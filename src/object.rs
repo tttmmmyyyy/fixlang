@@ -1935,7 +1935,7 @@ pub fn array_storage_buf_padding(header_size: u64) -> u64 {
 
 /// Whether an `#ArrayStorage` object of `sizeof` bytes has its element buffer aligned, as a value
 /// the emitted code branches on.
-pub fn build_storage_is_aligned<'c, 'm>(
+pub fn build_array_storage_is_aligned<'c, 'm>(
     gc: &Generator<'c, 'm>,
     sizeof: IntValue<'c>,
 ) -> IntValue<'c> {
@@ -1946,7 +1946,7 @@ pub fn build_storage_is_aligned<'c, 'm>(
             gc.context
                 .i64_type()
                 .const_int(ARRAY_ALIGNED_ALLOC_THRESHOLD, false),
-            "storage_is_aligned",
+            "array_storage_is_aligned",
         )
         .unwrap()
 }
@@ -2103,7 +2103,7 @@ fn build_alloc_array_storage<'c, 'm>(
     sizeof: IntValue<'c>,
 ) -> (PointerValue<'c>, IntValue<'c>) {
     let i64_ty = gc.context.i64_type();
-    let is_aligned = build_storage_is_aligned(gc, sizeof);
+    let is_aligned = build_array_storage_is_aligned(gc, sizeof);
     let aligned_mask = gc
         .builder()
         .build_int_s_extend(is_aligned, i64_ty, "aligned_mask@alloc_array_storage")
@@ -2295,7 +2295,7 @@ pub fn create_obj<'c, 'm>(
                 // Initialize the traverser function.
                 assert_eq!(i, DYNAMIC_OBJ_TRAVARSER_IDX as usize);
                 let ptr_to_trav = obj.gep_boxed(gc, i as u32);
-                let trav = get_traverser_ptr(&ty, capture, gc, None);
+                let trav = get_dynamic_traverser_ptr(&ty, capture, gc);
                 gc.build_store(MemoryRegion::Data, ptr_to_trav, trav);
             }
             ObjectFieldType::UnionBuf(_) => {}
@@ -2306,45 +2306,39 @@ pub fn create_obj<'c, 'm>(
     obj
 }
 
-/// The address of the traverser function for an object of type `ty`, for a dynamic object to store
-/// and call indirectly.
+/// The address of the dynamic traverser function for an object of type `ty`, which a dynamic
+/// object stores and calls indirectly. The dynamic traverser takes the job to perform as an
+/// argument and dispatches on it at run time.
 ///
 /// # Arguments
 /// * `capture` — the captured types of a dynamic object, whose traverser disposes of them.
-/// * `work` — the job the traverser performs: `TraverserWorkType::release` selects the object's
-///   destructor, `mark_global` and `mark_threaded` the corresponding markers. `None` selects the
-///   dynamic traverser, which takes the job as a second argument and dispatches on it at run time.
 ///
 /// # Returns
 /// Where the type leaves the traverser no work to do, the address of an empty function, so that a
 /// caller holding this pointer always has one to call.
 // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
-pub fn get_traverser_ptr<'c, 'm>(
+pub fn get_dynamic_traverser_ptr<'c, 'm>(
     ty: &Arc<TypeNode>,
-    capture: &Vec<Arc<TypeNode>>, // used in destructor of lambda
+    capture: &Vec<Arc<TypeNode>>,
     gc: &mut Generator<'c, 'm>,
-    work: Option<TraverserWorkType>,
 ) -> PointerValue<'c> {
+    const EMPTY_TRAVERSER_NAME: &str = "fixruntime_empty_traverser_dynamic";
+
     // The pointer is stored in a dynamic object and called indirectly at reference count zero, so
     // nothing is known about the state of what it traverses.
-    match create_traverser(ty, capture, gc, work, RcState::Unknown) {
+    match create_traverser(ty, capture, gc, None, RcState::Unknown) {
         Some(fv) => fv.as_global_value().as_pointer_value(),
         None => {
-            let is_dynamic = work.is_none();
-            let func_name = if is_dynamic {
-                "fixruntime_empty_traverser_dynamic"
-            } else {
-                "fixruntime_empty_traverser"
-            };
-
             // Define an empty function (if there is none) and return its pointer.
-            let fv = if let Some(fv) = gc.module.get_function(func_name) {
+            let fv = if let Some(fv) = gc.module.get_function(EMPTY_TRAVERSER_NAME) {
                 fv
             } else {
-                let func_type = traverser_type(gc, ty, work.is_none());
-                let func = gc
-                    .module
-                    .add_function(func_name, func_type, Some(Linkage::Internal));
+                let func_type = traverser_type(gc, ty, true);
+                let func = gc.module.add_function(
+                    EMPTY_TRAVERSER_NAME,
+                    func_type,
+                    Some(Linkage::Internal),
+                );
                 let _builder_guard = gc.push_builder();
                 let bb = gc.context.append_basic_block(func, "entry");
                 gc.builder().position_at_end(bb);
@@ -2677,28 +2671,25 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
         let size_in_bits = gc.target_data.get_bit_size(&struct_type);
         let align_in_bits = gc.target_data.get_abi_alignment(&struct_type) * 8;
 
-        let mut subelement_names = vec![];
-        if !ty.is_closure() {
-            let tc_info = ty.toplevel_tycon_info(gc.type_env());
-            subelement_names = tc_info
+        let mut subelement_names = if ty.is_closure() {
+            vec![]
+        } else {
+            ty.toplevel_tycon_info(gc.type_env())
                 .fields
                 .iter()
                 .map(|field| field.name.clone())
-                .collect();
+                .collect::<Vec<_>>()
         }
+        .into_iter();
 
         let mut elements = vec![];
         for (i, field) in obj_type.field_types.iter().enumerate() {
             let mut member_name = match field {
-                ObjectFieldType::SubObject(ty, _) => {
-                    if !subelement_names.is_empty() {
-                        subelement_names.remove(0)
-                    } else {
-                        // A closure's captured values are declared nowhere and so carry no names,
-                        // which leaves each of them presented to a debugger by its type.
-                        format!("<subelement of type {}>", ty.to_string())
-                    }
-                }
+                ObjectFieldType::SubObject(ty, _) => subelement_names.next().unwrap_or_else(|| {
+                    // A closure's captured values are declared nowhere and so carry no names,
+                    // which leaves each of them presented to a debugger by its type.
+                    format!("<subelement of type {}>", ty.to_string())
+                }),
                 ObjectFieldType::ControlBlock => "<control block>".to_string(),
                 ObjectFieldType::TraverseFunction => "<ptr to traverser function>".to_string(),
                 ObjectFieldType::LambdaFunction(_) => "<ptr to lambda function>".to_string(),
