@@ -13,11 +13,14 @@ You can try Fix in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-pla
 
 ## Concepts and features
 
-- **Fast**
-  - While Fix is still undergoing benchmarking and optimization, Fix can achieve performance comparable to C++ in a few simple programs that I have tested.
-  - One of Fix's goals is to compile high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
-  - [Benchmark history](https://tttmmmyyyy.github.io/fixlang/benchmark/)
-- **Familiar**
+- **Functional**
+  - Higher-kinded types, traits, and associated types give the type system the abstractions a purely functional language needs to express effects and generic structure.
+  - Sequencing effects without leaving pure code: an `IO` action is an ordinary value, and Fix composes them with dedicated operators.
+- **Memory management**
+  - In-place update: since Fix uses reference counting for memory management, it can update uniquely referenced values in place while being purely functional. As an example, look at the program below that calculates the Fibonacci sequence. In this code, the array is never cloned when modified by the `set` function. This allows Fix to implement algorithms naturally using arrays and hash tables, while remaining purely functional.
+  - Fix manages memory by reference counting, and its type system makes cyclic references impossible to construct. Every value is freed the moment it becomes unreachable, so Fix needs no tracing garbage collector, no `weak` references, and no cycle collector.
+  - Fix's compiler inserts every retain and release, so this reference counting is memory-safe on its own, and its optional thread-safe mode extends that safety across threads.
+- **Familiar Syntax**
   - Syntax that combines the advantages of functional and OOP languages. For example, if you have an array of integers called `fib` and you want to display it on the screen, you can write any of the following:
     -  `println(fib.to_iter.map(to_string).join(", "))` 
     -  `println $ fib.to_iter.map(to_string).join(", ")`
@@ -25,13 +28,10 @@ You can try Fix in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-pla
   - Closures: `|x| x + 42`
   - Syntax for using Lens to manipulate hierarchical data: `array_of_vectors[2][^x].iset(3.0) // Update the "x" field of the struct at index 2 of an array of vectors`
   - Destructuring (pattern matching): `let Rectangle { pos : (x, y) } = rect; ...`
-- **Purely functional**
-  - In-place update: since Fix uses reference counting for memory management, it can update uniquely referenced values in place while being purely functional. As an example, look at the program below that calculates the Fibonacci sequence. In this code, the array is never cloned when modified by the `set` function. This allows Fix to implement algorithms naturally using arrays and hash tables, while remaining purely functional.
-  - Higher-kinded types and traits (`Array : Functor`, `IO : Monad`, etc.) and associated types (`Iterator::Item`) give the type system the abstractions a purely functional language needs to express effects and generic structure.
-  - Sequencing effects without leaving pure code: an `IO` action is an ordinary value, and `;;`/`*` compose them, e.g. `main : IO () = println("I will echo you: ");; println(*input_line);`.
-- **Memory management**
-  - Fix manages memory by reference counting, and its type system makes cyclic references impossible to construct. Every value is freed the moment it becomes unreachable, so Fix needs no tracing garbage collector, no `weak` references, and no cycle collector.
-  - Fix's compiler inserts every retain and release, so this reference counting is memory-safe on its own, and its optional thread-safe mode extends that safety across threads.
+- **Fast**
+  - While Fix is still undergoing benchmarking and optimization, Fix can achieve performance comparable to C++ in a few simple programs that I have tested.
+  - One of Fix's goals is to compile high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
+  - [Benchmark history](https://tttmmmyyyy.github.io/fixlang/benchmark/)
 
 Fix also supports multithreading and a foreign function interface (FFI).
 
