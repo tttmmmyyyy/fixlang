@@ -7,26 +7,32 @@ A fast, familiar, purely functional language.
 
 ## Overview
 
-Fix has been in development since 2023. Its tools include a dependency manager, a document generator, and a language server with VSCode and Zed extensions, plus a [registry of packages](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) — regular-expression, JSON, hash-map, and GMP/MPFR/Cairo bindings among them.
+Fix has been in development since 2023. Its tools include a dependency manager, a document generator, and a language server with [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) extensions, plus a [registry of packages](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) — regular-expression, JSON, hash-map, and GMP/MPFR/Cairo bindings among them.
 
-You can try Fix in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-playground/).
+You can try Fix in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-playground/), and it's also one of the judge languages on [AtCoder](https://atcoder.jp/), a major competitive programming site.
 
-Concepts: 
-- **Syntax that combines the advantages of functional and OOP languages** 
-  - For example, if you have an array of integers called `fib` and you want to display it on the screen, you can write any of the following:
-    -  `println(fib.to_iter.map(to_string).join(", "))` 
-    -  `println $ fib.to_iter.map(to_string).join(", ")`
-    -  `fib.to_iter.map(to_string).join(", ").println`
-- **In-place update** 
-  - Since Fix uses reference counting for memory management, it can update uniquely referenced values in place while being purely functional.
-  - As an example, look at the program below that calculates the Fibonacci sequence. In this code, the array is never cloned when modified by the `set` function.
-  - This allows Fix to implement algorithms naturally using arrays and hash tables, while remaining purely functional.
-- **Memory management**
-  - Fix manages memory by reference counting, and its type system makes cyclic references impossible to construct. Every value is freed the moment it becomes unreachable, so Fix needs no tracing garbage collector, no `weak` references, and no cycle collector.
-- **Performance** 
+Concepts, matching the tagline above:
+- **Fast**
   - While Fix is still undergoing benchmarking and optimization, Fix can achieve performance comparable to C++ in a few simple programs that I have tested.
   - One of Fix's goals is to compile high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
   - [Benchmark history](https://tttmmmyyyy.github.io/fixlang/benchmark/)
+- **Familiar**
+  - Syntax that combines the advantages of functional and OOP languages. For example, if you have an array of integers called `fib` and you want to display it on the screen, you can write any of the following:
+    -  `println(fib.to_iter.map(to_string).join(", "))` 
+    -  `println $ fib.to_iter.map(to_string).join(", ")`
+    -  `fib.to_iter.map(to_string).join(", ").println`
+  - Closures: `|x| x + 42`
+  - Higher kinded types and traits: `Array : Functor`, `IO : Monad`, etc.
+  - Associated types to traits: `Iterator::Item`
+  - Syntax for combining monads (`;;` and `*`): `main : IO () = println("I will echo you: ");; println(*input_line);`
+  - Syntax for using Lens to manipulate hierarchical data: `array_of_vectors[2][^x].iset(3.0) // Update the "x" field of the struct at index 2 of an array of vectors`
+  - Destructuring (pattern matching): `let Rectangle { pos : (x, y) } = rect; ...`
+- **Purely functional**
+  - In-place update: since Fix uses reference counting for memory management, it can update uniquely referenced values in place while being purely functional. As an example, look at the program below that calculates the Fibonacci sequence. In this code, the array is never cloned when modified by the `set` function. This allows Fix to implement algorithms naturally using arrays and hash tables, while remaining purely functional.
+  - Memory management: Fix manages memory by reference counting, and its type system makes cyclic references impossible to construct. Every value is freed the moment it becomes unreachable, so Fix needs no tracing garbage collector, no `weak` references, and no cycle collector.
+  - Memory safety and thread safety
+
+Fix also supports multithreading and a foreign function interface (FFI).
 
 The following is an example program that calculates the Fibonacci sequence using Fix:
 ```
@@ -57,27 +63,6 @@ main = (
     println $ fib.to_iter.map(to_string).join(", ")
 );
 ```
-
-## Features
-
-- Functional paradigm and type system
-  - Closures: `|x| x + 42`
-  - Higher kinded types and traits: `Array : Functor`, `IO : Monad`, etc.
-  - Associated types to traits: `Iterator::Item`
-  - Syntax for combining monads (`;;` and `*`): `main : IO () = println("I will echo you: ");; println(*input_line);`
-  - Syntax for using Lens to manipulate hierarchical data: `array_of_vectors[2][^x].iset(3.0) // Update the "x" field of the struct at index 2 of an array of vectors`
-  - Destructuring (pattern matching): `let Rectangle { pos : (x, y) } = rect; ...`
-- Memory management & mutability
-  - In-place update of values which is uniquely referenced
-  - Memory safety and thread safety
-  - No memory leak achieved by avoiding cyclic references syntactically
-- Multithreading
-- Foreign function interface (FFI)
-- Tools
-  - Dependency manager
-  - Document generation
-  - Language Server Protocol (LSP) support
-    - Editor extensions: [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) / [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support)
 
 ## Installation
 
