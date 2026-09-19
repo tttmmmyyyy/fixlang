@@ -1,6 +1,7 @@
 /*
-C functions / values for implementing Fix standard library.
-When running program by `fix build`, then this source file will be compiled into object file and linked to the binary.
+The C functions and values the Fix standard library is implemented with.
+
+`fix build` compiles this source into an object file and links it into the program it builds.
 */
 
 #include <ctype.h>
@@ -10,6 +11,7 @@ When running program by `fix build`, then this source file will be compiled into
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #ifndef __MINGW32__
 #include <sys/wait.h>
 #endif // __MINGW32__
@@ -27,6 +29,9 @@ void fixruntime_eprintln(const char *msg)
     fflush(stderr);
 }
 
+// Each of the twelve below moves a number between a value and the bytes holding it: the
+// `_to_bytes` ones write `v` into the object at `buf`, and the `_from_bytes` ones answer with the
+// number the object at `buf` holds.
 void fixruntime_u8_to_bytes(uint8_t *buf, uint8_t v)
 {
     *buf = v;
@@ -76,46 +81,132 @@ double fixruntime_f64_from_bytes(double *buf)
     return *buf;
 }
 
-void fixruntime_ptr_to_str(char *buf, uint64_t ptr) // To avoid warning, we use uint64_t instead of void*.
+// The two digits each number below a hundred is written with, laid end to end, so that a number is
+// written two digits at a time.
+//
+// Ryu carries the same table in `ryu/digit_table.h`, where it is `static`, so a source including
+// that header takes a copy of it rather than sharing this one.
+static const char FIXRUNTIME_DIGIT_PAIRS[201] =
+    "0001020304050607080910111213141516171819202122232425262728293031323334353637383940414243444546474849"
+    "5051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899";
+
+// The digits a `uint64_t` takes in decimal: `18446744073709551615` is the longest.
+#define FIXRUNTIME_U64_DIGITS 20
+
+// Writes `v` at `buf` in decimal, null-terminated, and reports how many digits it took.
+//
+// The digits are produced from the last backwards into a scratch buffer, so that one pass writes
+// them without first counting how many there are. The scratch is then copied to `buf`.
+//
+// Declared in `float_text.c` as well; the two translation units carry the declaration because the
+// runtime has no header of its own.
+int64_t fixruntime_write_u64(char *buf, uint64_t v)
 {
-    sprintf(buf, "%016" PRIx64, ptr);
-}
-void fixruntime_i8_to_str(char *buf, int8_t v)
-{
-    sprintf(buf, "%" PRId8, v);
-}
-void fixruntime_u8_to_str(char *buf, uint8_t v)
-{
-    sprintf(buf, "%" PRIu8, v);
-}
-void fixruntime_i16_to_str(char *buf, int16_t v)
-{
-    sprintf(buf, "%" PRId16, v);
-}
-void fixruntime_u16_to_str(char *buf, uint16_t v)
-{
-    sprintf(buf, "%" PRIu16, v);
-}
-void fixruntime_u32_to_str(char *buf, uint32_t v)
-{
-    sprintf(buf, "%" PRIu32, v);
+    char digits[FIXRUNTIME_U64_DIGITS];
+    int start = FIXRUNTIME_U64_DIGITS;
+    while (v >= 100)
+    {
+        uint64_t higher = v / 100;
+        unsigned int pair = (unsigned int)(v - higher * 100);
+        start -= 2;
+        digits[start] = FIXRUNTIME_DIGIT_PAIRS[2 * pair];
+        digits[start + 1] = FIXRUNTIME_DIGIT_PAIRS[2 * pair + 1];
+        v = higher;
+    }
+    if (v >= 10)
+    {
+        start -= 2;
+        digits[start] = FIXRUNTIME_DIGIT_PAIRS[2 * v];
+        digits[start + 1] = FIXRUNTIME_DIGIT_PAIRS[2 * v + 1];
+    }
+    else
+    {
+        digits[--start] = (char)('0' + v);
+    }
+    int64_t length = FIXRUNTIME_U64_DIGITS - start;
+    memcpy(buf, digits + start, (size_t)length);
+    buf[length] = '\0';
+    return length;
 }
 
-void fixruntime_u64_to_str(char *buf, uint64_t v)
+// Writes `v` at `buf` in decimal, with a sign where it is negative, and reports how many bytes it
+// took, the sign among them.
+static int64_t fixruntime_write_i64(char *buf, int64_t v)
 {
-    sprintf(buf, "%" PRIu64, v);
+    if (v >= 0)
+    {
+        return fixruntime_write_u64(buf, (uint64_t)v);
+    }
+    buf[0] = '-';
+    // The magnitude is taken in unsigned arithmetic, where negating the least number an `int64_t`
+    // holds is still a number. Negating it as signed overflows.
+    return 1 + fixruntime_write_u64(buf + 1, -(uint64_t)v);
 }
 
-void fixruntime_i32_to_str(char *buf, int32_t v)
+// The characters a hexadecimal digit is written with.
+static const char FIXRUNTIME_HEX_DIGITS[17] = "0123456789abcdef";
+
+// How many hexadecimal digits a pointer is written with: every digit a `uint64_t` holds.
+#define FIXRUNTIME_PTR_DIGITS 16
+
+// Writes `ptr` at `buf` as `FIXRUNTIME_PTR_DIGITS` hexadecimal digits, null-terminated, leading
+// zeros among them, and reports how many digits it wrote. The pointer is taken as a `uint64_t` to
+// avoid a compiler warning.
+int64_t fixruntime_ptr_to_str(char *buf, uint64_t ptr)
 {
-    sprintf(buf, "%" PRId32, v);
+    for (int i = 0; i < FIXRUNTIME_PTR_DIGITS; i++)
+    {
+        buf[i] = FIXRUNTIME_HEX_DIGITS[(ptr >> (4 * (FIXRUNTIME_PTR_DIGITS - 1 - i))) & 0xF];
+    }
+    buf[FIXRUNTIME_PTR_DIGITS] = '\0';
+    return FIXRUNTIME_PTR_DIGITS;
+}
+// Each of the eight below writes `v` at `buf` in decimal, null-terminated, and reports how many
+// bytes the text took, the null left out. A negative number is written with a `-` before its
+// digits.
+int64_t fixruntime_i8_to_str(char *buf, int8_t v)
+{
+    return fixruntime_write_i64(buf, v);
 }
 
-void fixruntime_i64_to_str(char *buf, int64_t v)
+int64_t fixruntime_u8_to_str(char *buf, uint8_t v)
 {
-    sprintf(buf, "%" PRId64, v);
+    return fixruntime_write_u64(buf, v);
 }
 
+int64_t fixruntime_i16_to_str(char *buf, int16_t v)
+{
+    return fixruntime_write_i64(buf, v);
+}
+
+int64_t fixruntime_u16_to_str(char *buf, uint16_t v)
+{
+    return fixruntime_write_u64(buf, v);
+}
+
+int64_t fixruntime_u32_to_str(char *buf, uint32_t v)
+{
+    return fixruntime_write_u64(buf, v);
+}
+
+int64_t fixruntime_u64_to_str(char *buf, uint64_t v)
+{
+    return fixruntime_write_u64(buf, v);
+}
+
+int64_t fixruntime_i32_to_str(char *buf, int32_t v)
+{
+    return fixruntime_write_i64(buf, v);
+}
+
+int64_t fixruntime_i64_to_str(char *buf, int64_t v)
+{
+    return fixruntime_write_i64(buf, v);
+}
+
+// Each of the two below reads a decimal number from the whole of `str`. The text names the number
+// and nothing else: a leading space, or anything left over after the number, sets `errno` to
+// `EINVAL`, and a number too large for the type sets it to `ERANGE`.
 int64_t fixruntime_strtoll_10(const char *str)
 {
     char *endptr;
@@ -150,21 +241,25 @@ uint64_t fixruntime_strtoull_10(const char *str)
     return v;
 }
 
+// The processor time the program has used so far, in the ticks C counts it in.
 int64_t fixruntime_clock()
 {
     return (int64_t)clock();
 }
 
+// The seconds `clocks` ticks come to.
 double fixruntime_clocks_to_sec(int64_t clocks)
 {
     return (double)(clock_t)clocks / CLOCKS_PER_SEC;
 }
 
+// Whether `errno` holds `EINVAL`, the error a text that does not name a number leaves.
 uint8_t fixruntime_is_einval()
 {
     return errno == EINVAL;
 }
 
+// Whether `errno` holds `ERANGE`, the error a number too large to hold leaves.
 uint8_t fixruntime_is_erange()
 {
     return errno == ERANGE;
@@ -176,32 +271,39 @@ typedef struct
     FILE *file;
 } IOHandle;
 
+// Answers with a handle holding `file`, allocated on the heap.
 IOHandle *fixruntime_iohandle_create(FILE *file)
 {
     IOHandle *handle = (IOHandle *)malloc(sizeof(IOHandle));
     handle->file = file;
     return handle;
 }
+// Frees the handle. The file it holds is left open.
 void fixruntime_iohandle_delete(IOHandle *handle)
 {
     free(handle);
 }
+// The file the handle holds, and `NULL` once the handle has been closed.
 FILE *fixruntime_iohandle_get_file(IOHandle *handle)
 {
     FILE *file;
     __atomic_load(&handle->file, &file, __ATOMIC_SEQ_CST);
     return file;
 }
+// Takes the file out of the handle and closes it. Two threads reaching this together close the
+// file once, since one of them takes it and the other finds the handle empty.
 void fixruntime_iohandle_close(IOHandle *handle)
 {
     FILE *file;
-    FILE *new_val = NULL;
-    __atomic_exchange(&handle->file, &new_val, &file, __ATOMIC_SEQ_CST);
+    FILE *closed = NULL;
+    __atomic_exchange(&handle->file, &closed, &file, __ATOMIC_SEQ_CST);
     if (file)
     {
         fclose(file);
     }
 }
+// Each of the three below answers with one of C's standard streams. They are macros, which an FFI
+// call cannot reach.
 FILE *fixruntime_c_stdin()
 {
     return stdin;
@@ -217,16 +319,21 @@ FILE *fixruntime_c_stderr()
     return stderr;
 }
 
+// The value `errno` holds. `errno` is a macro, which an FFI call cannot reach.
 int fixruntime_get_errno()
 {
     return errno;
 }
 
+// Sets `errno` to zero.
 void fixruntime_clear_errno()
 {
     errno = 0;
 }
 
+// Each of the four below prints what went wrong to standard error and stops the program: an index
+// fell outside its array, an array size was below zero, an array size was wider than the address
+// space, or a signed operation's result did not fit its type.
 __attribute__((noreturn)) void fixruntime_index_out_of_range(int64_t idx, int64_t size)
 {
     fprintf(stderr, "Index out of range: index=%" PRId64 ", size=%" PRId64 "\n", idx, size);
@@ -269,9 +376,9 @@ static int fixruntime_backtrace_full_callback(void *data, uintptr_t pc,
                                               const char *filename, int lineno,
                                               const char *function)
 {
-    int *index = (int *)data;
+    int *frame_index = (int *)data;
     fprintf(stderr, "  #%02d  %s at %s:%d (pc=0x%lx)\n",
-            (*index)++, function ? function : "??",
+            (*frame_index)++, function ? function : "??",
             filename ? filename : "??", lineno,
             (unsigned long)pc);
     return 0; // 0 = continue, non-zero = stop
@@ -286,7 +393,8 @@ static int fixruntime_backtrace_full_callback(void *data, uintptr_t pc,
 
 #endif // BACKTRACE
 
-// Abort function that prints backtrace if BACKTRACE is defined
+// Stops the program, printing the call stack it stopped at where the runtime was built with
+// `BACKTRACE` defined.
 __attribute__((noreturn)) void fixruntime_abort(void)
 {
 #if defined(BACKTRACE)
@@ -312,14 +420,14 @@ __attribute__((noreturn)) void fixruntime_abort(void)
     void *callstack[MAX_BACKTRACE_FRAMES];
     int frames = backtrace(callstack, MAX_BACKTRACE_FRAMES);
     fprintf(stderr, "Backtrace (%d frames):\n", frames);
-    char **strs = backtrace_symbols(callstack, frames);
-    if (strs)
+    char **symbols = backtrace_symbols(callstack, frames);
+    if (symbols)
     {
         for (int i = 1; i < frames; ++i)
         { // Skip frame 0 (current function)
-            fprintf(stderr, "  #%02d  %s\n", i - 1, strs[i]);
+            fprintf(stderr, "  #%02d  %s\n", i - 1, symbols[i]);
         }
-        free(strs);
+        free(symbols);
     }
     else
     {

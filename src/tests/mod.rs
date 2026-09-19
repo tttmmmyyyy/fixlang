@@ -47,6 +47,7 @@ mod test_import;
 mod test_index_syntax;
 mod test_inline_growth;
 mod test_integer_arithmetic;
+mod test_integer_text_buffer;
 mod test_let_elimination;
 mod test_llvm_arg;
 mod test_llvm_passes;

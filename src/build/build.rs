@@ -4,7 +4,7 @@ use crate::constants::INTERMEDIATE_PATH;
 use crate::elaboration::elaborate_via_config;
 use crate::error::Errors;
 use crate::misc::info_msg;
-use rand::Rng;
+use rand::{thread_rng, Rng};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -35,7 +35,7 @@ fn c_compiler_command(config: &Configuration) -> Result<Command, Errors> {
 fn clang_path() -> Result<PathBuf, Errors> {
     // `llvm-sys` names this after the LLVM release it links, which `Cargo.toml` pins through
     // inkwell's `llvm22-1` feature. Raising one without the other leaves this looking for a prefix
-    // nothing sets, so say so rather than reach for whatever clang the path happens to hold.
+    // nothing sets, which is reported as an error.
     let Some(prefix) = option_env!("LLVM_SYS_221_PREFIX") else {
         return Err(Errors::from_msg(
             "This compiler was built without recording where its LLVM lives, so the clang a \
@@ -63,11 +63,11 @@ fn clang_path() -> Result<PathBuf, Errors> {
 /// * `step` — what the invocation is for, as a verb phrase that completes "Failed to ...", so that
 ///   a failure says which of the build's several C compiler calls it was.
 fn run_c_compiler(com: &mut Command, step: &str) -> Result<(), Errors> {
-    let program = com.get_program().to_string_lossy().to_string();
+    let compiler = com.get_program().to_string_lossy().to_string();
     let output = com.output().map_err(|e| {
         Errors::from_msg(format!(
             "Failed to {}: could not run `{}`: {}.",
-            step, program, e
+            step, compiler, e
         ))
     })?;
     if output.stderr.len() > 0 {
@@ -79,7 +79,7 @@ fn run_c_compiler(com: &mut Command, step: &str) -> Result<(), Errors> {
         return Err(Errors::from_msg(format!(
             "Failed to {}: {} exited with code {}.",
             step,
-            program,
+            compiler,
             output.status.code().unwrap_or(-1)
         )));
     }
@@ -145,43 +145,32 @@ struct RuntimeSource {
     path: &'static str,
     /// The text of the source, carried in the compiler.
     text: &'static str,
-    /// The flags this source alone is compiled with.
-    flags: &'static [&'static str],
 }
 
 /// The C sources the runtime is built from.
 ///
 /// `ryu/d2s.c` and `ryu/f2s.c` each define a `to_chars` of their own, so each is a translation unit
 /// of its own.
-///
-/// The sources that write a floating point number as text are compiled with optimization, where
-/// the rest of the runtime is not. They are the runtime's one piece of arithmetic: Ryu takes
-/// 214 ns to write a number unoptimized against 88 ns optimized, and placing the digits it answers
-/// with costs more than Ryu itself until it is optimized too.
 const RUNTIME_SOURCES: [RuntimeSource; 4] = [
     RuntimeSource {
         object_name: "runtime",
         path: "runtime.c",
         text: include_str!("../fixstd/runtime.c"),
-        flags: &[],
     },
     RuntimeSource {
         object_name: "float-text",
         path: "float_text.c",
         text: include_str!("../fixstd/float_text.c"),
-        flags: &["-O2"],
     },
     RuntimeSource {
         object_name: "ryu-d2s",
         path: "ryu/d2s.c",
         text: include_str!("../fixstd/ryu/d2s.c"),
-        flags: &["-O2"],
     },
     RuntimeSource {
         object_name: "ryu-f2s",
         path: "ryu/f2s.c",
         text: include_str!("../fixstd/ryu/f2s.c"),
-        flags: &["-O2"],
     },
 ];
 
@@ -216,10 +205,8 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
         return Ok(objects);
     }
 
-    let build_dir = PathBuf::from(INTERMEDIATE_PATH).join(format!(
-        "runtime.{}",
-        rand::thread_rng().gen::<u64>().to_string()
-    ));
+    let build_dir = PathBuf::from(INTERMEDIATE_PATH)
+        .join(format!("runtime.{}", thread_rng().gen::<u64>().to_string()));
     let write_file = |path: &str, text: &str| {
         let path = build_dir.join(path);
         fs::create_dir_all(path.parent().unwrap())
@@ -237,15 +224,21 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
     }
 
     for (source, object) in RUNTIME_SOURCES.iter().zip(objects.iter()) {
-        // The compiler runs inside the build directory, so it is given the name of the object it
-        // writes rather than a path reaching that directory.
+        // The compiler runs inside the build directory, so it is given the plain name of the
+        // object it writes.
         let compiled_name = format!("{}.o", source.object_name);
         let mut com = c_compiler_command(&config)?;
         // A source reaches the headers beside it by the path it includes them under, which is the
         // one it carries in the compiler's tree.
         com.current_dir(&build_dir).arg("-I.");
-        com.args(source.flags);
-        com.arg("-ffunction-sections").arg("-fdata-sections");
+        // Writing a number as text is arithmetic, and unoptimized arithmetic costs several times
+        // what optimized arithmetic costs: Ryu takes 214 ns to write a floating point number
+        // unoptimized against 88 ns optimized, and one integer takes 188 instructions against 97.
+        // The whole runtime compiles in a few milliseconds, and a build reuses the objects a
+        // previous build of the same compiler wrote.
+        com.arg("-O2")
+            .arg("-ffunction-sections")
+            .arg("-fdata-sections");
         // Keep frame pointers for better backtraces on macOS when backtrace is enabled
         if config.no_elim_frame_pointers() {
             com.arg("-fno-omit-frame-pointer");
