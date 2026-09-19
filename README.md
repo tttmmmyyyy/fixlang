@@ -16,7 +16,6 @@ A simple, fast, functional language.
   - Haskell's `$` for application: `println $ 42.to_string`
   - Syntax for composing monadic actions (`;;` and `*`): `println("I will echo you: ");; println(*input_line)`
   - Syntax for using Lens on hierarchical data: `vectors[i][^x].iset(42.0)`
-  - Destructuring (pattern matching): `let Rectangle { pos : (x, y) } = rect; ...`
 - **Fast**
   - In-place update: since Fix uses reference counting, it can update a uniquely referenced value in place instead of cloning it, even while remaining purely functional. As an example, look at the Fibonacci program under [Examples](#examples): the array is never cloned when the `set` function modifies it. This lets Fix implement algorithms naturally using arrays and hash tables without paying a cloning cost.
   - While Fix is still undergoing benchmarking and optimization, Fix can achieve performance comparable to C++ in a few simple programs that I have tested.
