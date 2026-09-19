@@ -1785,17 +1785,20 @@ fn build_shift_amount_check<'c, 'm>(
     );
 }
 
-/// The body of `shift_left` and `shift_right` at every integer type. It moves the bits of a value
-/// by an amount the program computes, masking an amount outside the width of the type down into
-/// it, so that every amount gives one value.
+/// Evaluates `Std::I64::shift_left` and `Std::I64::shift_right`, and the same values of the other
+/// integer types: the value with its bits moved by the given number of places.
+///
+/// A right shift of a signed type fills the vacated places with the sign bit, and every other shift
+/// fills them with zeros. The number of places is taken modulo the width of the type in bits, so
+/// every count gives one value of that type; `--check-integer-operations` stops the program on a
+/// count outside that range.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMShiftBody {
-    /// The local name bound to the value whose bits move.
+    /// The local binding holding the value to shift.
     value_name: FullName,
-    /// The local name bound to the amount, in bits, the value moves by.
+    /// The local binding holding the number of places to shift by.
     n_name: FullName,
-    /// Whether the value moves towards its greatest bit. A move towards its least bit fills the
-    /// bits it leaves with the sign bit on a signed type, and with zero on an unsigned one.
+    /// Whether the bits move towards the more significant end.
     is_left: bool,
 }
 
@@ -1862,10 +1865,12 @@ impl LLVMGen for InlineLLVMShiftBody {
     }
 }
 
-/// The definition of `shift_left` or `shift_right` at the integer type `ty`.
+/// `val` shifted by `n` bits, towards the more significant end when `is_left` holds and towards the
+/// less significant end otherwise.
+/// Type: ty -> ty -> ty
 ///
-/// The amount is the first argument and the value shifted the second, which is what makes
-/// `v.shift_left(bits)` move the bits of `v` by `bits`.
+/// The number of bits is the first argument and the value the second, which is what makes
+/// `v.shift_left(bits)` move the bits of `v`.
 pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     const VALUE_NAME: &str = "val";
     const N_NAME: &str = "n";
@@ -1896,10 +1901,14 @@ pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<S
     (expr, scm)
 }
 
+/// A way of combining the corresponding bits of two integers into one bit.
 #[derive(Clone, Copy, Serialize, Deserialize)]
 pub enum BitOperationType {
+    /// The result bit is set where exactly one of the two operands has the bit set.
     Xor,
+    /// The result bit is set where either operand has the bit set.
     Or,
+    /// The result bit is set where both operands have the bit set.
     And,
 }
 
@@ -1914,10 +1923,15 @@ impl BitOperationType {
     }
 }
 
+/// Evaluates `Std::I64::bit_and`, `Std::I64::bit_or` and `Std::I64::bit_xor`, and the same values
+/// of the other integer types: the two operands combined bit by bit.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMBitwiseOperationBody {
+    /// The local binding holding the left operand.
     lhs_name: FullName,
+    /// The local binding holding the right operand.
     rhs_name: FullName,
+    /// How the corresponding bits of the two operands are combined.
     op_type: BitOperationType,
 }
 
@@ -1928,7 +1942,7 @@ impl LLVMGen for InlineLLVMBitwiseOperationBody {
         let lhs = gc.get_scoped_obj_field(&self.lhs_name, 0).into_int_value();
         let rhs = gc.get_scoped_obj_field(&self.rhs_name, 0).into_int_value();
 
-        // Perform cast.
+        // Combine the bits.
         let val = match self.op_type {
             BitOperationType::Xor => gc
                 .builder()
@@ -1982,6 +1996,8 @@ impl LLVMGen for InlineLLVMBitwiseOperationBody {
     }
 }
 
+/// The bits of `lhs` and `rhs` combined pairwise by `op_type`.
+/// Type: ty -> ty -> ty
 pub fn bitwise_operation_function(
     ty: Arc<TypeNode>,
     op_type: BitOperationType,
@@ -2015,8 +2031,11 @@ pub fn bitwise_operation_function(
     (expr, scm)
 }
 
+/// Evaluates `Std::I64::bit_not`, and the same value of the other integer types: the operand with
+/// every bit flipped.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMBitNotBody {
+    /// The local binding holding the operand whose bits are flipped.
     operand_name: FullName,
 }
 
@@ -2028,7 +2047,7 @@ impl LLVMGen for InlineLLVMBitNotBody {
             .get_scoped_obj_field(&self.operand_name, 0)
             .into_int_value();
 
-        // Perform cast.
+        // Flip every bit.
         let val = gc
             .builder()
             .build_not(operand, "not@bitwise_not_function")
@@ -2061,6 +2080,8 @@ impl LLVMGen for InlineLLVMBitNotBody {
     }
 }
 
+/// The value with every bit of `operand` flipped.
+/// Type: ty -> ty
 pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const OPERAND_NAME: &str = "operand";
 
@@ -2077,6 +2098,204 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
                 operand_name: FullName::local(OPERAND_NAME),
             }),
             ty,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+/// Evaluates `Std::Ptr::add_offset`: the address a signed number of bytes past the given pointer.
+///
+/// A pointer is a number in Fix, and this is arithmetic on that number: every offset is defined,
+/// including a negative one, one whose result lies outside the object the pointer points into, and
+/// one whose sum wraps at the width of the address. The offset therefore goes through the integer
+/// address. A `getelementptr inbounds` is `poison` once the address it computes leaves its
+/// allocation, and every `getelementptr` the compiler emits is `inbounds`.
+///
+/// The price of the integer address is the pointer's provenance: LLVM takes a value built by
+/// `inttoptr` to point into any allocation, so an access through the result may reach any object.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMAddOffsetBody {
+    /// The local binding holding the offset, in bytes.
+    offset_name: FullName,
+    /// The local binding holding the pointer the offset is applied to.
+    ptr_name: FullName,
+}
+
+#[typetag::serde]
+impl LLVMGen for InlineLLVMAddOffsetBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
+        let i64_ty = gc.context.i64_type();
+        let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+
+        let offset = gc
+            .get_scoped_obj_field(&self.offset_name, 0)
+            .into_int_value();
+        let ptr = gc
+            .get_scoped_obj_field(&self.ptr_name, 0)
+            .into_pointer_value();
+
+        let address = gc
+            .builder()
+            .build_ptr_to_int(ptr, i64_ty, "ptr_to_int@add_offset")
+            .unwrap();
+        let sum = gc
+            .builder()
+            .build_int_add(address, offset, "add@add_offset")
+            .unwrap();
+        let sum_ptr = gc
+            .builder()
+            .build_int_to_ptr(sum, ptr_ty, "int_to_ptr@add_offset")
+            .unwrap();
+
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@add_offset"));
+        obj.insert_field(gc, 0, sum_ptr)
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "add_offset({}, {})",
+            self.offset_name.to_string(),
+            self.ptr_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.offset_name, &mut self.ptr_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// The address `offset` bytes past `ptr`, where the count is signed.
+/// Type: I64 -> Ptr -> Ptr
+pub fn add_offset_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const OFFSET_NAME: &str = "offset";
+    const PTR_NAME: &str = "ptr";
+
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        vec![],
+        type_fun(make_i64_ty(), type_fun(make_ptr_ty(), make_ptr_ty())),
+    );
+    let expr = expr_abs(
+        vec![var_local(OFFSET_NAME)],
+        expr_abs(
+            vec![var_local(PTR_NAME)],
+            expr_llvm(
+                Box::new(InlineLLVMAddOffsetBody {
+                    offset_name: FullName::local(OFFSET_NAME),
+                    ptr_name: FullName::local(PTR_NAME),
+                }),
+                make_ptr_ty(),
+                None,
+            ),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+/// Evaluates `Std::Ptr::offset_from`: the distance in bytes from one pointer to another, as a
+/// signed count.
+///
+/// A pointer is a number in Fix, and this is the difference of two such numbers: the two pointers
+/// may point into different objects, the result may be negative, and the difference wraps at the
+/// width of `I64`.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMOffsetFromBody {
+    /// The local binding holding the pointer the distance is measured from.
+    origin_name: FullName,
+    /// The local binding holding the pointer the distance is measured to.
+    ptr_name: FullName,
+}
+
+#[typetag::serde]
+impl LLVMGen for InlineLLVMOffsetFromBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
+        let i8_ty = gc.context.i8_type();
+
+        let origin = gc
+            .get_scoped_obj_field(&self.origin_name, 0)
+            .into_pointer_value();
+        let ptr = gc
+            .get_scoped_obj_field(&self.ptr_name, 0)
+            .into_pointer_value();
+
+        // The element type fixes the unit the distance is counted in, and this answers in bytes.
+        let distance = gc
+            .builder()
+            .build_ptr_diff(i8_ty, ptr, origin, "ptr_diff@offset_from")
+            .unwrap();
+
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@offset_from"));
+        obj.insert_field(gc, 0, distance)
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "offset_from({}, {})",
+            self.origin_name.to_string(),
+            self.ptr_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.origin_name, &mut self.ptr_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// The distance in bytes from `origin` to `ptr`, as a signed count.
+/// Type: Ptr -> Ptr -> I64
+pub fn offset_from_function() -> (Arc<ExprNode>, Arc<Scheme>) {
+    const ORIGIN_NAME: &str = "origin";
+    const PTR_NAME: &str = "ptr";
+
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        vec![],
+        type_fun(make_ptr_ty(), type_fun(make_ptr_ty(), make_i64_ty())),
+    );
+    let expr = expr_abs(
+        vec![var_local(ORIGIN_NAME)],
+        expr_abs(
+            vec![var_local(PTR_NAME)],
+            expr_llvm(
+                Box::new(InlineLLVMOffsetFromBody {
+                    origin_name: FullName::local(ORIGIN_NAME),
+                    ptr_name: FullName::local(PTR_NAME),
+                }),
+                make_i64_ty(),
+                None,
+            ),
             None,
         ),
         None,

@@ -1,12 +1,17 @@
-// ==================== Integration Tests for `fix docs` Command ====================
-// These tests use actual Fix projects in src/tests/test_docs/
+//! Integration tests for the `fix docs` command.
+//!
+//! They run the command over real Fix projects: the `Std` module of the compiler itself, and the
+//! projects under `src/tests/test_docs/`.
 
 use crate::tests::test_util::fix_command;
 
+/// `fix docs` documents the `Std` module of the compiler being tested.
+///
+/// It writes into the `std_doc` project, whose generated `Std.md` the repository carries, so that
+/// the file follows a change to `std.fix` or to a document under `src/docs/`.
 #[test]
 pub fn test_generate_documents() {
-    // Run `fix doc -m Std` in `std_doc` directory.
-    let _ = fix_command()
+    let output = fix_command()
         .arg("docs")
         .arg("-m")
         .arg("Std")
@@ -15,22 +20,149 @@ pub fn test_generate_documents() {
         .current_dir("std_doc")
         .output()
         .expect("Failed to run fix doc.");
+    assert!(
+        output.status.success(),
+        "documenting `Std` failed.\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr),
+    );
 }
 
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
-    use std::{fs, path::PathBuf};
+    use std::{fs, iter, path::PathBuf};
     use tempfile::TempDir;
 
-    // Get the path to the test project directory
+    /// The section a generated document gives the value `name`: its heading and the lines under it,
+    /// up to the heading that opens the next item; the empty string where the document has no
+    /// heading for `name`.
+    ///
+    /// A value is headed at level four, and a part of one, such as its parameter list, is headed at
+    /// level five. So the section ends at the next heading whose level is four or less.
+    fn documented_section(document: &str, name: &str) -> String {
+        let heading = format!("#### {}", name);
+        let opens_an_item = |line: &&str| {
+            let heading_level = line.len() - line.trim_start_matches('#').len();
+            (1..=4).contains(&heading_level)
+        };
+        let mut lines = document
+            .lines()
+            .skip_while(|line| line.trim_end() != heading);
+        let Some(heading_line) = lines.next() else {
+            return String::new();
+        };
+        iter::once(heading_line)
+            .chain(lines.take_while(|line| !opens_an_item(line)))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// A value whose body the compiler supplies has no declaration in a source to carry its
+    /// documentation, and takes it from the text `Program::add_global_value` is given instead.
+    /// `fix docs` renders that text under the value's own namespace, with the type, what the value
+    /// does, and every parameter it names.
+    #[test]
+    fn test_a_value_the_compiler_defines_is_documented() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let project_dir = temp_dir.path().join("std_doc");
+        fs::create_dir(&project_dir).expect("Failed to create the copy of the std_doc project");
+        // The project's own two files, and nothing else `std_doc` holds: `test_generate_documents`
+        // regenerates `Std.md` in that directory and leaves a build directory beside it, and it
+        // runs alongside this test.
+        let source_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("std_doc");
+        for file in ["fixproj.toml", "main.fix"] {
+            fs::copy(source_dir.join(file), project_dir.join(file))
+                .unwrap_or_else(|e| panic!("Failed to copy std_doc/{}: {}", file, e));
+        }
+
+        let output = fix_command()
+            .args(&["docs", "-m", "Std", "-o", "."])
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix docs");
+        assert!(
+            output.status.success(),
+            "documenting `Std` failed.\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+        let document =
+            fs::read_to_string(project_dir.join("Std.md")).expect("Failed to read Std.md");
+
+        for (name, type_, summary, parameters) in [
+            (
+                "add_offset",
+                "Std::I64 -> Std::Ptr -> Std::Ptr",
+                "Adds an offset to a pointer.",
+                ["`offset`", "`ptr`"],
+            ),
+            (
+                "offset_from",
+                "Std::Ptr -> Std::Ptr -> Std::I64",
+                "The distance in bytes from one pointer to another.",
+                ["`origin`", "`ptr`"],
+            ),
+        ] {
+            let section = documented_section(&document, name);
+            assert!(
+                !section.is_empty(),
+                "`Std::Ptr::{}` should be documented in the generated `Std.md`",
+                name,
+            );
+            assert!(
+                section.contains(&format!("Type: `{}`", type_)),
+                "the documentation of `Std::Ptr::{}` should give its type:\n{}",
+                name,
+                section,
+            );
+            assert!(
+                section.contains(summary),
+                "the documentation of `Std::Ptr::{}` should say what it does:\n{}",
+                name,
+                section,
+            );
+            for parameter in parameters {
+                assert!(
+                    section.contains(parameter),
+                    "the documentation of `Std::Ptr::{}` should name its parameter {}:\n{}",
+                    name,
+                    parameter,
+                    section,
+                );
+            }
+            // `offset_from` takes two pointers, so the order the two are listed in is the only
+            // thing that says which of them the distance is measured from.
+            let where_named = parameters
+                .iter()
+                .map(|parameter| {
+                    section
+                        .find(parameter)
+                        .expect("the parameter is named above")
+                })
+                .collect::<Vec<_>>();
+            assert!(
+                where_named.windows(2).all(|pair| pair[0] < pair[1]),
+                "the documentation of `Std::Ptr::{}` should name its parameters in the order the \
+                 value takes them, {:?}:\n{}",
+                name,
+                parameters,
+                section,
+            );
+        }
+    }
+
+    /// The directory of the Fix project the tests document: `Main` in its build, `Test` in its test
+    /// build, and the projects of `cases/` beneath it.
     fn get_test_project_dir() -> PathBuf {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/tests/test_docs");
         path
     }
 
-    // Create a temporary test environment with copied project files
+    /// A copy of the project `get_test_project_dir` names, in a temporary directory of its own so
+    /// that tests running at the same time each document their own copy: the directory, which
+    /// deletes the copy once it is dropped, and the path of the copy.
     fn setup_test_env() -> (TempDir, PathBuf) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_project_src = get_test_project_dir();
@@ -43,7 +175,8 @@ mod integration_tests {
         (temp_dir, test_project_dst)
     }
 
-    // Clean up generated documentation before running test
+    /// Removes a project's `docs` directory, so that what a later run of `fix docs` writes is the
+    /// whole of its content.
     fn cleanup_test_docs(project_dir: &PathBuf) {
         let docs_dir = project_dir.join("docs");
         if docs_dir.exists() {
@@ -51,12 +184,10 @@ mod integration_tests {
         }
     }
 
+    /// `fix docs` documents the modules of the build alone: it writes `docs/Main.md`, holding
+    /// `hello`, and the test module `Test` is documented only when it is asked for.
     #[test]
     fn test_docs_default_mode() {
-        // This test verifies that `fix docs` (without --test flag):
-        // 1. Generates documentation only for Main module
-        // 2. Does NOT generate documentation for Test module
-
         let (_temp_dir, project_dir) = setup_test_env();
         cleanup_test_docs(&project_dir);
 
@@ -104,12 +235,10 @@ mod integration_tests {
         );
     }
 
+    /// `--test` documents the test modules alongside those of the build: `docs/Main.md` holds
+    /// `hello` and `docs/Test.md` holds `test_helper`.
     #[test]
     fn test_docs_test_mode() {
-        // This test verifies that `fix docs --test`:
-        // 1. Generates documentation for Main module
-        // 2. Also generates documentation for Test module
-
         let (_temp_dir, project_dir) = setup_test_env();
         cleanup_test_docs(&project_dir);
 
@@ -164,12 +293,10 @@ mod integration_tests {
         );
     }
 
+    /// `--mods` picks the modules to document: naming `Test` alone writes `docs/Test.md`, holding
+    /// `test_helper`, and that document alone.
     #[test]
     fn test_docs_test_mode_specific_module() {
-        // This test verifies that `fix docs --test --mods Test`:
-        // 1. Generates documentation only for Test module
-        // 2. Does NOT generate documentation for Main module
-
         let (_temp_dir, project_dir) = setup_test_env();
         cleanup_test_docs(&project_dir);
 
@@ -217,13 +344,11 @@ mod integration_tests {
         );
     }
 
+    /// The document `fix docs` generates for a project exercising structs, unions, traits and type
+    /// aliases matches `expected_docs/Main.md` character for character, so a change in how any of
+    /// those is rendered shows up as a difference against the file the repository carries.
     #[test]
     fn test_docs_comprehensive_output() {
-        // This test verifies that `fix docs` generates documentation
-        // that matches the expected output for a comprehensive test case
-        // containing various language features (structs, unions, traits, type aliases, etc.)
-
-        // Set up test environment with comprehensive test case
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_project_dir().join("cases/comprehensive_docs");
         let test_case_dst = temp_dir.path().join("comprehensive_docs");
@@ -282,13 +407,12 @@ mod integration_tests {
         );
     }
 
+    /// `--with-compiler-defined-methods` documents the accessors the compiler defines, which carry
+    /// no syntactic type scheme: `@field`, `set_field`, `mod_field` and `act_field` of a public
+    /// struct field, and `as_variant`, `is_variant` and `mod_variant` of a public union variant.
+    /// The accessors of a field or variant whose name opens with an underscore stay private.
     #[test]
     fn test_docs_with_compiler_defined_methods() {
-        // This test verifies that `fix docs --with-compiler-defined-methods`:
-        // 1. Does not panic (regression: compiler-defined methods have syn_scm = None).
-        // 2. Includes accessors for public fields/variants.
-        // 3. Excludes accessors for private (underscore-prefixed) fields/variants.
-
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_project_dir().join("cases/comprehensive_docs");
         let test_case_dst = temp_dir.path().join("comprehensive_docs");
@@ -345,13 +469,11 @@ mod integration_tests {
         }
     }
 
+    /// `--with-private` documents the items an opening underscore keeps private: a top-level
+    /// value, the subsection of a struct field and that of a union variant, and, together with
+    /// `--with-compiler-defined-methods`, the accessors of that field and that variant.
     #[test]
     fn test_docs_with_private_and_compiler_defined_methods() {
-        // This test verifies that `fix docs --with-private --with-compiler-defined-methods`
-        // un-hides all private items that are otherwise filtered:
-        // private top-level values, private field/variant subsections,
-        // and accessors for private fields/variants.
-
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let test_case_src = get_test_project_dir().join("cases/comprehensive_docs");
         let test_case_dst = temp_dir.path().join("comprehensive_docs");

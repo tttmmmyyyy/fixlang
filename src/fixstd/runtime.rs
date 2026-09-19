@@ -31,10 +31,6 @@ pub const RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE: &str = "fixruntime_shift_amount_out
 pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
 /// libc `sprintf`, which writes a formatted value into a buffer the caller provides.
 pub const RUNTIME_SPRINTF: &str = "sprintf";
-/// The runtime function giving the distance in bytes from its second pointer to its first.
-pub const RUNTIME_SUBTRACT_PTR: &str = "fixruntime_subtract_ptr";
-/// The runtime function giving the address a signed number of bytes past the pointer it is given.
-pub const RUNTIME_PTR_ADD_OFFSET: &str = "fixruntime_ptr_add_offset";
 /// libc `pthread_once`, which runs an initializer at the first thread to reach it and makes every
 /// other thread wait for that run to finish.
 // PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -121,8 +117,6 @@ pub fn build_runtime<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     );
     build_eprintln_function(gc, mode);
     build_sprintf_function(gc, mode);
-    build_subtract_ptr_function(gc, mode);
-    build_ptr_add_offset_function(gc, mode);
     if gc.config.threaded {
         build_pthread_once_function(gc, mode);
     }
@@ -136,7 +130,7 @@ pub fn build_runtime<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
 ///
 /// The runtime functions split into two groups: those provided externally (by
 /// the C runtime, e.g. `malloc`), which need only a declaration, and those
-/// implemented in this module (e.g. `fixruntime_ptr_add_offset`), which also
+/// implemented in this module (e.g. `fixruntime_get_argc`), which also
 /// need a body. Each build pass runs once in `Declare` mode and once in
 /// `Implement` mode.
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
@@ -240,71 +234,6 @@ fn build_sprintf_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
         true,
     );
     module.add_function(RUNTIME_SPRINTF, fn_ty, None);
-}
-
-/// Build `fixruntime_subtract_ptr`, which returns the distance in bytes from its second pointer
-/// argument to its first.
-fn build_subtract_ptr_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
-    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
-    let fn_ty = gc
-        .context
-        .i64_type()
-        .fn_type(&[ptr_ty.into(), ptr_ty.into()], false);
-    let Some(func) = declare_or_lookup_runtime_function(gc, mode, RUNTIME_SUBTRACT_PTR, fn_ty)
-    else {
-        return;
-    };
-
-    let bb = gc.context.append_basic_block(func, "entry");
-    let _builder_guard = gc.push_builder();
-
-    gc.builder().position_at_end(bb);
-    let lhs = func.get_first_param().unwrap().into_pointer_value();
-    let rhs = func.get_nth_param(1).unwrap().into_pointer_value();
-    let ptr_diff = gc
-        .builder()
-        .build_ptr_diff(
-            gc.context.i8_type(),
-            lhs,
-            rhs,
-            "ptr_diff@fixruntime_subtract_ptr",
-        )
-        .unwrap();
-    gc.builder().build_return(Some(&ptr_diff)).unwrap();
-}
-
-/// Build `fixruntime_ptr_add_offset`, which returns the address `offset` bytes past the pointer it
-/// is given. The offset is applied to the integer address, so it may be negative and may land
-/// outside the object the pointer points into.
-fn build_ptr_add_offset_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
-    let i64_ty = gc.context.i64_type();
-    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
-
-    let fn_ty = ptr_ty.fn_type(&[ptr_ty.into(), i64_ty.into()], false);
-    let Some(func) = declare_or_lookup_runtime_function(gc, mode, RUNTIME_PTR_ADD_OFFSET, fn_ty)
-    else {
-        return;
-    };
-
-    let bb = gc.context.append_basic_block(func, "entry");
-    let _builder_guard = gc.push_builder();
-
-    gc.builder().position_at_end(bb);
-    let ptr = func.get_first_param().unwrap().into_pointer_value();
-    let offset = func.get_nth_param(1).unwrap().into_int_value();
-    let ptr_int = gc
-        .builder()
-        .build_ptr_to_int(ptr, i64_ty, "ptr_to_int@fixruntime_ptr_add_offset")
-        .unwrap();
-    let sum_int = gc
-        .builder()
-        .build_int_add(ptr_int, offset, "add@fixruntime_ptr_add_offset")
-        .unwrap();
-    let sum_ptr = gc
-        .builder()
-        .build_int_to_ptr(sum_int, ptr_ty, "int_to_ptr@fixruntime_ptr_add_offset")
-        .unwrap();
-    gc.builder().build_return(Some(&sum_ptr)).unwrap();
 }
 
 /// Declare `pthread_once`, which takes the flag recording whether the initializer has run and the

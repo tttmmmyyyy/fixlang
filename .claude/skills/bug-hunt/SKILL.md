@@ -176,6 +176,8 @@ change in the wrong direction.
 
 Untested code is where a latent bug survives, because a tested path carrying a bug would already have failed — so a gap in the suite is a map to where the bugs are. Enumerate the cases the target handles — the match arms, the error branches, the boundaries (empty, one element, the degenerate shape), the opt-level and config combinations — and cross off the ones a test exercises; a coverage tool (`cargo-llvm-cov`) mechanizes the same census. Craft the input that drives execution into what is left, run it, and read the result with a detector. This is the `test-sufficiency` review lens turned offensive: that aspect flags the gap for the author, a hunt shoots into it.
 
+**A test that names the case it declines to cover is the cheapest form of this.** A test's doc routinely explains why it chose the input it chose, and such a sentence is the author telling you which neighbouring case they decided not to exercise, together with the reason they believed it was uninteresting. Check the reason rather than the choice. When it says two *inputs* are equivalent, the case may genuinely be covered; when it says one *stage* treats them alike — a widening that is a no-op at that width, a conversion that is the identity for that type, a path that short-circuits for that size — then every stage after that one is still untested on it, and that is where the bug sits. So read the test files the target owns for the sentences that justify an input, take each case such a sentence names, and run it.
+
 #### Feed a corpus of broken inputs to the mode whose whole specification is "do not fail"
 
 Some modes exist to keep going on input the normal mode rejects: an error-tolerant elaboration serving an editor mid-edit, a parser's error recovery, a documentation generator over a project that does not build, any partial answer computed while the user is still typing. Such a mode has no expected output to write down, which is why it is usually tested with a handful of hand-picked cases — and that is also what makes it cheap to hunt, because **"it must not crash" is the entire specification, so any invalid input is a test and the crash is the oracle**.
@@ -206,6 +208,27 @@ answer while compiling, and what is left runs nothing the test claims to check. 
 something the compiler has to leave alone — the program's arguments, a file, a value the run
 computes — and confirm the choice by mutating the mechanism the test names and watching it go red.
 Until that, a green run says only that the program compiled.
+
+#### Count the shapes the corpus holds, not the ones the detector was written for
+
+A detector that reads machine-generated text -- IR, bytecode, a log, a serialized form -- implements
+a grammar, and it implements the part of that grammar its author thought of. Injecting a failure
+proves it fires on *that* shape; it says nothing about the shapes the generator emits that the author
+never pictured, and those are exactly where a walk goes quiet while looking as it does when it
+passes.
+
+So enumerate the shapes from the corpus rather than from the model of the input: grep the corpus for
+each construct the detector claims to handle, count the occurrences, and for every shape whose count
+is not zero, confirm the detector's answer on it is a decision rather than a miss. A shape the
+detector was never shown is one whose silence means nothing, however many times the corpus holds it
+-- and the count is the measurement of what the silence was worth. One walk of this kind reported
+correctly on a value built from a bare scaffold and dropped every unwritten field of one built from
+a constant aggregate; the two are the same situation written two ways, and the second stood 150
+times across 30 modules of the corpus the walk had just pronounced clean.
+
+The same enumeration catches the parser's own blind spots -- a name the generator quotes where the
+pattern admits no quote, an escape, a form the grammar allows and the sample never showed. Those
+make the detector skip whatever follows, which is the widest way for a walk to go quiet.
 
 #### Run the gatekeeper's predicate at the gate
 
