@@ -1,6 +1,6 @@
 # Fix
 
-A fast, familiar, purely functional language.
+A fast, familiar, functional language.
 
 ![Ubuntu Tests](https://github.com/tttmmmyyyy/fixlang/actions/workflows/test.yml/badge.svg)
 [![GitHub release](https://img.shields.io/github/v/release/tttmmmyyyy/fixlang)](https://github.com/tttmmmyyyy/fixlang/releases)
@@ -14,6 +14,7 @@ You can try Fix in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-pla
 ## Concepts and features
 
 - **Functional**
+  - Fix is a purely functional language, like Haskell: functions are pure, and effects are expressed as values, with the foreign function interface as the one exception, since a C function it calls can do anything.
   - Higher-kinded types, traits, and associated types give the type system the abstractions a purely functional language needs to express effects and generic structure.
   - Sequencing effects without leaving pure code: an `IO` action is an ordinary value, and Fix composes them with dedicated operators.
 - **Memory management**
