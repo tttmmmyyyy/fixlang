@@ -7,9 +7,11 @@ A fast, familiar, functional language.
 
 ## Overview
 
-Fix has been in development since 2023. Its tools include a dependency manager, a document generator, and a language server with [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) extensions, plus a [registry of packages](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) — regular-expression, JSON, hash-map, and GMP/MPFR/Cairo bindings among them.
-
 You can try Fix in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-playground/), and it's also one of the judge languages on [AtCoder](https://atcoder.jp/), a major competitive programming site.
+
+## Development status
+
+Fix has been in development since 2023. Its tools include a dependency manager, a document generator, and a language server with [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) extensions, plus a [registry of packages](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) — regular-expression, JSON, hash-map, and GMP/MPFR/Cairo bindings among them.
 
 ## Concepts and features
 
