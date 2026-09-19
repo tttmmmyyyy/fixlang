@@ -5,10 +5,6 @@ A fast, familiar, functional language.
 ![Ubuntu Tests](https://github.com/tttmmmyyyy/fixlang/actions/workflows/test.yml/badge.svg)
 [![GitHub release](https://img.shields.io/github/v/release/tttmmmyyyy/fixlang)](https://github.com/tttmmmyyyy/fixlang/releases)
 
-## Overview
-
-You can try Fix in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-playground/), and it's also one of the judge languages on [AtCoder](https://atcoder.jp/), a major competitive programming site.
-
 ## Development status
 
 Fix has been in development since 2023.
@@ -74,6 +70,8 @@ main = (
 ```
 
 ## Installation
+
+You can try Fix without installing it, in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-playground/); it's also one of the judge languages on [AtCoder](https://atcoder.jp/), a major competitive programming site.
 
 Fix provides prebuilt binaries for:
 
