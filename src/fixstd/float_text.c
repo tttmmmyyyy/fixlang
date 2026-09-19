@@ -61,7 +61,7 @@ int64_t fixruntime_write_u64(char *buf, uint64_t v);
 // * `written` - The length of the text, without its null. A negative number is what `snprintf`
 //   answers where it could not write the text at all.
 // * `size` - The bytes the buffer holds.
-static int64_t fixruntime_check_float_text(int written, int64_t size)
+static int64_t fixruntime_checked_float_text_length(int written, int64_t size)
 {
     if (written < 0)
     {
@@ -82,22 +82,22 @@ static int64_t fixruntime_check_float_text(int written, int64_t size)
 // the number in scientific notation, and the others write it positionally.
 int64_t fixruntime_f32_to_str_exp_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
-    return fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*e", (int)precision, v), size);
+    return fixruntime_checked_float_text_length(snprintf(buf, (size_t)size, "%.*e", (int)precision, v), size);
 }
 
 int64_t fixruntime_f32_to_str_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
-    return fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*f", (int)precision, v), size);
+    return fixruntime_checked_float_text_length(snprintf(buf, (size_t)size, "%.*f", (int)precision, v), size);
 }
 
 int64_t fixruntime_f64_to_str_exp_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
-    return fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*le", (int)precision, v), size);
+    return fixruntime_checked_float_text_length(snprintf(buf, (size_t)size, "%.*le", (int)precision, v), size);
 }
 
 int64_t fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
-    return fixruntime_check_float_text(snprintf(buf, (size_t)size, "%.*lf", (int)precision, v), size);
+    return fixruntime_checked_float_text_length(snprintf(buf, (size_t)size, "%.*lf", (int)precision, v), size);
 }
 
 // Writes the scientific text Ryu produced the way Fix spells a floating point number, and
@@ -147,7 +147,7 @@ static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t s
             fprintf(stderr, "A number was written as \"%s\", which is neither digits nor Infinity nor NaN\n", sci);
             fixruntime_abort();
         }
-        int length = fixruntime_check_float_text((int)strlen(special), size);
+        int length = fixruntime_checked_float_text_length((int)strlen(special), size);
         memcpy(buf, special, (size_t)length + 1);
         return length;
     }
@@ -247,7 +247,7 @@ static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t s
     }
     text[written] = '\0';
 
-    fixruntime_check_float_text(written, size);
+    fixruntime_checked_float_text_length(written, size);
     memcpy(buf, text, (size_t)written + 1);
     return written;
 }
