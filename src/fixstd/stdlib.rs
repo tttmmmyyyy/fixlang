@@ -917,11 +917,12 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
     // which decides whether the member's document speaks of the rounding a conversion from a
     // floating-point type performs.
     let mut to_type_names: Vec<(String, bool)> = vec![];
-    for ty in int_types.iter() {
-        to_type_names.push((ty.toplevel_tycon().unwrap().name.name.clone(), true));
-    }
-    for ty in float_types.iter() {
-        to_type_names.push((ty.toplevel_tycon().unwrap().name.name.clone(), false));
+    for (ty, holds_integers) in int_types
+        .iter()
+        .map(|ty| (ty, true))
+        .chain(float_types.iter().map(|ty| (ty, false)))
+    {
+        to_type_names.push((ty.toplevel_tycon().unwrap().name.name.clone(), holds_integers));
     }
     for (c_ty_name, number_kind, _) in &c_types {
         to_type_names.push((c_ty_name.to_string(), *number_kind != "F"));

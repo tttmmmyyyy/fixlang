@@ -1632,9 +1632,9 @@ fn build_float_to_int_range_check<'c, 'm>(
     to_int_ty: IntType<'c>,
     from_ty: &Arc<TypeNode>,
     to_ty: &Arc<TypeNode>,
+    is_signed: bool,
 ) {
     let float_ty = value.get_type();
-    let is_signed = to_ty.is_signed_integer();
     let truncate = gc.intrinsic_function("llvm.trunc", &[float_ty.into()]);
     let truncated = gc
         .builder()
@@ -1649,6 +1649,12 @@ fn build_float_to_int_range_check<'c, 'm>(
         .into_float_value();
 
     let width = to_int_ty.get_bit_width() as i32;
+    assert!(
+        width <= 64,
+        "a bound of the range is a power of two that both floating-point types hold exactly, which \
+         reaches as far as `2^64`; this integer type is {} bits wide",
+        width
+    );
     let (lower, upper) = if is_signed {
         (-2f64.powi(width - 1), 2f64.powi(width - 1))
     } else {
@@ -1739,7 +1745,7 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
         // conversion brings a value outside the range to the end of it, and a check behind it would
         // read that end rather than the value the program wrote.
         if gc.config.checks_integer_operations() {
-            build_float_to_int_range_check(gc, from_val, to_int_ty, &from_ty, to_ty);
+            build_float_to_int_range_check(gc, from_val, to_int_ty, &from_ty, to_ty, self.is_signed);
         }
 
         // Perform cast.
