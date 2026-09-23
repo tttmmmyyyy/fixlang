@@ -1,6 +1,7 @@
-//! Whether a build stops on a signed integer overflow, or on a shift by an amount outside the
-//! width of its type, is a setting of that build. A test build takes the `build.test` section's
-//! value, and falls back to the `build` section when `build.test` does not set it.
+//! Whether a build stops on a signed integer overflow, on a shift by an amount outside the width
+//! of its type, or on a conversion of a floating-point value to an integer type that does not hold
+//! it, is a setting of that build. A test build takes the `build.test` section's value, and falls
+//! back to the `build` section when `build.test` does not set it.
 //!
 //! Each case under `test_check_integer_operations_setting/cases` sums past the greatest value of
 //! `I64`. Under the check the program stops there; without it the sum wraps, so the program prints
@@ -12,7 +13,8 @@ use crate::tests::test_util::{assert_failed_with, assert_succeeded, run_fix, set
 const CASES: &str = "src/tests/test_check_integer_operations_setting/cases";
 
 /// What the checks say when they stop the program at the sum the case projects ask for.
-/// The setting covers the shift amount as well, which `test_shift_amount` exercises.
+/// The setting covers the shift amount and the float-to-integer conversion as well, which
+/// `test_shift_amount` and `test_float_to_integer_conversion` exercise.
 const SUM_STOPPED: &str = "Signed integer overflow: I64 addition";
 
 /// The `build` section decides the setting for the program.

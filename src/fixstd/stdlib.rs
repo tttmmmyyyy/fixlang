@@ -929,12 +929,15 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
     let mut src = "module Std; \n\n".to_string();
     for (to_name, holds_integers) in &to_type_names {
         let rounding = if *holds_integers {
-            "// \n\
-             // A floating-point value is rounded towards zero. Where the rounded value lies outside \
-             the range of `{}`, and where the value is a NaN, the result is unspecified; \
-             `--check-integer-operations` stops the program there.\n"
+            format!(
+                "// \n\
+                 // A floating-point value is rounded towards zero. Where the rounded value lies \
+                 outside the range of `{}`, and where the value is a NaN, the result is \
+                 unspecified; `--check-integer-operations` stops the program there.\n",
+                to_name,
+            )
         } else {
-            ""
+            String::new()
         };
         src += &format!(
             "trait a : To{} {{ \n\
@@ -944,7 +947,7 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
             }}\n",
             to_name,
             to_name,
-            rounding.replace("{}", to_name),
+            rounding,
             upper_camel_to_lower_snake(to_name),
             to_name,
         );

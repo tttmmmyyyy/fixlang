@@ -49,7 +49,7 @@ use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::locality::{ExtCond, ExtShape, LeafCond};
 use crate::rc_ir::provenance::{sole_origin, LeafOrigin, Provenance};
 use inkwell::module::Linkage;
-use inkwell::types::{FloatType, IntType};
+use inkwell::types::IntType;
 use inkwell::values::{BasicMetadataValueEnum, BasicValue, FloatValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use num_bigint::BigInt;
@@ -1583,17 +1583,6 @@ pub fn cast_int_to_float_function(
     (expr, scm)
 }
 
-/// The name of the `Std` floating-point type laid out as `float_ty`.
-fn float_type_name<'c, 'm>(gc: &Generator<'c, 'm>, float_ty: FloatType<'c>) -> &'static str {
-    if float_ty == gc.context.f64_type() {
-        "F64"
-    } else if float_ty == gc.context.f32_type() {
-        "F32"
-    } else {
-        panic!("A floating-point type of `Std` is laid out as neither `float` nor `double`")
-    }
-}
-
 /// `value` rounded towards zero and converted to the integer type `to_int_ty`, with a value beyond
 /// an end of that type's range brought to that end and a NaN brought to zero.
 ///
@@ -1635,16 +1624,17 @@ fn build_saturating_float_to_int<'c, 'm>(
 ///
 /// The bounds are the powers of two just outside the range rather than the values at its ends.
 /// `I64::maximum` has no exact form in `F64`, so a bound built from it would be rounded to `2^63`
-/// and let the value that reaches it past the check; `2^63` itself is exact in both floating-point
-/// types, and every value the check admits is below it.
+/// and let the value that reaches it past the check. A power of two is exact in both floating-point
+/// types, and every value the range holds lies below the one the check compares against.
 fn build_float_to_int_range_check<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     value: FloatValue<'c>,
     to_int_ty: IntType<'c>,
+    from_ty: &Arc<TypeNode>,
     to_ty: &Arc<TypeNode>,
-    is_signed: bool,
 ) {
     let float_ty = value.get_type();
+    let is_signed = to_ty.is_signed_integer();
     let truncate = gc.intrinsic_function("llvm.trunc", &[float_ty.into()]);
     let truncated = gc
         .builder()
@@ -1694,7 +1684,7 @@ fn build_float_to_int_range_check<'c, 'm>(
 
     let reported_conversion = format!(
         "{} to {}",
-        float_type_name(gc, float_ty),
+        from_ty.toplevel_tycon().unwrap().name.name,
         to_ty.toplevel_tycon().unwrap().name.name
     );
     let reported_conversion_ptr = gc
@@ -1733,10 +1723,10 @@ pub struct InlineLLVMCastFloatToIntBody {
 #[typetag::serde]
 impl LLVMGen for InlineLLVMCastFloatToIntBody {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, to_ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get value
-        let from_val = gc
-            .get_scoped_obj_field(&self.from_name, 0)
-            .into_float_value();
+        // Get value. The object carries the Fix type of the source, which the report names.
+        let from_obj = gc.get_scoped_obj(&self.from_name);
+        let from_ty = from_obj.ty.clone();
+        let from_val = from_obj.extract_field(gc, 0).into_float_value();
 
         // Get target type.
         let to_int_ty = to_ty
@@ -1749,7 +1739,7 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
         // conversion brings a value outside the range to the end of it, and a check behind it would
         // read that end rather than the value the program wrote.
         if gc.config.checks_integer_operations() {
-            build_float_to_int_range_check(gc, from_val, to_int_ty, to_ty, self.is_signed);
+            build_float_to_int_range_check(gc, from_val, to_int_ty, &from_ty, to_ty);
         }
 
         // Perform cast.

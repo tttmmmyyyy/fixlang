@@ -392,7 +392,7 @@ __attribute__((noreturn)) void fixruntime_shift_amount_out_of_range(const char *
 
 __attribute__((noreturn)) void fixruntime_float_to_integer_out_of_range(const char *operation, double value)
 {
-    fprintf(stderr, "Floating-point value outside the range of the integer type: %s, with %g\n", operation, value);
+    fprintf(stderr, "Floating-point value outside the range of the integer type: %s, with %.17g\n", operation, value);
     fixruntime_abort();
 }
 

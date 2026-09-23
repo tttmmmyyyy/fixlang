@@ -604,7 +604,8 @@ fn run_source(source: &str, config: Configuration) -> Result<Result<Output, io::
 }
 
 /// A configuration with `--check-integer-operations` on, which stops the program on a signed
-/// integer overflow, or on a shift by an amount outside the width of its type.
+/// integer overflow, on a shift by an amount outside the width of its type, or on a conversion of
+/// a floating-point value to an integer type that does not hold it.
 pub fn integer_operations_checked_config() -> Configuration {
     let mut config = Configuration::develop_mode();
     config.check_integer_operations = true;
