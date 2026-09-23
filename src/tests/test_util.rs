@@ -618,6 +618,11 @@ pub fn integer_operations_checked_config() -> Configuration {
 /// An operand built from `zero` reaches the code generator as a value, so the value a case names
 /// is the one the instruction receives. An operand written as a literal is folded long before
 /// that, and the instruction then answers at compile time whatever the folding chose.
+///
+/// The program states nothing about what `get_args` answered. An assertion on `args.@size` hands
+/// the optimizer that size on every path below it, which folds `zero` and with it everything the
+/// body builds from it — the test then measures the folding rather than the emitted instruction.
+/// The number of arguments is the caller's to control, and `run_sources` passes none.
 pub fn source_with_a_runtime_zero(body: &str) -> String {
     format!(
         r#"
@@ -625,7 +630,6 @@ pub fn source_with_a_runtime_zero(body: &str) -> String {
         main : IO ();
         main = (
             let args = *get_args;
-            assert_eq(|_|"The test program is run with its own path alone", args.@size, 1);;
             let zero = args.@size - 1;
             {}
             pure()

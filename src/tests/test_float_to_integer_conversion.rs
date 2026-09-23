@@ -298,3 +298,40 @@ pub fn test_the_check_respects_no_runtime_check() {
         integer_operations_checked_runtime_unchecked_config(),
     );
 }
+
+/// A conversion answers the same value whether the optimizer took it while compiling or the
+/// emitted instruction took it while running.
+///
+/// Each case converts one value twice: from a literal, which the optimizer folds, and from that
+/// literal added to a `Std::I64` that is 0 at run time, which reaches the instruction. The two
+/// agree because the conversion saturates at both ends. `fptosi` answered `poison` outside the
+/// range, and the two halves then took different values from it — which is the shape of the defect
+/// this file exists for, measured where the other tests cannot see it.
+#[test]
+pub fn test_a_folded_conversion_answers_what_a_running_one_answers() {
+    test_with_a_runtime_zero(
+        r#"
+            let z64 = zero.f64;
+            let z32 = zero.f32;
+            assert_eq(|_|"1e30 into I64", (1.0e30).i64, (1.0e30 + z64).i64);;
+            assert_eq(|_|"-1e30 into I64", (-1.0e30).i64, (-1.0e30 + z64).i64);;
+            assert_eq(|_|"1e30 into U64", (1.0e30).u64, (1.0e30 + z64).u64);;
+            assert_eq(|_|"-1.0 into U8", (-1.0).u8, (-1.0 + z64).u8);;
+            assert_eq(|_|"1000.0 into U8", (1000.0).u8, (1000.0 + z64).u8);;
+            assert_eq(|_|"300.0 into I8", (300.0).i8, (300.0 + z64).i8);;
+            assert_eq(
+                |_|"2^63 into I64",
+                (9223372036854775808.0).i64,
+                (9223372036854775808.0 + z64).i64
+            );;
+            assert_eq(
+                |_|"2^64 into U64",
+                (18446744073709551616.0).u64,
+                (18446744073709551616.0 + z64).u64
+            );;
+            assert_eq(|_|"1e30 of F32 into I32", (1.0e30_F32).i32, (1.0e30_F32 + z32).i32);;
+            assert_eq(|_|"-1e30 of F32 into U32", (-1.0e30_F32).u32, (-1.0e30_F32 + z32).u32);;
+        "#,
+        Configuration::develop_mode(),
+    );
+}
