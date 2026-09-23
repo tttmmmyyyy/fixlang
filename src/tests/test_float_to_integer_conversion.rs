@@ -25,7 +25,7 @@ fn assert_the_check_stops_running(body: &str, report: &str) {
 /// The Fix source that binds `nan`, `infinite` and `one` to values the compiler cannot fold, so
 /// that the conversions below are performed at run time.
 const VALUES_BUILT_AT_RUN_TIME: &str = r#"
-    let one = zero.to_F64 + 1.0;
+    let one = zero.f64 + 1.0;
     let nan = (one - one) / (one - one);
     let infinite = one / (one - one);
 "#;
@@ -42,7 +42,7 @@ pub fn test_a_conversion_out_of_range_answers_one_value() {
         &format!(
             r#"
             {}
-            let x = nan.to_I64;
+            let x = nan.i64;
             assert_eq(
                 |_|"What the value compares as and what it prints as",
                 x < 0,
@@ -66,28 +66,38 @@ pub fn test_what_a_conversion_out_of_range_answers() {
         &format!(
             r#"
             {}
-            assert_eq(|_|"A NaN converts to zero", nan.to_I64, 0);;
-            assert_eq(|_|"A NaN converts to zero in an unsigned type", nan.to_U64, 0_U64);;
-            assert_eq(|_|"A NaN converts to zero in a narrow type", nan.to_I32, 0_I32);;
+            assert_eq(|_|"A NaN converts to zero", nan.i64, 0);;
+            assert_eq(|_|"A NaN converts to zero in an unsigned type", nan.u64, 0_U64);;
+            assert_eq(|_|"A NaN converts to zero in a narrow type", nan.i32, 0_I32);;
             assert_eq(
                 |_|"A value above the range converts to the greatest value of the type",
-                infinite.to_I64,
+                infinite.i64,
                 I64::maximum
             );;
             assert_eq(
                 |_|"A value below the range converts to the least value of the type",
-                (-infinite).to_I64,
+                (-infinite).i64,
                 I64::minimum
             );;
             assert_eq(
                 |_|"A negative value converts to zero in an unsigned type",
-                (-one).to_U8,
+                (-one).u8,
                 0_U8
             );;
             assert_eq(
                 |_|"A finite value above the range converts to the greatest value of the type",
-                (one * 1.0e30).to_I64,
+                (one * 1.0e30).i64,
                 I64::maximum
+            );;
+            assert_eq(
+                |_|"A value above the range converts to the greatest value of an unsigned type",
+                infinite.u64,
+                U64::maximum
+            );;
+            assert_eq(
+                |_|"A finite value above the range converts to the greatest value of a narrow unsigned type",
+                (one * 1000.0).u8,
+                U8::maximum
             );;
         "#,
             VALUES_BUILT_AT_RUN_TIME
@@ -108,12 +118,12 @@ pub fn test_the_round_trip_of_the_greatest_value() {
         r#"
             assert_eq(
                 |_|"I64::maximum through F64 and back",
-                (I64::maximum + zero).to_F64.to_I64,
+                (I64::maximum + zero).f64.i64,
                 I64::maximum
             );;
             assert_eq(
                 |_|"I32::maximum through F32 and back",
-                (I32::maximum + zero.to_I32).to_F32.to_I32,
+                (I32::maximum + zero.i32).f32.i32,
                 I32::maximum
             );;
         "#,
@@ -130,18 +140,18 @@ pub fn test_the_round_trip_of_the_greatest_value() {
 #[test]
 pub fn test_a_value_rounding_into_range_is_converted_and_passes_the_check() {
     let body = r#"
-        let z = zero.to_F64;
-        assert_eq(|_|"-128.5 into I8", (-128.5 + z).to_I8, -128_I8);;
-        assert_eq(|_|"127.9 into I8", (127.9 + z).to_I8, 127_I8);;
-        assert_eq(|_|"255.9 into U8", (255.9 + z).to_U8, 255_U8);;
-        assert_eq(|_|"-0.9 into U8", (-0.9 + z).to_U8, 0_U8);;
+        let z = zero.f64;
+        assert_eq(|_|"-128.5 into I8", (-128.5 + z).i8, -128_I8);;
+        assert_eq(|_|"127.9 into I8", (127.9 + z).i8, 127_I8);;
+        assert_eq(|_|"255.9 into U8", (255.9 + z).u8, 255_U8);;
+        assert_eq(|_|"-0.9 into U8", (-0.9 + z).u8, 0_U8);;
         assert_eq(
             |_|"-2147483648.5 into I32",
-            (-2147483648.5 + z).to_I32,
+            (-2147483648.5 + z).i32,
             I32::minimum
         );;
-        assert_eq(|_|"3.7 into I64", (3.7 + z).to_I64, 3);;
-        assert_eq(|_|"-3.7 into I64", (-3.7 + z).to_I64, -3);;
+        assert_eq(|_|"3.7 into I64", (3.7 + z).i64, 3);;
+        assert_eq(|_|"-3.7 into I64", (-3.7 + z).i64, -3);;
     "#;
     test_with_a_runtime_zero(body, Configuration::develop_mode());
     test_with_a_runtime_zero(body, integer_operations_checked_config());
@@ -154,7 +164,7 @@ pub fn test_the_check_stops_a_conversion_of_a_nan() {
         &format!(
             r#"
             {}
-            eval nan.to_I64;
+            eval nan.i64;
         "#,
             VALUES_BUILT_AT_RUN_TIME
         ),
@@ -169,7 +179,7 @@ pub fn test_the_check_stops_a_conversion_above_the_range() {
         &format!(
             r#"
             {}
-            eval infinite.to_I64;
+            eval infinite.i64;
         "#,
             VALUES_BUILT_AT_RUN_TIME
         ),
@@ -185,7 +195,7 @@ pub fn test_the_check_stops_a_negative_value_into_an_unsigned_type() {
         &format!(
             r#"
             {}
-            eval (-one).to_U8;
+            eval (-one).u8;
         "#,
             VALUES_BUILT_AT_RUN_TIME
         ),
@@ -199,10 +209,92 @@ pub fn test_the_check_stops_a_negative_value_into_an_unsigned_type() {
 pub fn test_the_check_names_the_source_type() {
     assert_the_check_stops_running(
         r#"
-            let one = zero.to_F32 + 1.0_F32;
+            let one = zero.f32 + 1.0_F32;
             let nan = (one - one) / (one - one);
-            eval nan.to_I32;
+            eval nan.i32;
         "#,
         "Floating-point value outside the range of the integer type: F32 to I32, with nan",
+    );
+}
+
+/// The check stops the program at a value above the range of an unsigned type, whose greatest
+/// value lies below the power of two of its whole width rather than of one less.
+#[test]
+pub fn test_the_check_stops_a_value_above_an_unsigned_range() {
+    assert_the_check_stops_running(
+        &format!(
+            r#"
+            {}
+            eval (one * 1000.0).u8;
+        "#,
+            VALUES_BUILT_AT_RUN_TIME
+        ),
+        "Floating-point value outside the range of the integer type: F64 to U8, with 1000",
+    );
+}
+
+/// The check stops the program at the power of two the range ends below, which is the value
+/// `I64::maximum` takes in `F64`.
+///
+/// A bound built from `I64::maximum` would be rounded to that same power of two and let the value
+/// through, leaving saturation to answer a conversion the type has no answer for.
+#[test]
+pub fn test_the_check_stops_the_power_of_two_the_range_ends_below() {
+    assert_the_check_stops_running(
+        "eval (I64::maximum + zero).f64.i64;",
+        "Floating-point value outside the range of the integer type: F64 to I64",
+    );
+}
+
+/// The values at the ends of each type's range pass the check and convert to themselves.
+///
+/// A bound placed one power of two too low — `2^(w-1)` for an unsigned type of `w` bits — or a
+/// comparison that excluded the end of the range would stop one of these. `9223372036854774784`
+/// and `18446744073709549568` are the greatest values of `F64` below `2^63` and `2^64`.
+#[test]
+pub fn test_the_check_lets_the_ends_of_the_range_through() {
+    test_with_a_runtime_zero(
+        r#"
+            let z = zero.f64;
+            assert_eq(
+                |_|"The greatest F64 below 2^63 into I64",
+                (9223372036854774784.0 + z).i64,
+                9223372036854774784
+            );;
+            assert_eq(
+                |_|"The greatest F64 below 2^64 into U64",
+                (18446744073709549568.0 + z).u64,
+                18446744073709549568_U64
+            );;
+            assert_eq(|_|"The greatest value of U32", (4294967295.0 + z).u32, U32::maximum);;
+            assert_eq(|_|"The least value of I16", (-32768.0 + z).i16, I16::minimum);;
+            assert_eq(|_|"The greatest value of U16", (65535.9 + z).u16, U16::maximum);;
+        "#,
+        integer_operations_checked_config(),
+    );
+}
+
+/// A configuration that asks for the conversion check and then leaves out every check that ends
+/// the program, as `--check-integer-operations --no-runtime-check` does.
+fn integer_operations_checked_runtime_unchecked_config() -> Configuration {
+    let mut config = integer_operations_checked_config();
+    config.no_runtime_check = true;
+    config
+}
+
+/// `--no-runtime-check` takes the conversion check out with the rest of the checks that end the
+/// program, so a build given both it and `--check-integer-operations` runs on at a value the
+/// target type does not hold.
+#[test]
+pub fn test_the_check_respects_no_runtime_check() {
+    test_with_a_runtime_zero(
+        &format!(
+            r#"
+            {}
+            assert_eq(|_|"A NaN converts to zero", nan.i64, 0);;
+        "#,
+            VALUES_BUILT_AT_RUN_TIME
+        ),
+        integer_operations_checked_runtime_unchecked_config(),
     );
 }
