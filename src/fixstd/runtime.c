@@ -7,6 +7,7 @@ The C functions and values the Fix standard library is implemented with.
 #include <ctype.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -392,7 +393,17 @@ __attribute__((noreturn)) void fixruntime_shift_amount_out_of_range(const char *
 
 __attribute__((noreturn)) void fixruntime_float_to_integer_out_of_range(const char *operation, double value)
 {
-    fprintf(stderr, "Floating-point value outside the range of the integer type: %s, with %.17g\n", operation, value);
+    // A NaN is reported without its sign bit, which the language leaves open: the quotient that
+    // produces one carries a different sign when the optimizer folds it than when the machine
+    // computes it, and a report naming that bit would name the optimization level instead.
+    if (isnan(value))
+    {
+        fprintf(stderr, "Floating-point value outside the range of the integer type: %s, with nan\n", operation);
+    }
+    else
+    {
+        fprintf(stderr, "Floating-point value outside the range of the integer type: %s, with %.17g\n", operation, value);
+    }
     fixruntime_abort();
 }
 
