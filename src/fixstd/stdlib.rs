@@ -132,7 +132,12 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         } else {
             make_integral_ty(&format!("{}{}", sign, size))
         };
-        let fix_type = fix_type.expect("Type alias `{}` is not supported in this system.");
+        let fix_type = fix_type.unwrap_or_else(|| {
+            panic!(
+                "The C type `{}` is {} bits wide, which no Fix type has.",
+                name, size
+            )
+        });
         fix_module.add_type_defns(vec![TypeDefn {
             name: FullName::from_strs(&[STD_NAME, FFI_NAME], name),
             value: TypeDeclValue::Alias(TypeAlias { value: fix_type }),
@@ -1019,7 +1024,13 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
             } else {
                 make_floating_ty(&format!("{}{}", sign, size))
             };
-            let Some(to_fix) = to_fix else { continue };
+            let to_fix = to_fix.unwrap_or_else(|| {
+                panic!(
+                    "The C type `{}` reached the cast traits without a Fix type, which \
+                     `make_std_mod` stops at before it builds them.",
+                    to_name_c
+                )
+            });
             let to_alias = type_tycon(&Arc::new(TyCon::new(FullName::from_strs(
                 &[STD_NAME, FFI_NAME],
                 to_name_c,
