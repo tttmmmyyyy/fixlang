@@ -1714,8 +1714,8 @@ fn build_float_to_int_range_check<'c, 'm>(
     );
 }
 
-/// Evaluates `Std::F64::to_I64` and the other conversions from a floating-point type to an integer
-/// type: the value rounded towards zero.
+/// Evaluates the `Std::ToI64` member `i64` implemented for `Std::F64`, and the other conversions
+/// from a floating-point type to an integer type: the value rounded towards zero.
 ///
 /// A value whose rounded form lies beyond an end of the target type's range gives that end, and a
 /// NaN gives zero, so every input gives one value of the target type;
