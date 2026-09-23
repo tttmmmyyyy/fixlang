@@ -914,8 +914,8 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
     let c_types = config.c_type_sizes.get_c_types();
 
     // Source: trait declarations only. Each name carries whether the type it names is an integer
-    // type, which decides whether the member's document speaks of the rounding a conversion from a
-    // floating-point type performs.
+    // type, which decides whether the member's doc comment states how a floating-point value is
+    // rounded.
     let mut to_type_names: Vec<(String, bool)> = vec![];
     for (to, to_is_int) in int_types
         .iter()

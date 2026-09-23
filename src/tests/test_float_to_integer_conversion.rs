@@ -6,14 +6,15 @@ use crate::tests::test_util::{
     integer_operations_checked_config, source_with_a_runtime_zero, test_source, test_source_fail,
 };
 
-/// Builds `source_with_a_runtime_zero(body)` under `config`, runs it, and fails the test unless the
-/// program exits with code 0.
+/// Runs `body` under `config` as the body of a program that binds `zero` to a `Std::I64` the
+/// compiler cannot fold, and fails the test unless the program exits with code 0.
 fn test_with_a_runtime_zero(body: &str, config: Configuration) {
     test_source(&source_with_a_runtime_zero(body), config);
 }
 
-/// Builds `source_with_a_runtime_zero(body)` under a configuration that stops at a value the target
-/// type does not hold, runs it, and asserts that it stops with a report containing `report`.
+/// Runs `body` as the body of a program that binds `zero` to a `Std::I64` the compiler cannot
+/// fold, under a configuration that stops at a value the target type does not hold, and asserts
+/// that the program stops with a report containing `report`.
 fn assert_the_check_stops_running(body: &str, report: &str) {
     test_source_fail(
         &source_with_a_runtime_zero(body),
@@ -110,8 +111,7 @@ pub fn test_what_a_conversion_out_of_range_answers() {
 /// the greatest value.
 ///
 /// `F64` has no exact form for `I64::maximum` and rounds it to `2^63`, which `I64` does not hold,
-/// so the conversion back is one of the out-of-range cases; the round trip used to return the least
-/// value of the type.
+/// so the conversion back is one of the out-of-range cases.
 #[test]
 pub fn test_the_round_trip_of_the_greatest_value() {
     test_with_a_runtime_zero(
