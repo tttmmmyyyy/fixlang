@@ -1349,9 +1349,13 @@ impl LLVMGen for InlineLLVMCastIntegralBody {
     }
 }
 
-// Cast function of integrals
-//
-// - `to_alias`: A type alias to the target type. If set, it will appear in the documentation.
+/// The expression and the type scheme of a numeric cast trait member that converts from the
+/// integer type `from` to the integer type `to`, such as the `Std::ToU8` member `u8` implemented
+/// for `Std::I64`.
+///
+/// # Arguments
+/// * `to_alias` - A type alias standing for `to`, which the generated documentation shows in its
+///   place.
 pub fn cast_between_integral_function(
     from: Arc<TypeNode>,
     to: Arc<TypeNode>,
@@ -1450,9 +1454,13 @@ impl LLVMGen for InlineLLVMCastFloatBody {
     }
 }
 
-// Cast function of integrals
-//
-// - `to_alias`: A type alias to the target type. If set, it will appear in the documentation.
+/// The expression and the type scheme of a numeric cast trait member that converts from the
+/// floating-point type `from` to the floating-point type `to`, such as the `Std::ToF64` member
+/// `f64` implemented for `Std::F32`.
+///
+/// # Arguments
+/// * `to_alias` - A type alias standing for `to`, which the generated documentation shows in its
+///   place.
 pub fn cast_between_float_function(
     from: Arc<TypeNode>,
     to: Arc<TypeNode>,
@@ -1554,7 +1562,9 @@ impl LLVMGen for InlineLLVMCastIntToFloatBody {
     }
 }
 
-// Cast function from int to float.
+/// The expression and the type scheme of a numeric cast trait member that converts from the
+/// integer type `from` to the floating-point type `to`, such as the `Std::ToF64` member `f64`
+/// implemented for `Std::I64`.
 pub fn cast_int_to_float_function(
     from: Arc<TypeNode>,
     to: Arc<TypeNode>,
@@ -1722,7 +1732,10 @@ fn build_float_to_int_range_check<'c, 'm>(
 /// `--check-integer-operations` stops the program on an input outside the range.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastFloatToIntBody {
+    /// The local binding holding the value to convert.
     from_name: FullName,
+    /// Whether the target type is a signed integer, which decides the range the value is brought
+    /// into and how the bits are written.
     is_signed: bool,
 }
 
@@ -1795,7 +1808,9 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
     }
 }
 
-// Cast function from float to int.
+/// The expression and the type scheme of a numeric cast trait member that converts from the
+/// floating-point type `from` to the integer type `to`, such as the `Std::ToI64` member `i64`
+/// implemented for `Std::F64`.
 pub fn cast_float_to_int_function(
     from: Arc<TypeNode>,
     to: Arc<TypeNode>,
