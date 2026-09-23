@@ -1745,7 +1745,14 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
         // conversion brings a value outside the range to the end of it, and a check behind it would
         // read that end rather than the value the program wrote.
         if gc.config.checks_integer_operations() {
-            build_float_to_int_range_check(gc, from_val, to_int_ty, &from_ty, to_ty, self.is_signed);
+            build_float_to_int_range_check(
+                gc,
+                from_val,
+                to_int_ty,
+                &from_ty,
+                to_ty,
+                self.is_signed,
+            );
         }
 
         // Perform cast.
