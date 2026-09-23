@@ -913,23 +913,38 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
     let float_types = floating_types();
     let c_types = config.c_type_sizes.get_c_types();
 
-    // Source: trait declarations only.
-    let mut to_type_names: Vec<String> = vec![];
-    for ty in int_types.iter().chain(float_types.iter()) {
-        to_type_names.push(ty.toplevel_tycon().unwrap().name.name.clone());
+    // Source: trait declarations only. Each name carries whether the type it names holds integers,
+    // which decides whether the member's document speaks of the rounding a conversion from a
+    // floating-point type performs.
+    let mut to_type_names: Vec<(String, bool)> = vec![];
+    for ty in int_types.iter() {
+        to_type_names.push((ty.toplevel_tycon().unwrap().name.name.clone(), true));
     }
-    for (c_ty_name, _, _) in &c_types {
-        to_type_names.push(c_ty_name.to_string());
+    for ty in float_types.iter() {
+        to_type_names.push((ty.toplevel_tycon().unwrap().name.name.clone(), false));
+    }
+    for (c_ty_name, number_kind, _) in &c_types {
+        to_type_names.push((c_ty_name.to_string(), *number_kind != "F"));
     }
     let mut src = "module Std; \n\n".to_string();
-    for to_name in &to_type_names {
+    for (to_name, holds_integers) in &to_type_names {
+        let rounding = if *holds_integers {
+            "// \n\
+             // A floating-point value is rounded towards zero. Where the rounded value lies outside \
+             the range of `{}`, and where the value is a NaN, the result is unspecified; \
+             `--check-integer-operations` stops the program there.\n"
+        } else {
+            ""
+        };
         src += &format!(
             "trait a : To{} {{ \n\
             // Casts a value into `{}` type.\n\
+            {}\
             {} : a -> {};\n\
             }}\n",
             to_name,
             to_name,
+            rounding.replace("{}", to_name),
             upper_camel_to_lower_snake(to_name),
             to_name,
         );

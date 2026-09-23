@@ -31,8 +31,8 @@ use crate::constants::{
     TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::fixstd::runtime::{
-    RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_REALLOC, RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE,
-    RUNTIME_SIGNED_OVERFLOW,
+    RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_FLOAT_TO_INTEGER_OUT_OF_RANGE, RUNTIME_REALLOC,
+    RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE, RUNTIME_SIGNED_OVERFLOW,
 };
 use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
@@ -49,7 +49,8 @@ use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::locality::{ExtCond, ExtShape, LeafCond};
 use crate::rc_ir::provenance::{sole_origin, LeafOrigin, Provenance};
 use inkwell::module::Linkage;
-use inkwell::values::{BasicMetadataValueEnum, BasicValue, IntValue, PointerValue};
+use inkwell::types::{FloatType, IntType};
+use inkwell::values::{BasicMetadataValueEnum, BasicValue, FloatValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
@@ -1582,6 +1583,147 @@ pub fn cast_int_to_float_function(
     (expr, scm)
 }
 
+/// The name of the `Std` floating-point type laid out as `float_ty`.
+fn float_type_name<'c, 'm>(gc: &Generator<'c, 'm>, float_ty: FloatType<'c>) -> &'static str {
+    if float_ty == gc.context.f64_type() {
+        "F64"
+    } else if float_ty == gc.context.f32_type() {
+        "F32"
+    } else {
+        panic!("A floating-point type of `Std` is laid out as neither `float` nor `double`")
+    }
+}
+
+/// `value` rounded towards zero and converted to the integer type `to_int_ty`, with a value beyond
+/// an end of that type's range brought to that end and a NaN brought to zero.
+///
+/// `fptosi` and `fptoui` answer `poison` where the rounded value does not fit the target type, and
+/// a `poison` is a permission to take any value, so two readers of one conversion may take
+/// different answers from it. The saturating intrinsics answer one value at every input.
+fn build_saturating_float_to_int<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    value: FloatValue<'c>,
+    to_int_ty: IntType<'c>,
+    is_signed: bool,
+) -> IntValue<'c> {
+    let intrinsic_name = if is_signed {
+        "llvm.fptosi.sat"
+    } else {
+        "llvm.fptoui.sat"
+    };
+    let intrinsic =
+        gc.intrinsic_function(intrinsic_name, &[to_int_ty.into(), value.get_type().into()]);
+    gc.builder()
+        .build_call(
+            intrinsic,
+            &[value.into()],
+            "float_to_int@cast_float_to_int_function",
+        )
+        .unwrap()
+        .try_as_basic_value()
+        .expect_basic("a saturating float-to-integer intrinsic answers an integer")
+        .into_int_value()
+}
+
+/// Emit the check that stops the program where rounding `value` towards zero leaves a value outside
+/// the range of the integer type `to_int_ty`, which is where the conversion has no answer in that
+/// type, and where a NaN reaches it.
+///
+/// The check rounds before it compares, because the conversion does: `-128.5` becomes `-128`, which
+/// `I8` holds, so a check reading the value before rounding would stop a program the conversion
+/// answers.
+///
+/// The bounds are the powers of two just outside the range rather than the values at its ends.
+/// `I64::maximum` has no exact form in `F64`, so a bound built from it would be rounded to `2^63`
+/// and let the value that reaches it past the check; `2^63` itself is exact in both floating-point
+/// types, and every value the check admits is below it.
+fn build_float_to_int_range_check<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    value: FloatValue<'c>,
+    to_int_ty: IntType<'c>,
+    to_ty: &Arc<TypeNode>,
+    is_signed: bool,
+) {
+    let float_ty = value.get_type();
+    let truncate = gc.intrinsic_function("llvm.trunc", &[float_ty.into()]);
+    let truncated = gc
+        .builder()
+        .build_call(
+            truncate,
+            &[value.into()],
+            "truncated@cast_float_to_int_function",
+        )
+        .unwrap()
+        .try_as_basic_value()
+        .expect_basic("`llvm.trunc` answers a floating-point value")
+        .into_float_value();
+
+    let width = to_int_ty.get_bit_width() as i32;
+    let (lower, upper) = if is_signed {
+        (-2f64.powi(width - 1), 2f64.powi(width - 1))
+    } else {
+        (0f64, 2f64.powi(width))
+    };
+    // `UGE` holds of a NaN too, which is the other input the conversion has no answer for.
+    let above_range = gc
+        .builder()
+        .build_float_compare(
+            FloatPredicate::UGE,
+            truncated,
+            float_ty.const_float(upper),
+            "above_range@cast_float_to_int_function",
+        )
+        .unwrap();
+    let below_range = gc
+        .builder()
+        .build_float_compare(
+            FloatPredicate::OLT,
+            truncated,
+            float_ty.const_float(lower),
+            "below_range@cast_float_to_int_function",
+        )
+        .unwrap();
+    let out_of_range = gc
+        .builder()
+        .build_or(
+            above_range,
+            below_range,
+            "out_of_range@cast_float_to_int_function",
+        )
+        .unwrap();
+
+    let reported_conversion = format!(
+        "{} to {}",
+        float_type_name(gc, float_ty),
+        to_ty.toplevel_tycon().unwrap().name.name
+    );
+    let reported_conversion_ptr = gc
+        .add_global_string(&reported_conversion)
+        .as_pointer_value();
+    // The report takes the value as a `double`, which holds every `F32` without rounding.
+    let reported_value = gc
+        .builder()
+        .build_float_cast(
+            value,
+            gc.context.f64_type(),
+            "reported_value@cast_float_to_int_function",
+        )
+        .unwrap();
+    build_abort_if(
+        gc,
+        out_of_range,
+        RUNTIME_FLOAT_TO_INTEGER_OUT_OF_RANGE,
+        &[reported_conversion_ptr.into(), reported_value.into()],
+        "float_to_integer_out_of_range",
+    );
+}
+
+/// Evaluates `Std::F64::to_I64` and the other conversions from a floating-point type to an integer
+/// type: the value rounded towards zero.
+///
+/// A value whose rounded form lies beyond an end of the target type's range gives that end, and a
+/// NaN gives zero, so every input gives one value of the target type;
+/// `--check-integer-operations` stops the program on an input outside the range.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMCastFloatToIntBody {
     from_name: FullName,
@@ -1603,24 +1745,15 @@ impl LLVMGen for InlineLLVMCastFloatToIntBody {
             .unwrap()
             .into_int_type();
 
+        // The check reads the value the program wrote, so it stands ahead of the conversion: the
+        // conversion brings a value outside the range to the end of it, and a check behind it would
+        // read that end rather than the value the program wrote.
+        if gc.config.checks_integer_operations() {
+            build_float_to_int_range_check(gc, from_val, to_int_ty, to_ty, self.is_signed);
+        }
+
         // Perform cast.
-        let to_val = if self.is_signed {
-            gc.builder()
-                .build_float_to_signed_int(
-                    from_val,
-                    to_int_ty,
-                    "float_to_signed_int@cast_float_to_int_function",
-                )
-                .unwrap()
-        } else {
-            gc.builder()
-                .build_float_to_unsigned_int(
-                    from_val,
-                    to_int_ty,
-                    "float_to_unsigned_int@cast_float_to_int_function",
-                )
-                .unwrap()
-        };
+        let to_val = build_saturating_float_to_int(gc, from_val, to_int_ty, self.is_signed);
 
         // Return result.
         let obj = create_obj(

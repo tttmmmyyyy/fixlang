@@ -16,6 +16,7 @@ mod test_borrowed_union_field;
 mod test_build_exit_status;
 mod test_check;
 mod test_check_integer_operations_setting;
+mod test_float_to_integer_conversion;
 mod test_closure_capture;
 mod test_closure_specialization;
 mod test_collapse_constructions;

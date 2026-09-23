@@ -27,6 +27,10 @@ pub const RUNTIME_SIGNED_OVERFLOW: &str = "fixruntime_signed_overflow";
 /// on, and ends the program. It takes the operation's name, whether the amount is read as signed,
 /// and the amount widened to 64 bits, and returns to no one.
 pub const RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE: &str = "fixruntime_shift_amount_out_of_range";
+/// The runtime function that reports a floating-point value whose truncation lies outside the range
+/// of the integer type it is converted to, and ends the program. It takes the conversion's name and
+/// the value widened to `double`, and returns to no one.
+pub const RUNTIME_FLOAT_TO_INTEGER_OUT_OF_RANGE: &str = "fixruntime_float_to_integer_out_of_range";
 /// The runtime function that writes a C string to standard error, followed by a newline.
 pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
 /// libc `sprintf`, which writes a formatted value into a buffer the caller provides.
@@ -114,6 +118,12 @@ pub fn build_runtime<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
         mode,
         RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE,
         &[ptr_ty.into(), i32_ty.into(), i64_ty.into()],
+    );
+    declare_noreturn_runtime_function(
+        gc,
+        mode,
+        RUNTIME_FLOAT_TO_INTEGER_OUT_OF_RANGE,
+        &[ptr_ty.into(), gc.context.f64_type().into()],
     );
     build_eprintln_function(gc, mode);
     build_sprintf_function(gc, mode);

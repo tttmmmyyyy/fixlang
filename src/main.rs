@@ -305,8 +305,8 @@ fn run_cli() {
     let check_integer_operations = Arg::new("check-integer-operations")
         .long("check-integer-operations")
         .help(
-            "Stop the program on a signed integer overflow, or on a shift by an amount outside the width of its type.\n\
-            An overflow is a `+`, `-`, `*`, unary `-`, `/` or `%` on `I8`, `I16`, `I32` or `I64` whose result does not fit the type; unsigned arithmetic wraps instead, so it is never checked. The shift check applies to every integer type: the amount must be at least zero and less than the number of bits in the type."
+            "Stop the program on a signed integer overflow, on a shift by an amount outside the width of its type, or on a conversion of a floating-point value to an integer type that does not hold it.\n\
+            An overflow is a `+`, `-`, `*`, unary `-`, `/` or `%` on `I8`, `I16`, `I32` or `I64` whose result does not fit the type; unsigned arithmetic wraps instead, so it is never checked. The shift check applies to every integer type: the amount must be at least zero and less than the number of bits in the type. The conversion check applies to every conversion from `F32` or `F64` to an integer type: the value rounded towards zero must lie in the range of that type, which a NaN never does."
         );
     let skip_eval = Arg::new("skip-eval")
         .long("skip-eval")
