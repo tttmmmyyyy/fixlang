@@ -913,23 +913,23 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
     let float_types = floating_types();
     let c_types = config.c_type_sizes.get_c_types();
 
-    // Source: trait declarations only. Each name carries whether the type it names holds integers,
-    // which decides whether the member's document speaks of the rounding a conversion from a
+    // Source: trait declarations only. Each name carries whether the type it names is an integer
+    // type, which decides whether the member's document speaks of the rounding a conversion from a
     // floating-point type performs.
     let mut to_type_names: Vec<(String, bool)> = vec![];
-    for (ty, holds_integers) in int_types
+    for (to, to_is_int) in int_types
         .iter()
-        .map(|ty| (ty, true))
-        .chain(float_types.iter().map(|ty| (ty, false)))
+        .map(|t| (t, true))
+        .chain(float_types.iter().map(|t| (t, false)))
     {
-        to_type_names.push((ty.toplevel_tycon().unwrap().name.name.clone(), holds_integers));
+        to_type_names.push((to.toplevel_tycon().unwrap().name.name.clone(), to_is_int));
     }
-    for (c_ty_name, number_kind, _) in &c_types {
-        to_type_names.push((c_ty_name.to_string(), *number_kind != "F"));
+    for (c_ty_name, sign, _) in &c_types {
+        to_type_names.push((c_ty_name.to_string(), *sign != "F"));
     }
     let mut src = "module Std; \n\n".to_string();
-    for (to_name, holds_integers) in &to_type_names {
-        let rounding = if *holds_integers {
+    for (to_name, to_is_int) in &to_type_names {
+        let rounding_doc = if *to_is_int {
             format!(
                 "// \n\
                  // A floating-point value is rounded towards zero. Where the rounded value lies \
@@ -948,7 +948,7 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
             }}\n",
             to_name,
             to_name,
-            rounding,
+            rounding_doc,
             upper_camel_to_lower_snake(to_name),
             to_name,
         );

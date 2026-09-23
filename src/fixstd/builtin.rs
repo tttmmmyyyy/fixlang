@@ -1635,11 +1635,11 @@ fn build_float_to_int_range_check<'c, 'm>(
     is_signed: bool,
 ) {
     let float_ty = value.get_type();
-    let truncate = gc.intrinsic_function("llvm.trunc", &[float_ty.into()]);
+    let truncate_fn = gc.intrinsic_function("llvm.trunc", &[float_ty.into()]);
     let truncated = gc
         .builder()
         .build_call(
-            truncate,
+            truncate_fn,
             &[value.into()],
             "truncated@cast_float_to_int_function",
         )

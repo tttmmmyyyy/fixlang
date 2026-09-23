@@ -22,9 +22,9 @@ fn assert_the_check_stops_running(body: &str, report: &str) {
     );
 }
 
-/// The Fix source that binds `nan`, `infinite` and `one` to values the compiler cannot fold, so
+/// The Fix source that binds `one`, `nan` and `infinite` to values the compiler cannot fold, so
 /// that the conversions below are performed at run time.
-const VALUES_BUILT_AT_RUN_TIME: &str = r#"
+const BINDINGS_BUILT_AT_RUN_TIME: &str = r#"
     let one = zero.f64 + 1.0;
     let nan = (one - one) / (one - one);
     let infinite = one / (one - one);
@@ -49,7 +49,7 @@ pub fn test_a_conversion_out_of_range_answers_one_value() {
                 x.to_string.get_bytes.@(0) == '-'
             );;
         "#,
-            VALUES_BUILT_AT_RUN_TIME
+            BINDINGS_BUILT_AT_RUN_TIME
         ),
         Configuration::develop_mode(),
     );
@@ -100,7 +100,7 @@ pub fn test_what_a_conversion_out_of_range_answers() {
                 U8::maximum
             );;
         "#,
-            VALUES_BUILT_AT_RUN_TIME
+            BINDINGS_BUILT_AT_RUN_TIME
         ),
         Configuration::develop_mode(),
     );
@@ -166,7 +166,7 @@ pub fn test_the_check_stops_a_conversion_of_a_nan() {
             {}
             eval nan.i64;
         "#,
-            VALUES_BUILT_AT_RUN_TIME
+            BINDINGS_BUILT_AT_RUN_TIME
         ),
         "Floating-point value outside the range of the integer type: F64 to I64, with nan",
     );
@@ -181,7 +181,7 @@ pub fn test_the_check_stops_a_conversion_above_the_range() {
             {}
             eval infinite.i64;
         "#,
-            VALUES_BUILT_AT_RUN_TIME
+            BINDINGS_BUILT_AT_RUN_TIME
         ),
         "Floating-point value outside the range of the integer type: F64 to I64, with inf",
     );
@@ -197,7 +197,7 @@ pub fn test_the_check_stops_a_negative_value_into_an_unsigned_type() {
             {}
             eval (-one).u8;
         "#,
-            VALUES_BUILT_AT_RUN_TIME
+            BINDINGS_BUILT_AT_RUN_TIME
         ),
         "Floating-point value outside the range of the integer type: F64 to U8, with -1",
     );
@@ -227,7 +227,7 @@ pub fn test_the_check_stops_a_value_above_an_unsigned_range() {
             {}
             eval (one * 1000.0).u8;
         "#,
-            VALUES_BUILT_AT_RUN_TIME
+            BINDINGS_BUILT_AT_RUN_TIME
         ),
         "Floating-point value outside the range of the integer type: F64 to U8, with 1000",
     );
@@ -293,7 +293,7 @@ pub fn test_the_check_respects_no_runtime_check() {
             {}
             assert_eq(|_|"A NaN converts to zero", nan.i64, 0);;
         "#,
-            VALUES_BUILT_AT_RUN_TIME
+            BINDINGS_BUILT_AT_RUN_TIME
         ),
         integer_operations_checked_runtime_unchecked_config(),
     );
