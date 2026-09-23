@@ -3,25 +3,9 @@
 
 use crate::configuration::Configuration;
 use crate::tests::test_util::{
-    integer_operations_checked_config, source_with_a_runtime_zero, test_source, test_source_fail,
+    assert_the_check_stops_running, integer_operations_checked_config,
+    integer_operations_checked_no_runtime_check_config, test_with_a_runtime_zero,
 };
-
-/// Runs `body` under `config` as the body of a program that binds `zero` to a `Std::I64` the
-/// compiler cannot fold, and fails the test unless the program exits with code 0.
-fn test_with_a_runtime_zero(body: &str, config: Configuration) {
-    test_source(&source_with_a_runtime_zero(body), config);
-}
-
-/// Runs `body` as the body of a program that binds `zero` to a `Std::I64` the compiler cannot
-/// fold, under a configuration that stops at a value the target type does not hold, and asserts
-/// that the program stops with a report containing `report`.
-fn assert_the_check_stops_running(body: &str, report: &str) {
-    test_source_fail(
-        &source_with_a_runtime_zero(body),
-        integer_operations_checked_config(),
-        report,
-    );
-}
 
 /// The Fix source that binds `one`, `nan` and `infinity` to values the compiler cannot fold, so
 /// that the conversions below are performed at run time.
@@ -274,14 +258,6 @@ pub fn test_the_check_lets_the_ends_of_the_range_through() {
     );
 }
 
-/// A configuration that asks for the conversion check and then leaves out every check that ends
-/// the program, as `--check-integer-operations --no-runtime-check` does.
-fn integer_operations_checked_runtime_unchecked_config() -> Configuration {
-    let mut config = integer_operations_checked_config();
-    config.no_runtime_check = true;
-    config
-}
-
 /// `--no-runtime-check` takes the conversion check out with the rest of the checks that end the
 /// program, so a build given both it and `--check-integer-operations` runs on at a value the
 /// target type does not hold.
@@ -295,6 +271,6 @@ pub fn test_the_check_respects_no_runtime_check() {
         "#,
             BINDINGS_BUILT_AT_RUN_TIME
         ),
-        integer_operations_checked_runtime_unchecked_config(),
+        integer_operations_checked_no_runtime_check_config(),
     );
 }
