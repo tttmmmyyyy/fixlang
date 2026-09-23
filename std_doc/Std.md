@@ -4518,6 +4518,8 @@ Trait member of `Std::ToCChar`
 
 Casts a value into `CChar` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CChar`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 ### namespace Std::ToCDouble
 
 #### c_double
@@ -4548,6 +4550,8 @@ Trait member of `Std::ToCInt`
 
 Casts a value into `CInt` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CInt`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 ### namespace Std::ToCLong
 
 #### c_long
@@ -4557,6 +4561,8 @@ Type: `[a : Std::ToCLong] a -> Std::FFI::CLong`
 Trait member of `Std::ToCLong`
 
 Casts a value into `CLong` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CLong`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 ### namespace Std::ToCLongLong
 
@@ -4568,6 +4574,8 @@ Trait member of `Std::ToCLongLong`
 
 Casts a value into `CLongLong` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CLongLong`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 ### namespace Std::ToCShort
 
 #### c_short
@@ -4577,6 +4585,8 @@ Type: `[a : Std::ToCShort] a -> Std::FFI::CShort`
 Trait member of `Std::ToCShort`
 
 Casts a value into `CShort` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CShort`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 ### namespace Std::ToCSizeT
 
@@ -4588,6 +4598,8 @@ Trait member of `Std::ToCSizeT`
 
 Casts a value into `CSizeT` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CSizeT`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 ### namespace Std::ToCUnsignedChar
 
 #### c_unsigned_char
@@ -4597,6 +4609,8 @@ Type: `[a : Std::ToCUnsignedChar] a -> Std::FFI::CUnsignedChar`
 Trait member of `Std::ToCUnsignedChar`
 
 Casts a value into `CUnsignedChar` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CUnsignedChar`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 ### namespace Std::ToCUnsignedInt
 
@@ -4608,6 +4622,8 @@ Trait member of `Std::ToCUnsignedInt`
 
 Casts a value into `CUnsignedInt` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CUnsignedInt`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 ### namespace Std::ToCUnsignedLong
 
 #### c_unsigned_long
@@ -4617,6 +4633,8 @@ Type: `[a : Std::ToCUnsignedLong] a -> Std::FFI::CUnsignedLong`
 Trait member of `Std::ToCUnsignedLong`
 
 Casts a value into `CUnsignedLong` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CUnsignedLong`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 ### namespace Std::ToCUnsignedLongLong
 
@@ -4628,6 +4646,8 @@ Trait member of `Std::ToCUnsignedLongLong`
 
 Casts a value into `CUnsignedLongLong` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CUnsignedLongLong`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 ### namespace Std::ToCUnsignedShort
 
 #### c_unsigned_short
@@ -4637,6 +4657,8 @@ Type: `[a : Std::ToCUnsignedShort] a -> Std::FFI::CUnsignedShort`
 Trait member of `Std::ToCUnsignedShort`
 
 Casts a value into `CUnsignedShort` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CUnsignedShort`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 ### namespace Std::ToF32
 
@@ -4668,6 +4690,8 @@ Trait member of `Std::ToI16`
 
 Casts a value into `I16` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `I16`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 ### namespace Std::ToI32
 
 #### i32
@@ -4677,6 +4701,8 @@ Type: `[a : Std::ToI32] a -> Std::I32`
 Trait member of `Std::ToI32`
 
 Casts a value into `I32` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `I32`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 ### namespace Std::ToI64
 
@@ -4688,6 +4714,8 @@ Trait member of `Std::ToI64`
 
 Casts a value into `I64` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `I64`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 ### namespace Std::ToI8
 
 #### i8
@@ -4697,6 +4725,8 @@ Type: `[a : Std::ToI8] a -> Std::I8`
 Trait member of `Std::ToI8`
 
 Casts a value into `I8` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `I8`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 ### namespace Std::ToString
 
@@ -4716,6 +4746,8 @@ Trait member of `Std::ToU16`
 
 Casts a value into `U16` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `U16`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 ### namespace Std::ToU32
 
 #### u32
@@ -4725,6 +4757,8 @@ Type: `[a : Std::ToU32] a -> Std::U32`
 Trait member of `Std::ToU32`
 
 Casts a value into `U32` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `U32`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 ### namespace Std::ToU64
 
@@ -4736,6 +4770,8 @@ Trait member of `Std::ToU64`
 
 Casts a value into `U64` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `U64`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 ### namespace Std::ToU8
 
 #### u8
@@ -4745,6 +4781,8 @@ Type: `[a : Std::ToU8] a -> Std::U8`
 Trait member of `Std::ToU8`
 
 Casts a value into `U8` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `U8`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 ### namespace Std::U16
 
@@ -6792,6 +6830,8 @@ Type: `a -> Std::I8`
 
 Casts a value into `CChar` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CChar`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 #### trait `a : ToCDouble`
 
 ##### method `c_double`
@@ -6816,6 +6856,8 @@ Type: `a -> Std::I32`
 
 Casts a value into `CInt` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CInt`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 #### trait `a : ToCLong`
 
 ##### method `c_long`
@@ -6823,6 +6865,8 @@ Casts a value into `CInt` type.
 Type: `a -> Std::I64`
 
 Casts a value into `CLong` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CLong`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 #### trait `a : ToCLongLong`
 
@@ -6832,6 +6876,8 @@ Type: `a -> Std::I64`
 
 Casts a value into `CLongLong` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CLongLong`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 #### trait `a : ToCShort`
 
 ##### method `c_short`
@@ -6839,6 +6885,8 @@ Casts a value into `CLongLong` type.
 Type: `a -> Std::I16`
 
 Casts a value into `CShort` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CShort`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 #### trait `a : ToCSizeT`
 
@@ -6848,6 +6896,8 @@ Type: `a -> Std::U64`
 
 Casts a value into `CSizeT` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CSizeT`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 #### trait `a : ToCUnsignedChar`
 
 ##### method `c_unsigned_char`
@@ -6855,6 +6905,8 @@ Casts a value into `CSizeT` type.
 Type: `a -> Std::U8`
 
 Casts a value into `CUnsignedChar` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CUnsignedChar`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 #### trait `a : ToCUnsignedInt`
 
@@ -6864,6 +6916,8 @@ Type: `a -> Std::U32`
 
 Casts a value into `CUnsignedInt` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CUnsignedInt`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 #### trait `a : ToCUnsignedLong`
 
 ##### method `c_unsigned_long`
@@ -6871,6 +6925,8 @@ Casts a value into `CUnsignedInt` type.
 Type: `a -> Std::U64`
 
 Casts a value into `CUnsignedLong` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CUnsignedLong`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 #### trait `a : ToCUnsignedLongLong`
 
@@ -6880,6 +6936,8 @@ Type: `a -> Std::U64`
 
 Casts a value into `CUnsignedLongLong` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CUnsignedLongLong`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 #### trait `a : ToCUnsignedShort`
 
 ##### method `c_unsigned_short`
@@ -6887,6 +6945,8 @@ Casts a value into `CUnsignedLongLong` type.
 Type: `a -> Std::U16`
 
 Casts a value into `CUnsignedShort` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `CUnsignedShort`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 #### trait `a : ToF32`
 
@@ -6912,6 +6972,8 @@ Type: `a -> Std::I16`
 
 Casts a value into `I16` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `I16`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 #### trait `a : ToI32`
 
 ##### method `i32`
@@ -6919,6 +6981,8 @@ Casts a value into `I16` type.
 Type: `a -> Std::I32`
 
 Casts a value into `I32` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `I32`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 #### trait `a : ToI64`
 
@@ -6928,6 +6992,8 @@ Type: `a -> Std::I64`
 
 Casts a value into `I64` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `I64`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 #### trait `a : ToI8`
 
 ##### method `i8`
@@ -6935,6 +7001,8 @@ Casts a value into `I64` type.
 Type: `a -> Std::I8`
 
 Casts a value into `I8` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `I8`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 #### trait `a : ToString`
 
@@ -6950,6 +7018,8 @@ Type: `a -> Std::U16`
 
 Casts a value into `U16` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `U16`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 #### trait `a : ToU32`
 
 ##### method `u32`
@@ -6957,6 +7027,8 @@ Casts a value into `U16` type.
 Type: `a -> Std::U32`
 
 Casts a value into `U32` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `U32`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 #### trait `a : ToU64`
 
@@ -6966,6 +7038,8 @@ Type: `a -> Std::U64`
 
 Casts a value into `U64` type.
 
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `U64`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 #### trait `a : ToU8`
 
 ##### method `u8`
@@ -6973,6 +7047,8 @@ Casts a value into `U64` type.
 Type: `a -> Std::U8`
 
 Casts a value into `U8` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `U8`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 #### trait `a : Zero`
 
