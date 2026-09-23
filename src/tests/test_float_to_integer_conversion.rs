@@ -23,12 +23,12 @@ fn assert_the_check_stops_running(body: &str, report: &str) {
     );
 }
 
-/// The Fix source that binds `one`, `nan` and `infinite` to values the compiler cannot fold, so
+/// The Fix source that binds `one`, `nan` and `infinity` to values the compiler cannot fold, so
 /// that the conversions below are performed at run time.
 const BINDINGS_BUILT_AT_RUN_TIME: &str = r#"
     let one = zero.f64 + 1.0;
     let nan = (one - one) / (one - one);
-    let infinite = one / (one - one);
+    let infinity = one / (one - one);
 "#;
 
 /// A conversion of a value the target type does not hold answers one value: what the result
@@ -72,12 +72,12 @@ pub fn test_what_a_conversion_out_of_range_answers() {
             assert_eq(|_|"A NaN converts to zero in a narrow type", nan.i32, 0_I32);;
             assert_eq(
                 |_|"A value above the range converts to the greatest value of the type",
-                infinite.i64,
+                infinity.i64,
                 I64::maximum
             );;
             assert_eq(
                 |_|"A value below the range converts to the least value of the type",
-                (-infinite).i64,
+                (-infinity).i64,
                 I64::minimum
             );;
             assert_eq(
@@ -92,7 +92,7 @@ pub fn test_what_a_conversion_out_of_range_answers() {
             );;
             assert_eq(
                 |_|"A value above the range converts to the greatest value of an unsigned type",
-                infinite.u64,
+                infinity.u64,
                 U64::maximum
             );;
             assert_eq(
@@ -179,7 +179,7 @@ pub fn test_the_check_stops_a_conversion_above_the_range() {
         &format!(
             r#"
             {}
-            eval infinite.i64;
+            eval infinity.i64;
         "#,
             BINDINGS_BUILT_AT_RUN_TIME
         ),

@@ -1368,8 +1368,9 @@ impl Configuration {
         !self.no_runtime_check
     }
 
-    /// Whether the generated program stops on a signed integer overflow, or on a shift by an
-    /// amount outside the width of its type.
+    /// Whether the generated program stops on a signed integer overflow, on a shift by an amount
+    /// outside the width of its type, or on a conversion of a floating-point value to an integer
+    /// type that does not hold it.
     ///
     /// `--check-integer-operations` asks for the checks, and `--no-runtime-check` takes out every
     /// check that ends the program, these among them.
