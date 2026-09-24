@@ -5838,10 +5838,10 @@ pub fn test_float_to_string_round_trips_across_every_decade() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// The text `to_string` writes and the text `from_string` reads are both spelled with a point,
-/// whatever `LC_NUMERIC` the program is running under. `to_string_precision`, which goes through
-/// `snprintf`, follows the locale, and this test uses that to prove the locale it set took effect
-/// rather than passing on a machine where the locale is absent.
+/// Every text `Std` writes for a floating point number, and the text `from_string` reads, is spelled
+/// with a point, whatever `LC_NUMERIC` the program is running under. C's `strtod` follows the
+/// locale, and this test uses that to prove the locale it set took effect rather than passing on a
+/// machine where the locale is absent.
 #[test]
 pub fn test_float_text_is_read_and_written_under_one_locale() {
     let source = r#"
@@ -5864,15 +5864,24 @@ pub fn test_float_text_is_read_and_written_under_one_locale() {
             "de_DE.UTF-8", "de_DE.utf8", "fr_FR.UTF-8", "fr_FR.utf8", "en_DK.UTF-8", "en_DK.utf8"
         ];
 
+        // What C's `strtod` reads from `text`, under the locale the program is running under.
+        //
+        // # Parameters
+        // * `text` - The text to read.
+        c_strtod : String -> IO F64;
+        c_strtod = |text| (
+            text.borrow_c_str_io(|p| FFI_CALL_IO[CDouble strtod(Ptr, Ptr), p, nullptr])
+        );
+
         main : IO ();
         main = (
-            // Walk the candidates until `to_string_precision` writes a comma, which is what says
-            // the locale took: it is the one text here that follows `LC_NUMERIC`.
+            // Walk the candidates until C's `strtod` reads a comma as the point, which is what
+            // says the locale took.
             let took = *candidates.to_iter.fold_m(false, |name, took|
                 if took { true.pure };
                 set_locale(1_I32, name);;
                 set_locale(4_I32, name);;
-                (1.5.to_string_precision(1_U8) == "1,5").pure
+                (*c_strtod("1,5") == 1.5).pure
             );
 
             if !took {
@@ -5887,6 +5896,19 @@ pub fn test_float_text_is_read_and_written_under_one_locale() {
             assert_eq(|_|"an F32 text is written with a point too", 1.5_F32.to_string, "1.5");;
             let back : Result ErrMsg F32 = 1.5_F32.to_string.from_string;
             assert_eq(|_|"an F32 text is read with a point too", back.as_ok, 1.5_F32);;
+
+            // The texts with a given number of places are written with a point as well, so
+            // `from_string` reads them back.
+            assert_eq(|_|"to_string_precision writes a point", 1.5.to_string_precision(1_U8), "1.5");;
+            assert_eq(|_|"to_string_exp writes a point", 1.5.to_string_exp, "1.500000e+00");;
+            assert_eq(|_|"to_string_exp_precision writes a point", 1.5.to_string_exp_precision(1_U8), "1.5e+00");;
+            assert_eq(|_|"F32 to_string_precision writes a point", 1.5_F32.to_string_precision(1_U8), "1.5");;
+            assert_eq(|_|"F32 to_string_exp writes a point", 1.5_F32.to_string_exp, "1.500000e+00");;
+            assert_eq(|_|"F32 to_string_exp_precision writes a point", 1.5_F32.to_string_exp_precision(1_U8), "1.5e+00");;
+            let back : Result ErrMsg F64 = 1.5.to_string_precision(3_U8).from_string;
+            assert_eq(|_|"from_string reads what to_string_precision wrote", back.as_ok, 1.5);;
+            let back : Result ErrMsg F64 = 1.5.to_string_exp.from_string;
+            assert_eq(|_|"from_string reads what to_string_exp wrote", back.as_ok, 1.5);;
 
             pure()
         );
@@ -5963,6 +5985,42 @@ pub fn test_float_to_string_exp_precision() {
                       text.get_sub(0, 20), "-1.79769313486231570");;
             assert_eq(|_|"the widest F64 text ends in its exponent",
                       text.get_sub(text.@size - 6, text.@size), "8e+308");;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Pins the text the functions writing a given number of places write for a number that is not
+/// finite: `inf` and `-inf`, which `from_string` reads back, and `nan` whatever the sign of the NaN.
+/// `inf - inf` is a NaN whose sign bit is set on x86-64.
+#[test]
+pub fn test_float_to_string_precision_of_non_finite_numbers() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            let inf = F64::infinity;
+            let nan = inf - inf;
+            let texts = [
+                inf.to_string_precision(2_U8), (-inf).to_string_precision(2_U8), nan.to_string_precision(2_U8),
+                inf.to_string_exp, (-inf).to_string_exp, nan.to_string_exp,
+                inf.to_string_exp_precision(2_U8), (-inf).to_string_exp_precision(2_U8), nan.to_string_exp_precision(2_U8)
+            ];
+            assert_eq(|_|"F64", texts, ["inf", "-inf", "nan", "inf", "-inf", "nan", "inf", "-inf", "nan"]);;
+
+            let inf = F32::infinity;
+            let nan = inf - inf;
+            let texts = [
+                inf.to_string_precision(2_U8), (-inf).to_string_precision(2_U8), nan.to_string_precision(2_U8),
+                inf.to_string_exp, (-inf).to_string_exp, nan.to_string_exp,
+                inf.to_string_exp_precision(2_U8), (-inf).to_string_exp_precision(2_U8), nan.to_string_exp_precision(2_U8)
+            ];
+            assert_eq(|_|"F32", texts, ["inf", "-inf", "nan", "inf", "-inf", "nan", "inf", "-inf", "nan"]);;
+
+            let back : Result ErrMsg F64 = (-F64::infinity).to_string_precision(2_U8).from_string;
+            assert_eq(|_|"from_string reads the negative infinity back", back.as_ok, -F64::infinity);;
 
             pure()
         );

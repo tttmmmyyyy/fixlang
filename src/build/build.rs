@@ -101,7 +101,7 @@ struct RuntimeHeader {
 /// and `f2s_intrinsics.h` choose between a tabulated and a computed table by a macro, so which
 /// headers a build reads depends on the macros it is given.
 /// `test_vendored_ryu_headers_are_all_carried` holds this list to the directory.
-const RUNTIME_HEADERS: [RuntimeHeader; 8] = [
+const RUNTIME_HEADERS: [RuntimeHeader; 9] = [
     RuntimeHeader {
         path: "ryu/ryu.h",
         text: include_str!("../fixstd/ryu/ryu.h"),
@@ -134,6 +134,10 @@ const RUNTIME_HEADERS: [RuntimeHeader; 8] = [
         path: "ryu/f2s_full_table.h",
         text: include_str!("../fixstd/ryu/f2s_full_table.h"),
     },
+    RuntimeHeader {
+        path: "ryu/d2fixed_full_table.h",
+        text: include_str!("../fixstd/ryu/d2fixed_full_table.h"),
+    },
 ];
 
 /// One of the C sources the runtime is built from.
@@ -151,7 +155,7 @@ struct RuntimeSource {
 ///
 /// `ryu/d2s.c` and `ryu/f2s.c` each define a `to_chars` of their own, so each is a translation unit
 /// of its own.
-const RUNTIME_SOURCES: [RuntimeSource; 4] = [
+const RUNTIME_SOURCES: [RuntimeSource; 5] = [
     RuntimeSource {
         object_name: "runtime",
         path: "runtime.c",
@@ -171,6 +175,11 @@ const RUNTIME_SOURCES: [RuntimeSource; 4] = [
         object_name: "ryu-f2s",
         path: "ryu/f2s.c",
         text: include_str!("../fixstd/ryu/f2s.c"),
+    },
+    RuntimeSource {
+        object_name: "ryu-d2fixed",
+        path: "ryu/d2fixed.c",
+        text: include_str!("../fixstd/ryu/d2fixed.c"),
     },
 ];
 

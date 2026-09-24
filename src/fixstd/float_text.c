@@ -1,9 +1,10 @@
 /*
 Writing a floating point number as text and reading one back, for `Std::F64` and `Std::F32`.
 
-The shortest text that reads back as the number is found by Ryu, whose sources sit beside this one
-under `ryu/`. Reading goes through C's `strtod`, under a locale of this file's own so that the
-point is the character Ryu writes whatever locale the program runs in.
+Every text is written by Ryu, whose sources sit beside this one under `ryu/`: the shortest text that
+reads back as the number, and the text with a given number of places behind the point. Reading goes
+through C's `strtod`, under a locale of this file's own so that the point is the character Ryu
+writes whatever locale the program runs in.
 */
 
 // `strtod_l` and `newlocale` are what read a number under a locale of our own choosing. glibc
@@ -58,16 +59,10 @@ int64_t fixruntime_write_u64(char *buf, uint64_t v);
 // run on would leave the heap damaged and the program going.
 //
 // # Arguments
-// * `written` - The length of the text, without its null. A negative number is what `snprintf`
-//   answers where it could not write the text at all.
+// * `written` - The length of the text, without its null.
 // * `size` - The bytes the buffer holds.
 static int64_t fixruntime_checked_float_text_length(int written, int64_t size)
 {
-    if (written < 0)
-    {
-        fprintf(stderr, "Writing a number as text failed\n");
-        fixruntime_abort();
-    }
     if ((int64_t)written + 1 > size)
     {
         fprintf(stderr, "A number's text takes %" PRId64 " bytes and its buffer holds %" PRId64 "\n",
@@ -77,27 +72,65 @@ static int64_t fixruntime_checked_float_text_length(int written, int64_t size)
     return written;
 }
 
+// The bytes a text with a given number of places behind the point takes at its widest, the null
+// included: the least `F64` written positionally with the 255 places a `U8` precision reaches, which
+// is a sign, the 309 digits of its whole part, a point and the places. Written as a power of ten,
+// the same number takes a sign, a digit, a point, the places and a four byte power of ten.
+#define PRECISION_TEXT_SIZE (1 + 309 + 1 + 255 + 1)
+
+// Copies the text Ryu wrote with a given number of places to `buf`, null-terminated, spelled the
+// way Fix spells a number, and reports how many bytes the text took, the null left out.
+//
+// Ryu writes a number as C's `printf` does, and writes an infinity as `Infinity`, where Fix writes
+// `inf`, which is what `Std::FromString` takes back. A NaN it writes as `nan` whatever its sign, as
+// Fix's `to_string` does.
+//
+// # Arguments
+// * `text` - What `d2fixed_buffered_n` or `d2exp_buffered_n` wrote, `written` bytes of it.
+// * `written` - The number of bytes Ryu reported writing.
+// * `buf` - Where the text is written, null-terminated.
+// * `size` - The bytes `buf` holds.
+static int64_t fixruntime_copy_precision_text(char *text, int written, char *buf, int64_t size)
+{
+    int sign = text[0] == '-';
+    if (text[sign] == 'I')
+    {
+        memcpy(text + sign, "inf", 3);
+        written = sign + 3;
+    }
+    fixruntime_checked_float_text_length(written, size);
+    memcpy(buf, text, (size_t)written);
+    buf[written] = '\0';
+    return written;
+}
+
 // Each of the four below writes `v` at `buf` with `precision` digits after the point, null-
 // terminated, and reports how many bytes the text took, the null left out. The `exp` ones write
-// the number in scientific notation, and the others write it positionally.
+// the number in scientific notation, and the others write it positionally. The text is the one
+// C's `printf` writes for `%.*e` and `%.*f` under the `C` locale; an `F32` is written as the
+// `double` it widens to, as `printf` takes it.
 int64_t fixruntime_f32_to_str_exp_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
-    return fixruntime_checked_float_text_length(snprintf(buf, (size_t)size, "%.*e", (int)precision, v), size);
+    char text[PRECISION_TEXT_SIZE];
+    return fixruntime_copy_precision_text(text, d2exp_buffered_n((double)v, precision, text), buf, size);
 }
 
 int64_t fixruntime_f32_to_str_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
-    return fixruntime_checked_float_text_length(snprintf(buf, (size_t)size, "%.*f", (int)precision, v), size);
+    char text[PRECISION_TEXT_SIZE];
+    return fixruntime_copy_precision_text(text, d2fixed_buffered_n((double)v, precision, text), buf, size);
 }
 
 int64_t fixruntime_f64_to_str_exp_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
-    return fixruntime_checked_float_text_length(snprintf(buf, (size_t)size, "%.*le", (int)precision, v), size);
+    char text[PRECISION_TEXT_SIZE];
+    return fixruntime_copy_precision_text(text, d2exp_buffered_n(v, precision, text), buf, size);
 }
 
 int64_t fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
-    return fixruntime_checked_float_text_length(snprintf(buf, (size_t)size, "%.*lf", (int)precision, v), size);
+    char text[PRECISION_TEXT_SIZE];
+    return fixruntime_copy_precision_text(text, d2fixed_buffered_n(v, precision, text), buf, size);
 }
 
 // Writes the scientific text Ryu produced the way Fix spells a floating point number, and
