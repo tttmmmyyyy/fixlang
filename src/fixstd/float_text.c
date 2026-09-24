@@ -51,17 +51,17 @@ int64_t fixruntime_write_u64(char *buf, uint64_t v);
 #define F64_POSITIONAL_HIGH 16
 #define F64_DIGITS 17
 
-// Answers with `written` where a text of that many bytes, and the null after it, fit `size`, and
-// stops the program where they do not.
+// Copies `text` to `buf`, null-terminated, and reports how many bytes the text took, the null
+// left out. Stops the program where the text and its null do not fit `size`.
 //
 // A buffer is sized from the widest text it can be asked to hold, so a text that does not fit
 // means that size was derived wrongly. Stopping here names the two sizes, where letting the write
 // run on would leave the heap damaged and the program going.
 //
 // # Arguments
-// * `written` - The length of the text, without its null.
-// * `size` - The bytes the buffer holds.
-static int64_t fixruntime_checked_float_text_length(int written, int64_t size)
+// * `written` - The length of `text`, which needs no null of its own.
+// * `size` - The bytes `buf` holds.
+static int64_t fixruntime_copy_float_text(const char *text, int written, char *buf, int64_t size)
 {
     if ((int64_t)written + 1 > size)
     {
@@ -69,76 +69,79 @@ static int64_t fixruntime_checked_float_text_length(int written, int64_t size)
                 (int64_t)written + 1, size);
         fixruntime_abort();
     }
-    return written;
-}
-
-// The bytes a text with a given number of places behind the point takes at its widest, the null
-// included: the least `F64` written positionally with the 255 places a `U8` precision reaches, which
-// is a sign, the 309 digits of its whole part, a point and the places. Written as a power of ten,
-// the same number takes a sign, a digit, a point, the places and a four byte power of ten.
-#define PRECISION_TEXT_SIZE (1 + 309 + 1 + 255 + 1)
-
-// Copies the text Ryu wrote with a given number of places to `buf`, null-terminated, spelled the
-// way Fix spells a number, and reports how many bytes the text took, the null left out.
-//
-// Ryu writes a number as C's `printf` does, and writes an infinity as `Infinity`, where Fix writes
-// `inf`, which is what `Std::FromString` takes back. A NaN it writes as `nan` whatever its sign, as
-// Fix's `to_string` does.
-//
-// # Arguments
-// * `text` - What `d2fixed_buffered_n` or `d2exp_buffered_n` wrote, `written` bytes of it.
-// * `written` - The number of bytes Ryu reported writing.
-// * `buf` - Where the text is written, null-terminated.
-// * `size` - The bytes `buf` holds.
-static int64_t fixruntime_copy_precision_text(char *text, int written, char *buf, int64_t size)
-{
-    int sign = text[0] == '-';
-    if (text[sign] == 'I')
-    {
-        memcpy(text + sign, "inf", 3);
-        written = sign + 3;
-    }
-    fixruntime_checked_float_text_length(written, size);
     memcpy(buf, text, (size_t)written);
     buf[written] = '\0';
     return written;
 }
 
+// Writes `v`, which is an infinity or a NaN, at `buf` the way Fix spells it, null-terminated, and
+// reports how many bytes the text took, the null left out.
+//
+// Fix writes `inf`, `-inf` and `nan`, which is what `Std::FromString` takes back. A NaN is `nan`
+// whatever its sign.
+static int64_t fixruntime_write_non_finite_text(double v, char *buf, int64_t size)
+{
+    const char *text = isnan(v) ? "nan" : v < 0 ? "-inf" : "inf";
+    return fixruntime_copy_float_text(text, (int)strlen(text), buf, size);
+}
+
+// The bytes a text with a given number of places behind the point takes at its widest: the least
+// `F64` written positionally with the 255 places a `U8` precision reaches, which is a sign, the 309
+// digits of its whole part, a point and the places. Written as a power of ten, the same number
+// takes a sign, a digit, a point, the places and a four byte power of ten.
+#define PRECISION_TEXT_SIZE (1 + 309 + 1 + 255)
+
 // Each of the four below writes `v` at `buf` with `precision` digits after the point, null-
 // terminated, and reports how many bytes the text took, the null left out. The `exp` ones write
-// the number in scientific notation, and the others write it positionally. The text is the one
-// C's `printf` writes for `%.*e` and `%.*f` under the `C` locale; an `F32` is written as the
-// `double` it widens to, as `printf` takes it.
+// the number in scientific notation, and the others write it positionally. A finite number's text
+// is the one C's `printf` writes for `%.*e` and `%.*f` under the `C` locale; an `F32` is written as
+// the `double` it widens to, as `printf` takes it.
 int64_t fixruntime_f32_to_str_exp_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
+    if (!isfinite(v))
+    {
+        return fixruntime_write_non_finite_text(v, buf, size);
+    }
     char text[PRECISION_TEXT_SIZE];
-    return fixruntime_copy_precision_text(text, d2exp_buffered_n((double)v, precision, text), buf, size);
+    return fixruntime_copy_float_text(text, d2exp_buffered_n((double)v, precision, text), buf, size);
 }
 
 int64_t fixruntime_f32_to_str_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
+    if (!isfinite(v))
+    {
+        return fixruntime_write_non_finite_text(v, buf, size);
+    }
     char text[PRECISION_TEXT_SIZE];
-    return fixruntime_copy_precision_text(text, d2fixed_buffered_n((double)v, precision, text), buf, size);
+    return fixruntime_copy_float_text(text, d2fixed_buffered_n((double)v, precision, text), buf, size);
 }
 
 int64_t fixruntime_f64_to_str_exp_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
+    if (!isfinite(v))
+    {
+        return fixruntime_write_non_finite_text(v, buf, size);
+    }
     char text[PRECISION_TEXT_SIZE];
-    return fixruntime_copy_precision_text(text, d2exp_buffered_n(v, precision, text), buf, size);
+    return fixruntime_copy_float_text(text, d2exp_buffered_n(v, precision, text), buf, size);
 }
 
 int64_t fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
+    if (!isfinite(v))
+    {
+        return fixruntime_write_non_finite_text(v, buf, size);
+    }
     char text[PRECISION_TEXT_SIZE];
-    return fixruntime_copy_precision_text(text, d2fixed_buffered_n(v, precision, text), buf, size);
+    return fixruntime_copy_float_text(text, d2fixed_buffered_n(v, precision, text), buf, size);
 }
 
 // Writes the scientific text Ryu produced the way Fix spells a floating point number, and
 // reports how many bytes the text took.
 //
-// `sci` holds what `d2s_buffered_n` or `f2s_buffered_n` wrote: a sign, the shortest digits that
-// read back as the number with a point after the first of them, `E`, and the power of ten those
-// digits are multiplied by. Fix writes those digits positionally where the point falls inside or
+// `sci` holds what `d2s_buffered_n` or `f2s_buffered_n` wrote for a finite number: a sign, the
+// shortest digits that read back as the number with a point after the first of them, `E`, and the
+// power of ten those digits are multiplied by. Fix writes those digits positionally where the point falls inside or
 // near them, and as a power of ten otherwise, so that the text stays about as wide as the digits
 // it carries: `1e300` rather than a 1 followed by 300 zeros.
 //
@@ -159,30 +162,6 @@ static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t s
     if (negative)
     {
         read = 1;
-    }
-
-    // Ryu writes `Infinity` and `NaN` where the number is not finite, and digits everywhere else,
-    // zero included, which it writes as `0E0`. Fix writes `inf` and `nan`, which is what
-    // `Std::FromString` takes back.
-    if (sci[read] < '0' || sci[read] > '9')
-    {
-        const char *special;
-        if (sci[read] == 'N')
-        {
-            special = "nan";
-        }
-        else if (sci[read] == 'I')
-        {
-            special = negative ? "-inf" : "inf";
-        }
-        else
-        {
-            fprintf(stderr, "A number was written as \"%s\", which is neither digits nor Infinity nor NaN\n", sci);
-            fixruntime_abort();
-        }
-        int length = fixruntime_checked_float_text_length((int)strlen(special), size);
-        memcpy(buf, special, (size_t)length + 1);
-        return length;
     }
 
     char digits[32];
@@ -278,11 +257,8 @@ static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t s
         }
         written += (int)fixruntime_write_u64(text + written, (uint64_t)exponent);
     }
-    text[written] = '\0';
 
-    fixruntime_checked_float_text_length(written, size);
-    memcpy(buf, text, (size_t)written + 1);
-    return written;
+    return fixruntime_copy_float_text(text, written, buf, size);
 }
 
 // Each of the two below writes the shortest text of `v` that reads back as `v` at `buf`, null-
@@ -292,6 +268,10 @@ int64_t fixruntime_f32_to_str_shortest(char *buf, int64_t size, float v)
     _Static_assert(WIDEST_FLOAT_TEXT_SIZE(F32_POSITIONAL_LOW, F32_POSITIONAL_HIGH, F32_DIGITS) <=
                        FLOAT_TEXT_SIZE,
                    "an F32's window asks for more than the text buffer holds");
+    if (!isfinite(v))
+    {
+        return fixruntime_write_non_finite_text(v, buf, size);
+    }
     char sci[32];
     sci[f2s_buffered_n(v, sci)] = '\0';
     return fixruntime_write_float_text(sci, buf, size, F32_POSITIONAL_LOW, F32_POSITIONAL_HIGH);
@@ -302,6 +282,10 @@ int64_t fixruntime_f64_to_str_shortest(char *buf, int64_t size, double v)
     _Static_assert(WIDEST_FLOAT_TEXT_SIZE(F64_POSITIONAL_LOW, F64_POSITIONAL_HIGH, F64_DIGITS) <=
                        FLOAT_TEXT_SIZE,
                    "an F64's window asks for more than the text buffer holds");
+    if (!isfinite(v))
+    {
+        return fixruntime_write_non_finite_text(v, buf, size);
+    }
     char sci[32];
     sci[d2s_buffered_n(v, sci)] = '\0';
     return fixruntime_write_float_text(sci, buf, size, F64_POSITIONAL_LOW, F64_POSITIONAL_HIGH);

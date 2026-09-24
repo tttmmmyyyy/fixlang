@@ -41,11 +41,12 @@ translation unit of its own.
 ## The text these produce
 
 `d2s_buffered_n` and `f2s_buffered_n` write scientific text: `1E300`, `3.333333333333333E-1`,
-`-0E0`, `Infinity`, `NaN`. Fix spells a number differently — `1e300`, `0.3333333333333333`,
-`-0.0`, `inf`, `nan` — so `fixruntime_f64_to_str_shortest` in `float_text.c` takes the digits and
-the exponent from that text and writes Fix's spelling.
+`-0E0`. Fix spells a number differently — `1e300`, `0.3333333333333333`, `-0.0` — so
+`fixruntime_f64_to_str_shortest` in `float_text.c` takes the digits and the exponent from that
+text and writes Fix's spelling.
 
 `d2fixed_buffered_n` and `d2exp_buffered_n` write the text `printf` writes for `%.*f` and `%.*e`
-under the `C` locale — `3.140`, `3.140e+00` — except where the number is not finite: they write
-`Infinity` and `nan`, and `fixruntime_copy_precision_text` in `float_text.c` spells the infinity
-`inf`.
+under the `C` locale: `3.140`, `3.140e+00`.
+
+Ryu spells an infinity and a NaN its own way, so `float_text.c` writes those without it, as `inf`,
+`-inf` and `nan`.
