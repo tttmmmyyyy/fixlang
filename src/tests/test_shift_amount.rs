@@ -3,32 +3,9 @@
 
 use crate::configuration::Configuration;
 use crate::tests::test_util::{
-    integer_operations_checked_config, source_with_a_runtime_zero, test_source, test_source_fail,
+    assert_the_check_stops_running, integer_operations_checked_config,
+    integer_operations_checked_no_runtime_check_config, test_with_a_runtime_zero,
 };
-
-/// Builds `source_with_a_runtime_zero(body)` under `config`, runs it, and fails the test unless the
-/// program exits with code 0.
-fn test_with_a_runtime_zero(body: &str, config: Configuration) {
-    test_source(&source_with_a_runtime_zero(body), config);
-}
-
-/// A configuration that asks for the shift amount check and then leaves out every check that ends
-/// the program, as `--check-integer-operations --no-runtime-check` does.
-fn integer_operations_checked_runtime_unchecked_config() -> Configuration {
-    let mut config = integer_operations_checked_config();
-    config.no_runtime_check = true;
-    config
-}
-
-/// Builds `source_with_a_runtime_zero(body)` under a configuration that stops at a shift amount
-/// outside the width, runs it, and asserts that it stops with a report containing `report`.
-fn assert_the_check_stops_running(body: &str, report: &str) {
-    test_source_fail(
-        &source_with_a_runtime_zero(body),
-        integer_operations_checked_config(),
-        report,
-    );
-}
 
 /// A shift by an amount the type has no room for answers one value: what the result compares as
 /// and what it prints as agree.
@@ -199,6 +176,6 @@ pub fn test_the_check_respects_no_runtime_check() {
         r#"
             assert_eq(|_|"I64 left by its width", 1.shift_left(zero + 64), 1);;
         "#,
-        integer_operations_checked_runtime_unchecked_config(),
+        integer_operations_checked_no_runtime_check_config(),
     );
 }

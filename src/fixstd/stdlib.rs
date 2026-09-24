@@ -132,7 +132,12 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         } else {
             make_integral_ty(&format!("{}{}", sign, size))
         };
-        let fix_type = fix_type.expect("Type alias `{}` is not supported in this system.");
+        let fix_type = fix_type.unwrap_or_else(|| {
+            panic!(
+                "The C type `{}` is {} bits wide, which no Fix type has.",
+                name, size
+            )
+        });
         fix_module.add_type_defns(vec![TypeDefn {
             name: FullName::from_strs(&[STD_NAME, FFI_NAME], name),
             value: TypeDeclValue::Alias(TypeAlias { value: fix_type }),
@@ -900,6 +905,16 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
     src
 }
 
+/// Every numeric type a cast can name — the integral types followed by the floating-point types —
+/// each paired with whether it is an integral type.
+fn numeric_types_and_is_int() -> Vec<(Arc<TypeNode>, bool)> {
+    integral_types()
+        .into_iter()
+        .map(|ty| (ty, true))
+        .chain(floating_types().into_iter().map(|ty| (ty, false)))
+        .collect()
+}
+
 /// Builds the module that defines the traits which convert between numeric types.
 ///
 /// The trait declarations (`trait a : ToF64 { f64 : a -> F64; }` etc.) are emitted as source so that
@@ -909,27 +924,41 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
 /// the body `<method> = to_<To>;`, whose use of the deprecated `to_<To>` global raises a deprecation
 /// warning.
 pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, Errors> {
-    let int_types = integral_types();
-    let float_types = floating_types();
+    let numeric_types = numeric_types_and_is_int();
     let c_types = config.c_type_sizes.get_c_types();
 
-    // Source: trait declarations only.
-    let mut to_type_names: Vec<String> = vec![];
-    for ty in int_types.iter().chain(float_types.iter()) {
-        to_type_names.push(ty.toplevel_tycon().unwrap().name.name.clone());
+    // Source: trait declarations only. Each name carries whether the type it names is an integer
+    // type, which decides whether the member's doc comment states how a floating-point value is
+    // rounded.
+    let mut to_type_names: Vec<(String, bool)> = vec![];
+    for (to, to_is_int) in &numeric_types {
+        to_type_names.push((to.toplevel_tycon().unwrap().name.name.clone(), *to_is_int));
     }
-    for (c_ty_name, _, _) in &c_types {
-        to_type_names.push(c_ty_name.to_string());
+    for (to_name_c, sign, _) in &c_types {
+        to_type_names.push((to_name_c.to_string(), *sign != "F"));
     }
     let mut src = "module Std; \n\n".to_string();
-    for to_name in &to_type_names {
+    for (to_name, to_is_int) in &to_type_names {
+        let rounding_doc = if *to_is_int {
+            format!(
+                "// \n\
+                 // A floating-point value is rounded towards zero. Where the rounded value lies \
+                 outside the range of `{}`, and where the value is a NaN, the result is \
+                 unspecified; `--check-integer-operations` stops the program there.\n",
+                to_name,
+            )
+        } else {
+            String::new()
+        };
         src += &format!(
             "trait a : To{} {{ \n\
             // Casts a value into `{}` type.\n\
+            {}\
             {} : a -> {};\n\
             }}\n",
             to_name,
             to_name,
+            rounding_doc,
             upper_camel_to_lower_snake(to_name),
             to_name,
         );
@@ -977,29 +1006,17 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
     };
 
     // Fix → Fix: every (int|float) → (int|float) combination.
-    for (from, from_is_int) in int_types
-        .iter()
-        .map(|t| (t, true))
-        .chain(float_types.iter().map(|t| (t, false)))
-    {
-        for (to, to_is_int) in int_types
-            .iter()
-            .map(|t| (t, true))
-            .chain(float_types.iter().map(|t| (t, false)))
-        {
+    for (from, from_is_int) in &numeric_types {
+        for (to, to_is_int) in &numeric_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
-            let body = cast_body(from, from_is_int, to.clone(), to_is_int, None);
+            let body = cast_body(from, *from_is_int, to.clone(), *to_is_int, None);
             prog.trait_env
                 .add_instance(make_impl(from, &to_name, body))?;
         }
     }
     // Fix → C type. The C type name (e.g. `CInt`) is an alias for one of the
     // Fix integral/floating types, identified by `(sign, size)`.
-    for (from, from_is_int) in int_types
-        .iter()
-        .map(|t| (t, true))
-        .chain(float_types.iter().map(|t| (t, false)))
-    {
+    for (from, from_is_int) in &numeric_types {
         for (to_name_c, sign, size) in &c_types {
             let to_is_int = *sign != "F";
             let to_fix = if to_is_int {
@@ -1007,12 +1024,18 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
             } else {
                 make_floating_ty(&format!("{}{}", sign, size))
             };
-            let Some(to_fix) = to_fix else { continue };
+            let to_fix = to_fix.unwrap_or_else(|| {
+                panic!(
+                    "The C type `{}` reached the cast traits without a Fix type, which \
+                     `make_std_mod` stops at before it builds them.",
+                    to_name_c
+                )
+            });
             let to_alias = type_tycon(&Arc::new(TyCon::new(FullName::from_strs(
                 &[STD_NAME, FFI_NAME],
                 to_name_c,
             ))));
-            let body = cast_body(from, from_is_int, to_fix, to_is_int, Some(to_alias));
+            let body = cast_body(from, *from_is_int, to_fix, to_is_int, Some(to_alias));
             prog.trait_env
                 .add_instance(make_impl(from, to_name_c, body))?;
         }

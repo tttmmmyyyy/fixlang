@@ -3021,7 +3021,7 @@ The following table shows how each setting is handled.
             <td>--check-integer-operations</td>
             <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Stop the program on a signed integer overflow, or on a shift by an amount outside the width of its type. <code>fix test</code> reads it from the <code>build.test</code> section, or from <code>build</code> when <code>build.test</code> does not set it.</td>
+            <td>Stop the program on a signed integer overflow, on a shift by an amount outside the width of its type, or on a conversion of a floating-point value to an integer type that does not hold it. <code>fix test</code> reads it from the <code>build.test</code> section, or from <code>build</code> when <code>build.test</code> does not set it.</td>
         </tr>
         <tr>
             <td>skip_eval</td>

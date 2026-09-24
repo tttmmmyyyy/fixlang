@@ -71,8 +71,9 @@ files = ["main.fix"]
 ## Whether to disable runtime checks (e.g., out-of-range check for array access).
 # no_runtime_check = false
 
-## Whether to stop the program on a signed integer overflow, or on a shift by an amount outside
-## the width of its type.
+## Whether to stop the program on a signed integer overflow, on a shift by an amount outside
+## the width of its type, or on a conversion of a floating-point value to an integer type that
+## does not hold it.
 ## Overwritten by the command line argument.
 # check_integer_operations = false
 

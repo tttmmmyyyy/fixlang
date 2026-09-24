@@ -604,11 +604,37 @@ fn run_source(source: &str, config: Configuration) -> Result<Result<Output, io::
 }
 
 /// A configuration with `--check-integer-operations` on, which stops the program on a signed
-/// integer overflow, or on a shift by an amount outside the width of its type.
+/// integer overflow, on a shift by an amount outside the width of its type, or on a conversion of
+/// a floating-point value to an integer type that does not hold it.
 pub fn integer_operations_checked_config() -> Configuration {
     let mut config = Configuration::develop_mode();
     config.check_integer_operations = true;
     config
+}
+
+/// A configuration that asks for the integer-operation checks and then leaves out every check that
+/// ends the program, as `--check-integer-operations --no-runtime-check` does.
+pub fn integer_operations_checked_no_runtime_check_config() -> Configuration {
+    let mut config = integer_operations_checked_config();
+    config.no_runtime_check = true;
+    config
+}
+
+/// Runs `body` under `config` as the body of a program that binds `zero` to a `Std::I64` the
+/// compiler cannot fold, and fails the test unless the program exits with code 0.
+pub fn test_with_a_runtime_zero(body: &str, config: Configuration) {
+    test_source(&source_with_a_runtime_zero(body), config);
+}
+
+/// Runs `body` as the body of a program that binds `zero` to a `Std::I64` the compiler cannot fold,
+/// under a configuration that asks for the integer-operation checks, and asserts that the program
+/// stops with a report containing `report`.
+pub fn assert_the_check_stops_running(body: &str, report: &str) {
+    test_source_fail(
+        &source_with_a_runtime_zero(body),
+        integer_operations_checked_config(),
+        report,
+    );
 }
 
 /// A program whose `main` binds `zero` to a `Std::I64` that is 0 at run time and that no
@@ -617,6 +643,11 @@ pub fn integer_operations_checked_config() -> Configuration {
 /// An operand built from `zero` reaches the code generator as a value, so the value a case names
 /// is the one the instruction receives. An operand written as a literal is folded long before
 /// that, and the instruction then answers at compile time whatever the folding chose.
+///
+/// The program states nothing about what `get_args` answered. An assertion on `args.@size` hands
+/// the optimizer that size on every path below it, which folds `zero` and with it everything the
+/// body builds from it — the test then measures the folding rather than the emitted instruction.
+/// The number of arguments is the caller's to control, and `run_sources` passes none.
 pub fn source_with_a_runtime_zero(body: &str) -> String {
     format!(
         r#"
@@ -624,7 +655,6 @@ pub fn source_with_a_runtime_zero(body: &str) -> String {
         main : IO ();
         main = (
             let args = *get_args;
-            assert_eq(|_|"The test program is run with its own path alone", args.@size, 1);;
             let zero = args.@size - 1;
             {}
             pure()

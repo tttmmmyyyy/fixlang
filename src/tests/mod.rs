@@ -37,6 +37,7 @@ mod test_external_projects;
 mod test_ffi;
 mod test_file_io;
 mod test_float_text_buffer;
+mod test_float_to_integer_conversion;
 mod test_get_args;
 mod test_git_ref;
 mod test_global_accessor;
