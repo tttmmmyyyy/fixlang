@@ -6028,6 +6028,112 @@ pub fn test_float_to_string_precision_of_non_finite_numbers() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Pins the text the functions writing a given number of places write where rounding carries
+/// through every digit: the carry adds a leading `1`, moving the point one place to the right, and
+/// with a power of ten it raises the power. This is the text `printf` writes for `%.*f` and `%.*e`.
+#[test]
+pub fn test_float_to_string_precision_carries_into_a_new_digit() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            assert_eq(|_|"9.5 to 0 places", 9.5.to_string_precision(0_U8), "10");;
+            assert_eq(|_|"99.96 to 1 place", 99.96.to_string_precision(1_U8), "100.0");;
+            assert_eq(|_|"-99.96 to 1 place", (-99.96).to_string_precision(1_U8), "-100.0");;
+            assert_eq(|_|"0.96 to 1 place", 0.96.to_string_precision(1_U8), "1.0");;
+            assert_eq(|_|"F32 99.96 to 1 place", 99.96_F32.to_string_precision(1_U8), "100.0");;
+
+            assert_eq(|_|"9.5 to 0 places with a power of ten", 9.5.to_string_exp_precision(0_U8), "1e+01");;
+            assert_eq(|_|"99.96 to 1 place with a power of ten", 99.96.to_string_exp_precision(1_U8), "1.0e+02");;
+            assert_eq(|_|"-9.96 to 1 place with a power of ten", (-9.96).to_string_exp_precision(1_U8), "-1.0e+01");;
+            assert_eq(|_|"9.9999996 with the default places", 9.9999996.to_string_exp, "1.000000e+01");;
+            assert_eq(|_|"F32 99.96 to 1 place with a power of ten", 99.96_F32.to_string_exp_precision(1_U8), "1.0e+02");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Pins the text the functions writing a given number of places write for zero: a negative zero,
+/// and a negative number that rounds to zero, keep their sign, as `printf` writes them, and
+/// `from_string` reads the negative zero back.
+#[test]
+pub fn test_float_to_string_precision_of_zero() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            assert_eq(|_|"F64 zero",
+                      [0.0.to_string_precision(2_U8), 0.0.to_string_exp_precision(3_U8), 0.0.to_string_exp_precision(0_U8)],
+                      ["0.00", "0.000e+00", "0e+00"]);;
+            assert_eq(|_|"F64 negative zero",
+                      [(-0.0).to_string_precision(2_U8), (-0.0).to_string_exp_precision(0_U8), (-0.0).to_string_exp],
+                      ["-0.00", "-0e+00", "-0.000000e+00"]);;
+            assert_eq(|_|"F32 negative zero",
+                      [(-0.0_F32).to_string_precision(2_U8), (-0.0_F32).to_string_exp],
+                      ["-0.00", "-0.000000e+00"]);;
+            assert_eq(|_|"a negative number rounded to zero", (-0.001).to_string_precision(2_U8), "-0.00");;
+            let back : Result ErrMsg F64 = (-0.0).to_string_precision(2_U8).from_string;
+            assert_eq(|_|"from_string reads the negative zero back", back.as_ok.to_bytes, (-0.0).to_bytes);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Pins the text the functions writing a given number of places write for a subnormal number,
+/// whose power of ten is negative and three digits wide, and `from_string` reads it back.
+#[test]
+pub fn test_float_to_string_precision_of_subnormal_numbers() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            let least = 4.9406564584124654e-324;
+            assert_eq(|_|"the least subnormal with a power of ten", least.to_string_exp, "4.940656e-324");;
+            assert_eq(|_|"the least subnormal positionally", least.to_string_precision(2_U8), "0.00");;
+            assert_eq(|_|"the least normal with a power of ten",
+                      2.2250738585072014e-308.to_string_exp_precision(3_U8), "2.225e-308");;
+            let back : Result ErrMsg F64 = least.to_string_exp_precision(20_U8).from_string;
+            assert_eq(|_|"from_string reads the least subnormal back", back.as_ok, least);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Pins that the functions writing a given number of places write a NaN as `nan` whether its sign
+/// bit is clear or set, on every platform: the NaNs are built from their bits rather than by
+/// arithmetic.
+#[test]
+pub fn test_float_to_string_precision_of_nan_of_either_sign() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            // `quiet_nan` has its sign bit clear, and the NaN read from bytes that are all `255`
+            // has it set.
+            let pos = F64::quiet_nan;
+            let neg = (from_bytes([255_U8, 255_U8, 255_U8, 255_U8, 255_U8, 255_U8, 255_U8, 255_U8]) : Result ErrMsg F64).as_ok;
+            let texts = [
+                pos.to_string_precision(2_U8), pos.to_string_exp, pos.to_string_exp_precision(2_U8),
+                neg.to_string_precision(2_U8), neg.to_string_exp, neg.to_string_exp_precision(2_U8)
+            ];
+            assert_eq(|_|"F64", texts, ["nan", "nan", "nan", "nan", "nan", "nan"]);;
+
+            let pos = F32::quiet_nan;
+            let neg = (from_bytes([255_U8, 255_U8, 255_U8, 255_U8]) : Result ErrMsg F32).as_ok;
+            let texts = [
+                pos.to_string_precision(2_U8), pos.to_string_exp, pos.to_string_exp_precision(2_U8),
+                neg.to_string_precision(2_U8), neg.to_string_exp, neg.to_string_exp_precision(2_U8)
+            ];
+            assert_eq(|_|"F32", texts, ["nan", "nan", "nan", "nan", "nan", "nan"]);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 #[test]
 pub fn test_loop_lines() {
     let source = r#"
