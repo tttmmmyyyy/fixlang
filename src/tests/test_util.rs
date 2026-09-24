@@ -612,6 +612,31 @@ pub fn integer_operations_checked_config() -> Configuration {
     config
 }
 
+/// A configuration that asks for the integer-operation checks and then leaves out every check that
+/// ends the program, as `--check-integer-operations --no-runtime-check` does.
+pub fn integer_operations_checked_no_runtime_check_config() -> Configuration {
+    let mut config = integer_operations_checked_config();
+    config.no_runtime_check = true;
+    config
+}
+
+/// Runs `body` under `config` as the body of a program that binds `zero` to a `Std::I64` the
+/// compiler cannot fold, and fails the test unless the program exits with code 0.
+pub fn test_with_a_runtime_zero(body: &str, config: Configuration) {
+    test_source(&source_with_a_runtime_zero(body), config);
+}
+
+/// Runs `body` as the body of a program that binds `zero` to a `Std::I64` the compiler cannot fold,
+/// under a configuration that asks for the integer-operation checks, and asserts that the program
+/// stops with a report containing `report`.
+pub fn assert_the_check_stops_running(body: &str, report: &str) {
+    test_source_fail(
+        &source_with_a_runtime_zero(body),
+        integer_operations_checked_config(),
+        report,
+    );
+}
+
 /// A program whose `main` binds `zero` to a `Std::I64` that is 0 at run time and that no
 /// optimization level can fold, and runs `body` after it.
 ///
