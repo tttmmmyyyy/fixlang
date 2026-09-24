@@ -2,16 +2,14 @@
 // buffer's size is derived from the widest text the value can be asked for, and the derivation
 // holds only if the widest digits, the widest exponent and the null terminator were all counted.
 //
-// A buffer short of that text stops the program: the six that go through `snprintf` pass it the
-// buffer's size, so a text that does not fit is truncated rather than written past the allocation,
-// and `fixruntime_checked_float_text_length` reads the length `snprintf` reports and aborts on it;
-// the two `to_string` values build the text in the runtime's own buffer and hand the same guard
-// its length before copying. So what this file does is write the widest text each of the eight can produce,
-// which is what proves the guard never fires — and an undersized buffer is caught by the abort
-// wherever the tests run, rather than by the Valgrind this file also asks for.
+// A buffer short of that text stops the program: the runtime builds every text in a buffer of its
+// own and hands its length to `fixruntime_copy_float_text`, which aborts where the text and its
+// null do not fit before copying anything. So what this file does is write the widest text each of
+// the eight can produce, which is what proves the check never fires — and an undersized buffer is
+// caught by the abort wherever the tests run, rather than by the Valgrind this file also asks for.
 //
-// The run is under Valgrind all the same, because the guard answers for the write into the buffer
-// and Valgrind answers for everything around it: the `Array` the buffer lives in, the copy out of
+// The run is under Valgrind all the same, because the check answers for the write into the buffer
+// and Valgrind answers for everything around it: the `Array` the buffer lives in, the copy into
 // it, and the `String` built from it.
 
 #[cfg(test)]
