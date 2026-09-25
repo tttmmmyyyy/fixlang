@@ -5993,8 +5993,7 @@ pub fn test_float_to_string_exp_precision() {
 }
 
 /// Pins the text the functions writing a given number of places write for a number that is not
-/// finite: `inf` and `-inf`, which `from_string` reads back, and `nan` whatever the sign of the NaN.
-/// `inf - inf` is a NaN whose sign bit is set on x86-64.
+/// finite: `inf` and `-inf`, which `from_string` reads back, and `nan`.
 #[test]
 pub fn test_float_to_string_precision_of_non_finite_numbers() {
     let source = r#"
