@@ -15,7 +15,9 @@ use crate::constants::{
 };
 use crate::generator::Generator;
 use crate::object::int_type_of_bits;
-use crate::target_triple::{architecture_of_target, vendor_of_target, Architecture};
+use crate::target_triple::{
+    architecture_of_target, target_is_darwin, target_is_windows, Architecture,
+};
 use inkwell::attributes::AttributeLoc;
 use inkwell::context::Context;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
@@ -76,10 +78,11 @@ impl CIntegerExtension {
 /// that a declaration of a C function carries `signext` or `zeroext` on each such parameter and
 /// result.
 ///
-/// x86-64 and Apple's AArch64 extend, and clang puts the attributes on their declarations. AAPCS64
-/// on every other operating system leaves the bits to the reader, and clang puts none. A declaration
-/// that promises the extension where the ABI does not make it reads the whole unit: a C function
-/// returning `(int8_t)3000`, which is -72, hands Fix 3000.
+/// The rule is clang's. x86-64 extends, and clang puts the attributes on its declarations, except on
+/// Windows, whose x64 ABI leaves the bits to the reader. AArch64 extends on Apple's operating
+/// systems, and AAPCS64 on every other one leaves the bits to the reader, where clang puts none. A
+/// declaration that promises the extension where the ABI does not make it reads the whole unit: a C
+/// function returning `(int8_t)3000`, which is -72, hands Fix 3000.
 ///
 /// Any other architecture gets no attribute. Fix then narrows every value it reads, which is correct
 /// under either kind of ABI, but hands C an argument or a result with the bits above it unfilled,
@@ -91,8 +94,8 @@ impl CIntegerExtension {
 /// does not.
 pub fn c_abi_extends_narrow_integers(triple: &str) -> bool {
     match architecture_of_target(triple) {
-        Architecture::X86_64 => true,
-        Architecture::AArch64 => vendor_of_target(triple) == "apple",
+        Architecture::X86_64 => !target_is_windows(triple),
+        Architecture::AArch64 => target_is_darwin(triple),
         Architecture::Other => false,
     }
 }

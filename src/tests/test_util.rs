@@ -841,10 +841,14 @@ pub fn test_source_with_c(fix_src: &str, c_src: &str, test_name: &str) {
     let mut file = File::create(&c_file_path).unwrap();
     file.write_all(c_src.as_bytes()).unwrap();
 
-    // Build `c_source` into an object file.
+    // Build `c_source` into an object file, optimized as a library a program links usually is. The
+    // bits a C function leaves above a narrow integer are what an optimized build leaves there: at
+    // `-O0`, gcc for AArch64 widens every narrow result and argument whether or not the ABI asks
+    // for it, which hides a Fix side that reads those bits.
     let o_file_path = format!("{}/{}.o", COMPILER_TEST_WORKING_PATH, test_name);
     let mut command = Command::new("gcc");
     let output = command
+        .arg("-O2")
         .arg("-c")
         .arg("-o")
         .arg(&o_file_path)

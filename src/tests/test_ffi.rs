@@ -358,20 +358,32 @@ pub fn test_ffi_export_reads_a_narrow_argument() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
-/// Apple's AArch64 extends under either name LLVM gives the architecture, AArch64 Linux extends
-/// under neither name, also when its triple leaves the vendor out, and x86-64 extends on every
-/// operating system.
+/// The answer agrees with the declaration clang 22 writes for `int8_t f(uint16_t)` on each triple:
+/// `signext` and `zeroext` where it is listed as extending, and no attribute elsewhere. The triples
+/// cover each spelling LLVM gives the two architectures and each operating system that changes the
+/// answer.
 #[test]
 pub fn test_c_abi_extends_narrow_integers_under_each_spelling() {
     for (triple, extends) in [
+        ("x86_64-unknown-linux-gnu", true),
+        ("x86_64-linux-gnu", true),
+        ("amd64-unknown-openbsd", true),
+        ("x86_64h-apple-darwin", true),
+        ("x86_64-pc-windows-msvc", false),
+        ("x86_64-w64-mingw32", false),
         ("aarch64-apple-darwin", true),
         ("arm64-apple-darwin23.0.0", true),
+        ("arm64e-apple-ios", true),
+        ("arm64-apple-tvos", true),
+        ("arm64-apple-xros", true),
+        ("aarch64-apple-none-macho", false),
         ("aarch64-unknown-linux-gnu", false),
         ("aarch64-linux-gnu", false),
         ("arm64-unknown-linux-gnu", false),
-        ("x86_64-apple-darwin", true),
-        ("x86_64-unknown-linux-gnu", true),
-        ("x86_64-linux-gnu", true),
+        ("aarch64_lfi-unknown-linux-gnu", false),
+        ("aarch64-unknown-freebsd", false),
+        ("aarch64-pc-windows-msvc", false),
+        ("aarch64", false),
     ] {
         assert_eq!(c_abi_extends_narrow_integers(triple), extends, "{}", triple);
     }
