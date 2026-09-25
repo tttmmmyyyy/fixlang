@@ -147,7 +147,7 @@ impl OutputFileType {
 /// The list covers the architectures the compiler is tested on, x86-64 and AArch64. Another
 /// architecture has no entry, since nobody has checked valgrind's decoder against it.
 fn features_valgrind_cannot_decode() -> &'static [&'static str] {
-    match std::env::consts::ARCH {
+    match env::consts::ARCH {
         "x86_64" => &["avx512f"],
         "aarch64" => &["sve", "rcpc"],
         _ => &[],
