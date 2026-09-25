@@ -88,3 +88,19 @@ impl CpuFeatures {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::CpuFeatures;
+
+    /// A feature turned off by name is turned off whether or not the list holds it, and after every
+    /// feature the list turns on, since LLVM applies the list in order and a feature listed later
+    /// would turn back on a feature it implies.
+    #[test]
+    fn test_a_named_feature_is_turned_off_after_everything_the_list_turns_on() {
+        let mut features = CpuFeatures::parse("+avx512f,+avx512vl,+sse2");
+        features.disable("avx512f");
+        features.disable("rcpc");
+        assert_eq!(features.to_string(), "+avx512vl,+sse2,-avx512f,-rcpc");
+    }
+}
