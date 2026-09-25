@@ -39,8 +39,12 @@ int64_t fixruntime_write_u64(char *buf, uint64_t v);
 // entry points hold each window to what fits here, since a wider one would write past it.
 #define FLOAT_TEXT_SIZE 48
 
-// The bytes a window asks for at its widest: a sign, a point, the zeros either edge of the window
-// allows beside the digits, the digits themselves, a power of ten of up to four bytes, and a null.
+// The bytes a window's text takes at its widest, the null included. The sum counts a sign, two
+// bytes, the zeros either edge of the window allows beside the digits, the digits themselves, four
+// bytes, and a null. A text written positionally spends the two bytes on a point and the `0` beside
+// it, and leaves the four unused. A text written with a power of ten spends the two bytes on a point
+// and the `e`, and the four on the rest of the power, `-324` at its widest; it leaves the zeros
+// unused.
 #define WIDEST_FLOAT_TEXT_SIZE(low, high, digits) \
     (1 + 2 + ((-(low)) > (high) ? (-(low)) : (high)) + (digits) + 4 + 1)
 
@@ -346,7 +350,7 @@ static locale_t float_text_locale(void)
 //
 // # Arguments
 // * `v` - What `strtod` answered.
-static void fixruntime_keep_only_overflow(double v)
+static void fixruntime_drop_subnormal_range_error(double v)
 {
     if (errno == ERANGE && isfinite(v) && v != 0.0)
     {
@@ -358,7 +362,8 @@ static void fixruntime_keep_only_overflow(double v)
 // program runs in.
 //
 // The text names the number and nothing else: a leading space, or anything left over after the
-// number, sets `errno` to `EINVAL`, and a number too large to hold sets it to `ERANGE`.
+// number, sets `errno` to `EINVAL`, and a number too large to hold, or too small to hold at all,
+// sets it to `ERANGE`.
 double fixruntime_strtod(const char *str)
 {
     char *endptr;
@@ -369,7 +374,7 @@ double fixruntime_strtod(const char *str)
         return 0.0;
     }
     double v = strtod_l(str, &endptr, float_text_locale());
-    fixruntime_keep_only_overflow(v);
+    fixruntime_drop_subnormal_range_error(v);
     if (endptr == str || *endptr != '\0')
     {
         errno = EINVAL;
@@ -381,7 +386,8 @@ double fixruntime_strtod(const char *str)
 // program runs in.
 //
 // The text names the number and nothing else: a leading space, or anything left over after the
-// number, sets `errno` to `EINVAL`, and a number too large to hold sets it to `ERANGE`.
+// number, sets `errno` to `EINVAL`, and a number too large to hold, or too small to hold at all,
+// sets it to `ERANGE`.
 float fixruntime_strtof(const char *str)
 {
     char *endptr;
@@ -392,7 +398,7 @@ float fixruntime_strtof(const char *str)
         return 0.0f;
     }
     float v = strtof_l(str, &endptr, float_text_locale());
-    fixruntime_keep_only_overflow((double)v);
+    fixruntime_drop_subnormal_range_error((double)v);
     if (endptr == str || *endptr != '\0')
     {
         errno = EINVAL;

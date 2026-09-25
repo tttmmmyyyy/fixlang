@@ -5,7 +5,7 @@ use crate::elaboration::elaborate_via_config;
 use crate::error::Errors;
 use crate::misc::info_msg;
 use rand::{thread_rng, Rng};
-use std::env;
+use std::env::consts::OS;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -314,7 +314,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     let mut libs_opts = vec![];
     let mut has_warned_on_mac = false;
     for (lib_name, link_type) in &config.linked_libraries {
-        if env::consts::OS != "macos" {
+        if OS != "macos" {
             match link_type {
                 LinkType::Static => libs_opts.push("-Wl,-Bstatic".to_string()),
                 LinkType::Dynamic => libs_opts.push("-Wl,-Bdynamic".to_string()),
@@ -341,7 +341,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     } else {
         com.arg("-no-pie");
     }
-    if env::consts::OS == "macos" {
+    if OS == "macos" {
         com.arg("-Wl,-dead_strip");
     } else {
         com.arg("-Wl,--gc-sections");
@@ -402,8 +402,9 @@ mod tests {
         );
     }
 
-    /// Every source of `src/fixstd/ryu/` is compiled. The same reasoning as the headers': a source
-    /// the directory gained and nothing compiled would be missing from the link.
+    /// Every source of `src/fixstd/ryu/` is compiled into the runtime. Taking a newer Ryu is a
+    /// matter of replacing that directory's files, and a source it gained that nothing compiled
+    /// would be missing from the link.
     #[test]
     fn test_vendored_ryu_sources_are_all_compiled() {
         let compiled: Set<String> = RUNTIME_SOURCES

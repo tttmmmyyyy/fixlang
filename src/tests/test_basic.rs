@@ -36,6 +36,8 @@ namespace Array {
 }
 "#;
 
+/// Checks that `*`, `/` and `%` bind tighter than `+`, that `/` truncates, and that the literal
+/// `1e1_I64` is the integer 10.
 #[test]
 pub fn test0() {
     let source = r#"    
@@ -50,12 +52,13 @@ pub fn test0() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that a `loop_m` whose state tuple carries a boxed array leaks nothing. `continue_m`
+/// and `break_m` wrap the state tuple in a `LoopState` union and pass it to `pure` at an owning
+/// position, so borrow-ification treats that union as owned, as its payload is an owned tuple.
+/// Treating it as borrowed brackets the call with a retain that has no matching release and
+/// leaks the array. Runs under memcheck.
 #[test]
 pub fn test_loop_m_array_state_no_leak() {
-    // A monadic loop whose state carries a boxed array: `continue_m`/`break_m` wrap the state tuple
-    // in a `LoopState` union and pass it to `pure` at an owning position. Borrow-ification must treat
-    // that union as owned — its payload is an owned tuple — rather than borrowed, or it brackets the
-    // call with a retain that has no matching release and leaks the array. Run under memcheck.
     let source = r#"
             module Main;
 
@@ -73,12 +76,12 @@ pub fn test_loop_m_array_state_no_leak() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that a `loop` whose state is a tuple of two arrays keeps both arrays alive through
+/// every turn and reads them back as written afterwards. The `LoopState` union wraps a value
+/// holding two reference-counting units, and is itself one unboxed union and so one unit of its
+/// own. Runs under memcheck.
 #[test]
 pub fn test_loop_two_array_state_stays_alive() {
-    // A loop whose state is a tuple of two arrays wraps a value holding two reference-counting units
-    // in a `LoopState` union, which is one unboxed union and so one unit of its own. The state's
-    // arrays must survive every turn of the loop and read back afterwards as they were written. Run
-    // under memcheck.
     let source = r#"
             module Main;
 
@@ -104,12 +107,12 @@ pub fn test_loop_two_array_state_stays_alive() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that destructuring an unboxed tuple and passing its array field to a borrowing call,
+/// then reading the field again, is memory-safe. Cancellation keeps the retain of the field's
+/// move through the destructure pending and cancels it across the borrow call. Runs under
+/// memcheck.
 #[test]
 pub fn test_unboxed_destructure_field_borrow() {
-    // Destructure an unboxed tuple and pass a field array to a read-only (borrowing) call, then read
-    // it again. Cancellation lets the field's move through the destructure keep its retain pending
-    // and cancel across the borrow call; this checks that keeping it pending — rather than consuming
-    // it at the destructure — stays memory-safe. Run under memcheck.
     let source = r#"
             module Main;
 
@@ -133,12 +136,12 @@ pub fn test_unboxed_destructure_field_borrow() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that wrapping a borrowed array `p` in `some(p)` and passing it to a borrowing
+/// position leaves `p` alive for the caller's later read. Building the union lays the borrowed
+/// payload in place, so borrow-ification must not release `p` through that union; a release
+/// there makes the caller's read a use-after-free. Runs under memcheck.
 #[test]
 pub fn test_union_borrow_no_double_free() {
-    // A function builds `some(p)` around a borrowed array `p` and passes it to a borrowing position,
-    // then the caller reads the array again afterward. Building the union lays the borrowed payload
-    // in place rather than owning it, so borrow-ification must not release `p` through that union;
-    // otherwise the caller's later read is a use-after-free of its own array. Run under memcheck.
     let source = r#"
             module Main;
 
@@ -159,11 +162,12 @@ pub fn test_union_borrow_no_double_free() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that cancellation respects an array's per-arm fate: after a borrowing call reads the
+/// array, one `if` arm consumes it with `push_back` and the other drops it and returns a fresh
+/// array. Cancellation keeps the release that lowering placed on the dropping arm. Runs under
+/// memcheck.
 #[test]
 pub fn test_cancel_match_arm_array_fate() {
-    // A borrowing call reads the array, then a match consumes it on one arm (`push_back`) and drops
-    // it on the other (returning a fresh array). Cancellation must respect the array's per-arm fate,
-    // keeping the release its lowering placed rather than over-cancelling it. Run under memcheck.
     let source = r#"
             module Main;
 
@@ -187,13 +191,12 @@ pub fn test_cancel_match_arm_array_fate() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that unique-check elimination drops the force-unique clone from `set` on a locally
+/// fresh array, which then still computes the right values in place. A `set` on an array read
+/// out of a boxed container keeps its check and clones, leaving the array's other holder
+/// untouched. Runs under memcheck, where a wrongly dropped clone shows up as corruption.
 #[test]
 pub fn test_unique_check_elim_fresh_and_shared() {
-    // Unique-check elimination drops the force-unique clone from a `set` whose array is proven
-    // unique. The elided sets here run in place on a locally fresh array and must still compute the
-    // right values; a `set` reached through a boxed container is of unknown sharing, so its check
-    // stays and clones, leaving the array's other holder untouched. Run under memcheck so a wrongly
-    // dropped clone (an in-place write into a shared array) shows up as corruption.
     let source = r#"
             module Main;
 
@@ -217,13 +220,13 @@ pub fn test_unique_check_elim_fresh_and_shared() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that a `set` after an `if` whose one branch shares the array keeps its force-unique
+/// check. The provenance analysis joins the branches' exit environments, so the array is
+/// possibly shared at the `set`; the `set` clones and `keep`'s copy keeps its original value.
+/// Runs both branches under memcheck, where eliding the check corrupts `keep` and double-frees
+/// its array.
 #[test]
 pub fn test_unique_check_elim_branch_shared() {
-    // A fresh array is shared on only one branch of an `if` (stored into `keep`), then `set` after
-    // the branches merge. Because the provenance analysis joins the branches' exit environments, the
-    // array is possibly-shared at the `set`, so its force-unique check must stay: the `set` clones,
-    // leaving `keep`'s copy at its original value. Run for both branches under memcheck; eliding the
-    // check on the shared branch would corrupt `keep` (and double-free its array).
     let source = r#"
             module Main;
 
@@ -246,11 +249,11 @@ pub fn test_unique_check_elim_branch_shared() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks chained `Array::mod`: the first `mod` returns a uniquely owned array through its
+/// `plug`, so the second one drops its force-unique check. A `mod` on a shared array keeps its
+/// check and clones, leaving its other holder untouched. Runs under memcheck.
 #[test]
 pub fn test_unique_check_elim_chained_array_mod() {
-    // Chained `mod` on an array: `mod` completes through a `plug` that returns a uniquely owned
-    // array, so the second `mod`'s force-unique is dropped. A shared array keeps its check and
-    // clones, leaving its other holder untouched. Run under memcheck.
     let source = r#"
             module Main;
 
@@ -271,12 +274,12 @@ pub fn test_unique_check_elim_chained_array_mod() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks chained field updates on a boxed struct: a struct `set`/`mod` returns a uniquely
+/// owned struct, so after the first update the rest write in place with the check dropped. An
+/// update on a shared struct keeps its check and clones, leaving its other holder untouched.
+/// Runs under memcheck.
 #[test]
 pub fn test_unique_check_elim_chained_struct_fields() {
-    // Chained field updates on a boxed struct: once the first update leaves the struct unique, the
-    // rest write in place with the check dropped (a struct `set`/`mod` returns a uniquely owned
-    // struct, so the result feeds the next update as unique). A shared struct keeps its check and
-    // clones, so its other holder is untouched. Run under memcheck.
     let source = r#"
             module Main;
 
@@ -299,13 +302,13 @@ pub fn test_unique_check_elim_chained_struct_fields() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that a boxed field destructured out of a shared boxed struct counts as shared:
+/// mutating it keeps its force-unique check and clones, leaving the struct's other holder
+/// untouched. A field read out of a boxed container has `Dyn` provenance, like a boxed union's
+/// payload. Eliding the check here corrupts `keep` and double-frees its array. Runs under
+/// memcheck.
 #[test]
 pub fn test_unique_check_elim_destructured_boxed_field_shared() {
-    // Destructuring a shared boxed struct reads its fields out of the shared allocation, so a
-    // destructured boxed field is itself shared: mutating it must keep its force-unique check and
-    // clone, leaving the struct's other holder untouched. A field read out of a boxed container has
-    // `Dyn` provenance (like a boxed union's payload), not the box's own provenance; eliding the
-    // check here would corrupt `keep` and double-free its array. Run under memcheck.
     let source = r#"
             module Main;
 
@@ -325,13 +328,12 @@ pub fn test_unique_check_elim_destructured_boxed_field_shared() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that a function returning `()` compiles and runs when one branch returns a unit-typed
+/// call result and the other the literal `()`. The provenance analysis joins the two branches,
+/// which requires a fieldless value to have a single provenance representation whether it comes
+/// from the type or from a constructor.
 #[test]
 pub fn test_fieldless_value_merged_across_branch_compiles() {
-    // A function returning a fieldless value (`()`) whose branches merge a unit-typed call result
-    // with a `()` literal. The two sides once carried different provenance shapes — one seeded from
-    // the type, one built by a constructor — and merging them aborted the provenance analysis' branch
-    // join at Max ("mismatched shapes: Unboxed vs UnboxedAgg([])"). Compiling and running this at Max
-    // guards that a fieldless value has a single provenance representation.
     let source = r#"
             module Main;
 
@@ -348,13 +350,12 @@ pub fn test_fieldless_value_merged_across_branch_compiles() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that mutating an array projected twice out of an unboxed tuple keeps its force-unique
+/// check when the first projection `keep` is shared by storing it twice. Reference counting
+/// retains the shared field on the container before projecting it, so both projections read a
+/// shared value and the check stays. Runs under memcheck.
 #[test]
 pub fn test_unique_check_elim_reprojected_alias_shared() {
-    // An unboxed tuple's boxed field is projected into `keep` (which is stored twice, so it is
-    // shared) and re-projected into `m`, then `m` is mutated. `keep` and `m` name the same array, so
-    // the mutation must keep its check. Because reference counting retains the shared field on the
-    // container before projecting it, both projections read a shared value and the check stays; this
-    // guards that the container-level retain keeps re-projected aliases sound. Run under memcheck.
     let source = r#"
             module Main;
 
@@ -375,13 +376,13 @@ pub fn test_unique_check_elim_reprojected_alias_shared() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that mutating an array projected twice out of an unboxed tuple keeps its force-unique
+/// check when the first projection `y` stays live across the mutation and is read afterwards.
+/// The sharing comes from that liveness alone, where
+/// `test_unique_check_elim_reprojected_alias_shared` shares the first projection by storing it
+/// in a tuple. Runs under memcheck, where a wrongly elided check shows as corruption of `y`.
 #[test]
 pub fn test_unique_check_elim_reprojected_alias_live_across_mutation() {
-    // An unboxed tuple's boxed field is projected into `y` and again into `a`; `a` is mutated while
-    // `y` is read only afterwards. Both name the same array, so the mutation must keep its check.
-    // Unlike the sibling test that shares the first projection by storing it in a tuple, here the
-    // sharing comes purely from `y` staying live across the mutation. Run under memcheck so a wrongly
-    // elided check (an in-place write into the array `y` also holds) shows as corruption.
     let source = r#"
             module Main;
 
@@ -399,12 +400,12 @@ pub fn test_unique_check_elim_reprojected_alias_live_across_mutation() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks the per-caller specialization of a function that mutates its array argument: the
+/// unique caller's clone drops the check and writes in place, and the shared caller's version
+/// keeps the check and clones. The shared caller's other holder stays untouched. Runs under
+/// memcheck, where a wrongly dropped check shows as corruption.
 #[test]
 pub fn test_unique_check_elim_specialized_shared_and_unique() {
-    // A function that mutates its array argument in place is specialized per caller: a unique caller
-    // gets a clone with the check dropped (writing in place), a shared caller keeps the checked
-    // version (which clones). Specialization must not corrupt the shared caller's other holder. Run
-    // under memcheck so a wrongly dropped check shows as corruption.
     let source = r#"
             module Main;
 
@@ -428,12 +429,12 @@ pub fn test_unique_check_elim_specialized_shared_and_unique() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks a loop that increments each element of an array it threads through. Entered with a
+/// unique array, every `set` writes in place; entered with a shared one, the first `set` clones
+/// and the rest write in place on that clone. Either way the array's other holder stays
+/// untouched. Runs under memcheck.
 #[test]
 pub fn test_unique_check_elim_specialized_loop_shared_entry() {
-    // An array threaded through a loop that increments each element. Entered unique, every iteration's
-    // set writes in place; entered shared, the first set clones (the loop's shared version) and the
-    // rest run in place on that fresh clone. Either way the loop's other holder stays untouched. Run
-    // under memcheck.
     let source = r#"
             module Main;
 
@@ -459,14 +460,13 @@ pub fn test_unique_check_elim_specialized_loop_shared_entry() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks `Array::act` with the `Option` functor, which has no functor-specialized variant and
+/// so decides at run time whether to take its in-place arm. On an array proven unique the
+/// runtime check folds away and the in-place arm computes the right values. On a shared array
+/// the check stays and the shared arm clones, leaving the other holder untouched. Runs under
+/// memcheck, where a wrongly dropped check shows as corruption.
 #[test]
 pub fn test_unique_check_elim_generic_act() {
-    // A generic `act` (here with the `Option` functor, which has no functor-specialized variant)
-    // decides at run time whether its array is unique and takes an in-place arm when it is. Where the
-    // array is proven unique, that runtime check folds away and the in-place arm always runs — it must
-    // still compute the right values. Where the array is shared (a second holder retained across the
-    // call), the check stays and the shared arm clones, leaving the other holder untouched. Run under
-    // memcheck so a wrongly dropped check (an in-place write into a shared array) shows as corruption.
     let source = r#"
             module Main;
 
@@ -488,12 +488,12 @@ pub fn test_unique_check_elim_generic_act() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that unique-check elimination drops the force-unique clone from `Array::swap` on an
+/// array proven unique, which then swaps in place. A swap on a shared array keeps its check and
+/// clones, so its other holder keeps the original order. Runs under memcheck, where a wrongly
+/// dropped clone shows up as corruption of the other holder.
 #[test]
 pub fn test_unique_check_elim_swap_fresh_and_shared() {
-    // Unique-check elimination drops the force-unique clone from `Array::swap` whose array is proven
-    // unique: the swap exchanges the two elements in place. A shared array keeps its check and clones,
-    // so its other holder keeps the original order. Run under memcheck so a wrongly dropped clone (an
-    // in-place swap into a shared array) shows up as corruption of the other holder.
     let source = r#"
             module Main;
 
@@ -516,6 +516,8 @@ pub fn test_unique_check_elim_swap_fresh_and_shared() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that in `let x = if c { a }; b;` the first semicolon ends the `if` and the second
+/// ends the `let`, so `x` is bound to the `if`'s value.
 #[test]
 pub fn test_if_semicolon_in_let() {
     let source = r#"    
@@ -531,6 +533,8 @@ pub fn test_if_semicolon_in_let() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that unary minus applies to a variable bound by `let ... in` written as a function
+/// argument.
 #[test]
 pub fn test1() {
     let source = r#"
@@ -545,6 +549,8 @@ pub fn test1() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that a `let ... in` expression evaluates to its body when the body leaves the bound
+/// variable unused.
 #[test]
 pub fn test2() {
     let source = r#"
@@ -559,6 +565,7 @@ pub fn test2() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that the body of nested `let ... in` expressions reads the outer binding.
 #[test]
 pub fn test3() {
     let source = r#"
@@ -573,6 +580,7 @@ pub fn test3() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that the body of nested `let ... in` expressions reads the inner binding.
 #[test]
 pub fn test4() {
     let source = r#"
@@ -587,6 +595,7 @@ pub fn test4() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that an inner `let ... in` binding shadows an outer binding of the same name.
 #[test]
 pub fn test5() {
     let source = r#"
@@ -601,6 +610,7 @@ pub fn test5() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that a `let ... in` expression can be the bound value of another `let ... in`.
 #[test]
 pub fn test6() {
     let source = r#"
@@ -615,6 +625,7 @@ pub fn test6() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that a lambda literal can be applied directly, here ignoring its argument.
 #[test]
 pub fn test7() {
     let source = r#"
@@ -628,6 +639,7 @@ pub fn test7() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `$` applies a parenthesized lambda to its argument.
 #[test]
 pub fn test8() {
     let source = r#"
@@ -642,6 +654,7 @@ pub fn test8() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks `let` bindings ended by `;` and a subtraction whose result is negative.
 #[test]
 pub fn test9_5() {
     let source = r#"
@@ -657,6 +670,7 @@ pub fn test9_5() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that a `let ... in` body can use the bound variable in an arithmetic expression.
 #[test]
 pub fn test10() {
     let source = r#"
@@ -670,6 +684,8 @@ pub fn test10() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `let ... in` bindings spanning several lines scope over the `;;` sequence that
+/// follows them.
 #[test]
 pub fn test11() {
     let source = r#"
@@ -685,6 +701,7 @@ pub fn test11() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks a chain of `let ... in` bindings where a later binding is computed from earlier ones.
 #[test]
 pub fn test12() {
     let source = r#"
@@ -702,6 +719,8 @@ pub fn test12() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `add(5)` is a partial application that adds 5 to the argument it is later called
+/// with.
 #[test]
 pub fn test13() {
     let source = r#"
@@ -715,6 +734,8 @@ pub fn test13() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that a partially applied `add(5)` can be called several times with different
+/// arguments.
 #[test]
 pub fn test13_5() {
     let source = r#"
@@ -728,6 +749,8 @@ pub fn test13_5() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks partial application of `add` to a variable, then calling the result with another
+/// variable.
 #[test]
 pub fn test14() {
     let source = r#"
@@ -743,6 +766,7 @@ pub fn test14() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that a lambda bound by `let ... in` computes `3 + x` for its argument.
 #[test]
 pub fn test15() {
     let source = r#"
@@ -756,6 +780,8 @@ pub fn test15() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that a lambda captures a `let`-bound variable and returns it, ignoring its own
+/// argument.
 #[test]
 pub fn test15_5() {
     let source = r#"
@@ -770,6 +796,8 @@ pub fn test15_5() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that a lambda bound by `let ... in` computes `x + 3` with its parameter as the left
+/// operand.
 #[test]
 pub fn test16() {
     let source = r#"
@@ -783,6 +811,7 @@ pub fn test16() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `if true` evaluates to the `then` branch.
 #[test]
 pub fn test17() {
     let source = r#"
@@ -795,6 +824,7 @@ pub fn test17() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `if false` evaluates to the `else` branch.
 #[test]
 pub fn test18() {
     let source = r#"
@@ -807,6 +837,7 @@ pub fn test18() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `if` on a true `==` comparison evaluates to the `then` branch.
 #[test]
 pub fn test19() {
     let source = r#"
@@ -819,6 +850,7 @@ pub fn test19() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `if` on a false `==` comparison evaluates to the `else` branch.
 #[test]
 pub fn test20() {
     let source = r#"
@@ -831,6 +863,7 @@ pub fn test20() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that an `else if` chain falls through to the final `else` when no condition holds.
 #[test]
 pub fn test20_5() {
     let source = r#"
@@ -852,6 +885,7 @@ pub fn test20_5() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `fix $ |loop, n| ...` defines a recursive local function, here factorial.
 #[test]
 pub fn test21() {
     let source = r#"
@@ -866,6 +900,8 @@ pub fn test21() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks calling `fix` with the recursive function and its argument in one call, as `fix(f,
+/// 5)`.
 #[test]
 pub fn test_fix_direct_call() {
     let source = r#"
@@ -880,9 +916,10 @@ pub fn test_fix_direct_call() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that a two-argument tail-recursive function defined by `fix` runs a million
+/// iterations without exhausting the stack in release mode.
 #[test]
 pub fn test22() {
-    // Test recursion function defined by fix with two variables that is tail call.
     let n: i64 = 1000000;
     let source = format!(
         r#"
@@ -911,9 +948,10 @@ pub fn test22() {
     );
 }
 
+/// Checks a non-tail-recursive function defined by `fix`, here Fibonacci with two recursive
+/// calls.
 #[test]
 pub fn test22_5() {
-    // Test recursion function defined by fix that is not tail-call.
     let source = r#"
         module Main;         main : IO ();
         main = (
@@ -933,9 +971,9 @@ pub fn test22_5() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks a recursive global function, here Fibonacci with two recursive calls.
 #[test]
 pub fn test22_7() {
-    // Test global recursion function
     let source = r#"
         module Main; 
         fib : I64 -> I64;
@@ -958,9 +996,9 @@ pub fn test22_7() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `Array::fill` with size 0 builds an empty array without error.
 #[test]
 pub fn test23() {
-    // Test Array::fill of size 0.
     let source = r#"
         module Main;
         main : IO ();
@@ -972,9 +1010,9 @@ pub fn test23() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `Array::fill` builds an array of the requested size.
 #[test]
 pub fn test24() {
-    // Test Array::fill of size > 0.
     let source = r#"
         module Main;         main : IO ();
         main = (
@@ -986,9 +1024,9 @@ pub fn test24() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that reading an element of an array built by `Array::fill` returns the fill value.
 #[test]
 pub fn test25() {
-    // Test Array::get.
     let source = r#"
         module Main;
         main : IO ();
@@ -1002,9 +1040,9 @@ pub fn test25() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `Array::set` on a uniquely referenced array writes the new value.
 #[test]
 pub fn test26() {
-    // Test Array::set (unique case).
     let source = r#"
         module Main;
         main : IO ();
@@ -1018,9 +1056,9 @@ pub fn test26() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `Array::set` on a shared array leaves the original array's element unchanged.
 #[test]
 pub fn test27() {
-    // Test Array::set (shared case).
     let source = r#"
         module Main;
         main : IO ();
@@ -1034,9 +1072,10 @@ pub fn test27() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks an array of closures: `Array::set` replaces one element, and elements read back can
+/// be called.
 #[test]
 pub fn test27_5() {
-    // Test Array of boxed object.
     let source = r#"
         module Main;
         main : IO ();
@@ -1050,9 +1089,10 @@ pub fn test27_5() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that every `Array::set` in a `fix` loop computing Fibonacci numbers acts on a
+/// uniquely referenced array, so the loop updates the array in place.
 #[test]
 pub fn test28() {
-    // Calculate Fibonacci sequence using array.
     let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
         + r#"
 
@@ -1080,6 +1120,7 @@ pub fn test28() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that a generic `id` is instantiated at `Bool` and at `I64` within one expression.
 #[test]
 pub fn test29() {
     let source = r#"
@@ -1096,9 +1137,9 @@ pub fn test29() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `$` is right-associative, so `g $ f $ 5` applies `f` first.
 #[test]
 pub fn test30() {
-    // Test dollar combinator
     let source = r#"
         module Main;
         main : IO ();
@@ -1113,9 +1154,9 @@ pub fn test30() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `.` applies functions left to right, so `5 .f. g` is `g(f(5))`.
 #[test]
 pub fn test31() {
-    // Test . combinator
     let source = r#"
         module Main;
         main : IO ();
@@ -1130,9 +1171,11 @@ pub fn test31() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `.` passes its left operand to the function on its right and `$` passes its
+/// right operand to the function on its left, when both appear in one expression and `5.add` is
+/// a partial application.
 #[test]
 pub fn test32() {
-    // Test . and $ combinator
     let source = r#"
         module Main;
         main : IO ();
@@ -1145,9 +1188,10 @@ pub fn test32() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a boxed struct is built by a struct literal, updated by `mod_x` and read by
+/// `@x`, with both accessors called through the struct's namespace.
 #[test]
 pub fn test33() {
-    // Test struct declaration and new, mod.
     let source = r#"
         module Main;
         type I64Bool = box struct {x: I64, y: Bool};
@@ -1163,9 +1207,10 @@ pub fn test33() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that an unboxed struct is built by a struct literal, updated by `mod_x` and read by
+/// `@x`, with both accessors called through the struct's namespace.
 #[test]
 pub fn test34_5() {
-    // Test unboxed struct declaration and new, mod.
     let source = r#"
         module Main;
         type I64Bool = unbox struct {x: I64, y: Bool};
@@ -1181,9 +1226,10 @@ pub fn test34_5() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `obj.mod_x` and `obj.@x` resolve to the accessors of the struct `obj` belongs
+/// to, when another struct in the module also has a field `x`.
 #[test]
 pub fn test34() {
-    // Test namespace inference.
     let source = r#"
         module Main;
         
@@ -1201,9 +1247,10 @@ pub fn test34() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that the accessors `@x` and `@y`, which two structs both define with different
+/// field types, resolve by the type of the value they are applied to.
 #[test]
 pub fn test35() {
-    // Test overloading resolution.
     let source = r#"
         module Main; 
         type A = box struct {x: I64, y: Bool};
@@ -1221,9 +1268,10 @@ pub fn test35() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `mod_x $ mod_x $ f` composes two modifiers into one that updates a field of a
+/// struct nested in another struct.
 #[test]
 pub fn test36() {
-    // Test modifier composition.
     let source = r#"
         module Main; 
         type A = box struct {x: B};
@@ -1241,9 +1289,10 @@ pub fn test36() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a nested update with composed modifiers leaves the original value unchanged
+/// when the value is still referenced afterwards.
 #[test]
 pub fn test37_5() {
-    // Test shared modField.
     let source = r#"
         module Main; 
         type A = box struct {x: B};
@@ -1261,9 +1310,10 @@ pub fn test37_5() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a type annotation on an expression, `(a : A)`, decides which struct's `mod_x`
+/// an overloaded accessor chain refers to inside a lambda.
 #[test]
 pub fn test_type_annotation() {
-    // Test type annotation.
     let source = r#"
         module Main; 
         type A = box struct {x: B};
@@ -1282,9 +1332,10 @@ pub fn test_type_annotation() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a type annotation on the accessor itself, `(mod_x : (B -> B) -> A -> A)`,
+/// decides which struct's `mod_x` each accessor in a chain refers to.
 #[test]
 pub fn test_type_annotation_2() {
-    // Test type annotation.
     let source = r#"
         module Main; 
         type A = box struct {x: B};
@@ -1303,9 +1354,10 @@ pub fn test_type_annotation_2() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a type annotation on a `let` binding, `let f: A -> A`, decides which struct's
+/// `mod_x` the lambda bound to it refers to.
 #[test]
 pub fn test_type_annotated_pattern() {
-    // Test type annotation at let-binding.
     let source = r#"
         module Main; 
         type A = box struct {x: B};
@@ -1324,9 +1376,10 @@ pub fn test_type_annotated_pattern() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a `let` binding annotated with a function type accepts a lambda and can be
+/// called.
 #[test]
 pub fn test_type_annotated_pattern_2() {
-    // Test type annotation at let-binding.
     let source = r#"
         module Main;         
         main : IO ();
@@ -1340,6 +1393,8 @@ pub fn test_type_annotated_pattern_2() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `_` discards the matched value in tuple, nested tuple, struct and `match`
+/// patterns and as a lambda parameter, and that it may appear several times in one pattern.
 #[test]
 pub fn test_wildcard_pattern() {
     // `_` is a wildcard pattern: it discards the matched value and may
@@ -1378,6 +1433,8 @@ pub fn test_wildcard_pattern() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `_` binds no name: referring to `_` after `let _ = ...` is reported as an
+/// unknown name.
 #[test]
 pub fn test_wildcard_pattern_not_readable() {
     // A value bound by the wildcard `_` cannot be referred to afterwards.
@@ -1392,9 +1449,9 @@ pub fn test_wildcard_pattern_not_readable() {
     test_source_fail(source, Configuration::develop_mode(), "Unknown name `_`.");
 }
 
+/// Verifies that a lambda parameter accepts a type annotation, `|x: I64|`.
 #[test]
 pub fn test41_5() {
-    // Test type annotation at lambda
     let source = r#"
         module Main;         
         main : IO ();
@@ -1408,6 +1465,8 @@ pub fn test41_5() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a global function calling itself outside tail position computes the right
+/// result at a recursion depth of 10000.
 #[test]
 pub fn test42() {
     // Recursion function using global variable (not tail call).
@@ -1431,6 +1490,8 @@ pub fn test42() {
     test_source(source.as_str(), Configuration::develop_mode());
 }
 
+/// Verifies that a tail-recursive global function completes ten million iterations in release
+/// mode, which needs its tail calls to reuse the stack frame.
 #[test]
 pub fn test43() {
     // Recursion function using global variable (tail call).
@@ -1457,9 +1518,11 @@ pub fn test43() {
     );
 }
 
+/// Verifies that a trait with implementations for `I64` and `Bool` dispatches by type, both
+/// when its method is called directly and inside a function whose type variable carries the
+/// trait as a bound.
 #[test]
 pub fn test44() {
-    // Test basic use of traits.
     let source = r#"
         module Main; 
         trait a : ToI64 {
@@ -1500,9 +1563,9 @@ pub fn test44() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `Array::from_map` fills each index with the function applied to that index.
 #[test]
 pub fn test44_5() {
-    // Test Array::from_map.
     let source = r#"
         module Main; 
         sum : Array I64 -> I64;
@@ -1525,9 +1588,10 @@ pub fn test44_5() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a trait can be declared over a higher-kinded type variable `f : * -> *`,
+/// implemented for `Array`, and called through that implementation.
 #[test]
 pub fn test45() {
-    // Test HKT.
     let source = r#"
         module Main; 
         trait [f:*->*] f : MyFunctor {
@@ -1561,9 +1625,11 @@ pub fn test45() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that local `let` bindings shadow global values of the same name, that `Main::y`
+/// reaches the global value while it is shadowed, and that `x` outside the `let` refers to the
+/// global again.
 #[test]
 pub fn test46() {
-    // Test confliction of global name and local name.
     let source = r#"
         module Main; 
         x : I64;
@@ -1582,9 +1648,10 @@ pub fn test46() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies the accessors of an unboxed union: `mod_*` changes the value only when the union
+/// holds that variant, and `is_*` and `as_*` test and extract the variant.
 #[test]
 pub fn test_union_basic_unboxed() {
-    // Basic use of union.
     let source = r#"
         module Main; 
         type I64OrBool = union {int : I64, bool: Bool};
@@ -1603,9 +1670,10 @@ pub fn test_union_basic_unboxed() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies the accessors of a boxed union: `mod_*` changes the value only when the union holds
+/// that variant, and `is_*` and `as_*` test and extract the variant.
 #[test]
 pub fn test_union_basic_boxed() {
-    // Basic use of boxed union.
     let source = r#"
         module Main; 
         type I64OrBool = box union {int : I64, bool: Bool};
@@ -1624,6 +1692,8 @@ pub fn test_union_basic_boxed() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `mod_func` on a union variant holding a closure replaces it with a closure
+/// that wraps the original, and that the original's captured value survives.
 #[test]
 pub fn test_union_mod_closure() {
     let source = r#"
@@ -1643,9 +1713,10 @@ pub fn test_union_mod_closure() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `mod_some` on an `Option` holding an array can grow the array, and that
+/// `as_some` returns the grown array.
 #[test]
 pub fn test_union_mod_array() {
-    // Test union for array.
     let source = r#"
         module Main; 
         main : IO ();
@@ -1667,9 +1738,10 @@ pub fn test_union_mod_array() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `mod_some` on a boxed union that is still referenced afterwards leaves the
+/// original's array unchanged, while the result holds the appended array.
 #[test]
 pub fn test_shared_union_mod() {
-    // Test union for array.
     let source = r#"
         module Main; 
 
@@ -1701,9 +1773,10 @@ pub fn test_shared_union_mod() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a struct with a type parameter can hold an `Array a` and that `mod_data`
+/// updates that array.
 #[test]
 pub fn test48() {
-    // Parametrised struct.
     let source = r#"
         module Main; 
         type Vec a = box struct {data: Array a};
@@ -1722,9 +1795,10 @@ pub fn test48() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a union with two type parameters is built by its constructor and read by
+/// `is_left` and `as_left`.
 #[test]
 pub fn test49() {
-    // Parametrised union.
     let source = r#"
         module Main; 
         type Either a b = union {left: a, right: b};
@@ -1748,9 +1822,10 @@ pub fn test49() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `loop` runs with a tuple as its state until `break` returns the accumulated
+/// sum.
 #[test]
 pub fn test50() {
-    // test loop.
     let n = 100;
     let source = format!(
         r#"
@@ -1778,9 +1853,10 @@ pub fn test50() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `loop_iter` stops an infinite `Iterator::count_up` at `break`, and that
+/// `loop_iter_m` does the same inside `IO` with `break_m` and `continue_m`.
 #[test]
 pub fn test50_3() {
-    // test loop_iter, loop_iter_m.
     let source = r#"
         module Main;         
         main : IO ();
@@ -1804,9 +1880,10 @@ pub fn test50_3() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a function whose type variable has an `Eq` bound works on tuples, by finding
+/// the index of a tuple in an array.
 #[test]
 pub fn test51() {
-    // test trait bounds.
     let source = r#"
     module Main;     
     search : [a: Eq] a -> Array a -> I64;
@@ -1835,9 +1912,10 @@ pub fn test51() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that nested `loop`s whose state is a boxed struct holding an array keep the array
+/// unique, so each `set` of the sieve of Eratosthenes mutates it in place.
 #[test]
 pub fn test52() {
-    // Test loop with boxed state / break.
     let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
         + r#"
     type SieveState = box struct {i: I64, arr: Array Bool};
@@ -1891,9 +1969,10 @@ pub fn test52() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `mod_0` and `mod_1` on a tuple held only once keep the array in its field
+/// unique, so `set` inside the modifier mutates it in place.
 #[test]
 pub fn test53() {
-    // Test mutation of unique unboxed struct (e.g., tuple).
     let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
         + r#"
     main : IO ();
@@ -1911,9 +1990,10 @@ pub fn test53() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `mod_0` and `mod_1` applied to one tuple referenced twice give each result its
+/// own change.
 #[test]
 pub fn test54() {
-    // Test mutation of shared unboxed struct (e.g., tuple).
     let source = r#"
     module Main;     
     main : IO ();
@@ -1931,9 +2011,9 @@ pub fn test54() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies `<=` and `>=` on `I64`, including operands that are equal and a negative operand.
 #[test]
 pub fn test55() {
-    // Test <= operator
     let source = r#"
     module Main;     
     main : IO ();
@@ -1954,9 +2034,10 @@ pub fn test55() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `&&` and `||` combine `==` comparisons of `Bool` values written without
+/// parentheses, with `==` binding tighter than `&&` and `&&` tighter than `||`.
 #[test]
 pub fn test56() {
-    // Test && and || operator
     let source = r#"
     module Main;     
     main : IO ();
@@ -1975,9 +2056,9 @@ pub fn test56() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `!` negates `true` and `false`.
 #[test]
 pub fn test57() {
-    // Test ! operator
     let source = r#"
     module Main;     
     main : IO ();
@@ -1996,9 +2077,9 @@ pub fn test57() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies `!=` on `Bool`, both on its own and under `!`.
 #[test]
 pub fn test58() {
-    // Test != operator
     let source = r#"
     module Main;     
     main : IO ();
@@ -2017,9 +2098,10 @@ pub fn test58() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that two namespaces may define the same names, that `A::x` names one of them, and
+/// that the unqualified `y` resolves to the one whose type fits its use as a condition.
 #[test]
 pub fn test59() {
-    // Test namespace definition
     let source = r#"
     module Main;     
     namespace A {
@@ -2048,9 +2130,9 @@ pub fn test59() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a global value of the unit type `()` can be declared, defined and referenced.
 #[test]
 pub fn test60() {
-    // Test unit.
     let source = r"
     module Main;     
     unit : ();
@@ -2062,9 +2144,10 @@ pub fn test60() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a recursive global function returning `IO ()` sequences `println` with `;;`
+/// and runs one `println` per call.
 #[test]
 pub fn test61() {
-    // Test Hello world.
     let source = r#"
     module Main; 
     main_loop : I64 -> IO ();
@@ -2083,9 +2166,9 @@ pub fn test61() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `loop_m` runs an `IO` action per iteration until `break_m`.
 #[test]
 pub fn test61_5() {
-    // Test Hello world.
     let source = r#"
     module Main; 
     main : IO ();
@@ -2100,9 +2183,10 @@ pub fn test61_5() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `@size` of a string literal is its number of bytes, excluding the null
+/// terminator.
 #[test]
 pub fn test62() {
-    // Test String length.
     let source = r#"
     module Main; 
     main : IO ();
@@ -2115,6 +2199,8 @@ pub fn test62() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that the minimum `I64` value is accepted as a literal and written by `to_string` as
+/// its decimal text.
 #[test]
 pub fn test63() {
     // Test I64 ToString.
@@ -2180,7 +2266,7 @@ pub fn test_string_literal_holding_a_null_character_is_reported() {
 }
 
 /// Verifies that a `\uXXXX` escape naming a surrogate code point is reported, since a surrogate
-/// is not a character and so has no UTF-8 encoding.
+/// code point has no UTF-8 encoding.
 #[test]
 pub fn test_string_literal_surrogate_escape_is_reported() {
     let source = r#"
@@ -2254,9 +2340,9 @@ pub fn test_integer_literal_with_a_negative_exponent_is_reported() {
     );
 }
 
+/// Verifies that a tuple pattern in a `let` binding splits a tuple into its elements.
 #[test]
 pub fn test65() {
-    // Test tuple pattern matching.
     let source = r#"
     module Main; 
     main : IO ();
@@ -2276,9 +2362,9 @@ pub fn test65() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a struct pattern in a `let` binding splits an unboxed struct into its fields.
 #[test]
 pub fn test66() {
-    // Test unboxed struct pattern matching.
     let source = r#"
     module Main; 
     type State = unbox struct {idx: I64, sum: I64};
@@ -2300,9 +2386,9 @@ pub fn test66() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a struct pattern in a `let` binding splits a boxed struct into its fields.
 #[test]
 pub fn test67() {
-    // Test boxed struct pattern matching.
     let source = r#"
     module Main; 
     type State = box struct {idx: I64, sum: I64};
@@ -2324,9 +2410,9 @@ pub fn test67() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a tuple pattern can stand as a lambda parameter.
 #[test]
 pub fn test72() {
-    // Test pattern matching on argment.
     let source = r#"
     module Main; 
     main : IO ();
@@ -2345,9 +2431,10 @@ pub fn test72() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that a struct literal may list its fields in an order different from the struct's
+/// declaration, and each value lands in the field it names.
 #[test]
 pub fn test73() {
-    // Test pattern matching on argment.
     let source = r#"
     module Main; 
     type I64Bool = box struct {x: I64, y: Bool};
@@ -2363,9 +2450,10 @@ pub fn test73() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `set_*` replaces a field of an unboxed struct, a tuple and a boxed struct,
+/// including a second `set_*` on the value the first one returned.
 #[test]
 pub fn test74() {
-    // Test setter function of struct / tuple.
     let source = r#"
     module Main; 
     type UnboxStr = unbox struct {x: I64, y: Bool};
@@ -2400,9 +2488,10 @@ pub fn test74() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `Iterator::from_map` yields the function applied to 0, 1, 2 and so on, one
+/// value per `advance`.
 #[test]
 pub fn test75() {
-    // Test iterator.
     let source = r#"
     module Main; 
     main : IO ();
@@ -2424,9 +2513,10 @@ pub fn test75() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `Array::mod` on an array of arrays keeps the inner array unique inside the
+/// modifier, so `set` mutates it in place.
 #[test]
 pub fn test76() {
-    // Test array modifier.
     let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
         + r#"
     main : IO ();
@@ -2440,9 +2530,9 @@ pub fn test76() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `Iterator::zip`, `map`, `take` and `fold` chained over two infinite iterators.
 #[test]
 pub fn test77() {
-    // Test Iterator::zip / map / take / fold
     let source = r#"
     module Main; 
     main : IO ();
@@ -2460,9 +2550,9 @@ pub fn test77() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `Iterator::filter` keeps exactly the elements its predicate accepts.
 #[test]
 pub fn test78() {
-    // Test Iterator::filter
     let source = r#"
     module Main; 
     main : IO ();
@@ -2477,9 +2567,10 @@ pub fn test78() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `Iterator::push_front` puts each element before the ones pushed earlier, and
+/// that the iterator ends after the pushed elements.
 #[test]
 pub fn test79() {
-    // Test Iterator::push_front
     let source = r#"
     module Main; 
     main : IO ();
@@ -2497,9 +2588,10 @@ pub fn test79() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that an array literal has as many elements as it lists, and that the empty literal
+/// `[]` has size 0.
 #[test]
 pub fn test81() {
-    // Test array literal.
     let source = r#"
     module Main; 
     main : IO ();
@@ -2514,9 +2606,11 @@ pub fn test81() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies `Array::append`: the capacity when either side or both are empty, closures as
+/// elements, appending an array that is referenced afterwards leaves it unchanged, and
+/// appending to a unique accumulator in a fold.
 #[test]
 pub fn test82() {
-    // Test Array::append.
     let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
         + r#"
     main : IO ();
@@ -2583,9 +2677,10 @@ pub fn test82() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that 100 `push_back`s and 100 `pop_back`s leave an empty array whose capacity stays
+/// at least 100, for both unboxed elements and closures.
 #[test]
 pub fn test83() {
-    // Test Array::push_back, pop_back
     let source = r#"
     module Main; 
     main : IO ();
@@ -2637,9 +2732,10 @@ pub fn test83() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies `==` and `!=` on arrays: equal elements compare equal, one differing element or a
+/// differing size compares unequal, and two empty arrays compare equal.
 #[test]
 pub fn test84() {
-    // Test Eq for Array
     let source = r#"
     module Main; 
     main : IO ();
@@ -2666,9 +2762,9 @@ pub fn test84() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `concat` joins strings in order.
 #[test]
 pub fn test85() {
-    // Test concat string, compare string.
     let source = r#"
     module Main; 
     main : IO ();
@@ -2685,9 +2781,9 @@ pub fn test85() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `concat_iter` joins the strings an iterator yields, in order.
 #[test]
 pub fn test86() {
-    // Test concat_iter
     let source = r#"
     module Main; 
     main : IO ();
@@ -2701,9 +2797,10 @@ pub fn test86() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies `==` on `DynIterator`: two iterators yielding the same elements are equal, two
+/// empty ones are equal, and an empty one differs from a non-empty one.
 #[test]
 pub fn test87() {
-    // Test dynamic iterator comparison
     let source = r#"
     module Main; 
     main : IO ();
@@ -2727,9 +2824,10 @@ pub fn test87() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `Iterator::intersperse` puts the separator between consecutive elements, so a
+/// one-element or an empty iterator comes out unchanged.
 #[test]
 pub fn test88() {
-    // Test Iterator::intersperse
     let source = r#"
     module Main; 
     main : IO ();
@@ -2753,9 +2851,10 @@ pub fn test88() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `Iterator::append` yields the left elements followed by the right ones, also
+/// when either side or both sides are empty.
 #[test]
 pub fn test89() {
-    // Test Iterator::append
     let source = r#"
     module Main; 
     main : IO ();
@@ -3093,9 +3192,9 @@ main = (
     test_source(source, Configuration::develop_mode());
 }
 
-/// Verifies `sort` and `sort_stable`, which take their order from the `LessThan` trait rather than
-/// from a comparator the caller passes: the result is non-descending, elements the trait calls equal
-/// keep the order they came in, and the array the caller goes on holding is left as it was.
+/// Verifies `sort` and `sort_stable`, which order elements by their `LessThan` implementation:
+/// the result is non-descending, elements that `LessThan` calls equal keep the order they came
+/// in, and the array the caller goes on holding is left as it was.
 #[test]
 pub fn test_sort() {
     let source = r#"
@@ -3134,6 +3233,8 @@ main = (
     test_source(source, Configuration::develop_mode());
 }
 
+/// Pushes onto each of two bindings of one array with reserved capacity. Each `push_back` finds
+/// the storage shared, so it has to copy it; the test passes when the program runs to the end.
 #[test]
 pub fn test92() {
     let source = r#"
@@ -3151,9 +3252,11 @@ pub fn test92() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that setting a field of a boxed struct to the struct itself creates no reference
+/// cycle: the struct is shared at that point, so `set_data` writes into a copy, and the program
+/// runs to the end.
 #[test]
 pub fn test93() {
-    // Test try to make circular reference (and fail).
     let source = r#"
     module Main; 
 
@@ -3170,9 +3273,10 @@ pub fn test93() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies that `FFI_CALL` calls a variadic C function, `printf`, with a pointer to a C string
+/// and an `I32`.
 #[test]
 pub fn test_ffi_call() {
-    // Test FFI
     let source = r#"
             module Main;     
             main : IO ();
@@ -3186,9 +3290,10 @@ pub fn test_ffi_call() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `FFI_CALL_IOS` calls a variadic C function, `printf`, inside
+/// `IO::from_runner`, passing the `IOState` through the call.
 #[test]
 pub fn test_ffi_call_ios() {
-    // Test FFI
     let source = r#"
             module Main;     
 
@@ -3205,9 +3310,10 @@ pub fn test_ffi_call_ios() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `FFI_CALL_IO` calls a variadic C function, `printf`, as an `IO` action, with a
+/// pointer that `borrow_elements_io` lends from a string's bytes.
 #[test]
 pub fn test_ffi_call_io() {
-    // Test FFI
     let source = r#"
             module Main;     
 
@@ -3222,9 +3328,11 @@ pub fn test_ffi_call_io() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `unsafe_is_unique` and `Array::_unsafe_is_storage_unique` report a boxed value
+/// or an array as unique exactly when the value passed in is not used afterwards, and that
+/// `assert_unique` passes on a unique boxed value and on a unique array.
 #[test]
 pub fn test95() {
-    // Test Std::unsafe_is_unique, Array::_unsafe_is_storage_unique, Debug::assert_unique
     let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
         + r#"
 
@@ -3274,6 +3382,8 @@ pub fn test95() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `Debug::assert_unique_array` passes a freshly filled array through, and that
+/// `set` on the array it returns keeps both writes.
 #[test]
 pub fn test_assert_unique_array() {
     // A fresh array's storage is uniquely referenced, so `Debug::assert_unique_array` returns it and
@@ -3293,6 +3403,8 @@ pub fn test_assert_unique_array() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `Debug::assert_unique_array` aborts with "Array storage is not unique" when
+/// another live binding holds the same storage.
 #[test]
 pub fn test_assert_unique_array_aborts_when_shared() {
     // Another live binding keeps a reference to the same storage, so `Debug::assert_unique_array`
@@ -3316,14 +3428,14 @@ pub fn test_assert_unique_array_aborts_when_shared() {
     );
 }
 
-/// Verifies that a write in the `true` branch of an `unsafe_is_unique` still clones when the value
-/// is shared between the check and the branch.
+/// Verifies that a write in the `true` branch of an `unsafe_is_unique` still clones when the
+/// value is shared between the check and the branch.
 ///
-/// Reaching that branch means the value's reference count was one, which lets the operations in it
-/// drop their uniqueness checks. Sharing the value in between ends that: here the array is put into
-/// another array first, so the write in the branch has to clone instead of overwriting what the
-/// other holder sees. Both branches write, so the test fails on the wrong answer rather than on
-/// taking the other branch.
+/// Reaching that branch means the value's reference count was one, which lets the operations in
+/// it drop their uniqueness checks. Sharing the value in between ends that: here the array is
+/// put into another array first, so the write in the branch has to clone and leave the other
+/// holder's copy as it was. Both branches write the same value, so the assertions check the
+/// result of the write whichever branch runs.
 #[test]
 pub fn test_is_unique_true_branch_invalidated_by_sharing() {
     let source = r#"
@@ -3444,9 +3556,10 @@ pub fn test97() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// The decimal text each integer type writes its extreme values as, and that `from_string` reads
-/// those texts back as the numbers they name. A text that is not a number, one with a leading
-/// space, and one naming a number too large for the type are errors.
+/// Verifies the decimal text `to_string` writes for the minimum and the maximum of each integer
+/// type, and that `from_string` reads one of those texts back as the number. `from_string` into
+/// `I64` gives an error for a text that is not a number, one with a leading space, and one too
+/// large for the type.
 #[test]
 pub fn test98() {
     let source = r#"
@@ -3568,8 +3681,8 @@ pub fn test_integer_to_string_writes_the_decimal_digits() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// A cast between integral types answers with the bits of the source read as the target type,
-/// checked against Rust's own casts over a random value for each ordered pair of the eight types.
+/// Verifies that a cast between integral types truncates or extends the value the way Rust's
+/// `as` does, over a random value for each ordered pair of the eight types.
 #[test]
 pub fn test99() {
     let mut rng = thread_rng();
@@ -3577,6 +3690,8 @@ pub fn test99() {
     let tys = &[
         I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME,
     ];
+    /// Casts `num` to the integral type named `ty`, one of the eight type names, with Rust's `as`,
+    /// and widens the result back to `i128`.
     fn cast(num: i128, ty: &str) -> i128 {
         match ty {
             I8_NAME => (num as i8) as i128,
@@ -3621,9 +3736,10 @@ pub fn test99() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that casting an `F32` or an `F64` to each integral type truncates toward zero, a
+/// negative value into the signed types and a positive one into the unsigned types.
 #[test]
 pub fn test99_5() {
-    // Test cast float to integral types.
     let source = r#"
         module Main; 
         main : IO ();
@@ -3652,9 +3768,10 @@ pub fn test99_5() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that casting each integral type to `F32` and to `F64` gives the float of the same
+/// value, a negative one from the signed types and a positive one from the unsigned types.
 #[test]
 pub fn test99_51() {
-    // Test cast integral to float types.
     let source = r#"
         module Main; 
         main : IO ();
@@ -3683,9 +3800,9 @@ pub fn test99_51() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies the byte values of the character literals `'A'`, `'0'`, `'\n'` and `'\x7f'`.
 #[test]
 pub fn test100() {
-    // Test u8 literal
     let source = r#"
         module Main; 
         main : IO ();
@@ -3700,9 +3817,10 @@ pub fn test100() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `Array::is_empty`, `get_first` and `get_last` on an array of closures: an empty
+/// array gives `none()` for both getters, and a one-element array gives its element for both.
 #[test]
 pub fn test101() {
-    // Test Array::is_empty, get_first, get_last.
     let source = r#"
         module Main; 
         main : IO ();
@@ -3725,6 +3843,8 @@ pub fn test101() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `Iterator::get_first` yields the first element and `Iterator::get_tail` the
+/// rest, and that both give `none()` on an empty iterator.
 #[test]
 pub fn test_iterator_get_first_get_tail() {
     let source = r#"
@@ -3746,6 +3866,8 @@ pub fn test_iterator_get_first_get_tail() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `Iterator::get_last` yields the last element of a longer or a one-element
+/// iterator, and `none()` on an empty one.
 #[test]
 pub fn test_iterator_get_last() {
     let source = r#"
@@ -3768,6 +3890,9 @@ pub fn test_iterator_get_last() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `Iterator::take_while` stops before the first element that fails the
+/// predicate, keeps every element when none fails, and yields nothing when the first element
+/// fails or the input is empty.
 #[test]
 pub fn test_iterator_take_while() {
     // take_while : (a -> Bool) -> Iterator a -> Iterator a;
@@ -3798,9 +3923,10 @@ pub fn test_iterator_take_while() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `==`, `!=`, `<`, `>`, `<=` and `>=` on `I64` over an equal pair and an unequal
+/// pair.
 #[test]
 pub fn test102() {
-    // Test I64 : Eq, LessThan, LessThanEq
     let source = r#"
         module Main; 
         main : IO ();
@@ -3825,9 +3951,9 @@ pub fn test102() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `==` on `Bool` over all four pairs of values.
 #[test]
 pub fn test103() {
-    // Test Bool : Eq
     let source = r#"
         module Main; 
         main : IO ();
@@ -3843,9 +3969,9 @@ pub fn test103() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `to_string` writes `true` as `"true"` and `false` as `"false"`.
 #[test]
 pub fn test_bool_tostring() {
-    // Test Bool : ToString
     let source = r#"
         module Main; 
         main : IO ();
@@ -3859,9 +3985,10 @@ pub fn test_bool_tostring() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `String::is_empty`, `get_first_byte` and `get_last_byte` on the empty string, where
+/// both getters give `none()`, and on a three-byte string.
 #[test]
 pub fn test105() {
-    // Test String::get_first_byte, get_last_byte, is_empty
     let source = r#"
         module Main; 
         main : IO ();
@@ -3879,9 +4006,10 @@ pub fn test105() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `==` on `Option I64`: two `none()`s are equal, `none()` differs from a `some`, and
+/// two `some`s compare by the values they hold.
 #[test]
 pub fn test106() {
-    // Test [a : Eq] Option a : Eq
     let source = r#"
         module Main; 
         main : IO ();
@@ -3908,9 +4036,11 @@ pub fn test106() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `String::pop_back_byte` removes the last byte and leaves the empty string
+/// empty, that `strip_last_bytes` removes only the trailing run of bytes the predicate accepts,
+/// and that `strip_last_newlines` removes a trailing `\n\r`.
 #[test]
 pub fn test107() {
-    // Test String::pop_back_byte, strip_last_bytes, strip_last_newlines.
     let source = r#"
         module Main; 
         main : IO ();
@@ -3934,9 +4064,11 @@ pub fn test107() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies the `*` bind syntax in the `Option` and `Result` monads: `add_opt_int` gives
+/// `none()` when either operand is `none()`, and a `sequence` written for any monad collects an
+/// iterator of `ok`s into an array and stops at the first `err`.
 #[test]
 pub fn test109() {
-    // Test monad syntax.
     let source = r#"
         module Main; 
         add_opt_int : Option I64 -> Option I64 -> Option I64;
@@ -3986,9 +4118,10 @@ pub fn test109() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `abs`, `==`, `!=`, `+` and `*` on `F32` and `F64`, and `/` on `F32`, comparing
+/// computed results within `1.0e-4`.
 #[test]
 pub fn test110a() {
-    // Test basic float operations, cast between floats, to_string, from_string, to_string_with_precision
     let source = r#"
         module Main; 
         main : IO ();
@@ -4050,9 +4183,11 @@ pub fn test110a() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `/` on `F64`, `>` and `>=` on both float types, casts between `F32` and `F64` and
+/// between `I64` and `F64`, and that `from_string` reads the text `to_string` writes for `3.14`
+/// back as `3.14`.
 #[test]
 pub fn test110b() {
-    // Test basic float operations, cast between floats, to_string, from_string, to_string_with_precision
     let source = r#"
         module Main; 
         main : IO ();
@@ -4115,9 +4250,9 @@ pub fn test110b() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `f << g` applies `g` first and `f >> g` applies `f` first.
 #[test]
 pub fn test111() {
-    // Test function composition operators
     let source = r#"
         module Main; 
         main : IO ();
@@ -4137,9 +4272,10 @@ pub fn test111() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `Iterator::generate` yields nothing when the step function returns `none()` at
+/// once, and otherwise yields each element the step function gives until it returns `none()`.
 #[test]
 pub fn test112() {
-    // Test Iterator::generate
     let source = r#"
         module Main; 
         main : IO ();
@@ -4158,9 +4294,10 @@ pub fn test112() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `shift_right`, which keeps the sign of a negative `I32`, `shift_left`, `bit_xor`,
+/// `bit_or`, `bit_and`, and `bit_not` on `U8` and `U16`.
 #[test]
 pub fn test113() {
-    // Test bit operations.
     let source = r#"
         module Main; 
         main : IO ();
@@ -4198,9 +4335,10 @@ pub fn test113() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `Array::find_by` returns the element satisfying the predicate, and `none()`
+/// when no element does.
 #[test]
 pub fn test114() {
-    // Test Array::find_by
     let source = r#"
         module Main; 
         main : IO ();
@@ -4219,9 +4357,10 @@ pub fn test114() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a `Std::FFI::Destructor` calls its destructor function exactly once when the
+/// program drops it, counted by C wrappers around `malloc` and `free`.
 #[test]
 pub fn test_destructor() {
-    // Test Std::Destructor
     let source = r#"
 module Main;
 
@@ -4272,10 +4411,10 @@ void check(int expect_malloc, int expect_free)
     test_source_with_c(&source, &c_source, function_name!());
 }
 
-/// A `Std::FFI::Destructor` reached only through a container runs its destructor function exactly
-/// once. Whichever shape holds the value, the release that reaches it goes through the traverser
-/// generated for the container's type rather than straight from a binding, and the destructor
-/// function belongs to that release just the same.
+/// Verifies that a `Std::FFI::Destructor` reached only through a container runs its destructor
+/// function exactly once, where the container is an array, a boxed struct, an unboxed struct, a
+/// union, or a closure that captures it. Releasing the container is what releases the
+/// `Destructor`.
 #[test]
 pub fn test_destructor_reached_through_a_container_runs_once() {
     let source = r#"
@@ -4343,10 +4482,10 @@ void check(int expected)
     test_source_with_c(&source, &c_source, function_name!());
 }
 
-/// The destructor function receives the resource with nobody else holding it.
-/// `Std::FFI::Destructor`'s documentation states the guarantee — "it is guaranteed that `dtor`
-/// receives a unique value" — and rests the editing of a resource such as an `Array Ptr` in place
-/// on it.
+/// Verifies that the destructor function of a `Std::FFI::Destructor` receives the resource with
+/// nobody else holding it. The documentation of `Std::FFI::Destructor` guarantees this ("it is
+/// guaranteed that `dtor` receives a unique value"), and code that edits a resource such as an
+/// `Array Ptr` in place relies on it.
 #[test]
 pub fn test_destructor_function_receives_a_unique_resource() {
     let source = r#"
@@ -4460,9 +4599,10 @@ void check(int expect_held, int expect_returned)
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// Verifies that `String::_unsafe_from_c_str` ends the string at the first NUL byte of the
+/// array, so the string holds the three bytes before it.
 #[test]
 pub fn test117() {
-    // Test String::from_c_str
     let source = r#"
         module Main; 
         main : IO ();
@@ -4476,9 +4616,10 @@ pub fn test117() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `fold_m` passes the accumulator through ten steps of an `IO` action that
+/// prints each partial sum; the test passes when the program runs to the end.
 #[test]
 pub fn test118() {
-    // Test fold_m
     let source = r#"
         module Main; 
         main : IO ();
@@ -4495,9 +4636,11 @@ pub fn test118() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that two namespaces can each declare a struct and a union with the same names, and
+/// that a struct literal and a struct pattern qualified by a namespace refer to that
+/// namespace's struct.
 #[test]
 pub fn test119() {
-    // Test namespace and MakeStruct, Pattern.
     let source = r#"
         module Main; 
         namespace A {
@@ -4522,9 +4665,13 @@ pub fn test119() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `PunchedArray::_unsafe_punch_bounds_unchecked` takes an element out of a
+/// two-element array of boxed values, and that `PunchedArray::_unsafe_plug_bounds_unchecked`
+/// puts back the same element, the other element of the array, or a new value. Each case runs
+/// with distinct elements and with one value shared by both elements, and the punched array is
+/// also dropped without being plugged.
 #[test]
 pub fn test_punched_array_0() {
-    // Test PunchedArray.
     let source = r#"
         module Main; 
 
@@ -4595,9 +4742,11 @@ pub fn test_punched_array_0() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies punching and plugging with `PunchedArray::_unsafe_punch_bounds_unchecked` and
+/// `PunchedArray::_unsafe_plug_bounds_unchecked` on a one-element array of boxed values and on
+/// an array of `I64`, and dropping the punched array without plugging it.
 #[test]
 pub fn test_punched_array_1() {
-    // Test PunchedArray.
     let source = r#"
         module Main; 
 
@@ -4635,9 +4784,12 @@ pub fn test_punched_array_1() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `Array::act` with an action that returns a pair: `act` returns the action's result
+/// with the array whose element was replaced. When the array and the element are both unique,
+/// the action receives a unique element; when either is shared, the array or element the caller
+/// goes on holding is left as it was.
 #[test]
 pub fn test_array_act_0() {
-    // Test Array::act
     let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
         + r#"
         
@@ -4677,9 +4829,11 @@ pub fn test_array_act_0() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `Array::act` in the `Option` functor on a unique array of boxed values: when the
+/// action returns `some`, the result holds the new element beside the untouched one, and the
+/// action receives a unique element; when the action returns `none()`, so does `act`.
 #[test]
 pub fn test_array_act_1() {
-    // Test Array::act
     let source = r#"
         module Main; 
         
@@ -4733,9 +4887,12 @@ pub fn test_array_act_1() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `Array::act` in the `Option` functor on an array of boxed values that the caller
+/// goes on holding: an action returning `some` gives an array with the element replaced, one
+/// returning `none()` makes `act` return `none()`, and the caller's array is left as it was
+/// either way.
 #[test]
 pub fn test_array_act_2() {
-    // Test Array::act
     let source = r#"
         module Main; 
         
@@ -4793,9 +4950,11 @@ pub fn test_array_act_2() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `Array::act` in the `Option` functor on an array of `I64`, both unique and held by
+/// the caller: an action returning `some` replaces the element, one returning `none()` makes
+/// `act` return `none()`, and the caller's array is left as it was.
 #[test]
 pub fn test_array_act_3() {
-    // Test Array::act
     let source = r#"
         module Main; 
         
@@ -4854,9 +5013,11 @@ pub fn test_array_act_3() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies nested `Array::act` that updates one element of a two-dimensional array in the
+/// `Option` functor, on a unique and on a shared array, and `act` in the `Array` functor, where
+/// the action returns several elements and `act` returns one array for each.
 #[test]
 pub fn test_array_act_4() {
-    // Test Array::act (case 2)
     let source = r#"
         module Main; 
 
@@ -4907,9 +5068,11 @@ pub fn test_array_act_4() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `flatten`, monadic bind in `do` blocks, and `map` on arrays: bind pairs every
+/// element of one array with every element of the other, an action returning an empty array
+/// drops the element, and binding an empty array gives an empty result.
 #[test]
 pub fn test124() {
-    // Test Array : Functor, Array : Monad
     let source = r#"
         module Main; 
 
@@ -4957,9 +5120,9 @@ pub fn test124() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that two unit values `()` compare equal.
 #[test]
 pub fn test125() {
-    // Test () : Eq
     let source = r#"
         module Main; 
 
@@ -4975,9 +5138,10 @@ pub fn test125() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `Iterator::sum` adds up integers and concatenates strings, arrays and
+/// `DynIterator`s.
 #[test]
 pub fn test_iterator_sum() {
-    // Test Iterator::sum.
     let source = r#"
         module Main; 
         
@@ -5006,10 +5170,13 @@ pub fn test_iterator_sum() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies trait aliases in three uses: an alias of higher-kinded traits as the constraint of
+/// a generic function, `Additive` as the constraint of `impl`s of the traits it stands for, and
+/// an alias of another alias.
 #[test]
 pub fn test_trait_alias() {
-    // Test trait alias.
-    // Basic example are Additive and Iterator::sum, which are tested in other tests.
+    // Test trait alias. `Additive`, the basic alias, is exercised through `Iterator::sum` in
+    // test_iterator_sum.
     let source = r#"
         module Main; 
         
@@ -5087,6 +5254,9 @@ pub fn test_trait_alias() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `One::one` is one in every integer and float type, and that a product under
+/// the `Multiplicative` constraint, started from `One::one`, multiplies `I64`s and `F64`s and
+/// gives one for an empty array.
 #[test]
 pub fn test_one_and_multiplicative() {
     let source = r#"
@@ -5172,8 +5342,8 @@ pub fn test_trait_alias_implement_trait_alias_directly() {
     );
 }
 
-/// Two aliases that stand for each other are reported as circular, so expanding one of them ends
-/// instead of running on forever.
+/// Two aliases that stand for each other are reported as circular, so expanding either of them
+/// stops at the report.
 #[test]
 pub fn test_trait_alias_circular_aliasing() {
     let source = r#"
@@ -5257,11 +5427,9 @@ pub fn test_trait_alias_reachable_along_two_paths() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Each numeric type carries a value through `to_bytes` and back with `from_bytes`, and
-/// `from_bytes` on a byte array one byte short of the type's width answers an error.
-/// A trait of kind `*->*` that two aliases both stand for is reached twice while an alias naming
-/// both is expanded, and the alias takes that kind. A trait named twice in one definition is
-/// likewise arrived at twice.
+/// A trait of kind `*->*` that two aliases both stand for is reached twice while an alias
+/// naming both is expanded, and the alias takes that kind. A trait named twice in one
+/// definition is likewise arrived at twice.
 #[test]
 pub fn test_trait_alias_higher_kinded_reachable_along_two_paths() {
     let source = r#"
@@ -5320,8 +5488,8 @@ pub fn test_trait_alias_circular_beside_shared_aliases() {
     );
 }
 
-/// An implementation that defines a member the trait does not declare is reported, and the report
-/// points at the definition of that member rather than at the implementation as a whole.
+/// An implementation that defines a member the trait does not declare is reported, and the
+/// report points at the definition of that member.
 #[test]
 pub fn test_trait_impl_defines_undeclared_member() {
     let source = r#"
@@ -5372,7 +5540,7 @@ pub fn test129() {
             // I8
             let case = "I8";
             let n = 1;
-            let x = 127_U8;
+            let x = -128_I8;
             assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);;
             let y : Result ErrMsg I8 = Array::fill(n-1, 127_U8).from_bytes;
             assert(|_|case + " 2", y.is_err);;
@@ -5496,7 +5664,7 @@ pub fn test_narrow_signed_integer_bytes_round_trip() {
 #[test]
 pub fn test_consumed_time() {
     if env_vars::get_max_opt_level() <= FixOptimizationLevel::Basic {
-        // Skip this test when the optimization level is low since it takes too long time.
+        // The loop of a billion steps takes too long at a low optimization level.
         return;
     }
     let tmp_dir = PathBuf::from(format!(
@@ -5534,6 +5702,8 @@ pub fn test_consumed_time() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `consumed_time_while_lazy` and `consumed_time_while_io` hand back the value
+/// their argument produced, with a loop short enough to run at every optimization level.
 #[test]
 pub fn test_consumed_time_fast() {
     let tmp_dir = PathBuf::from(format!(
@@ -5769,10 +5939,9 @@ pub fn test_float_to_string_precision() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Every text `to_string` writes for a normal number reads back as the number it was written from,
-/// which is what choosing the shortest digits is for. The walk crosses both edges of the window the
-/// point is written positionally in at every scale either type reaches, rather than at the few a
-/// hand-written list names.
+/// Every text `to_string` writes for a normal number reads back as the number it was written
+/// from, which is what choosing the shortest digits is for. The walk crosses both edges of the
+/// window the point is written positionally in, at every scale either type reaches.
 #[test]
 pub fn test_float_to_string_round_trips_across_every_decade() {
     let source = r#"
@@ -6133,6 +6302,9 @@ pub fn test_float_to_string_precision_of_nan_of_either_sign() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `loop_lines` reads a file line by line and that `break` ends the loop early:
+/// the sum stops at the first line that does not parse as an integer, and an empty file gives
+/// the initial value.
 #[test]
 pub fn test_loop_lines() {
     let source = r#"
@@ -6176,6 +6348,9 @@ pub fn test_loop_lines() {
     remove_file("test_GndeZP399tLX.txt").unwrap();
 }
 
+/// Verifies that `Array::get_sub` returns the elements from the start index up to, and
+/// excluding, the end index, cuts an end index past the size down to the size, and returns an
+/// empty array for an empty range or an empty input, for unboxed and boxed elements.
 #[test]
 pub fn test_array_get_sub() {
     let source = r#"
@@ -6213,6 +6388,8 @@ pub fn test_array_get_sub() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `loop_lines_io` visits every line of a file with its newline, by copying a
+/// file line by line and checking that the copy equals the original.
 #[test]
 pub fn test_loop_lines_io() {
     let source = r#"
@@ -6247,6 +6424,8 @@ pub fn test_loop_lines_io() {
     remove_file("test_9A5bu4U57xTd.txt").unwrap();
 }
 
+/// Verifies that names beginning with the literals `true`, `false` and `nullptr` are read as
+/// ordinary global and local names.
 #[test]
 pub fn test_names_literal_prefix() {
     let source = r#"
@@ -6275,10 +6454,12 @@ pub fn test_names_literal_prefix() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies the Takeuchi function `tarai`, a deep non-tail recursion, at `(12, 6, 0)`; the test
+/// runs only above the lowest optimization level.
 #[test]
 pub fn test_tarai() {
     if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
-        // Skip this test when the optimization level is low since it takes too long time.
+        // The recursion takes too long without optimization.
         return;
     }
     let source = r#"
@@ -6306,6 +6487,9 @@ pub fn test_tarai() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that the Takeuchi function `tarai`, which recurses deeply through a tuple
+/// argument, returns 8 for `(8, 4, 0)`. The input is small enough to run at every optimization
+/// level, where `test_tarai` runs only above `None`.
 #[test]
 pub fn test_tarai_fast() {
     let source = r#"
@@ -6364,6 +6548,7 @@ pub fn test_float_inf_nan() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a program binding a tuple of ten elements compiles and runs.
 #[test]
 pub fn test_large_tuple() {
     let source = r##"
@@ -6378,6 +6563,8 @@ pub fn test_large_tuple() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `fold` passes each element and the accumulator to the function in order, by
+/// summing `Iterator::range(0, 100)` to 4950.
 #[test]
 pub fn test_iterator_fold() {
     let source = r##"
@@ -6395,6 +6582,8 @@ pub fn test_iterator_fold() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `loop_iter` stops at the first `break` and returns its value: summing
+/// `Iterator::range(0, 200)` and breaking at 100 gives the sum of 0 through 99.
 #[test]
 pub fn test_iterator_loop_iter() {
     let source = r##"
@@ -6413,6 +6602,8 @@ pub fn test_iterator_loop_iter() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that turning an array into an iterator and back gives the same elements in the
+/// same order.
 #[test]
 pub fn test_iterator_to_array() {
     let source = r##"
@@ -6430,6 +6621,9 @@ pub fn test_iterator_to_array() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `flatten` concatenates the inner iterators in order, skipping the empty ones,
+/// and yields nothing when every inner iterator is empty or there is none. The inner iterators
+/// may come from arrays or from `Iterator::range`.
 #[test]
 pub fn test_iterator_flatten() {
     let source = r##"
@@ -6448,10 +6642,12 @@ pub fn test_iterator_flatten() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that every Fix program under `examples` compiles and runs, at optimization levels
+/// above `None`.
 #[test]
 pub fn test_run_examples() {
     if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
-        // Skip this test when the optimization level is low since it takes too long time.
+        // At optimization level `None`, the examples take too long to run.
         return;
     }
     test_files_in_directory(Path::new("./examples"));
@@ -6778,6 +6974,8 @@ pub fn test_floating_point_literal_at_a_midpoint_takes_the_even_significand() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Verifies the text `to_string` writes for an array: the elements separated by `, ` inside
+/// brackets, and `[]` for an empty array.
 #[test]
 pub fn test_array_to_string() {
     let source = r##"
@@ -6793,6 +6991,8 @@ pub fn test_array_to_string() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies the text `to_string` writes for an `Option`: `none()`, and `some(42)` with the
+/// text of the value inside.
 #[test]
 pub fn test_option_to_string() {
     let source = r##"
@@ -6808,6 +7008,8 @@ pub fn test_option_to_string() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies the text `to_string` writes for tuples: `()` for the unit, and the elements
+/// separated by `, ` inside parentheses, where a `String` element is written without quotes.
 #[test]
 pub fn test_unit_tuple_to_string() {
     let source = r##"
@@ -6824,6 +7026,8 @@ pub fn test_unit_tuple_to_string() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `==` on the unit and on tuples of two and three elements: two tuples are equal
+/// exactly when every element is, so a difference in any one element makes them unequal.
 #[test]
 pub fn test_unit_tuple_eq() {
     let source = r##"
@@ -6847,6 +7051,9 @@ pub fn test_unit_tuple_eq() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `<` and `<=` order pairs lexicographically: the first element decides, and
+/// the second decides only when the first ones are equal. `<` is false and `<=` is true for
+/// equal pairs.
 #[test]
 pub fn test_tuple_less_than_and_less_than_or_eq() {
     let source = r##"
@@ -6872,6 +7079,8 @@ pub fn test_tuple_less_than_and_less_than_or_eq() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies the text `to_string` writes for a `Result`: `ok(true)` and `err(error)`, where the
+/// `String` payload is written without quotes.
 #[test]
 pub fn test_result_to_string() {
     let source = r##"
@@ -6889,6 +7098,8 @@ pub fn test_result_to_string() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies `==` on `Result` over every pair of two `ok` and two `err` values: two values are
+/// equal exactly when both the variant and the payload match.
 #[test]
 pub fn test_result_eq() {
     let source = r##"
@@ -6923,6 +7134,8 @@ pub fn test_result_eq() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `<` and `<=` order arrays lexicographically, with an array ordered before any
+/// longer array it is a prefix of: `[] < [1] < [1, 1] < [1, 2] < [2]`, checked on every pair.
 #[test]
 pub fn test_array_less_than_and_less_than_or_eq() {
     let source = r##"
@@ -6955,6 +7168,8 @@ pub fn test_array_less_than_and_less_than_or_eq() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a trait member and a global function of one name, `show`, coexist in a
+/// module, and that `Main::show` and `Show::show` each reach the one it names.
 #[test]
 pub fn test_overlapping_trait_and_function() {
     let source = r##"
@@ -6981,6 +7196,8 @@ pub fn test_overlapping_trait_and_function() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that implementing a trait of another module for a type of another module is
+/// reported: here `Std::ToString` for `Std::Array a` in `Main`.
 #[test]
 pub fn test_orphan_rule_1() {
     let source = r##"
@@ -7002,6 +7219,9 @@ pub fn test_orphan_rule_1() {
     );
 }
 
+/// Verifies that the orphan rule looks at the outermost type constructor of the head:
+/// implementing `Std::ToString` for `Std::Array Main::MyType` is reported, although `MyType`
+/// is defined in `Main`.
 #[test]
 pub fn test_orphan_rule_2() {
     let source = r##"
@@ -7025,6 +7245,9 @@ pub fn test_orphan_rule_2() {
     );
 }
 
+/// Verifies that the orphan rule counts a function type as a type of another module:
+/// implementing `Std::ToString` for `Main::MyType -> Main::MyType` is reported, although
+/// `MyType` is defined in `Main`.
 #[test]
 pub fn test_orphan_rule_3() {
     let source = r##"
@@ -7048,6 +7271,9 @@ pub fn test_orphan_rule_3() {
     );
 }
 
+/// Verifies that a trait can be implemented for function types with a fixed domain and a
+/// constrained codomain, `I64 -> b`, and that a lambda resolves to that implementation, whose
+/// member calls the function.
 #[test]
 pub fn test_implement_trait_on_arrow_1() {
     let source = r##"
@@ -7070,6 +7296,8 @@ pub fn test_implement_trait_on_arrow_1() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a trait can be implemented for every function type `a -> b`, and that a
+/// lambda resolves to that implementation.
 #[test]
 pub fn test_implement_trait_on_arrow_2() {
     let source = r##"
@@ -7262,8 +7490,8 @@ pub fn test_overlapping_instances_higher_kinded_head() {
     );
 }
 
-/// A variable whose higher kind comes from a trait constraint rather than a kind signature reaches
-/// the overlap check with that kind, so the pair is reported.
+/// Verifies that a type variable whose higher kind is given only by a trait constraint, `[f :
+/// MyFunctor]`, reaches the overlap check with that kind, so the pair of heads is reported.
 #[test]
 pub fn test_overlapping_instances_higher_kind_from_constraint() {
     let source = r##"
@@ -7417,6 +7645,8 @@ pub fn test_eval_non_unit() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a trait member whose type does not mention the trait's type variable is
+/// reported, since that variable is left ambiguous at every use.
 #[test]
 pub fn test_unrelated_trait_method() {
     let source = r##"
@@ -7436,6 +7666,9 @@ pub fn test_unrelated_trait_method() {
     );
 }
 
+/// Verifies that a trait member whose type mentions the trait's type variable only as the
+/// argument of a type alias that drops it, `Alias a = I64`, is reported as leaving that
+/// variable ambiguous.
 #[test]
 pub fn test_unrelated_trait_method_via_type_alias() {
     let source = r##"
@@ -7457,6 +7690,8 @@ pub fn test_unrelated_trait_method_via_type_alias() {
     );
 }
 
+/// Verifies that a trait member's type is reported when it puts a trait constraint on the
+/// trait's own type variable, as `[b : MyTrait]` does.
 #[test]
 pub fn test_constrain_impl_type_in_trait_member_definition_0() {
     // Related to: Issue #73
@@ -7478,6 +7713,8 @@ main: IO () = (
     );
 }
 
+/// Verifies that a trait member's type is reported when it constrains the trait's own type
+/// variable through an associated type equality, as `[MyItem b = I64]` does.
 #[test]
 pub fn test_constrain_impl_type_in_trait_member_definition_1() {
     // Related to: Issue #73
@@ -7500,6 +7737,8 @@ main: IO () = (
     );
 }
 
+/// Verifies that two definitions of one global value in one module, `Main::truth`, are
+/// reported.
 #[test]
 pub fn test_duplicated_symbols() {
     let source = r##"
@@ -7546,6 +7785,7 @@ pub fn test_value_of_a_types_namespace_collides_with_a_compiler_defined_method()
     );
 }
 
+/// Verifies that a trait declaring one member twice is reported.
 #[test]
 pub fn test_duplicated_trait_member() {
     let source = r##"
@@ -7566,6 +7806,7 @@ pub fn test_duplicated_trait_member() {
     );
 }
 
+/// Verifies that a trait implementation defining one member twice is reported.
 #[test]
 pub fn test_duplicated_trait_member_impl() {
     let source = r##"
@@ -7590,6 +7831,8 @@ pub fn test_duplicated_trait_member_impl() {
     );
 }
 
+/// Verifies that a struct whose field type uses a type variable missing from the type's
+/// parameters is reported.
 #[test]
 pub fn test_typedef_unknown_tyvar() {
     let source = r##"
@@ -7607,6 +7850,8 @@ pub fn test_typedef_unknown_tyvar() {
     );
 }
 
+/// Verifies that the constraint of a type definition accepts kind signatures only, so a trait
+/// constraint such as `[a : ToString]` is reported.
 #[test]
 pub fn test_typedef_trait_precondition() {
     let source = r##"
@@ -7624,6 +7869,7 @@ pub fn test_typedef_trait_precondition() {
     );
 }
 
+/// Verifies that a type definition giving one type variable two kind signatures is reported.
 #[test]
 pub fn test_typedef_specify_kind_twice() {
     let source = r##"
@@ -7641,6 +7887,8 @@ pub fn test_typedef_specify_kind_twice() {
     );
 }
 
+/// Verifies that a kind mismatch in a type definition is reported: the field type `a b`
+/// applies `a`, which has the default kind `*` since no kind signature gives it another.
 #[test]
 pub fn test_typedef_kind_mismatch() {
     let source = r##"
@@ -7654,6 +7902,8 @@ pub fn test_typedef_kind_mismatch() {
     test_source_fail(&source, Configuration::develop_mode(), "Kind mismatch");
 }
 
+/// Verifies that a struct can take a type parameter of kind `*->*` and apply it in a field: `X
+/// IO I64` holds an `IO I64`, whose result `main` reads back.
 #[test]
 pub fn test_typedef_struct_higher_kinded_type_variable() {
     let source = r##"
@@ -7671,6 +7921,9 @@ pub fn test_typedef_struct_higher_kinded_type_variable() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a program can define a state monad transformer `StateT` with a `Monad`
+/// implementation over any monad, and use it over `IO`: three increments from 0 leave the
+/// state at 3, and `lift` runs an `IO` action inside it.
 #[test]
 pub fn test_state_t() {
     let source = r##"
@@ -7736,6 +7989,8 @@ pub fn test_state_t() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that two type definitions of one name in one namespace, `Main::Hoge`, are
+/// reported.
 #[test]
 pub fn test_duplicated_struct_name() {
     let source = r##"
@@ -7756,6 +8011,8 @@ pub fn test_duplicated_struct_name() {
     );
 }
 
+/// Verifies that a type name used unqualified is reported as ambiguous when two namespaces
+/// define it, with both full names listed.
 #[test]
 pub fn test_ambiguous_struct_name() {
     let source = r##"
@@ -7782,6 +8039,8 @@ pub fn test_ambiguous_struct_name() {
     );
 }
 
+/// Verifies that two trait definitions of one name in one namespace, `Main::Hoge`, are
+/// reported.
 #[test]
 pub fn test_duplicated_trait_name() {
     let source = r##"
@@ -7806,6 +8065,8 @@ pub fn test_duplicated_trait_name() {
     );
 }
 
+/// Verifies that a trait name used unqualified in a constraint is reported as ambiguous when
+/// two namespaces define it, with both full names listed.
 #[test]
 pub fn test_ambiguous_trait_name() {
     let source = r##"
@@ -7838,6 +8099,9 @@ pub fn test_ambiguous_trait_name() {
     );
 }
 
+/// Verifies that a trailing comma is accepted in struct and union definitions, struct literals
+/// and patterns, array literals and tuple types and literals. `[,]` is an empty array, `(42)`
+/// is the value 42, and `(x,)` is a tuple of one element, written `(42,)` by `to_string`.
 #[test]
 pub fn test_extra_comma() {
     let source = r##"
@@ -7896,6 +8160,8 @@ pub fn test_extra_comma() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `Tuple0`, `Tuple1 I64` and `Tuple2 I64 Bool` name the same types as `()`,
+/// `(I64,)` and `(I64, Bool)`.
 #[test]
 pub fn test_textual_name_of_tuples() {
     let source = r##"
@@ -7921,6 +8187,8 @@ pub fn test_textual_name_of_tuples() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies the order in which `product` yields pairs, with the elements of the receiver
+/// varying fastest, and that it yields nothing when either iterator is empty.
 #[test]
 pub fn test_iterator_product() {
     let source = r##"
@@ -7938,11 +8206,14 @@ pub fn test_iterator_product() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a pipeline of `product` and `filter_map` finds the Pythagorean triples with
+/// `a <= b < 50` and `c < 5000`, and prints the time it takes. It runs at optimization levels
+/// above `None`.
 #[test]
 pub fn test_iterator_filtermap() {
     if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
-        // Skip this test because it causes stack overflow unless the optimization is enabled.
-        // We run `test_iterator_filtermap_small` in this case.
+        // At optimization level `None`, this input overflows the stack.
+        // `test_iterator_filtermap_fast` runs the same pipeline on a smaller input.
         return;
     }
     let source = r##"
@@ -7972,6 +8243,9 @@ pub fn test_iterator_filtermap() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that a pipeline of `product` and `filter_map` finds the one Pythagorean triple
+/// with `a <= b < 5` and `c < 50`, `(3, 4, 5)`. The input is small enough to run at every
+/// optimization level.
 #[test]
 pub fn test_iterator_filtermap_fast() {
     let source = r##"
@@ -7997,6 +8271,7 @@ pub fn test_iterator_filtermap_fast() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `get_size` counts the elements of an iterator, including 0 for an empty one.
 #[test]
 pub fn test_iterator_get_size() {
     let source = r##"
@@ -8012,6 +8287,7 @@ pub fn test_iterator_get_size() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `Iterator::empty`, converted to a `DynIterator`, has no elements.
 #[test]
 pub fn test_iterator_empty() {
     let source = r##"
@@ -8027,6 +8303,7 @@ pub fn test_iterator_empty() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `pop_first` drops the first element, and leaves an empty iterator empty.
 #[test]
 pub fn test_iterator_pop_first() {
     let source = r##"
@@ -8042,6 +8319,7 @@ pub fn test_iterator_pop_first() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `is_empty` is false for an iterator with elements and true for one without.
 #[test]
 pub fn test_iterator_is_empty() {
     let source = r##"
@@ -8057,6 +8335,8 @@ pub fn test_iterator_is_empty() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `fold_m` runs its step in the monad once per element, in order, passing the
+/// accumulator along: the sum after element `i` is `i * (i + 1) / 2`.
 #[test]
 pub fn test_iterator_fold_m() {
     let source = r##"
@@ -8075,6 +8355,8 @@ pub fn test_iterator_fold_m() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `loop_iter_m` carries the accumulator through `continue_m` in order, and that
+/// `break_m` ends the loop before the remaining elements.
 #[test]
 pub fn test_iterator_loop_iter_m() {
     let source = r##"
@@ -8094,6 +8376,9 @@ pub fn test_iterator_loop_iter_m() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `Iterator::generate` yields the second element of each pair its function
+/// returns and continues from the first, and yields nothing when the function first returns
+/// `none()`.
 #[test]
 pub fn test_iterator_generate() {
     let source = r##"
@@ -8113,6 +8398,8 @@ pub fn test_iterator_generate() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `intersperse` puts the separator between elements alone, so an iterator of
+/// one element or of none is unchanged.
 #[test]
 pub fn test_iterator_intersperse() {
     let source = r##"
@@ -8129,6 +8416,7 @@ pub fn test_iterator_intersperse() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `take(n)` yields the first `n` elements, and nothing for `n = 0`.
 #[test]
 pub fn test_iterator_take() {
     let source = r##"
@@ -8144,6 +8432,7 @@ pub fn test_iterator_take() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `zip` pairs elements in order and stops when the shorter iterator ends.
 #[test]
 pub fn test_iterator_zip() {
     let source = r##"
@@ -8158,6 +8447,8 @@ pub fn test_iterator_zip() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `enumerate` pairs each element with its index counted from 0, whatever the
+/// elements are, and yields nothing for an empty iterator.
 #[test]
 pub fn test_iterator_enumerate() {
     let source = r##"
@@ -8173,6 +8464,8 @@ pub fn test_iterator_enumerate() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies binding in a `do` block over `DynIterator`: it yields every combination of the
+/// bound elements, with the later binding varying fastest.
 #[test]
 pub fn test_iterator_monad() {
     let source = r##"
@@ -8193,6 +8486,8 @@ pub fn test_iterator_monad() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `collect_m` over `Option` elements gives `some` of all values when every
+/// element is `some`, and `none()` when any element is `none()`.
 #[test]
 pub fn test_iterator_collect_m() {
     let source = r##"
@@ -8212,6 +8507,8 @@ pub fn test_iterator_collect_m() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `Iterator::range(0, n)` yields 0 through `n - 1`, and nothing when `n` is 0
+/// or less.
 #[test]
 pub fn test_range() {
     let source = r##"
@@ -8232,6 +8529,9 @@ pub fn test_range() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `Iterator::range_step` from 0 to 10 with a positive step yields the start and every step
+/// after it that stays below the end, down to the start alone once the step exceeds the range;
+/// a negative step over that ascending range yields nothing.
 #[test]
 pub fn test_range_step_1() {
     let source = r##"
@@ -8258,6 +8558,9 @@ pub fn test_range_step_1() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `Iterator::range_step` from 10 down to 0 with a negative step yields the start and every
+/// step after it that stays above the end; a positive step over that descending range yields
+/// nothing, and an empty range yields nothing for either sign of the step.
 #[test]
 pub fn test_range_step_2() {
     let source = r##"
@@ -8288,6 +8591,9 @@ pub fn test_range_step_2() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `flat_map` concatenates the iterators the function returns, in the order of the elements,
+/// and an element mapped to an empty iterator contributes nothing. Nested `flat_map`s enumerate
+/// the Pythagorean triples up to 100 in lexicographic order.
 #[test]
 pub fn test_iterator_flat_map() {
     let source = r##"
@@ -8320,6 +8626,7 @@ pub fn test_iterator_flat_map() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `to_iter` on an `Option` yields the payload once for `some` and nothing for `none`.
 #[test]
 pub fn test_option_iterator() {
     let source = r##"
@@ -8335,9 +8642,10 @@ pub fn test_option_iterator() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A type alias stands for its type in a global value's signature, a struct field, a trait
+/// member's signature, a `let` annotation, and the head of a trait implementation.
 #[test]
 pub fn test_type_alias() {
-    // Test type alias.
     let source = r#"
         module Main; 
         
@@ -8382,9 +8690,10 @@ pub fn test_type_alias() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A type alias whose parameter is a type constructor applies it in its body: `Swap () IO`
+/// expands to `IO ()`, the type of `main`.
 #[test]
-pub fn test_type_alias_higner_kinded_argument() {
-    // Test type alias.
+pub fn test_type_alias_higher_kinded_argument() {
     let source = r#"
         module Main; 
         
@@ -8398,6 +8707,8 @@ pub fn test_type_alias_higner_kinded_argument() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A type alias used as its own argument, `MyArray (MyArray I64)`, expands to `Array (Array
+/// I64)` and compiles.
 #[test]
 pub fn test_circular_aliasing_issue42() {
     let source = r##"
@@ -8414,6 +8725,8 @@ pub fn test_circular_aliasing_issue42() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A type alias given fewer arguments than it declares, here in the head of a trait
+/// implementation, is reported as not fully applied.
 #[test]
 pub fn test_unsaturated_type_alias() {
     let source = r##"
@@ -8438,6 +8751,7 @@ pub fn test_unsaturated_type_alias() {
     );
 }
 
+/// Two type aliases each defined as the other are reported as circular.
 #[test]
 pub fn test_detect_circular_type_aliasing_0() {
     let source = r##"
@@ -8459,6 +8773,8 @@ pub fn test_detect_circular_type_aliasing_0() {
     );
 }
 
+/// A type alias whose definition contains the alias itself, `type Hoge = Array Hoge`, is
+/// reported as circular.
 #[test]
 pub fn test_detect_circular_type_aliasing_1() {
     let source = r##"
@@ -8479,6 +8795,8 @@ pub fn test_detect_circular_type_aliasing_1() {
     );
 }
 
+/// A type alias with a parameter whose definition applies the alias again, `type Hoge a = Hoge
+/// I64`, is reported as circular, and the report names the applied alias.
 #[test]
 pub fn test_detect_circular_type_aliasing_2() {
     let source = r##"
@@ -8499,6 +8817,8 @@ pub fn test_detect_circular_type_aliasing_2() {
     );
 }
 
+/// Calling a trait member on a type that has no implementation of the trait is reported as a
+/// type mismatch that says the trait constraint cannot be deduced.
 #[test]
 pub fn test_call_unimplemented_trait_method_regression_issue_43() {
     let source = r##"
@@ -8520,6 +8840,8 @@ pub fn test_call_unimplemented_trait_method_regression_issue_43() {
     );
 }
 
+/// Each C type alias from `CChar` to `CDouble` has a conversion function, callable on both an
+/// `I64` and an `F64`, whose result has that alias as its type.
 #[test]
 pub fn test_c_type_aliases() {
     let source = r##"
@@ -8572,6 +8894,8 @@ pub fn test_c_type_aliases() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `mutate_boxed` hands a C function the pointer to the data of a unique boxed value, and the
+/// value it returns holds what C wrote there.
 #[test]
 pub fn test_mutate_boxed() {
     let source = r##"
@@ -8592,6 +8916,8 @@ pub fn test_mutate_boxed() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `mutate_boxed_io`, run as an `IO` action, hands a C function the pointer to the data of a
+/// unique boxed value, and the value it returns holds what C wrote there.
 #[test]
 pub fn test_mutate_boxed_io() {
     let source = r##"
@@ -8697,8 +9023,8 @@ pub fn test_mutate_elements_repeated() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Verifies the same in-place write for the variant that threads the surrounding IO context, whose
-/// result carries the written array at a different position.
+/// Verifies that consecutive `mutate_elements_io` writes to an unshared array accumulate in
+/// place, with the written array read from the result of the `IO` action.
 #[test]
 pub fn test_mutate_elements_io_repeated() {
     let source = r##"
@@ -8717,6 +9043,8 @@ pub fn test_mutate_elements_io_repeated() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `mutate_boxed` on a boxed value that another binding still holds writes to a copy: the
+/// returned value holds what C wrote, and the original keeps its old value.
 #[test]
 pub fn test_mutate_boxed_shared() {
     let source = r##"
@@ -8738,6 +9066,8 @@ pub fn test_mutate_boxed_shared() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `mutate_boxed_io` on a boxed value that another binding still holds writes to a copy: the
+/// returned value holds what C wrote, and the original keeps its old value.
 #[test]
 pub fn test_mutate_boxed_io_shared() {
     let source = r##"
@@ -8759,6 +9089,8 @@ pub fn test_mutate_boxed_io_shared() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `get_errno` reads the `errno` that a failing C call (`fopen` with an invalid mode) sets
+/// after `clear_errno`, so the value is nonzero.
 #[test]
 pub fn test_get_errno() {
     let source = r##"
@@ -9039,8 +9371,8 @@ pub fn test_struct_act2() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// `act` on the only field of an unboxed struct that holds a reference, where that reference is a
-/// closure's capture rather than an array.
+/// `act` on the only field of an unboxed struct that holds a reference, where that field holds
+/// a closure.
 #[test]
 pub fn test_struct_act_on_the_only_field_holding_a_closure() {
     let source = r##"
@@ -9080,8 +9412,8 @@ pub fn test_struct_act_on_the_only_reference_counted_field() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// `act` on the only reference-counted field of an unboxed struct, where the actor's functor yields
-/// nothing: the struct with that field punched out is dropped rather than plugged back.
+/// `act` on the only reference-counted field of an unboxed struct, where the actor's functor
+/// yields nothing: the struct with that field punched out is dropped, and the result is `none`.
 #[test]
 pub fn test_struct_act_yielding_nothing_on_the_only_reference_counted_field() {
     let source = r##"
@@ -9169,7 +9501,7 @@ pub fn test_struct_act_dropping_the_punched_struct_beside_a_sibling_field() {
 }
 
 /// `act` at the pair functor, whose implementation punches with the clone and plugs without the
-/// uniqueness check — the pairing the other functors do not use. The field is shared with a binding
+/// uniqueness check, a combination only this functor uses. The field is shared with a binding
 /// that outlives the update, for a boxed and for an unboxed struct.
 #[test]
 pub fn test_struct_act_at_the_pair_functor() {
@@ -9644,8 +9976,8 @@ pub fn test_circular_type_definition() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// A field of an unboxed type is laid out in place, so a cycle of such fields describes a value of
-/// no size, which the compiler reports rather than following the cycle forever.
+/// A field of an unboxed type is laid out in place, so a cycle of such fields describes a value
+/// of no size, and the compiler reports the cycle.
 #[test]
 pub fn test_circular_unboxed_types_have_no_size() {
     let source = r##"
@@ -10306,8 +10638,8 @@ pub fn test_growth_through_a_higher_kinded_parameter_has_no_size() {
     );
 }
 
-/// Types are counted one at a time, not as a whole: a program keeps compiling however many types it
-/// gains, as long as each of them is shallow.
+/// The depth bound applies to each type on its own: a program keeps compiling however many
+/// types it gains, as long as each of them is shallow.
 #[test]
 pub fn test_a_long_chain_of_shallow_types_compiles() {
     const CHAIN: usize = 300;
@@ -10339,6 +10671,8 @@ pub fn test_a_long_chain_of_shallow_types_compiles() {
 /// it is reported.
 #[test]
 pub fn test_a_type_at_the_depth_bound_compiles_and_one_past_it_does_not() {
+    /// Builds a program whose `depth` takes `I64` wrapped in `levels` applications of `W`, and
+    /// which keeps `depth` in the program without calling it.
     fn source_nesting(levels: usize) -> String {
         let mut ty = "I64".to_string();
         for _ in 0..levels {
@@ -10401,8 +10735,8 @@ pub fn test_a_type_with_no_size_is_reported_once() {
     );
 }
 
-/// Every type with no size gets a report of its own: the walk goes on past the first one instead of
-/// answering the whole program with it.
+/// Every type with no size gets a report of its own: the walk continues past the first type it
+/// reports.
 #[test]
 pub fn test_every_type_with_no_size_is_reported() {
     let source = r##"
@@ -10431,8 +10765,8 @@ pub fn test_every_type_with_no_size_is_reported() {
     }
 }
 
-// `number_to_varname` walks `a` through `z` and then repeats the letters with a numeric suffix, so
-// that distinct numbers give distinct names.
+/// Verifies that `number_to_varname` walks `a` through `z` and then repeats the letters with a
+/// numeric suffix, so that distinct numbers give distinct names.
 #[test]
 pub fn test_number_to_varname() {
     assert_eq!(number_to_varname(0), "a");
@@ -10578,6 +10912,8 @@ pub fn test_get_boxed_data_ptr_for_union() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// `mutate_boxed` on a unique boxed union hands a C function the pointer to the payload, and
+/// the returned union's variant holds what C wrote there.
 #[test]
 pub fn test_mutate_boxed_union() {
     let source = r##"
@@ -10606,6 +10942,8 @@ pub fn test_mutate_boxed_union() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// `mutate_boxed_io` on a unique boxed union hands a C function the pointer to the payload, and
+/// the returned union's variant holds what C wrote there.
 #[test]
 pub fn test_mutate_boxed_io_union() {
     let source = r##"
@@ -10634,6 +10972,8 @@ pub fn test_mutate_boxed_io_union() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// `mutate_boxed` on a boxed union that another binding still holds writes to a copy: the
+/// returned union holds what C wrote, and the original keeps its payload.
 #[test]
 pub fn test_mutate_boxed_union_shared() {
     let source = r##"
@@ -10663,6 +11003,8 @@ pub fn test_mutate_boxed_union_shared() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// With runtime checks on, reading a union through the accessor of a variant it does not hold
+/// (`as_b` on a value made by `a`) fails at run time with a variant mismatch.
 #[test]
 pub fn test_union_variant_mismatch() {
     let source = r##"
@@ -10685,6 +11027,8 @@ pub fn test_union_variant_mismatch() {
     test_source_fail(&source, config, "Union variant mismatch");
 }
 
+/// `mutate_boxed_io` on a boxed union that another binding still holds writes to a copy: the
+/// returned union holds what C wrote, and the original keeps its payload.
 #[test]
 pub fn test_mutate_boxed_io_union_shared() {
     let source = r##"
@@ -10714,6 +11058,8 @@ pub fn test_mutate_boxed_io_union_shared() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
+/// A type annotation on an expression may name a type variable of the enclosing global value's
+/// signature: `[] : Array a` in a value of type `Array a`.
 #[test]
 pub fn test_type_variable_in_type_annotation() {
     let source = r##"
@@ -10730,6 +11076,8 @@ pub fn test_type_variable_in_type_annotation() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The type annotation of a `let` pattern may name a type variable of the enclosing global
+/// value's signature: `let x : Array a` in a value of type `Array a`.
 #[test]
 pub fn test_type_variable_in_type_annotated_pattern() {
     let source = r##"
@@ -10749,6 +11097,9 @@ pub fn test_type_variable_in_type_annotated_pattern() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `_` in a type annotation stands for a type left to inference: in an expression annotation,
+/// in a `let` pattern, and in a generic function's body. Each `_` of a tuple type is inferred
+/// on its own, and `(_ : * -> *)` stands for a type constructor.
 #[test]
 pub fn test_type_wildcard_in_annotation() {
     let source = r##"
@@ -10786,10 +11137,10 @@ pub fn test_type_wildcard_in_annotation() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Applying a bare `_` to an argument (`_ I64`) is reported as a kind mismatch: a bare `_` has
+/// kind `*`, and a wildcard of a higher kind is written with its kind, as `(_ : * -> *) I64`.
 #[test]
 pub fn test_type_wildcard_applied_without_kind_is_error() {
-    // A bare `_` has kind `*`, so applying it (`_ I64`) is a kind error.
-    // The higher kind must be written explicitly: `(_ : * -> *) I64`.
     let source = r##"
         module Main;
 
@@ -10933,6 +11284,7 @@ pub fn test_match_option() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A `match` accepts a trailing comma after its last arm.
 #[test]
 pub fn test_match_extra_comma() {
     let source = r##"
@@ -10953,6 +11305,9 @@ pub fn test_match_extra_comma() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `match` on a boxed generic union, over the representations its payload takes: unboxed,
+/// boxed, and a closure. The boxed and the closure payload are also read out of the matched
+/// union after the match, where the arm has to have left them alive.
 #[test]
 pub fn test_match_boxed_union() {
     let source = r##"
@@ -11027,6 +11382,8 @@ pub fn test_match_boxed_union() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A `match` with no arm for one of the union's variants is reported, and the report names that
+/// variant.
 #[test]
 pub fn test_match_non_exhaustive() {
     let source = r##"
@@ -11050,6 +11407,8 @@ pub fn test_match_non_exhaustive() {
     );
 }
 
+/// A variable pattern after the variant arms matches every remaining value and binds the whole
+/// matched value.
 #[test]
 pub fn test_match_otherwise() {
     let source = r##"
@@ -11070,6 +11429,8 @@ pub fn test_match_otherwise() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A variable pattern ahead of other arms matches every value, so the arms after it are
+/// reported as unreachable.
 #[test]
 pub fn test_early_otherwise() {
     let source = r##"
@@ -11094,6 +11455,7 @@ pub fn test_early_otherwise() {
     );
 }
 
+/// A variant pattern naming no variant of the matched union is reported.
 #[test]
 pub fn test_match_bad_variant() {
     let source = r##"
@@ -11117,6 +11479,8 @@ pub fn test_match_bad_variant() {
     );
 }
 
+/// A variant pattern may qualify the variant with the namespace of its union, as in
+/// `Option::some(v)`.
 #[test]
 pub fn test_match_variant_with_namespace() {
     let source = r##"
@@ -11137,6 +11501,8 @@ pub fn test_match_variant_with_namespace() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A variant pattern qualified with a namespace other than the matched union's is reported as
+/// naming no variant of that union.
 #[test]
 pub fn test_match_variant_with_bad_namespace() {
     let source = r##"
@@ -11161,8 +11527,10 @@ pub fn test_match_variant_with_bad_namespace() {
     );
 }
 
+/// The payload pattern of a variant pattern may itself be a struct pattern or a tuple pattern,
+/// which takes the payload apart inside the arm.
 #[test]
-pub fn test_match_single_variant() {
+pub fn test_struct_or_tuple_pattern_in_variant_pattern() {
     let source = r##"
     module Main;
 
@@ -11190,8 +11558,9 @@ pub fn test_match_single_variant() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A `match` on a union with a single variant is exhaustive with one variant arm.
 #[test]
-pub fn test_tuple_or_struct_in_match() {
+pub fn test_match_single_variant() {
     let source = r##"
     module Main;
 
@@ -11211,6 +11580,8 @@ pub fn test_tuple_or_struct_in_match() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `match` works on values of non-union types: a variable pattern on a `Box`, a tuple pattern
+/// on a tuple, and a struct pattern on a boxed struct, which stays readable after the match.
 #[test]
 pub fn test_match_on_nonunion_types() {
     let source = r##"
@@ -11244,6 +11615,8 @@ pub fn test_match_on_nonunion_types() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A variant pattern on a value of a non-union type (`Array`) is reported, and the report names
+/// the type and the pattern.
 #[test]
 pub fn test_match_on_variant_for_nonunion() {
     let source = r##"
@@ -11289,6 +11662,7 @@ pub fn test_match_on_variant_for_value_of_unknown_type() {
     );
 }
 
+/// The variant pattern of a unit payload may leave the payload pattern out, as in `none()`.
 #[test]
 pub fn test_match_omit_parentheses() {
     let source = r##"
@@ -11309,6 +11683,7 @@ pub fn test_match_omit_parentheses() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The `Functor` instance of functions composes: `f.map(g)` applies `f` and then `g`.
 #[test]
 pub fn test_arrow_functor() {
     let source = r##"
@@ -11325,6 +11700,8 @@ pub fn test_arrow_functor() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The `Monad` instance of functions hands one argument to every function a `do` block binds,
+/// so `x4(*x1 + 1)` and its binomial expansion over `*x1` to `*x4` agree.
 #[test]
 pub fn test_arrow_monad() {
     let source = r##"
@@ -11349,6 +11726,8 @@ pub fn test_arrow_monad() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The kind arrow is right-associative: `* -> * -> *` means `* -> (* -> *)`, so `Arrow` can
+/// implement a trait over a type constructor of two parameters.
 #[test]
 pub fn test_kind_arrow_right_associative() {
     let source = r##"
@@ -11372,6 +11751,8 @@ pub fn test_kind_arrow_right_associative() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A chain of calls binds more tightly than a lambda and than `.`: `|f| f(6)(7)` is a lambda
+/// whose body is `f(6)(7)`, and `arr.set(1)(42)` applies `set(1)(42)` to `arr`.
 #[test]
 pub fn test_arrow_associativity() {
     let source = r##"
@@ -11392,6 +11773,8 @@ pub fn test_arrow_associativity() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A type error at a `let` whose right-hand side is a `*` bind (`let a : U64 = *pure()`) is
+/// reported together with that line of the program.
 #[test]
 pub fn test_regression_issue_52() {
     let source = r##"
@@ -11410,6 +11793,9 @@ pub fn test_regression_issue_52() {
     );
 }
 
+/// An implementation of `Monad` for `Pipe a b`, whose type variables have the names that
+/// `Pipe`'s definition gives its parameters, compiles together with a `do` block over it, and
+/// the program starts running.
 #[test]
 pub fn test_regression_issue_54() {
     let source = r##"
@@ -11669,9 +12055,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Verifies that one compilation reports every unresolved name of a single trait implementation —
-/// in the constraint context, in an associated type equality, in the head, and in a member's type
-/// signature — rather than stopping at the first of them.
+/// Verifies that one compilation reports every unresolved name of a single trait
+/// implementation: in the constraint context, in an associated type equality, in the head, and
+/// in a member's type signature.
 #[test]
 pub fn test_all_unresolved_names_of_one_trait_implementation_are_reported() {
     let source = r##"
@@ -11705,6 +12091,9 @@ main = println(3.foo.to_string);
     }
 }
 
+/// `search_partition_point(pred, arr)` returns the index of the first element for which `pred`
+/// fails, on an array where `pred` holds on a prefix: covers an empty array, an array all or
+/// none of whose elements satisfy `pred`, and a boundary at index 1 and at the last index.
 #[test]
 pub fn test_array_search_partition_point() {
     let source = r##"
@@ -11749,6 +12138,7 @@ pub fn test_array_search_partition_point() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A no-break space (U+00A0) in the indentation of a program is read as whitespace.
 #[test]
 pub fn test_nobreak_space() {
     let source = r##"
@@ -11762,6 +12152,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Closures built across recursive calls keep their captures: at each level `h` composes the
+/// closure passed in with one capturing the current `n`, so `h` adds every `n` seen so far.
 #[test]
 pub fn test_recursive_closure_capturing() {
     let source = r##"
@@ -11785,9 +12177,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A missing `;` after a long chain of `let`s is reported as a syntax error, and the parser
+/// reaches that report quickly.
 #[test]
 pub fn test_regression_issue_57() {
-    // The following code should not take too long time to be parsed.
     let source = r##"
 module Main;
 
@@ -11809,6 +12202,7 @@ f = |x| (
     test_source_fail(&source, Configuration::develop_mode(), "Expected `;`");
 }
 
+/// A `let` binding parses with no spaces around `=`, as in `let x=42;`.
 #[test]
 pub fn test_let_nospace_equal() {
     let source = r##"
@@ -11824,6 +12218,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `check_all` is true for an empty iterator and for one whose every element satisfies the
+/// predicate, and false once any element fails it.
 #[test]
 pub fn test_check_all() {
     let source = r##"
@@ -11843,6 +12239,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `check_any` is false for an empty iterator and for one where no element satisfies the
+/// predicate, and true once any element satisfies it.
 #[test]
 pub fn test_check_any() {
     let source = r##"
@@ -11862,6 +12260,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `loop_iter_s` returns the first `break` the body gives; when the iterator runs out, it
+/// returns the last `continue` state, which is the initial state for an empty iterator.
 #[test]
 pub fn test_loop_iter_s() {
     let source = r##"
@@ -11892,6 +12292,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `loop_iter_ms`, whose body is a monadic action, returns the first `break_m` the body gives;
+/// when the iterator runs out, it returns the last `continue_m` state, which is the initial
+/// state for an empty iterator.
 #[test]
 pub fn test_loop_iter_ms() {
     let source = r##"
@@ -11937,6 +12340,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks `populate`: each `{}` is replaced by the next argument in order, and `{{` and `}}`
+/// become literal braces, at the start, middle and end of the string.
 #[test]
 pub fn test_populate() {
     let source = r##"
@@ -11970,6 +12375,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that a function whose signature leaves out the trait predicates required by the
+/// function it is defined as (`g = f`) is rejected, with an error saying that the missing
+/// predicate `a : Main::Action` cannot be deduced.
 #[test]
 pub fn test_regression_issue_59() {
     let source = r##"
@@ -12000,6 +12408,9 @@ main = (
     );
 }
 
+/// Checks that a `match` arm written `forward => ...`, without the `()` of the variant pattern,
+/// is read as a variable pattern that matches every value, so the compiler reports the next arm
+/// as unreachable.
 #[test]
 pub fn test_regression_issue_60() {
     let source = r##"
@@ -12032,6 +12443,8 @@ main = (
     );
 }
 
+/// Checks `Array::resize` growing an array with the fill value and shrinking it, down to size
+/// 0, for unboxed and for boxed elements.
 #[test]
 pub fn test_array_resize() {
     let source = r##"
@@ -12063,6 +12476,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks `Array::reverse` on arrays of size 0 to 3, and that reversing a shared array of boxed
+/// elements leaves the original array unchanged.
 #[test]
 pub fn test_array_reverse() {
     let source = r##"
@@ -12099,6 +12514,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that a global value can be declared and defined in one statement, `name : Type =
+/// expr`, written without spaces around `:`, `->` and `=`.
 #[test]
 pub fn test_concise_defn() {
     let source = r##"
@@ -12121,6 +12538,8 @@ main : IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks `Array::dedup` on unboxed elements: it removes only consecutive duplicates, keeps a
+/// value that repeats after another value, and leaves the original array unchanged.
 #[test]
 pub fn test_array_dedup1() {
     let source = r##"
@@ -12192,6 +12611,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks `Array::dedup` on boxed elements (`Array (Array I64)`): it removes only consecutive
+/// duplicates, keeps a value that repeats after another value, and leaves the original array
+/// unchanged.
 #[test]
 pub fn test_array_dedup2() {
     let source = r##"
@@ -12255,6 +12677,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that comparing the polymorphic global `g : Array a` with itself, which leaves the
+/// element type undetermined, is rejected with "Cannot infer the type of this expression".
 #[test]
 pub fn test_indeterminate_type_variable() {
     let source = r##"
@@ -12277,6 +12701,8 @@ main = (
     );
 }
 
+/// Checks that taking the size of an empty array literal `[]`, whose element type nothing
+/// determines, is rejected with "Cannot infer the type of this expression".
 #[test]
 pub fn test_indeterminate_type_variable2() {
     let source = r##"
@@ -12294,13 +12720,12 @@ main = (
     );
 }
 
-/// `let x = [];` produces a tyvar-location message for the empty
-/// array's element type. The element source is intentionally a
-/// zero-width span between the brackets, so `short_span_snippet`
-/// returns `None` and the no-snippet fallback is used. This pins
-/// down that the fallback is a self-contained sentence and not the
-/// "...is the type for:" fragment which leaves a dangling colon
-/// when the source pointer alone has nothing to anchor.
+/// Checks the error message for `let x = [];`, whose element type is undetermined. The source
+/// of the element type is a zero-width span between the brackets, so the message has no source
+/// snippet to show.
+///
+/// The message must still end in a whole sentence, "is the type for this expression.", and must
+/// not contain "is the type for:", which would end in a colon with nothing after it.
 #[test]
 pub fn test_indeterminate_type_variable_message_for_empty_array() {
     let source = r##"
@@ -12320,13 +12745,11 @@ main = (
     test_source_fail_excludes(&source, Configuration::develop_mode(), "is the type for:");
 }
 
+/// Checks that every C numeric type name parses in an `FFI_CALL` signature, including a name
+/// that begins with a shorter one, such as `CLongLong` beginning with `CLong`: the grammar has
+/// to try the longer name first. Only parsing is checked.
 #[test]
 pub fn test_regression_issue_62() {
-    // Every C numeric type name must parse inside an `FFI_CALL` signature. Issue #62 was a
-    // grammar-ordering bug where a longer type name was shadowed by a shorter one it starts with
-    // (e.g. `CLongLong` matched the prefix `CLong` and left `Long` dangling), so the source
-    // failed to parse. This is a parser regression test, so it only checks that the source
-    // parses; it does not compile or run.
     let source = r##"
 module Main;
 
@@ -12357,11 +12780,12 @@ main = (
     assert_grammar_accepts(&source);
 }
 
+/// Checks that `eval debug_print(...)`, `eval debug_println(...)`, `eval debug_eprint(...)` and
+/// `eval debug_eprintln(...)` write their text to stdout and stderr. `eval` evaluates its
+/// argument for its side effect at every optimization level, so the discarded value must not be
+/// dropped as a pure one.
 #[test]
 pub fn test_eval_debug_println_is_not_eliminated() {
-    // `eval debug_println(...)` and `debug_eprintln(...)` evaluate their argument for its side
-    // effect at every optimization level; the print must not be dropped as a discarded pure
-    // value even when optimization is on.
     let source = r##"
 module Main;
 
@@ -12392,6 +12816,9 @@ main = (
     );
 }
 
+/// Checks `Bar (Foo I64)`, where `Foo I64` is the struct `Foo a b` applied to one of its two
+/// parameters. `Bar` has a second field, so the compiler keeps it as a struct, and newtype
+/// unwrapping reaches `Foo I64`. The test calls the function held in the nested field.
 #[test]
 pub fn test_unwrap_newtype_partial_application() {
     let source = r##"
@@ -12412,9 +12839,11 @@ main : IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks newtype unwrapping of the one-field unboxed struct `Reader e a`, declared with an
+/// unused kind annotation `[m : * -> *]`, when a reader returns another reader and both are run
+/// with `run_reader`.
 #[test]
 pub fn test_unwrap_newtype_bug_regression() {
-    // A regression test for a bug that existed in the implementation of `unwrap-newtype`.
     let source = r##"
 module Main;
 
@@ -12439,9 +12868,11 @@ main : IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks `Foo Bar`, a struct over a parameter of kind `(* -> *) -> *` given another struct
+/// over a higher-kinded parameter, whose nested field holds an `IO ()` that `main` runs.
+/// Exercises the removal of higher-kinded type variables and newtype unwrapping.
 #[test]
 pub fn test_regression_issue_64() {
-    // This is also a test for remove-hktvs and unwrap-newtype.
     let source = r##"
 module Main;
 
@@ -12457,9 +12888,11 @@ main : IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks `Foo Bar`, a boxed struct over a parameter of kind `(* -> *) -> *` given another
+/// boxed struct over a higher-kinded parameter, whose nested field holds an `IO ()` that `main`
+/// runs. Exercises the removal of higher-kinded type variables and newtype unwrapping.
 #[test]
 pub fn test_regression_issue_64_boxed() {
-    // This is also a test for remove-hktvs and unwrap-newtype.
     let source = r##"
 module Main;
 
@@ -12475,9 +12908,12 @@ main : IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks `Foo Bar`, a struct over a parameter of kind `(* -> *) -> *` that wraps a
+/// user-defined `Reader I64 I64`: reading the nested field, updating it with `mod_data`,
+/// `set_data` and composed `act_data`, and running the reader's `Monad` instance in a `do`
+/// block. Exercises the removal of higher-kinded type variables and newtype unwrapping.
 #[test]
 pub fn test_regression_issue_64_more_complex() {
-    // This is also a test for remove-hktvs and unwrap-newtype.
     let source = r##"
 module Main;
 
@@ -12537,9 +12973,12 @@ main : IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks `Foo Bar`, a boxed struct over a parameter of kind `(* -> *) -> *` that wraps a
+/// user-defined `Reader I64 I64`: reading the nested field, updating it with `mod_data`,
+/// `set_data` and composed `act_data`, and running the reader's `Monad` instance in a `do`
+/// block. Exercises the removal of higher-kinded type variables and newtype unwrapping.
 #[test]
 pub fn test_regression_issue_64_more_complex_boxed() {
-    // This is also a test for remove-hktvs and unwrap-newtype.
     let source = r##"
 module Main;
 
@@ -12599,6 +13038,9 @@ main : IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks newtype unwrapping of the one-field unboxed struct `ContT r m a` in a continuation
+/// monad: a `setjmp` / `longjmp` pair built on `call_cc` jumps back until its counter reaches
+/// 5.
 #[test]
 pub fn test_unwrap_newtype_cont() {
     let source = r##"
@@ -12714,8 +13156,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// Type annotations written inside a polymorphic definition — on the lambda's parameters, on an
-// argument, and on the body — naming the type variables of the definition's signature.
+/// Checks type annotations inside a polymorphic definition, on the lambda's parameters, on an
+/// argument and on the body, that name the type variables of the definition's signature.
 #[test]
 pub fn test_generic_type_annotation() {
     let source = r##"
@@ -12734,6 +13176,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks the one-field unboxed struct `Headers`, whose field is a `DynIterator`: updating the
+/// field with `mod_iter` and reading back the element pushed to it.
 #[test]
 pub fn test_unwrap_newtype() {
     let source = r##"
@@ -12759,9 +13203,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// `Phantom a` holds nothing of type `a`, so `C` is a type of one `I64` even though the type it
-// names its field with names `C` back. Unwrapping `Phantom` leaves `C` a one-field unboxed struct,
-// and every field operation on `C` has to keep working on it.
+/// `C` has one field of type `Phantom C`, and `Phantom a` holds one `I64` and nothing of type
+/// `a`, so `C` names itself only through a type argument. Checks that reading, setting,
+/// updating and destructuring the field of `C` work once `Phantom` is unwrapped and `C` is left
+/// a one-field unboxed struct.
 #[test]
 pub fn test_newtype_naming_itself_through_a_phantom_type_argument() {
     let source = r##"
@@ -12786,9 +13231,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// `DynIterator` is an unboxed struct of one field whose type names `DynIterator` itself, so it is a
-// type the compiler carries as it is. `mod_` and `act_` on its field take it apart into the field
-// and the rest of the struct, which is where a type left as it is has to stay whole.
+/// `DynIterator` is a one-field unboxed struct whose field type names `DynIterator` itself, so
+/// the compiler keeps it as a struct. Checks that `mod_next` and `act_next`, which split the
+/// struct into its field and the rest, give back a whole iterator.
 #[test]
 pub fn test_field_update_of_a_std_type_naming_itself() {
     let source = r##"
@@ -12807,10 +13252,11 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A type of a higher-kinded parameter that names itself through the type argument of its parameter,
-// so the copy the compiler makes of it is a type the compiler carries as it is. The pass that
-// removes higher-kinded type variables rebuilds the type constructor for each argument list, so the
-// copy of the struct and the copy of the form with its field punched out have to stay paired.
+/// `It f` has the one field `f (It f)`, so it names itself through the argument of its
+/// higher-kinded parameter, and the compiler keeps `It Array` as a struct. Removing
+/// higher-kinded type variables makes one copy of the type for each argument list. Checks that
+/// the copy of `It Array` and its copy with the field punched out stay paired, so that
+/// `mod_next` and destructuring work.
 #[test]
 pub fn test_higher_kinded_newtype_naming_itself_through_its_parameter() {
     let source = r##"
@@ -12832,10 +13278,11 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// One type of a higher-kinded parameter, used at two type arguments: at one it is a type the
-// compiler replaces with its field, at the other it names itself and stays. The copy made for each
-// argument list has to be paired with the copy of the form with its field punched out made for that
-// same argument list, so that updating the field takes the type apart the way that copy is laid out.
+/// `Wrap f` is a one-field struct over a higher-kinded parameter, used at two arguments. `Wrap
+/// Array` holds only an `Array I64`, so the compiler replaces it with its field; `Wrap Holder`
+/// names itself through `Holder`, so the compiler keeps it as a struct. Checks `mod_v` on both,
+/// which needs the copy of `Wrap` made for each argument list to pair with the copy with the
+/// field punched out made for the same argument list.
 #[test]
 pub fn test_higher_kinded_newtype_folded_at_one_type_argument_and_kept_at_another() {
     let source = r##"
@@ -12954,10 +13401,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-/// A parameter of a higher kind given the one-element tuple, which the compiler declares as an
-/// unboxed struct of one field and therefore replaces: the field type `f I64` names a replaced type
-/// constructor only once the substitution saturates it, and here that constructor is one no source
-/// file writes.
+/// Checks a higher-kinded parameter given the one-element tuple `Std::Tuple1`, which the
+/// compiler declares itself as a one-field unboxed struct and so replaces with its field. The
+/// field type `f I64` names `Std::Tuple1` only after substitution applies it to `I64`. Covers
+/// an unboxed struct, a boxed struct, a union and an array of such values.
 #[test]
 pub fn test_higher_kinded_parameter_given_the_one_element_tuple() {
     let source = r##"
@@ -13256,10 +13703,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// Two types that name each other through the type argument of a phantom type, so each is reached
-// from itself in two steps. Neither is a type the compiler may replace with its field, and
-// unwrapping the phantom type leaves both of them one-field unboxed structs whose field operations
-// have to keep working.
+/// `D` and `E` are one-field unboxed structs that name each other through the type argument of
+/// `Phantom`, so each reaches itself in two steps and the compiler keeps both as structs.
+/// Checks reading, updating and destructuring their fields once `Phantom` is unwrapped.
 #[test]
 pub fn test_two_newtypes_naming_each_other_through_a_phantom_type_argument() {
     let source = r##"
@@ -13285,10 +13731,11 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A type the compiler keeps rather than replacing with its field, whose one field is reference
-// counted, through every operation a program can perform on such a value: reading and replacing the
-// field, holding it in an array, a struct, a union and a boxed struct, passing it to a higher-order
-// function, and sharing it between two bindings.
+/// `C` is a one-field struct that the compiler keeps as a struct, and its field holds a
+/// reference-counted `Array`. Checks every operation a program can perform on such a value:
+/// reading, setting, updating and destructuring the field, its `Eq` and `ToString` instances,
+/// holding it in an array, an unboxed struct, a boxed struct and a union, passing it to a
+/// higher-order function, and sharing it between two bindings.
 #[test]
 pub fn test_kept_newtype_with_a_reference_counted_field_through_every_operation() {
     let source = r##"
@@ -13341,8 +13788,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A type the compiler keeps whose one field is a closure, which is the shape `Std::DynIterator` has,
-// written out by a program of its own.
+/// Checks a one-field struct that the compiler keeps as a struct and whose field holds a
+/// closure, the shape of `Std::DynIterator` written in the program: reading, updating, setting
+/// and destructuring the field, and holding such values in an array.
 #[test]
 pub fn test_kept_newtype_with_a_closure_field() {
     let source = r##"
@@ -13369,8 +13817,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// The field of a `Std::DynIterator` through building, reading, replacing, updating, matching,
-// holding in an array, and sharing between two bindings.
+/// Checks the `next` field of `Std::DynIterator` through building, reading, setting, updating
+/// and destructuring, holding iterators in an array, and sharing one between two bindings.
 #[test]
 pub fn test_dyn_iterator_through_every_field_operation() {
     let source = r##"
@@ -13396,8 +13844,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A type the compiler keeps whose one field is a union, one whose field is a boxed value, and one
-// held inside another such type.
+/// Checks reading and updating the field of one-field structs that the compiler keeps as
+/// structs: one whose field holds a union (`Option (Array I64)`), one whose field holds a boxed
+/// struct, and one held in an array inside another struct.
 #[test]
 pub fn test_kept_newtype_with_a_union_field_and_nested_kept_newtypes() {
     let source = r##"
@@ -13435,8 +13884,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A type the compiler keeps that takes two parameters of a higher kind and names itself through
-// both of them.
+/// `It2 f g` has two higher-kinded parameters and names itself through both, so the compiler
+/// keeps it as a struct. Checks reading, updating, setting and destructuring its field at `It2
+/// Array Array` and at `It2 Array Option`.
 #[test]
 pub fn test_two_parameter_higher_kinded_kept_newtype() {
     let source = r##"
@@ -13465,8 +13915,11 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// Updating the field of a shared value of a type the compiler keeps leaves the other binding's value
-// alone, which is what a wrong uniqueness decision on such a type would break silently.
+/// Checks that updating the field of a shared value of a one-field struct that the compiler
+/// keeps as a struct leaves the other binding's value unchanged, for a value held by two
+/// bindings and for one held in an array. A wrong uniqueness decision on such a type would
+/// overwrite the shared value without any error. Also updates such a value in each of 100
+/// `loop` iterations.
 #[test]
 pub fn test_a_shared_kept_newtype_is_copied_by_a_field_update() {
     let source = r##"
@@ -13495,9 +13948,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// `act_` on a type the compiler keeps, at the functors the field-update machinery has a special
-// implementation for: one that discards the rest of the struct, one that carries it beside another
-// value, and the one `mod_` itself is written on.
+/// Checks `act_y` on a one-field struct that the compiler keeps as a struct, at the functors
+/// the field-update code handles specially: `Option`, which may discard the rest of the struct;
+/// a tuple, which carries it beside another value; and `Identity`, which `mod_` is written
+/// with.
 #[test]
 pub fn test_kept_newtype_act_at_the_specialized_functors() {
     let source = r##"
@@ -13523,7 +13977,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// `act_` on the field of a `Std::DynIterator`, whose one field is a closure, at the same functors.
+/// Checks `act_next` on `Std::DynIterator`, whose one field is a closure, at the tuple and
+/// `Identity` functors that the field-update code handles specially.
 #[test]
 pub fn test_dyn_iterator_act_at_the_specialized_functors() {
     let source = r##"
@@ -13543,8 +13998,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A struct of two fields, one of whose field types names the struct itself, so the struct is one the
-// compiler carries as it is while having a field beside the one that names it.
+/// `T` has two fields, and the type of one of them, `Phantom T`, names `T` itself. Checks
+/// updating, setting and destructuring both fields of such a struct.
 #[test]
 pub fn test_field_operations_on_a_two_field_struct_naming_itself() {
     let source = r##"
@@ -13568,8 +14023,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A one-field unboxed struct whose field type reaches the struct through an array, so the struct is
-// one the compiler carries as it is even though its field holds a pointer.
+/// `G` is a one-field unboxed struct whose field type `Array G` names `G`, so the compiler
+/// keeps it as a struct although its field is a single pointer. Checks building nested values
+/// of it and updating, setting and destructuring its field.
 #[test]
 pub fn test_newtype_naming_itself_through_an_array() {
     let source = r##"
@@ -13591,9 +14047,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A type of a higher-kinded parameter whose form with the field punched out the program reaches
-// before its whole form, so the copy made for the punched form is the one that pairs itself with the
-// copy made for the struct.
+/// `Cell f` is a one-field struct over a higher-kinded parameter that names itself, and the
+/// program reaches `Cell Array` with its field punched out (in `mod_v`) before it reaches the
+/// whole `Cell Array`. Checks that the copy made for the punched form pairs with the copy made
+/// for the struct.
 #[test]
 pub fn test_higher_kinded_newtype_punched_before_its_whole_form() {
     let source = r##"
@@ -13616,9 +14073,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// The operations `Std` builds on a `DynIterator` — which is a type the compiler carries as it is —
-// mixed with an update of its field, so each operation meets a value the update has taken apart and
-// put back together.
+/// Checks the `Std` operations on `DynIterator` (`to_array`, `advance`, `map`, `bind`, `+` and
+/// `DynIterator::empty`) on an iterator whose field `mod_next` has taken apart and put back
+/// together. The compiler keeps `DynIterator` as a struct because its field type names
+/// `DynIterator` itself.
 #[test]
 pub fn test_dyn_iterator_through_the_std_operations_on_it() {
     let source = r##"
@@ -13642,8 +14100,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A type of a higher-kinded parameter that the compiler carries as it is, at a parameter that is
-// itself such a type: the copy made for `It DynIterator` pairs a user type with one of `Std`'s.
+/// `It f` is a one-field struct over a higher-kinded parameter that names itself, so the
+/// compiler keeps it as a struct. Checks it at `It Array` and at `It DynIterator`, where the
+/// argument is `Std`'s `DynIterator`, which the compiler also keeps as a struct.
 #[test]
 pub fn test_higher_kinded_kept_newtype_at_a_std_kept_newtype_argument() {
     let source = r##"
@@ -13666,10 +14125,11 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// A user-defined state monad over a twelve-word state. Its `run` takes thirteen scalars and returns
-// fourteen, so the recursion runs in constant stack only where both halves of the tail-call ABI
-// hold: the wide result travels through an out-pointer, and the calling convention lets the tail
-// call rewrite the arguments that do not fit in registers.
+/// Folds ten million steps in a user-defined state monad over a twelve-word state. Its `run`
+/// takes thirteen scalars and returns fourteen, so the recursion runs in constant stack only
+/// when both parts of the tail-call ABI hold: the wide result goes through an out-pointer, and
+/// the calling convention lets the tail call overwrite the arguments that do not fit in
+/// registers.
 #[test]
 pub fn test_regression_issue_63() {
     let source = r##"
@@ -13703,9 +14163,10 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks memory management of the code generated for `eval` inside a global value's
+/// definition, on an unboxed value and on a boxed array that the definition then returns.
 #[test]
 pub fn test_eval_0() {
-    // This program verifies memory management of GenerationContext::eval_eval.
     let source = r##"
 module Main;
 
@@ -13729,6 +14190,8 @@ main : IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks that reading the closure field of a struct and then updating its array field with
+/// `mod_arr` leaves the array unique, so `push_back` updates it in place.
 #[test]
 pub fn test_regression_issue_66() {
     let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
@@ -13754,8 +14217,9 @@ main: IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// Reading an element out of a struct's array and keeping the value must leave no reference to the
-// array behind: the array is still unique when the same function goes on to modify it.
+/// Checks that reading an element out of a struct's array and keeping the value leaves no
+/// reference to the array: the array is still unique when the same function then updates it
+/// with `mod_arr`.
 #[test]
 pub fn test_regression_issue_67() {
     let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
@@ -13782,9 +14246,11 @@ main: IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
-// Reading an element out of a struct's array leaves no reference to the array behind, whatever kind
-// of expression the read value is later consumed by. Each function below places the use of the read
-// behind a different expression form, which is what decides whether the read may be moved to it.
+/// Checks that reading an element out of a struct's array leaves no reference to the array,
+/// whatever kind of expression later uses the read value. Each function puts that use in a
+/// different expression form (a tuple, an `if` branch, a struct literal, a `match` arm, a
+/// lambda, a call of a global function), and the form decides whether the read may be moved to
+/// the use.
 #[test]
 pub fn test_read_before_modify_keeps_the_array_unique() {
     let source = MAIN_MODULE_WITH_ARRAY_ASSERT_UNIQUE.to_string()
@@ -13869,9 +14335,10 @@ main : IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Checks `pure` and `bind` of `Identity`, a chain of `bind` calls, and the left and right
+/// identity laws.
 #[test]
 pub fn test_identity_monad() {
-    // Test Identity Monad: pure and bind
     let source = r#"
     module Main;
     
@@ -13909,9 +14376,10 @@ pub fn test_identity_monad() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that global values defined by themselves (`x = x`) or by each other (`y = z`, `z =
+/// y`) compile when `main` does not use them.
 #[test]
 pub fn test_recursive_reference() {
-    // Even with recursive definitions, it should compile as long as the values are not used.
     let source = r#"
     module Main;
 
@@ -13932,6 +14400,8 @@ pub fn test_recursive_reference() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that implementing a trait that is not declared anywhere is rejected with "Unknown
+/// trait name `MyFunctor`."
 #[test]
 pub fn test_impl_undefined_trait() {
     let source = r#"
@@ -13955,6 +14425,8 @@ main : IO () = (
     );
 }
 
+/// Checks that two implementations whose heads `(Array a, b)` and `(a, Array b)` both match a
+/// pair of arrays are rejected as overlapping.
 #[test]
 pub fn test_regression_issue_69() {
     let source = r#"
@@ -13996,6 +14468,9 @@ main = (
     );
 }
 
+/// Checks reading and writing the bytes of a `String` through the index syntax `s[i]` with
+/// `iget` and `iset`, in a fold over every byte position. The result is printed and not
+/// compared.
 #[test]
 pub fn test_string_at_and_index() {
     let source = r#"
@@ -14015,6 +14490,9 @@ main = (
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks trait resolution through nested type aliases: the `ToTypeName` instance of `Tuple3 a
+/// b c` builds `zero : TypeList3 a b c`, which needs the `Zero` and `ToTypeName` instances of
+/// `TCons` through three levels of aliases, and prints "I64:I32:I16:TNil".
 #[test]
 pub fn test_regression_issue_71() {
     let source = r#"
@@ -14056,6 +14534,8 @@ main = (
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that a struct definition that lists the same type variable twice (`type A a a`) is
+/// rejected.
 #[test]
 pub fn test_duplicated_type_var_in_type_defn() {
     let source = r#"
@@ -14075,6 +14555,8 @@ main = (
     );
 }
 
+/// Checks that a type alias definition that lists the same type variable twice (`type Func a
+/// a`) is rejected.
 #[test]
 pub fn test_duplicated_type_var_in_type_alias_defn() {
     let source = r#"
@@ -14094,6 +14576,8 @@ main = (
     );
 }
 
+/// Checks a struct whose field type is `ReaderT e IO a`, where `ReaderT` is a struct with no
+/// fields over a higher-kinded parameter `m`, by building a value of it and evaluating it.
 #[test]
 pub fn test_regression_72() {
     let source = r#"
@@ -14114,13 +14598,13 @@ main: IO () = (
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that unboxed struct arguments survive being passed as their leaf scalars. A zero-leaf
+/// `()` argument before a capture must leave the capture read at the right offset; a wrong
+/// offset would return a wrong captured value without any error. The zero-field state of
+/// `Iterator::empty` must fold correctly. A nested unboxed struct must come out unchanged after
+/// being split at the call and rebuilt at the function entry.
 #[test]
 pub fn test_unbox_struct_arg_abi() {
-    // Verifies that an unbox-struct function argument survives being passed as its flat leaf
-    // scalars: a zero-leaf `()` argument that precedes a capture must not shift the capture read
-    // (a wrong offset would silently return the wrong captured value), folding the zero-field
-    // empty-iterator state must stay correct, and a nested unbox struct must round-trip through
-    // the explode-at-call / reassemble-at-entry path unchanged.
     let source = r#"
         module Main;
 
@@ -14152,15 +14636,18 @@ pub fn test_unbox_struct_arg_abi() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that `build_scalar_phi` passes values through a merge block unchanged. It carries an
+/// unboxed struct value as one scalar phi per leaf field and rebuilds the value at the merge
+/// block; a non-tail `match`, a union field modifier and a diverging arm all merge their
+/// results this way.
+///
+/// The cases are a nested tuple (leaf order), a union arm that returns a struct holding an
+/// `Array`, a union `mod_p` that either matches the tag or passes the value through, an arm
+/// that diverges with `undefined`, a struct whose `Bool` field sits between two `I64` fields
+/// (the zero-sized payload leaf of `Bool` is dropped, so a miscount would scramble the
+/// neighbors), and a `()` value, whose whole type is zero-sized.
 #[test]
 pub fn test_scalar_phi_value_roundtrip() {
-    // A non-tail match, a union field modifier, and a diverging arm all merge their result through
-    // `build_scalar_phi`, which carries an unbox-struct value as one scalar phi per leaf field and
-    // reassembles it at the merge block. This checks the merge reproduces the value unchanged for a
-    // nested tuple (leaf order), a union arm returning a struct that holds an `Array`, a
-    // tag-match-vs-passthrough union modification, an arm that diverges via `undefined`, a struct
-    // whose zero-sized `Bool` field sits between two `I64` fields (that payload leaf is dropped, so a
-    // miscount would scramble the neighbors), and a `()` value whose whole type is zero-sized.
     let source = r#"
         module Main;
 
@@ -14237,13 +14724,13 @@ pub fn test_scalar_phi_value_roundtrip() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Checks that merging an empty-payload union value through `build_scalar_phi` yields no phi of
+/// its zero-sized payload; `Bool` is `{ i8 tag, [0 x i8] payload }`. LLVM's AArch64 GlobalISel,
+/// the `-O0` default on Apple Silicon, crashes on a phi of a zero-sized aggregate, a crash
+/// invisible on an x86_64 host and at `-O max`. The test emits the unoptimized IR and asserts
+/// that it has no such phi.
 #[test]
 pub fn test_empty_union_emits_no_zero_sized_phi() {
-    // An empty-payload union value — `Bool` is `{ i8 tag, [0 x i8] payload }` — merged through
-    // `build_scalar_phi` must not yield a phi of its zero-sized payload. LLVM's AArch64 GlobalISel
-    // (the `-O0` default on Apple Silicon) crashes on a phi of a zero-sized aggregate, a failure
-    // invisible on an x86_64 host and at `-O max`. The test emits the unoptimized IR and asserts
-    // that it carries no such phi.
     let source = r#"
         module Main;
         main : IO ();
@@ -14326,13 +14813,14 @@ fn test_annotation_stripping_is_value_neutral() {
     test_source(source, Configuration::develop_mode());
 }
 
-// Under separated compilation the unit that defines a global and the unit that reads it are
-// generated apart: the defining unit builds the accessor from the type of the initializer it
-// implements, while a reading unit builds the declaration from the type recorded for the program's
-// globals. One symbol per unit puts a unit boundary on every read. The shapes cover a zero-sized
-// global (whose accessor returns nothing rather than a value), a boxed global, an unboxed global of
-// several leaves, an array global, a global whose initializer reads other globals, a global of
-// function type referred to by name, and a global read from inside a lifted lambda.
+/// Checks reading global values across compilation units. The unit that defines a global builds
+/// its accessor from the type of the initializer, and a unit that reads the global builds the
+/// declaration from the type recorded for the program's globals. `cu_size = 1` puts each symbol
+/// in its own unit, so every read crosses a unit boundary.
+///
+/// The globals are a zero-sized one, whose accessor returns no value, a boxed one, an unboxed
+/// one of several leaves, an array, one whose initializer reads other globals, a function
+/// referred to by name, and one read inside a lifted lambda.
 #[test]
 fn test_global_accessors_across_compilation_units() {
     let source = r#"
@@ -14376,8 +14864,8 @@ fn test_global_accessors_across_compilation_units() {
     test_source(source, config);
 }
 
-/// A higher-kinded trait whose instance is pinned down by the annotation at the use site rather
-/// than by the argument: each annotation selects a different instance of the same value.
+/// Checks a method of a higher-kinded trait whose instance only the result type determines: the
+/// type annotation at each use site selects a different instance for the same call `build(n)`.
 #[test]
 pub fn test_higher_kinded_instance_selected_by_annotation() {
     let source = r##"
