@@ -402,8 +402,9 @@ mod tests {
         );
     }
 
-    /// Every source of `src/fixstd/ryu/` is compiled. The same reasoning as the headers': a source
-    /// the directory gained and nothing compiled would be missing from the link.
+    /// Every source of `src/fixstd/ryu/` is compiled into the runtime. Taking a newer Ryu is a
+    /// matter of replacing that directory's files, and a source it gained that nothing compiled
+    /// would be missing from the link.
     #[test]
     fn test_vendored_ryu_sources_are_all_compiled() {
         let compiled: Set<String> = RUNTIME_SOURCES
