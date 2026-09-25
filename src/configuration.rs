@@ -1972,7 +1972,6 @@ mod tests {
     fn test_a_named_feature_is_turned_off_after_everything_the_host_lists() {
         let mut config = Configuration::develop_mode();
         config.host_cpu.features = "+avx512f,+avx512vl,+sse2".to_string();
-        config.disable_cpu_features_regex = vec![];
         config.disabled_cpu_features = vec!["avx512f".to_string(), "rcpc".to_string()];
 
         let features = config.target_cpu_features();
