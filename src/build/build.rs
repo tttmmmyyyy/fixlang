@@ -5,7 +5,7 @@ use crate::elaboration::elaborate_via_config;
 use crate::error::Errors;
 use crate::misc::info_msg;
 use rand::{thread_rng, Rng};
-use std::env;
+use std::env::consts::OS;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -101,7 +101,7 @@ struct RuntimeHeader {
 /// and `f2s_intrinsics.h` choose between a tabulated and a computed table by a macro, so which
 /// headers a build reads depends on the macros it is given.
 /// `test_vendored_ryu_headers_are_all_carried` holds this list to the directory.
-const RUNTIME_HEADERS: [RuntimeHeader; 8] = [
+const RUNTIME_HEADERS: [RuntimeHeader; 9] = [
     RuntimeHeader {
         path: "ryu/ryu.h",
         text: include_str!("../fixstd/ryu/ryu.h"),
@@ -134,6 +134,10 @@ const RUNTIME_HEADERS: [RuntimeHeader; 8] = [
         path: "ryu/f2s_full_table.h",
         text: include_str!("../fixstd/ryu/f2s_full_table.h"),
     },
+    RuntimeHeader {
+        path: "ryu/d2fixed_full_table.h",
+        text: include_str!("../fixstd/ryu/d2fixed_full_table.h"),
+    },
 ];
 
 /// One of the C sources the runtime is built from.
@@ -151,7 +155,7 @@ struct RuntimeSource {
 ///
 /// `ryu/d2s.c` and `ryu/f2s.c` each define a `to_chars` of their own, so each is a translation unit
 /// of its own.
-const RUNTIME_SOURCES: [RuntimeSource; 4] = [
+const RUNTIME_SOURCES: [RuntimeSource; 5] = [
     RuntimeSource {
         object_name: "runtime",
         path: "runtime.c",
@@ -171,6 +175,11 @@ const RUNTIME_SOURCES: [RuntimeSource; 4] = [
         object_name: "ryu-f2s",
         path: "ryu/f2s.c",
         text: include_str!("../fixstd/ryu/f2s.c"),
+    },
+    RuntimeSource {
+        object_name: "ryu-d2fixed",
+        path: "ryu/d2fixed.c",
+        text: include_str!("../fixstd/ryu/d2fixed.c"),
     },
 ];
 
@@ -305,7 +314,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     let mut libs_opts = vec![];
     let mut has_warned_on_mac = false;
     for (lib_name, link_type) in &config.linked_libraries {
-        if env::consts::OS != "macos" {
+        if OS != "macos" {
             match link_type {
                 LinkType::Static => libs_opts.push("-Wl,-Bstatic".to_string()),
                 LinkType::Dynamic => libs_opts.push("-Wl,-Bdynamic".to_string()),
@@ -332,7 +341,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     } else {
         com.arg("-no-pie");
     }
-    if env::consts::OS == "macos" {
+    if OS == "macos" {
         com.arg("-Wl,-dead_strip");
     } else {
         com.arg("-Wl,--gc-sections");
@@ -393,8 +402,9 @@ mod tests {
         );
     }
 
-    /// Every source of `src/fixstd/ryu/` is compiled. The same reasoning as the headers': a source
-    /// the directory gained and nothing compiled would be missing from the link.
+    /// Every source of `src/fixstd/ryu/` is compiled into the runtime. Taking a newer Ryu is a
+    /// matter of replacing that directory's files, and a source it gained that nothing compiled
+    /// would be missing from the link.
     #[test]
     fn test_vendored_ryu_sources_are_all_compiled() {
         let compiled: Set<String> = RUNTIME_SOURCES
