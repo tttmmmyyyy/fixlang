@@ -134,6 +134,15 @@ impl OutputFileType {
     }
 }
 
+/// Patterns of the CPU features whose instructions valgrind's decoder lacks, as late as valgrind
+/// 3.25.1. A program built with one of them stops with SIGILL at the first such instruction
+/// valgrind meets. The code generator emits them in ordinary code: AVX-512 and SVE from
+/// vectorized loops, and RCpc's `ldapr` for an atomic acquire load, which the reference counting of
+/// a threaded program performs. The names are LLVM's, and each pattern matches from the start of a
+/// name, so it reaches the features of one architecture only: `avx512` those of x86-64, and `sve`
+/// and `rcpc` those of AArch64.
+const FEATURES_VALGRIND_CANNOT_DECODE: [&str; 3] = ["^avx512", "^sve", "^rcpc"];
+
 /// The valgrind tool the built program is run under in `run` mode.
 #[derive(PartialEq, Eq, Clone, Copy)]
 pub enum ValgrindTool {
@@ -742,8 +751,8 @@ impl Configuration {
     }
 
     /// Run the built program under `tool` in `run` mode. On a platform where valgrind is
-    /// unavailable the request is dropped with a warning. Any tool also disables the AVX-512
-    /// features valgrind cannot interpret (#41).
+    /// unavailable the request is dropped with a warning. Any tool also disables the CPU features
+    /// whose instructions valgrind cannot decode, listed in `FEATURES_VALGRIND_CANNOT_DECODE`.
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {
         if !platform_valgrind_supported() && tool != ValgrindTool::None {
             warn_msg(&format!(
@@ -755,8 +764,11 @@ impl Configuration {
         }
         self.valgrind_tool = tool;
         if tool != ValgrindTool::None {
-            // Valgrind-3.22.0 does not support AVX-512 (#41).
-            self.disable_cpu_features_regex.push("avx512.*".to_string());
+            self.disable_cpu_features_regex.extend(
+                FEATURES_VALGRIND_CANNOT_DECODE
+                    .iter()
+                    .map(|pattern| pattern.to_string()),
+            );
         }
         self
     }
@@ -1631,9 +1643,9 @@ int main() {
 mod tests {
     use super::{
         llvm_passes_for_speed, Configuration, FixOptimizationLevel, OutputFileType, Sanitizer,
-        SubCommand,
+        SubCommand, ValgrindTool,
     };
-    use crate::misc::Map;
+    use crate::misc::{platform_valgrind_supported, Map};
     use std::fs;
     use std::path::Path;
 
@@ -1926,6 +1938,34 @@ mod tests {
             "a feature a pattern names is not generated for: {}",
             features
         );
+    }
+
+    /// Running under valgrind keeps the program off the features whose instructions valgrind cannot
+    /// decode — AVX-512 on x86-64, and SVE and RCpc on AArch64 — and leaves every other
+    /// feature the host has.
+    #[test]
+    fn test_valgrind_turns_off_the_features_it_cannot_decode() {
+        if !platform_valgrind_supported() {
+            return;
+        }
+        let mut config = Configuration::develop_mode();
+        config.host_cpu.features =
+            "+avx512f,+avx2,+sve,+sve2,+rcpc,+rcpc-immo,+lse,+neon".to_string();
+        config.disable_cpu_features_regex = vec![];
+        config.set_valgrind(ValgrindTool::MemCheck);
+
+        let features = config.target_cpu_features();
+        for kept in ["+avx2", "+lse", "+neon"] {
+            assert!(features.contains(kept), "{} is kept: {}", kept, features);
+        }
+        for dropped in ["avx512f", "sve", "sve2", "rcpc", "rcpc-immo"] {
+            assert!(
+                features.contains(&format!("-{}", dropped)),
+                "{} is turned off: {}",
+                dropped,
+                features
+            );
+        }
     }
 
     /// `fix build` and `fix run` produce the same code from the same program, so they share the hash
