@@ -367,9 +367,11 @@ pub fn test_c_abi_extends_narrow_integers_under_each_spelling() {
         ("aarch64-apple-darwin", true),
         ("arm64-apple-darwin23.0.0", true),
         ("aarch64-unknown-linux-gnu", false),
+        ("aarch64-linux-gnu", false),
         ("arm64-unknown-linux-gnu", false),
         ("x86_64-apple-darwin", true),
         ("x86_64-unknown-linux-gnu", true),
+        ("x86_64-linux-gnu", true),
     ] {
         assert_eq!(c_abi_extends_narrow_integers(triple), extends, "{}", triple);
     }
