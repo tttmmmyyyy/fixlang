@@ -59,19 +59,19 @@ int64_t fixruntime_write_u64(char *buf, uint64_t v);
 // run on would leave the heap damaged and the program going.
 //
 // # Arguments
-// * `written` - The length of `text`, which needs no null of its own.
+// * `length` - The length of `text`, which needs no null of its own.
 // * `size` - The bytes `buf` holds.
-static int64_t fixruntime_copy_float_text(const char *text, int written, char *buf, int64_t size)
+static int64_t fixruntime_copy_float_text(const char *text, int length, char *buf, int64_t size)
 {
-    if ((int64_t)written + 1 > size)
+    if ((int64_t)length + 1 > size)
     {
         fprintf(stderr, "A number's text takes %" PRId64 " bytes and its buffer holds %" PRId64 "\n",
-                (int64_t)written + 1, size);
+                (int64_t)length + 1, size);
         fixruntime_abort();
     }
-    memcpy(buf, text, (size_t)written);
-    buf[written] = '\0';
-    return written;
+    memcpy(buf, text, (size_t)length);
+    buf[length] = '\0';
+    return length;
 }
 
 // Writes `v`, which is an infinity or a NaN, at `buf` the way Fix spells it, null-terminated, and
