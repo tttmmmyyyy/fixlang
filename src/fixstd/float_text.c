@@ -64,7 +64,7 @@ int64_t fixruntime_write_u64(char *buf, uint64_t v);
 // * `size` - The bytes `buf` holds.
 //
 // Every text written passes through here once, so it is inlined into each writer: a call costs
-// `Std::F64::to_string` 8 more instructions, where the whole of it takes about 1,100.
+// `Std::F64::to_string` 8 more instructions.
 static inline __attribute__((always_inline)) int64_t fixruntime_copy_float_text(const char *text, int length,
                                                                                  char *buf, int64_t size)
 {
