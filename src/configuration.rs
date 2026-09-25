@@ -543,9 +543,9 @@ pub struct Configuration {
     /// The size of each C type on the target, read from the C compiler. The `Std::FFI` type
     /// aliases such as `CChar` are defined from it.
     pub c_type_sizes: CTypeSizes,
-    /// The CPU the build generates code for, read from the machine the compiler runs on.
-    /// `get_target_machine` compiles for it, minus the features `target_cpu_features` turns off, so
-    /// the object files a build produces hold the instructions this CPU has.
+    /// The CPU of the machine the compiler runs on. The build generates code for the CPU
+    /// `target_cpu_name` and `target_cpu_features` derive from it, so the object files a build
+    /// produces hold only instructions this CPU has.
     pub host_cpu: HostCpu,
     /// Regex patterns of the CPU features the generated code leaves unused. A feature the host
     /// supports and no pattern matches is used, unless valgrind cannot decode it and the program
@@ -1972,6 +1972,7 @@ mod tests {
     #[test]
     fn test_the_target_cpu_features_are_the_hosts_minus_the_disabled_ones() {
         let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
         config.host_cpu.features = "+avx512f,+avx2,+sse2".to_string();
         config.disable_cpu_features_regex = vec!["avx.*".to_string()];
 
@@ -1983,6 +1984,41 @@ mod tests {
         );
         assert!(
             !features.contains("+avx512f") && !features.contains("+avx2"),
+            "a feature a pattern names is not generated for: {}",
+            features
+        );
+    }
+
+    /// Without valgrind, the code is generated for the host's CPU model.
+    #[test]
+    fn test_the_target_cpu_is_the_hosts_without_valgrind() {
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
+        config.host_cpu.name = "a-cpu-model".to_string();
+        assert_eq!(config.target_cpu_name(), "a-cpu-model");
+    }
+
+    /// Under valgrind, a feature a pattern names is left unused, even one valgrind decodes.
+    #[test]
+    fn test_a_disabled_feature_stays_off_under_valgrind() {
+        if !platform_valgrind_supported() {
+            return;
+        }
+        let (_, decodable) = cpu_valgrind_decodes().expect("an entry for the host");
+        let mut config = Configuration::develop_mode();
+        config.host_cpu.features = format!("+{},+{}", decodable[0], decodable[1]);
+        config.disable_cpu_features_regex = vec![format!("^{}$", regex::escape(decodable[1]))];
+        config.set_valgrind(ValgrindTool::MemCheck);
+
+        let features = config.target_cpu_features();
+        let entries = features.split(',').collect::<Vec<_>>();
+        assert!(
+            entries.contains(&format!("+{}", decodable[0]).as_str()),
+            "a decodable feature no pattern names is kept: {}",
+            features
+        );
+        assert!(
+            !entries.contains(&format!("+{}", decodable[1]).as_str()),
             "a feature a pattern names is not generated for: {}",
             features
         );

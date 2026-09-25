@@ -1,10 +1,11 @@
 use inkwell::targets::TargetMachine;
 
-/// The CPU a build generates code for, as LLVM names it.
+/// The CPU of the machine a build runs on, as LLVM names it.
 ///
-/// A build compiles for the machine it runs on, so this is read from the host. It reaches the
-/// generated code through `get_target_machine`, and an object file therefore holds the
-/// instructions this CPU has.
+/// A build compiles for the machine it runs on: the code is generated for this CPU, or under
+/// valgrind for a baseline model with a part of its features (`Configuration::target_cpu_name` and
+/// `Configuration::target_cpu_features`), so an object file holds only instructions this CPU
+/// has.
 #[derive(Clone, PartialEq, Eq)]
 pub struct HostCpu {
     /// The model name, such as `skylake-avx512`.
