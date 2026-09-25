@@ -12,7 +12,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        # `ubuntu-24.04-arm` runs AArch64 Linux, whose C ABI leaves a narrow integer's upper bits
+        # to the receiver, unlike x86-64 and Apple AArch64.
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
         opt-level: [max, basic, none]
     env:
       FIX_MAX_OPT_LEVEL: ${{ matrix.opt-level }}
@@ -23,14 +25,15 @@ jobs:
       - name: Install LLVM
         shell: bash
         run: |
-          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
-            LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.8/LLVM-22.1.8-Linux-X64.tar.xz"
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            if [[ "${{ runner.arch }}" == "ARM64" ]]; then LLVM_ARCH=ARM64; else LLVM_ARCH=X64; fi
+            LLVM_URL="https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.8/LLVM-22.1.8-Linux-${LLVM_ARCH}.tar.xz"
             mkdir -p llvm
             wget -q "$LLVM_URL" -O llvm.tar.xz
             tar -xf llvm.tar.xz -C llvm --strip-components=1
             LLVM_PATH="${GITHUB_WORKSPACE}/llvm"
             echo "LLVM_SYS_221_PREFIX=$LLVM_PATH" >> $GITHUB_ENV
-          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
             brew install llvm@22
             echo "LLVM_SYS_221_PREFIX=$(brew --prefix llvm@22)" >> $GITHUB_ENV
           fi
@@ -38,10 +41,10 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          if [[ "${{ matrix.os }}" == "ubuntu-latest" ]]; then
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
             sudo apt-get update
             sudo apt-get install -y libgmp-dev libmpfr-dev lldb
-          elif [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
             brew install openssl
             echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
             brew install gmp
@@ -55,8 +58,8 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Install valgrind (Ubuntu only)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install valgrind (Linux only)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get install -y valgrind=1:3.22.*
 
