@@ -626,8 +626,8 @@ fn set_llvm_options(args: &[String]) {
 }
 
 /// The LLVM target machine to compile for: the CPU `Configuration::target_cpu_name` and
-/// `Configuration::target_cpu_features` give, generating code at `opt_level`. A dynamic library is compiled
-/// position-independent.
+/// `Configuration::target_cpu_features` give, generating code at `opt_level`. A dynamic library is
+/// compiled position-independent.
 // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn get_target_machine(
     opt_level: OptimizationLevel,

@@ -518,8 +518,8 @@ pub struct Configuration {
     /// produces hold only instructions this CPU has.
     pub host_cpu: HostCpu,
     /// Regex patterns of the CPU features the generated code leaves unused. A feature the host
-    /// supports and no pattern matches is used, unless valgrind cannot decode it and the program
-    /// runs under valgrind.
+    /// supports and no pattern matches is used, unless the program runs under valgrind and
+    /// `ValgrindCpu` leaves the feature out.
     pub disable_cpu_features_regex: Vec<String>,
     /// Options handed to LLVM's own option parser before any code is generated, written as LLVM
     /// writes them. They reach settings the C API leaves out — among them the boundary a loop's
@@ -1066,7 +1066,8 @@ impl Configuration {
             // `llvm_passes` is the pipeline `llvm_passes_override` gives where it gives one and the
             // optimization level implies otherwise, `entry_point_runs_tests` is what the
             // subcommand decides about the code, and `target_cpu_name` and `target_cpu_features`
-            // are the CPU the host, the patterns and valgrind leave the code generated for.
+            // are the CPU the code is generated for, which the host, the patterns and valgrind
+            // decide.
             llvm_passes_override: _,
             subcommand: _,
             host_cpu: _,
@@ -1268,7 +1269,9 @@ impl Configuration {
         features.to_string()
     }
 
-    /// The CPU valgrind decodes on this architecture, when the program runs under valgrind.
+    /// The CPU the program is built for under valgrind. It is `None`, and the code is generated for
+    /// the host's CPU, when the program runs without valgrind or this architecture has no
+    /// `ValgrindCpu`.
     fn valgrind_cpu(&self) -> Option<ValgrindCpu> {
         if self.valgrind_tool == ValgrindTool::None {
             None

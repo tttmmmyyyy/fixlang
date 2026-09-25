@@ -150,8 +150,8 @@ pub fn test_leaked_array_is_an_error() {
 
 /// A vectorized loop over bytes runs under memcheck. On a host with GFNI, LLVM compiles the byte
 /// shifts of such a loop to `vgf2p8affineqb`, which valgrind cannot decode, so the program is built
-/// with only the CPU features valgrind decodes. The array's contents come from the program's
-/// arguments, so the loop stays for the code generator to vectorize.
+/// with only the CPU features valgrind decodes. The array's contents depend on the program's
+/// arguments, so the compiler cannot compute the result ahead of time and vectorizes the loop.
 #[test]
 pub fn test_vectorized_byte_shifts_run_under_memcheck() {
     if !platform_valgrind_supported() {
