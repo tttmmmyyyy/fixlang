@@ -15,6 +15,7 @@ use crate::constants::{
 };
 use crate::generator::Generator;
 use crate::object::int_type_of_bits;
+use crate::target_triple::{architecture_of_target, vendor_of_target, Architecture};
 use inkwell::attributes::AttributeLoc;
 use inkwell::context::Context;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
@@ -78,20 +79,21 @@ impl CIntegerExtension {
 /// x86-64 and Apple's AArch64 extend, and clang puts the attributes on their declarations. AAPCS64
 /// on every other operating system leaves the bits to the reader, and clang puts none. A declaration
 /// that promises the extension where the ABI does not make it reads the whole unit: a C function
-/// returning `(int8_t)3000`, which is -72, hands Fix 3000. An architecture outside this list gets
-/// no attribute, so Fix narrows every value it reads, which is right under either regime.
+/// returning `(int8_t)3000`, which is -72, hands Fix 3000.
+///
+/// Another architecture gets no attribute. Fix then narrows every value it reads, which holds under
+/// either regime, but hands C an argument or a result with the bits above it unfilled, which an ABI
+/// that extends reads wrong. RISC-V 64 is one such ABI, and it also extends to 64 bits rather than
+/// to `C_INTEGER_UNIT_BITS`; supporting it means an entry here and a wider unit.
 ///
 /// # Examples
 /// `x86_64-unknown-linux-gnu` and `arm64-apple-darwin23.0.0` extend; `aarch64-unknown-linux-gnu`
 /// does not.
 pub fn c_abi_extends_narrow_integers(triple: &str) -> bool {
-    let mut parts = triple.split('-');
-    let architecture = parts.next().unwrap();
-    let vendor = parts.next().unwrap_or("");
-    match architecture {
-        "x86_64" => true,
-        "aarch64" | "arm64" => vendor == "apple",
-        _ => false,
+    match architecture_of_target(triple) {
+        Architecture::X86_64 => true,
+        Architecture::AArch64 => vendor_of_target(triple) == "apple",
+        Architecture::Other => false,
     }
 }
 
