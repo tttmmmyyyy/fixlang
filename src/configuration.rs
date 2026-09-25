@@ -763,7 +763,7 @@ impl Configuration {
 
     /// Run the built program under `tool` in `run` mode. On a platform where valgrind is
     /// unavailable the request is dropped with a warning. Under any tool, the program is built
-    /// without the CPU features `disabled_cpu_features` names.
+    /// without the CPU features `cpu_features_disabled_by_name` names.
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {
         if !platform_valgrind_supported() && tool != ValgrindTool::None {
             warn_msg(&format!(
@@ -1085,8 +1085,8 @@ impl Configuration {
             // Reach the generated code through what they decide, which is pushed in their place:
             // `llvm_passes` is the pipeline `llvm_passes_override` gives where it gives one and the
             // optimization level implies otherwise, `entry_point_runs_tests` is what the
-            // subcommand decides about the code, and `disabled_cpu_features` is what running the
-            // program under valgrind takes out of it.
+            // subcommand decides about the code, and `cpu_features_disabled_by_name` is what
+            // running the program under valgrind takes out of it.
             llvm_passes_override: _,
             subcommand: _,
             valgrind_tool: _,
@@ -1188,7 +1188,7 @@ impl Configuration {
         object_generation.push_text(&host_cpu.name);
         object_generation.push_text(&host_cpu.features);
         object_generation.push_list(disable_cpu_features_regex);
-        object_generation.push_list(self.disabled_cpu_features());
+        object_generation.push_list(self.cpu_features_disabled_by_name());
         // What LLVM was told before it generated the code.
         object_generation.push_list(llvm_args);
 
@@ -1268,11 +1268,11 @@ impl Configuration {
     }
 
     /// The CPU features the generated code is compiled for: the ones the host supports, minus the
-    /// ones `disable_cpu_features_regex` and `disabled_cpu_features` turn off.
+    /// ones `disable_cpu_features_regex` and `cpu_features_disabled_by_name` turn off.
     pub fn target_cpu_features(&self) -> String {
         let mut features = CpuFeatures::parse(&self.host_cpu.features);
         features.disable_by_regexes(&self.disable_cpu_features_regex);
-        for name in self.disabled_cpu_features() {
+        for name in self.cpu_features_disabled_by_name() {
             features.disable(name);
         }
         features.to_string()
@@ -1286,7 +1286,7 @@ impl Configuration {
     /// not the host lists it, which is what keeps off a feature LLVM takes from the CPU's model. On
     /// AArch64 Linux the host lists only what the kernel reports, and RCpc comes from the model
     /// alone.
-    fn disabled_cpu_features(&self) -> &'static [&'static str] {
+    fn cpu_features_disabled_by_name(&self) -> &'static [&'static str] {
         if self.valgrind_tool == ValgrindTool::None {
             &[]
         } else {
