@@ -1862,6 +1862,12 @@ mod tests {
                 }),
             ),
             (
+                "disabled_cpu_features",
+                Box::new(|config: &mut Configuration| {
+                    config.disabled_cpu_features.push("avx512f".to_string())
+                }),
+            ),
+            (
                 "llvm_args",
                 Box::new(|config: &mut Configuration| {
                     config.llvm_args.push("--some-llvm-option=1".to_string())
@@ -1955,6 +1961,42 @@ mod tests {
         assert!(
             !features.contains("+avx512f") && !features.contains("+avx2"),
             "a feature a pattern names is not generated for: {}",
+            features
+        );
+    }
+
+    /// A feature `disabled_cpu_features` names is turned off whether or not the host lists it, and
+    /// after every feature the host lists, since LLVM applies the list in order and a feature listed
+    /// later would turn back on a feature it implies.
+    #[test]
+    fn test_a_named_feature_is_turned_off_after_everything_the_host_lists() {
+        let mut config = Configuration::develop_mode();
+        config.host_cpu.features = "+avx512f,+avx512vl,+sse2".to_string();
+        config.disable_cpu_features_regex = vec![];
+        config.disabled_cpu_features = vec!["avx512f".to_string(), "rcpc".to_string()];
+
+        let features = config.target_cpu_features();
+        let entries = features.split(',').collect::<Vec<_>>();
+        let position = |entry: &str| {
+            entries
+                .iter()
+                .position(|listed| *listed == entry)
+                .unwrap_or_else(|| panic!("`{}` is missing from {}", entry, features))
+        };
+        assert!(
+            !entries.contains(&"+avx512f"),
+            "a named feature the host lists is not generated for: {}",
+            features
+        );
+        assert!(
+            entries.contains(&"+sse2"),
+            "a feature nothing names is generated for as the host has it: {}",
+            features
+        );
+        let last_enabled = position("+avx512vl").max(position("+sse2"));
+        assert!(
+            position("-avx512f") > last_enabled && position("-rcpc") > last_enabled,
+            "each named feature is turned off after every feature the host lists, listed or not: {}",
             features
         );
     }
