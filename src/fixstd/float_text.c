@@ -94,6 +94,8 @@ static int64_t fixruntime_write_non_finite_text(double v, char *buf, int64_t siz
 // left out: the most negative `F64` written positionally with the 255 places a `U8` precision
 // reaches, which is a sign, the 309 digits of its whole part, a point and the places. Written with
 // a power of ten, the same number takes fewer: a sign, a digit, a point, the places and `e+308`.
+// Ryu writes with no bound, so this size is the whole guard; `test_float_to_string_precision`
+// writes that widest text and pins its length.
 #define PRECISION_TEXT_SIZE (1 + 309 + 1 + 255)
 
 // Writes `v` at `buf` with `precision` digits after the point, null-terminated, and reports how
@@ -110,14 +112,7 @@ static int64_t fixruntime_write_precision_text(int (*write_finite)(double, uint3
         return fixruntime_write_non_finite_text(v, buf, size);
     }
     char text[PRECISION_TEXT_SIZE];
-    int written = write_finite(v, precision, text);
-    if (written > PRECISION_TEXT_SIZE)
-    {
-        fprintf(stderr, "Ryu wrote a number's text of %d bytes past a buffer of %d\n", written,
-                PRECISION_TEXT_SIZE);
-        fixruntime_abort();
-    }
-    return fixruntime_copy_float_text(text, written, buf, size);
+    return fixruntime_copy_float_text(text, write_finite(v, precision, text), buf, size);
 }
 
 // Each of the four below writes `v` at `buf` with `precision` digits after the point, null-
