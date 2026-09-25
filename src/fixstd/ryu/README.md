@@ -30,7 +30,7 @@ directory to the C compiler through `RUNTIME_HEADERS` and `RUNTIME_SOURCES` in
 | `d2s.c` | `double` to its shortest decimal text. |
 | `f2s.c` | `float` to its shortest decimal text. |
 | `d2fixed.c` | `double` to its text with a given number of places, positional (`%.*f`) or with a power of ten (`%.*e`). |
-| `common.h`, `digit_table.h` | Bit and digit helpers both of the above use. |
+| `common.h`, `digit_table.h` | Bit and digit helpers the sources above use. |
 | `d2s_intrinsics.h`, `f2s_intrinsics.h` | The 64 x 64 and 32 x 32 multiplications the algorithm rests on. |
 | `d2s_full_table.h`, `f2s_full_table.h`, `d2fixed_full_table.h` | The powers of ten the algorithm looks up. |
 | `d2s_small_table.h` | The powers of ten computed rather than tabulated, which `RYU_OPTIMIZE_SIZE` selects. |

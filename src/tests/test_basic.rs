@@ -6103,8 +6103,8 @@ pub fn test_float_to_string_precision_of_subnormal_numbers() {
 }
 
 /// Pins that the functions writing a given number of places write a NaN as `nan` whether its sign
-/// bit is clear or set, on every platform: the NaNs are built from their bits rather than by
-/// arithmetic.
+/// bit is clear or set. The NaNs are built from their bits, so each has the same sign on every
+/// platform.
 #[test]
 pub fn test_float_to_string_precision_of_nan_of_either_sign() {
     let source = r#"

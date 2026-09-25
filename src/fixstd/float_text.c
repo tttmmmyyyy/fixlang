@@ -1,10 +1,11 @@
 /*
 Writing a floating point number as text and reading one back, for `Std::F64` and `Std::F32`.
 
-Every text is written by Ryu, whose sources sit beside this one under `ryu/`: the shortest text that
-reads back as the number, and the text with a given number of places behind the point. Reading goes
-through C's `strtod`, under a locale of this file's own so that the point is the character Ryu
-writes whatever locale the program runs in.
+Every finite number's text is written by Ryu, whose sources sit beside this one under `ryu/`: the
+shortest text that reads back as the number, and the text with a given number of places behind the
+point. An infinity and a NaN are written here, as `inf`, `-inf` and `nan`. Reading goes through C's
+`strtod`, under a locale of this file's own so that the point is the character Ryu writes whatever
+locale the program runs in.
 */
 
 // `strtod_l` and `newlocale` are what read a number under a locale of our own choosing. glibc
@@ -85,10 +86,10 @@ static int64_t fixruntime_write_non_finite_text(double v, char *buf, int64_t siz
     return fixruntime_copy_float_text(text, (int)strlen(text), buf, size);
 }
 
-// The bytes a text with a given number of places behind the point takes at its widest: the least
-// `F64` written positionally with the 255 places a `U8` precision reaches, which is a sign, the 309
-// digits of its whole part, a point and the places. Written as a power of ten, the same number
-// takes a sign, a digit, a point, the places and a four byte power of ten.
+// The bytes a text with a given number of places behind the point takes at its widest, the null
+// left out: the most negative `F64` written positionally with the 255 places a `U8` precision
+// reaches, which is a sign, the 309 digits of its whole part, a point and the places. Written with
+// a power of ten, the same number takes fewer: a sign, a digit, a point, the places and `e+308`.
 #define PRECISION_TEXT_SIZE (1 + 309 + 1 + 255)
 
 // Writes `v` at `buf` with `precision` digits after the point, null-terminated, and reports how
@@ -145,9 +146,9 @@ int64_t fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8
 //
 // `sci` holds what `d2s_buffered_n` or `f2s_buffered_n` wrote for a finite number: a sign, the
 // shortest digits that read back as the number with a point after the first of them, `E`, and the
-// power of ten those digits are multiplied by. Fix writes those digits positionally where the point falls inside or
-// near them, and as a power of ten otherwise, so that the text stays about as wide as the digits
-// it carries: `1e300` rather than a 1 followed by 300 zeros.
+// power of ten those digits are multiplied by. Fix writes those digits positionally where the
+// point falls inside or near them, and as a power of ten otherwise, so that the text stays about
+// as wide as the digits it carries: `1e300` rather than a 1 followed by 300 zeros.
 //
 // # Arguments
 // * `sci` - The scientific text, null-terminated.
