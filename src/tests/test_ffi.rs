@@ -147,7 +147,7 @@ pub fn test_export_scalar_types() {
 /// on the host's target exactly where `c_abi_extends_narrow_integers` says that ABI extends, which
 /// this test reads off the emitted IR.
 #[test]
-pub fn test_narrow_integers_carry_the_c_extension_attribute() {
+pub fn test_narrow_integer_extension_attribute_follows_the_host_abi() {
     let source = r#"
         module Main;
 
