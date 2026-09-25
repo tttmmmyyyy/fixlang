@@ -10,7 +10,7 @@ use inkwell::targets::{TargetMachine, TargetTriple};
 /// The architectures whose ABI the compiler knows.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Architecture {
-    /// x86-64.
+    /// x86-64, which LLVM names `x86_64`.
     X86_64,
     /// 64-bit ARM, which LLVM names `aarch64` or `arm64`.
     AArch64,

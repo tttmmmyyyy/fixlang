@@ -3438,9 +3438,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// target whose C ABI makes that extension.
     ///
     /// A C compiler puts the extension on every such parameter and result there, and a Fix function
-    /// reaching C carries it for the same reason: without it the reader of a promise-based ABI sees
-    /// whatever the bits happen to hold. On a target whose ABI leaves the bits to the reader, the
-    /// attribute would promise what the other side never does, so it is left off.
+    /// reaching C carries it for the same reason: without it a C function reading the value takes
+    /// whatever the bits above it happen to hold. On a target whose ABI leaves the bits to the
+    /// reader, the attribute would promise what the other side never does, so it is left off.
     /// `CIntegerExtension` holds which values need one and why.
     ///
     /// Two descriptions a program writes of one C function agree on the extension at each position —

@@ -12,8 +12,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # `ubuntu-24.04-arm` runs AArch64 Linux, whose C ABI leaves a narrow integer's upper bits
-        # to the receiver, unlike x86-64 and Apple AArch64.
+        # `ubuntu-24.04-arm` runs AArch64 Linux, the one runner whose C ABI leaves the bits above a
+        # narrow integer to the reader.
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
         opt-level: [max, basic, none]
     env:

@@ -214,8 +214,8 @@ pub fn test_narrow_integer_extension_attribute_follows_the_host_abi() {
             ("", "")
         };
     for expected in [
-        // An exported function extends its narrow arguments and result, by sign or by zero
-        // according to the Fix type.
+        // Where the ABI extends, an exported function extends its narrow arguments and result, by
+        // sign or by zero according to the Fix type.
         format!("define{signext} i8 @c_add_i8(i8{signext} %0, i8{signext} %1)"),
         format!("define{zeroext} i16 @c_add_u16(i16{zeroext} %0, i16{zeroext} %1)"),
         // A type that fills the register carries no attribute, and neither does a pointer.
@@ -280,8 +280,8 @@ pub fn test_narrow_integer_extension_follows_the_target_abi() {
 
 /// A C function's result narrower than the unit the ABI carries an integer in arrives in the low
 /// bits of a register, and the value is what those bits hold. Each C function here returns the low
-/// bits of a wider product, so the bits above the result hold the rest of that product, and the
-/// number the Fix side reads is the narrow one.
+/// bits of a wider product, so on an ABI that leaves the bits above to the reader they hold the rest
+/// of that product, and the number the Fix side reads is the narrow one.
 #[test]
 pub fn test_ffi_call_reads_a_narrow_result() {
     let source = r##"
@@ -359,8 +359,9 @@ pub fn test_ffi_export_reads_a_narrow_argument() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
-/// Apple's AArch64 extends under either name LLVM gives the architecture, and x86-64 extends
-/// whatever the operating system.
+/// Apple's AArch64 extends under either name LLVM gives the architecture, AArch64 Linux extends
+/// under neither name, also when its triple leaves the vendor out, and x86-64 extends on every
+/// operating system.
 #[test]
 pub fn test_c_abi_extends_narrow_integers_under_each_spelling() {
     for (triple, extends) in [

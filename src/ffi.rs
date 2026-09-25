@@ -28,16 +28,16 @@ use std::sync::Arc;
 /// Two types of one shape are one C type, so a signature written with either declares the same
 /// function. `I64` and `U64` share a shape: a value that fills its register travels the same way
 /// whichever sign the reader gives the bits. `I8` and `U8` do not, since a narrow integer is widened
-/// by its sign — by C's default argument promotions everywhere, and at every call by an ABI that
-/// extends it — so the two are different C types on every target.
+/// according to its sign — by C's default argument promotions on every target, and at every call on
+/// a target whose ABI extends it — so the two are different C types on every target.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CTypeShape {
     /// An integer of this width in bits, carrying the extension its width earns it.
     Integer {
         /// The width of the C integer type: 8, 16, 32 or 64.
         bits: u32,
-        /// The extension a value of this width is widened with to the unit a C signature carries an
-        /// integer in, and `None` at a width that fills the unit.
+        /// How a value of this width is widened to the unit a C signature carries an integer in, and
+        /// `None` at a width that fills the unit.
         extension: Option<CIntegerExtension>,
     },
     /// C's `float`.
@@ -81,10 +81,10 @@ impl CIntegerExtension {
 /// that promises the extension where the ABI does not make it reads the whole unit: a C function
 /// returning `(int8_t)3000`, which is -72, hands Fix 3000.
 ///
-/// Another architecture gets no attribute. Fix then narrows every value it reads, which holds under
-/// either regime, but hands C an argument or a result with the bits above it unfilled, which an ABI
-/// that extends reads wrong. RISC-V 64 is one such ABI, and it also extends to 64 bits rather than
-/// to `C_INTEGER_UNIT_BITS`; supporting it means an entry here and a wider unit.
+/// Any other architecture gets no attribute. Fix then narrows every value it reads, which is correct
+/// under either kind of ABI, but hands C an argument or a result with the bits above it unfilled,
+/// which an ABI that extends reads wrong. RISC-V 64 is one such ABI, and it extends to 64 bits, wider
+/// than `C_INTEGER_UNIT_BITS`; supporting it means an entry here and a wider unit.
 ///
 /// # Examples
 /// `x86_64-unknown-linux-gnu` and `arm64-apple-darwin23.0.0` extend; `aarch64-unknown-linux-gnu`
