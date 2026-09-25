@@ -833,9 +833,9 @@ pub fn test_ffi_call_promotes_only_what_follows_the_declared_parameters() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
-/// A parameter is a position like the result: the ABI carries a narrow integer in the low bits of a
-/// register and the sign says which side extends it, so the two calls ask the one declaration for
-/// opposite promises about the bits above the value.
+/// A parameter is a position like the result: `I8` and `U8` are different C types on every target,
+/// since a narrow integer is widened according to its sign, so the two calls describe the one C
+/// function in two ways that disagree.
 #[test]
 pub fn test_ffi_calls_of_one_c_name_taking_a_narrow_argument_at_two_signs_fails() {
     let source = r##"
@@ -911,9 +911,8 @@ pub fn test_ffi_calls_of_one_c_name_reading_a_wide_result_as_both_signs() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
-/// The ABI carries an integer narrower than 32 bits in the low bits of a register, and the sign is
-/// what says which side extends it. So the two descriptions ask the one declaration for opposite
-/// promises about the bits above the value.
+/// An integer narrower than 32 bits is widened according to its sign, so `I8` and `U8` are
+/// different C types on every target, and the two descriptions of the one C function disagree.
 #[test]
 pub fn test_ffi_calls_of_one_c_name_reading_a_narrow_result_as_both_signs_fails() {
     let source = r##"
