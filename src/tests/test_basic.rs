@@ -5540,7 +5540,7 @@ pub fn test129() {
             // I8
             let case = "I8";
             let n = 1;
-            let x = 127_U8;
+            let x = -128_I8;
             assert_eq(|_|case + " 1", x, x.to_bytes.from_bytes.as_ok);;
             let y : Result ErrMsg I8 = Array::fill(n-1, 127_U8).from_bytes;
             assert(|_|case + " 2", y.is_err);;
@@ -8694,7 +8694,7 @@ pub fn test_type_alias() {
 /// A type alias whose parameter is a type constructor applies it in its body: `Swap () IO`
 /// expands to `IO ()`, the type of `main`.
 #[test]
-pub fn test_type_alias_higner_kinded_argument() {
+pub fn test_type_alias_higher_kinded_argument() {
     let source = r#"
         module Main; 
         
@@ -11531,7 +11531,7 @@ pub fn test_match_variant_with_bad_namespace() {
 /// The payload pattern of a variant pattern may itself be a struct pattern or a tuple pattern,
 /// which takes the payload apart inside the arm.
 #[test]
-pub fn test_match_single_variant() {
+pub fn test_struct_or_tuple_pattern_in_variant_pattern() {
     let source = r##"
     module Main;
 
@@ -11561,7 +11561,7 @@ pub fn test_match_single_variant() {
 
 /// A `match` on a union with a single variant is exhaustive with one variant arm.
 #[test]
-pub fn test_tuple_or_struct_in_match() {
+pub fn test_match_single_variant() {
     let source = r##"
     module Main;
 

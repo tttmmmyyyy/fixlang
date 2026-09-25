@@ -351,7 +351,7 @@ static locale_t float_text_locale(void)
 //
 // # Arguments
 // * `v` - What `strtod` answered.
-static void fixruntime_keep_only_overflow(double v)
+static void fixruntime_drop_subnormal_range_error(double v)
 {
     if (errno == ERANGE && isfinite(v) && v != 0.0)
     {
@@ -375,7 +375,7 @@ double fixruntime_strtod(const char *str)
         return 0.0;
     }
     double v = strtod_l(str, &endptr, float_text_locale());
-    fixruntime_keep_only_overflow(v);
+    fixruntime_drop_subnormal_range_error(v);
     if (endptr == str || *endptr != '\0')
     {
         errno = EINVAL;
@@ -399,7 +399,7 @@ float fixruntime_strtof(const char *str)
         return 0.0f;
     }
     float v = strtof_l(str, &endptr, float_text_locale());
-    fixruntime_keep_only_overflow((double)v);
+    fixruntime_drop_subnormal_range_error((double)v);
     if (endptr == str || *endptr != '\0')
     {
         errno = EINVAL;
