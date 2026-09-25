@@ -1,4 +1,5 @@
 use inkwell::targets::TargetMachine;
+use std::env::consts::ARCH;
 
 /// The CPU of the machine a build runs on, as LLVM names it.
 ///
@@ -20,6 +21,45 @@ impl HostCpu {
         HostCpu {
             name: TargetMachine::get_host_cpu_name().to_string(),
             features: TargetMachine::get_host_cpu_features().to_string(),
+        }
+    }
+}
+
+/// The CPU a program run under valgrind is built for: the architecture's baseline model, and the
+/// features valgrind 3.22 decodes that LLVM uses in ordinary code. The build turns on those of the
+/// features the host has, and no other.
+///
+/// valgrind stops a program with SIGILL at the first instruction it cannot decode, and each CPU
+/// generation adds features whose instructions it lacks: AVX-512, GFNI and APX on x86-64, SVE,
+/// RCpc, dot product and I8MM on AArch64. LLVM emits them in ordinary code, from vectorized loops
+/// and atomic loads. Listing what valgrind decodes, rather than what it does not, leaves a feature
+/// nobody has checked turned off.
+pub struct ValgrindCpu {
+    /// The baseline model, as LLVM names it.
+    pub model: &'static str,
+    /// The features valgrind decodes, as LLVM names them.
+    pub features: &'static [&'static str],
+}
+
+impl ValgrindCpu {
+    /// The entry for the architecture the compiler runs on and generates code for. An architecture
+    /// outside x86-64 and AArch64 has none, since nobody has checked valgrind's decoder against
+    /// it, and its program is built for the host's CPU as it is.
+    pub fn of_this_architecture() -> Option<ValgrindCpu> {
+        match ARCH {
+            "x86_64" => Some(ValgrindCpu {
+                model: "x86-64",
+                features: &[
+                    "64bit", "cmov", "cx8", "cx16", "fxsr", "mmx", "sahf", "sse", "sse2", "sse3",
+                    "ssse3", "sse4.1", "sse4.2", "crc32", "popcnt", "avx", "avx2", "fma", "f16c",
+                    "bmi", "bmi2", "lzcnt", "movbe", "aes", "pclmul",
+                ],
+            }),
+            "aarch64" => Some(ValgrindCpu {
+                model: "generic",
+                features: &["fp-armv8", "neon", "crc", "lse", "aes", "sha2", "rdm"],
+            }),
+            _ => None,
         }
     }
 }

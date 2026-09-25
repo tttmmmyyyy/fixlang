@@ -1,5 +1,5 @@
 use crate::ast::name::FullName;
-use crate::build::cpu_features::{CpuFeatures, HostCpu};
+use crate::build::cpu_features::{CpuFeatures, HostCpu, ValgrindCpu};
 use crate::constants::{
     CHECK_C_TYPES_PATH, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME,
     C_LONG_NAME, C_SHORT_NAME, C_SIZE_T_NAME, C_TYPES_JSON_PATH, C_UNSIGNED_CHAR_NAME,
@@ -131,36 +131,6 @@ impl OutputFileType {
                 }
             }
         }
-    }
-}
-
-/// The CPU a program run under valgrind is built for, on the architecture the compiler runs on and
-/// generates code for: the architecture's baseline model, and the features valgrind 3.22 decodes
-/// that LLVM uses in ordinary code. The build turns on those of them the host has, and no other.
-///
-/// valgrind stops a program with SIGILL at the first instruction it cannot decode, and each CPU
-/// generation adds features whose instructions it lacks: AVX-512, GFNI and APX on x86-64, SVE,
-/// RCpc, dot product and I8MM on AArch64. LLVM emits them in ordinary code, from vectorized loops
-/// and atomic loads. Listing what valgrind decodes, rather than what it does not, leaves a feature
-/// nobody has checked turned off.
-///
-/// The names are LLVM's. An architecture outside the two has no entry, since nobody has checked
-/// valgrind's decoder against it, and its program is built for the host's CPU as it is.
-fn cpu_valgrind_decodes() -> Option<(&'static str, &'static [&'static str])> {
-    match env::consts::ARCH {
-        "x86_64" => Some((
-            "x86-64",
-            &[
-                "64bit", "cmov", "cx8", "cx16", "fxsr", "mmx", "sahf", "sse", "sse2", "sse3",
-                "ssse3", "sse4.1", "sse4.2", "crc32", "popcnt", "avx", "avx2", "fma", "f16c",
-                "bmi", "bmi2", "lzcnt", "movbe", "aes", "pclmul",
-            ],
-        )),
-        "aarch64" => Some((
-            "generic",
-            &["fp-armv8", "neon", "crc", "lse", "aes", "sha2", "rdm"],
-        )),
-        _ => None,
     }
 }
 
@@ -775,7 +745,7 @@ impl Configuration {
 
     /// Run the built program under `tool` in `run` mode. On a platform where valgrind is
     /// unavailable the request is dropped with a warning. Under any tool, the program is built with
-    /// only the CPU features valgrind decodes (`cpu_valgrind_decodes`).
+    /// only the CPU features valgrind decodes (`ValgrindCpu`).
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {
         if !platform_valgrind_supported() && tool != ValgrindTool::None {
             warn_msg(&format!(
@@ -1278,32 +1248,32 @@ impl Configuration {
     }
 
     /// The CPU model the generated code is compiled for: the host's, or under valgrind the
-    /// architecture's baseline (`cpu_valgrind_decodes`).
+    /// architecture's baseline (`ValgrindCpu`).
     pub fn target_cpu_name(&self) -> String {
-        match self.cpu_valgrind_decodes() {
-            Some((baseline, _)) => baseline.to_string(),
+        match self.valgrind_cpu() {
+            Some(valgrind_cpu) => valgrind_cpu.model.to_string(),
             None => self.host_cpu.name.clone(),
         }
     }
 
     /// The CPU features the generated code is compiled for: the ones the host supports, minus the
     /// ones `disable_cpu_features_regex` turns off. Under valgrind, only those valgrind decodes
-    /// (`cpu_valgrind_decodes`) are kept.
+    /// (`ValgrindCpu`) are kept.
     pub fn target_cpu_features(&self) -> String {
         let mut features = CpuFeatures::parse(&self.host_cpu.features);
-        if let Some((_, decodable)) = self.cpu_valgrind_decodes() {
-            features.keep_enabled_only(decodable);
+        if let Some(valgrind_cpu) = self.valgrind_cpu() {
+            features.keep_enabled_only(valgrind_cpu.features);
         }
         features.disable_by_regexes(&self.disable_cpu_features_regex);
         features.to_string()
     }
 
     /// The CPU valgrind decodes on this architecture, when the program runs under valgrind.
-    fn cpu_valgrind_decodes(&self) -> Option<(&'static str, &'static [&'static str])> {
+    fn valgrind_cpu(&self) -> Option<ValgrindCpu> {
         if self.valgrind_tool == ValgrindTool::None {
             None
         } else {
-            cpu_valgrind_decodes()
+            ValgrindCpu::of_this_architecture()
         }
     }
 
@@ -1680,9 +1650,10 @@ int main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        cpu_valgrind_decodes, llvm_passes_for_speed, Configuration, FixOptimizationLevel,
-        OutputFileType, Sanitizer, SubCommand, ValgrindTool,
+        llvm_passes_for_speed, Configuration, FixOptimizationLevel, OutputFileType, Sanitizer,
+        SubCommand, ValgrindTool,
     };
+    use crate::build::cpu_features::ValgrindCpu;
     use crate::misc::{platform_valgrind_supported, Map};
     use std::fs;
     use std::path::Path;
@@ -2004,7 +1975,9 @@ mod tests {
         if !platform_valgrind_supported() {
             return;
         }
-        let (_, decodable) = cpu_valgrind_decodes().expect("an entry for the host");
+        let decodable = ValgrindCpu::of_this_architecture()
+            .expect("an entry for the host")
+            .features;
         let mut config = Configuration::develop_mode();
         config.host_cpu.features = format!("+{},+{}", decodable[0], decodable[1]);
         config.disable_cpu_features_regex = vec![format!("^{}$", regex::escape(decodable[1]))];
@@ -2032,7 +2005,8 @@ mod tests {
         if !platform_valgrind_supported() {
             return;
         }
-        let (baseline, decodable) = cpu_valgrind_decodes().expect("an entry for the host");
+        let valgrind_cpu = ValgrindCpu::of_this_architecture().expect("an entry for the host");
+        let decodable = valgrind_cpu.features;
         let mut config = Configuration::develop_mode();
         config.host_cpu.features = format!(
             "+{},+a-feature-nobody-checked,-{}",
@@ -2040,7 +2014,7 @@ mod tests {
         );
         config.set_valgrind(ValgrindTool::MemCheck);
 
-        assert_eq!(config.target_cpu_name(), baseline);
+        assert_eq!(config.target_cpu_name(), valgrind_cpu.model);
         assert_eq!(config.target_cpu_features(), format!("+{}", decodable[0]));
     }
 
