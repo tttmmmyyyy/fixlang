@@ -625,8 +625,8 @@ fn set_llvm_options(args: &[String]) {
     }
 }
 
-/// The LLVM target machine to compile for: the host's CPU with the features it supports, minus the
-/// ones the configuration disables, generating code at `opt_level`. A dynamic library is compiled
+/// The LLVM target machine to compile for: the CPU `Configuration::target_cpu_name` and
+/// `Configuration::target_cpu_features` give, generating code at `opt_level`. A dynamic library is compiled
 /// position-independent.
 // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub(crate) fn get_target_machine(
@@ -646,7 +646,7 @@ pub(crate) fn get_target_machine(
     };
     let target_machine = target.create_target_machine(
         &triple,
-        &config.host_cpu.name,
+        &config.target_cpu_name(),
         &config.target_cpu_features(),
         opt_level,
         reloc_mode,

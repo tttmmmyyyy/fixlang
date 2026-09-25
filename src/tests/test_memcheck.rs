@@ -1,7 +1,7 @@
 use crate::{
     configuration::{Configuration, ValgrindTool},
     misc::{function_name, platform_valgrind_supported},
-    tests::test_util::test_source_fail,
+    tests::test_util::{test_source, test_source_fail},
 };
 
 #[test]
@@ -146,4 +146,35 @@ pub fn test_leaked_array_is_an_error() {
     let mut config = Configuration::develop_mode();
     config.set_valgrind(ValgrindTool::MemCheck);
     test_source_fail(&source, config, "are definitely lost");
+}
+
+/// A vectorized loop over bytes runs under memcheck. On a host with GFNI, LLVM compiles the byte
+/// shifts of such a loop to `vgf2p8affineqb`, which valgrind cannot decode, so the program is built
+/// with only the CPU features valgrind decodes. The array's contents come from the program's
+/// arguments, so the loop stays for the code generator to vectorize.
+#[test]
+pub fn test_vectorized_byte_shifts_run_under_memcheck() {
+    if !platform_valgrind_supported() {
+        eprintln!(
+            "Skipping {}: Valgrind not available on this platform.",
+            function_name!()
+        );
+        return;
+    }
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let args = *IO::get_args;
+            let n = 4096 + args.get_size;
+            let arr0 = Array::from_map(n, |i| (i * i + args.get_size).to_U8);
+            let arr = Array::from_map(n, |i| arr0.@(i).shift_right(3_U8));
+            let s = arr.to_iter.fold(0, |x, acc| acc + x.to_I64);
+            println(s.to_string)
+        );
+    "#;
+    let mut config = Configuration::develop_mode();
+    config.set_valgrind(ValgrindTool::MemCheck);
+    test_source(&source, config);
 }

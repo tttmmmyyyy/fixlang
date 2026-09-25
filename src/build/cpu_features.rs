@@ -63,12 +63,13 @@ impl CpuFeatures {
             .join(",")
     }
 
-    /// Turns the feature `name` off, and every feature that implies it, whether or not the list
-    /// holds it. LLVM applies the list in order and turning a feature on turns on what it implies, so
-    /// the feature is moved to the end: `+avx512vl` after `-avx512f` would turn `avx512f` back on.
-    pub fn disable(&mut self, name: &str) {
-        self.data.retain(|(listed, _)| listed != name);
-        self.data.push((name.to_string(), FeatureState::Disabled));
+    /// Keeps only the features the list turns on and `names` holds, dropping every other entry.
+    /// Given the baseline CPU model, the features the list turns on are then the whole of what the
+    /// code may use.
+    pub fn keep_enabled_only(&mut self, names: &[&str]) {
+        self.data.retain(|(name, state)| {
+            matches!(state, FeatureState::Enabled) && names.contains(&name.as_str())
+        });
     }
 
     // Disable CPU features whose names match any of the given regexes.
@@ -93,14 +94,12 @@ impl CpuFeatures {
 mod tests {
     use super::CpuFeatures;
 
-    /// A feature turned off by name is turned off whether or not the list holds it, and after every
-    /// feature the list turns on, since LLVM applies the list in order and a feature listed later
-    /// would turn back on a feature it implies.
+    /// Keeping a set of features keeps those the list turns on, in their order, and drops the rest,
+    /// the features the list turns off included.
     #[test]
-    fn test_a_named_feature_is_turned_off_after_everything_the_list_turns_on() {
-        let mut features = CpuFeatures::parse("+avx512f,+avx512vl,+sse2");
-        features.disable("avx512f");
-        features.disable("rcpc");
-        assert_eq!(features.to_string(), "+avx512vl,+sse2,-avx512f,-rcpc");
+    fn test_keep_enabled_only_keeps_the_enabled_features_named() {
+        let mut features = CpuFeatures::parse("+avx2,+gfni,-sse4a,+sse2,-avx512f");
+        features.keep_enabled_only(&["sse2", "avx2", "sse4a"]);
+        assert_eq!(features.to_string(), "+avx2,+sse2");
     }
 }
