@@ -1,12 +1,15 @@
 use crate::{
+    ast::program::TypeEnv,
     commands::run::run,
     configuration::Configuration,
     constants::COMPILER_TEST_WORKING_PATH,
     env_vars::MAX_OPT_LEVEL_VAR,
     error::{panic_if_err, panic_with_msg, Errors},
-    misc::save_temporary_source,
+    generator::Generator,
+    misc::{save_temporary_source, Map},
     parse::parser::check_grammar_accepts,
 };
+use inkwell::{context::Context, module::Module, targets::TargetMachine};
 use std::{
     env,
     ffi::OsString,
@@ -14,7 +17,7 @@ use std::{
     io::{self, Write},
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Output, Stdio},
-    sync::Once,
+    sync::{Arc, Once},
     thread::sleep,
     time::{Duration, Instant},
 };
@@ -1016,4 +1019,26 @@ pub fn assert_failed_with(output: &Output, report: &str, what: &str) {
         String::from_utf8_lossy(&output.stdout),
         stderr,
     );
+}
+
+/// A generator over `module` that resolves no global and is given none, for a test that reads what
+/// the generator builds from types and signatures alone.
+pub fn standalone_generator<'c, 'm>(
+    context: &'c Context,
+    module: &'m Module<'c>,
+    target_machine: &TargetMachine,
+    config: &Configuration,
+    type_env: TypeEnv,
+) -> Generator<'c, 'm> {
+    Generator::new(
+        context,
+        module,
+        target_machine.get_target_data(),
+        config.clone(),
+        type_env,
+        Arc::new(Map::default()),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+    )
 }

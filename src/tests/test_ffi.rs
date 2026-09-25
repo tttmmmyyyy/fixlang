@@ -13,7 +13,8 @@ use crate::{
     generator::{enum_attribute_kind_id, Generator},
     misc::{function_name, Map},
     tests::test_util::{
-        emitted_llvm_ir, fix_command, test_source, test_source_fail, test_source_with_c, EmittedIr,
+        emitted_llvm_ir, fix_command, standalone_generator, test_source, test_source_fail,
+        test_source_with_c, EmittedIr,
     },
 };
 use inkwell::{
@@ -254,16 +255,12 @@ pub fn test_narrow_integer_extension_follows_the_target_abi() {
         let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
         let module = Generator::create_module("abi_test", &context, &target_machine);
         module.set_triple(&TargetTriple::create(triple));
-        let gc = Generator::new(
+        let gc = standalone_generator(
             &context,
             &module,
-            target_machine.get_target_data(),
-            config.clone(),
+            &target_machine,
+            &config,
             TypeEnv::default(),
-            Arc::new(Map::default()),
-            Default::default(),
-            Default::default(),
-            Default::default(),
         );
         let func = signature.get_or_declare_in_module(&"c_narrow".to_string(), &gc);
         let result_extended = func
@@ -309,6 +306,73 @@ pub fn test_ffi_call_reads_a_narrow_result() {
         uint16_t c_narrow_u16(int n) { return (uint16_t)(n * 3); }
     "##;
     test_source_with_c(&source, &c_source, function_name!());
+}
+
+/// An exported function's parameter narrower than the unit the ABI carries an integer in arrives in
+/// the low bits of a register, and the value is what those bits hold. The C caller here passes the
+/// low bits of a wider product, so on an ABI that leaves the bits above to the reader they hold the
+/// rest of that product, and the number the Fix side reads is the narrow one.
+#[test]
+pub fn test_ffi_export_reads_a_narrow_argument() {
+    let source = r##"
+        module Main;
+
+        widen_i8 : I8 -> I64;
+        widen_i8 = |x| x.i64;
+        FFI_EXPORT[widen_i8, c_widen_i8];
+
+        widen_u8 : U8 -> I64;
+        widen_u8 = |x| x.i64;
+        FFI_EXPORT[widen_u8, c_widen_u8];
+
+        widen_i16 : I16 -> I64;
+        widen_i16 = |x| x.i64;
+        FFI_EXPORT[widen_i16, c_widen_i16];
+
+        widen_u16 : U16 -> I64;
+        widen_u16 = |x| x.i64;
+        FFI_EXPORT[widen_u16, c_widen_u16];
+
+        main : IO ();
+        main = (
+            let n = (*IO::get_args).@size.c_int;
+            assert_eq(|_|"C reported a wrong argument", FFI_CALL[CInt run_c(CInt), n], 0.c_int);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        #include <stdint.h>
+
+        int64_t c_widen_i8(int8_t x);
+        int64_t c_widen_u8(uint8_t x);
+        int64_t c_widen_i16(int16_t x);
+        int64_t c_widen_u16(uint16_t x);
+
+        int run_c(int n) {
+            if (c_widen_i8((int8_t)(n * 3000)) != -72) { return 1; }
+            if (c_widen_u8((uint8_t)(n * 3000)) != 184) { return 2; }
+            if (c_widen_i16((int16_t)(n * 300000)) != -27680) { return 3; }
+            if (c_widen_u16((uint16_t)(n * 300000)) != 37856) { return 4; }
+            return 0;
+        }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+/// Apple's AArch64 extends under either name LLVM gives the architecture, and x86-64 extends
+/// whatever the operating system.
+#[test]
+pub fn test_c_abi_extends_narrow_integers_under_each_spelling() {
+    for (triple, extends) in [
+        ("aarch64-apple-darwin", true),
+        ("arm64-apple-darwin23.0.0", true),
+        ("aarch64-unknown-linux-gnu", false),
+        ("arm64-unknown-linux-gnu", false),
+        ("x86_64-apple-darwin", true),
+        ("x86_64-unknown-linux-gnu", true),
+    ] {
+        assert_eq!(c_abi_extends_narrow_integers(triple), extends, "{}", triple);
+    }
 }
 
 /// A boxed value returned to the foreign language arrives as an opaque pointer carrying one
