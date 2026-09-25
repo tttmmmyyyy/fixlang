@@ -523,7 +523,8 @@ pub struct Configuration {
     /// more stays one aggregate (see `Generator::type_parts`). Lowering it brings narrower types
     /// under the same treatment.
     pub max_split_scalars: usize,
-    /// The valgrind tool the built program is run under in `run` mode.
+    /// The valgrind tool the built program is run under in `run` mode. Under any tool, the program
+    /// is built without the CPU features whose instructions valgrind cannot decode.
     pub valgrind_tool: ValgrindTool,
     /// The sanitizer the generated program is instrumented with. Instrumenting is a property of the
     /// program that is built, so the project being built decides it, as it does the optimization
@@ -533,11 +534,11 @@ pub struct Configuration {
     /// aliases such as `CChar` are defined from it.
     pub c_type_sizes: CTypeSizes,
     /// The CPU the build generates code for, read from the machine the compiler runs on.
-    /// `get_target_machine` compiles for it, minus the features `disable_cpu_features_regex` turns
-    /// off, so the object files a build produces hold the instructions this CPU has.
+    /// `get_target_machine` compiles for it, minus the features `target_cpu_features` turns off, so
+    /// the object files a build produces hold the instructions this CPU has.
     pub host_cpu: HostCpu,
-    /// Regex patterns of the CPU features the generated code leaves unused; a feature the host
-    /// supports and no pattern matches is used.
+    /// Regex patterns of the CPU features the generated code leaves unused. A feature the host
+    /// supports and no pattern matches is used, unless running under valgrind turns it off.
     pub disable_cpu_features_regex: Vec<String>,
     /// Options handed to LLVM's own option parser before any code is generated, written as LLVM
     /// writes them. They reach settings the C API leaves out — among them the boundary a loop's
@@ -763,7 +764,7 @@ impl Configuration {
 
     /// Run the built program under `tool` in `run` mode. On a platform where valgrind is
     /// unavailable the request is dropped with a warning. Under any tool, the program is built
-    /// without the CPU features `cpu_features_disabled_by_name` names.
+    /// without the CPU features whose instructions valgrind cannot decode.
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {
         if !platform_valgrind_supported() && tool != ValgrindTool::None {
             warn_msg(&format!(
@@ -1182,9 +1183,10 @@ impl Configuration {
         object_generation.push_text(output_file_type.to_str());
         // A dynamic library's runtime is compiled position-independent.
         runtime_object.push_text(output_file_type.to_str());
-        // The CPU the code is generated for. The patterns are what the configuration says and the
-        // CPU is what the machine answers, and an object file holds the instructions of the CPU it
-        // was generated for, so a machine reading a cache another machine wrote needs both.
+        // The CPU the code is generated for. The CPU and its features are what the machine answers,
+        // and the features turned off, by pattern and by name, are what the configuration says. An
+        // object file holds the instructions of the CPU it was generated for, so a machine reading a
+        // cache another machine wrote needs all of them.
         object_generation.push_text(&host_cpu.name);
         object_generation.push_text(&host_cpu.features);
         object_generation.push_list(disable_cpu_features_regex);
@@ -1268,7 +1270,8 @@ impl Configuration {
     }
 
     /// The CPU features the generated code is compiled for: the ones the host supports, minus the
-    /// ones `disable_cpu_features_regex` and `cpu_features_disabled_by_name` turn off.
+    /// ones `disable_cpu_features_regex` turns off and, under valgrind, the ones whose instructions
+    /// valgrind cannot decode.
     pub fn target_cpu_features(&self) -> String {
         let mut features = CpuFeatures::parse(&self.host_cpu.features);
         features.disable_by_regexes(&self.disable_cpu_features_regex);
