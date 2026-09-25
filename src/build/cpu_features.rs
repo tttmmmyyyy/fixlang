@@ -36,9 +36,10 @@ impl HostCpu {
 /// nobody has checked turned off.
 pub struct ValgrindCpu {
     /// The baseline model, as LLVM names it.
-    pub model: &'static str,
-    /// The features valgrind decodes, as LLVM names them.
-    pub features: &'static [&'static str],
+    pub name: &'static str,
+    /// The features valgrind decodes, as LLVM names them. The program is built with those of them
+    /// the host has.
+    pub decodable_features: &'static [&'static str],
 }
 
 impl ValgrindCpu {
@@ -48,16 +49,16 @@ impl ValgrindCpu {
     pub fn of_this_architecture() -> Option<ValgrindCpu> {
         match ARCH {
             "x86_64" => Some(ValgrindCpu {
-                model: "x86-64",
-                features: &[
+                name: "x86-64",
+                decodable_features: &[
                     "64bit", "cmov", "cx8", "cx16", "fxsr", "mmx", "sahf", "sse", "sse2", "sse3",
                     "ssse3", "sse4.1", "sse4.2", "crc32", "popcnt", "avx", "avx2", "fma", "f16c",
                     "bmi", "bmi2", "lzcnt", "movbe", "aes", "pclmul",
                 ],
             }),
             "aarch64" => Some(ValgrindCpu {
-                model: "generic",
-                features: &["fp-armv8", "neon", "crc", "lse", "aes", "sha2", "rdm"],
+                name: "generic",
+                decodable_features: &["fp-armv8", "neon", "crc", "lse", "aes", "sha2", "rdm"],
             }),
             _ => None,
         }

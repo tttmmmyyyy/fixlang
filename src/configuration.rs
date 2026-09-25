@@ -1251,7 +1251,7 @@ impl Configuration {
     /// architecture's baseline (`ValgrindCpu`).
     pub fn target_cpu_name(&self) -> String {
         match self.valgrind_cpu() {
-            Some(valgrind_cpu) => valgrind_cpu.model.to_string(),
+            Some(valgrind_cpu) => valgrind_cpu.name.to_string(),
             None => self.host_cpu.name.clone(),
         }
     }
@@ -1262,7 +1262,7 @@ impl Configuration {
     pub fn target_cpu_features(&self) -> String {
         let mut features = CpuFeatures::parse(&self.host_cpu.features);
         if let Some(valgrind_cpu) = self.valgrind_cpu() {
-            features.keep_enabled_only(valgrind_cpu.features);
+            features.keep_enabled_only(valgrind_cpu.decodable_features);
         }
         features.disable_by_regexes(&self.disable_cpu_features_regex);
         features.to_string()
@@ -1977,7 +1977,7 @@ mod tests {
         }
         let decodable = ValgrindCpu::of_this_architecture()
             .expect("an entry for the host")
-            .features;
+            .decodable_features;
         let mut config = Configuration::develop_mode();
         config.host_cpu.features = format!("+{},+{}", decodable[0], decodable[1]);
         config.disable_cpu_features_regex = vec![format!("^{}$", regex::escape(decodable[1]))];
@@ -2006,7 +2006,7 @@ mod tests {
             return;
         }
         let valgrind_cpu = ValgrindCpu::of_this_architecture().expect("an entry for the host");
-        let decodable = valgrind_cpu.features;
+        let decodable = valgrind_cpu.decodable_features;
         let mut config = Configuration::develop_mode();
         config.host_cpu.features = format!(
             "+{},+a-feature-nobody-checked,-{}",
@@ -2014,7 +2014,7 @@ mod tests {
         );
         config.set_valgrind(ValgrindTool::MemCheck);
 
-        assert_eq!(config.target_cpu_name(), valgrind_cpu.model);
+        assert_eq!(config.target_cpu_name(), valgrind_cpu.name);
         assert_eq!(config.target_cpu_features(), format!("+{}", decodable[0]));
     }
 

@@ -168,10 +168,10 @@ pub fn test_vectorized_byte_shifts_run_under_memcheck() {
         main = (
             let args = *IO::get_args;
             let n = 4096 + args.@size;
-            let arr0 = Array::from_map(n, |i| (i * i + args.@size).u8);
-            let arr = Array::from_map(n, |i| arr0.@(i).shift_right(3_U8));
-            let s = arr.to_iter.fold(0, |x, acc| acc + x.i64);
-            println(s.to_string)
+            let bytes = Array::from_map(n, |i| (i * i + args.@size).u8);
+            let shifted = Array::from_map(n, |i| bytes.@(i).shift_right(3_U8));
+            let sum = shifted.to_iter.fold(0, |x, acc| acc + x.i64);
+            println(sum.to_string)
         );
     "#;
     let mut config = Configuration::develop_mode();
