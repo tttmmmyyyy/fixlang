@@ -91,6 +91,30 @@ static int64_t fixruntime_write_non_finite_text(double v, char *buf, int64_t siz
 // takes a sign, a digit, a point, the places and a four byte power of ten.
 #define PRECISION_TEXT_SIZE (1 + 309 + 1 + 255)
 
+// Writes `v` at `buf` with `precision` digits after the point, null-terminated, and reports how
+// many bytes the text took, the null left out.
+//
+// # Arguments
+// * `write_finite` - The Ryu printf function that writes a finite `v`: `d2fixed_buffered_n` or
+//   `d2exp_buffered_n`.
+static int64_t fixruntime_write_precision_text(int (*write_finite)(double, uint32_t, char *), double v,
+                                               uint8_t precision, char *buf, int64_t size)
+{
+    if (!isfinite(v))
+    {
+        return fixruntime_write_non_finite_text(v, buf, size);
+    }
+    char text[PRECISION_TEXT_SIZE];
+    int written = write_finite(v, precision, text);
+    if (written > PRECISION_TEXT_SIZE)
+    {
+        fprintf(stderr, "Ryu wrote a number's text of %d bytes past a buffer of %d\n", written,
+                PRECISION_TEXT_SIZE);
+        fixruntime_abort();
+    }
+    return fixruntime_copy_float_text(text, written, buf, size);
+}
+
 // Each of the four below writes `v` at `buf` with `precision` digits after the point, null-
 // terminated, and reports how many bytes the text took, the null left out. The `exp` ones write
 // the number in scientific notation, and the others write it positionally. A finite number's text
@@ -98,42 +122,22 @@ static int64_t fixruntime_write_non_finite_text(double v, char *buf, int64_t siz
 // the `double` it widens to, as `printf` takes it.
 int64_t fixruntime_f32_to_str_exp_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
-    if (!isfinite(v))
-    {
-        return fixruntime_write_non_finite_text(v, buf, size);
-    }
-    char text[PRECISION_TEXT_SIZE];
-    return fixruntime_copy_float_text(text, d2exp_buffered_n((double)v, precision, text), buf, size);
+    return fixruntime_write_precision_text(d2exp_buffered_n, (double)v, precision, buf, size);
 }
 
 int64_t fixruntime_f32_to_str_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
-    if (!isfinite(v))
-    {
-        return fixruntime_write_non_finite_text(v, buf, size);
-    }
-    char text[PRECISION_TEXT_SIZE];
-    return fixruntime_copy_float_text(text, d2fixed_buffered_n((double)v, precision, text), buf, size);
+    return fixruntime_write_precision_text(d2fixed_buffered_n, (double)v, precision, buf, size);
 }
 
 int64_t fixruntime_f64_to_str_exp_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
-    if (!isfinite(v))
-    {
-        return fixruntime_write_non_finite_text(v, buf, size);
-    }
-    char text[PRECISION_TEXT_SIZE];
-    return fixruntime_copy_float_text(text, d2exp_buffered_n(v, precision, text), buf, size);
+    return fixruntime_write_precision_text(d2exp_buffered_n, v, precision, buf, size);
 }
 
 int64_t fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
-    if (!isfinite(v))
-    {
-        return fixruntime_write_non_finite_text(v, buf, size);
-    }
-    char text[PRECISION_TEXT_SIZE];
-    return fixruntime_copy_float_text(text, d2fixed_buffered_n(v, precision, text), buf, size);
+    return fixruntime_write_precision_text(d2fixed_buffered_n, v, precision, buf, size);
 }
 
 // Writes the scientific text Ryu produced the way Fix spells a floating point number, and
@@ -164,6 +168,11 @@ static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t s
         read = 1;
     }
 
+    if (sci[read] < '0' || sci[read] > '9')
+    {
+        fprintf(stderr, "Ryu wrote a finite number as \"%s\", which does not open with a digit\n", sci);
+        fixruntime_abort();
+    }
     char digits[32];
     int digit_count = 0;
     for (; sci[read] != 'E'; read++)
