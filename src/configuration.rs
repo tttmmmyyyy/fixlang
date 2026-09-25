@@ -134,14 +134,22 @@ impl OutputFileType {
     }
 }
 
-/// Patterns of the CPU features whose instructions valgrind's decoder lacks, as late as valgrind
-/// 3.25.1. A program built with one of them stops with SIGILL at the first such instruction
-/// valgrind meets. The code generator emits them in ordinary code: AVX-512 and SVE from
-/// vectorized loops, and RCpc's `ldapr` for an atomic acquire load, which the reference counting of
-/// a threaded program performs. The names are LLVM's, and each pattern matches from the start of a
-/// name, so it reaches the features of one architecture only: `avx512` those of x86-64, and `sve`
-/// and `rcpc` those of AArch64.
-const FEATURES_VALGRIND_CANNOT_DECODE: [&str; 3] = ["^avx512", "^sve", "^rcpc"];
+/// The CPU features whose instructions valgrind's decoder lacks, as late as valgrind 3.25.1, on the
+/// architecture the compiler runs on and generates code for. A program built with one of them stops
+/// with SIGILL at the first such instruction valgrind meets, and the code generator emits them in
+/// ordinary code: AVX-512 and SVE from vectorized loops, and RCpc's `ldapr` for an atomic acquire
+/// load, which the reference counting of a threaded program performs.
+///
+/// The names are LLVM's. Turning a feature off turns off every feature that implies it, so one name
+/// covers a family: `avx512f` every AVX-512 extension, `sve` SVE2 and its extensions, and `rcpc` the
+/// later RCpc forms.
+fn features_valgrind_cannot_decode() -> &'static [&'static str] {
+    match std::env::consts::ARCH {
+        "x86_64" => &["avx512f"],
+        "aarch64" => &["sve", "rcpc"],
+        _ => &[],
+    }
+}
 
 /// The valgrind tool the built program is run under in `run` mode.
 #[derive(PartialEq, Eq, Clone, Copy)]
@@ -528,6 +536,11 @@ pub struct Configuration {
     /// Regex patterns of the CPU features the generated code leaves unused; a feature the host
     /// supports and no pattern matches is used.
     pub disable_cpu_features_regex: Vec<String>,
+    /// The CPU features the generated code leaves unused, named as LLVM names them. The patterns
+    /// above reach only the features the host lists; a name here is turned off whether or not the
+    /// host lists it, which is what keeps off a feature LLVM takes from the CPU's model. On AArch64
+    /// Linux the host lists only what the kernel reports, and RCpc comes from the model alone.
+    pub disabled_cpu_features: Vec<String>,
     /// Options handed to LLVM's own option parser before any code is generated, written as LLVM
     /// writes them. They reach settings the C API leaves out — among them the boundary a loop's
     /// code starts on, which moves how fast the CPU runs it. LLVM ignores an option it does not
@@ -669,6 +682,7 @@ impl Configuration {
             c_type_sizes: CTypeSizes::load_or_check()?,
             host_cpu: HostCpu::of_this_machine(),
             disable_cpu_features_regex: vec![],
+            disabled_cpu_features: vec![],
             llvm_args: vec![],
             preliminary_commands: vec![],
             allow_preliminary_commands: false,
@@ -752,7 +766,7 @@ impl Configuration {
 
     /// Run the built program under `tool` in `run` mode. On a platform where valgrind is
     /// unavailable the request is dropped with a warning. Any tool also disables the CPU features
-    /// whose instructions valgrind cannot decode, listed in `FEATURES_VALGRIND_CANNOT_DECODE`.
+    /// whose instructions valgrind cannot decode, listed by `features_valgrind_cannot_decode`.
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {
         if !platform_valgrind_supported() && tool != ValgrindTool::None {
             warn_msg(&format!(
@@ -764,10 +778,10 @@ impl Configuration {
         }
         self.valgrind_tool = tool;
         if tool != ValgrindTool::None {
-            self.disable_cpu_features_regex.extend(
-                FEATURES_VALGRIND_CANNOT_DECODE
+            self.disabled_cpu_features.extend(
+                features_valgrind_cannot_decode()
                     .iter()
-                    .map(|pattern| pattern.to_string()),
+                    .map(|name| name.to_string()),
             );
         }
         self
@@ -1076,6 +1090,7 @@ impl Configuration {
             output_file_type,
             host_cpu,
             disable_cpu_features_regex,
+            disabled_cpu_features,
             llvm_args,
 
             // Reach the generated code through what they decide, which is pushed in their place:
@@ -1183,6 +1198,7 @@ impl Configuration {
         object_generation.push_text(&host_cpu.name);
         object_generation.push_text(&host_cpu.features);
         object_generation.push_list(disable_cpu_features_regex);
+        object_generation.push_list(disabled_cpu_features);
         // What LLVM was told before it generated the code.
         object_generation.push_list(llvm_args);
 
@@ -1262,10 +1278,13 @@ impl Configuration {
     }
 
     /// The CPU features the generated code is compiled for: the ones the host supports, minus the
-    /// ones `disable_cpu_features_regex` turns off.
+    /// ones `disable_cpu_features_regex` and `disabled_cpu_features` turn off.
     pub fn target_cpu_features(&self) -> String {
         let mut features = CpuFeatures::parse(&self.host_cpu.features);
         features.disable_by_regexes(&self.disable_cpu_features_regex);
+        for name in &self.disabled_cpu_features {
+            features.disable(name);
+        }
         features.to_string()
     }
 
@@ -1642,8 +1661,8 @@ int main() {
 #[cfg(test)]
 mod tests {
     use super::{
-        llvm_passes_for_speed, Configuration, FixOptimizationLevel, OutputFileType, Sanitizer,
-        SubCommand, ValgrindTool,
+        features_valgrind_cannot_decode, llvm_passes_for_speed, Configuration,
+        FixOptimizationLevel, OutputFileType, Sanitizer, SubCommand, ValgrindTool,
     };
     use crate::misc::{platform_valgrind_supported, Map};
     use std::fs;
@@ -1941,31 +1960,29 @@ mod tests {
     }
 
     /// Running under valgrind keeps the program off the features whose instructions valgrind cannot
-    /// decode — AVX-512 on x86-64, and SVE and RCpc on AArch64 — and leaves every other
-    /// feature the host has.
+    /// decode, whether the host lists them or LLVM takes them from the CPU's model, and leaves every
+    /// other feature the host has. Each is turned off after everything the host lists, since a
+    /// feature listed later would turn back on a feature it implies.
     #[test]
     fn test_valgrind_turns_off_the_features_it_cannot_decode() {
         if !platform_valgrind_supported() {
             return;
         }
+        let undecodable = features_valgrind_cannot_decode();
+        assert!(!undecodable.is_empty(), "the host architecture has a list");
+        // The first undecodable feature is one the host lists; the rest come from the CPU's model.
         let mut config = Configuration::develop_mode();
-        config.host_cpu.features =
-            "+avx512f,+avx2,+sve,+sve2,+rcpc,+rcpc-immo,+lse,+neon".to_string();
-        config.disable_cpu_features_regex = vec![];
+        config.host_cpu.features = format!("+{},+crc", undecodable[0]);
+        config.disabled_cpu_features = vec![];
         config.set_valgrind(ValgrindTool::MemCheck);
 
         let features = config.target_cpu_features();
-        for kept in ["+avx2", "+lse", "+neon"] {
-            assert!(features.contains(kept), "{} is kept: {}", kept, features);
-        }
-        for dropped in ["avx512f", "sve", "sve2", "rcpc", "rcpc-immo"] {
-            assert!(
-                features.contains(&format!("-{}", dropped)),
-                "{} is turned off: {}",
-                dropped,
-                features
-            );
-        }
+        let expected_tail = undecodable
+            .iter()
+            .map(|name| format!("-{}", name))
+            .collect::<Vec<_>>()
+            .join(",");
+        assert_eq!(features, format!("+crc,{}", expected_tail));
     }
 
     /// `fix build` and `fix run` produce the same code from the same program, so they share the hash

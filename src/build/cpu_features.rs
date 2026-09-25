@@ -63,6 +63,14 @@ impl CpuFeatures {
             .join(",")
     }
 
+    /// Turns the feature `name` off, and every feature that implies it, whether or not the list
+    /// holds it. LLVM applies the list in order and turning a feature on turns on what it implies, so
+    /// the feature is moved to the end: `+avx512vl` after `-avx512f` would turn `avx512f` back on.
+    pub fn disable(&mut self, name: &str) {
+        self.data.retain(|(listed, _)| listed != name);
+        self.data.push((name.to_string(), FeatureState::Disabled));
+    }
+
     // Disable CPU features whose names match any of the given regexes.
     pub fn disable_by_regexes(&mut self, regexes: &[String]) {
         // All regexes are valid because they are validated by `validate_disable_cpu_features()`
