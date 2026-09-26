@@ -2952,6 +2952,16 @@ namespace String {
     _read_unsigned_decimal_integer : U64 -> String -> Result ErrMsg U64;
     _read_unsigned_decimal_integer = |max, str| str._read_decimal_integer(max, 0_U64).map(|(_, magnitude)| magnitude);
 
+    // Answers with what reading `str` as a floating point number comes to, from what the reader in
+    // `float_text.c` answered: the number `v`, and the `outcome` it recorded, one of the
+    // `NUMBER_TEXT_*` values there.
+    _float_text_result : U8 -> a -> String -> Result ErrMsg a;
+    _float_text_result = |outcome, v, str| (
+        if outcome == 1_U8 { Result::err("Failed to convert string to number (invalid format): " + str) };
+        if outcome == 2_U8 { Result::err("Failed to convert string to number (out of range): " + str) };
+        Result::ok(v)
+    );
+
     // Answers with the index of the first byte at or after `i` that is not a decimal digit.
     // `bytes` holds a byte after its digits that is not one, as a `String`'s null is.
     _skip_decimal_digits : I64 -> Array U8 -> I64;
@@ -4187,19 +4197,20 @@ namespace F32 {
 impl F32 : FromString {
     // Reads a decimal number: an optional `+` or `-`, digits with an optional point among them, and
     // an optional power of ten, such as `3.14`, `-1e10`, `.5` or `2.5E-3`. Also reads `inf`,
-    // `infinity` and `nan` in any case, with an optional sign.
+    // `infinity` and `nan` in any case, with an optional sign, and `nan` followed by letters,
+    // digits and underscores in parentheses, such as `nan(1)`.
     //
     // The number is rounded to the nearest `F32`. A text naming a number too large for `F32`, or a
     // number other than zero too small for it to hold at all, is an error.
     from_string = |str| (
-        str.borrow_c_str_io(|c_str| (
+        // The function given to `borrow_c_str_io` refers to nothing but its argument, so calling it
+        // allocates no closure.
+        let (v, outcome) = str.borrow_c_str_io(|c_str| (
             let v = *FFI_CALL_IO[F32 fixruntime_read_f32(Ptr), c_str];
-            // The three values are `NUMBER_TEXT_*` in `float_text.c`.
             let outcome = *FFI_CALL_IO[U8 fixruntime_number_text_outcome()];
-            if outcome == 1_U8 { Result::err("Failed to convert string to number (invalid format): " + str).pure };
-            if outcome == 2_U8 { Result::err("Failed to convert string to number (out of range): " + str).pure };
-            Result::ok(v).pure
-        )).unsafe_perform
+            (v, outcome).pure
+        )).unsafe_perform;
+        str._float_text_result(outcome, v)
     );
 }
 
@@ -4275,19 +4286,20 @@ namespace F64 {
 impl F64 : FromString {
     // Reads a decimal number: an optional `+` or `-`, digits with an optional point among them, and
     // an optional power of ten, such as `3.14`, `-1e10`, `.5` or `2.5E-3`. Also reads `inf`,
-    // `infinity` and `nan` in any case, with an optional sign.
+    // `infinity` and `nan` in any case, with an optional sign, and `nan` followed by letters,
+    // digits and underscores in parentheses, such as `nan(1)`.
     //
     // The number is rounded to the nearest `F64`. A text naming a number too large for `F64`, or a
     // number other than zero too small for it to hold at all, is an error.
     from_string = |str| (
-        str.borrow_c_str_io(|c_str| (
+        // The function given to `borrow_c_str_io` refers to nothing but its argument, so calling it
+        // allocates no closure.
+        let (v, outcome) = str.borrow_c_str_io(|c_str| (
             let v = *FFI_CALL_IO[F64 fixruntime_read_f64(Ptr), c_str];
-            // The three values are `NUMBER_TEXT_*` in `float_text.c`.
             let outcome = *FFI_CALL_IO[U8 fixruntime_number_text_outcome()];
-            if outcome == 1_U8 { Result::err("Failed to convert string to number (invalid format): " + str).pure };
-            if outcome == 2_U8 { Result::err("Failed to convert string to number (out of range): " + str).pure };
-            Result::ok(v).pure
-        )).unsafe_perform
+            (v, outcome).pure
+        )).unsafe_perform;
+        str._float_text_result(outcome, v)
     );
 }
 
