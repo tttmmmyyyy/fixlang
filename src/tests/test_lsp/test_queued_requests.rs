@@ -226,4 +226,50 @@ mod tests {
             .verify_no_protocol_error()
             .expect("Reader thread should not have errors");
     }
+
+    /// A request the server holds unanswered, waiting for a program to answer from, is answered
+    /// `RequestCancelled` when the client cancels it.
+    #[test]
+    fn test_a_cancellation_reaches_a_request_waiting_for_the_program() {
+        // The project file does not parse, so no analysis yields a program.
+        let (_temp_dir, project_dir) = setup_test_env("unreadable_project_file");
+        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
+        client
+            .initialize(&project_dir, Duration::from_secs(10))
+            .expect("Failed to initialize LSP");
+        client
+            .open_document(Path::new("main.fix"))
+            .expect("Failed to open main.fix");
+
+        let symbols_id = client
+            .send_request(
+                "textDocument/documentSymbol",
+                json!({ "textDocument": { "uri": client.file_uri(Path::new("main.fix")) } }),
+            )
+            .expect("Failed to send documentSymbol");
+        // Once the request after it is answered, the server has taken the documentSymbol request
+        // in and holds it.
+        let probe_id = request_tokens(&mut client);
+        client.expect_response(probe_id);
+        assert!(
+            client.take_response(symbols_id).is_none(),
+            "the documentSymbol request is expected to wait for a program"
+        );
+        client
+            .send_notification("$/cancelRequest", json!({ "id": symbols_id }))
+            .expect("Failed to send cancelRequest");
+
+        assert_eq!(
+            error_code(&client.expect_response(symbols_id)),
+            Some(REQUEST_CANCELLED),
+            "the client cancelled the documentSymbol request the server was holding, so it is \
+             expected to be answered RequestCancelled"
+        );
+        assert_answered_once(&mut client, symbols_id);
+
+        client.shutdown().expect("Failed to shutdown LSP");
+        client
+            .verify_no_protocol_error()
+            .expect("Reader thread should not have errors");
+    }
 }

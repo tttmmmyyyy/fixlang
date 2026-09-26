@@ -283,6 +283,21 @@ pub fn launch_language_server() {
                 send_response(id, Err::<(), _>(ResponseError::request_cancelled()));
                 continue;
             }
+            // A request waiting in a pending queue has been handed out and not answered.
+            Some(Incoming::LateCancellation(id)) => {
+                let pending = pending_document_symbol_requests
+                    .iter()
+                    .any(|req| req.id == id)
+                    || pending_workspace_symbol_requests
+                        .iter()
+                        .any(|req| req.id == id);
+                if pending {
+                    pending_document_symbol_requests.retain(|req| req.id != id);
+                    pending_workspace_symbol_requests.retain(|req| req.id != id);
+                    send_response(id, Err::<(), _>(ResponseError::request_cancelled()));
+                }
+                continue;
+            }
             None => break,
         };
 
