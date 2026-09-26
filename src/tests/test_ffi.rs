@@ -11,7 +11,7 @@ use crate::{
         RUNTIME_GET_ARGC,
     },
     generator::{enum_attribute_kind_id, Generator},
-    misc::{function_name, Map},
+    misc::function_name,
     tests::test_util::{
         emitted_llvm_ir, fix_command, standalone_generator, test_source, test_source_fail,
         test_source_with_c, EmittedIr,
@@ -26,7 +26,6 @@ use std::{
     fs::{self, File},
     io::Write,
     path::PathBuf,
-    sync::Arc,
 };
 
 // An exported function exchanges values with C through the C ABI, and the wrapper the compiler
@@ -519,17 +518,7 @@ fn names_of_runtime_functions_with_bodies(
     let context = Context::create();
     let target_machine = get_target_machine(config.get_llvm_opt_level(), config);
     let module = Generator::create_module("runtime_test", &context, &target_machine);
-    let mut gc = Generator::new(
-        &context,
-        &module,
-        target_machine.get_target_data(),
-        config.clone(),
-        type_env.clone(),
-        Arc::new(Map::default()),
-        Default::default(),
-        Default::default(),
-        Default::default(),
-    );
+    let mut gc = standalone_generator(&context, &module, &target_machine, config, type_env.clone());
     build_runtime(&mut gc, BuildMode::Declare);
     build_runtime(&mut gc, BuildMode::Implement);
 
@@ -856,9 +845,9 @@ pub fn test_ffi_call_promotes_only_what_follows_the_declared_parameters() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
-/// A parameter is a position like the result: the ABI carries a narrow integer in the low bits of a
-/// register and the sign says which side extends it, so the two calls ask the one declaration for
-/// opposite promises about the bits above the value.
+/// A parameter is a position like the result: `I8` and `U8` are different C types on every target,
+/// since a narrow integer is widened according to its sign, so the two calls describe the one C
+/// function in two ways that disagree.
 #[test]
 pub fn test_ffi_calls_of_one_c_name_taking_a_narrow_argument_at_two_signs_fails() {
     let source = r##"
@@ -934,9 +923,8 @@ pub fn test_ffi_calls_of_one_c_name_reading_a_wide_result_as_both_signs() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
-/// The ABI carries an integer narrower than 32 bits in the low bits of a register, and the sign is
-/// what says which side extends it. So the two descriptions ask the one declaration for opposite
-/// promises about the bits above the value.
+/// An integer narrower than 32 bits is widened according to its sign, so `I8` and `U8` are
+/// different C types on every target, and the two descriptions of the one C function disagree.
 #[test]
 pub fn test_ffi_calls_of_one_c_name_reading_a_narrow_result_as_both_signs_fails() {
     let source = r##"
