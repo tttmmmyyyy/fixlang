@@ -150,14 +150,14 @@ static const char FIXRUNTIME_HEX_DIGITS[17] = "0123456789abcdef";
 // How many hexadecimal digits a pointer is written with: every digit a `uint64_t` holds.
 #define FIXRUNTIME_PTR_DIGITS 16
 
-// Writes `ptr` at `buf` as `FIXRUNTIME_PTR_DIGITS` hexadecimal digits, null-terminated, leading
-// zeros among them, and reports how many digits it wrote. The pointer is taken as a `uint64_t` to
-// avoid a compiler warning.
-int64_t fixruntime_ptr_to_str(char *buf, uint64_t ptr)
+// Writes the address `ptr` holds at `buf` as `FIXRUNTIME_PTR_DIGITS` hexadecimal digits,
+// null-terminated, leading zeros among them, and reports how many digits it wrote.
+int64_t fixruntime_ptr_to_str(char *buf, const void *ptr)
 {
+    uintptr_t address = (uintptr_t)ptr;
     for (int i = 0; i < FIXRUNTIME_PTR_DIGITS; i++)
     {
-        buf[i] = FIXRUNTIME_HEX_DIGITS[(ptr >> (4 * (FIXRUNTIME_PTR_DIGITS - 1 - i))) & 0xF];
+        buf[i] = FIXRUNTIME_HEX_DIGITS[(address >> (4 * (FIXRUNTIME_PTR_DIGITS - 1 - i))) & 0xF];
     }
     buf[FIXRUNTIME_PTR_DIGITS] = '\0';
     return FIXRUNTIME_PTR_DIGITS;
