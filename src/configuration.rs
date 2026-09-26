@@ -1,5 +1,5 @@
 use crate::ast::name::FullName;
-use crate::build::cpu_features::{CpuFeatures, HostCpu};
+use crate::build::cpu_features::{CpuFeatures, HostCpu, ValgrindCpu};
 use crate::constants::{
     CHECK_C_TYPES_PATH, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME,
     C_LONG_NAME, C_SHORT_NAME, C_SIZE_T_NAME, C_TYPES_JSON_PATH, C_UNSIGNED_CHAR_NAME,
@@ -25,7 +25,13 @@ use std::fs::{self, File};
 use std::iter;
 use std::process::Command;
 use std::sync::Arc;
-use std::{env, path::PathBuf};
+use std::{
+    env::{
+        self,
+        consts::{ARCH, OS},
+    },
+    path::PathBuf,
+};
 
 /// Passes run before the `default<O3>` rounds at the optimization levels built for speed.
 ///
@@ -115,16 +121,16 @@ impl OutputFileType {
     pub fn default_file_name(&self) -> &'static str {
         match self {
             OutputFileType::Executable => {
-                if env::consts::OS == "windows" {
+                if OS == "windows" {
                     "a.exe"
                 } else {
                     "a.out"
                 }
             }
             OutputFileType::DynamicLibrary => {
-                if env::consts::OS == "windows" {
+                if OS == "windows" {
                     "lib.dll"
-                } else if env::consts::OS == "macos" {
+                } else if OS == "macos" {
                     "lib.dylib"
                 } else {
                     "lib.so"
@@ -503,7 +509,8 @@ pub struct Configuration {
     /// more stays one aggregate (see `Generator::type_parts`). Lowering it brings narrower types
     /// under the same treatment.
     pub max_split_scalars: usize,
-    /// The valgrind tool the built program is run under in `run` mode.
+    /// The valgrind tool the built program is run under in `run` mode. Under any tool, the program
+    /// is built with only the CPU features valgrind decodes.
     pub valgrind_tool: ValgrindTool,
     /// The sanitizer the generated program is instrumented with. Instrumenting is a property of the
     /// program that is built, so the project being built decides it, as it does the optimization
@@ -512,12 +519,13 @@ pub struct Configuration {
     /// The size of each C type on the target, read from the C compiler. The `Std::FFI` type
     /// aliases such as `CChar` are defined from it.
     pub c_type_sizes: CTypeSizes,
-    /// The CPU the build generates code for, read from the machine the compiler runs on.
-    /// `get_target_machine` compiles for it, minus the features `disable_cpu_features_regex` turns
-    /// off, so the object files a build produces hold the instructions this CPU has.
+    /// The CPU of the machine the compiler runs on. The build generates code for the CPU
+    /// `target_cpu_name` and `target_cpu_features` derive from it, so the object files a build
+    /// produces hold only instructions this CPU has.
     pub host_cpu: HostCpu,
-    /// Regex patterns of the CPU features the generated code leaves unused; a feature the host
-    /// supports and no pattern matches is used.
+    /// Regex patterns of the CPU features the generated code leaves unused. A feature the host
+    /// supports and no pattern matches is used, unless the program runs under valgrind and
+    /// `ValgrindCpu` leaves the feature out.
     pub disable_cpu_features_regex: Vec<String>,
     /// Options handed to LLVM's own option parser before any code is generated, written as LLVM
     /// writes them. They reach settings the C API leaves out — among them the boundary a loop's
@@ -742,8 +750,8 @@ impl Configuration {
     }
 
     /// Run the built program under `tool` in `run` mode. On a platform where valgrind is
-    /// unavailable the request is dropped with a warning. Any tool also disables the AVX-512
-    /// features valgrind cannot interpret (#41).
+    /// unavailable the request is dropped with a warning. Under any tool, the program is built with
+    /// only the CPU features valgrind decodes (`ValgrindCpu`).
     pub fn set_valgrind(&mut self, tool: ValgrindTool) -> &mut Configuration {
         if !platform_valgrind_supported() && tool != ValgrindTool::None {
             warn_msg(&format!(
@@ -754,10 +762,6 @@ impl Configuration {
             return self;
         }
         self.valgrind_tool = tool;
-        if tool != ValgrindTool::None {
-            // Valgrind-3.22.0 does not support AVX-512 (#41).
-            self.disable_cpu_features_regex.push("avx512.*".to_string());
-        }
         self
     }
 
@@ -1006,7 +1010,7 @@ impl Configuration {
     pub fn set_backtrace(&mut self) {
         self.backtrace = true;
         self.runtime_c_macro.push("BACKTRACE".to_string());
-        if env::consts::OS == "linux" {
+        if OS == "linux" {
             self.add_dynamic_library("backtrace");
         }
     }
@@ -1014,7 +1018,7 @@ impl Configuration {
     /// Whether the generated code must keep its frame pointers. macOS's `backtrace()` walks them, so
     /// a build that prints a backtrace there keeps them.
     pub fn no_elim_frame_pointers(&self) -> bool {
-        self.backtrace && env::consts::OS == "macos"
+        self.backtrace && OS == "macos"
     }
 
     /// The LLVM passes to run over each generated module, in order. Each entry is a
@@ -1062,16 +1066,19 @@ impl Configuration {
             emit_symbols,
             max_split_scalars,
             output_file_type,
-            host_cpu,
-            disable_cpu_features_regex,
             llvm_args,
 
             // Reach the generated code through what they decide, which is pushed in their place:
             // `llvm_passes` is the pipeline `llvm_passes_override` gives where it gives one and the
-            // optimization level implies otherwise, and `entry_point_runs_tests` is what the
-            // subcommand decides about the code.
+            // optimization level implies otherwise, `entry_point_runs_tests` is what the
+            // subcommand decides about the code, and `target_cpu_name` and `target_cpu_features`
+            // are the CPU the code is generated for, which the host, the patterns and valgrind
+            // decide.
             llvm_passes_override: _,
             subcommand: _,
+            host_cpu: _,
+            disable_cpu_features_regex: _,
+            valgrind_tool: _,
 
             // What to compile. The sources themselves are hashed beside these hashes, by
             // `Program::module_dependency_hash` and `build_object_files_cache_hash`, so what a
@@ -1110,7 +1117,6 @@ impl Configuration {
             deprecation_mode: _,
 
             // How the built program is run, once it is built.
-            valgrind_tool: _,
             run_program_args: _,
         } = self;
 
@@ -1165,12 +1171,11 @@ impl Configuration {
         object_generation.push_text(output_file_type.to_str());
         // A dynamic library's runtime is compiled position-independent.
         runtime_object.push_text(output_file_type.to_str());
-        // The CPU the code is generated for. The patterns are what the configuration says and the
-        // CPU is what the machine answers, and an object file holds the instructions of the CPU it
-        // was generated for, so a machine reading a cache another machine wrote needs both.
-        object_generation.push_text(&host_cpu.name);
-        object_generation.push_text(&host_cpu.features);
-        object_generation.push_list(disable_cpu_features_regex);
+        // The CPU the code is generated for. An object file holds the instructions of the CPU it
+        // was generated for, so a machine reading a cache another machine wrote needs it, and so
+        // does a build under valgrind reading the cache of a build without it.
+        object_generation.push_text(&self.target_cpu_name());
+        object_generation.push_text(&self.target_cpu_features());
         // What LLVM was told before it generated the code.
         object_generation.push_list(llvm_args);
 
@@ -1249,12 +1254,36 @@ impl Configuration {
         self.emit_symbols || self.emit_rc_ir.is_some() || self.emit_llvm
     }
 
+    /// The CPU model the generated code is compiled for: the host's, or under valgrind the
+    /// architecture's baseline (`ValgrindCpu`).
+    pub fn target_cpu_name(&self) -> String {
+        match self.valgrind_cpu() {
+            Some(valgrind_cpu) => valgrind_cpu.name.to_string(),
+            None => self.host_cpu.name.clone(),
+        }
+    }
+
     /// The CPU features the generated code is compiled for: the ones the host supports, minus the
-    /// ones `disable_cpu_features_regex` turns off.
+    /// ones `disable_cpu_features_regex` turns off. Under valgrind, only those valgrind decodes
+    /// (`ValgrindCpu`) are kept.
     pub fn target_cpu_features(&self) -> String {
         let mut features = CpuFeatures::parse(&self.host_cpu.features);
+        if let Some(valgrind_cpu) = self.valgrind_cpu() {
+            features.keep_enabled_only(valgrind_cpu.decodable_features);
+        }
         features.disable_by_regexes(&self.disable_cpu_features_regex);
         features.to_string()
+    }
+
+    /// The CPU the program is built for under valgrind. It is `None`, and the code is generated for
+    /// the host's CPU, when the program runs without valgrind or this architecture has no
+    /// `ValgrindCpu`.
+    fn valgrind_cpu(&self) -> Option<ValgrindCpu> {
+        if self.valgrind_tool == ValgrindTool::None {
+            None
+        } else {
+            ValgrindCpu::of_this_architecture()
+        }
     }
 
     /// The `valgrind` invocation to run a built program under, set up for the tool selected in this
@@ -1350,7 +1379,7 @@ impl Configuration {
             // out the same way on every run, which is what lets the sanitizer start. A program built
             // by `fix build` is run by hand, so the same wrapper is what its user writes.
             let mut com = Command::new("setarch");
-            com.arg(env::consts::ARCH).arg("-R").arg(exec_path);
+            com.arg(ARCH).arg("-R").arg(exec_path);
             return Ok(com);
         }
         Ok(Command::new(exec_path))
@@ -1631,9 +1660,10 @@ int main() {
 mod tests {
     use super::{
         llvm_passes_for_speed, Configuration, FixOptimizationLevel, OutputFileType, Sanitizer,
-        SubCommand,
+        SubCommand, ValgrindTool,
     };
-    use crate::misc::Map;
+    use crate::build::cpu_features::{HostCpu, ValgrindCpu};
+    use crate::misc::{platform_valgrind_supported, Map};
     use std::fs;
     use std::path::Path;
 
@@ -1689,12 +1719,20 @@ mod tests {
     }
 
     /// The hash `hash` gives a build configuration to which `edit` has been applied.
+    ///
+    /// The configuration's CPU is fixed rather than read from the machine, so that a setting that
+    /// acts on the CPU's features has features to act on everywhere: LLVM lists none for an Apple
+    /// host.
     fn hash_after(
         hash: &impl Fn(&Configuration) -> String,
         edit: Box<dyn FnOnce(&mut Configuration)>,
     ) -> String {
         let mut config = Configuration::release_mode(SubCommand::Build)
             .unwrap_or_else(|errs| panic!("Failed to create a configuration: {}", errs));
+        config.host_cpu = HostCpu {
+            name: "a-cpu-model".to_string(),
+            features: "+a-feature,+another-feature".to_string(),
+        };
         edit(&mut config);
         hash(&config)
     }
@@ -1827,7 +1865,19 @@ mod tests {
             (
                 "disable_cpu_features_regex",
                 Box::new(|config: &mut Configuration| {
-                    config.disable_cpu_features_regex.push("avx.*".to_string())
+                    config
+                        .disable_cpu_features_regex
+                        .push("^a-feature$".to_string())
+                }),
+            ),
+            (
+                "valgrind_tool",
+                Box::new(|config: &mut Configuration| {
+                    config.valgrind_tool = if config.valgrind_tool == ValgrindTool::None {
+                        ValgrindTool::MemCheck
+                    } else {
+                        ValgrindTool::None
+                    }
                 }),
             ),
             (
@@ -1912,6 +1962,7 @@ mod tests {
     #[test]
     fn test_the_target_cpu_features_are_the_hosts_minus_the_disabled_ones() {
         let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
         config.host_cpu.features = "+avx512f,+avx2,+sse2".to_string();
         config.disable_cpu_features_regex = vec!["avx.*".to_string()];
 
@@ -1926,6 +1977,64 @@ mod tests {
             "a feature a pattern names is not generated for: {}",
             features
         );
+    }
+
+    /// Without valgrind, the code is generated for the host's CPU model.
+    #[test]
+    fn test_the_target_cpu_is_the_hosts_without_valgrind() {
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
+        config.host_cpu.name = "a-cpu-model".to_string();
+        assert_eq!(config.target_cpu_name(), "a-cpu-model");
+    }
+
+    /// Under valgrind, a feature a pattern names is left unused, even one valgrind decodes.
+    #[test]
+    fn test_a_disabled_feature_stays_off_under_valgrind() {
+        if !platform_valgrind_supported() {
+            return;
+        }
+        let decodable = ValgrindCpu::of_this_architecture()
+            .expect("an entry for the host")
+            .decodable_features;
+        let mut config = Configuration::develop_mode();
+        config.host_cpu.features = format!("+{},+{}", decodable[0], decodable[1]);
+        config.disable_cpu_features_regex = vec![format!("^{}$", regex::escape(decodable[1]))];
+        config.set_valgrind(ValgrindTool::MemCheck);
+
+        let features = config.target_cpu_features();
+        let entries = features.split(',').collect::<Vec<_>>();
+        assert!(
+            entries.contains(&format!("+{}", decodable[0]).as_str()),
+            "a decodable feature no pattern names is kept: {}",
+            features
+        );
+        assert!(
+            !entries.contains(&format!("+{}", decodable[1]).as_str()),
+            "a feature a pattern names is not generated for: {}",
+            features
+        );
+    }
+
+    /// Running under valgrind builds the program for the architecture's baseline CPU, with only the
+    /// features the host has that valgrind decodes: a feature the host has and valgrind was never
+    /// checked against is left off.
+    #[test]
+    fn test_valgrind_keeps_only_the_features_it_decodes() {
+        if !platform_valgrind_supported() {
+            return;
+        }
+        let valgrind_cpu = ValgrindCpu::of_this_architecture().expect("an entry for the host");
+        let decodable = valgrind_cpu.decodable_features;
+        let mut config = Configuration::develop_mode();
+        config.host_cpu.features = format!(
+            "+{},+a-feature-nobody-checked,-{}",
+            decodable[0], decodable[1]
+        );
+        config.set_valgrind(ValgrindTool::MemCheck);
+
+        assert_eq!(config.target_cpu_name(), valgrind_cpu.name);
+        assert_eq!(config.target_cpu_features(), format!("+{}", decodable[0]));
     }
 
     /// `fix build` and `fix run` produce the same code from the same program, so they share the hash
