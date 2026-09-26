@@ -1279,7 +1279,7 @@ namespace IO {
     // 
     // * `msg` - The string to be printed.
     eprint : String -> IO ();
-    eprint = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
+    eprint = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
 
     // Prints a string followed by a newline to stderr.
     // 
@@ -1472,7 +1472,7 @@ namespace IO {
     //
     // * `msg` - The string to be printed.
     print : String -> IO ();
-    print = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
+    print = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
 
     // Prints a string followed by a newline to stdout.
     // 
@@ -1482,7 +1482,7 @@ namespace IO {
     println : String -> IO ();
     println = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fixruntime_fputs_line(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
 
-    // Raads all characters from a file.
+    // Reads all characters from a file.
     // 
     // # Parameters
     //
@@ -4328,7 +4328,7 @@ namespace Debug {
     //
     // # Parameters
     //
-    // * `msg`    
+    // * `msg` - The string to be printed.
     debug_eprint : String -> ();
     debug_eprint = |msg| (eprint(msg);; stderr.flush;; pure()).unsafe_perform;
 
@@ -4338,7 +4338,7 @@ namespace Debug {
     //
     // # Parameters
     //
-    // * `msg`    
+    // * `msg` - The string to be printed.
     debug_eprintln : String -> ();
     debug_eprintln = |msg| (eprintln(msg);; stderr.flush;; pure()).unsafe_perform;
 
@@ -4348,7 +4348,7 @@ namespace Debug {
     //
     // # Parameters
     //
-    // * `msg`        
+    // * `msg` - The string to be printed.
     debug_print : String -> ();
     debug_print = |msg| (print(msg);; stdout.flush;; pure()).unsafe_perform;
 
@@ -4358,7 +4358,7 @@ namespace Debug {
     //
     // # Parameters
     //
-    // * `msg`        
+    // * `msg` - The string to be printed.
     debug_println : String -> ();
     debug_println = |msg| (println(msg);; stdout.flush;; pure()).unsafe_perform;
 }
