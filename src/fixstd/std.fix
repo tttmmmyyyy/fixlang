@@ -3824,7 +3824,8 @@ namespace Ptr {
 
 impl Ptr : ToString {
     to_string = |v| (
-        let data = Array::empty(17); // len(ffffffffffffffff) + 1
+        // Holds the `FIXRUNTIME_PTR_DIGITS` digits `fixruntime_ptr_to_str` in runtime.c writes, and the null after them.
+        let data = Array::empty(17);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_ptr_to_str(Ptr, Ptr), ptr, v]);
         data._unsafe_from_c_str_with_len(length)
     );
