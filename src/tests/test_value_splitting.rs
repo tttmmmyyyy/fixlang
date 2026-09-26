@@ -4,11 +4,9 @@ use crate::constants::MAX_SPLIT_SCALARS;
 use crate::elaboration::elaborate_via_config;
 use crate::error::panic_if_err;
 use crate::generator::Generator;
-use crate::misc::Map;
-use crate::tests::test_util::{run_source_capture, test_source};
+use crate::tests::test_util::{run_source_capture, standalone_generator, test_source};
 use inkwell::context::Context;
 use inkwell::types::BasicTypeEnum;
-use std::sync::Arc;
 
 // A program that carries unboxed structs every way the two representations differ: it builds a
 // nested one, reads and modifies a field of a field, passes one across a function boundary and
@@ -81,19 +79,7 @@ fn test_split_limit_boundary() {
     let context = Context::create();
     let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
     let module = Generator::create_module("split_limit_test", &context, &target_machine);
-    // The part counts below are read off the types alone, so this generator resolves no global and
-    // is given none.
-    let gc = Generator::new(
-        &context,
-        &module,
-        target_machine.get_target_data(),
-        config.clone(),
-        type_env,
-        Arc::new(Map::default()),
-        Default::default(),
-        Default::default(),
-        Default::default(),
-    );
+    let gc = standalone_generator(&context, &module, &target_machine, &config, type_env);
 
     let limit = MAX_SPLIT_SCALARS;
     let scalar = context.i64_type().into();
@@ -389,19 +375,7 @@ fn test_field_part_ranges_tile_the_part_list() {
     let context = Context::create();
     let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
     let module = Generator::create_module("part_range_test", &context, &target_machine);
-    // The part lists below are read off the types alone, so this generator resolves no global and
-    // is given none.
-    let gc = Generator::new(
-        &context,
-        &module,
-        target_machine.get_target_data(),
-        config.clone(),
-        type_env,
-        Arc::new(Map::default()),
-        Default::default(),
-        Default::default(),
-        Default::default(),
-    );
+    let gc = standalone_generator(&context, &module, &target_machine, &config, type_env);
 
     // A struct of `n` scalars of alternating class, led by a zero-sized member that yields no part.
     let mixed = |n: usize| {
