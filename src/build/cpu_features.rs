@@ -1,4 +1,5 @@
 use inkwell::targets::TargetMachine;
+use regex::Regex;
 use std::env::consts::ARCH;
 
 /// The CPU of the machine a build runs on, as LLVM names it.
@@ -64,21 +65,28 @@ impl ValgrindCpu {
     }
 }
 
-// A struct to parse and manipulate CPU features obtained by `TargetMachine::get_host_cpu_features()`.
+/// A list of CPU features in the form LLVM reads and `TargetMachine::get_host_cpu_features` writes,
+/// such as `+avx2,-avx512f`. LLVM applies the list in order.
 pub struct CpuFeatures {
+    /// Each feature's name, as LLVM names it, and whether the list turns it on or off.
     data: Vec<(String, FeatureState)>,
 }
 
+/// Whether a list of CPU features turns a feature on or off.
 enum FeatureState {
+    /// Turned on, written `+name`.
     Enabled,
+    /// Turned off, written `-name`.
     Disabled,
 }
 
 impl CpuFeatures {
+    /// Reads a comma-separated list of `+name` and `-name`. An entry with another prefix panics: the
+    /// list comes from LLVM, never from the user.
     pub fn parse(features: &str) -> CpuFeatures {
         let mut data = vec![];
         for feature in features.split(',') {
-            if feature.len() == 0 {
+            if feature.is_empty() {
                 continue;
             }
             // `feature` is in the form of `(+/-)name`.
@@ -93,6 +101,7 @@ impl CpuFeatures {
         CpuFeatures { data }
     }
 
+    /// Writes the list in the form `parse` reads.
     pub fn to_string(&self) -> String {
         self.data
             .iter()
@@ -112,12 +121,12 @@ impl CpuFeatures {
         });
     }
 
-    // Disable CPU features whose names match any of the given regexes.
+    /// Turns off each feature in the list whose name matches one of `regexes`, where it stands.
     pub fn disable_by_regexes(&mut self, regexes: &[String]) {
         // All regexes are valid because they are validated by `validate_disable_cpu_features()`
         let regexes = regexes
             .iter()
-            .map(|s| regex::Regex::new(s).unwrap())
+            .map(|pattern| Regex::new(pattern).unwrap())
             .collect::<Vec<_>>();
         for (name, state) in &mut self.data {
             for re in &regexes {

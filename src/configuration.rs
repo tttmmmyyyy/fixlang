@@ -25,7 +25,13 @@ use std::fs::{self, File};
 use std::iter;
 use std::process::Command;
 use std::sync::Arc;
-use std::{env, path::PathBuf};
+use std::{
+    env::{
+        self,
+        consts::{ARCH, OS},
+    },
+    path::PathBuf,
+};
 
 /// Passes run before the `default<O3>` rounds at the optimization levels built for speed.
 ///
@@ -115,16 +121,16 @@ impl OutputFileType {
     pub fn default_file_name(&self) -> &'static str {
         match self {
             OutputFileType::Executable => {
-                if env::consts::OS == "windows" {
+                if OS == "windows" {
                     "a.exe"
                 } else {
                     "a.out"
                 }
             }
             OutputFileType::DynamicLibrary => {
-                if env::consts::OS == "windows" {
+                if OS == "windows" {
                     "lib.dll"
-                } else if env::consts::OS == "macos" {
+                } else if OS == "macos" {
                     "lib.dylib"
                 } else {
                     "lib.so"
@@ -1004,7 +1010,7 @@ impl Configuration {
     pub fn set_backtrace(&mut self) {
         self.backtrace = true;
         self.runtime_c_macro.push("BACKTRACE".to_string());
-        if env::consts::OS == "linux" {
+        if OS == "linux" {
             self.add_dynamic_library("backtrace");
         }
     }
@@ -1012,7 +1018,7 @@ impl Configuration {
     /// Whether the generated code must keep its frame pointers. macOS's `backtrace()` walks them, so
     /// a build that prints a backtrace there keeps them.
     pub fn no_elim_frame_pointers(&self) -> bool {
-        self.backtrace && env::consts::OS == "macos"
+        self.backtrace && OS == "macos"
     }
 
     /// The LLVM passes to run over each generated module, in order. Each entry is a
@@ -1373,7 +1379,7 @@ impl Configuration {
             // out the same way on every run, which is what lets the sanitizer start. A program built
             // by `fix build` is run by hand, so the same wrapper is what its user writes.
             let mut com = Command::new("setarch");
-            com.arg(env::consts::ARCH).arg("-R").arg(exec_path);
+            com.arg(ARCH).arg("-R").arg(exec_path);
             return Ok(com);
         }
         Ok(Command::new(exec_path))
