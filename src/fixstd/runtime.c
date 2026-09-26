@@ -4,6 +4,9 @@ The C functions and values the Fix standard library is implemented with.
 `fix build` compiles this source into an object file and links it into the program it builds.
 */
 
+// glibc declares `fputs_unlocked` for a source that asks for the GNU extensions.
+#define _GNU_SOURCE
+
 #include <ctype.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -326,7 +329,12 @@ FILE *fixruntime_c_stderr()
 int fixruntime_fputs_line(const char *str, FILE *file)
 {
     flockfile(file);
+#ifdef __GLIBC__
+    // Skips taking the lock that this function already holds.
+    int res = fputs_unlocked(str, file);
+#else
     int res = fputs(str, file);
+#endif
     if (res >= 0 && putc_unlocked('\n', file) == EOF)
     {
         res = EOF;
