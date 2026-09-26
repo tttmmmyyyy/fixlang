@@ -10,9 +10,8 @@ use crate::fixstd::builtin::{
     make_u8_ty,
 };
 use crate::generator::Generator;
-use crate::misc::Map;
 use crate::object::ty_to_object_ty;
-use crate::tests::test_util::test_source;
+use crate::tests::test_util::{standalone_generator, test_source};
 use inkwell::context::Context;
 use std::sync::Arc;
 
@@ -53,19 +52,7 @@ fn test_union_memory_layout() {
     let context = Context::create();
     let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
     let module = Generator::create_module("union_layout_test", &context, &target_machine);
-    // The layouts below are read off the types alone, so this generator resolves no global and is
-    // given none.
-    let mut gc = Generator::new(
-        &context,
-        &module,
-        target_machine.get_target_data(),
-        config.clone(),
-        type_env,
-        Arc::new(Map::default()),
-        Default::default(),
-        Default::default(),
-        Default::default(),
-    );
+    let mut gc = standalone_generator(&context, &module, &target_machine, &config, type_env);
 
     // A union's payload buffer takes the ABI alignment of its payloads, so a small or empty
     // payload does not pad the whole union up to 8 bytes.
@@ -183,17 +170,7 @@ fn test_union_is_larger_than_a_payload_past_the_single_precision_significand() {
     let context = Context::create();
     let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
     let module = Generator::create_module("union_payload_test", &context, &target_machine);
-    let mut gc = Generator::new(
-        &context,
-        &module,
-        target_machine.get_target_data(),
-        config.clone(),
-        type_env,
-        Arc::new(Map::default()),
-        Default::default(),
-        Default::default(),
-        Default::default(),
-    );
+    let mut gc = standalone_generator(&context, &module, &target_machine, &config, type_env);
 
     // A pair of a type is twice its size, so pairing `U8` twenty-four times over reaches 2^24
     // bytes; the `U8` beside it makes the payload one byte more.
