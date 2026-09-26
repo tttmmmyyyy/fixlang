@@ -2936,12 +2936,16 @@ namespace String {
 
     // Reads the whole of `str` as a decimal integer from `-max - 1` to `max`, the way
     // `_read_decimal_integer` reads one.
+    //
+    // # Parameters
+    // * `max` - The greatest number the text may name.
+    // * `str` - The text to read.
     _read_signed_decimal_integer : I64 -> String -> Result ErrMsg I64;
     _read_signed_decimal_integer = |max, str| (
         str._read_decimal_integer(max.u64, max.u64 + 1_U64).map(|(negative, magnitude)|
             if !negative { magnitude.i64 }
-            // The magnitude of `I64::minimum` is not an `I64`, so the magnitude is negated one
-            // below itself.
+            // The magnitude of `I64::minimum` exceeds `I64::maximum`, so this negates one less than
+            // the magnitude and subtracts 1.
             else if magnitude == 0_U64 { 0 }
             else { -(magnitude - 1_U64).i64 - 1 }
         )
@@ -2949,12 +2953,20 @@ namespace String {
 
     // Reads the whole of `str` as a decimal integer from 0 to `max`, the way
     // `_read_decimal_integer` reads one. `-0` is read as 0.
+    //
+    // # Parameters
+    // * `max` - The greatest number the text may name.
+    // * `str` - The text to read.
     _read_unsigned_decimal_integer : U64 -> String -> Result ErrMsg U64;
     _read_unsigned_decimal_integer = |max, str| str._read_decimal_integer(max, 0_U64).map(|(_, magnitude)| magnitude);
 
-    // Answers with what reading `str` as a floating point number comes to, from what the reader in
-    // `float_text.c` answered: the number `v`, and the `outcome` it recorded, one of the
-    // `FLOAT_TEXT_*` values there, which the literals below must stay in sync with.
+    // Turns what the reader in `float_text.c` answered for `str` into the result of `from_string`.
+    // The literals below must stay in sync with the `FLOAT_TEXT_*` values there.
+    //
+    // # Parameters
+    // * `outcome` - The `FLOAT_TEXT_*` value the reader recorded.
+    // * `v` - The number the reader answered with.
+    // * `str` - The text the reader read.
     _float_text_result : U8 -> a -> String -> Result ErrMsg a;
     _float_text_result = |outcome, v, str| (
         if outcome == 0_U8 { Result::ok(v) };
@@ -2964,7 +2976,11 @@ namespace String {
     );
 
     // Answers with the index of the first byte at or after `i` that is not a decimal digit.
-    // `bytes` holds a byte after its digits that is not one, as a `String`'s null is.
+    //
+    // # Parameters
+    // * `i` - The index to start at.
+    // * `bytes` - The bytes to scan, which must hold a byte other than a digit after the digits, as
+    //   the null at the end of a `String`'s data is.
     _skip_decimal_digits : I64 -> Array U8 -> I64;
     _skip_decimal_digits = |i, bytes| loop(i, |i| if bytes.@(i) - '0' < 10_U8 { continue $ i + 1 } else { break $ i });
 
@@ -3925,7 +3941,7 @@ impl U8 : ToString {
 }
 impl U8 : FromString {
     // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
-    // `42`, `-7` or `+007`. A text naming a number outside `U8` is an error.
+    // `42`, `-0` or `+007`. A text naming a number outside `U8` is an error.
     from_string = |str| str._read_unsigned_decimal_integer(U8::maximum.u64).map(u8 : U64 -> U8);
 }
 
@@ -3953,7 +3969,7 @@ impl U16 : ToString {
 }
 impl U16 : FromString {
     // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
-    // `42`, `-7` or `+007`. A text naming a number outside `U16` is an error.
+    // `42`, `-0` or `+007`. A text naming a number outside `U16` is an error.
     from_string = |str| str._read_unsigned_decimal_integer(U16::maximum.u64).map(u16 : U64 -> U16);
 }
 
@@ -3981,7 +3997,7 @@ impl U32 : ToString {
 }
 impl U32 : FromString {
     // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
-    // `42`, `-7` or `+007`. A text naming a number outside `U32` is an error.
+    // `42`, `-0` or `+007`. A text naming a number outside `U32` is an error.
     from_string = |str| str._read_unsigned_decimal_integer(U32::maximum.u64).map(u32 : U64 -> U32);
 }
 
@@ -4009,7 +4025,7 @@ impl U64 : ToString {
 }
 impl U64 : FromString {
     // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
-    // `42`, `-7` or `+007`. A text naming a number outside `U64` is an error.
+    // `42`, `-0` or `+007`. A text naming a number outside `U64` is an error.
     from_string = |str| str._read_unsigned_decimal_integer(U64::maximum);
 }
 

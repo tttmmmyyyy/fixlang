@@ -3624,9 +3624,8 @@ pub fn test98() {
 }
 
 /// `from_string` into each integer type reads a text naming a number the type holds, and reports a
-/// text naming one outside it as out of range rather than wrapping it into the type. A text that is
-/// not an optional sign followed by decimal digits is reported as malformed, even where its digits
-/// name a number outside the type.
+/// text naming one outside it as out of range. A text that is not an optional sign followed by
+/// decimal digits is reported as malformed, even where its digits name a number outside the type.
 #[test]
 pub fn test_integer_from_string_reads_only_numbers_its_type_holds() {
     let source = r#"

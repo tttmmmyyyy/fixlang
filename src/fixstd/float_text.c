@@ -371,18 +371,20 @@ static ffc_parse_options fixruntime_float_text_options(void)
 }
 
 // Reads a `double` from the whole of the null-terminated `str`, and records how the reading came
-// out in `float_text_outcome`. Answers with 0 for a text that is not read as a number.
+// out in `float_text_outcome`. Answers with 0 where that outcome is other than
+// `FLOAT_TEXT_READ`.
 double fixruntime_read_f64(const char *str)
 {
     const char *end = str + strlen(str);
     double v;
-    ffc_result result = ffc_from_chars_double_options(str, end, &v, fixruntime_float_text_options());
+    ffc_result result =
+        ffc_from_chars_double_options(str, end, &v, fixruntime_float_text_options());
     fixruntime_record_float_text_outcome(result, end);
     return float_text_outcome == FLOAT_TEXT_READ ? v : 0.0;
 }
 
 // Reads a `float` from the whole of the null-terminated `str`, and records how the reading came out
-// in `float_text_outcome`. Answers with 0 for a text that is not read as a number.
+// in `float_text_outcome`. Answers with 0 where that outcome is other than `FLOAT_TEXT_READ`.
 float fixruntime_read_f32(const char *str)
 {
     const char *end = str + strlen(str);
