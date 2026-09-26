@@ -431,7 +431,7 @@ enum NamespaceClassification {
 /// # Arguments
 /// * `auto_ns` — the type's auto-namespace path, e.g. `["Foo", "Point"]` for `Foo::Point`.
 /// * `edits` — receives the edits of single `NameSpace` name components.
-/// * `rebuilt_stmt_spans` — receives the edits that replace a whole statement.
+/// * `rebuilt_stmt_edits` — receives the edits that replace a whole statement.
 fn collect_import_edits_for_type(
     program: &Program,
     auto_ns: &[Name],
@@ -439,7 +439,7 @@ fn collect_import_edits_for_type(
     type_new: &Name,
     stmt: &ImportStatement,
     edits: &mut Vec<(Span, String)>,
-    rebuilt_stmt_spans: &mut Vec<(Span, String)>,
+    rebuilt_stmt_edits: &mut Vec<(Span, String)>,
 ) {
     let module = &stmt.module_name;
     let stmt_classifications =
@@ -471,7 +471,7 @@ fn collect_import_edits_for_type(
                 &[module.clone()],
                 &mut new_stmt.hiding,
             );
-            rebuilt_stmt_spans.push((stmt_span.clone(), new_stmt.stringify()));
+            rebuilt_stmt_edits.push((stmt_span.clone(), new_stmt.stringify()));
         }
     } else {
         // Emit individual NameSpace name-span edits for all-auto nodes.
@@ -874,14 +874,14 @@ fn walk_expr_for_inline_qualified(
 
 /// Re-parses a Var's source span (covering whatever qualified name the
 /// user actually wrote) and returns an edit that rewrites its last
-/// namespace component to `new_name`, when that component is `type_old`.
+/// namespace component to `new_name`, when that component is `old_name`.
 ///
 /// # Examples
-/// For the source `Point::@x` and `type_old` `Point`, the edit covers `Point`.
-/// For the source `PrimeProvider::create` and `type_old` `PrimeProvider`, it covers `PrimeProvider`.
+/// For the source `Point::@x` and `old_name` `Point`, the edit covers `Point`.
+/// For the source `PrimeProvider::create` and `old_name` `PrimeProvider`, it covers `PrimeProvider`.
 fn extract_inline_qualified_edit(
     var_source: &Span,
-    type_old: &Name,
+    old_name: &Name,
     new_name: &Name,
 ) -> Option<(Span, String)> {
     let content = var_source.input.string().ok()?;
@@ -900,7 +900,7 @@ fn extract_inline_qualified_edit(
     // `PrimeProvider::create`. If the user wrote an unqualified
     // reference, items is empty and there's nothing to do.
     let last = items.last()?;
-    if &last.name != type_old {
+    if &last.name != old_name {
         return None;
     }
     let abs_start = s_start + caret_skip + last.start;

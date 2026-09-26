@@ -295,7 +295,7 @@ pub fn launch_language_server() {
                 };
                 handle_initialize(id, &params);
             } else if method == "initialized" {
-                let params: Option<InitializedParams> = parase_params(message.params.unwrap());
+                let params: Option<InitializedParams> = parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -323,14 +323,14 @@ pub fn launch_language_server() {
                 break;
             } else if method == "textDocument/didOpen" {
                 let params: Option<DidOpenTextDocumentParams> =
-                    parase_params(message.params.unwrap());
+                    parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
                 handle_textdocument_did_open(&params.unwrap(), &mut uri_to_latest_content);
             } else if method == "textDocument/didChange" {
                 let params: Option<DidChangeTextDocumentParams> =
-                    parase_params(message.params.unwrap());
+                    parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -345,7 +345,7 @@ pub fn launch_language_server() {
                 );
             } else if method == "textDocument/didSave" {
                 let params: Option<DidSaveTextDocumentParams> =
-                    parase_params(message.params.unwrap());
+                    parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -357,7 +357,7 @@ pub fn launch_language_server() {
                 );
             } else if method == "workspace/didChangeConfiguration" {
                 let params: Option<DidChangeConfigurationParams> =
-                    parase_params(message.params.unwrap());
+                    parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -554,7 +554,7 @@ pub fn launch_language_server() {
 }
 
 /// Read the `params` of a message as `T`. A payload that does not read as `T` is logged.
-pub(super) fn parase_params<T: DeserializeOwned>(params: Value) -> Option<T> {
+pub(super) fn parse_params<T: DeserializeOwned>(params: Value) -> Option<T> {
     let params: Result<T, _> = serde_json::from_value(params);
     if params.is_err() {
         let mut msg = "Failed to parse the params: \n".to_string();
@@ -582,7 +582,7 @@ fn parse_id(message: &JSONRPCMessage, method: &str) -> Option<u32> {
 /// logged, the missing `id` under `method`, the request's method.
 fn parse_request<T: DeserializeOwned>(message: &JSONRPCMessage, method: &str) -> Option<(u32, T)> {
     let id = parse_id(message, method)?;
-    let params = parase_params(message.params.clone().unwrap())?;
+    let params = parse_params(message.params.clone().unwrap())?;
     Some((id, params))
 }
 
