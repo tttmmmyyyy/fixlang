@@ -312,6 +312,15 @@ impl LspClient {
         Ok(id)
     }
 
+    /// Answer the server's request `id` with `result`.
+    pub fn send_response(&mut self, id: u32, result: Value) -> Result<(), String> {
+        self.send_message(&json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": result,
+        }))
+    }
+
     /// Send the notification `method` with `params`, which the server answers nothing to.
     pub fn send_notification(&mut self, method: &str, params: Value) -> Result<(), String> {
         self.send_message(&json!({

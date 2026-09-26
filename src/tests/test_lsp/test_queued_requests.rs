@@ -84,6 +84,29 @@ mod tests {
         })
     }
 
+    /// Send a semantic-tokens request for `main.fix`, and return its id.
+    fn request_tokens(client: &mut LspClient) -> u32 {
+        client
+            .send_request(
+                "textDocument/semanticTokens/full",
+                json!({ "textDocument": { "uri": client.file_uri(Path::new("main.fix")) } }),
+            )
+            .expect("Failed to send semanticTokens")
+    }
+
+    /// Assert that the server sends no response to the request `id` beyond the one the test has
+    /// taken. The server handles the client's messages in the order they arrive, so once a request
+    /// sent now is answered, every response to `id` the server was going to send has arrived.
+    fn assert_answered_once(client: &mut LspClient, id: u32) {
+        let probe = request_tokens(client);
+        client.expect_response(probe);
+        assert!(
+            client.take_response(id).is_none(),
+            "the request {} is expected to be answered once",
+            id
+        );
+    }
+
     /// A request is carried out when a change to the document it asks about arrived behind it.
     #[test]
     fn test_a_change_behind_a_request_leaves_it_to_be_carried_out() {
@@ -134,6 +157,64 @@ mod tests {
             "the client cancelled the semantic-tokens request before the server reached it, so it \
              is expected to be answered RequestCancelled"
         );
+
+        client.shutdown().expect("Failed to shutdown LSP");
+        client
+            .verify_no_protocol_error()
+            .expect("Reader thread should not have errors");
+    }
+
+    /// A cancellation of a request the server has already answered leaves that answer the only
+    /// one.
+    #[test]
+    fn test_a_cancellation_after_the_answer_sends_nothing_more() {
+        let (_temp_dir, _project_dir, mut client) = open_session();
+
+        let tokens = request_tokens(&mut client);
+        client.expect_response(tokens);
+        client
+            .send_notification("$/cancelRequest", json!({ "id": tokens }))
+            .expect("Failed to send cancelRequest");
+        assert_answered_once(&mut client, tokens);
+
+        client.shutdown().expect("Failed to shutdown LSP");
+        client
+            .verify_no_protocol_error()
+            .expect("Reader thread should not have errors");
+    }
+
+    /// A cancellation names a request of the client: a response of the client queued ahead of that
+    /// request under the same id is left to be handled as a response.
+    #[test]
+    fn test_a_cancellation_passes_over_a_response_carrying_the_same_id() {
+        let (_temp_dir, _project_dir, mut client) = open_session();
+
+        let completion = client
+            .send_request(
+                "textDocument/completion",
+                json!({
+                    "textDocument": { "uri": client.file_uri(Path::new("lib.fix")) },
+                    "position": { "line": 9, "character": 5 }
+                }),
+            )
+            .expect("Failed to send completion");
+        // The client numbers its requests in order, so the next request carries `completion + 1`.
+        client
+            .send_response(completion + 1, Value::Null)
+            .expect("Failed to send a response");
+        let tokens = request_tokens(&mut client);
+        assert_eq!(tokens, completion + 1);
+        client
+            .send_notification("$/cancelRequest", json!({ "id": tokens }))
+            .expect("Failed to send cancelRequest");
+
+        assert_eq!(
+            error_code(&client.expect_response(tokens)),
+            Some(REQUEST_CANCELLED),
+            "the client cancelled the semantic-tokens request before the server reached it, so it \
+             is expected to be answered RequestCancelled"
+        );
+        assert_answered_once(&mut client, tokens);
 
         client.shutdown().expect("Failed to shutdown LSP");
         client
