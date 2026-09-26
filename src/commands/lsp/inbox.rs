@@ -7,7 +7,7 @@
 //! before it; on a slow machine carrying out each completion takes longer than the keystrokes take
 //! to arrive, and answering the cancelled ones at once keeps the server level with the typing.
 
-use super::server::JSONRPCMessage;
+use super::server::{parase_params, JSONRPCMessage};
 use crate::write_log;
 use lsp_types::{CancelParams, NumberOrString};
 use std::collections::VecDeque;
@@ -61,13 +61,14 @@ impl Inbox {
     /// Every message that has arrived is queued before the next is handed out, so that a
     /// cancellation the client has already sent reaches the request it names.
     pub(super) fn next(&mut self) -> Option<Incoming> {
-        self.take_arrived();
-        if self.queued.is_empty() {
+        loop {
+            self.take_arrived();
+            if let Some(incoming) = self.queued.pop_front() {
+                return Some(incoming);
+            }
             let message = self.recv.recv().ok()?;
             self.enqueue(message);
-            self.take_arrived();
         }
-        self.queued.pop_front()
     }
 
     /// Queue every message that has arrived, without waiting for more.
@@ -84,9 +85,7 @@ impl Inbox {
             self.queued.push_back(Incoming::Message(message));
             return;
         }
-        let params = message
-            .params
-            .and_then(|params| serde_json::from_value::<CancelParams>(params).ok());
+        let params = message.params.and_then(parase_params::<CancelParams>);
         let Some(CancelParams {
             id: NumberOrString::Number(id),
         }) = params

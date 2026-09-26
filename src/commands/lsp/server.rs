@@ -633,7 +633,7 @@ pub fn launch_language_server() {
 }
 
 /// Read the `params` of a message as `T`. A payload that does not read as `T` is logged.
-fn parase_params<T: DeserializeOwned>(params: Value) -> Option<T> {
+pub(super) fn parase_params<T: DeserializeOwned>(params: Value) -> Option<T> {
     let params: Result<T, _> = serde_json::from_value(params);
     if params.is_err() {
         let mut msg = "Failed to parse the params: \n".to_string();

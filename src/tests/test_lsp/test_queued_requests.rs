@@ -12,6 +12,7 @@ mod tests {
     use lsp_types::error_codes::REQUEST_CANCELLED;
     use serde_json::{json, Value};
     use std::path::{Path, PathBuf};
+    use std::thread;
     use std::time::Duration;
     use tempfile::TempDir;
 
@@ -165,7 +166,7 @@ mod tests {
     }
 
     /// A cancellation of a request the server has already answered leaves that answer the only
-    /// one.
+    /// one, and leaves the server serving.
     #[test]
     fn test_a_cancellation_after_the_answer_sends_nothing_more() {
         let (_temp_dir, _project_dir, mut client) = open_session();
@@ -175,6 +176,9 @@ mod tests {
         client
             .send_notification("$/cancelRequest", json!({ "id": tokens }))
             .expect("Failed to send cancelRequest");
+        // A cancellation that finds its request answered queues nothing. The pause lets the server
+        // take it in alone, with nothing queued behind it, before the next request arrives.
+        thread::sleep(Duration::from_millis(500));
         assert_answered_once(&mut client, tokens);
 
         client.shutdown().expect("Failed to shutdown LSP");
