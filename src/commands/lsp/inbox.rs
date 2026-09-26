@@ -3,9 +3,11 @@
 //! A thread of its own reads stdin, so the messages the client sends while the server works on one
 //! request queue up here, and a cancellation reaches the request it names while that request is
 //! still queued. A cancelled request is answered with `RequestCancelled` at once, instead of being
-//! carried out. An editor sends a completion request with every keystroke and cancels the one
-//! before it; on a slow machine carrying out each completion takes longer than the keystrokes take
-//! to arrive, and answering the cancelled ones at once lets the server keep up with the typing.
+//! carried out. A cancellation of a request already handed out goes to the server, which answers
+//! that request the same way when it is still holding it unanswered. An editor sends a completion
+//! request with every keystroke and cancels the one before it; on a slow machine carrying out each
+//! completion takes longer than the keystrokes take to arrive, and answering the cancelled ones at
+//! once lets the server keep up with the typing.
 
 use super::server::{parse_params, JSONRPCMessage};
 use crate::write_log;
@@ -22,6 +24,9 @@ pub(super) enum Incoming {
     /// The id of a request the client cancelled before the server reached it, which is answered
     /// with `RequestCancelled`.
     Cancelled(u32),
+    /// The id a cancellation names when the request is no longer queued: the server has handed it
+    /// out already, and may be holding it unanswered.
+    LateCancellation(u32),
 }
 
 /// The messages the client has sent and the server has still to handle, in the order the client
@@ -78,8 +83,8 @@ impl Inbox {
         }
     }
 
-    /// Queue `message`. A cancellation marks the queued request it names as cancelled instead; one
-    /// naming a request already handed out has nothing left to act on.
+    /// Queue `message`. A cancellation marks the queued request it names as cancelled instead, or
+    /// queues a `LateCancellation` when that request has been handed out.
     fn accept(&mut self, message: JSONRPCMessage) {
         if message.method.as_deref() != Some("$/cancelRequest") {
             self.queued.push_back(Incoming::Message(message));
@@ -99,8 +104,9 @@ impl Inbox {
             matches!(incoming, Incoming::Message(queued_message)
                 if queued_message.method.is_some() && queued_message.id == Some(id))
         });
-        if let Some(request) = request {
-            *request = Incoming::Cancelled(id);
+        match request {
+            Some(request) => *request = Incoming::Cancelled(id),
+            None => self.queued.push_back(Incoming::LateCancellation(id)),
         }
     }
 }

@@ -1,0 +1,6 @@
+[general
+name = "unreadable-project-file"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]
