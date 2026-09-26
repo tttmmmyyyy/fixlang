@@ -462,10 +462,11 @@ pub fn test_writing_through_a_literals_bytes_leaves_the_literal_alone() {
 /// Every `Std::Array` primitive that writes, applied to the bytes a string literal hands out,
 /// writes into a copy: the literal's storage is a constant in the program's data, so a write that
 /// reached it would land in read-only memory. Each write below is the only use of the bytes it is
-/// given, so the uniqueness check that makes the copy is one a shared array would fail.
+/// given, so what makes it copy is that the bytes are the literal's, and nothing else.
 #[test]
 pub fn test_every_write_through_a_literals_bytes_lands_on_a_copy() {
-    // Long enough that the storage is the aligned kind.
+    // Long enough that the storage reaches `ARRAY_ALIGNED_ALLOC_THRESHOLD`, from which its element
+    // buffer is aligned.
     let literal = "0123456789abcdefghijklmnopqrstuvwxyz".repeat(7) + "0123456789";
     let source = format!(
         r#"
