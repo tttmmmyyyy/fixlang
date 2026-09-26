@@ -108,6 +108,39 @@ pub fn test_write_read_file_bytes() {
     fs::remove_file(tmp_file).unwrap();
 }
 
+/// `write_bytes` reports an error for a handle that accepts no bytes, and `read_n_bytes` for a
+/// handle that gives none.
+#[test]
+pub fn test_write_read_bytes_report_failure() {
+    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
+    let tmp_file = format!("{}/{}.dat", COMPILER_TEST_WORKING_PATH, function_name!());
+
+    let source = format!(
+        r#"
+        module Main;
+        main : IO ();
+        main = (
+            let file_path = "{}";
+            let res = *write_file_bytes(file_path, [1_U8, 2_U8, 3_U8]).to_result;
+            assert(|_|"setup", res.is_ok);;
+
+            // A handle opened for reading only accepts no bytes.
+            let res = *with_file(file_path, "r", |handle| write_bytes(handle, [4_U8])).to_result;
+            assert(|_|"write to a read-only handle", res.is_err);;
+
+            // A handle opened for appending only gives no bytes.
+            let res = *with_file(file_path, "a", |handle| read_n_bytes(handle, 1)).to_result;
+            assert(|_|"read from a write-only handle", res.is_err);;
+
+            pure()
+        );
+    "#,
+        tmp_file
+    );
+    test_source(&source, Configuration::develop_mode());
+    fs::remove_file(tmp_file).unwrap();
+}
+
 #[test]
 pub fn test_with_file_closed_when_ok() {
     // Create a working directory.

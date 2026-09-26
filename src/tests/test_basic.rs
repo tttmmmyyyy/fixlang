@@ -5659,6 +5659,41 @@ pub fn test_narrow_signed_integer_bytes_round_trip() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `to_bytes` and `from_bytes` of a 32- or 64-bit signed integer carry the value through the byte
+/// array and back, at both ends of the type's range, and the bytes are the value's two's-complement
+/// representation.
+#[test]
+pub fn test_wide_signed_integer_bytes_round_trip() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let case = "I32";
+            assert_eq(|_|case + " negative one", (-1_I32).to_bytes.from_bytes.as_ok, -1_I32);;
+            assert_eq(|_|case + " minimum", I32::minimum.to_bytes.from_bytes.as_ok, I32::minimum);;
+            assert_eq(|_|case + " maximum", I32::maximum.to_bytes.from_bytes.as_ok, I32::maximum);;
+
+            let case = "I64";
+            assert_eq(|_|case + " negative one", (-1_I64).to_bytes.from_bytes.as_ok, -1_I64);;
+            assert_eq(|_|case + " minimum", I64::minimum.to_bytes.from_bytes.as_ok, I64::minimum);;
+            assert_eq(|_|case + " maximum", I64::maximum.to_bytes.from_bytes.as_ok, I64::maximum);;
+
+            // The bytes of -1 are all ones in either byte order.
+            let case = "representation";
+            assert_eq(|_|case + " I32 negative one", (-1_I32).to_bytes, Array::fill(4, 255_U8));;
+            assert_eq(|_|case + " I64 negative one", (-1_I64).to_bytes, Array::fill(8, 255_U8));;
+            let from_all_ones : Result ErrMsg I32 = Array::fill(4, 255_U8).from_bytes;
+            assert_eq(|_|case + " I32 from all ones", from_all_ones.as_ok, -1_I32);;
+            let from_all_ones : Result ErrMsg I64 = Array::fill(8, 255_U8).from_bytes;
+            assert_eq(|_|case + " I64 from all ones", from_all_ones.as_ok, -1_I64);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// `consumed_time_while_lazy` and `consumed_time_while_io` hand back the value their argument
 /// produced along with the time it took, for a long computation and for file IO.
 #[test]

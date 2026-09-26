@@ -18,6 +18,30 @@ pub fn test_string_unsafe_from_c_str_ptr() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `unsafe_from_c_str_ptr` and `unsafe_from_c_str_ptr_io` read back the string a C string holds,
+/// the empty one included.
+#[test]
+pub fn test_string_unsafe_from_c_str_ptr_io_and_empty() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let src = "Hello World!";
+            let cpy = *src.borrow_c_str_io(String::unsafe_from_c_str_ptr_io);
+            assert_eq(|_|"io", cpy, src);;
+
+            let cpy = "".borrow_c_str(String::unsafe_from_c_str_ptr);
+            assert_eq(|_|"pure empty", cpy, "");;
+            let cpy = *"".borrow_c_str_io(String::unsafe_from_c_str_ptr_io);
+            assert_eq(|_|"io empty", cpy, "");;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// The substring between two indices, where the range covers part of the string, is empty, or
 /// reaches past the end, and where the string itself is empty.
 #[test]
