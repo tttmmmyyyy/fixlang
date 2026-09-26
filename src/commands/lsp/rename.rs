@@ -11,7 +11,7 @@ use super::references::{
     find_assoc_type_references, find_field_occurrences, find_global_value_references,
     find_trait_references, find_type_references,
 };
-use super::server::{send_response, DiagnosticsResult, LatestContent};
+use super::server::{send_response, DiagnosticsResult, LatestContent, ResponseError};
 use super::util::{
     find_local_occurrences, get_current_dir, path_to_uri, resolve_source_pos, span_to_range,
 };
@@ -28,28 +28,10 @@ use crate::parse::sourcefile::{SourcePos, Span};
 use lsp_types::{
     PrepareRenameResponse, RenameParams, TextDocumentPositionParams, TextEdit, Uri, WorkspaceEdit,
 };
-use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-
-// LSP `ResponseError` shape: `{ code, message }`.
-#[derive(Serialize)]
-struct ResponseError {
-    code: i64,
-    message: String,
-}
-
-impl ResponseError {
-    fn invalid_request(message: impl Into<String>) -> Self {
-        // -32600 is the JSON-RPC reserved code for Invalid Request.
-        ResponseError {
-            code: -32600,
-            message: message.into(),
-        }
-    }
-}
 
 // Handle "textDocument/prepareRename".
 //

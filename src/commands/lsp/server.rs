@@ -3,6 +3,7 @@ use super::completion;
 use super::document_symbol;
 use super::goto_definition;
 use super::hover;
+use super::inbox::Inbox;
 use super::references;
 use super::rename;
 use super::semantic_tokens;
@@ -45,7 +46,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::time::Duration;
 use std::{
-    io::{stdin, stdout, Read, Write},
+    io::{stdout, Write},
     path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -197,7 +198,7 @@ impl LatestContent {
 /// Run the language server: read the client's messages off stdin and answer them, until the
 /// client asks the server to exit or closes the pipe.
 pub fn launch_language_server() {
-    let mut stdin = stdin();
+    let mut inbox = Inbox::read_stdin();
 
     // Prepare a channel to send requests to the diagnostics thread.
     let (diag_req_send, diag_req_recv) = mpsc::channel::<DiagnosticsMessage>();
@@ -241,8 +242,8 @@ pub fn launch_language_server() {
 
     loop {
         // Take in whatever the diagnostics thread has finished, keeping the newest result. This
-        // sits above the read below, so a result finished while the loop was blocked reading
-        // arrives only after one more message has been handled. `save_and_wait_for_the_program`
+        // sits above the wait for the next message below, so a result finished while the loop was
+        // waiting arrives only after one more message has been handled. `save_and_wait_for_the_program`
         // of the test client waits that message out, and must stay in step with this placement.
         let mut diagnostics_updated = false;
         while let Ok(diagnostics_result) = diag_res_recv.try_recv() {
@@ -275,98 +276,13 @@ pub fn launch_language_server() {
             }
         }
 
-        // Read a line to get the content length.
-        let mut header_line = String::new();
-        let res = stdin.read_line(&mut header_line);
-        match res {
-            // `read_line` returns `Ok(0)` when stdin has reached EOF, which
-            // happens when the parent editor process dies and closes the pipe.
-            // EOF is permanent: every subsequent read returns `Ok(0)`
-            // immediately without blocking, so without this branch the loop
-            // would spin at 100% CPU forever. Terminate the server instead,
-            // just as we do on the `exit` notification.
-            Ok(0) => {
-                write_log!("stdin reached EOF. Exiting the language server.");
-                break;
-            }
-            Ok(_) => {}
-            Err(e) => {
-                let mut msg = "Failed to read a line: \n".to_string();
-                msg.push_str(&format!("{:?}", e));
-                write_log!("{}", msg);
-                continue;
-            }
-        }
-        if header_line.trim().is_empty() {
+        let Some(message) = inbox.next() else {
+            break;
+        };
+        if let Some(error) = inbox.obsolete(&message) {
+            send_response(message.id.unwrap(), Err::<(), _>(error));
             continue;
         }
-
-        // Check if the line starts with "Content-Length:".
-        if !header_line.starts_with("Content-Length:") {
-            let mut msg = "Expected `Content-Length:`. The line is: \n".to_string();
-            msg.push_str(&format!("{:?}", header_line));
-            write_log!("{}", msg);
-            continue;
-        }
-
-        // Ignore the `Content-Length:` prefix and parse the rest as a number.
-        let content_length: Result<usize, _> = header_line
-            .split_off("Content-Length:".len())
-            .trim()
-            .parse();
-        if content_length.is_err() {
-            let mut msg = "Failed to parse the content length: \n".to_string();
-            msg.push_str(&format!("{:?}", content_length.err().unwrap()));
-            write_log!("{}", msg);
-            continue;
-        }
-        let content_length = content_length.unwrap();
-
-        // Read stdin upto an empty line.
-        loop {
-            let mut line = String::new();
-            let res = stdin.read_line(&mut line);
-            if res.is_err() {
-                let e = res.unwrap_err();
-                let mut msg = "Failed to read a line: \n".to_string();
-                msg.push_str(&format!("{:?}", e));
-                write_log!("{}", msg);
-                continue;
-            }
-            if line.trim().is_empty() {
-                break;
-            }
-        }
-
-        // Read the content of the message.
-        let mut message = vec![0; content_length];
-        let res = stdin.read_exact(&mut message);
-        if res.is_err() {
-            let mut msg = "Failed to read the message: \n".to_string();
-            msg.push_str(&format!("{:?}", res.unwrap_err()));
-            write_log!("{}", msg);
-            continue;
-        }
-        let message = String::from_utf8(message);
-        if message.is_err() {
-            write_log!("Failed to parse the message as utf-8 string: ");
-            write_log!("{:?}", message.unwrap_err());
-            continue;
-        }
-        let message = message.unwrap();
-
-        // Parse the message as JSONRPCMessage.
-        let message: Result<JSONRPCMessage, _> = serde_json::from_str(&message);
-        if message.is_err() {
-            write_log!("Failed to parse the message as JSONRPCMessage: ");
-            write_log!("{:?}", message.err().unwrap());
-            continue;
-        }
-        let message = message.unwrap();
-        write_log!(
-            "Received message: {:?}",
-            serde_json::to_string(&message).unwrap()
-        );
 
         // Depending on the method, handle the message.
         if let Some(method) = message.method.as_ref() {
@@ -750,6 +666,43 @@ fn send_request<T: Serialize>(id: u32, method: String, params: Option<T>) {
         None,
     );
     send_message(&msg);
+}
+
+/// The `error` of a response, in the shape the protocol gives it.
+#[derive(Serialize)]
+pub(super) struct ResponseError {
+    /// The number saying what kind of error this is.
+    code: i64,
+    /// A description of the error, which a client may show to the user.
+    message: String,
+}
+
+impl ResponseError {
+    /// The request cannot be carried out as it was sent. The client may show `message` to the
+    /// user.
+    pub(super) fn invalid_request(message: impl Into<String>) -> Self {
+        ResponseError {
+            code: -32600,
+            message: message.into(),
+        }
+    }
+
+    /// The client cancelled the request before the server carried it out.
+    pub(super) fn request_cancelled() -> Self {
+        ResponseError {
+            code: -32800,
+            message: "The request was cancelled.".to_string(),
+        }
+    }
+
+    /// The document the request asks about changed after the request was sent, so the answer
+    /// would describe a text the client no longer holds.
+    pub(super) fn content_modified() -> Self {
+        ResponseError {
+            code: -32801,
+            message: "The document changed after the request was sent.".to_string(),
+        }
+    }
 }
 
 /// Answer the client's request `id`: an `Ok` becomes the response's `result`, an `Err` becomes

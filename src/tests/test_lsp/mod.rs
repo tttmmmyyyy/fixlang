@@ -9,6 +9,7 @@ pub mod test_diagnostics;
 pub mod test_goto_definition;
 pub mod test_hover;
 pub mod test_import_completion;
+pub mod test_obsolete_requests;
 pub mod test_polling;
 pub mod test_references;
 pub mod test_rename;
