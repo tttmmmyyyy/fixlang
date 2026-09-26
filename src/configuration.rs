@@ -1850,8 +1850,10 @@ mod tests {
             ),
             (
                 "disable_cpu_features_regex",
+                // The hash takes the features the patterns leave, so the pattern has to match a
+                // feature the host has, on whatever architecture the test runs.
                 Box::new(|config: &mut Configuration| {
-                    config.disable_cpu_features_regex.push("avx.*".to_string())
+                    config.disable_cpu_features_regex.push(".*".to_string())
                 }),
             ),
             (
