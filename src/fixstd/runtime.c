@@ -4,9 +4,6 @@ The C functions and values the Fix standard library is implemented with.
 `fix build` compiles this source into an object file and links it into the program it builds.
 */
 
-// glibc declares `fputs_unlocked` for a source that asks for the GNU extensions.
-#define _GNU_SOURCE
-
 #include <ctype.h>
 #include <errno.h>
 #include <inttypes.h>
@@ -323,24 +320,26 @@ FILE *fixruntime_c_stderr()
     return stderr;
 }
 
-// Writes the null-terminated `str` followed by a newline to `file`, holding the file's lock across
-// both, so no other thread's output to `file` falls between them. Returns a negative number when a
-// write fails, and otherwise what `fputs` returns for `str`.
+// The longest line, newline included, that `fixruntime_fputs_line` joins on the stack. It stays well
+// under a page, so the frame needs no stack probe.
+#define FIXRUNTIME_LINE_STACK_BYTES 1024
+
+// Writes the null-terminated `str` followed by a newline to `file` in one call, so no other output
+// falls inside the line, even when `file` is unbuffered and each call reaches the file as a write
+// of its own. Returns a negative number when the write fails.
 int fixruntime_fputs_line(const char *str, FILE *file)
 {
-    flockfile(file);
-#ifdef __GLIBC__
-    // Skips taking the lock that this function already holds.
-    int res = fputs_unlocked(str, file);
-#else
-    int res = fputs(str, file);
-#endif
-    if (res >= 0 && putc_unlocked('\n', file) == EOF)
+    size_t length = strlen(str);
+    char stack_line[FIXRUNTIME_LINE_STACK_BYTES];
+    char *line = length < sizeof(stack_line) ? stack_line : (char *)malloc(length + 1);
+    memcpy(line, str, length);
+    line[length] = '\n';
+    size_t written = fwrite(line, 1, length + 1, file);
+    if (line != stack_line)
     {
-        res = EOF;
+        free(line);
     }
-    funlockfile(file);
-    return res;
+    return written == length + 1 ? 0 : EOF;
 }
 
 // The value `errno` holds. `errno` is a macro, which an FFI call cannot reach.
