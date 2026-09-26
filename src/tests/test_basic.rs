@@ -12816,6 +12816,69 @@ main = (
     );
 }
 
+/// Checks that `println` and `eprintln` write the string followed by one newline, in order with
+/// what `print` and `eprint` write to the same stream. An empty string makes an empty line.
+#[test]
+pub fn test_println_writes_the_string_and_a_newline() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    print("a");;
+    println("b");;
+    println("");;
+    println("c d");;
+    eprint("x");;
+    eprintln("y");;
+    eprintln("");;
+    pure()
+);
+    "##;
+    let mut config = Configuration::develop_mode();
+    config.set_valgrind(ValgrindTool::None);
+    let output = run_source_capture(&source, config);
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "ab\n\nc d\n");
+    assert_eq!(String::from_utf8_lossy(&output.stderr), "xy\n\n");
+}
+
+/// Checks that `debug_print` and `debug_println` flush stdout: what they write reaches it even when
+/// the program then aborts, which leaves the stdio buffers unflushed.
+#[test]
+pub fn test_debug_print_flushes_stdout_before_an_abort() {
+    for (call, expected) in [
+        (r#"debug_print("a")"#, "a"),
+        (r#"debug_println("b")"#, "b\n"),
+    ] {
+        let source = format!(
+            r##"
+module Main;
+
+main : IO ();
+main = (
+    eval {};
+    undefined("stop")
+);
+    "##,
+            call
+        );
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
+        let output = run_source_capture(&source, config);
+        assert!(
+            !output.status.success(),
+            "`undefined` was expected to abort the program after `{}`.",
+            call
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            expected,
+            "after `{}`",
+            call
+        );
+    }
+}
+
 /// Checks `Bar (Foo I64)`, where `Foo I64` is the struct `Foo a b` applied to one of its two
 /// parameters. `Bar` has a second field, so the compiler keeps it as a struct, and newtype
 /// unwrapping reaches `Foo I64`. The test calls the function held in the nested field.
