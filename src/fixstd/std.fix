@@ -1482,7 +1482,7 @@ namespace IO {
     println : String -> IO ();
     println = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fixruntime_fputs_line(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
 
-    // Raads all characters from a file.
+    // Reads all characters from a file.
     // 
     // # Parameters
     //
@@ -4328,7 +4328,7 @@ namespace Debug {
     //
     // # Parameters
     //
-    // * `msg`    
+    // * `msg` - The string to be printed.
     debug_eprint : String -> ();
     debug_eprint = |msg| (eprint(msg);; stderr.flush;; pure()).unsafe_perform;
 
@@ -4338,7 +4338,7 @@ namespace Debug {
     //
     // # Parameters
     //
-    // * `msg`    
+    // * `msg` - The string to be printed.
     debug_eprintln : String -> ();
     debug_eprintln = |msg| (eprintln(msg);; stderr.flush;; pure()).unsafe_perform;
 
@@ -4348,7 +4348,7 @@ namespace Debug {
     //
     // # Parameters
     //
-    // * `msg`        
+    // * `msg` - The string to be printed.
     debug_print : String -> ();
     debug_print = |msg| (print(msg);; stdout.flush;; pure()).unsafe_perform;
 
@@ -4358,7 +4358,7 @@ namespace Debug {
     //
     // # Parameters
     //
-    // * `msg`        
+    // * `msg` - The string to be printed.
     debug_println : String -> ();
     debug_println = |msg| (println(msg);; stdout.flush;; pure()).unsafe_perform;
 }
