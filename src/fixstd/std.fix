@@ -1533,7 +1533,7 @@ namespace IO {
     // # Parameters
     //
     // * `handle` - The IOHandle to be read.
-    // * `num_bytes` - The number of bytes to be read.
+    // * `n` - The maximum number of bytes to be read.
     read_n_bytes : IOHandle -> I64 -> IOFail (Array U8);
     read_n_bytes = |handle, n| IOFail::from_io_result $ do {
         // Get the file pointer.
@@ -1583,7 +1583,7 @@ namespace IO {
     //
     // * `path` - The path to the file to be opened.
     // * `mode` - The mode string for `fopen` C function.
-    // * `work` - The function to be called on the opened file handle.
+    // * `action` - The function to be called on the opened file handle.
     with_file : Path -> String -> (IOHandle -> IOFail a) -> IOFail a;
     with_file = |path, mode, action| (
         let handle = *open_file(path, mode);
@@ -2860,7 +2860,7 @@ namespace String {
 
     // Create a `String` from a pointer to a null-terminated C string.
     //
-    // If the pointer is not pointing to a valid null-terminated C string, this function cause undefined behavior.
+    // If the pointer is not pointing to a valid null-terminated C string, this function causes undefined behavior.
     //
     // If you have an `Array U8` containing a null-terminated C string, use `FromBytes::from_bytes` instead.
     //
@@ -3824,7 +3824,8 @@ namespace Ptr {
 
 impl Ptr : ToString {
     to_string = |v| (
-        let data = Array::empty(17); // len(ffffffffffffffff) + 1
+        // Holds the `FIXRUNTIME_PTR_DIGITS` digits `fixruntime_ptr_to_str` in runtime.c writes, and the null after them.
+        let data = Array::empty(17);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_ptr_to_str(Ptr, Ptr), ptr, v]);
         data._unsafe_from_c_str_with_len(length)
     );
