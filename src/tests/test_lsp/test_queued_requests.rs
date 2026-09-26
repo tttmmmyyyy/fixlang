@@ -11,6 +11,7 @@ mod tests {
     use super::super::lsp_client::LspClient;
     use lsp_types::error_codes::REQUEST_CANCELLED;
     use serde_json::{json, Value};
+    use std::fs;
     use std::path::{Path, PathBuf};
     use std::thread;
     use std::time::Duration;
@@ -113,7 +114,7 @@ mod tests {
     fn test_a_change_behind_a_request_leaves_it_to_be_carried_out() {
         let (_temp_dir, project_dir, mut client) = open_session();
         let main_fix = Path::new("main.fix");
-        let text = std::fs::read_to_string(project_dir.join(main_fix)).unwrap();
+        let text = fs::read_to_string(project_dir.join(main_fix)).unwrap();
 
         let (_, tokens_id) = send_behind_a_completion(&mut client, |client, _| {
             change(client, main_fix, 2, &format!("{}\n", text));
