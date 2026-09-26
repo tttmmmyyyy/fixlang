@@ -1656,7 +1656,7 @@ mod tests {
         llvm_passes_for_speed, Configuration, FixOptimizationLevel, OutputFileType, Sanitizer,
         SubCommand, ValgrindTool,
     };
-    use crate::build::cpu_features::ValgrindCpu;
+    use crate::build::cpu_features::{HostCpu, ValgrindCpu};
     use crate::misc::{platform_valgrind_supported, Map};
     use std::fs;
     use std::path::Path;
@@ -1713,12 +1713,20 @@ mod tests {
     }
 
     /// The hash `hash` gives a build configuration to which `edit` has been applied.
+    ///
+    /// The configuration's CPU is fixed rather than read from the machine, so that a setting that
+    /// acts on the CPU's features has features to act on everywhere: LLVM lists none for an Apple
+    /// host.
     fn hash_after(
         hash: &impl Fn(&Configuration) -> String,
         edit: Box<dyn FnOnce(&mut Configuration)>,
     ) -> String {
         let mut config = Configuration::release_mode(SubCommand::Build)
             .unwrap_or_else(|errs| panic!("Failed to create a configuration: {}", errs));
+        config.host_cpu = HostCpu {
+            name: "a-cpu-model".to_string(),
+            features: "+a-feature,+another-feature".to_string(),
+        };
         edit(&mut config);
         hash(&config)
     }
@@ -1850,10 +1858,10 @@ mod tests {
             ),
             (
                 "disable_cpu_features_regex",
-                // The hash takes the features the patterns leave, so the pattern has to match a
-                // feature the host has, on whatever architecture the test runs.
                 Box::new(|config: &mut Configuration| {
-                    config.disable_cpu_features_regex.push(".*".to_string())
+                    config
+                        .disable_cpu_features_regex
+                        .push("^a-feature$".to_string())
                 }),
             ),
             (
