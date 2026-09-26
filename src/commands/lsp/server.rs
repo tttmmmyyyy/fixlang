@@ -199,7 +199,7 @@ impl LatestContent {
 /// Run the language server: read the client's messages off stdin and answer them, until the
 /// client asks the server to exit or closes the pipe.
 pub fn launch_language_server() {
-    let mut inbox = Inbox::read_stdin();
+    let mut inbox = Inbox::spawn_stdin_reader();
 
     // Prepare a channel to send requests to the diagnostics thread.
     let (diag_req_send, diag_req_recv) = mpsc::channel::<DiagnosticsMessage>();

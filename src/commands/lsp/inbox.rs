@@ -36,7 +36,7 @@ pub(super) struct Inbox {
 impl Inbox {
     /// Start the thread that reads the client's messages off stdin, and return the inbox they
     /// arrive in.
-    pub(super) fn read_stdin() -> Inbox {
+    pub(super) fn spawn_stdin_reader() -> Inbox {
         let (send, recv) = mpsc::channel();
         thread::Builder::new()
             .name("lsp-stdin".to_string())
@@ -67,20 +67,20 @@ impl Inbox {
                 return Some(incoming);
             }
             let message = self.recv.recv().ok()?;
-            self.enqueue(message);
+            self.accept(message);
         }
     }
 
     /// Queue every message that has arrived, without waiting for more.
     fn take_arrived(&mut self) {
         while let Ok(message) = self.recv.try_recv() {
-            self.enqueue(message);
+            self.accept(message);
         }
     }
 
     /// Queue `message`. A cancellation marks the queued request it names as cancelled instead; one
     /// naming a request already handed out has nothing left to act on.
-    fn enqueue(&mut self, message: JSONRPCMessage) {
+    fn accept(&mut self, message: JSONRPCMessage) {
         if message.method.as_deref() != Some("$/cancelRequest") {
             self.queued.push_back(Incoming::Message(message));
             return;
