@@ -21,7 +21,7 @@ use crate::constants::SYMBOL_VERSION_SEPARATOR;
 use crate::constants::SYMBOL_VERSION_SEPARATOR_SUBSTITUTE;
 use crate::constants::{ARRAY_BUF_ALIGNMENT, STORAGE_BUF_IDX};
 use crate::error::panic_with_msg;
-use crate::ffi::{promote_through_ellipsis, CSignature};
+use crate::ffi::{c_abi_extends_narrow_integers, promote_through_ellipsis, CSignature};
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
 use crate::fixstd::builtin::{make_array_storage_ty, make_u8_ty};
@@ -639,6 +639,9 @@ pub struct Generator<'c, 'm> {
     /// The convention every Fix lambda in this module is defined and called with, read once from the
     /// module's triple.
     lambda_calling_convention: u32,
+    /// Whether the C ABI of the module's target extends a narrow integer at a call, read once from
+    /// the module's triple.
+    c_abi_extends_narrow_integers: bool,
     /// The configuration the program is being built under.
     pub config: Configuration,
     /// The global constant emitted for each Rust string embedded in the module, keyed by the string,
@@ -1113,6 +1116,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             target_data: target_data,
             return_registers: return_registers_of_target(&triple),
             lambda_calling_convention: lambda_calling_convention_of_target(&triple),
+            c_abi_extends_narrow_integers: c_abi_extends_narrow_integers(&triple),
             config,
             global_strings: Map::default(),
             global_byte_array_storages: Map::default(),
@@ -3430,11 +3434,14 @@ impl<'c, 'm> Generator<'c, 'm> {
         func.add_attribute(loc, self.context.create_enum_attribute(kind, 0));
     }
 
-    /// Mark a value crossing the C boundary as one the ABI extends to the unit it travels in.
+    /// Mark a value crossing the C boundary as one the ABI extends to the unit it travels in, on a
+    /// target whose C ABI makes that extension.
     ///
-    /// A C compiler puts the extension on every such parameter and result, and a Fix function
-    /// reaching C carries it for the same reason: without it the reader of a promise-based ABI sees
-    /// whatever the bits happen to hold. `CIntegerExtension` holds which values need one and why.
+    /// A C compiler puts the extension on every such parameter and result there, and a Fix function
+    /// reaching C carries it for the same reason: without it a C function reading the value takes
+    /// whatever the bits above it happen to hold. On a target whose ABI leaves the bits to the
+    /// reader, the attribute would promise what the other side never does, so it is left off.
+    /// `CIntegerExtension` holds which values need one and why.
     ///
     /// Two descriptions a program writes of one C function agree on the extension at each position —
     /// that is what `Program::validate_c_function_calls` decides — so a position written twice in
@@ -3445,6 +3452,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         loc: AttributeLoc,
         tycon: &TyCon,
     ) {
+        if !self.c_abi_extends_narrow_integers {
+            return;
+        }
         let Some(extension) = tycon.c_integer_extension() else {
             return;
         };

@@ -15,6 +15,9 @@ use crate::constants::{
 };
 use crate::generator::Generator;
 use crate::object::int_type_of_bits;
+use crate::target_triple::{
+    architecture_of_target, target_is_darwin, target_is_windows, Architecture,
+};
 use inkwell::attributes::AttributeLoc;
 use inkwell::context::Context;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
@@ -26,16 +29,17 @@ use std::sync::Arc;
 ///
 /// Two types of one shape are one C type, so a signature written with either declares the same
 /// function. `I64` and `U64` share a shape: a value that fills its register travels the same way
-/// whichever sign the reader gives the bits. `I8` and `U8` do not, since the ABI carries a narrow
-/// integer in the low bits of a register and the sign is what says which side extends it.
+/// whichever sign the reader gives the bits. `I8` and `U8` do not, since a narrow integer is widened
+/// according to its sign — by C's default argument promotions on every target, and at every call on
+/// a target whose ABI extends it — so the two are different C types on every target.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CTypeShape {
     /// An integer of this width in bits, carrying the extension its width earns it.
     Integer {
         /// The width of the C integer type: 8, 16, 32 or 64.
         bits: u32,
-        /// The extension the ABI asks of a value of this width, and `None` at a width that fills
-        /// the unit a C signature carries an integer in.
+        /// How a value of this width is widened to the unit a C signature carries an integer in, and
+        /// `None` at a width that fills the unit.
         extension: Option<CIntegerExtension>,
     },
     /// C's `float`.
@@ -48,10 +52,10 @@ pub enum CTypeShape {
 
 /// How the bits above an integer narrower than the 32-bit unit the ABI carries it in are filled.
 ///
-/// Apple's AArch64 has the caller fill them for an argument and the callee for a result, and lets
-/// the other side read the whole register on that promise, while AAPCS64 and System V leave them
-/// unspecified and have the reader narrow the value itself. Naming the fill is how a signature says
-/// which of the two it follows, and a C compiler puts one on every such parameter and result.
+/// An ABI that extends a narrow integer at a call has the caller fill them for an argument and the
+/// callee for a result, and lets the other side read the whole unit on that promise; one that does
+/// not leaves them unspecified and has the reader narrow the value itself.
+/// `c_abi_extends_narrow_integers` says which of the two a target follows.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum CIntegerExtension {
     /// Copies of the value's sign bit fill the bits above it.
@@ -70,6 +74,32 @@ impl CIntegerExtension {
     }
 }
 
+/// Whether the C ABI of `triple` extends an integer narrower than `C_INTEGER_UNIT_BITS` at a call, so
+/// that a declaration of a C function carries `signext` or `zeroext` on each such parameter and
+/// result.
+///
+/// The rule is clang's. x86-64 extends, and clang puts the attributes on its declarations, except on
+/// Windows, whose x64 ABI leaves the bits to the reader. AArch64 extends on Apple's operating
+/// systems, and AAPCS64 on every other one leaves the bits to the reader, where clang puts none. A
+/// declaration that promises the extension where the ABI does not make it reads the whole unit: a C
+/// function returning `(int8_t)3000`, which is -72, hands Fix 3000.
+///
+/// Any other architecture gets no attribute. Fix then narrows every value it reads, which is correct
+/// under either kind of ABI, but hands C an argument or a result with the bits above it unfilled,
+/// which an ABI that extends reads wrong. RISC-V 64 is one such ABI, and it extends to 64 bits, wider
+/// than `C_INTEGER_UNIT_BITS`; supporting it means an entry here and a wider unit.
+///
+/// # Examples
+/// `x86_64-unknown-linux-gnu` and `arm64-apple-darwin23.0.0` extend; `aarch64-unknown-linux-gnu`
+/// does not.
+pub fn c_abi_extends_narrow_integers(triple: &str) -> bool {
+    match architecture_of_target(triple) {
+        Architecture::X86_64 => !target_is_windows(triple),
+        Architecture::AArch64 => target_is_darwin(triple),
+        Architecture::Other => false,
+    }
+}
+
 /// The unit a C signature carries an integer in. An integer narrower than this width travels in the
 /// low bits of the unit, and C's default argument promotions widen such an integer to this width on
 /// the way through `...`.
@@ -83,8 +113,8 @@ impl TyCon {
     /// The shape of the C type this type constructor stands for.
     /// `()` is C's `void`, which carries no value, so it has no shape.
     ///
-    /// An integer narrower than 32 bits travels in the low bits of a register and carries the
-    /// extension its sign asks for; one that fills the register carries none, which is what lets a
+    /// An integer narrower than 32 bits travels in the low bits of a register and is widened by the
+    /// extension its sign asks for; one that fills the register needs none, which is what lets a
     /// program read the same C function's result as `I64` in one place and as `U64` in another.
     pub fn c_type_shape(self: &TyCon) -> Option<CTypeShape> {
         if self.is_unit() {
@@ -120,7 +150,7 @@ impl TyCon {
         })
     }
 
-    /// The extension the ABI puts on a value of this type crossing to C, and `None` for a value that
+    /// The extension a value of this type is widened with crossing to C, and `None` for a value that
     /// needs none: a wide integer, a floating point number, a pointer, and `()`.
     pub fn c_integer_extension(self: &TyCon) -> Option<CIntegerExtension> {
         match self.c_type_shape()? {

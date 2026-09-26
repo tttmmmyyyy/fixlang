@@ -2224,7 +2224,7 @@ The following types can be used for `{return_type}` or `{arg_type_i}`:
 
 An argument written past the declared parameters — one that goes through the `...` — is a value of one of the types an `{arg_type_i}` may be: a pointer or a number. C carries such an argument as one scalar, so write a `Bool` as a `U8` or a `CInt`, take a `Ptr` to a `String` with `Std::String::borrow_c_str`, and take a `Ptr` to a boxed value with `Std::FFI::boxed_to_retained_ptr` or `Std::FFI::borrow_boxed`.
 
-Note that the function signature must match what is declared in the C language header.
+The function signature must match what the C language header declares. A signature that does not match it has undefined behavior.
 For example, `scanf` is declared as `int scanf(const char *format, ...);`.
 Suppose that the pointer to the format string is `format_ptr : Ptr` and the pointer to a buffer to store the read value is `buf_ptr : Ptr`.
 In this case, the correct way to call it is as follows:
@@ -2304,13 +2304,9 @@ Any other type is rejected when the program is compiled.
 
 #### Names an exported function can take
 
-The exported function takes the C name written in the statement, and a program may call it back with `FFI_CALL` under that name.
+The exported function takes the C name written in the statement.
 
 `main` and the names beginning with `fixruntime_` are functions the compiler implements, so exporting one of them is rejected. `main` is available to a dynamic library, which carries no entry point.
-
-One name denotes one C function, so every description of it — an `FFI_EXPORT` that defines it, and each `FFI_CALL` that calls it — gives one signature. A program that describes one name two ways is rejected.
-
-Whether two signatures are the same is decided by whether C writes them the same way. `U64` and `I64` are one declaration in C, so one C function's result may be read as `U64` in one place and as `I64` in another. Integers narrower than 32 bits are the exception: the ABI carries one in the low bits of a register and the sign decides which side fills the bits above it, so `I8` and `U8` are different declarations. To read a narrow value at the other sign, take the sign the C function has and convert on the Fix side.
 
 #### Returning more than one value
 

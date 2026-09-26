@@ -1,26 +1,31 @@
 use crate::{
-    ast::program::TypeEnv,
+    ast::{name::FullName, program::TypeEnv, types::tycon},
     build::build_object_files::get_target_machine,
     configuration::{Configuration, OutputFileType},
-    constants::{COMPILER_TEST_WORKING_PATH, C_ENTRY_POINT_NAME},
+    constants::{COMPILER_TEST_WORKING_PATH, C_ENTRY_POINT_NAME, I8_NAME, STD_NAME, U16_NAME},
     elaboration::elaborate_via_config,
     error::panic_if_err,
+    ffi::{c_abi_extends_narrow_integers, CSignature},
     fixstd::runtime::{
         build_runtime, compiler_defined_c_function_reason, BuildMode, RUNTIME_ABORT,
         RUNTIME_GET_ARGC,
     },
-    generator::Generator,
-    misc::{function_name, Map},
+    generator::{enum_attribute_kind_id, Generator},
+    misc::function_name,
     tests::test_util::{
-        emitted_llvm_ir, fix_command, test_source, test_source_fail, test_source_with_c, EmittedIr,
+        emitted_llvm_ir, fix_command, standalone_generator, test_source, test_source_fail,
+        test_source_with_c, EmittedIr,
     },
 };
-use inkwell::context::Context;
+use inkwell::{
+    attributes::AttributeLoc,
+    context::Context,
+    targets::{TargetMachine, TargetTriple},
+};
 use std::{
     fs::{self, File},
     io::Write,
     path::PathBuf,
-    sync::Arc,
 };
 
 // An exported function exchanges values with C through the C ABI, and the wrapper the compiler
@@ -135,14 +140,13 @@ pub fn test_export_scalar_types() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
-/// An integer narrower than 32 bits travels in the low bits of a register, and `signext` /
-/// `zeroext` is how a signature says which side of the call extends it. Leaving it off costs
-/// nothing on x86-64, where whoever reads the value narrows it anyway, and yields the wrong
-/// number on AArch64, where the reader takes the whole register on the promise that the other
-/// side extended it. On an x86-64 host the attribute is therefore visible only in the emitted
-/// IR, which is what this test reads.
+/// An integer narrower than 32 bits travels in the low bits of a register, and on a target whose
+/// C ABI extends it at a call, `signext` / `zeroext` is how a signature says which side of the call
+/// extends it. The program's exported functions and the C functions it calls carry the attribute
+/// on the host's target exactly where `c_abi_extends_narrow_integers` says that ABI extends, which
+/// this test reads off the emitted IR.
 #[test]
-pub fn test_narrow_integers_carry_the_c_extension_attribute() {
+pub fn test_narrow_integer_extension_attribute_follows_the_host_abi() {
     let source = r#"
         module Main;
 
@@ -201,23 +205,187 @@ pub fn test_narrow_integers_carry_the_c_extension_attribute() {
     // `-O none` compiles the program as several modules, and the wrappers are spread over them.
     let ir = emitted_llvm_ir(&work_dir, EmittedIr::BeforeOptimization);
 
+    let host_triple = TargetMachine::get_default_triple();
+    let (signext, zeroext) =
+        if c_abi_extends_narrow_integers(&host_triple.as_str().to_string_lossy()) {
+            (" signext", " zeroext")
+        } else {
+            ("", "")
+        };
     for expected in [
-        // An exported function extends its narrow arguments and result, by sign or by zero
-        // according to the Fix type.
-        "define signext i8 @c_add_i8(i8 signext %0, i8 signext %1)",
-        "define zeroext i16 @c_add_u16(i16 zeroext %0, i16 zeroext %1)",
+        // Where the ABI extends, an exported function extends its narrow arguments and result, by
+        // sign or by zero according to the Fix type.
+        format!("define{signext} i8 @c_add_i8(i8{signext} %0, i8{signext} %1)"),
+        format!("define{zeroext} i16 @c_add_u16(i16{zeroext} %0, i16{zeroext} %1)"),
         // A type that fills the register carries no attribute, and neither does a pointer.
-        "define i64 @c_add_i64(i64 %0, i64 %1)",
-        "define void @c_write_byte(ptr %0, i8 zeroext %1)",
+        format!("define i64 @c_add_i64(i64 %0, i64 %1)"),
+        format!("define void @c_write_byte(ptr %0, i8{zeroext} %1)"),
         // The same holds for the C functions Fix calls.
-        "declare void @fixruntime_u8_to_bytes(ptr, i8 zeroext)",
+        format!("declare void @fixruntime_u8_to_bytes(ptr, i8{zeroext})"),
     ] {
         assert!(
-            ir.contains(expected),
+            ir.contains(&expected),
             "emitted IR lacks `{}`:\n{}",
             expected,
             ir
         );
+    }
+}
+
+/// Whether a declaration of a C function carries `signext` / `zeroext` on a narrow integer follows
+/// the C ABI of the target the module is compiled for: x86-64 and Apple's AArch64 extend, and
+/// AAPCS64 on Linux leaves the bits to the reader. Each module here is given a target's triple, so
+/// a host of either architecture checks all three answers.
+#[test]
+pub fn test_narrow_integer_extension_follows_the_target_abi() {
+    let config = Configuration::develop_mode();
+    let std_tycon = |name: &str| tycon(FullName::from_strs(&[STD_NAME], name));
+    let signature = CSignature {
+        param_tys: vec![std_tycon(U16_NAME)],
+        ret_tycon: std_tycon(I8_NAME),
+        is_var_args: false,
+    };
+    for (triple, extends) in [
+        ("x86_64-unknown-linux-gnu", true),
+        ("arm64-apple-darwin23.0.0", true),
+        ("aarch64-unknown-linux-gnu", false),
+    ] {
+        let context = Context::create();
+        let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
+        let module = Generator::create_module("abi_test", &context, &target_machine);
+        module.set_triple(&TargetTriple::create(triple));
+        let gc = standalone_generator(
+            &context,
+            &module,
+            &target_machine,
+            &config,
+            TypeEnv::default(),
+        );
+        let func = signature.get_or_declare_in_module(&"c_narrow".to_string(), &gc);
+        let result_extended = func
+            .get_enum_attribute(AttributeLoc::Return, enum_attribute_kind_id("signext"))
+            .is_some();
+        let argument_extended = func
+            .get_enum_attribute(AttributeLoc::Param(0), enum_attribute_kind_id("zeroext"))
+            .is_some();
+        assert_eq!(
+            (result_extended, argument_extended),
+            (extends, extends),
+            "the extension attributes of `int8_t c_narrow(uint16_t)` on {}",
+            triple
+        );
+    }
+}
+
+/// A C function's result narrower than the unit the ABI carries an integer in arrives in the low
+/// bits of a register, and the value is what those bits hold. Each C function here returns the low
+/// bits of a wider product, so on an ABI that leaves the bits above to the reader they hold the rest
+/// of that product, and the number the Fix side reads is the narrow one.
+#[test]
+pub fn test_ffi_call_reads_a_narrow_result() {
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            let n = (*IO::get_args).@size.c_int;
+            assert_eq(|_|"I8", FFI_CALL[I8 c_narrow_i8(CInt), n * 1000.c_int].i64, -72);;
+            assert_eq(|_|"U8", FFI_CALL[U8 c_narrow_u8(CInt), n * 1000.c_int].i64, 184);;
+            assert_eq(|_|"I16", FFI_CALL[I16 c_narrow_i16(CInt), n * 100000.c_int].i64, -27680);;
+            assert_eq(|_|"U16", FFI_CALL[U16 c_narrow_u16(CInt), n * 100000.c_int].i64, 37856);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        #include <stdint.h>
+
+        int8_t   c_narrow_i8(int n)  { return (int8_t)(n * 3); }
+        uint8_t  c_narrow_u8(int n)  { return (uint8_t)(n * 3); }
+        int16_t  c_narrow_i16(int n) { return (int16_t)(n * 3); }
+        uint16_t c_narrow_u16(int n) { return (uint16_t)(n * 3); }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+/// An exported function's parameter narrower than the unit the ABI carries an integer in arrives in
+/// the low bits of a register, and the value is what those bits hold. The C caller here passes the
+/// low bits of a wider product, so on an ABI that leaves the bits above to the reader they hold the
+/// rest of that product, and the number the Fix side reads is the narrow one.
+#[test]
+pub fn test_ffi_export_reads_a_narrow_argument() {
+    let source = r##"
+        module Main;
+
+        widen_i8 : I8 -> I64;
+        widen_i8 = |x| x.i64;
+        FFI_EXPORT[widen_i8, c_widen_i8];
+
+        widen_u8 : U8 -> I64;
+        widen_u8 = |x| x.i64;
+        FFI_EXPORT[widen_u8, c_widen_u8];
+
+        widen_i16 : I16 -> I64;
+        widen_i16 = |x| x.i64;
+        FFI_EXPORT[widen_i16, c_widen_i16];
+
+        widen_u16 : U16 -> I64;
+        widen_u16 = |x| x.i64;
+        FFI_EXPORT[widen_u16, c_widen_u16];
+
+        main : IO ();
+        main = (
+            let n = (*IO::get_args).@size.c_int;
+            assert_eq(|_|"C reported a wrong argument", FFI_CALL[CInt run_c(CInt), n], 0.c_int);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        #include <stdint.h>
+
+        int64_t c_widen_i8(int8_t x);
+        int64_t c_widen_u8(uint8_t x);
+        int64_t c_widen_i16(int16_t x);
+        int64_t c_widen_u16(uint16_t x);
+
+        int run_c(int n) {
+            if (c_widen_i8((int8_t)(n * 3000)) != -72) { return 1; }
+            if (c_widen_u8((uint8_t)(n * 3000)) != 184) { return 2; }
+            if (c_widen_i16((int16_t)(n * 300000)) != -27680) { return 3; }
+            if (c_widen_u16((uint16_t)(n * 300000)) != 37856) { return 4; }
+            return 0;
+        }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+/// The answer agrees with the declaration clang 22 writes for `int8_t f(uint16_t)` on each triple:
+/// `signext` and `zeroext` where it is listed as extending, and no attribute elsewhere. The triples
+/// cover each spelling LLVM gives the two architectures and each operating system that changes the
+/// answer.
+#[test]
+pub fn test_c_abi_extends_narrow_integers_under_each_spelling() {
+    for (triple, extends) in [
+        ("x86_64-unknown-linux-gnu", true),
+        ("x86_64-linux-gnu", true),
+        ("amd64-unknown-openbsd", true),
+        ("x86_64h-apple-darwin", true),
+        ("x86_64-pc-windows-msvc", false),
+        ("x86_64-w64-mingw32", false),
+        ("aarch64-apple-darwin", true),
+        ("arm64-apple-darwin23.0.0", true),
+        ("arm64e-apple-ios", true),
+        ("arm64-apple-tvos", true),
+        ("arm64-apple-xros", true),
+        ("aarch64-apple-none-macho", false),
+        ("aarch64-unknown-linux-gnu", false),
+        ("aarch64-linux-gnu", false),
+        ("arm64-unknown-linux-gnu", false),
+        ("aarch64_lfi-unknown-linux-gnu", false),
+        ("aarch64-unknown-freebsd", false),
+        ("aarch64-pc-windows-msvc", false),
+        ("aarch64", false),
+    ] {
+        assert_eq!(c_abi_extends_narrow_integers(triple), extends, "{}", triple);
     }
 }
 
@@ -350,17 +518,7 @@ fn names_of_runtime_functions_with_bodies(
     let context = Context::create();
     let target_machine = get_target_machine(config.get_llvm_opt_level(), config);
     let module = Generator::create_module("runtime_test", &context, &target_machine);
-    let mut gc = Generator::new(
-        &context,
-        &module,
-        target_machine.get_target_data(),
-        config.clone(),
-        type_env.clone(),
-        Arc::new(Map::default()),
-        Default::default(),
-        Default::default(),
-        Default::default(),
-    );
+    let mut gc = standalone_generator(&context, &module, &target_machine, config, type_env.clone());
     build_runtime(&mut gc, BuildMode::Declare);
     build_runtime(&mut gc, BuildMode::Implement);
 
@@ -687,9 +845,9 @@ pub fn test_ffi_call_promotes_only_what_follows_the_declared_parameters() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
-/// A parameter is a position like the result: the ABI carries a narrow integer in the low bits of a
-/// register and the sign says which side extends it, so the two calls ask the one declaration for
-/// opposite promises about the bits above the value.
+/// A parameter is a position like the result: `I8` and `U8` are different C types on every target,
+/// since a narrow integer is widened according to its sign, so the two calls describe the one C
+/// function in two ways that disagree.
 #[test]
 pub fn test_ffi_calls_of_one_c_name_taking_a_narrow_argument_at_two_signs_fails() {
     let source = r##"
@@ -765,9 +923,8 @@ pub fn test_ffi_calls_of_one_c_name_reading_a_wide_result_as_both_signs() {
     test_source_with_c(&source, &c_source, function_name!());
 }
 
-/// The ABI carries an integer narrower than 32 bits in the low bits of a register, and the sign is
-/// what says which side extends it. So the two descriptions ask the one declaration for opposite
-/// promises about the bits above the value.
+/// An integer narrower than 32 bits is widened according to its sign, so `I8` and `U8` are
+/// different C types on every target, and the two descriptions of the one C function disagree.
 #[test]
 pub fn test_ffi_calls_of_one_c_name_reading_a_narrow_result_as_both_signs_fails() {
     let source = r##"

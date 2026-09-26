@@ -1,12 +1,15 @@
 use crate::{
+    ast::program::TypeEnv,
     commands::run::run,
     configuration::Configuration,
     constants::COMPILER_TEST_WORKING_PATH,
     env_vars::MAX_OPT_LEVEL_VAR,
     error::{panic_if_err, panic_with_msg, Errors},
-    misc::save_temporary_source,
+    generator::Generator,
+    misc::{save_temporary_source, Map},
     parse::parser::check_grammar_accepts,
 };
+use inkwell::{context::Context, module::Module, targets::TargetMachine};
 use std::{
     env,
     ffi::OsString,
@@ -14,7 +17,7 @@ use std::{
     io::{self, Write},
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Output, Stdio},
-    sync::Once,
+    sync::{Arc, Once},
     thread::sleep,
     time::{Duration, Instant},
 };
@@ -838,10 +841,14 @@ pub fn test_source_with_c(fix_src: &str, c_src: &str, test_name: &str) {
     let mut file = File::create(&c_file_path).unwrap();
     file.write_all(c_src.as_bytes()).unwrap();
 
-    // Build `c_source` into an object file.
+    // Build `c_source` into an object file, optimized as a library a program links usually is. The
+    // bits a C function leaves above a narrow integer are what an optimized build leaves there: at
+    // `-O0`, gcc for AArch64 widens every narrow result and argument whether or not the ABI asks
+    // for it, which hides a Fix side that reads those bits.
     let o_file_path = format!("{}/{}.o", COMPILER_TEST_WORKING_PATH, test_name);
     let mut command = Command::new("gcc");
     let output = command
+        .arg("-O2")
         .arg("-c")
         .arg("-o")
         .arg(&o_file_path)
@@ -1016,4 +1023,26 @@ pub fn assert_failed_with(output: &Output, report: &str, what: &str) {
         String::from_utf8_lossy(&output.stdout),
         stderr,
     );
+}
+
+/// A generator over `module` that resolves no global and is given none, for a test that reads what
+/// the generator builds from types and signatures alone.
+pub fn standalone_generator<'c, 'm>(
+    context: &'c Context,
+    module: &'m Module<'c>,
+    target_machine: &TargetMachine,
+    config: &Configuration,
+    type_env: TypeEnv,
+) -> Generator<'c, 'm> {
+    Generator::new(
+        context,
+        module,
+        target_machine.get_target_data(),
+        config.clone(),
+        type_env,
+        Arc::new(Map::default()),
+        Default::default(),
+        Default::default(),
+        Default::default(),
+    )
 }

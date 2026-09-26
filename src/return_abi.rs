@@ -27,6 +27,7 @@
 //! out-pointer, a four-part state and a capture pointer already fill it. On that target
 //! `lambda_calling_convention_of_target` lifts the limit for every Fix lambda.
 
+use crate::target_triple::{architecture_of_target, Architecture};
 use inkwell::types::BasicTypeEnum;
 
 /// `llvm::CallingConv::Tail`, which inkwell exposes only as a number. The backend may rewrite — and
@@ -55,14 +56,9 @@ const CCC: u32 = 0;
 /// uniform, since a tail call between two conventions becomes an ordinary call in both directions.
 pub fn lambda_calling_convention_of_target(triple: &str) -> u32 {
     match architecture_of_target(triple) {
-        "x86_64" => TAILCC,
-        _ => CCC,
+        Architecture::X86_64 => TAILCC,
+        Architecture::AArch64 | Architecture::Other => CCC,
     }
-}
-
-/// The architecture a target triple names.
-fn architecture_of_target(triple: &str) -> &str {
-    triple.split('-').next().unwrap()
 }
 
 /// How many registers of each class a target returns a value in.
@@ -100,9 +96,9 @@ const AARCH64_CCC: ReturnRegisters = ReturnRegisters {
 /// headroom, while the cost of guessing a budget too large is O(n) stack with nothing to signal it.
 pub fn return_registers_of_target(triple: &str) -> ReturnRegisters {
     match architecture_of_target(triple) {
-        "x86_64" => X86_64_TAILCC,
-        "aarch64" | "arm64" => AARCH64_CCC,
-        _ => X86_64_TAILCC,
+        Architecture::X86_64 => X86_64_TAILCC,
+        Architecture::AArch64 => AARCH64_CCC,
+        Architecture::Other => X86_64_TAILCC,
     }
 }
 
