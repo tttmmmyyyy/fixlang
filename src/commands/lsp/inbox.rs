@@ -1,21 +1,28 @@
 //! The client's messages waiting to be handled.
 //!
 //! A thread of its own reads stdin, so the messages the client sends while the server works on one
-//! request queue up here. Before the server carries out a request, the queue behind it says whether
-//! the answer still has a use: the client may have cancelled it, or changed the document it asks
-//! about. Such a request is answered with an error at once. An editor sends a completion request
-//! and a semantic-tokens request with every keystroke, and on a slow machine carrying each of them
-//! out takes longer than the keystrokes take to arrive; answering the outdated ones at once keeps
-//! the server level with the typing.
+//! request queue up here, and a cancellation reaches the request it names while that request is
+//! still queued. A cancelled request is answered with `RequestCancelled` at once, in place of being
+//! carried out. An editor sends a completion request with every keystroke and cancels the one
+//! before it; on a slow machine carrying out each completion takes longer than the keystrokes take
+//! to arrive, and answering the cancelled ones at once keeps the server level with the typing.
 
-use super::server::{JSONRPCMessage, ResponseError};
-use crate::misc::Set;
+use super::server::JSONRPCMessage;
 use crate::write_log;
 use lsp_types::{CancelParams, NumberOrString};
 use std::collections::VecDeque;
 use std::io::{stdin, BufRead};
-use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::sync::mpsc::{self, Receiver};
 use std::thread;
+
+/// What the server is handed out of the inbox.
+pub(super) enum Incoming {
+    /// A message to handle.
+    Message(JSONRPCMessage),
+    /// The id of a request the client cancelled before the server reached it, which is answered
+    /// with `RequestCancelled`.
+    Cancelled(u32),
+}
 
 /// The messages the client has sent and the server has still to handle, in the order the client
 /// sent them.
@@ -23,9 +30,7 @@ pub(super) struct Inbox {
     /// The messages the reader thread has read off stdin. It disconnects once stdin is closed.
     recv: Receiver<JSONRPCMessage>,
     /// The messages taken off `recv` and not yet handed out by `next`.
-    queued: VecDeque<JSONRPCMessage>,
-    /// The ids of the requests in `queued` that the client has cancelled.
-    cancelled: Set<u32>,
+    queued: VecDeque<Incoming>,
 }
 
 impl Inbox {
@@ -47,16 +52,15 @@ impl Inbox {
         Inbox {
             recv,
             queued: VecDeque::new(),
-            cancelled: Set::default(),
         }
     }
 
     /// The next message to handle, waiting for one to arrive when none has. `None` once stdin is
     /// closed and every message read off it has been handed out.
     ///
-    /// Every message that has arrived is queued before the next is handed out, so that
-    /// `obsolete` judges it against everything the client has sent so far.
-    pub(super) fn next(&mut self) -> Option<JSONRPCMessage> {
+    /// Every message that has arrived is queued before the next is handed out, so that a
+    /// cancellation the client has already sent reaches the request it names.
+    pub(super) fn next(&mut self) -> Option<Incoming> {
         self.take_arrived();
         if self.queued.is_empty() {
             let message = self.recv.recv().ok()?;
@@ -66,41 +70,18 @@ impl Inbox {
         self.queued.pop_front()
     }
 
-    /// The error to answer `request` with in place of carrying it out, when the messages queued
-    /// behind it leave its answer with no use: the client cancelled it, or changed the document it
-    /// asks about. `request` is the message `next` has just handed out.
-    pub(super) fn obsolete(&mut self, request: &JSONRPCMessage) -> Option<ResponseError> {
-        let id = request.id?;
-        if request.method.is_none() {
-            return None;
-        }
-        if self.cancelled.remove(&id) {
-            return Some(ResponseError::request_cancelled());
-        }
-        let uri = document_of(request)?;
-        let changed_later = self.queued.iter().any(|message| {
-            message.method.as_deref() == Some("textDocument/didChange")
-                && document_of(message) == Some(uri)
-        });
-        changed_later.then(ResponseError::content_modified)
-    }
-
     /// Queue every message that has arrived, without waiting for more.
     fn take_arrived(&mut self) {
-        loop {
-            match self.recv.try_recv() {
-                Ok(message) => self.enqueue(message),
-                Err(TryRecvError::Empty | TryRecvError::Disconnected) => return,
-            }
+        while let Ok(message) = self.recv.try_recv() {
+            self.enqueue(message);
         }
     }
 
-    /// Queue `message`. A cancellation is recorded against the request it names instead, when
-    /// that request is still queued; one naming a request already handed out has nothing left to
-    /// act on.
+    /// Queue `message`. A cancellation marks the queued request it names as cancelled instead; one
+    /// naming a request already handed out has nothing left to act on.
     fn enqueue(&mut self, message: JSONRPCMessage) {
         if message.method.as_deref() != Some("$/cancelRequest") {
-            self.queued.push_back(message);
+            self.queued.push_back(Incoming::Message(message));
             return;
         }
         let params = message
@@ -115,20 +96,14 @@ impl Inbox {
         let Ok(id) = u32::try_from(id) else {
             return;
         };
-        if self.queued.iter().any(|message| message.id == Some(id)) {
-            self.cancelled.insert(id);
+        let request = self.queued.iter_mut().find(|incoming| {
+            matches!(incoming, Incoming::Message(message)
+                if message.method.is_some() && message.id == Some(id))
+        });
+        if let Some(request) = request {
+            *request = Incoming::Cancelled(id);
         }
     }
-}
-
-/// The URI of the document a message asks about or reports on, which is `textDocument.uri` among
-/// its params.
-fn document_of(message: &JSONRPCMessage) -> Option<&str> {
-    message
-        .params
-        .as_ref()?
-        .pointer("/textDocument/uri")?
-        .as_str()
 }
 
 /// Read one message off `stdin`, skipping what does not read as a message. `None` once stdin is

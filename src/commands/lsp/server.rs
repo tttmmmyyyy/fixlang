@@ -3,7 +3,7 @@ use super::completion;
 use super::document_symbol;
 use super::goto_definition;
 use super::hover;
-use super::inbox::Inbox;
+use super::inbox::{Inbox, Incoming};
 use super::references;
 use super::rename;
 use super::semantic_tokens;
@@ -21,6 +21,7 @@ use crate::metafiles::project_file::ProjectFile;
 use crate::misc::{spawn_compiler_thread, to_absolute_path, Map, Set};
 use crate::parse::parser::{parse_str_import_statements, parse_str_module_defn};
 use crate::write_log;
+use lsp_types::error_codes::REQUEST_CANCELLED;
 use lsp_types::{
     CallHierarchyIncomingCallsParams, CallHierarchyOutgoingCallsParams, CallHierarchyPrepareParams,
     CallHierarchyServerCapability, CodeActionParams, CodeActionProviderCapability, CompletionItem,
@@ -276,13 +277,14 @@ pub fn launch_language_server() {
             }
         }
 
-        let Some(message) = inbox.next() else {
-            break;
+        let message = match inbox.next() {
+            Some(Incoming::Message(message)) => message,
+            Some(Incoming::Cancelled(id)) => {
+                send_response(id, Err::<(), _>(ResponseError::request_cancelled()));
+                continue;
+            }
+            None => break,
         };
-        if let Some(error) = inbox.obsolete(&message) {
-            send_response(message.id.unwrap(), Err::<(), _>(error));
-            continue;
-        }
 
         // Depending on the method, handle the message.
         if let Some(method) = message.method.as_ref() {
@@ -690,17 +692,8 @@ impl ResponseError {
     /// The client cancelled the request before the server carried it out.
     pub(super) fn request_cancelled() -> Self {
         ResponseError {
-            code: -32800,
+            code: REQUEST_CANCELLED,
             message: "The request was cancelled.".to_string(),
-        }
-    }
-
-    /// The document the request asks about changed after the request was sent, so the answer
-    /// would describe a text the client no longer holds.
-    pub(super) fn content_modified() -> Self {
-        ResponseError {
-            code: -32801,
-            message: "The document changed after the request was sent.".to_string(),
         }
     }
 }

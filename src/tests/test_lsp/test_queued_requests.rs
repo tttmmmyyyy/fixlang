@@ -1,24 +1,19 @@
-//! Requests whose answers have lost their use by the time the server reaches them.
+//! Requests the client cancels, or edits behind, before the server reaches them.
 //!
-//! The client goes on sending while the server works on a request, and what it sends behind a
-//! request can leave that request's answer with no use: a cancellation of it, or a change to the
-//! document it asks about. Such a request is answered with the error the protocol gives for the
-//! case, without being carried out.
+//! The client goes on sending while the server works on a request. A cancellation of a request
+//! still waiting its turn is answered with `RequestCancelled`, without carrying the request out. A
+//! change to the document a waiting request asks about leaves the request to be carried out: the
+//! client decides whether an answer computed on the older text is of use, and cancels it if not.
 
 #[cfg(test)]
 mod tests {
     use super::super::case_project::setup_test_env;
     use super::super::lsp_client::LspClient;
+    use lsp_types::error_codes::REQUEST_CANCELLED;
     use serde_json::{json, Value};
     use std::path::{Path, PathBuf};
     use std::time::Duration;
     use tempfile::TempDir;
-
-    /// The error code of a request the client cancelled.
-    const REQUEST_CANCELLED: i64 = -32800;
-
-    /// The error code of a request whose document changed after the request was sent.
-    const CONTENT_MODIFIED: i64 = -32801;
 
     /// A session over the case project `goto_local`, with `main.fix` and `lib.fix` opened and
     /// analyzed once.
@@ -89,54 +84,23 @@ mod tests {
         })
     }
 
-    /// A request is answered with `ContentModified` when a change to the document it asks about
-    /// arrived behind it, and the request before it, on another document, is carried out.
+    /// A request is carried out when a change to the document it asks about arrived behind it.
     #[test]
-    fn test_a_request_on_a_document_changed_behind_it_is_answered_content_modified() {
+    fn test_a_change_behind_a_request_leaves_it_to_be_carried_out() {
         let (_temp_dir, project_dir, mut client) = open_session();
         let main_fix = Path::new("main.fix");
         let text = std::fs::read_to_string(project_dir.join(main_fix)).unwrap();
 
-        let (completion, tokens) = send_behind_a_completion(&mut client, |client, _| {
-            change(client, main_fix, 2, &format!("{}\n", text));
-        });
-
-        assert_eq!(
-            error_code(&client.expect_response(completion)),
-            None,
-            "the completion request asks about lib.fix, which no change arrived behind, so it is \
-             expected to be carried out"
-        );
-        assert_eq!(
-            error_code(&client.expect_response(tokens)),
-            Some(CONTENT_MODIFIED),
-            "a change to main.fix arrived behind the semantic-tokens request, so it is expected to \
-             be answered ContentModified"
-        );
-
-        client.shutdown().expect("Failed to shutdown LSP");
-        client
-            .verify_no_protocol_error()
-            .expect("Reader thread should not have errors");
-    }
-
-    /// A request is carried out when the change that arrived behind it is to another document.
-    #[test]
-    fn test_a_change_to_another_document_leaves_a_request_to_be_carried_out() {
-        let (_temp_dir, project_dir, mut client) = open_session();
-        let lib_fix = Path::new("lib.fix");
-        let text = std::fs::read_to_string(project_dir.join(lib_fix)).unwrap();
-
         let (_, tokens) = send_behind_a_completion(&mut client, |client, _| {
-            change(client, lib_fix, 2, &format!("{}\n", text));
+            change(client, main_fix, 2, &format!("{}\n", text));
         });
 
         let response = client.expect_response(tokens);
         assert_eq!(
             error_code(&response),
             None,
-            "the change behind the semantic-tokens request is to lib.fix, and the request asks \
-             about main.fix, so it is expected to be carried out"
+            "a change to main.fix arrived behind the semantic-tokens request, which the client \
+             did not cancel, so it is expected to be carried out"
         );
         assert!(
             !response["result"]["data"]
