@@ -4,9 +4,10 @@
 //! request queue up here, and a cancellation reaches the request it names while that request is
 //! still queued. A cancelled request is answered with `RequestCancelled` at once, instead of being
 //! carried out. A cancellation of a request already handed out goes to the server, which answers
-//! that request the same way when it is still holding it unanswered. An editor sends a completion request with every keystroke and cancels the one
-//! before it; on a slow machine carrying out each completion takes longer than the keystrokes take
-//! to arrive, and answering the cancelled ones at once lets the server keep up with the typing.
+//! that request the same way when it is still holding it unanswered. An editor sends a completion
+//! request with every keystroke and cancels the one before it; on a slow machine carrying out each
+//! completion takes longer than the keystrokes take to arrive, and answering the cancelled ones at
+//! once lets the server keep up with the typing.
 
 use super::server::{parase_params, JSONRPCMessage};
 use crate::write_log;
