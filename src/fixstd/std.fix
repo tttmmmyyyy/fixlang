@@ -1287,7 +1287,7 @@ namespace IO {
     // 
     // * `msg` - The string to be printed.
     eprintln : String -> IO ();
-    eprintln = |str| eprint(str + "\n");
+    eprintln = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fixruntime_fputs_line(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
 
     // Exits the program with an error code.
     // 
@@ -1480,7 +1480,7 @@ namespace IO {
     //
     // * `msg` - The string to be printed.
     println : String -> IO ();
-    println = |str| print(str + "\n");
+    println = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fixruntime_fputs_line(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
 
     // Raads all characters from a file.
     // 
@@ -4330,7 +4330,7 @@ namespace Debug {
     //
     // * `msg`    
     debug_eprint : String -> ();
-    debug_eprint = |msg| _debug_print_to_stream(stderr, msg);
+    debug_eprint = |msg| (eprint(msg);; stderr.flush;; pure()).unsafe_perform;
 
     // Prints a string followed by a newline to stderr and flushes.
     //
@@ -4340,7 +4340,7 @@ namespace Debug {
     //
     // * `msg`    
     debug_eprintln : String -> ();
-    debug_eprintln = |msg| debug_eprint(msg + "\n");
+    debug_eprintln = |msg| (eprintln(msg);; stderr.flush;; pure()).unsafe_perform;
 
     // Prints a string to stdout and flushes.
     // 
@@ -4350,7 +4350,7 @@ namespace Debug {
     //
     // * `msg`        
     debug_print : String -> ();
-    debug_print = |msg| _debug_print_to_stream(stdout, msg);
+    debug_print = |msg| (print(msg);; stdout.flush;; pure()).unsafe_perform;
 
     // Prints a string followed by a newline to stdout and flushes.
     //
@@ -4360,20 +4360,7 @@ namespace Debug {
     //
     // * `msg`        
     debug_println : String -> ();
-    debug_println = |msg| debug_print(msg + "\n");
-
-    // Prints a string to the specified stream and flushes the stream.
-    // 
-    // NOTE: This function is not pure and should only be used for temporary debugging purposes.
-    _debug_print_to_stream : IOHandle -> String -> ();
-    _debug_print_to_stream = |handle, msg| (
-        msg.borrow_c_str_io(|str|
-            let file_ptr = *handle.get_file_ptr;
-            FFI_CALL_IO[I32 fputs(Ptr, Ptr), str, file_ptr];;
-            FFI_CALL_IO[I32 fflush(Ptr), file_ptr];;
-            pure()
-        ).unsafe_perform
-    );
+    debug_println = |msg| (println(msg);; stdout.flush;; pure()).unsafe_perform;
 }
 
 // The trait for indexable types.

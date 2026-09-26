@@ -12816,6 +12816,32 @@ main = (
     );
 }
 
+/// Checks that `println` and `eprintln` write the string followed by one newline, in order with
+/// what `print` and `eprint` write to the same stream, an empty string making an empty line.
+#[test]
+pub fn test_println_writes_the_string_and_a_newline() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    print("a");;
+    println("b");;
+    println("");;
+    println("c d");;
+    eprint("x");;
+    eprintln("y");;
+    eprintln("");;
+    pure()
+);
+    "##;
+    let mut config = Configuration::develop_mode();
+    config.set_valgrind(ValgrindTool::None);
+    let output = run_source_capture(&source, config);
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "ab\n\nc d\n");
+    assert_eq!(String::from_utf8_lossy(&output.stderr), "xy\n\n");
+}
+
 /// Checks `Bar (Foo I64)`, where `Foo I64` is the struct `Foo a b` applied to one of its two
 /// parameters. `Bar` has a second field, so the compiler keeps it as a struct, and newtype
 /// unwrapping reaches `Foo I64`. The test calls the function held in the nested field.
