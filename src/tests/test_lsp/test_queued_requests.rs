@@ -203,7 +203,8 @@ mod tests {
                 }),
             )
             .expect("Failed to send completion");
-        // The client numbers its requests in order, so the next request carries `completion_id + 1`.
+        // The client numbers its requests in order, so the next request carries
+        // `completion_id + 1`.
         client
             .send_response(completion_id + 1, Value::Null)
             .expect("Failed to send a response");

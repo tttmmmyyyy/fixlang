@@ -244,8 +244,9 @@ pub fn launch_language_server() {
     loop {
         // Take in whatever the diagnostics thread has finished, keeping the newest result. This
         // sits above the wait for the next message below, so a result finished while the loop was
-        // waiting arrives only after one more message has been handled. `save_and_wait_for_the_program`
-        // of the test client waits that message out, and must stay in step with this placement.
+        // waiting arrives only after one more message has been handled.
+        // `save_and_wait_for_the_program` of the test client waits that message out, and must stay
+        // in step with this placement.
         let mut diagnostics_updated = false;
         while let Ok(diagnostics_result) = diag_res_recv.try_recv() {
             last_diag = Some(diagnostics_result);
