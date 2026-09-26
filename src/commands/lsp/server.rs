@@ -51,7 +51,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
-        mpsc::{self, Receiver, Sender},
+        mpsc::{self, Receiver, RecvTimeoutError, Sender},
         Arc,
     },
 };
@@ -957,7 +957,7 @@ fn diagnostics_thread(
             let debounce = Duration::from_millis(debounce_ms.load(Ordering::Relaxed));
             match req_recv.recv_timeout(debounce) {
                 Ok(msg) => Some(msg),
-                Err(mpsc::RecvTimeoutError::Timeout) => {
+                Err(RecvTimeoutError::Timeout) => {
                     run_diagnostics_pass(
                         pending.take().unwrap(),
                         &typecheck_cache,
@@ -967,7 +967,7 @@ fn diagnostics_thread(
                     continue;
                 }
                 // The sender was dropped: stop the diagnostics thread.
-                Err(mpsc::RecvTimeoutError::Disconnected) => None,
+                Err(RecvTimeoutError::Disconnected) => None,
             }
         };
         match msg {
