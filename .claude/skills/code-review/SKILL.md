@@ -183,6 +183,8 @@ So a finding is not the end of the road. Read every one the review produced — 
 
 **A fix that changes what a valid program does leaves the cleanup branch.** Where the review finds a defect a user can reach — a program compiled into the wrong code, a diagnostic reported at the wrong place or missing, a `fix` command answering wrongly — that is not cleanup, whatever its size. File it as an issue and fix it in a change of its own, with the changelog entry and the regression test such a change owes. A pull request titled cleanup is where nobody looks for a user-visible change, and the changelog entry is keyed to the issue and the pull request that carry one.
 
+**A finding on text the diff adds is fixed on the branch under review.** A comment, a doc paragraph or a changelog entry the change writes is part of the change, so its fix lands with the change, the same as the `in-diff` edits: commit it there before the cleanup branch is cut.
+
 For each finding you fix, run the **whole** suite. A filtered run answers a smaller question, and it answers it wrongly here more often than anywhere else: a finding sits by definition outside what the change's own tests exercise, so the tests that would catch a mistake in it are the ones you would not think to filter for.
 
 **Add a test where the fix wants one**, and judge it the way *Add the tests worth keeping* judges a proposal: break what it pins, run the whole suite, and keep it only when nothing else goes red. Most fixes here want none — a moved item is covered by whatever already reached it, and a signature change is covered by its callers.
@@ -958,9 +960,9 @@ This convention covers the text the project ships. Writing addressed to the peop
 
 Write that English plainly. A reader of this project need not be a native speaker, and a long sentence, a rare word where a common one fits, or a clause folded inside another costs them more than it costs a native reader. Short sentences and ordinary words carry the same meaning for less, and they are also what a translator of the document has to work from.
 
-Check that what is written is concise, plain and natural English, and that it leaves out what only someone working on the compiler needs. Where it is not, propose a replacement.
+Check that what is written is concise, plain and natural English, and that it leaves out what only someone working on the compiler needs.
 
-**Rewrite**: translate the comment into clear English while preserving its meaning; say a long or ornate sentence plainly.
+**Rewrite** each sentence that fails the check, in place: translate the comment into clear English while preserving its meaning; say a long or ornate sentence plainly; cut the words that carry nothing; drop what only someone working on the compiler needs. This aspect makes the edit itself, in whichever mode it is running.
 
 #### Every Rust item must have a doc comment — [Rust]
 
@@ -1093,16 +1095,16 @@ An entry states the change in a sentence or two; the numbers are what take a rea
    In `CHANGELOG.md`, read the entries the diff adds against the **[Changelog]** conventions as well; in `neighborhood` mode, the rest of the `## [Unreleased]` section.
 4. For each violation:
    - Identify which convention it is.
-   - For a rewriting convention: propose a rewrite that preserves the intent but removes the anti-pattern, then apply with `Edit`.
+   - For a rewriting convention: write a rewrite that preserves the intent but removes the anti-pattern, and apply it with `Edit`.
    - For the doc-comment convention: write the comment above the item in the shape that convention gives, or flag it for review if you cannot articulate the purpose without restating the name.
 5. After all edits, run `cargo check` to confirm nothing broke (comment edits shouldn't affect builds, but verify in case of doctest changes). Markdown edits don't affect the build.
 6. Report:
    - **Applied edits**: file, convention, brief rationale.
-   - **Flagged for review** (the doc-comment and changelog conventions): file, item name or entry, and why it was left to the author.
+   - **Flagged for review**: an item whose purpose you could not state without restating its name (*Every Rust item must have a doc comment*), and a `### Fixed` entry whose bug you could not date (*Leave out fixes for bugs that never shipped*) — file, item name or entry, and why it was left to the author. Every other convention ends in an edit.
 
 ### Scope
 
-- **Do not rewrite Rust comments or doc prose just because they're long.** Length is not the issue there; the listed anti-patterns are. Changelog entries are the exception — brevity is one of their conventions.
+- **Judge length by what each sentence carries.** Words and sentences that carry nothing are cut, under *The project's own text is in English* and the changelog conventions; a long comment whose every sentence carries meaning keeps its length.
 - **Do not enforce conventions beyond the ones listed here.** Other style judgments (tone, capitalization) are not in scope.
 
 ---
