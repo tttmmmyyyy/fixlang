@@ -12360,6 +12360,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `flush` flushes a handle that has text written to it and reports success as `fflush` does, with
+/// 0.
 #[test]
 pub fn test_flush() {
     let source = r##"
@@ -12367,7 +12369,9 @@ module Main;
 
 main : IO ();
 main = (
-    println("Hello, World!");;
+    print("Hello, World!");;
+    let res = *flush(stdout);
+    assert_eq(|_|"flush", res, 0_I32);;
 
     pure()
 );
