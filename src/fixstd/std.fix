@@ -1287,7 +1287,7 @@ namespace IO {
     // 
     // * `msg` - The string to be printed.
     eprintln : String -> IO ();
-    eprintln = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fixruntime_fputs_line(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
+    eprintln = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fixruntime_fputs_line(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
 
     // Exits the program with an error code.
     // 
@@ -1480,7 +1480,7 @@ namespace IO {
     //
     // * `msg` - The string to be printed.
     println : String -> IO ();
-    println = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fixruntime_fputs_line(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
+    println = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fixruntime_fputs_line(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
 
     // Raads all characters from a file.
     // 
