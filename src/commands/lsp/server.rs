@@ -409,18 +409,14 @@ pub fn launch_language_server() {
                 let Some((id, params)) = parse_request::<HoverParams>(&message, method) else {
                     continue;
                 };
-                hover::handle_hover(
-                    id,
-                    &params,
-                    program,
-                    &uri_to_latest_content,
-                );
+                hover::handle_hover(id, &params, program, &uri_to_latest_content);
             } else if method == "textDocument/definition" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let Some((id, params)) = parse_request::<GotoDefinitionParams>(&message, method) else {
+                let Some((id, params)) = parse_request::<GotoDefinitionParams>(&message, method)
+                else {
                     continue;
                 };
                 goto_definition::handle_goto_definition(
@@ -430,27 +426,25 @@ pub fn launch_language_server() {
                     &uri_to_latest_content,
                 );
             } else if method == "textDocument/documentSymbol" {
-                let Some((id, params)) = parse_request::<DocumentSymbolParams>(&message, method) else {
+                let Some((id, params)) = parse_request::<DocumentSymbolParams>(&message, method)
+                else {
                     continue;
                 };
                 if last_diag.is_none() {
-                    pending_document_symbol_requests.push_back(PendingDocumentSymbolRequest {
-                        id,
-                        params,
-                    });
+                    pending_document_symbol_requests
+                        .push_back(PendingDocumentSymbolRequest { id, params });
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
                 document_symbol::handle_document_symbol(id, &params, program);
             } else if method == "workspace/symbol" {
-                let Some((id, params)) = parse_request::<WorkspaceSymbolParams>(&message, method) else {
+                let Some((id, params)) = parse_request::<WorkspaceSymbolParams>(&message, method)
+                else {
                     continue;
                 };
                 if last_diag.is_none() {
-                    pending_workspace_symbol_requests.push_back(PendingWorkspaceSymbolRequest {
-                        id,
-                        params,
-                    });
+                    pending_workspace_symbol_requests
+                        .push_back(PendingWorkspaceSymbolRequest { id, params });
                     continue;
                 }
                 let diag = last_diag.as_ref().unwrap();
@@ -460,12 +454,7 @@ pub fn launch_language_server() {
                     continue;
                 };
                 let program = last_diag.as_ref().map(|d| &d.program);
-                code_action::handle_code_action(
-                    id,
-                    &params,
-                    program,
-                    &mut uri_to_latest_content,
-                );
+                code_action::handle_code_action(id, &params, program, &mut uri_to_latest_content);
             } else if method == "textDocument/references" {
                 if last_diag.is_none() {
                     continue;
@@ -474,12 +463,7 @@ pub fn launch_language_server() {
                 let Some((id, params)) = parse_request::<ReferenceParams>(&message, method) else {
                     continue;
                 };
-                references::handle_references(
-                    id,
-                    &params,
-                    program,
-                    &uri_to_latest_content,
-                );
+                references::handle_references(id, &params, program, &uri_to_latest_content);
             } else if method == "textDocument/rename" {
                 if last_diag.is_none() {
                     continue;
@@ -494,21 +478,20 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let diag = last_diag.as_ref().unwrap();
-                let Some((id, params)) = parse_request::<TextDocumentPositionParams>(&message, method) else {
+                let Some((id, params)) =
+                    parse_request::<TextDocumentPositionParams>(&message, method)
+                else {
                     continue;
                 };
-                rename::handle_prepare_rename(
-                    id,
-                    &params,
-                    diag,
-                    &uri_to_latest_content,
-                );
+                rename::handle_prepare_rename(id, &params, diag, &uri_to_latest_content);
             } else if method == "textDocument/prepareCallHierarchy" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let Some((id, params)) = parse_request::<CallHierarchyPrepareParams>(&message, method) else {
+                let Some((id, params)) =
+                    parse_request::<CallHierarchyPrepareParams>(&message, method)
+                else {
                     continue;
                 };
                 references::handle_call_hierarchy_prepare(
@@ -522,7 +505,9 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let Some((id, params)) = parse_request::<CallHierarchyIncomingCallsParams>(&message, method) else {
+                let Some((id, params)) =
+                    parse_request::<CallHierarchyIncomingCallsParams>(&message, method)
+                else {
                     continue;
                 };
                 references::handle_call_hierarchy_incoming(id, &params, program);
@@ -531,7 +516,9 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let Some((id, params)) = parse_request::<CallHierarchyOutgoingCallsParams>(&message, method) else {
+                let Some((id, params)) =
+                    parse_request::<CallHierarchyOutgoingCallsParams>(&message, method)
+                else {
                     continue;
                 };
                 references::handle_call_hierarchy_outgoing(id, &params, program);
@@ -539,7 +526,8 @@ pub fn launch_language_server() {
                 // Answered whether or not `last_diag` is set: semantic tokens are
                 // produced by a never-failing lexer over the live buffer, so
                 // highlighting works even while the file does not parse.
-                let Some((id, params)) = parse_request::<SemanticTokensParams>(&message, method) else {
+                let Some((id, params)) = parse_request::<SemanticTokensParams>(&message, method)
+                else {
                     continue;
                 };
                 semantic_tokens::handle_semantic_tokens_full(

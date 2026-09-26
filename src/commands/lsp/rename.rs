@@ -170,9 +170,10 @@ pub(super) fn handle_rename(
             }
         }
         EndNode::Trait(trait_id) => collect_trait_rename_edits(program, trait_id, new_name),
-        EndNode::AssocType(assoc_type) => {
-            rename_edits(find_assoc_type_references(program, assoc_type, true), new_name)
-        }
+        EndNode::AssocType(assoc_type) => rename_edits(
+            find_assoc_type_references(program, assoc_type, true),
+            new_name,
+        ),
         EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
             find_field_occurrences(program, tc, name, true)
                 .into_iter()
