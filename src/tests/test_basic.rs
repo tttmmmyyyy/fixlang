@@ -5694,6 +5694,36 @@ pub fn test_wide_signed_integer_bytes_round_trip() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `from_bytes` and `to_bytes` of `F32` and `F64` carry a signaling NaN's bits through unchanged:
+/// the value crosses the C runtime twice as a `float` or a `double`, and nothing on the way may
+/// quiet it or drop its payload. The payload is drawn from the argument count so that the optimizer
+/// cannot fold the round trip.
+#[test]
+pub fn test_float_bytes_round_trip_keeps_signaling_nan() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let payload = (*get_args).@size.u8;
+            assert(|_|"the payload is not zero", payload != 0_U8);;
+
+            let f32_bytes = [payload, 0_U8, 128_U8, 127_U8];
+            let f : F32 = f32_bytes.from_bytes.as_ok;
+            assert(|_|"F32 is a NaN", f != f);;
+            assert_eq(|_|"F32 signaling NaN", f.to_bytes, f32_bytes);;
+
+            let f64_bytes = [payload, 0_U8, 0_U8, 0_U8, 0_U8, 0_U8, 240_U8, 127_U8];
+            let d : F64 = f64_bytes.from_bytes.as_ok;
+            assert(|_|"F64 is a NaN", d != d);;
+            assert_eq(|_|"F64 signaling NaN", d.to_bytes, f64_bytes);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// `consumed_time_while_lazy` and `consumed_time_while_io` hand back the value their argument
 /// produced along with the time it took, for a long computation and for file IO.
 #[test]

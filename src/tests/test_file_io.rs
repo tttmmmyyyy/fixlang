@@ -141,6 +141,70 @@ pub fn test_write_read_bytes_report_failure() {
     fs::remove_file(tmp_file).unwrap();
 }
 
+/// `read_line` returns a line that spans several of `fgets`'s buffers whole, a last line without a
+/// newline, and the empty string once the file is exhausted, after which `is_eof` holds;
+/// `read_n_bytes` returns nothing for a count of zero, the rest of the file for a count past it, and
+/// nothing at the end; and writing no bytes succeeds and leaves the file empty.
+#[test]
+pub fn test_read_write_boundaries() {
+    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
+    let tmp_file = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
+
+    let source = format!(
+        r#"
+        module Main;
+        main : IO ();
+        main = (
+            let file_path = "{}";
+            let long1 = Array::fill(1023, "a").to_iter.concat_iter;
+            let long2 = Array::fill(2500, "b").to_iter.concat_iter;
+            let content = long1 + "\n" + long2 + "\n" + "tail";
+            let res = *write_file_string(file_path, content).to_result;
+            assert(|_|"setup", res.is_ok);;
+
+            let res = *with_file(file_path, "r", |h| (
+                let l1 = *read_line(h);
+                let l2 = *read_line(h);
+                let l3 = *read_line(h);
+                let l4 = *read_line(h);
+                let eof = *is_eof(h).lift;
+                pure $ (l1, l2, l3, l4, eof)
+            )).to_result;
+            let (l1, l2, l3, l4, eof) = res.as_ok;
+            assert_eq(|_|"line of 1023 bytes", l1, long1 + "\n");;
+            assert_eq(|_|"line of 2500 bytes", l2, long2 + "\n");;
+            assert_eq(|_|"last line without newline", l3, "tail");;
+            assert_eq(|_|"read past the end", l4, "");;
+            assert(|_|"eof after the end", eof);;
+
+            let res = *read_file_string(file_path).to_result;
+            assert_eq(|_|"read_string", res.as_ok, content);;
+
+            let res = *with_file(file_path, "r", |h| (
+                let zero = *read_n_bytes(h, 0);
+                let all = *read_n_bytes(h, 100000);
+                let after = *read_n_bytes(h, 10);
+                pure $ (zero, all, after)
+            )).to_result;
+            let (zero, all, after) = res.as_ok;
+            assert_eq(|_|"zero bytes", zero, []);;
+            assert_eq(|_|"more than remain", all, content.get_bytes.pop_back);;
+            assert_eq(|_|"at the end", after, []);;
+
+            let res = *with_file(file_path, "w", |h| write_bytes(h, []);; write_string(h, "")).to_result;
+            assert(|_|"write nothing", res.is_ok);;
+            let res = *read_file_bytes(file_path).to_result;
+            assert_eq(|_|"file is empty", res.as_ok, []);;
+
+            pure()
+        );
+    "#,
+        tmp_file
+    );
+    test_source(&source, Configuration::develop_mode());
+    fs::remove_file(tmp_file).unwrap();
+}
+
 #[test]
 pub fn test_with_file_closed_when_ok() {
     // Create a working directory.
