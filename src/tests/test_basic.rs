@@ -5694,6 +5694,36 @@ pub fn test_wide_signed_integer_bytes_round_trip() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `from_bytes` and `to_bytes` of `F32` and `F64` carry a signaling NaN's bits through unchanged:
+/// the value crosses the C runtime twice as a `float` or a `double`, and nothing on the way may
+/// quiet it or drop its payload. The payload is drawn from the argument count so that the optimizer
+/// cannot fold the round trip.
+#[test]
+pub fn test_float_bytes_round_trip_keeps_signaling_nan() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let payload = (*get_args).@size.u8;
+            assert(|_|"the payload is not zero", payload != 0_U8);;
+
+            let f32_bytes = [payload, 0_U8, 128_U8, 127_U8];
+            let f : F32 = f32_bytes.from_bytes.as_ok;
+            assert(|_|"F32 is a NaN", f != f);;
+            assert_eq(|_|"F32 signaling NaN", f.to_bytes, f32_bytes);;
+
+            let f64_bytes = [payload, 0_U8, 0_U8, 0_U8, 0_U8, 0_U8, 240_U8, 127_U8];
+            let d : F64 = f64_bytes.from_bytes.as_ok;
+            assert(|_|"F64 is a NaN", d != d);;
+            assert_eq(|_|"F64 signaling NaN", d.to_bytes, f64_bytes);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// `consumed_time_while_lazy` and `consumed_time_while_io` hand back the value their argument
 /// produced along with the time it took, for a long computation and for file IO.
 #[test]
@@ -12853,6 +12883,69 @@ main = (
         "debug_eprint / debug_eprintln output missing from stderr.\nstderr:\n{}",
         stderr
     );
+}
+
+/// Checks that `println` and `eprintln` write the string followed by one newline, in order with
+/// what `print` and `eprint` write to the same stream. An empty string makes an empty line.
+#[test]
+pub fn test_println_writes_the_string_and_a_newline() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    print("a");;
+    println("b");;
+    println("");;
+    println("c d");;
+    eprint("x");;
+    eprintln("y");;
+    eprintln("");;
+    pure()
+);
+    "##;
+    let mut config = Configuration::develop_mode();
+    config.set_valgrind(ValgrindTool::None);
+    let output = run_source_capture(&source, config);
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "ab\n\nc d\n");
+    assert_eq!(String::from_utf8_lossy(&output.stderr), "xy\n\n");
+}
+
+/// Checks that `debug_print` and `debug_println` flush stdout: what they write reaches it even when
+/// the program then aborts, which leaves the stdio buffers unflushed.
+#[test]
+pub fn test_debug_print_flushes_stdout_before_an_abort() {
+    for (call, expected) in [
+        (r#"debug_print("a")"#, "a"),
+        (r#"debug_println("b")"#, "b\n"),
+    ] {
+        let source = format!(
+            r##"
+module Main;
+
+main : IO ();
+main = (
+    eval {};
+    undefined("stop")
+);
+    "##,
+            call
+        );
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
+        let output = run_source_capture(&source, config);
+        assert!(
+            !output.status.success(),
+            "`undefined` was expected to abort the program after `{}`.",
+            call
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            expected,
+            "after `{}`",
+            call
+        );
+    }
 }
 
 /// Checks `Bar (Foo I64)`, where `Foo I64` is the struct `Foo a b` applied to one of its two

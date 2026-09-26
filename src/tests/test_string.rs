@@ -42,6 +42,47 @@ pub fn test_string_unsafe_from_c_str_ptr_io_and_empty() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `strip_first_spaces`, `strip_last_spaces` and `strip_spaces` remove exactly the six bytes C's
+/// `isspace` accepts and keep bytes above 0x7F; `starts_with` and `ends_with` hold for the empty
+/// affix and the whole string, fail for a longer affix, and compare bytes above 0x7F; `find` answers
+/// for an empty token at or past the end, a start past the end, and a token longer than the string.
+#[test]
+pub fn test_string_c_calls_boundaries() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            let spaces = " \t\n\u000B\u000C\r";
+            assert_eq(|_|"six bytes", spaces.@size, 6);;
+            assert_eq(|_|"strip_first_spaces", (spaces + "x" + spaces).strip_first_spaces, "x" + spaces);;
+            assert_eq(|_|"strip_last_spaces", (spaces + "x" + spaces).strip_last_spaces, spaces + "x");;
+            assert_eq(|_|"strip_spaces all spaces", spaces.strip_spaces, "");;
+            let high = [0xA0_U8, 0x85_U8, 0xFF_U8, 0x80_U8, 0_U8];
+            let high : String = high.from_bytes.as_ok;
+            assert_eq(|_|"high bytes kept", high.strip_spaces, high);;
+
+            assert(|_|"starts_with empty", "abc".starts_with(""));;
+            assert(|_|"ends_with empty", "abc".ends_with(""));;
+            assert(|_|"empty starts_with empty", "".starts_with(""));;
+            assert(|_|"starts_with whole", "abc".starts_with("abc"));;
+            assert(|_|"ends_with whole", "abc".ends_with("abc"));;
+            assert(|_|"starts_with longer", !"abc".starts_with("abcd"));;
+            assert(|_|"ends_with longer", !"abc".ends_with("zabc"));;
+            assert(|_|"ends_with mismatch", !"abc".ends_with("bd"));;
+            assert(|_|"starts_with high bytes", (high + "a").starts_with(high));;
+            assert(|_|"ends_with high bytes", ("a" + high).ends_with(high));;
+
+            assert_eq(|_|"find empty at end", "abc".find("", 3), Option::some(3));;
+            assert_eq(|_|"find empty past end", "abc".find("", 10), Option::some(3));;
+            assert_eq(|_|"find past end", "abc".find("c", 10), Option::none());;
+            assert_eq(|_|"find longer", "abc".find("abcd", 0), Option::none());;
+            assert_eq(|_|"find from start_idx", "abcabc".find("abc", 1), Option::some(3));;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// The substring between two indices, where the range covers part of the string, is empty, or
 /// reaches past the end, and where the string itself is empty.
 #[test]

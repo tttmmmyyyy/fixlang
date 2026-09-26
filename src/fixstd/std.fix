@@ -1237,11 +1237,11 @@ namespace IO {
                 let buf_size = 1024;
                 let buf = Array::empty(buf_size);
                 let (buf, fgets_res) = *buf.mutate_elements_io(|buf_ptr| (
-                    FFI_CALL_IO[Ptr fgets(Ptr, I32, Ptr), buf_ptr, buf_size.i32, file_ptr]
+                    FFI_CALL_IO[Ptr fgets(Ptr, CInt, Ptr), buf_ptr, buf_size.c_int, file_ptr]
                 ));
                 if fgets_res == nullptr {
-                    let err = *FFI_CALL_IO[I32 ferror(Ptr), file_ptr];
-                    if err != 0_I32 { 
+                    let err = *FFI_CALL_IO[CInt ferror(Ptr), file_ptr];
+                    if err != 0.c_int { 
                         let err = "`Std::IO::_read_line_inner` failed!: an error occurred in `fgets`.";
                         break_m $ Result::err(err)
                     } else {
@@ -1279,7 +1279,7 @@ namespace IO {
     // 
     // * `msg` - The string to be printed.
     eprint : String -> IO ();
-    eprint = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
+    eprint = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[CInt fputs(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
 
     // Prints a string followed by a newline to stderr.
     // 
@@ -1287,7 +1287,7 @@ namespace IO {
     // 
     // * `msg` - The string to be printed.
     eprintln : String -> IO ();
-    eprintln = |str| eprint(str + "\n");
+    eprintln = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[CInt fixruntime_fputs_line(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
 
     // Exits the program with an error code.
     // 
@@ -1295,7 +1295,7 @@ namespace IO {
     // 
     // * `code` - The error code to be returned.
     exit : I64 -> IO a;
-    exit = |code| FFI_CALL_IO[() exit(I32), code.i32];; pure $ undefined("");
+    exit = |code| FFI_CALL_IO[() exit(CInt), code.c_int];; pure $ undefined("");
 
     // Exits the program with an error message and an error code.
     //  
@@ -1315,7 +1315,7 @@ namespace IO {
     flush : IOHandle -> IO I32;
     flush = |handle| (
         let file_ptr = *handle.get_file_ptr;
-        let res = *FFI_CALL_IO[I32 fflush(Ptr), file_ptr];
+        let res = *FFI_CALL_IO[CInt fflush(Ptr), file_ptr];
         res.i32.pure
     );
 
@@ -1395,7 +1395,7 @@ namespace IO {
     // 
     // * `handle` - The IOHandle to be checked.
     is_eof : IOHandle -> IO Bool;
-    is_eof = |handle| FFI_CALL_IO[I32 feof(Ptr), *handle.get_file_ptr].map(|res| res != 0_I32);
+    is_eof = |handle| FFI_CALL_IO[CInt feof(Ptr), *handle.get_file_ptr].map(|res| res != 0.c_int);
 
     // Loop on lines read from an `IOHandle`.
     // 
@@ -1472,7 +1472,7 @@ namespace IO {
     //
     // * `msg` - The string to be printed.
     print : String -> IO ();
-    print = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
+    print = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[CInt fputs(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
 
     // Prints a string followed by a newline to stdout.
     // 
@@ -1480,9 +1480,9 @@ namespace IO {
     //
     // * `msg` - The string to be printed.
     println : String -> IO ();
-    println = |str| print(str + "\n");
+    println = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[CInt fixruntime_fputs_line(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
 
-    // Raads all characters from a file.
+    // Reads all characters from a file.
     // 
     // # Parameters
     //
@@ -1544,8 +1544,8 @@ namespace IO {
         let (buf, len) = buf.mutate_elements(|buf| FFI_CALL_IO[CSizeT fread(Ptr, CSizeT, CSizeT, Ptr), buf, 1.c_size_t, n.c_size_t, file_ptr]);
 
         // Check error.
-        let err = *FFI_CALL_IO[I32 ferror(Ptr), file_ptr];
-        if err != 0_I32 { 
+        let err = *FFI_CALL_IO[CInt ferror(Ptr), file_ptr];
+        if err != 0.c_int { 
             let err = "`Std::IO::read_n_bytes` failed!: Some error occurred in `fread`.";
             pure $ Result::err(err)
         };
@@ -1637,8 +1637,8 @@ namespace IO {
     write_string = |handle, content| IOFail::from_io_result $ do {
         let file_ptr = *handle.get_file_ptr;
         content.borrow_c_str_io(|c_str|
-            let res = *FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, file_ptr];
-            if res < 0_I32 { pure $ Result::err $ "`Std::IO::write_string` failed!: some error occurred in fputs." };
+            let res = *FFI_CALL_IO[CInt fputs(Ptr, Ptr), c_str, file_ptr];
+            if res < 0.c_int { pure $ Result::err $ "`Std::IO::write_string` failed!: some error occurred in fputs." };
             pure $ Result::ok()
         )
     };
@@ -3219,7 +3219,7 @@ namespace String {
     //
     // * `str` - The string to be modified.
     strip_first_spaces : String -> String;
-    strip_first_spaces = strip_first_bytes(|c| FFI_CALL[I32 isspace(I32), c.i32] > 0_I32);
+    strip_first_spaces = strip_first_bytes(|c| FFI_CALL[CInt isspace(CInt), c.c_int] != 0.c_int);
 
     // Removes the last byte of a string while it satisifies the specified condition.
     // 
@@ -3252,7 +3252,7 @@ namespace String {
     //
     // * `str` - The string to be modified.
     strip_last_spaces : String -> String;
-    strip_last_spaces = strip_last_bytes(|c| FFI_CALL[I32 isspace(I32), c.i32] > 0_I32);
+    strip_last_spaces = strip_last_bytes(|c| FFI_CALL[CInt isspace(CInt), c.c_int] != 0.c_int);
 
     // Strips leading and trailing whitespace characters.
     //
@@ -4329,9 +4329,9 @@ namespace Debug {
     //
     // # Parameters
     //
-    // * `msg`    
+    // * `msg` - The string to be printed.
     debug_eprint : String -> ();
-    debug_eprint = |msg| _debug_print_to_stream(stderr, msg);
+    debug_eprint = |msg| (eprint(msg);; stderr.flush;; pure()).unsafe_perform;
 
     // Prints a string followed by a newline to stderr and flushes.
     //
@@ -4339,9 +4339,9 @@ namespace Debug {
     //
     // # Parameters
     //
-    // * `msg`    
+    // * `msg` - The string to be printed.
     debug_eprintln : String -> ();
-    debug_eprintln = |msg| debug_eprint(msg + "\n");
+    debug_eprintln = |msg| (eprintln(msg);; stderr.flush;; pure()).unsafe_perform;
 
     // Prints a string to stdout and flushes.
     // 
@@ -4349,9 +4349,9 @@ namespace Debug {
     //
     // # Parameters
     //
-    // * `msg`        
+    // * `msg` - The string to be printed.
     debug_print : String -> ();
-    debug_print = |msg| _debug_print_to_stream(stdout, msg);
+    debug_print = |msg| (print(msg);; stdout.flush;; pure()).unsafe_perform;
 
     // Prints a string followed by a newline to stdout and flushes.
     //
@@ -4359,22 +4359,9 @@ namespace Debug {
     //
     // # Parameters
     //
-    // * `msg`        
+    // * `msg` - The string to be printed.
     debug_println : String -> ();
-    debug_println = |msg| debug_print(msg + "\n");
-
-    // Prints a string to the specified stream and flushes the stream.
-    // 
-    // NOTE: This function is not pure and should only be used for temporary debugging purposes.
-    _debug_print_to_stream : IOHandle -> String -> ();
-    _debug_print_to_stream = |handle, msg| (
-        msg.borrow_c_str_io(|str|
-            let file_ptr = *handle.get_file_ptr;
-            FFI_CALL_IO[I32 fputs(Ptr, Ptr), str, file_ptr];;
-            FFI_CALL_IO[I32 fflush(Ptr), file_ptr];;
-            pure()
-        ).unsafe_perform
-    );
+    debug_println = |msg| (println(msg);; stdout.flush;; pure()).unsafe_perform;
 }
 
 // The trait for indexable types.

@@ -853,7 +853,7 @@ NOTE: This function is not pure and should only be used for temporary debugging 
 
 ##### Parameters
 
-* `msg`
+* `msg` - The string to be printed.
 
 #### debug_eprintln
 
@@ -865,7 +865,7 @@ NOTE: This function is not pure and should only be used for temporary debugging 
 
 ##### Parameters
 
-* `msg`
+* `msg` - The string to be printed.
 
 #### debug_print
 
@@ -877,7 +877,7 @@ NOTE: This function is not pure and should only be used for temporary debugging 
 
 ##### Parameters
 
-* `msg`
+* `msg` - The string to be printed.
 
 #### debug_println
 
@@ -889,7 +889,7 @@ NOTE: This function is not pure and should only be used for temporary debugging 
 
 ##### Parameters
 
-* `msg`
+* `msg` - The string to be printed.
 
 ### namespace Std::Div
 
@@ -2990,7 +2990,7 @@ Reads all bytes from a file.
 
 Type: `Std::Path -> Std::IO::IOFail Std::String`
 
-Raads all characters from a file.
+Reads all characters from a file.
 
 ##### Parameters
 
