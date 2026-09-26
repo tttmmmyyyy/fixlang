@@ -147,7 +147,7 @@ static int64_t fixruntime_write_i64(char *buf, int64_t v)
 // The characters a hexadecimal digit is written with.
 static const char FIXRUNTIME_HEX_DIGITS[17] = "0123456789abcdef";
 
-// How many hexadecimal digits a pointer is written with: every digit a `uint64_t` holds.
+// How many hexadecimal digits a pointer is written with: every digit a 64-bit address holds.
 #define FIXRUNTIME_PTR_DIGITS 16
 
 // Writes the address `ptr` holds at `buf` as `FIXRUNTIME_PTR_DIGITS` hexadecimal digits,
