@@ -2,10 +2,10 @@
 //!
 //! A thread of its own reads stdin, so the messages the client sends while the server works on one
 //! request queue up here, and a cancellation reaches the request it names while that request is
-//! still queued. A cancelled request is answered with `RequestCancelled` at once, in place of being
+//! still queued. A cancelled request is answered with `RequestCancelled` at once, instead of being
 //! carried out. An editor sends a completion request with every keystroke and cancels the one
 //! before it; on a slow machine carrying out each completion takes longer than the keystrokes take
-//! to arrive, and answering the cancelled ones at once keeps the server level with the typing.
+//! to arrive, and answering the cancelled ones at once lets the server keep up with the typing.
 
 use super::server::{parase_params, JSONRPCMessage};
 use crate::write_log;
@@ -148,7 +148,7 @@ fn read_message(stdin: &mut impl BufRead) -> Option<JSONRPCMessage> {
             }
         };
 
-        // Read stdin upto an empty line.
+        // Read stdin up to an empty line.
         loop {
             let mut line = String::new();
             if let Err(e) = stdin.read_line(&mut line) {

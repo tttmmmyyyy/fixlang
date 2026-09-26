@@ -683,6 +683,7 @@ impl ResponseError {
     /// The request cannot be carried out as it was sent. The client may show `message` to the
     /// user.
     pub(super) fn invalid_request(message: impl Into<String>) -> Self {
+        // -32600 is the code JSON-RPC reserves for an invalid request.
         ResponseError {
             code: -32600,
             message: message.into(),

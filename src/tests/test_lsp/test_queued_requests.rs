@@ -1,4 +1,4 @@
-//! Requests the client cancels, or edits behind, before the server reaches them.
+//! Requests that the client cancels, or follows with an edit, before the server reaches them.
 //!
 //! The client goes on sending while the server works on a request. A cancellation of a request
 //! still waiting its turn is answered with `RequestCancelled`, without carrying the request out. A
