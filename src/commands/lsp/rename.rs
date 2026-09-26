@@ -77,23 +77,8 @@ pub(super) fn handle_prepare_rename(
         send_response(id, Ok::<_, ()>(None::<PrepareRenameResponse>));
         return;
     }
-    if is_auto_method_var(program, &node) {
-        send_response(
-            id,
-            Err::<(), _>(ResponseError::invalid_request(
-                "Cannot rename an auto-generated accessor. \
-                 Rename the field or variant declaration instead.",
-            )),
-        );
-        return;
-    }
-    if !target_is_user_defined(diag, &node, &pos) {
-        send_response(
-            id,
-            Err::<(), _>(ResponseError::invalid_request(
-                "Cannot rename a symbol defined outside this project.",
-            )),
-        );
+    if let Err(msg) = check_rename_allowed(diag, &node, &pos) {
+        send_response(id, Err::<(), _>(ResponseError::invalid_request(msg)));
         return;
     }
 
@@ -139,30 +124,8 @@ pub(super) fn handle_rename(
         return;
     }
 
-    // Reject auto-generated accessors before any further analysis. The
-    // user must rename the field/variant itself instead, where they don't
-    // have to think about whether the new name should include the `@`,
-    // `set_`, etc. prefix.
-    if is_auto_method_var(program, &node) {
-        send_response(
-            id,
-            Err::<(), _>(ResponseError::invalid_request(
-                "Cannot rename an auto-generated accessor. \
-                 Rename the field or variant declaration instead.",
-            )),
-        );
-        return;
-    }
-
-    // Reject symbols whose declaration lives outside this project's source
-    // tree (i.e. not listed in `fixproj.toml`'s `files` section).
-    if !target_is_user_defined(diag, &node, &pos) {
-        send_response(
-            id,
-            Err::<(), _>(ResponseError::invalid_request(
-                "Cannot rename a symbol defined outside this project.",
-            )),
-        );
+    if let Err(msg) = check_rename_allowed(diag, &node, &pos) {
+        send_response(id, Err::<(), _>(ResponseError::invalid_request(msg)));
         return;
     }
 
@@ -184,18 +147,14 @@ pub(super) fn handle_rename(
                 };
                 let mut spans = vec![occ.definition];
                 spans.extend(occ.uses);
-                spans.into_iter().map(|s| (s, new_name.clone())).collect()
+                rename_edits(spans, new_name)
             } else {
-                find_global_value_references(program, name, true)
-                    .into_iter()
-                    .map(|s| (s, new_name.clone()))
-                    .collect()
+                rename_edits(find_global_value_references(program, name, true), new_name)
             }
         }
-        EndNode::ValueDecl(name) => find_global_value_references(program, name, true)
-            .into_iter()
-            .map(|s| (s, new_name.clone()))
-            .collect(),
+        EndNode::ValueDecl(name) => {
+            rename_edits(find_global_value_references(program, name, true), new_name)
+        }
         EndNode::Type(tycon) => collect_type_rename_edits(program, tycon, new_name),
         EndNode::TypeOrTrait(name) => {
             // Resolve to either a type or a trait. Type takes precedence
@@ -207,17 +166,13 @@ pub(super) fn handle_rename(
                 collect_type_rename_edits(program, &tycon, new_name)
             } else {
                 let trait_id = TraitId::from_fullname(name.clone());
-                find_trait_references(program, &trait_id, true)
-                    .into_iter()
-                    .map(|s| (s, new_name.clone()))
-                    .collect()
+                rename_edits(find_trait_references(program, &trait_id, true), new_name)
             }
         }
         EndNode::Trait(trait_id) => collect_trait_rename_edits(program, trait_id, new_name),
-        EndNode::AssocType(assoc_type) => find_assoc_type_references(program, assoc_type, true)
-            .into_iter()
-            .map(|s| (s, new_name.clone()))
-            .collect(),
+        EndNode::AssocType(assoc_type) => {
+            rename_edits(find_assoc_type_references(program, assoc_type, true), new_name)
+        }
         EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
             find_field_occurrences(program, tc, name, true)
                 .into_iter()
@@ -234,6 +189,35 @@ pub(super) fn handle_rename(
     };
     let workspace_edit = build_workspace_edit(edits, &cdir);
     send_response(id, Ok::<_, ()>(Some(workspace_edit)));
+}
+
+// An edit replacing each of `spans` with `new_text`.
+fn rename_edits(spans: Vec<Span>, new_text: &Name) -> Vec<(Span, String)> {
+    spans.into_iter().map(|s| (s, new_text.clone())).collect()
+}
+
+// Refuse a rename starting on an auto-generated accessor, or on a symbol
+// declared outside this project's source tree (i.e. not listed in
+// `fixproj.toml`'s `files` section). The error is the message the client
+// shows the user. Shared by prepareRename and rename, so that both refuse
+// the same symbols with the same words.
+//
+// For an accessor, the user renames the field/variant itself instead,
+// where they don't have to think about whether the new name should include
+// the `@`, `set_`, etc. prefix.
+fn check_rename_allowed(
+    diag: &DiagnosticsResult,
+    node: &EndNode,
+    pos: &SourcePos,
+) -> Result<(), &'static str> {
+    if is_auto_method_var(&diag.program, node) {
+        return Err("Cannot rename an auto-generated accessor. \
+                    Rename the field or variant declaration instead.");
+    }
+    if !target_is_user_defined(diag, node, pos) {
+        return Err("Cannot rename a symbol defined outside this project.");
+    }
+    Ok(())
 }
 
 // Whether the symbol at this EndNode is renameable at all. Used by both
@@ -328,10 +312,7 @@ fn collect_trait_rename_edits(
     trait_id: &TraitId,
     new_name: &Name,
 ) -> Vec<(Span, String)> {
-    let mut edits: Vec<(Span, String)> = find_trait_references(program, trait_id, true)
-        .into_iter()
-        .map(|s| (s, new_name.clone()))
-        .collect();
+    let mut edits = rename_edits(find_trait_references(program, trait_id, true), new_name);
 
     // Walk every global value's expression for Var refs whose resolved
     // name is `<trait_ns>::<trait_name>::<member>` and rewrite the
@@ -371,10 +352,7 @@ fn collect_type_rename_edits(
     // (A) Bare token spans: declaration, type annotations, MakeStruct,
     // Pattern::Struct, impl blocks, `import Foo::{Point}` (TypeOrTrait
     // import). Already handled by `find_type_references`.
-    let mut edits: Vec<(Span, String)> = find_type_references(program, tc, true)
-        .into_iter()
-        .map(|s| (s, new_name.clone()))
-        .collect();
+    let mut edits = rename_edits(find_type_references(program, tc, true), new_name);
 
     // For non-struct/non-union types (aliases, builtins) the auto-namespace
     // doesn't exist, so (B) and (C) are no-ops. Bail out early.
@@ -660,12 +638,7 @@ fn classify_child(
         ImportTreeNode::Any(_) => scan_namespace_for_auto_user(program, namespace_path),
         ImportTreeNode::Symbol(name, _) => {
             let full = make_fullname(namespace_path, name);
-            let is_auto = program
-                .global_values
-                .get(&full)
-                .map(|gv| gv.compiler_defined_method)
-                .unwrap_or(false);
-            if is_auto {
+            if is_compiler_defined_method(program, &full) {
                 (true, false)
             } else {
                 (false, true)
@@ -764,11 +737,7 @@ fn collect_inline_qualified_edits(
         if name.namespace.names != auto_ns {
             return false;
         }
-        program
-            .global_values
-            .get(name)
-            .map(|gv| gv.compiler_defined_method)
-            .unwrap_or(false)
+        is_compiler_defined_method(program, name)
     };
     walk_symbol_expr_for_inline_qualified(expr, &predicate, type_old, new_name, edits);
 }
@@ -1007,6 +976,13 @@ fn is_auto_method_var(program: &Program, node: &EndNode) -> bool {
     if name.is_local() {
         return false;
     }
+    is_compiler_defined_method(program, name)
+}
+
+// True if `name` is a global value the compiler generated for a type
+// (`compiler_defined_method == true`). A name that is no global value is
+// not one.
+fn is_compiler_defined_method(program: &Program, name: &FullName) -> bool {
     program
         .global_values
         .get(name)
@@ -1038,16 +1014,10 @@ fn declaration_span(program: &Program, node: &EndNode, pos: &SourcePos) -> Optio
             if name.is_local() {
                 find_local_occurrences(program, pos, name).map(|o| o.definition)
             } else {
-                program
-                    .global_values
-                    .get(name)
-                    .and_then(|gv| gv.decl_src.clone().or_else(|| gv.defn_src.clone()))
+                global_value_declaration_span(program, name)
             }
         }
-        EndNode::ValueDecl(name) => program
-            .global_values
-            .get(name)
-            .and_then(|gv| gv.decl_src.clone().or_else(|| gv.defn_src.clone())),
+        EndNode::ValueDecl(name) => global_value_declaration_span(program, name),
         EndNode::Type(tc) => program
             .type_defns
             .iter()
@@ -1058,35 +1028,10 @@ fn declaration_span(program: &Program, node: &EndNode, pos: &SourcePos) -> Optio
             if let Some(td) = program.type_defns.iter().find(|td| td.tycon() == tc) {
                 td.name_src.clone()
             } else {
-                let trait_id = TraitId::from_fullname(name.clone());
-                program
-                    .trait_env
-                    .traits
-                    .get(&trait_id)
-                    .and_then(|ti| ti.name_src.clone())
-                    .or_else(|| {
-                        program
-                            .trait_env
-                            .aliases
-                            .data
-                            .get(&trait_id)
-                            .and_then(|ta| ta.name_src.clone())
-                    })
+                trait_declaration_span(program, &TraitId::from_fullname(name.clone()))
             }
         }
-        EndNode::Trait(trait_id) => program
-            .trait_env
-            .traits
-            .get(trait_id)
-            .and_then(|ti| ti.name_src.clone())
-            .or_else(|| {
-                program
-                    .trait_env
-                    .aliases
-                    .data
-                    .get(trait_id)
-                    .and_then(|ta| ta.name_src.clone())
-            }),
+        EndNode::Trait(trait_id) => trait_declaration_span(program, trait_id),
         EndNode::AssocType(at) => {
             let trait_id = at.trait_id();
             program
@@ -1114,4 +1059,31 @@ fn declaration_span(program: &Program, node: &EndNode, pos: &SourcePos) -> Optio
         EndNode::Module(_) => None,
         EndNode::InferredType(_) => None,
     }
+}
+
+// The span of the declaration of the global value `name`, or of its
+// definition when it has no separate declaration.
+fn global_value_declaration_span(program: &Program, name: &FullName) -> Option<Span> {
+    program
+        .global_values
+        .get(name)
+        .and_then(|gv| gv.decl_src.clone().or_else(|| gv.defn_src.clone()))
+}
+
+// The span of the name of the trait or trait alias `trait_id` where it is
+// declared.
+fn trait_declaration_span(program: &Program, trait_id: &TraitId) -> Option<Span> {
+    program
+        .trait_env
+        .traits
+        .get(trait_id)
+        .and_then(|ti| ti.name_src.clone())
+        .or_else(|| {
+            program
+                .trait_env
+                .aliases
+                .data
+                .get(trait_id)
+                .and_then(|ta| ta.name_src.clone())
+        })
 }

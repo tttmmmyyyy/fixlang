@@ -290,15 +290,10 @@ pub fn launch_language_server() {
         if let Some(method) = message.method.as_ref() {
             write_log!("Handling method: {}", method);
             if method == "initialize" {
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<InitializeParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<InitializeParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                handle_initialize(id.unwrap(), &params.unwrap());
+                };
+                handle_initialize(id, &params);
             } else if method == "initialized" {
                 let params: Option<InitializedParams> = parase_params(message.params.unwrap());
                 if params.is_none() {
@@ -382,17 +377,12 @@ pub fn launch_language_server() {
                 // like the LSP crashed). Pass `None` for the snapshot
                 // program and let `handle_completion` fall back to the
                 // dot-extract program (or reply empty).
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<CompletionParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<CompletionParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 completion::handle_completion(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     last_diag.as_ref().map(|d| &d.program),
                     &uri_to_latest_content,
                     typecheck_cache.clone(),
@@ -402,17 +392,12 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<CompletionItem>(&message, method) else {
                     continue;
-                }
-                let params: Option<CompletionItem> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 completion::handle_completion_resolve_document(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     &mut uri_to_latest_content,
                     program,
                 );
@@ -421,17 +406,12 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<HoverParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<HoverParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 hover::handle_hover(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     program,
                     &uri_to_latest_content,
                 );
@@ -440,69 +420,49 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<GotoDefinitionParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<GotoDefinitionParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 goto_definition::handle_goto_definition(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     program,
                     &uri_to_latest_content,
                 );
             } else if method == "textDocument/documentSymbol" {
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<DocumentSymbolParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<DocumentSymbolParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 if last_diag.is_none() {
                     pending_document_symbol_requests.push_back(PendingDocumentSymbolRequest {
-                        id: id.unwrap(),
-                        params: params.unwrap(),
+                        id,
+                        params,
                     });
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                document_symbol::handle_document_symbol(id.unwrap(), &params.unwrap(), program);
+                document_symbol::handle_document_symbol(id, &params, program);
             } else if method == "workspace/symbol" {
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<WorkspaceSymbolParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<WorkspaceSymbolParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 if last_diag.is_none() {
                     pending_workspace_symbol_requests.push_back(PendingWorkspaceSymbolRequest {
-                        id: id.unwrap(),
-                        params: params.unwrap(),
+                        id,
+                        params,
                     });
                     continue;
                 }
                 let diag = last_diag.as_ref().unwrap();
-                workspace_symbol::handle_workspace_symbol(id.unwrap(), &params.unwrap(), diag);
+                workspace_symbol::handle_workspace_symbol(id, &params, diag);
             } else if method == "textDocument/codeAction" {
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<CodeActionParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<CodeActionParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 let program = last_diag.as_ref().map(|d| &d.program);
                 code_action::handle_code_action(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     program,
                     &mut uri_to_latest_content,
                 );
@@ -511,17 +471,12 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<ReferenceParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<ReferenceParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 references::handle_references(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     program,
                     &uri_to_latest_content,
                 );
@@ -530,32 +485,21 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let diag = last_diag.as_ref().unwrap();
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<RenameParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<RenameParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                rename::handle_rename(id.unwrap(), &params.unwrap(), diag, &uri_to_latest_content);
+                };
+                rename::handle_rename(id, &params, diag, &uri_to_latest_content);
             } else if method == "textDocument/prepareRename" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let diag = last_diag.as_ref().unwrap();
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<TextDocumentPositionParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<TextDocumentPositionParams> =
-                    parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 rename::handle_prepare_rename(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     diag,
                     &uri_to_latest_content,
                 );
@@ -564,18 +508,12 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<CallHierarchyPrepareParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<CallHierarchyPrepareParams> =
-                    parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 references::handle_call_hierarchy_prepare(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     program,
                     &uri_to_latest_content,
                 );
@@ -584,46 +522,29 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<CallHierarchyIncomingCallsParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<CallHierarchyIncomingCallsParams> =
-                    parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                references::handle_call_hierarchy_incoming(id.unwrap(), &params.unwrap(), program);
+                };
+                references::handle_call_hierarchy_incoming(id, &params, program);
             } else if method == "callHierarchy/outgoingCalls" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<CallHierarchyOutgoingCallsParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<CallHierarchyOutgoingCallsParams> =
-                    parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                references::handle_call_hierarchy_outgoing(id.unwrap(), &params.unwrap(), program);
+                };
+                references::handle_call_hierarchy_outgoing(id, &params, program);
             } else if method == "textDocument/semanticTokens/full" {
                 // Intentionally not gated on `last_diag`: semantic tokens are
                 // produced by a never-failing lexer over the live buffer, so
                 // highlighting works even while the file does not parse.
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<SemanticTokensParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<SemanticTokensParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 semantic_tokens::handle_semantic_tokens_full(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     &uri_to_latest_content,
                     last_diag.as_ref(),
                 );
@@ -655,6 +576,14 @@ fn parse_id(message: &JSONRPCMessage, method: &str) -> Option<u32> {
         return None;
     }
     message.id
+}
+
+/// The `id` of the request `message` and its `params` read as `T`. A request missing either is
+/// logged, the missing `id` under `method`, the request's method.
+fn parse_request<T: DeserializeOwned>(message: &JSONRPCMessage, method: &str) -> Option<(u32, T)> {
+    let id = parse_id(message, method)?;
+    let params = parase_params(message.params.clone().unwrap())?;
+    Some((id, params))
 }
 
 /// Send a server-initiated JSON-RPC request (carrying both an `id` and a
