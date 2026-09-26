@@ -12817,7 +12817,7 @@ main = (
 }
 
 /// Checks that `println` and `eprintln` write the string followed by one newline, in order with
-/// what `print` and `eprint` write to the same stream, an empty string making an empty line.
+/// what `print` and `eprint` write to the same stream. An empty string makes an empty line.
 #[test]
 pub fn test_println_writes_the_string_and_a_newline() {
     let source = r##"

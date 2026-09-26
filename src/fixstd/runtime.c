@@ -324,8 +324,8 @@ FILE *fixruntime_c_stderr()
 }
 
 // Writes the null-terminated `str` followed by a newline to `file`, holding the file's lock across
-// both, so no other thread's output falls between them. Answers what `fputs` answers of the
-// line's text: a negative number when the write failed.
+// both, so no other thread's output to `file` falls between them. Returns a negative number when a
+// write fails, and otherwise what `fputs` returns for `str`.
 int fixruntime_fputs_line(const char *str, FILE *file)
 {
     flockfile(file);
