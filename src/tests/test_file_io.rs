@@ -124,11 +124,11 @@ pub fn test_write_read_bytes_report_failure() {
             let res = *write_file_bytes(file_path, [1_U8, 2_U8, 3_U8]).to_result;
             assert(|_|"setup", res.is_ok);;
 
-            // A handle opened for reading only accepts no bytes.
+            // A handle opened only for reading accepts no bytes.
             let res = *with_file(file_path, "r", |handle| write_bytes(handle, [4_U8])).to_result;
             assert(|_|"write to a read-only handle", res.is_err);;
 
-            // A handle opened for appending only gives no bytes.
+            // A handle opened only for appending gives no bytes.
             let res = *with_file(file_path, "a", |handle| read_n_bytes(handle, 1)).to_result;
             assert(|_|"read from a write-only handle", res.is_err);;
 
