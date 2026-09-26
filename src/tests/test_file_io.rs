@@ -193,9 +193,13 @@ pub fn test_lines_read_from_a_file() {
             assert_eq(|_|"loop_lines, no last newline", res.as_ok, ["x\n", "y"]);;
             let res = *lines_of("").to_result;
             assert_eq(|_|"loop_lines, empty file", res.as_ok, [""]);;
+            let res = *lines_of("x\n\ny\n").to_result;
+            assert_eq(|_|"loop_lines, empty line", res.as_ok, ["x\n", "\n", "y\n", ""]);;
 
             let res = *lines_of_io("x\ny\n").to_result;
             assert_eq(|_|"loop_lines_io, last newline", res.as_ok, ["x\n", "y\n", ""]);;
+            let res = *lines_of_io("x\n\ny").to_result;
+            assert_eq(|_|"loop_lines_io, empty line and no last newline", res.as_ok, ["x\n", "\n", "y"]);;
             let res = *lines_of_io("").to_result;
             assert_eq(|_|"loop_lines_io, empty file", res.as_ok, [""]);;
 
