@@ -6,6 +6,8 @@ use crate::{
 };
 use std::fs;
 
+/// `read_file_string` reads back the whole string `write_file_string` wrote, and `read_line` reads
+/// it back line by line, each line keeping its trailing newline and the last line having none.
 #[test]
 pub fn test_write_read_file_string() {
     // Create a working directory.
@@ -42,6 +44,7 @@ pub fn test_write_read_file_string() {
     fs::remove_file(tmp_file).unwrap();
 }
 
+/// `is_eof` answers `true` once `read_string` has read the file to its end.
 #[test]
 pub fn test_is_eof() {
     // Create a working directory.
@@ -78,6 +81,8 @@ pub fn test_is_eof() {
     fs::remove_file(tmp_file).unwrap();
 }
 
+/// `read_file_bytes` reads back the bytes `write_file_bytes` wrote, for data longer than the
+/// 1024-byte chunks `read_bytes` reads it in.
 #[test]
 pub fn test_write_read_file_bytes() {
     // Create a working directory.
@@ -141,13 +146,14 @@ pub fn test_write_read_bytes_report_failure() {
     fs::remove_file(tmp_file).unwrap();
 }
 
+/// `with_file` closes the file when the action it runs succeeds, which leaves the handle's file
+/// pointer null.
 #[test]
 pub fn test_with_file_closed_when_ok() {
     // Create a working directory.
     let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
     let tmp_file = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
 
-    // Test write_file_bytes, read_file_bytes.
     let source = format!(
         r#"
 module Main; 
@@ -198,13 +204,14 @@ void *load()
     fs::remove_file(tmp_file).unwrap();
 }
 
+/// `with_file` closes the file when the action it runs fails, which leaves the handle's file pointer
+/// null.
 #[test]
 pub fn test_with_file_closed_when_err() {
     // Create a working directory.
     let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
     let tmp_file = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
 
-    // Test write_file_bytes, read_file_bytes.
     let source = format!(
         r#"
 module Main; 

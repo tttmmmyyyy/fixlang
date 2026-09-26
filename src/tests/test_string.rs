@@ -422,10 +422,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Writing through the bytes a string literal hands out leaves the literal saying what the source
-/// wrote, and the write lands in what the caller holds. A literal reads its bytes out of a constant
-/// the program holds in memory it may not write, so the write goes to a copy, which keeps both
-/// halves of that true.
+/// Writing through the bytes a string literal hands out leaves the literal as the source wrote it,
+/// and the caller's array holds the write. A literal's bytes are a constant in read-only memory, so
+/// the write goes to a copy.
 #[test]
 pub fn test_writing_through_a_literals_bytes_leaves_the_literal_alone() {
     let source = r#"

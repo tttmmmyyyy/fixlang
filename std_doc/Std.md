@@ -3016,7 +3016,7 @@ Reads at most n bytes from an IOHandle.
 ##### Parameters
 
 * `handle` - The IOHandle to be read.
-* `num_bytes` - The number of bytes to be read.
+* `n` - The maximum number of bytes to be read.
 
 #### read_string
 
@@ -3070,7 +3070,7 @@ The file handle will be closed automatically.
 
 * `path` - The path to the file to be opened.
 * `mode` - The mode string for `fopen` C function.
-* `work` - The function to be called on the opened file handle.
+* `action` - The function to be called on the opened file handle.
 
 #### write_bytes
 
@@ -4450,7 +4450,7 @@ Type: `Std::Ptr -> Std::String`
 
 Create a `String` from a pointer to a null-terminated C string.
 
-If the pointer is not pointing to a valid null-terminated C string, this function cause undefined behavior.
+If the pointer is not pointing to a valid null-terminated C string, this function causes undefined behavior.
 
 If you have an `Array U8` containing a null-terminated C string, use `FromBytes::from_bytes` instead.
 
