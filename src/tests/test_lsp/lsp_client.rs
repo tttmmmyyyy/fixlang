@@ -106,7 +106,8 @@ fn is_publish_diagnostics(message: &Value) -> bool {
 /// diagnostics pass into the count of the passes that have ended, the diagnostics of a file under
 /// the file's path, and the message itself into the queue.
 fn process_message(message: Value, shared: &SharedState) {
-    /// Handle a `textDocument/publishDiagnostics` notification.
+    /// Record the diagnostics a `textDocument/publishDiagnostics` notification carries, under the
+    /// path of the file it names. Any other message is left alone.
     fn process_publish_diagnostics(message: &Value, shared: &SharedState) {
         if !is_publish_diagnostics(message) {
             return;
@@ -600,7 +601,7 @@ impl LspClient {
 
         self.send_notification("exit", json!(null))?;
 
-        // A process still running when `exit_timeout` runs out is an error; `Drop` kills it.
+        // A process still running when `EXIT_TIMEOUT` runs out is an error; `Drop` kills it.
         match poll(Self::EXIT_TIMEOUT, || match self.process.try_wait() {
             Ok(Some(_status)) => Some(Ok(())),
             Ok(None) => None,

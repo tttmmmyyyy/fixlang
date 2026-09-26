@@ -205,7 +205,7 @@ pub fn launch_language_server() {
     let (diag_req_send, diag_req_recv) = mpsc::channel::<DiagnosticsMessage>();
     let mut diag_req_recv = Some(diag_req_recv);
 
-    // Prepare a channel to response from the diagnostics thread.
+    // Prepare a channel to receive the results of the diagnostics thread.
     let (diag_res_send, diag_res_recv) = mpsc::channel::<DiagnosticsResult>();
 
     // Session-scoped typecheck cache, owned by this loop and shared with the diagnostics thread
@@ -367,16 +367,16 @@ pub fn launch_language_server() {
                     &mut analyze_on_save,
                 );
             } else if method == "textDocument/completion" {
-                // Don't gate on `last_diag.is_some()` — the dot-context
+                // Answered whether or not `last_diag` is set: the dot-context
                 // completion pipeline runs its own `error_tolerant`
                 // elaborate over the live buffer, so it can produce
                 // candidates even when the saved file fails to parse
                 // and the diagnostics thread therefore never sends a
-                // `DiagnosticsResult`. Silently dropping the request
-                // in that state makes the client wait forever (looks
-                // like the LSP crashed). Pass `None` for the snapshot
-                // program and let `handle_completion` fall back to the
-                // dot-extract program (or reply empty).
+                // `DiagnosticsResult`. The client waits for an answer to
+                // every completion request, and an unanswered one looks
+                // like a crashed server. With `None` for the snapshot
+                // program, `handle_completion` falls back to the
+                // dot-extract program (or replies empty).
                 let Some((id, params)) = parse_request::<CompletionParams>(&message, method) else {
                     continue;
                 };
@@ -536,7 +536,7 @@ pub fn launch_language_server() {
                 };
                 references::handle_call_hierarchy_outgoing(id, &params, program);
             } else if method == "textDocument/semanticTokens/full" {
-                // Intentionally not gated on `last_diag`: semantic tokens are
+                // Answered whether or not `last_diag` is set: semantic tokens are
                 // produced by a never-failing lexer over the live buffer, so
                 // highlighting works even while the file does not parse.
                 let Some((id, params)) = parse_request::<SemanticTokensParams>(&message, method) else {
@@ -853,7 +853,7 @@ fn handle_textdocument_did_change(
     uri_to_latest_content: &mut Map<Uri, LatestContent>,
     analyze_on_type: bool,
 ) {
-    // Store the content of the file into `uri_to_content`. This must
+    // Store the content of the file into `uri_to_latest_content`. This must
     // happen even when on-type analysis is off, so other features
     // (completion, hover) still see the live buffer.
     if let Some(last_change) = params.content_changes.last() {
@@ -879,7 +879,7 @@ fn handle_textdocument_did_save(
     uri_to_latest_content: &mut Map<Uri, LatestContent>,
     analyze_on_save: bool,
 ) {
-    // Store the content of the file into maps.
+    // Store the content of the file into `uri_to_latest_content`.
     if let Some(text) = &params.text {
         record_latest_content(uri_to_latest_content, &params.text_document.uri, text);
     } else {
@@ -1113,7 +1113,7 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> Diagnostic {
         .map(|(_, span)| span_to_range(span))
         .unwrap_or_default();
 
-    // Other spans are shown in related informations.
+    // Other spans are shown as related information.
     let mut related_information = vec![];
     for (msg, span) in err.srcs.iter().skip(1) {
         // Convert span to location.
@@ -1123,7 +1123,7 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> Diagnostic {
         }
         let location = location.unwrap();
 
-        // Create related informations.
+        // Create the related information.
         let related = DiagnosticRelatedInformation {
             location,
             message: if msg.len() > 0 {
