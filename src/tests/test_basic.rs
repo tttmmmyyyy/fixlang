@@ -3681,6 +3681,9 @@ pub fn test_integer_from_string_reads_only_numbers_its_type_holds() {
             expect(0_U64, "-1", out_of_range("-1"));;
             expect(0_U64, "-0", "0");;
             expect(0_U32, "+4294967295", "4294967295");;
+            // Zero is zero whatever its sign, in a signed type as in an unsigned one.
+            expect(0_I8, "-0", "0");;
+            expect(0_I64, "-0", "0");;
 
             // Zeros before the digits do not count toward the range.
             expect(0_I8, "-000000000000000000000000128", "-128");;
@@ -3697,6 +3700,10 @@ pub fn test_integer_from_string_reads_only_numbers_its_type_holds() {
             expect(0_I64, "あ", malformed("あ"));;
             expect(0_U8, "999x", malformed("999x"));;
             expect(0_U64, "-1x", malformed("-1x"));;
+
+            // `:`, the byte after `9`, is not a digit, in a number the type holds and in one beyond it.
+            expect(0_I64, "1:", malformed("1:"));;
+            expect(0_U8, "256:", malformed("256:"));;
 
             pure()
         );
@@ -6284,6 +6291,18 @@ pub fn test_float_from_string_reads_decimal_texts() {
             expect(0.0_F32, "1e-50", out_of_range("1e-50"));;
             expect(0.0_F32, "3.5e38", out_of_range("3.5e38"));;
 
+            // Each range ends where the nearest number of the type becomes zero or an infinity: at
+            // half the least subnormal, and halfway from the greatest finite number to the next
+            // power of two. A text inside either end is read as the number it rounds to.
+            expect(0.0, "3e-324", "5e-324");;
+            expect(0.0, "2e-324", out_of_range("2e-324"));;
+            expect(0.0, "1.7976931348623158e308", "1.7976931348623157e308");;
+            expect(0.0, "1.797693134862315808e308", out_of_range("1.797693134862315808e308"));;
+            expect(0.0_F32, "8e-46", "1e-45");;
+            expect(0.0_F32, "7e-46", out_of_range("7e-46"));;
+            expect(0.0_F32, "3.4028235677e38", "3.4028235e38");;
+            expect(0.0_F32, "3.4028235678e38", out_of_range("3.4028235678e38"));;
+
             // An `F32` is rounded from the text itself: this one lies a quarter of the least
             // subnormal from the answer and three quarters from the number below it.
             let text = "0.0000000000000000000000000000000000000063045493406544889317960527914668501756929742366064834797205325642109586224692829858895493089221417903900146484375";
@@ -6296,6 +6315,7 @@ pub fn test_float_from_string_reads_decimal_texts() {
             expect(0.0_F32, "+INF", "inf");;
             expect(0.0, "NaN", "nan");;
             expect(0.0, "-nan(payload_1)", "nan");;
+            expect(0.0, "nan()", "nan");;
 
             // What is not one of those texts.
             expect(0.0, "", malformed(""));;
@@ -6307,6 +6327,7 @@ pub fn test_float_from_string_reads_decimal_texts() {
             expect(0.0, "1,5", malformed("1,5"));;
             expect(0.0, "infinit", malformed("infinit"));;
             expect(0.0, "nan(", malformed("nan("));;
+            expect(0.0, "nan(a-b)", malformed("nan(a-b)"));;
             expect(0.0, "0x1p3", malformed("0x1p3"));;
             expect(0.0_F32, "1e400x", malformed("1e400x"));;
 
