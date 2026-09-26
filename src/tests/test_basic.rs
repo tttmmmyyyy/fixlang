@@ -10,7 +10,8 @@ use crate::{
     tests::test_util::{
         assert_grammar_accepts, assert_grammar_rejects, emitted_llvm_ir, fix_command,
         run_source_assert_failed, run_source_capture, test_files_in_directory, test_source,
-        test_source_fail, test_source_fail_excludes, test_source_with_c, EmittedIr,
+        test_source_fail, test_source_fail_excludes, test_source_with_c, test_source_with_c_under,
+        EmittedIr,
     },
 };
 use rand::{thread_rng, Rng};
@@ -6334,6 +6335,88 @@ pub fn test_float_from_string_reads_decimal_texts() {
         );
     "#;
     test_source(&source, Configuration::develop_mode());
+}
+
+/// `from_string` into `F64` and `F32` answers each thread with the outcome of that thread's own
+/// text, while other threads read texts with other outcomes at the same time. Twelve C threads call
+/// back into the program, each reading one text over and over: a number, a malformed text, or one
+/// out of range, so a thread that saw another thread's outcome answers with the wrong one.
+#[test]
+pub fn test_float_from_string_outcome_belongs_to_its_thread() {
+    let fix_src = r#"
+        module Main;
+
+        // How reading `text` as the type of the first argument comes out: 0 read, 1 malformed,
+        // 2 out of range.
+        //
+        // # Parameters
+        // * `text` - A null-terminated C string.
+        outcome : [a : FromString] a -> Ptr -> U8;
+        outcome = |_, text| (
+            let read : Result ErrMsg a = String::unsafe_from_c_str_ptr(text).from_string;
+            if read.is_ok { 0_U8 };
+            if read.as_err.find("invalid", 0).is_some { 1_U8 };
+            2_U8
+        );
+
+        f64_outcome : Ptr -> IO U8;
+        f64_outcome = |text| pure $ outcome(0.0, text);
+        FFI_EXPORT[f64_outcome, fix_f64_outcome];
+
+        f32_outcome : Ptr -> IO U8;
+        f32_outcome = |text| pure $ outcome(0.0_F32, text);
+        FFI_EXPORT[f32_outcome, fix_f32_outcome];
+
+        main : IO ();
+        main = (
+            let wrong = *FFI_CALL_IO[I64 read_texts_on_threads()];
+            assert_eq(|_|"the readings that answered another thread's outcome", wrong, 0)
+        );
+    "#;
+    let c_src = r#"
+        #include <pthread.h>
+        #include <stdint.h>
+
+        uint8_t fix_f64_outcome(const char *text);
+        uint8_t fix_f32_outcome(const char *text);
+
+        // Indexed by the outcome reading the text comes out with.
+        static const char *texts[3] = {"1.5", "1.5x", "1e999"};
+        static int64_t wrong[12];
+
+        static void *read_one_text(void *arg)
+        {
+            int64_t k = (int64_t)arg;
+            uint8_t expected = (uint8_t)(k % 3);
+            for (int i = 0; i < 20000; i++) {
+                wrong[k] += fix_f64_outcome(texts[expected]) != expected;
+                wrong[k] += fix_f32_outcome(texts[expected]) != expected;
+            }
+            return 0;
+        }
+
+        int64_t read_texts_on_threads(void)
+        {
+            pthread_t threads[12];
+            for (int64_t k = 0; k < 12; k++) pthread_create(&threads[k], 0, read_one_text, (void *)k);
+            int64_t total = 0;
+            for (int64_t k = 0; k < 12; k++) {
+                pthread_join(threads[k], 0);
+                total += wrong[k];
+            }
+            return total;
+        }
+    "#;
+    let mut config = Configuration::develop_mode();
+    // Under memcheck the threads take turns, and the readings rarely overlap.
+    config.set_valgrind(ValgrindTool::None);
+    config.set_threaded();
+    test_source_with_c_under(
+        fix_src,
+        c_src,
+        "float_from_string_outcome_per_thread",
+        config,
+    );
 }
 
 /// Pins the exponential text `to_string_exp` writes: the six places the format gives by default,
