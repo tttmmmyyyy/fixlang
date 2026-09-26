@@ -8,15 +8,10 @@
 #[cfg(test)]
 mod tests {
     use super::super::case_project::setup_test_env;
+    use super::super::lsp_client::LspClient;
     use crate::tests::test_util::{fix_command, wait_within};
     use serde_json::{json, Value};
-    use std::{
-        fs,
-        io::{Read, Write},
-        process::Stdio,
-        thread::{self, sleep},
-        time::Duration,
-    };
+    use std::{iter, path::Path, process::Stdio, thread::sleep, time::Duration};
 
     /// Verifies that the language server terminates promptly once its
     /// stdin reaches EOF (parent editor closed the pipe).
@@ -63,63 +58,45 @@ mod tests {
     #[test]
     fn test_lsp_answers_requests_queued_before_stdin_eof() {
         let (_temp_dir, project_dir) = setup_test_env("completion");
-        let uri = format!("file://{}", project_dir.join("main.fix").display());
-        let text = fs::read_to_string(project_dir.join("main.fix")).unwrap();
-
-        let mut child = fix_command()
-            .arg("language-server")
-            .current_dir(&project_dir)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("Failed to spawn fix language-server");
-        let mut stdout = child.stdout.take().unwrap();
-        let reader = thread::spawn(move || {
-            let mut out = String::new();
-            stdout.read_to_string(&mut out).unwrap();
-            out
-        });
+        let main_fix = Path::new("main.fix");
+        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
+        client
+            .initialize(&project_dir, Duration::from_secs(10))
+            .expect("Failed to initialize LSP");
+        client
+            .open_document(main_fix)
+            .expect("Failed to open main.fix");
 
         // The completion request elaborates the program, which holds the server while the EOF
         // arrives behind the semantic-tokens request.
-        let messages = [
-            json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize",
-                    "params": { "processId": null, "capabilities": {} } }),
-            json!({ "jsonrpc": "2.0", "method": "textDocument/didOpen",
-                    "params": { "textDocument": { "uri": uri, "languageId": "fix",
-                                                  "version": 1, "text": text } } }),
-            json!({ "jsonrpc": "2.0", "id": 2, "method": "textDocument/completion",
-                    "params": { "textDocument": { "uri": uri },
-                                "position": { "line": 7, "character": 4 } } }),
-            json!({ "jsonrpc": "2.0", "id": 3, "method": "textDocument/semanticTokens/full",
-                    "params": { "textDocument": { "uri": uri } } }),
-        ];
-        let mut bytes = vec![];
-        for message in &messages {
-            let body = message.to_string();
-            write!(bytes, "Content-Length: {}\r\n\r\n{}", body.len(), body).unwrap();
-        }
-        let mut stdin = child.stdin.take().unwrap();
-        stdin.write_all(&bytes).unwrap();
-        drop(stdin);
+        let uri = client.file_uri(main_fix);
+        let completion_id = client
+            .send_request(
+                "textDocument/completion",
+                json!({ "textDocument": { "uri": uri }, "position": { "line": 7, "character": 4 } }),
+            )
+            .expect("Failed to send completion");
+        let tokens_id = client
+            .send_request(
+                "textDocument/semanticTokens/full",
+                json!({ "textDocument": { "uri": uri } }),
+            )
+            .expect("Failed to send semanticTokens");
+        client.close_stdin();
 
-        wait_within(
-            &mut child,
-            Duration::from_secs(60),
-            "the LSP server after stdin reached EOF",
-        );
-        let out = reader.join().unwrap();
-        let answered: Vec<u64> = out
-            .split("Content-Length:")
-            .filter_map(|frame| frame.split_once("\r\n\r\n"))
-            .filter_map(|(_, body)| serde_json::from_str::<Value>(body).ok())
+        client
+            .wait_for_exit(Duration::from_secs(60))
+            .expect("the LSP server is expected to exit after stdin reached EOF");
+        client.expect_response(tokens_id);
+        let answered: Vec<u32> = iter::from_fn(|| client.pop_message())
             .filter(|message| message.get("method").is_none())
             .filter_map(|message| message.get("id").and_then(Value::as_u64))
+            .map(|id| id as u32)
+            .filter(|id| [completion_id, tokens_id].contains(id))
             .collect();
         assert_eq!(
             answered,
-            vec![1, 2, 3],
+            vec![completion_id, tokens_id],
             "every request sent before the EOF is expected to be answered, in order"
         );
     }

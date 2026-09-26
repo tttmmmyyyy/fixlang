@@ -84,8 +84,8 @@ impl SharedState {
 pub struct LspClient {
     /// The server process, which `Drop` kills.
     process: Child,
-    /// The pipe the client writes its messages into.
-    stdin: ChildStdin,
+    /// The pipe the client writes its messages into. `None` once `close_stdin` has closed it.
+    stdin: Option<ChildStdin>,
     /// The project root, in absolute form. The paths a test passes are taken as relative to it.
     working_dir: PathBuf,
     /// The version last sent for each opened document, under the document's absolute path. The
@@ -267,7 +267,7 @@ impl LspClient {
 
         Ok(LspClient {
             process,
-            stdin,
+            stdin: Some(stdin),
             working_dir: absolute_working_dir,
             document_versions: Map::default(),
             shared,
@@ -283,13 +283,17 @@ impl LspClient {
 
         let header = format!("Content-Length: {}\r\n\r\n", content.len());
 
-        self.stdin
+        let stdin = self
+            .stdin
+            .as_mut()
+            .ok_or_else(|| "The pipe to the server is closed".to_string())?;
+        stdin
             .write_all(header.as_bytes())
             .map_err(|e| format!("Failed to write header: {:?}", e))?;
-        self.stdin
+        stdin
             .write_all(content.as_bytes())
             .map_err(|e| format!("Failed to write content: {:?}", e))?;
-        self.stdin
+        stdin
             .flush()
             .map_err(|e| format!("Failed to flush: {:?}", e))?;
 
@@ -599,15 +603,24 @@ impl LspClient {
         let _ = self.wait_for_response(id, Self::RESPONSE_TIMEOUT);
 
         self.send_notification("exit", json!(null))?;
+        self.wait_for_exit(Self::EXIT_TIMEOUT)
+    }
 
-        // A process still running when `exit_timeout` runs out is an error; `Drop` kills it.
-        match poll(Self::EXIT_TIMEOUT, || match self.process.try_wait() {
+    /// Close the pipe to the server, which the server reads as the editor going away.
+    pub fn close_stdin(&mut self) {
+        self.stdin = None;
+    }
+
+    /// Wait up to `timeout` for the server process to end. A process still running then is an
+    /// error; `Drop` kills it.
+    pub fn wait_for_exit(&mut self, timeout: Duration) -> Result<(), String> {
+        match poll(timeout, || match self.process.try_wait() {
             Ok(Some(_status)) => Some(Ok(())),
             Ok(None) => None,
             Err(e) => Some(Err(format!("Failed to check process status: {:?}", e))),
         }) {
             Some(result) => result,
-            None => Err("LSP server did not exit gracefully within timeout".to_string()),
+            None => Err("LSP server did not exit within timeout".to_string()),
         }
     }
 
