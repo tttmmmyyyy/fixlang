@@ -1279,7 +1279,7 @@ namespace IO {
     // 
     // * `msg` - The string to be printed.
     eprint : String -> IO ();
-    eprint = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
+    eprint = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
 
     // Prints a string followed by a newline to stderr.
     // 
@@ -1472,7 +1472,7 @@ namespace IO {
     //
     // * `msg` - The string to be printed.
     print : String -> IO ();
-    print = |str| str.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
+    print = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
 
     // Prints a string followed by a newline to stdout.
     // 
