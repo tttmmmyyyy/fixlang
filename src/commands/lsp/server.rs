@@ -124,20 +124,44 @@ pub struct DiagnosticsResult {
     pub user_source_contents: Map<PathBuf, String>,
 }
 
-/// A `textDocument/documentSymbol` request that is waiting for diagnostics to become available.
-pub struct PendingDocumentSymbolRequest {
-    /// The LSP request id used to correlate the eventual response.
-    id: u32,
-    /// The original request parameters, replayed once diagnostics are ready.
-    params: DocumentSymbolParams,
+/// A request that waits until an analysis yields a program, which it is answered out of.
+pub enum PendingRequest {
+    /// A `textDocument/documentSymbol` request.
+    DocumentSymbol {
+        /// The id the response carries.
+        id: u32,
+        /// The params of the request, read once a program is there to answer from.
+        params: DocumentSymbolParams,
+    },
+    /// A `workspace/symbol` request.
+    WorkspaceSymbol {
+        /// The id the response carries.
+        id: u32,
+        /// The params of the request, read once a program is there to answer from.
+        params: WorkspaceSymbolParams,
+    },
 }
 
-/// A `workspace/symbol` request that is waiting for diagnostics to become available.
-pub struct PendingWorkspaceSymbolRequest {
-    /// The LSP request id used to correlate the eventual response.
-    id: u32,
-    /// The original request parameters, replayed once diagnostics are ready.
-    params: WorkspaceSymbolParams,
+impl PendingRequest {
+    /// The id the response to the request carries.
+    fn id(&self) -> u32 {
+        match self {
+            PendingRequest::DocumentSymbol { id, .. }
+            | PendingRequest::WorkspaceSymbol { id, .. } => *id,
+        }
+    }
+
+    /// Answer the request out of the program `diag` holds.
+    fn answer(&self, diag: &DiagnosticsResult) {
+        match self {
+            PendingRequest::DocumentSymbol { id, params } => {
+                document_symbol::handle_document_symbol(*id, params, &diag.program)
+            }
+            PendingRequest::WorkspaceSymbol { id, params } => {
+                workspace_symbol::handle_workspace_symbol(*id, params, diag)
+            }
+        }
+    }
 }
 
 /// The latest content of one file, which may still be waiting to be saved to disk, together with
@@ -233,13 +257,8 @@ pub fn launch_language_server() {
     // The latest content of each open buffer, under the URI naming it.
     let mut uri_to_latest_content: Map<Uri, LatestContent> = Map::default();
 
-    // The pending document symbol requests.
-    let mut pending_document_symbol_requests: VecDeque<PendingDocumentSymbolRequest> =
-        VecDeque::new();
-
-    // The pending workspace symbol requests.
-    let mut pending_workspace_symbol_requests: VecDeque<PendingWorkspaceSymbolRequest> =
-        VecDeque::new();
+    // The requests waiting for an analysis to yield a program, in the order they arrived.
+    let mut pending_requests: VecDeque<PendingRequest> = VecDeque::new();
 
     loop {
         // Take in whatever the diagnostics thread has finished, keeping the newest result. This
@@ -265,16 +284,9 @@ pub fn launch_language_server() {
                 None::<()>,
             );
         }
-        if last_diag.is_some() {
-            // If there are pending document symbol requests, process them.
-            while let Some(req) = pending_document_symbol_requests.pop_front() {
-                let program = &last_diag.as_ref().unwrap().program;
-                document_symbol::handle_document_symbol(req.id, &req.params, program);
-            }
-            // If there are pending workspace symbol requests, process them.
-            while let Some(req) = pending_workspace_symbol_requests.pop_front() {
-                let diag = last_diag.as_ref().unwrap();
-                workspace_symbol::handle_workspace_symbol(req.id, &req.params, diag);
+        if let Some(diag) = last_diag.as_ref() {
+            for req in pending_requests.drain(..) {
+                req.answer(diag);
             }
         }
 
@@ -284,17 +296,10 @@ pub fn launch_language_server() {
                 send_response(id, Err::<(), _>(ResponseError::request_cancelled()));
                 continue;
             }
-            // A request waiting in a pending queue has been handed out and not answered.
+            // A request waiting for a program has been handed out and not answered.
             Some(Incoming::LateCancellation(id)) => {
-                let pending = pending_document_symbol_requests
-                    .iter()
-                    .any(|req| req.id == id)
-                    || pending_workspace_symbol_requests
-                        .iter()
-                        .any(|req| req.id == id);
-                if pending {
-                    pending_document_symbol_requests.retain(|req| req.id != id);
-                    pending_workspace_symbol_requests.retain(|req| req.id != id);
+                if let Some(index) = pending_requests.iter().position(|req| req.id() == id) {
+                    pending_requests.remove(index);
                     send_response(id, Err::<(), _>(ResponseError::request_cancelled()));
                 }
                 continue;
@@ -480,7 +485,7 @@ pub fn launch_language_server() {
                     continue;
                 }
                 if last_diag.is_none() {
-                    pending_document_symbol_requests.push_back(PendingDocumentSymbolRequest {
+                    pending_requests.push_back(PendingRequest::DocumentSymbol {
                         id: id.unwrap(),
                         params: params.unwrap(),
                     });
@@ -498,7 +503,7 @@ pub fn launch_language_server() {
                     continue;
                 }
                 if last_diag.is_none() {
-                    pending_workspace_symbol_requests.push_back(PendingWorkspaceSymbolRequest {
+                    pending_requests.push_back(PendingRequest::WorkspaceSymbol {
                         id: id.unwrap(),
                         params: params.unwrap(),
                     });
