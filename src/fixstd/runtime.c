@@ -148,7 +148,10 @@ static int64_t fixruntime_write_i64(char *buf, int64_t v)
 static const char FIXRUNTIME_HEX_DIGITS[17] = "0123456789abcdef";
 
 // How many hexadecimal digits a pointer is written with: every digit a 64-bit address holds.
+// Must stay in sync with the buffer `impl Ptr : ToString` in std.fix allocates.
 #define FIXRUNTIME_PTR_DIGITS 16
+_Static_assert(sizeof(uintptr_t) * 2 == FIXRUNTIME_PTR_DIGITS,
+               "FIXRUNTIME_PTR_DIGITS covers every hexadecimal digit of an address");
 
 // Writes the address `ptr` holds at `buf` as `FIXRUNTIME_PTR_DIGITS` hexadecimal digits,
 // null-terminated, leading zeros among them, and reports how many digits it wrote.
