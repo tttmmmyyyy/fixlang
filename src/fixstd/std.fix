@@ -1237,11 +1237,11 @@ namespace IO {
                 let buf_size = 1024;
                 let buf = Array::empty(buf_size);
                 let (buf, fgets_res) = *buf.mutate_elements_io(|buf_ptr| (
-                    FFI_CALL_IO[Ptr fgets(Ptr, I32, Ptr), buf_ptr, buf_size.i32, file_ptr]
+                    FFI_CALL_IO[Ptr fgets(Ptr, CInt, Ptr), buf_ptr, buf_size.c_int, file_ptr]
                 ));
                 if fgets_res == nullptr {
-                    let err = *FFI_CALL_IO[I32 ferror(Ptr), file_ptr];
-                    if err != 0_I32 { 
+                    let err = *FFI_CALL_IO[CInt ferror(Ptr), file_ptr];
+                    if err != 0.c_int { 
                         let err = "`Std::IO::_read_line_inner` failed!: an error occurred in `fgets`.";
                         break_m $ Result::err(err)
                     } else {
@@ -1279,7 +1279,7 @@ namespace IO {
     // 
     // * `msg` - The string to be printed.
     eprint : String -> IO ();
-    eprint = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
+    eprint = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[CInt fputs(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
 
     // Prints a string followed by a newline to stderr.
     // 
@@ -1287,7 +1287,7 @@ namespace IO {
     // 
     // * `msg` - The string to be printed.
     eprintln : String -> IO ();
-    eprintln = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fixruntime_fputs_line(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
+    eprintln = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[CInt fixruntime_fputs_line(Ptr, Ptr), c_str, *stderr.get_file_ptr]);; pure();
 
     // Exits the program with an error code.
     // 
@@ -1295,7 +1295,7 @@ namespace IO {
     // 
     // * `code` - The error code to be returned.
     exit : I64 -> IO a;
-    exit = |code| FFI_CALL_IO[() exit(I32), code.i32];; pure $ undefined("");
+    exit = |code| FFI_CALL_IO[() exit(CInt), code.c_int];; pure $ undefined("");
 
     // Exits the program with an error message and an error code.
     //  
@@ -1315,7 +1315,7 @@ namespace IO {
     flush : IOHandle -> IO I32;
     flush = |handle| (
         let file_ptr = *handle.get_file_ptr;
-        let res = *FFI_CALL_IO[I32 fflush(Ptr), file_ptr];
+        let res = *FFI_CALL_IO[CInt fflush(Ptr), file_ptr];
         res.i32.pure
     );
 
@@ -1395,7 +1395,7 @@ namespace IO {
     // 
     // * `handle` - The IOHandle to be checked.
     is_eof : IOHandle -> IO Bool;
-    is_eof = |handle| FFI_CALL_IO[I32 feof(Ptr), *handle.get_file_ptr].map(|res| res != 0_I32);
+    is_eof = |handle| FFI_CALL_IO[CInt feof(Ptr), *handle.get_file_ptr].map(|res| res != 0.c_int);
 
     // Loop on lines read from an `IOHandle`.
     // 
@@ -1472,7 +1472,7 @@ namespace IO {
     //
     // * `msg` - The string to be printed.
     print : String -> IO ();
-    print = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
+    print = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[CInt fputs(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
 
     // Prints a string followed by a newline to stdout.
     // 
@@ -1480,7 +1480,7 @@ namespace IO {
     //
     // * `msg` - The string to be printed.
     println : String -> IO ();
-    println = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[I32 fixruntime_fputs_line(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
+    println = |msg| msg.borrow_c_str_io(|c_str| FFI_CALL_IO[CInt fixruntime_fputs_line(Ptr, Ptr), c_str, *stdout.get_file_ptr]);; pure();
 
     // Reads all characters from a file.
     // 
@@ -1533,7 +1533,7 @@ namespace IO {
     // # Parameters
     //
     // * `handle` - The IOHandle to be read.
-    // * `num_bytes` - The number of bytes to be read.
+    // * `n` - The maximum number of bytes to be read.
     read_n_bytes : IOHandle -> I64 -> IOFail (Array U8);
     read_n_bytes = |handle, n| IOFail::from_io_result $ do {
         // Get the file pointer.
@@ -1541,17 +1541,17 @@ namespace IO {
 
         // Read n bytes into a buffer.
         let buf = Array::empty(n);
-        let (buf, len) = buf.mutate_elements(|buf| FFI_CALL_IO[I64 fread(Ptr, I64, I64, Ptr), buf, 1, n, file_ptr]);
+        let (buf, len) = buf.mutate_elements(|buf| FFI_CALL_IO[CSizeT fread(Ptr, CSizeT, CSizeT, Ptr), buf, 1.c_size_t, n.c_size_t, file_ptr]);
 
         // Check error.
-        let err = *FFI_CALL_IO[I32 ferror(Ptr), file_ptr];
-        if err != 0_I32 { 
+        let err = *FFI_CALL_IO[CInt ferror(Ptr), file_ptr];
+        if err != 0.c_int { 
             let err = "`Std::IO::read_n_bytes` failed!: Some error occurred in `fread`.";
             pure $ Result::err(err)
         };
 
         // Return the result.
-        let buf = buf._unsafe_grow_size(len);
+        let buf = buf._unsafe_grow_size(len.i64);
         pure $ Result::ok(buf)
     };
 
@@ -1583,7 +1583,7 @@ namespace IO {
     //
     // * `path` - The path to the file to be opened.
     // * `mode` - The mode string for `fopen` C function.
-    // * `work` - The function to be called on the opened file handle.
+    // * `action` - The function to be called on the opened file handle.
     with_file : Path -> String -> (IOHandle -> IOFail a) -> IOFail a;
     with_file = |path, mode, action| (
         let handle = *open_file(path, mode);
@@ -1603,8 +1603,8 @@ namespace IO {
         let file_ptr = *handle.get_file_ptr;
         let arr_size = array.@size;
         array.borrow_elements_io(|array_buf|
-            let written = *FFI_CALL_IO[I64 fwrite(Ptr, I64, I64, Ptr), array_buf, 1, arr_size, file_ptr];
-            if written < arr_size { pure $ Result::err $ "`Std::IO::write_bytes` failed!: some error occurred in `fwrite`." };
+            let written = *FFI_CALL_IO[CSizeT fwrite(Ptr, CSizeT, CSizeT, Ptr), array_buf, 1.c_size_t, arr_size.c_size_t, file_ptr];
+            if written.i64 < arr_size { pure $ Result::err $ "`Std::IO::write_bytes` failed!: some error occurred in `fwrite`." };
             pure $ Result::ok()
         )
     };
@@ -1637,8 +1637,8 @@ namespace IO {
     write_string = |handle, content| IOFail::from_io_result $ do {
         let file_ptr = *handle.get_file_ptr;
         content.borrow_c_str_io(|c_str|
-            let res = *FFI_CALL_IO[I32 fputs(Ptr, Ptr), c_str, file_ptr];
-            if res < 0_I32 { pure $ Result::err $ "`Std::IO::write_string` failed!: some error occurred in fputs." };
+            let res = *FFI_CALL_IO[CInt fputs(Ptr, Ptr), c_str, file_ptr];
+            if res < 0.c_int { pure $ Result::err $ "`Std::IO::write_string` failed!: some error occurred in fputs." };
             pure $ Result::ok()
         )
     };
@@ -2842,7 +2842,7 @@ namespace String {
     // The byte array must be unshared: this function updates its length in place.
     _unsafe_from_c_str : Array U8 -> String;
     _unsafe_from_c_str = |buf| (
-        let len = buf.borrow_elements(|ptr| FFI_CALL[I64 strlen(Ptr), ptr]);
+        let len = buf.borrow_elements(|ptr| FFI_CALL[CSizeT strlen(Ptr), ptr].i64);
         buf._unsafe_from_c_str_with_len(len)
     );
 
@@ -2860,7 +2860,7 @@ namespace String {
 
     // Create a `String` from a pointer to a null-terminated C string.
     //
-    // If the pointer is not pointing to a valid null-terminated C string, this function cause undefined behavior.
+    // If the pointer is not pointing to a valid null-terminated C string, this function causes undefined behavior.
     //
     // If you have an `Array U8` containing a null-terminated C string, use `FromBytes::from_bytes` instead.
     //
@@ -2886,10 +2886,10 @@ namespace String {
     // * `ptr` - The pointer to a null-terminated C string.
     unsafe_from_c_str_ptr : Ptr -> String;
     unsafe_from_c_str_ptr = |ptr| (
-        let len = FFI_CALL[I64 strlen(Ptr), ptr];
+        let len = FFI_CALL[CSizeT strlen(Ptr), ptr].i64;
         let buf_len = len + 1;
         let buf = Array::empty(buf_len)._unsafe_grow_size(buf_len);
-        let (buf, _) = buf.mutate_elements(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len]);
+        let (buf, _) = buf.mutate_elements(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, CSizeT), buf_ptr, ptr, buf_len.c_size_t]);
         String { _data : buf }
     );
 
@@ -2904,10 +2904,10 @@ namespace String {
     // If you have an `Array U8` containing a null-terminated C string, use `FromBytes::from_bytes` instead.
     unsafe_from_c_str_ptr_io : Ptr -> IO String;
     unsafe_from_c_str_ptr_io = |ptr| (
-        let len = *FFI_CALL_IO[I64 strlen(Ptr), ptr];
+        let len = (*FFI_CALL_IO[CSizeT strlen(Ptr), ptr]).i64;
         let buf_len = len + 1;
         let buf = Array::empty(buf_len)._unsafe_grow_size(buf_len);
-        let (buf, _) = *buf.mutate_elements_io(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, I64), buf_ptr, ptr, buf_len]);
+        let (buf, _) = *buf.mutate_elements_io(|buf_ptr| FFI_CALL_IO[Ptr memcpy(Ptr, Ptr, CSizeT), buf_ptr, ptr, buf_len.c_size_t]);
         String { _data : buf }.pure
     );
 
@@ -3219,7 +3219,7 @@ namespace String {
     //
     // * `str` - The string to be modified.
     strip_first_spaces : String -> String;
-    strip_first_spaces = strip_first_bytes(|c| FFI_CALL[I32 isspace(I32), c.i32] > 0_I32);
+    strip_first_spaces = strip_first_bytes(|c| FFI_CALL[CInt isspace(CInt), c.c_int] != 0.c_int);
 
     // Removes the last byte of a string while it satisifies the specified condition.
     // 
@@ -3252,7 +3252,7 @@ namespace String {
     //
     // * `str` - The string to be modified.
     strip_last_spaces : String -> String;
-    strip_last_spaces = strip_last_bytes(|c| FFI_CALL[I32 isspace(I32), c.i32] > 0_I32);
+    strip_last_spaces = strip_last_bytes(|c| FFI_CALL[CInt isspace(CInt), c.c_int] != 0.c_int);
 
     // Strips leading and trailing whitespace characters.
     //
@@ -3824,7 +3824,8 @@ namespace Ptr {
 
 impl Ptr : ToString {
     to_string = |v| (
-        let data = Array::empty(17); // len(ffffffffffffffff) + 1
+        // Holds the `FIXRUNTIME_PTR_DIGITS` digits `fixruntime_ptr_to_str` in runtime.c writes, and the null after them.
+        let data = Array::empty(17);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_ptr_to_str(Ptr, Ptr), ptr, v]);
         data._unsafe_from_c_str_with_len(length)
     );
@@ -3997,7 +3998,7 @@ impl I16 : FromString {
 impl I32 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(4)._unsafe_grow_size(4);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u32_to_bytes(Ptr, I32), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u32_to_bytes(Ptr, U32), ptr, v.u32]);
         data
     );
 }
@@ -4006,7 +4007,7 @@ impl I32 : FromBytes {
         if bs.@size != 4 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I32."
         };
-        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[I32 fixruntime_u32_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U32 fixruntime_u32_from_bytes(Ptr), ptr].i32)
     );
 }
 impl I32 : ToString {
@@ -4023,7 +4024,7 @@ impl I32 : FromString {
 impl I64 : ToBytes {
     to_bytes = |v| (
         let data = Array::empty(8)._unsafe_grow_size(8);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u64_to_bytes(Ptr, I64), ptr, v]);
+        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u64_to_bytes(Ptr, U64), ptr, v.u64]);
         data
     );
 }
@@ -4032,7 +4033,7 @@ impl I64 : FromBytes {
         if bs.@size != 8 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I64."
         };
-        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[I64 fixruntime_u64_from_bytes(Ptr), ptr])
+        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U64 fixruntime_u64_from_bytes(Ptr), ptr].i64)
     );
 }
 impl I64 : ToString {

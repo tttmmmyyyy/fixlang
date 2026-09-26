@@ -18,6 +18,71 @@ pub fn test_string_unsafe_from_c_str_ptr() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `unsafe_from_c_str_ptr` and `unsafe_from_c_str_ptr_io` read back the string a C string holds,
+/// the empty one included.
+#[test]
+pub fn test_string_unsafe_from_c_str_ptr_io_and_empty() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let src = "Hello World!";
+            let cpy = *src.borrow_c_str_io(String::unsafe_from_c_str_ptr_io);
+            assert_eq(|_|"io", cpy, src);;
+
+            let cpy = "".borrow_c_str(String::unsafe_from_c_str_ptr);
+            assert_eq(|_|"pure empty", cpy, "");;
+            let cpy = *"".borrow_c_str_io(String::unsafe_from_c_str_ptr_io);
+            assert_eq(|_|"io empty", cpy, "");;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `strip_first_spaces`, `strip_last_spaces` and `strip_spaces` remove exactly the six bytes C's
+/// `isspace` accepts and keep bytes above 0x7F; `starts_with` and `ends_with` hold for the empty
+/// affix and the whole string, fail for a longer affix, and compare bytes above 0x7F; `find` answers
+/// for an empty token at or past the end, a start past the end, and a token longer than the string.
+#[test]
+pub fn test_string_c_calls_boundaries() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            let spaces = " \t\n\u000B\u000C\r";
+            assert_eq(|_|"six bytes", spaces.@size, 6);;
+            assert_eq(|_|"strip_first_spaces", (spaces + "x" + spaces).strip_first_spaces, "x" + spaces);;
+            assert_eq(|_|"strip_last_spaces", (spaces + "x" + spaces).strip_last_spaces, spaces + "x");;
+            assert_eq(|_|"strip_spaces all spaces", spaces.strip_spaces, "");;
+            let high = [0xA0_U8, 0x85_U8, 0xFF_U8, 0x80_U8, 0_U8];
+            let high : String = high.from_bytes.as_ok;
+            assert_eq(|_|"high bytes kept", high.strip_spaces, high);;
+
+            assert(|_|"starts_with empty", "abc".starts_with(""));;
+            assert(|_|"ends_with empty", "abc".ends_with(""));;
+            assert(|_|"empty starts_with empty", "".starts_with(""));;
+            assert(|_|"starts_with whole", "abc".starts_with("abc"));;
+            assert(|_|"ends_with whole", "abc".ends_with("abc"));;
+            assert(|_|"starts_with longer", !"abc".starts_with("abcd"));;
+            assert(|_|"ends_with longer", !"abc".ends_with("zabc"));;
+            assert(|_|"ends_with mismatch", !"abc".ends_with("bd"));;
+            assert(|_|"starts_with high bytes", (high + "a").starts_with(high));;
+            assert(|_|"ends_with high bytes", ("a" + high).ends_with(high));;
+
+            assert_eq(|_|"find empty at end", "abc".find("", 3), Option::some(3));;
+            assert_eq(|_|"find empty past end", "abc".find("", 10), Option::some(3));;
+            assert_eq(|_|"find past end", "abc".find("c", 10), Option::none());;
+            assert_eq(|_|"find longer", "abc".find("abcd", 0), Option::none());;
+            assert_eq(|_|"find from start_idx", "abcabc".find("abc", 1), Option::some(3));;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// The substring between two indices, where the range covers part of the string, is empty, or
 /// reaches past the end, and where the string itself is empty.
 #[test]
@@ -398,10 +463,9 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Writing through the bytes a string literal hands out leaves the literal saying what the source
-/// wrote, and the write lands in what the caller holds. A literal reads its bytes out of a constant
-/// the program holds in memory it may not write, so the write goes to a copy, which keeps both
-/// halves of that true.
+/// Writing through the bytes a string literal hands out leaves the literal as the source wrote it,
+/// and the caller's array holds the write. A literal's bytes are a constant in read-only memory, so
+/// the write goes to a copy.
 #[test]
 pub fn test_writing_through_a_literals_bytes_leaves_the_literal_alone() {
     let source = r#"
@@ -439,10 +503,11 @@ pub fn test_writing_through_a_literals_bytes_leaves_the_literal_alone() {
 /// Every `Std::Array` primitive that writes, applied to the bytes a string literal hands out,
 /// writes into a copy: the literal's storage is a constant in the program's data, so a write that
 /// reached it would land in read-only memory. Each write below is the only use of the bytes it is
-/// given, so the uniqueness check that makes the copy is one a shared array would fail.
+/// given, so what makes it copy is that the bytes are the literal's, and nothing else.
 #[test]
 pub fn test_every_write_through_a_literals_bytes_lands_on_a_copy() {
-    // Long enough that the storage is the aligned kind.
+    // Long enough that the storage reaches `ARRAY_ALIGNED_ALLOC_THRESHOLD`, from which its element
+    // buffer is aligned.
     let literal = "0123456789abcdefghijklmnopqrstuvwxyz".repeat(7) + "0123456789";
     let source = format!(
         r#"

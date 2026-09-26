@@ -5659,6 +5659,71 @@ pub fn test_narrow_signed_integer_bytes_round_trip() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `to_bytes` and `from_bytes` of a 32- or 64-bit signed integer carry the value through the byte
+/// array and back, at both ends of the type's range, and the bytes are the value's two's-complement
+/// representation.
+#[test]
+pub fn test_wide_signed_integer_bytes_round_trip() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let case = "I32";
+            assert_eq(|_|case + " negative one", (-1_I32).to_bytes.from_bytes.as_ok, -1_I32);;
+            assert_eq(|_|case + " minimum", I32::minimum.to_bytes.from_bytes.as_ok, I32::minimum);;
+            assert_eq(|_|case + " maximum", I32::maximum.to_bytes.from_bytes.as_ok, I32::maximum);;
+
+            let case = "I64";
+            assert_eq(|_|case + " negative one", (-1_I64).to_bytes.from_bytes.as_ok, -1_I64);;
+            assert_eq(|_|case + " minimum", I64::minimum.to_bytes.from_bytes.as_ok, I64::minimum);;
+            assert_eq(|_|case + " maximum", I64::maximum.to_bytes.from_bytes.as_ok, I64::maximum);;
+
+            // The bytes of -1 are all ones in either byte order.
+            let case = "representation";
+            assert_eq(|_|case + " I32 negative one", (-1_I32).to_bytes, Array::fill(4, 255_U8));;
+            assert_eq(|_|case + " I64 negative one", (-1_I64).to_bytes, Array::fill(8, 255_U8));;
+            let from_all_ones : Result ErrMsg I32 = Array::fill(4, 255_U8).from_bytes;
+            assert_eq(|_|case + " I32 from all ones", from_all_ones.as_ok, -1_I32);;
+            let from_all_ones : Result ErrMsg I64 = Array::fill(8, 255_U8).from_bytes;
+            assert_eq(|_|case + " I64 from all ones", from_all_ones.as_ok, -1_I64);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `from_bytes` and `to_bytes` of `F32` and `F64` carry a signaling NaN's bits through unchanged:
+/// the value crosses the C runtime twice as a `float` or a `double`, and nothing on the way may
+/// quiet it or drop its payload. The payload is drawn from the argument count so that the optimizer
+/// cannot fold the round trip.
+#[test]
+pub fn test_float_bytes_round_trip_keeps_signaling_nan() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let payload = (*get_args).@size.u8;
+            assert(|_|"the payload is not zero", payload != 0_U8);;
+
+            let f32_bytes = [payload, 0_U8, 128_U8, 127_U8];
+            let f : F32 = f32_bytes.from_bytes.as_ok;
+            assert(|_|"F32 is a NaN", f != f);;
+            assert_eq(|_|"F32 signaling NaN", f.to_bytes, f32_bytes);;
+
+            let f64_bytes = [payload, 0_U8, 0_U8, 0_U8, 0_U8, 0_U8, 240_U8, 127_U8];
+            let d : F64 = f64_bytes.from_bytes.as_ok;
+            assert(|_|"F64 is a NaN", d != d);;
+            assert_eq(|_|"F64 signaling NaN", d.to_bytes, f64_bytes);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// `consumed_time_while_lazy` and `consumed_time_while_io` hand back the value their argument
 /// produced along with the time it took, for a long computation and for file IO.
 #[test]
@@ -12325,6 +12390,8 @@ main = (
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `flush` flushes a handle that has text written to it and reports success as `fflush` does, with
+/// 0.
 #[test]
 pub fn test_flush() {
     let source = r##"
@@ -12332,7 +12399,9 @@ module Main;
 
 main : IO ();
 main = (
-    println("Hello, World!");;
+    print("Hello, World!");;
+    let res = *flush(stdout);
+    assert_eq(|_|"flush", res, 0_I32);;
 
     pure()
 );
