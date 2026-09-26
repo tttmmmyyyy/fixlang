@@ -2954,7 +2954,7 @@ namespace String {
 
     // Answers with what reading `str` as a floating point number comes to, from what the reader in
     // `float_text.c` answered: the number `v`, and the `outcome` it recorded, one of the
-    // `NUMBER_TEXT_*` values there, which the literals below must stay in sync with.
+    // `FLOAT_TEXT_*` values there, which the literals below must stay in sync with.
     _float_text_result : U8 -> a -> String -> Result ErrMsg a;
     _float_text_result = |outcome, v, str| (
         if outcome == 0_U8 { Result::ok(v) };
@@ -4208,7 +4208,7 @@ impl F32 : FromString {
         // allocates no closure.
         let (v, outcome) = str.borrow_c_str_io(|c_str| (
             let v = *FFI_CALL_IO[F32 fixruntime_read_f32(Ptr), c_str];
-            let outcome = *FFI_CALL_IO[U8 fixruntime_number_text_outcome()];
+            let outcome = *FFI_CALL_IO[U8 fixruntime_float_text_outcome()];
             (v, outcome).pure
         )).unsafe_perform;
         str._float_text_result(outcome, v)
@@ -4297,7 +4297,7 @@ impl F64 : FromString {
         // allocates no closure.
         let (v, outcome) = str.borrow_c_str_io(|c_str| (
             let v = *FFI_CALL_IO[F64 fixruntime_read_f64(Ptr), c_str];
-            let outcome = *FFI_CALL_IO[U8 fixruntime_number_text_outcome()];
+            let outcome = *FFI_CALL_IO[U8 fixruntime_float_text_outcome()];
             (v, outcome).pure
         )).unsafe_perform;
         str._float_text_result(outcome, v)
