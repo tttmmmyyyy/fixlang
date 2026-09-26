@@ -96,8 +96,8 @@ impl Inbox {
             return;
         };
         let request = self.queued.iter_mut().find(|incoming| {
-            matches!(incoming, Incoming::Message(message)
-                if message.method.is_some() && message.id == Some(id))
+            matches!(incoming, Incoming::Message(queued_message)
+                if queued_message.method.is_some() && queued_message.id == Some(id))
         });
         if let Some(request) = request {
             *request = Incoming::Cancelled(id);

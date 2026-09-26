@@ -44,7 +44,7 @@ mod tests {
         client: &mut LspClient,
         follow: impl FnOnce(&mut LspClient, u32),
     ) -> (u32, u32) {
-        let completion = client
+        let completion_id = client
             .send_request(
                 "textDocument/completion",
                 json!({
@@ -53,14 +53,14 @@ mod tests {
                 }),
             )
             .expect("Failed to send completion");
-        let tokens = client
+        let tokens_id = client
             .send_request(
                 "textDocument/semanticTokens/full",
                 json!({ "textDocument": { "uri": client.file_uri(Path::new("main.fix")) } }),
             )
             .expect("Failed to send semanticTokens");
-        follow(client, tokens);
-        (completion, tokens)
+        follow(client, tokens_id);
+        (completion_id, tokens_id)
     }
 
     /// Tell the server that the client now holds `text` for `file` under `version`.
@@ -99,8 +99,8 @@ mod tests {
     /// taken. The server handles the client's messages in the order they arrive, so once a request
     /// sent now is answered, every response to `id` the server was going to send has arrived.
     fn assert_answered_once(client: &mut LspClient, id: u32) {
-        let probe = request_tokens(client);
-        client.expect_response(probe);
+        let probe_id = request_tokens(client);
+        client.expect_response(probe_id);
         assert!(
             client.take_response(id).is_none(),
             "the request {} is expected to be answered once",
@@ -115,11 +115,11 @@ mod tests {
         let main_fix = Path::new("main.fix");
         let text = std::fs::read_to_string(project_dir.join(main_fix)).unwrap();
 
-        let (_, tokens) = send_behind_a_completion(&mut client, |client, _| {
+        let (_, tokens_id) = send_behind_a_completion(&mut client, |client, _| {
             change(client, main_fix, 2, &format!("{}\n", text));
         });
 
-        let response = client.expect_response(tokens);
+        let response = client.expect_response(tokens_id);
         assert_eq!(
             error_code(&response),
             None,
@@ -146,14 +146,14 @@ mod tests {
     fn test_a_request_cancelled_before_it_is_reached_is_answered_request_cancelled() {
         let (_temp_dir, _project_dir, mut client) = open_session();
 
-        let (_, tokens) = send_behind_a_completion(&mut client, |client, tokens| {
+        let (_, tokens_id) = send_behind_a_completion(&mut client, |client, tokens_id| {
             client
-                .send_notification("$/cancelRequest", json!({ "id": tokens }))
+                .send_notification("$/cancelRequest", json!({ "id": tokens_id }))
                 .expect("Failed to send cancelRequest");
         });
 
         assert_eq!(
-            error_code(&client.expect_response(tokens)),
+            error_code(&client.expect_response(tokens_id)),
             Some(REQUEST_CANCELLED),
             "the client cancelled the semantic-tokens request before the server reached it, so it \
              is expected to be answered RequestCancelled"
@@ -171,15 +171,15 @@ mod tests {
     fn test_a_cancellation_after_the_answer_sends_nothing_more() {
         let (_temp_dir, _project_dir, mut client) = open_session();
 
-        let tokens = request_tokens(&mut client);
-        client.expect_response(tokens);
+        let tokens_id = request_tokens(&mut client);
+        client.expect_response(tokens_id);
         client
-            .send_notification("$/cancelRequest", json!({ "id": tokens }))
+            .send_notification("$/cancelRequest", json!({ "id": tokens_id }))
             .expect("Failed to send cancelRequest");
         // A cancellation that finds its request answered queues nothing. The pause lets the server
         // take it in alone, with nothing queued behind it, before the next request arrives.
         thread::sleep(Duration::from_millis(500));
-        assert_answered_once(&mut client, tokens);
+        assert_answered_once(&mut client, tokens_id);
 
         client.shutdown().expect("Failed to shutdown LSP");
         client
@@ -193,7 +193,7 @@ mod tests {
     fn test_a_cancellation_passes_over_a_response_carrying_the_same_id() {
         let (_temp_dir, _project_dir, mut client) = open_session();
 
-        let completion = client
+        let completion_id = client
             .send_request(
                 "textDocument/completion",
                 json!({
@@ -202,23 +202,23 @@ mod tests {
                 }),
             )
             .expect("Failed to send completion");
-        // The client numbers its requests in order, so the next request carries `completion + 1`.
+        // The client numbers its requests in order, so the next request carries `completion_id + 1`.
         client
-            .send_response(completion + 1, Value::Null)
+            .send_response(completion_id + 1, Value::Null)
             .expect("Failed to send a response");
-        let tokens = request_tokens(&mut client);
-        assert_eq!(tokens, completion + 1);
+        let tokens_id = request_tokens(&mut client);
+        assert_eq!(tokens_id, completion_id + 1);
         client
-            .send_notification("$/cancelRequest", json!({ "id": tokens }))
+            .send_notification("$/cancelRequest", json!({ "id": tokens_id }))
             .expect("Failed to send cancelRequest");
 
         assert_eq!(
-            error_code(&client.expect_response(tokens)),
+            error_code(&client.expect_response(tokens_id)),
             Some(REQUEST_CANCELLED),
             "the client cancelled the semantic-tokens request before the server reached it, so it \
              is expected to be answered RequestCancelled"
         );
-        assert_answered_once(&mut client, tokens);
+        assert_answered_once(&mut client, tokens_id);
 
         client.shutdown().expect("Failed to shutdown LSP");
         client
