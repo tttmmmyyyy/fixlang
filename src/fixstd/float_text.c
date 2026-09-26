@@ -309,6 +309,9 @@ int64_t fixruntime_f64_to_str_shortest(char *buf, int64_t size, double v)
 // How the last reading of a number on this thread came out: one of the three `NUMBER_TEXT_*`
 // values below. `fixruntime_read_f64` and `fixruntime_read_f32` answer with the number alone, and
 // `std.fix` reads this through `fixruntime_number_text_outcome` right after each call.
+//
+// The values must stay in sync with `Std::String::_float_text_result` in `std.fix`, which tells
+// them apart.
 static _Thread_local uint8_t number_text_outcome;
 
 // The text named a number, and the answer is it, rounded to the nearest number of the type.
@@ -337,17 +340,21 @@ uint8_t fixruntime_number_text_outcome(void)
 // * `end` - The end of the text.
 static bool fixruntime_record_number_text_outcome(ffc_result result, const char *end)
 {
-    if (result.outcome == FFC_OUTCOME_INVALID_INPUT || result.ptr != end)
+    switch (result.outcome)
     {
+    case FFC_OUTCOME_OK:
+        number_text_outcome = result.ptr == end ? NUMBER_TEXT_READ : NUMBER_TEXT_MALFORMED;
+        break;
+    case FFC_OUTCOME_OUT_OF_RANGE:
+        number_text_outcome = result.ptr == end ? NUMBER_TEXT_OUT_OF_RANGE : NUMBER_TEXT_MALFORMED;
+        break;
+    case FFC_OUTCOME_INVALID_INPUT:
         number_text_outcome = NUMBER_TEXT_MALFORMED;
-    }
-    else if (result.outcome == FFC_OUTCOME_OUT_OF_RANGE)
-    {
-        number_text_outcome = NUMBER_TEXT_OUT_OF_RANGE;
-    }
-    else
-    {
-        number_text_outcome = NUMBER_TEXT_READ;
+        break;
+    default:
+        fprintf(stderr, "fast_float answered with an outcome it does not define: %" PRIu32 "\n",
+                (uint32_t)result.outcome);
+        fixruntime_abort();
     }
     return number_text_outcome == NUMBER_TEXT_READ;
 }

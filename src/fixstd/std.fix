@@ -2954,12 +2954,13 @@ namespace String {
 
     // Answers with what reading `str` as a floating point number comes to, from what the reader in
     // `float_text.c` answered: the number `v`, and the `outcome` it recorded, one of the
-    // `NUMBER_TEXT_*` values there.
+    // `NUMBER_TEXT_*` values there, which the literals below must stay in sync with.
     _float_text_result : U8 -> a -> String -> Result ErrMsg a;
     _float_text_result = |outcome, v, str| (
+        if outcome == 0_U8 { Result::ok(v) };
         if outcome == 1_U8 { Result::err("Failed to convert string to number (invalid format): " + str) };
         if outcome == 2_U8 { Result::err("Failed to convert string to number (out of range): " + str) };
-        Result::ok(v)
+        undefined("[Std::String::_float_text_result] The reader recorded an outcome it does not define: " + outcome.to_string)
     );
 
     // Answers with the index of the first byte at or after `i` that is not a decimal digit.
