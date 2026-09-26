@@ -3623,6 +3623,87 @@ pub fn test98() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `from_string` into each integer type reads a text naming a number the type holds, and reports a
+/// text naming one outside it as out of range rather than wrapping it into the type. A text that is
+/// not an optional sign followed by decimal digits is reported as malformed, even where its digits
+/// name a number outside the type.
+#[test]
+pub fn test_integer_from_string_reads_only_numbers_its_type_holds() {
+    let source = r#"
+        module Main;
+
+        // Reads `text` as the type of the first argument, and asserts that the answer, written as
+        // text, or the error message is `expected`.
+        expect : [a : FromString, a : ToString] a -> String -> String -> IO ();
+        expect = |_, text, expected| (
+            let read : Result ErrMsg a = text.from_string;
+            let actual = if read.is_ok { read.as_ok.to_string } else { read.as_err };
+            assert_eq(|_|"reading \"" + text + "\"", actual, expected)
+        );
+
+        out_of_range : String -> String;
+        out_of_range = |text| "Failed to convert string to integer (out of range): " + text;
+
+        malformed : String -> String;
+        malformed = |text| "Failed to convert string to integer (invalid format): " + text;
+
+        main : IO ();
+        main = (
+            // The two ends of each type, and the numbers one beyond them.
+            expect(0_I8, "-128", "-128");;
+            expect(0_I8, "127", "127");;
+            expect(0_I8, "-129", out_of_range("-129"));;
+            expect(0_I8, "128", out_of_range("128"));;
+            expect(0_U8, "255", "255");;
+            expect(0_U8, "256", out_of_range("256"));;
+            expect(0_I16, "-32768", "-32768");;
+            expect(0_I16, "32767", "32767");;
+            expect(0_I16, "-32769", out_of_range("-32769"));;
+            expect(0_I16, "32768", out_of_range("32768"));;
+            expect(0_U16, "65535", "65535");;
+            expect(0_U16, "65536", out_of_range("65536"));;
+            expect(0_I32, "-2147483648", "-2147483648");;
+            expect(0_I32, "2147483647", "2147483647");;
+            expect(0_I32, "-2147483649", out_of_range("-2147483649"));;
+            expect(0_I32, "2147483648", out_of_range("2147483648"));;
+            expect(0_U32, "4294967295", "4294967295");;
+            expect(0_U32, "4294967296", out_of_range("4294967296"));;
+            expect(0_I64, "-9223372036854775808", "-9223372036854775808");;
+            expect(0_I64, "9223372036854775807", "9223372036854775807");;
+            expect(0_I64, "-9223372036854775809", out_of_range("-9223372036854775809"));;
+            expect(0_I64, "9223372036854775808", out_of_range("9223372036854775808"));;
+            expect(0_U64, "18446744073709551615", "18446744073709551615");;
+            expect(0_U64, "18446744073709551616", out_of_range("18446744073709551616"));;
+            expect(0_U64, "99999999999999999999999999", out_of_range("99999999999999999999999999"));;
+
+            // An unsigned type holds no negative number, and holds zero whatever its sign.
+            expect(0_U8, "-1", out_of_range("-1"));;
+            expect(0_U64, "-1", out_of_range("-1"));;
+            expect(0_U64, "-0", "0");;
+            expect(0_U32, "+4294967295", "4294967295");;
+
+            // Zeros before the digits do not count toward the range.
+            expect(0_I8, "-000000000000000000000000128", "-128");;
+            expect(0_U64, "00000000000000000000018446744073709551615", "18446744073709551615");;
+
+            // What is not a sign followed by digits.
+            expect(0_I64, "", malformed(""));;
+            expect(0_I64, "-", malformed("-"));;
+            expect(0_I64, "+-1", malformed("+-1"));;
+            expect(0_I64, " 1", malformed(" 1"));;
+            expect(0_I64, "1 ", malformed("1 "));;
+            expect(0_I64, "0x10", malformed("0x10"));;
+            expect(0_I64, "1.0", malformed("1.0"));;
+            expect(0_I64, "あ", malformed("あ"));;
+            expect(0_U8, "999x", malformed("999x"));;
+            expect(0_U64, "-1x", malformed("-1x"));;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// Pins the decimal text `to_string` writes, against a spelling the test builds one digit at a
 /// time: every number of at most four digits, and every power of ten an `I64` reaches with the
 /// numbers either side of it, and the negative of each, which carries a sign.
@@ -6078,6 +6159,91 @@ pub fn test_float_text_is_read_and_written_under_one_locale() {
             assert_eq(|_|"from_string reads what to_string_precision wrote", back.as_ok, 1.5);;
             let back : Result ErrMsg F64 = 1.5.to_string_exp.from_string;
             assert_eq(|_|"from_string reads what to_string_exp wrote", back.as_ok, 1.5);;
+
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `from_string` into `F64` and `F32` reads a decimal number with an optional sign, point and power
+/// of ten, rounded to the nearest number of the type, and the names of the infinities and of NaN.
+/// A text naming a number too large for the type, or one other than zero too small to hold at all,
+/// is reported as out of range; any other text is reported as malformed, a hexadecimal one among
+/// them.
+#[test]
+pub fn test_float_from_string_reads_decimal_texts() {
+    let source = r#"
+        module Main;
+
+        // Reads `text` as the type of the first argument, and asserts that the answer, written as
+        // text, or the error message is `expected`.
+        expect : [a : FromString, a : ToString] a -> String -> String -> IO ();
+        expect = |_, text, expected| (
+            let read : Result ErrMsg a = text.from_string;
+            let actual = if read.is_ok { read.as_ok.to_string } else { read.as_err };
+            assert_eq(|_|"reading \"" + text + "\"", actual, expected)
+        );
+
+        out_of_range : String -> String;
+        out_of_range = |text| "Failed to convert string to number (out of range): " + text;
+
+        malformed : String -> String;
+        malformed = |text| "Failed to convert string to number (invalid format): " + text;
+
+        main : IO ();
+        main = (
+            // The shapes a decimal number takes.
+            expect(0.0, "3.14", "3.14");;
+            expect(0.0, "+1e3", "1000.0");;
+            expect(0.0, "-2.5E-3", "-0.0025");;
+            expect(0.0, ".5", "0.5");;
+            expect(0.0, "5.", "5.0");;
+            expect(0.0, "-0", "-0.0");;
+            expect(0.0, "0e999999999999999999", "0.0");;
+
+            // The digits beyond what the type holds still decide the rounding: the first text is
+            // the midpoint between 1 and the next `F64` above it, which rounds to the even one,
+            // and the second is a hair above that midpoint.
+            expect(0.0, "1.00000000000000011102230246251565404236316680908203125", "1.0");;
+            expect(0.0, "1.00000000000000011102230246251565404236316680908203125000000000000000001", "1.0000000000000002");;
+
+            // A number between the least subnormal and the greatest finite number is read, and
+            // one beyond either is out of range.
+            expect(0.0, "5e-324", "5e-324");;
+            expect(0.0, "1.7976931348623157e308", "1.7976931348623157e308");;
+            expect(0.0, "1e-400", out_of_range("1e-400"));;
+            expect(0.0, "-1e400", out_of_range("-1e400"));;
+            expect(0.0_F32, "1e-45", "1e-45");;
+            expect(0.0_F32, "3.4028235e38", "3.4028235e38");;
+            expect(0.0_F32, "1e-50", out_of_range("1e-50"));;
+            expect(0.0_F32, "3.5e38", out_of_range("3.5e38"));;
+
+            // An `F32` is rounded from the text itself: this one lies a quarter of the least
+            // subnormal from the answer and three quarters from the number below it.
+            let text = "0.0000000000000000000000000000000000000063045493406544889317960527914668501756929742366064834797205325642109586224692829858895493089221417903900146484375";
+            let read : Result ErrMsg F32 = text.from_string;
+            assert_eq(|_|"an F32 near a subnormal midpoint", read.as_ok.to_bytes, [0x85_U8, 0xa6_U8, 0x44_U8, 0x00_U8]);;
+
+            // The infinities and NaN, in any case.
+            expect(0.0, "inf", "inf");;
+            expect(0.0, "-Infinity", "-inf");;
+            expect(0.0_F32, "+INF", "inf");;
+            expect(0.0, "NaN", "nan");;
+            expect(0.0, "-nan(payload_1)", "nan");;
+
+            // What is not one of those texts.
+            expect(0.0, "", malformed(""));;
+            expect(0.0, ".", malformed("."));;
+            expect(0.0, "1e", malformed("1e"));;
+            expect(0.0, "1e+", malformed("1e+"));;
+            expect(0.0, " 1", malformed(" 1"));;
+            expect(0.0, "1 ", malformed("1 "));;
+            expect(0.0, "1,5", malformed("1,5"));;
+            expect(0.0, "infinit", malformed("infinit"));;
+            expect(0.0, "nan(", malformed("nan("));;
+            expect(0.0, "0x1p3", malformed("0x1p3"));;
+            expect(0.0_F32, "1e400x", malformed("1e400x"));;
 
             pure()
         );

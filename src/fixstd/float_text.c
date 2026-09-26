@@ -3,29 +3,31 @@ Writing a floating point number as text and reading one back, for `Std::F64` and
 
 Every finite number's text is written by Ryu, whose sources sit beside this one under `ryu/`: the
 shortest text that reads back as the number, and the text with a given number of places behind the
-point. An infinity and a NaN are written here, as `inf`, `-inf` and `nan`. Reading goes through C's
-`strtod`, under a locale of this file's own so that the point is the character Ryu writes whatever
-locale the program runs in.
+point. An infinity and a NaN are written here, as `inf`, `-inf` and `nan`. A text is read by
+fast_float, carried under `ffc/`, which rounds the decimal number a text names to the nearest
+number of the type, and takes `.` for the point whatever locale the program runs in.
 */
 
-// `strtod_l` and `newlocale` are what read a number under a locale of our own choosing. glibc
-// declares them for a source that asks for the GNU extensions, and macOS in a header of its own.
-#define _GNU_SOURCE
-
-#include <ctype.h>
-#include <errno.h>
 #include <inttypes.h>
-#include <locale.h>
 #include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
-#ifdef __APPLE__
-#include <xlocale.h>
-#endif
 #include "ryu/ryu.h"
+
+// fast_float's implementation, compiled into this translation unit alone. Its functions declared
+// `extern inline` call `static` ones, which clang reports under `-Wstatic-in-inline`: the
+// definitions are in this one unit, so every call reaches the definition it names.
+#define FFC_IMPL
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wstatic-in-inline"
+#endif
+#include "ffc/ffc.h"
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
 // Defined by the compiler, and declared in `runtime.c` as well; the two translation units carry
 // the declaration because the runtime has no header of its own.
@@ -304,104 +306,81 @@ int64_t fixruntime_f64_to_str_shortest(char *buf, int64_t size, double v)
     return fixruntime_write_float_text(sci, buf, size, F64_POSITIONAL_LOW, F64_POSITIONAL_HIGH);
 }
 
-// The locale a number is read under: the one whose decimal point is the `.` Ryu writes.
-//
-// A program takes whatever locale its own code and the libraries it links set, and C's `strtod`
-// reads the decimal point from that. Reading under this one instead is what makes a text `Std`
-// wrote readable by the `Std` that wrote it.
-static locale_t numeric_c_locale = (locale_t)0;
+// How the last reading of a number on this thread came out: one of the three `NUMBER_TEXT_*`
+// values below. `fixruntime_read_f64` and `fixruntime_read_f32` answer with the number alone, and
+// `std.fix` reads this through `fixruntime_number_text_outcome` right after each call.
+static _Thread_local uint8_t number_text_outcome;
 
-// Answers the locale numbers are read under, building it on the first call.
-//
-// Two threads reaching this together both build one, and the one that loses the exchange frees
-// what it built, so the answer is the same object for every caller.
-static locale_t float_text_locale(void)
+// The text named a number, and the answer is it, rounded to the nearest number of the type.
+#define NUMBER_TEXT_READ 0
+// The text is not a number, or holds something after one.
+#define NUMBER_TEXT_MALFORMED 1
+// The text names a finite number whose nearest number of the type is an infinity, or a number other
+// than zero whose nearest number of the type is zero.
+#define NUMBER_TEXT_OUT_OF_RANGE 2
+
+// Answers with how the last reading of a number on this thread came out.
+uint8_t fixruntime_number_text_outcome(void)
 {
-    locale_t answer;
-    __atomic_load(&numeric_c_locale, &answer, __ATOMIC_ACQUIRE);
-    if (answer != (locale_t)0)
-    {
-        return answer;
-    }
-    answer = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
-    if (answer == (locale_t)0)
-    {
-        // POSIX gives every program the `C` locale, so there is no state in which this fails.
-        fprintf(stderr, "The C locale, which numbers are read under, could not be built\n");
-        fixruntime_abort();
-    }
-    locale_t current = (locale_t)0;
-    if (!__atomic_compare_exchange_n(&numeric_c_locale, &current, answer, false, __ATOMIC_ACQ_REL,
-                                     __ATOMIC_ACQUIRE))
-    {
-        freelocale(answer);
-        answer = current;
-    }
-    return answer;
+    return number_text_outcome;
 }
 
-// Takes back the range error a number too small to hold in full raises.
+// Records how a reading by fast_float came out, and answers whether it produced a number.
 //
-// `strtod` raises `ERANGE` in two cases: the text names a number too large to hold, and it answers
-// with an infinity; or it names one too small to hold in full, and it answers with the nearest
-// number it can hold. The second is the number the text names — a subnormal number is a number
-// like any other — so only the first is an error. A text naming a number too small to hold at all
-// keeps the error, since zero is not what it names.
+// The text names a number and nothing else, so a reading that stopped before `end` is malformed.
+// fast_float reports a number too large or too small to hold as out of range, and still answers
+// with the infinity or the zero it rounds to; the caller answers with 0 for every outcome but a
+// number read.
 //
 // # Arguments
-// * `v` - What `strtod` answered.
-static void fixruntime_drop_subnormal_range_error(double v)
+// * `result` - What fast_float answered.
+// * `end` - The end of the text.
+static bool fixruntime_record_number_text_outcome(ffc_result result, const char *end)
 {
-    if (errno == ERANGE && isfinite(v) && v != 0.0)
+    if (result.outcome == FFC_OUTCOME_INVALID_INPUT || result.ptr != end)
     {
-        errno = 0;
+        number_text_outcome = NUMBER_TEXT_MALFORMED;
     }
+    else if (result.outcome == FFC_OUTCOME_OUT_OF_RANGE)
+    {
+        number_text_outcome = NUMBER_TEXT_OUT_OF_RANGE;
+    }
+    else
+    {
+        number_text_outcome = NUMBER_TEXT_READ;
+    }
+    return number_text_outcome == NUMBER_TEXT_READ;
 }
 
-// Reads a `double` from the whole of `str`, with `.` as the decimal point whatever locale the
-// program runs in.
-//
-// The text names the number and nothing else: a leading space, or anything left over after the
-// number, sets `errno` to `EINVAL`, and a number too large to hold, or too small to hold at all,
-// sets it to `ERANGE`.
-double fixruntime_strtod(const char *str)
+// The texts `fixruntime_read_f64` and `fixruntime_read_f32` read: a decimal number with an optional
+// sign, point and power of ten, `inf`, `infinity` and `nan` in any case, with an optional sign, and
+// `nan` followed by a parenthesized run of letters, digits and underscores. A NaN read is the
+// quiet NaN of the sign written.
+static ffc_parse_options fixruntime_number_text_options(void)
 {
-    char *endptr;
-    errno = 0;
-    if (isspace((unsigned char)*str))
-    {
-        errno = EINVAL;
-        return 0.0;
-    }
-    double v = strtod_l(str, &endptr, float_text_locale());
-    fixruntime_drop_subnormal_range_error(v);
-    if (endptr == str || *endptr != '\0')
-    {
-        errno = EINVAL;
-    }
-    return v;
+    ffc_parse_options options = {
+        .format = FFC_PRESET_GENERAL | FFC_FORMAT_FLAG_ALLOW_LEADING_PLUS,
+        .decimal_point = '.',
+    };
+    return options;
 }
 
-// Reads a `float` from the whole of `str`, with `.` as the decimal point whatever locale the
-// program runs in.
-//
-// The text names the number and nothing else: a leading space, or anything left over after the
-// number, sets `errno` to `EINVAL`, and a number too large to hold, or too small to hold at all,
-// sets it to `ERANGE`.
-float fixruntime_strtof(const char *str)
+// Reads a `double` from the whole of the null-terminated `str`, and records how the reading came
+// out in `number_text_outcome`. Answers with 0 for a text that is not read as a number.
+double fixruntime_read_f64(const char *str)
 {
-    char *endptr;
-    errno = 0;
-    if (isspace((unsigned char)*str))
-    {
-        errno = EINVAL;
-        return 0.0f;
-    }
-    float v = strtof_l(str, &endptr, float_text_locale());
-    fixruntime_drop_subnormal_range_error((double)v);
-    if (endptr == str || *endptr != '\0')
-    {
-        errno = EINVAL;
-    }
-    return v;
+    const char *end = str + strlen(str);
+    double v;
+    ffc_result result = ffc_from_chars_double_options(str, end, &v, fixruntime_number_text_options());
+    return fixruntime_record_number_text_outcome(result, end) ? v : 0.0;
+}
+
+// Reads a `float` from the whole of the null-terminated `str`, and records how the reading came out
+// in `number_text_outcome`. Answers with 0 for a text that is not read as a number.
+float fixruntime_read_f32(const char *str)
+{
+    const char *end = str + strlen(str);
+    float v;
+    ffc_result result = ffc_from_chars_float_options(str, end, &v, fixruntime_number_text_options());
+    return fixruntime_record_number_text_outcome(result, end) ? v : 0.0f;
 }

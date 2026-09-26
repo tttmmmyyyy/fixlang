@@ -2897,6 +2897,66 @@ namespace String {
     _unsafe_from_c_str_ptr = unsafe_from_c_str_ptr;
     DEPRECATED[_unsafe_from_c_str_ptr, "Use `Std::String::unsafe_from_c_str_ptr` instead."];
 
+    // Reads the whole of `str` as a decimal integer, and answers with its sign and its magnitude:
+    // `(true, 5)` for `-5`. The text is an optional `+` or `-` followed by one or more decimal digits.
+    //
+    // # Parameters
+    // * `positive_limit` - The greatest magnitude a text without `-` may name.
+    // * `negative_limit` - The greatest magnitude a text with `-` may name.
+    // * `str` - The text to read.
+    _read_decimal_integer : U64 -> U64 -> String -> Result ErrMsg (Bool, U64);
+    _read_decimal_integer = |positive_limit, negative_limit, str| (
+        // The null after the text is not a digit, so it stops each loop below at the text's end.
+        let bytes = str.@_data;
+        let first = bytes.@(0);
+        let negative = first == '-';
+        let start = if negative || first == '+' { 1 } else { 0 };
+        let limit = if negative { negative_limit } else { positive_limit };
+        let limit_tens = limit / 10_U64;
+        let limit_ones = limit % 10_U64;
+        // The index of the first byte after the digits, and the magnitude they name, or none where
+        // it exceeds `limit`.
+        let (end, magnitude) = loop((start, 0_U64), |(i, magnitude)| (
+            let digit = bytes.@(i) - '0';
+            if digit >= 10_U8 { break $ (i, Option::some(magnitude)) };
+            let digit = digit.u64;
+            if magnitude > limit_tens || (magnitude == limit_tens && digit > limit_ones) {
+                break $ (bytes._skip_decimal_digits(i), Option::none())
+            };
+            continue $ (i + 1, magnitude * 10_U64 + digit)
+        ));
+        if end == start || end != str.get_size {
+            Result::err("Failed to convert string to integer (invalid format): " + str)
+        };
+        if magnitude.is_none {
+            Result::err("Failed to convert string to integer (out of range): " + str)
+        };
+        Result::ok((negative, magnitude.as_some))
+    );
+
+    // Reads the whole of `str` as a decimal integer from `-max - 1` to `max`, the way
+    // `_read_decimal_integer` reads one.
+    _read_signed_decimal_integer : I64 -> String -> Result ErrMsg I64;
+    _read_signed_decimal_integer = |max, str| (
+        str._read_decimal_integer(max.u64, max.u64 + 1_U64).map(|(negative, magnitude)|
+            if !negative { magnitude.i64 }
+            // The magnitude of `I64::minimum` is not an `I64`, so the magnitude is negated one
+            // below itself.
+            else if magnitude == 0_U64 { 0 }
+            else { -(magnitude - 1_U64).i64 - 1 }
+        )
+    );
+
+    // Reads the whole of `str` as a decimal integer from 0 to `max`, the way
+    // `_read_decimal_integer` reads one. `-0` is read as 0.
+    _read_unsigned_decimal_integer : U64 -> String -> Result ErrMsg U64;
+    _read_unsigned_decimal_integer = |max, str| str._read_decimal_integer(max, 0_U64).map(|(_, magnitude)| magnitude);
+
+    // Answers with the index of the first byte at or after `i` that is not a decimal digit.
+    // `bytes` holds a byte after its digits that is not one, as a `String`'s null is.
+    _skip_decimal_digits : I64 -> Array U8 -> I64;
+    _skip_decimal_digits = |i, bytes| loop(i, |i| if bytes.@(i) - '0' < 10_U8 { continue $ i + 1 } else { break $ i });
+
     // Create a `String` from a pointer to a null-terminated C string, via an IO action.
     // 
     // If the pointer is not pointing to a valid null-terminated C string, this function causes undefined behavior.
@@ -3852,7 +3912,9 @@ impl U8 : ToString {
     );
 }
 impl U8 : FromString {
-    from_string = |str| str.from_string.map(u8 : U64 -> U8);
+    // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
+    // `42`, `-7` or `+007`. A text naming a number outside `U8` is an error.
+    from_string = |str| str._read_unsigned_decimal_integer(U8::maximum.u64).map(u8 : U64 -> U8);
 }
 
 impl U16 : ToBytes {
@@ -3878,7 +3940,9 @@ impl U16 : ToString {
     );
 }
 impl U16 : FromString {
-    from_string = |str| str.from_string.map(u16 : U64 -> U16);
+    // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
+    // `42`, `-7` or `+007`. A text naming a number outside `U16` is an error.
+    from_string = |str| str._read_unsigned_decimal_integer(U16::maximum.u64).map(u16 : U64 -> U16);
 }
 
 impl U32 : ToBytes {
@@ -3904,7 +3968,9 @@ impl U32 : ToString {
     );
 }
 impl U32 : FromString {
-    from_string = |str| str.from_string.map(u32 : U64 -> U32);
+    // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
+    // `42`, `-7` or `+007`. A text naming a number outside `U32` is an error.
+    from_string = |str| str._read_unsigned_decimal_integer(U32::maximum.u64).map(u32 : U64 -> U32);
 }
 
 impl U64 : ToBytes {
@@ -3930,16 +3996,9 @@ impl U64 : ToString {
     );
 }
 impl U64 : FromString {
-    from_string = |str| (
-        str.borrow_c_str_io(|c_str| (
-            let v = *FFI_CALL_IO[U64 fixruntime_strtoull_10(Ptr), c_str];
-            let invalid_format = *FFI_CALL_IO[U8 fixruntime_is_einval()];
-            if invalid_format != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str).pure };
-            let out_of_range = *FFI_CALL_IO[U8 fixruntime_is_erange()];
-            if out_of_range != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str).pure };
-            Result::ok(v).pure
-        )).unsafe_perform
-    );
+    // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
+    // `42`, `-7` or `+007`. A text naming a number outside `U64` is an error.
+    from_string = |str| str._read_unsigned_decimal_integer(U64::maximum);
 }
 
 impl I8 : ToBytes {
@@ -3965,7 +4024,9 @@ impl I8 : ToString {
     );
 }
 impl I8 : FromString {
-    from_string = |str| str.from_string.map(i8 : I64 -> I8);
+    // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
+    // `42`, `-7` or `+007`. A text naming a number outside `I8` is an error.
+    from_string = |str| str._read_signed_decimal_integer(I8::maximum.i64).map(i8 : I64 -> I8);
 }
 
 impl I16 : ToBytes {
@@ -3991,7 +4052,9 @@ impl I16 : ToString {
     );
 }
 impl I16 : FromString {
-    from_string = |str| str.from_string.map(i16 : I64 -> I16);
+    // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
+    // `42`, `-7` or `+007`. A text naming a number outside `I16` is an error.
+    from_string = |str| str._read_signed_decimal_integer(I16::maximum.i64).map(i16 : I64 -> I16);
 }
 
 impl I32 : ToBytes {
@@ -4017,7 +4080,9 @@ impl I32 : ToString {
     );
 }
 impl I32 : FromString {
-    from_string = |str| str.from_string.map(i32 : I64 -> I32);
+    // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
+    // `42`, `-7` or `+007`. A text naming a number outside `I32` is an error.
+    from_string = |str| str._read_signed_decimal_integer(I32::maximum.i64).map(i32 : I64 -> I32);
 }
 
 impl I64 : ToBytes {
@@ -4043,16 +4108,9 @@ impl I64 : ToString {
     );
 }
 impl I64 : FromString {
-    from_string = |str| (
-        str.borrow_c_str_io(|c_str| (
-            let v = *FFI_CALL_IO[I64 fixruntime_strtoll_10(Ptr), c_str];
-            let invalid_format = *FFI_CALL_IO[U8 fixruntime_is_einval()];
-            if invalid_format != 0_U8 { Result::err("Failed to convert string to integer (invalid format): " + str).pure };
-            let out_of_range = *FFI_CALL_IO[U8 fixruntime_is_erange()];
-            if out_of_range != 0_U8 { Result::err("Failed to convert string to integer (out of range): " + str).pure };
-            Result::ok(v).pure
-        )).unsafe_perform
-    );
+    // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
+    // `42`, `-7` or `+007`. A text naming a number outside `I64` is an error.
+    from_string = |str| str._read_signed_decimal_integer(I64::maximum);
 }
 
 impl F32 : ToBytes {
@@ -4126,13 +4184,19 @@ namespace F32 {
     );
 }
 impl F32 : FromString {
+    // Reads a decimal number: an optional `+` or `-`, digits with an optional point among them, and
+    // an optional power of ten, such as `3.14`, `-1e10`, `.5` or `2.5E-3`. Also reads `inf`,
+    // `infinity` and `nan` in any case, with an optional sign.
+    //
+    // The number is rounded to the nearest `F32`. A text naming a number too large for `F32`, or a
+    // number other than zero too small for it to hold at all, is an error.
     from_string = |str| (
         str.borrow_c_str_io(|c_str| (
-            let v = *FFI_CALL_IO[F32 fixruntime_strtof(Ptr), c_str];
-            let invalid_format = *FFI_CALL_IO[U8 fixruntime_is_einval()];
-            if invalid_format != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str).pure };
-            let out_of_range = *FFI_CALL_IO[U8 fixruntime_is_erange()];
-            if out_of_range != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str).pure };
+            let v = *FFI_CALL_IO[F32 fixruntime_read_f32(Ptr), c_str];
+            // The three values are `NUMBER_TEXT_*` in `float_text.c`.
+            let outcome = *FFI_CALL_IO[U8 fixruntime_number_text_outcome()];
+            if outcome == 1_U8 { Result::err("Failed to convert string to number (invalid format): " + str).pure };
+            if outcome == 2_U8 { Result::err("Failed to convert string to number (out of range): " + str).pure };
             Result::ok(v).pure
         )).unsafe_perform
     );
@@ -4208,13 +4272,19 @@ namespace F64 {
     );
 }
 impl F64 : FromString {
+    // Reads a decimal number: an optional `+` or `-`, digits with an optional point among them, and
+    // an optional power of ten, such as `3.14`, `-1e10`, `.5` or `2.5E-3`. Also reads `inf`,
+    // `infinity` and `nan` in any case, with an optional sign.
+    //
+    // The number is rounded to the nearest `F64`. A text naming a number too large for `F64`, or a
+    // number other than zero too small for it to hold at all, is an error.
     from_string = |str| (
         str.borrow_c_str_io(|c_str| (
-            let v = *FFI_CALL_IO[F64 fixruntime_strtod(Ptr), c_str];
-            let invalid_format = *FFI_CALL_IO[U8 fixruntime_is_einval()];
-            if invalid_format != 0_U8 { Result::err("Failed to convert string to number (invalid format): " + str).pure };
-            let out_of_range = *FFI_CALL_IO[U8 fixruntime_is_erange()];
-            if out_of_range != 0_U8 { Result::err("Failed to convert string to number (out of range): " + str).pure };
+            let v = *FFI_CALL_IO[F64 fixruntime_read_f64(Ptr), c_str];
+            // The three values are `NUMBER_TEXT_*` in `float_text.c`.
+            let outcome = *FFI_CALL_IO[U8 fixruntime_number_text_outcome()];
+            if outcome == 1_U8 { Result::err("Failed to convert string to number (invalid format): " + str).pure };
+            if outcome == 2_U8 { Result::err("Failed to convert string to number (out of range): " + str).pure };
             Result::ok(v).pure
         )).unsafe_perform
     );
