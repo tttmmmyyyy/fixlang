@@ -2304,11 +2304,9 @@ Any other type is rejected when the program is compiled.
 
 #### Names an exported function can take
 
-The exported function takes the C name written in the statement, and a program may call it back with `FFI_CALL` under that name.
+The exported function takes the C name written in the statement.
 
 `main` and the names beginning with `fixruntime_` are functions the compiler implements, so exporting one of them is rejected. `main` is available to a dynamic library, which carries no entry point.
-
-One name denotes one C function, so every description of it — an `FFI_EXPORT` that defines it, and each `FFI_CALL` that calls it — gives one signature. A program that describes one name two ways is either rejected or has undefined behavior.
 
 #### Returning more than one value
 
