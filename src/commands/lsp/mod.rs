@@ -4,6 +4,7 @@ pub mod document_symbol;
 pub mod edit_import;
 pub mod goto_definition;
 pub mod hover;
+pub mod inbox;
 pub mod references;
 pub mod rename;
 pub mod semantic_tokens;

@@ -3,6 +3,7 @@ use super::completion;
 use super::document_symbol;
 use super::goto_definition;
 use super::hover;
+use super::inbox::{Inbox, Incoming};
 use super::references;
 use super::rename;
 use super::semantic_tokens;
@@ -20,6 +21,7 @@ use crate::metafiles::project_file::ProjectFile;
 use crate::misc::{spawn_compiler_thread, to_absolute_path, Map, Set};
 use crate::parse::parser::{parse_str_import_statements, parse_str_module_defn};
 use crate::write_log;
+use lsp_types::error_codes::REQUEST_CANCELLED;
 use lsp_types::{
     CallHierarchyIncomingCallsParams, CallHierarchyOutgoingCallsParams, CallHierarchyPrepareParams,
     CallHierarchyServerCapability, CodeActionParams, CodeActionProviderCapability, CompletionItem,
@@ -45,11 +47,11 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
 use std::time::Duration;
 use std::{
-    io::{stdin, stdout, Read, Write},
+    io::{stdout, Write},
     path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
-        mpsc::{self, Receiver, Sender},
+        mpsc::{self, Receiver, RecvTimeoutError, Sender},
         Arc,
     },
 };
@@ -122,20 +124,44 @@ pub struct DiagnosticsResult {
     pub user_source_contents: Map<PathBuf, String>,
 }
 
-/// A `textDocument/documentSymbol` request that is waiting for diagnostics to become available.
-pub struct PendingDocumentSymbolRequest {
-    /// The LSP request id used to correlate the eventual response.
-    id: u32,
-    /// The original request parameters, replayed once diagnostics are ready.
-    params: DocumentSymbolParams,
+/// A request that waits for an analysis to yield a program, and is then answered from it.
+enum PendingRequest {
+    /// A `textDocument/documentSymbol` request.
+    DocumentSymbol {
+        /// The id the response carries.
+        id: u32,
+        /// The params of the request, read once a program is there to answer from.
+        params: DocumentSymbolParams,
+    },
+    /// A `workspace/symbol` request.
+    WorkspaceSymbol {
+        /// The id the response carries.
+        id: u32,
+        /// The params of the request, read once a program is there to answer from.
+        params: WorkspaceSymbolParams,
+    },
 }
 
-/// A `workspace/symbol` request that is waiting for diagnostics to become available.
-pub struct PendingWorkspaceSymbolRequest {
-    /// The LSP request id used to correlate the eventual response.
-    id: u32,
-    /// The original request parameters, replayed once diagnostics are ready.
-    params: WorkspaceSymbolParams,
+impl PendingRequest {
+    /// The id the response to the request carries.
+    fn id(&self) -> u32 {
+        match self {
+            PendingRequest::DocumentSymbol { id, .. }
+            | PendingRequest::WorkspaceSymbol { id, .. } => *id,
+        }
+    }
+
+    /// Answer the request from the program `diag` holds.
+    fn answer(&self, diag: &DiagnosticsResult) {
+        match self {
+            PendingRequest::DocumentSymbol { id, params } => {
+                document_symbol::handle_document_symbol(*id, params, &diag.program)
+            }
+            PendingRequest::WorkspaceSymbol { id, params } => {
+                workspace_symbol::handle_workspace_symbol(*id, params, diag)
+            }
+        }
+    }
 }
 
 /// The latest content of one file, which may still be waiting to be saved to disk, together with
@@ -169,12 +195,7 @@ impl LatestContent {
     /// content does not parse.
     pub(super) fn get_import_stmts(&mut self) -> &Option<Vec<ImportStatement>> {
         if self.import_stmts.is_none() {
-            let import_stmts = parse_str_import_statements(self.path.clone(), &self.content);
-            if let Ok(import_stmts) = import_stmts {
-                self.import_stmts = Some(import_stmts);
-            } else {
-                self.import_stmts = None;
-            }
+            self.import_stmts = parse_str_import_statements(self.path.clone(), &self.content).ok();
         }
         &self.import_stmts
     }
@@ -183,12 +204,7 @@ impl LatestContent {
     /// not parse.
     pub(super) fn get_module_info(&mut self) -> &Option<ModuleInfo> {
         if self.module_info.is_none() {
-            let module_info = parse_str_module_defn(self.path.clone(), &self.content);
-            if let Ok(module_info) = module_info {
-                self.module_info = Some(module_info);
-            } else {
-                self.module_info = None;
-            }
+            self.module_info = parse_str_module_defn(self.path.clone(), &self.content).ok();
         }
         &self.module_info
     }
@@ -197,13 +213,13 @@ impl LatestContent {
 /// Run the language server: read the client's messages off stdin and answer them, until the
 /// client asks the server to exit or closes the pipe.
 pub fn launch_language_server() {
-    let mut stdin = stdin();
+    let mut inbox = Inbox::spawn_stdin_reader();
 
     // Prepare a channel to send requests to the diagnostics thread.
     let (diag_req_send, diag_req_recv) = mpsc::channel::<DiagnosticsMessage>();
     let mut diag_req_recv = Some(diag_req_recv);
 
-    // Prepare a channel to response from the diagnostics thread.
+    // Prepare a channel to receive the results of the diagnostics thread.
     let (diag_res_send, diag_res_recv) = mpsc::channel::<DiagnosticsResult>();
 
     // Session-scoped typecheck cache, owned by this loop and shared with the diagnostics thread
@@ -231,19 +247,15 @@ pub fn launch_language_server() {
     // The latest content of each open buffer, under the URI naming it.
     let mut uri_to_latest_content: Map<Uri, LatestContent> = Map::default();
 
-    // The pending document symbol requests.
-    let mut pending_document_symbol_requests: VecDeque<PendingDocumentSymbolRequest> =
-        VecDeque::new();
-
-    // The pending workspace symbol requests.
-    let mut pending_workspace_symbol_requests: VecDeque<PendingWorkspaceSymbolRequest> =
-        VecDeque::new();
+    // The requests waiting for an analysis to yield a program, in the order they arrived.
+    let mut pending_requests: VecDeque<PendingRequest> = VecDeque::new();
 
     loop {
         // Take in whatever the diagnostics thread has finished, keeping the newest result. This
-        // sits above the read below, so a result finished while the loop was blocked reading
-        // arrives only after one more message has been handled. `save_and_wait_for_the_program`
-        // of the test client waits that message out, and must stay in step with this placement.
+        // sits above the wait for the next message below, so a result finished while the loop was
+        // waiting arrives only after one more message has been handled.
+        // `save_and_wait_for_the_program` of the test client waits that message out, and must stay
+        // in step with this placement.
         let mut diagnostics_updated = false;
         while let Ok(diagnostics_result) = diag_res_recv.try_recv() {
             last_diag = Some(diagnostics_result);
@@ -262,127 +274,40 @@ pub fn launch_language_server() {
                 None::<()>,
             );
         }
-        if last_diag.is_some() {
-            // If there are pending document symbol requests, process them.
-            while let Some(req) = pending_document_symbol_requests.pop_front() {
-                let program = &last_diag.as_ref().unwrap().program;
-                document_symbol::handle_document_symbol(req.id, &req.params, program);
-            }
-            // If there are pending workspace symbol requests, process them.
-            while let Some(req) = pending_workspace_symbol_requests.pop_front() {
-                let diag = last_diag.as_ref().unwrap();
-                workspace_symbol::handle_workspace_symbol(req.id, &req.params, diag);
+        if let Some(diag) = last_diag.as_ref() {
+            for req in pending_requests.drain(..) {
+                req.answer(diag);
             }
         }
 
-        // Read a line to get the content length.
-        let mut header_line = String::new();
-        let res = stdin.read_line(&mut header_line);
-        match res {
-            // `read_line` returns `Ok(0)` when stdin has reached EOF, which
-            // happens when the parent editor process dies and closes the pipe.
-            // EOF is permanent: every subsequent read returns `Ok(0)`
-            // immediately without blocking, so without this branch the loop
-            // would spin at 100% CPU forever. Terminate the server instead,
-            // just as we do on the `exit` notification.
-            Ok(0) => {
-                write_log!("stdin reached EOF. Exiting the language server.");
-                break;
-            }
-            Ok(_) => {}
-            Err(e) => {
-                let mut msg = "Failed to read a line: \n".to_string();
-                msg.push_str(&format!("{:?}", e));
-                write_log!("{}", msg);
+        let message = match inbox.next() {
+            Some(Incoming::Message(message)) => message,
+            Some(Incoming::Cancelled(id)) => {
+                send_response(id, Err::<(), _>(ResponseError::request_cancelled()));
                 continue;
             }
-        }
-        if header_line.trim().is_empty() {
-            continue;
-        }
-
-        // Check if the line starts with "Content-Length:".
-        if !header_line.starts_with("Content-Length:") {
-            let mut msg = "Expected `Content-Length:`. The line is: \n".to_string();
-            msg.push_str(&format!("{:?}", header_line));
-            write_log!("{}", msg);
-            continue;
-        }
-
-        // Ignore the `Content-Length:` prefix and parse the rest as a number.
-        let content_length: Result<usize, _> = header_line
-            .split_off("Content-Length:".len())
-            .trim()
-            .parse();
-        if content_length.is_err() {
-            let mut msg = "Failed to parse the content length: \n".to_string();
-            msg.push_str(&format!("{:?}", content_length.err().unwrap()));
-            write_log!("{}", msg);
-            continue;
-        }
-        let content_length = content_length.unwrap();
-
-        // Read stdin upto an empty line.
-        loop {
-            let mut line = String::new();
-            let res = stdin.read_line(&mut line);
-            if res.is_err() {
-                let e = res.unwrap_err();
-                let mut msg = "Failed to read a line: \n".to_string();
-                msg.push_str(&format!("{:?}", e));
-                write_log!("{}", msg);
+            // The cancelled request has been handed out already. It is answered `RequestCancelled`
+            // here when it is still waiting for a program.
+            Some(Incoming::LateCancellation(id)) => {
+                if let Some(index) = pending_requests.iter().position(|req| req.id() == id) {
+                    pending_requests.remove(index);
+                    send_response(id, Err::<(), _>(ResponseError::request_cancelled()));
+                }
                 continue;
             }
-            if line.trim().is_empty() {
-                break;
-            }
-        }
-
-        // Read the content of the message.
-        let mut message = vec![0; content_length];
-        let res = stdin.read_exact(&mut message);
-        if res.is_err() {
-            let mut msg = "Failed to read the message: \n".to_string();
-            msg.push_str(&format!("{:?}", res.unwrap_err()));
-            write_log!("{}", msg);
-            continue;
-        }
-        let message = String::from_utf8(message);
-        if message.is_err() {
-            write_log!("Failed to parse the message as utf-8 string: ");
-            write_log!("{:?}", message.unwrap_err());
-            continue;
-        }
-        let message = message.unwrap();
-
-        // Parse the message as JSONRPCMessage.
-        let message: Result<JSONRPCMessage, _> = serde_json::from_str(&message);
-        if message.is_err() {
-            write_log!("Failed to parse the message as JSONRPCMessage: ");
-            write_log!("{:?}", message.err().unwrap());
-            continue;
-        }
-        let message = message.unwrap();
-        write_log!(
-            "Received message: {:?}",
-            serde_json::to_string(&message).unwrap()
-        );
+            None => break,
+        };
 
         // Depending on the method, handle the message.
         if let Some(method) = message.method.as_ref() {
             write_log!("Handling method: {}", method);
             if method == "initialize" {
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<InitializeParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<InitializeParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                handle_initialize(id.unwrap(), &params.unwrap());
+                };
+                handle_initialize(id, &params);
             } else if method == "initialized" {
-                let params: Option<InitializedParams> = parase_params(message.params.unwrap());
+                let params: Option<InitializedParams> = parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -410,14 +335,14 @@ pub fn launch_language_server() {
                 break;
             } else if method == "textDocument/didOpen" {
                 let params: Option<DidOpenTextDocumentParams> =
-                    parase_params(message.params.unwrap());
+                    parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
                 handle_textdocument_did_open(&params.unwrap(), &mut uri_to_latest_content);
             } else if method == "textDocument/didChange" {
                 let params: Option<DidChangeTextDocumentParams> =
-                    parase_params(message.params.unwrap());
+                    parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -432,7 +357,7 @@ pub fn launch_language_server() {
                 );
             } else if method == "textDocument/didSave" {
                 let params: Option<DidSaveTextDocumentParams> =
-                    parase_params(message.params.unwrap());
+                    parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -444,7 +369,7 @@ pub fn launch_language_server() {
                 );
             } else if method == "workspace/didChangeConfiguration" {
                 let params: Option<DidChangeConfigurationParams> =
-                    parase_params(message.params.unwrap());
+                    parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -454,27 +379,22 @@ pub fn launch_language_server() {
                     &mut analyze_on_save,
                 );
             } else if method == "textDocument/completion" {
-                // Don't gate on `last_diag.is_some()` — the dot-context
+                // Answered whether or not `last_diag` is set: the dot-context
                 // completion pipeline runs its own `error_tolerant`
                 // elaborate over the live buffer, so it can produce
                 // candidates even when the saved file fails to parse
                 // and the diagnostics thread therefore never sends a
-                // `DiagnosticsResult`. Silently dropping the request
-                // in that state makes the client wait forever (looks
-                // like the LSP crashed). Pass `None` for the snapshot
-                // program and let `handle_completion` fall back to the
-                // dot-extract program (or reply empty).
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                // `DiagnosticsResult`. The client waits for an answer to
+                // every completion request, and an unanswered one looks
+                // like a crashed server. With `None` for the snapshot
+                // program, `handle_completion` falls back to the
+                // dot-extract program (or replies empty).
+                let Some((id, params)) = parse_request::<CompletionParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<CompletionParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 completion::handle_completion(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     last_diag.as_ref().map(|d| &d.program),
                     &uri_to_latest_content,
                     typecheck_cache.clone(),
@@ -484,17 +404,12 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<CompletionItem>(&message, method) else {
                     continue;
-                }
-                let params: Option<CompletionItem> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 completion::handle_completion_resolve_document(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     &mut uri_to_latest_content,
                     program,
                 );
@@ -503,161 +418,95 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<HoverParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<HoverParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                hover::handle_hover(
-                    id.unwrap(),
-                    &params.unwrap(),
-                    program,
-                    &uri_to_latest_content,
-                );
+                };
+                hover::handle_hover(id, &params, program, &uri_to_latest_content);
             } else if method == "textDocument/definition" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<GotoDefinitionParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<GotoDefinitionParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 goto_definition::handle_goto_definition(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     program,
                     &uri_to_latest_content,
                 );
             } else if method == "textDocument/documentSymbol" {
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<DocumentSymbolParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<DocumentSymbolParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 if last_diag.is_none() {
-                    pending_document_symbol_requests.push_back(PendingDocumentSymbolRequest {
-                        id: id.unwrap(),
-                        params: params.unwrap(),
-                    });
+                    pending_requests.push_back(PendingRequest::DocumentSymbol { id, params });
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                document_symbol::handle_document_symbol(id.unwrap(), &params.unwrap(), program);
+                document_symbol::handle_document_symbol(id, &params, program);
             } else if method == "workspace/symbol" {
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<WorkspaceSymbolParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<WorkspaceSymbolParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 if last_diag.is_none() {
-                    pending_workspace_symbol_requests.push_back(PendingWorkspaceSymbolRequest {
-                        id: id.unwrap(),
-                        params: params.unwrap(),
-                    });
+                    pending_requests.push_back(PendingRequest::WorkspaceSymbol { id, params });
                     continue;
                 }
                 let diag = last_diag.as_ref().unwrap();
-                workspace_symbol::handle_workspace_symbol(id.unwrap(), &params.unwrap(), diag);
+                workspace_symbol::handle_workspace_symbol(id, &params, diag);
             } else if method == "textDocument/codeAction" {
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<CodeActionParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<CodeActionParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 let program = last_diag.as_ref().map(|d| &d.program);
-                code_action::handle_code_action(
-                    id.unwrap(),
-                    &params.unwrap(),
-                    program,
-                    &mut uri_to_latest_content,
-                );
+                code_action::handle_code_action(id, &params, program, &mut uri_to_latest_content);
             } else if method == "textDocument/references" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<ReferenceParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<ReferenceParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                references::handle_references(
-                    id.unwrap(),
-                    &params.unwrap(),
-                    program,
-                    &uri_to_latest_content,
-                );
+                };
+                references::handle_references(id, &params, program, &uri_to_latest_content);
             } else if method == "textDocument/rename" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let diag = last_diag.as_ref().unwrap();
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<RenameParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<RenameParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                rename::handle_rename(id.unwrap(), &params.unwrap(), diag, &uri_to_latest_content);
+                };
+                rename::handle_rename(id, &params, diag, &uri_to_latest_content);
             } else if method == "textDocument/prepareRename" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let diag = last_diag.as_ref().unwrap();
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) =
+                    parse_request::<TextDocumentPositionParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<TextDocumentPositionParams> =
-                    parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                rename::handle_prepare_rename(
-                    id.unwrap(),
-                    &params.unwrap(),
-                    diag,
-                    &uri_to_latest_content,
-                );
+                };
+                rename::handle_prepare_rename(id, &params, diag, &uri_to_latest_content);
             } else if method == "textDocument/prepareCallHierarchy" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) =
+                    parse_request::<CallHierarchyPrepareParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<CallHierarchyPrepareParams> =
-                    parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 references::handle_call_hierarchy_prepare(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     program,
                     &uri_to_latest_content,
                 );
@@ -666,46 +515,34 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) =
+                    parse_request::<CallHierarchyIncomingCallsParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<CallHierarchyIncomingCallsParams> =
-                    parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                references::handle_call_hierarchy_incoming(id.unwrap(), &params.unwrap(), program);
+                };
+                references::handle_call_hierarchy_incoming(id, &params, program);
             } else if method == "callHierarchy/outgoingCalls" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) =
+                    parse_request::<CallHierarchyOutgoingCallsParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<CallHierarchyOutgoingCallsParams> =
-                    parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                references::handle_call_hierarchy_outgoing(id.unwrap(), &params.unwrap(), program);
+                };
+                references::handle_call_hierarchy_outgoing(id, &params, program);
             } else if method == "textDocument/semanticTokens/full" {
-                // Intentionally not gated on `last_diag`: semantic tokens are
+                // Answered whether or not `last_diag` is set: semantic tokens are
                 // produced by a never-failing lexer over the live buffer, so
                 // highlighting works even while the file does not parse.
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<SemanticTokensParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<SemanticTokensParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 semantic_tokens::handle_semantic_tokens_full(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     &uri_to_latest_content,
                     last_diag.as_ref(),
                 );
@@ -715,7 +552,7 @@ pub fn launch_language_server() {
 }
 
 /// Read the `params` of a message as `T`. A payload that does not read as `T` is logged.
-fn parase_params<T: DeserializeOwned>(params: Value) -> Option<T> {
+pub(super) fn parse_params<T: DeserializeOwned>(params: Value) -> Option<T> {
     let params: Result<T, _> = serde_json::from_value(params);
     if params.is_err() {
         let mut msg = "Failed to parse the params: \n".to_string();
@@ -739,6 +576,14 @@ fn parse_id(message: &JSONRPCMessage, method: &str) -> Option<u32> {
     message.id
 }
 
+/// The `id` of the request `message` and its `params` read as `T`. A request missing either is
+/// logged, the missing `id` under `method`, the request's method.
+fn parse_request<T: DeserializeOwned>(message: &JSONRPCMessage, method: &str) -> Option<(u32, T)> {
+    let id = parse_id(message, method)?;
+    let params = parse_params(message.params.clone().unwrap())?;
+    Some((id, params))
+}
+
 /// Send a server-initiated JSON-RPC request (carrying both an `id` and a
 /// `method`) to the client.
 fn send_request<T: Serialize>(id: u32, method: String, params: Option<T>) {
@@ -750,6 +595,35 @@ fn send_request<T: Serialize>(id: u32, method: String, params: Option<T>) {
         None,
     );
     send_message(&msg);
+}
+
+/// The `error` of a response, in the shape the protocol gives it.
+#[derive(Serialize)]
+pub(super) struct ResponseError {
+    /// The number saying what kind of error this is.
+    code: i64,
+    /// A description of the error, which a client may show to the user.
+    message: String,
+}
+
+impl ResponseError {
+    /// The request cannot be carried out as it was sent. The client may show `message` to the
+    /// user.
+    pub(super) fn invalid_request(message: impl Into<String>) -> Self {
+        // -32600 is the code JSON-RPC reserves for an invalid request.
+        ResponseError {
+            code: -32600,
+            message: message.into(),
+        }
+    }
+
+    /// The client cancelled the request before the server carried it out.
+    pub(super) fn request_cancelled() -> Self {
+        ResponseError {
+            code: REQUEST_CANCELLED,
+            message: "The request was cancelled.".to_string(),
+        }
+    }
 }
 
 /// Answer the client's request `id`: an `Ok` becomes the response's `result`, an `Err` becomes
@@ -977,7 +851,7 @@ fn handle_textdocument_did_change(
     uri_to_latest_content: &mut Map<Uri, LatestContent>,
     analyze_on_type: bool,
 ) {
-    // Store the content of the file into `uri_to_content`. This must
+    // Store the content of the file into `uri_to_latest_content`. This must
     // happen even when on-type analysis is off, so other features
     // (completion, hover) still see the live buffer.
     if let Some(last_change) = params.content_changes.last() {
@@ -1003,7 +877,7 @@ fn handle_textdocument_did_save(
     uri_to_latest_content: &mut Map<Uri, LatestContent>,
     analyze_on_save: bool,
 ) {
-    // Store the content of the file into maps.
+    // Store the content of the file into `uri_to_latest_content`.
     if let Some(text) = &params.text {
         record_latest_content(uri_to_latest_content, &params.text_document.uri, text);
     } else {
@@ -1081,7 +955,7 @@ fn diagnostics_thread(
             let debounce = Duration::from_millis(debounce_ms.load(Ordering::Relaxed));
             match req_recv.recv_timeout(debounce) {
                 Ok(msg) => Some(msg),
-                Err(mpsc::RecvTimeoutError::Timeout) => {
+                Err(RecvTimeoutError::Timeout) => {
                     run_diagnostics_pass(
                         pending.take().unwrap(),
                         &typecheck_cache,
@@ -1091,7 +965,7 @@ fn diagnostics_thread(
                     continue;
                 }
                 // The sender was dropped: stop the diagnostics thread.
-                Err(mpsc::RecvTimeoutError::Disconnected) => None,
+                Err(RecvTimeoutError::Disconnected) => None,
             }
         };
         match msg {
@@ -1237,17 +1111,15 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> Diagnostic {
         .map(|(_, span)| span_to_range(span))
         .unwrap_or_default();
 
-    // Other spans are shown in related informations.
+    // Other spans are shown as related information.
     let mut related_information = vec![];
     for (msg, span) in err.srcs.iter().skip(1) {
         // Convert span to location.
-        let location = span_to_location(span, cdir);
-        if location.is_none() {
+        let Some(location) = span_to_location(span, cdir) else {
             continue;
-        }
-        let location = location.unwrap();
+        };
 
-        // Create related informations.
+        // Create the related information.
         let related = DiagnosticRelatedInformation {
             location,
             message: if msg.len() > 0 {
@@ -1297,36 +1169,27 @@ pub(super) fn get_file_content_at_previous_diagnostics(
     program: &Program,
     queried_path: &Path,
 ) -> Result<String, String> {
+    let queried_path_abs = to_absolute_path(queried_path).map_err(|_| {
+        format!(
+            "Failed to get the absolute path of the file: \"{}\"",
+            queried_path.to_string_lossy()
+        )
+    })?;
     for mi in &program.modules {
         let src = &mi.source.input;
-        let path_abs = to_absolute_path(&queried_path);
-        if path_abs.is_err() {
-            let msg = format!(
-                "Failed to get the absolute path of the file: \"{}\"",
-                queried_path.to_string_lossy().to_string()
-            );
-            return Err(msg);
-        }
-        let queried_path_abs = path_abs.ok().unwrap();
-        let src_file_path_abs = to_absolute_path(&src.file_path);
-        if src_file_path_abs.is_err() {
-            let msg = format!(
+        let src_file_path = to_absolute_path(&src.file_path).map_err(|_| {
+            format!(
                 "Failed to get the absolute path of the source file: \"{}\"",
-                src.file_path.to_string_lossy().to_string()
-            );
-            return Err(msg);
-        }
-        let src_file_path = src_file_path_abs.ok().unwrap();
+                src.file_path.to_string_lossy()
+            )
+        })?;
         if src_file_path == queried_path_abs {
-            let content = src.string();
-            if let Err(_e) = content {
-                let msg = format!(
+            return src.string().map_err(|_| {
+                format!(
                     "Failed to get the content of the file: \"{}\"",
-                    src.file_path.to_string_lossy().to_string()
-                );
-                return Err(msg);
-            }
-            return Ok(content.ok().unwrap());
+                    src.file_path.to_string_lossy()
+                )
+            });
         }
     }
     let msg = format!(
