@@ -221,7 +221,7 @@ fn declare_or_lookup_runtime_function<'c, 'm>(
 /// flushes it.
 fn build_eprintln_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
-    let fn_ty = gc.context.void_type().fn_type(&[ptr_ty.into()], true);
+    let fn_ty = gc.context.void_type().fn_type(&[ptr_ty.into()], false);
     declare_external_runtime_function(gc, mode, RUNTIME_EPRINTLN, fn_ty);
 }
 
