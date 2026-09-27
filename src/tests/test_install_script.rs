@@ -40,7 +40,14 @@ mod integration_tests {
         write_executable(
             &bin_dir.join("curl"),
             &format!(
-                "#!/bin/sh\nout=\nwhile [ $# -gt 0 ]; do\n  if [ \"$1\" = -o ]; then out=\"$2\"; shift; fi\n  shift\ndone\nif [ -n \"$out\" ]; then echo placeholder > \"$out\"; else cat '{}'; fi\n",
+                r#"#!/bin/sh
+out=
+while [ $# -gt 0 ]; do
+  if [ "$1" = -o ]; then out="$2"; shift; fi
+  shift
+done
+if [ -n "$out" ]; then echo placeholder > "$out"; else cat '{}'; fi
+"#,
                 releases_path.display()
             ),
         );
