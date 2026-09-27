@@ -125,6 +125,54 @@ if [ -n "$out" ]; then echo placeholder > "$out"; else cat '{}'; fi
         );
     }
 
+    /// On the repository's own release history, where a suffix-less pre-release (`v1.0.1-rc`,
+    /// `v1.2.0-beta`) sits beside numbered ones and alpha numbers reach two digits, the list
+    /// and the default come out in semver order.
+    #[test]
+    fn test_install_script_orders_the_real_release_history() {
+        let stdout = run_install_script(&[
+            "v1.1.0-alpha.9",
+            "v1.0.1-rc",
+            "v1.5.0-beta.1",
+            "v1.1.0-alpha.10",
+            "v0.1.0",
+            "v1.2.0-beta",
+            "v1.0.1-rc.1",
+            "v1.5.0-rc.1",
+            "v1.3.0-beta.8",
+            "v1.4.0",
+            "v1.5.0",
+            "v1.3.0",
+            "v1.2.0-beta.3",
+            "v1.5.0-beta.3",
+            "v1.5.0-beta.2",
+            "v1.3.0-beta",
+        ]);
+        assert_eq!(
+            listed_versions(&stdout),
+            vec![
+                "v1.5.0",
+                "v1.5.0-rc.1 (pre-release)",
+                "v1.5.0-beta.3 (pre-release)",
+                "v1.5.0-beta.2 (pre-release)",
+                "v1.5.0-beta.1 (pre-release)",
+                "v1.4.0",
+                "v1.3.0",
+                "v1.3.0-beta.8 (pre-release)",
+                "v1.3.0-beta (pre-release)",
+                "v1.2.0-beta.3 (pre-release)",
+                "... (16 versions total)",
+            ],
+            "stdout:\n{}",
+            stdout
+        );
+        assert!(
+            stdout.contains("Version to install [v1.5.0]: v1.5.0"),
+            "stdout:\n{}",
+            stdout
+        );
+    }
+
     /// The default is the newest full release, even when a pre-release of a later version exists
     /// and the API lists it first.
     #[test]
