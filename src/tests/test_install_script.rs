@@ -7,7 +7,8 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use std::fs;
+    use std::env;
+    use std::fs::{self, Permissions};
     use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
     use std::process::{Command, Stdio};
@@ -15,7 +16,7 @@ mod integration_tests {
 
     fn write_executable(path: &Path, content: &str) {
         fs::write(path, content).expect("Failed to write a stand-in command");
-        fs::set_permissions(path, fs::Permissions::from_mode(0o755))
+        fs::set_permissions(path, Permissions::from_mode(0o755))
             .expect("Failed to make a stand-in command executable");
     }
 
@@ -60,7 +61,7 @@ if [ -n "$out" ]; then echo placeholder > "$out"; else cat '{}'; fi
         let path_env = format!(
             "{}:{}",
             bin_dir.display(),
-            std::env::var("PATH").unwrap_or_default()
+            env::var("PATH").unwrap_or_default()
         );
         let output = Command::new("perl")
             .args(["-MPOSIX", "-e", "POSIX::setsid(); exec @ARGV or die", "sh"])
