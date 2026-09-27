@@ -493,9 +493,7 @@ pub struct Configuration {
     pub threaded: bool,
     /// The macros the runtime's C sources are compiled with, each of which turns on a part of it.
     pub runtime_c_macro: Vec<String>,
-    /// Whether the build reports how long each of its steps took.
-    pub show_build_times: bool,
-    /// Whether the build reports what it is doing as it goes.
+    /// Whether the build reports what it is doing as it goes, and how long each of its steps took.
     pub verbose: bool,
     /// The average number of entries — the top-level functions and the global values whose code is
     /// generated — one compilation unit holds. Where a unit ends is decided by the names of the
@@ -658,7 +656,6 @@ impl Configuration {
             output_file_type: OutputFileType::Executable,
             threaded: false,
             runtime_c_macro: vec![],
-            show_build_times: false,
             verbose: false,
             cu_size: DEFAULT_COMPILATION_UNIT_SIZE,
             max_split_scalars: MAX_SPLIT_SCALARS,
@@ -1112,7 +1109,6 @@ impl Configuration {
             // build is and generates the code again (`dumps_generated_code`).
             emit_llvm: _,
             emit_rc_ir: _,
-            show_build_times: _,
             verbose: _,
             deprecation_mode: _,
 

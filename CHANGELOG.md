@@ -61,6 +61,7 @@
 - #517: `-O max` and `-O experimental` now build incrementally: an edit regenerates only the parts of the program whose code it changes, where an edit to one line used to cost as much as a build from nothing. `--cu-size` now sets the size of a unit at these levels too.
 - #598: The compiler is now built against LLVM 22.1.x, where it used to be built against LLVM 17.0.x. Building it from source needs that release, with `LLVM_SYS_221_PREFIX` naming where it lives; the "Build from source" section of `Document.md` carries the commands for Linux and macOS.
 - #753: LSP: The language server now keeps up with fast typing on a slow machine. It skips the requests the editor has already cancelled, such as the completion requests of earlier keystrokes, where it used to work through each half-typed state after the typing stopped and show a parse error for each.
+- `fix build --verbose` (and the other commands that take `--verbose`) now also reports how long each step of the build took, such as `typecheck: 0.153 sec`.
 ### Fixed
 
 #### Language

@@ -19,7 +19,7 @@ use std::{fs::create_dir_all, path::PathBuf};
 /// Changes made to the program include instantiation of symbols and setting of entry points.
 // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Errors> {
-    let _sw = StopWatch::new("check_program", config.show_build_times);
+    let _sw = StopWatch::new("check_program", config.verbose);
 
     // Add tuple definitions.
     program.add_tuple_defns();
@@ -100,7 +100,7 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
 
     // When running diagnostics, perform type checking of target modules and return here.
     if let SubCommand::Diagnostics(diag_config) = &config.subcommand {
-        let _sw = StopWatch::new("typecheck", config.show_build_times);
+        let _sw = StopWatch::new("typecheck", config.verbose);
         let target_module_names = program.modules_from_files(&diag_config.files)?;
         let mut errors = Errors::empty();
         errors.eat_err(program.resolve_namespace_and_check_type_in_modules(
@@ -119,7 +119,7 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // Perform namespace resolution and type-checking for all modules upfront.
     // This ensures opaque type resolutions are available before instantiation.
     {
-        let _sw = StopWatch::new("typecheck", config.show_build_times);
+        let _sw = StopWatch::new("typecheck", config.verbose);
         let all_module_names: Vec<_> = program.modules.iter().map(|m| m.name.clone()).collect();
         program.resolve_namespace_and_check_type_in_modules(
             &typechecker,
