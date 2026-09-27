@@ -28,8 +28,14 @@ number of the type, and takes `.` for the point whatever locale the program runs
 // the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
 
-// Writes `exponent`, a power of ten from 0 to 999, at `buf` in decimal, and reports how many digits
-// it took. No null follows them.
+// Writes the exponent of a number written with a power of ten, such as the `300` of `1e300`, at
+// `buf` in decimal, and reports how many digits it took. No null follows them.
+//
+// `exponent` is from 0 to 999. The caller writes the `-` of a negative exponent before calling.
+//
+// # Examples
+// `fixruntime_write_exponent(buf, 300)` writes `300` and returns 3, and
+// `fixruntime_write_exponent(buf, 7)` writes `7` and returns 1.
 static int fixruntime_write_exponent(char *buf, int exponent)
 {
     if (exponent >= 100)
