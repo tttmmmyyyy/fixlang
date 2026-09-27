@@ -1,6 +1,6 @@
 ---
 name: release
-description: 'Release procedure for Fix compiler. Use when: preparing a new version release, bumping compiler version, running release checks, publishing a tagged release. Covers version bumps, doc generation, performance testing, license updates, and git tagging.'
+description: 'Release procedure for Fix compiler. Use when: preparing a new version release, bumping compiler version, running release checks, publishing a tagged release. Covers version bumps, doc generation, performance testing, license updates, git tagging, checking the GitHub release, and advancing the version on main.'
 ---
 
 # Fix Compiler Release Procedure
@@ -27,7 +27,9 @@ Edit `Cargo.toml` at the project root. Update the `version` field under `[packag
 version = "X.Y.Z"
 ```
 
-**Important: For pre-release versions (alpha/beta), do NOT put the pre-release suffix in `Cargo.toml`.** The semver crate's `VersionReq::STAR` (`*`) does not match pre-release versions, which would cause all projects with `fix-version = "*"` to fail. For example, for a `v1.3.0-beta.2` release, keep `version = "1.3.0"` in `Cargo.toml`. The pre-release designation is only in the git tag.
+Then run `cargo update -w --offline`, which records the new version in `Cargo.lock`.
+
+**Important: For pre-release versions (a tag with a suffix such as `-beta.2` or `-rc.1`), do NOT put the pre-release suffix in `Cargo.toml`.** The semver crate's `VersionReq::STAR` (`*`) does not match pre-release versions, which would cause all projects with `fix-version = "*"` to fail. For example, for a `v1.3.0-beta.2` release, keep `version = "1.3.0"` in `Cargo.toml`. The pre-release designation is only in the git tag.
 
 ### Step 2: Sync std-doc Version
 
@@ -108,7 +110,7 @@ Review the generated `third-party-licenses/third-party-licenses.html` for comple
 
 ### Step 8: Update CHANGELOG.md (for stable releases)
 
-If this is a stable release (not alpha/beta), update `CHANGELOG.md`:
+If this is a stable release (a tag without a suffix), update `CHANGELOG.md`:
 
 1. Replace the `[Unreleased]` header with the version and release date:
    ```markdown
@@ -145,6 +147,24 @@ Present the diff to the user and wait for approval before proceeding to commit, 
    git push --tags
    ```
 
+### Step 11: Check the GitHub Release
+
+Pushing the tag starts `.github/workflows/release.yml`, which builds the binaries and creates the GitHub release for the tag. A tag with a suffix (`-alpha`, `-beta.2`, `-rc.1`, ...) becomes a pre-release, and a tag without one becomes a stable release that GitHub shows as "Latest".
+
+1. Once the workflow finishes, confirm the release carries a binary for every target and the pre-release mark its tag calls for:
+   ```bash
+   gh release view vX.Y.Z --json isPrerelease,assets --jq '.isPrerelease, .assets[].name'
+   ```
+2. For a stable release, set the release body to the version's section of `CHANGELOG.md`, from its `## [X.Y.Z] - YYYY-MM-DD` heading to the next version's heading:
+   ```bash
+   awk '/^## \[X.Y.Z\]/{p=1; print; next} /^## \[/{p=0} p' CHANGELOG.md > body.md
+   gh release edit vX.Y.Z --notes-file body.md
+   ```
+
+### Step 12: Advance the Version on main (for stable releases)
+
+After a stable release, set the version on main to the next patch version (`X.Y.Z` -> `X.Y.(Z+1)`), so a compiler built from main names a version the release does not. Update the three places Step 1 and Step 2 name — `Cargo.toml` (with `Cargo.lock`), `std_doc/fixproj.toml`, and the header of `std_doc/Std.md` — and commit them.
+
 ## Checklist Summary
 
 - [ ] `Cargo.toml` version updated
@@ -158,3 +178,5 @@ Present the diff to the user and wait for approval before proceeding to commit, 
 - [ ] CHANGELOG.md updated (stable releases only)
 - [ ] Diff reviewed and approved by user
 - [ ] Changes committed, tagged as `vX.Y.Z`, and pushed to main
+- [ ] GitHub release has every target's binary and the right pre-release mark; a stable release's body is its CHANGELOG section
+- [ ] Version on main advanced to the next patch version (stable releases only)

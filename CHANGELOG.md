@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Changed
+
+#### Tool
+
+- #780: `install.sh` now lists the releases newest first and offers the newest full release as the default. The default used to be whichever release GitHub listed first, which could be a pre-release such as `v1.5.0-rc.1`. Pre-releases are marked `(pre-release)` in the list, and you can install one by typing its name.
+
+### Fixed
+
+#### Tool
+
+- #780: A failed download in `install.sh` now leaves `~/.local/bin/fix` as it was. It used to leave an empty or partly written `fix` there, and later runs then took it for an installed one and installed nothing. `install.sh` can now also upgrade `fix` while it is running, for example as your editor's language server.
+
 ## [1.5.0] - 2026-09-27
 
 ### Performance
