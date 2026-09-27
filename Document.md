@@ -172,6 +172,8 @@ If you are using VSCode, install the [Fix extension](https://marketplace.visuals
 
 If you are using Zed, install the [Fix extension](https://github.com/tttmmmyyyy/zed-fixlang-support).
 
+If you are using Neovim (0.11 or later), thanks to [ButterPeanuts](https://github.com/ButterPeanuts), the plugin [fix.nvim](https://github.com/ButterPeanuts/fix.nvim) is available.
+
 ## Running Your First Fix Program
 
 Below is a Fix program that calculates the first 30 numbers of the Fibonacci sequence.
@@ -3270,7 +3272,7 @@ impl MyType : MyTrait  {
 ## Language Server Protocol
 
 Running `fix language-server` starts a language server which supports Language Server Protocol (LSP). 
-Editor extensions that connect to this language server are available for [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support).
+Editor extensions that connect to this language server are available for [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client), [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) and [Neovim](https://github.com/ButterPeanuts/fix.nvim).
 
 The language server requires [the project file](#project-file) to recognize the Fix source files.
 
@@ -3288,28 +3290,7 @@ The server re-analyzes your code shortly after you stop typing (the burst of edi
 
 The initial analysis over the standard library and dependencies always runs to completion and is never interrupted by subsequent edits.
 
-In **VSCode** (the [Fix extension](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)), set them in `settings.json`:
-
-```json
-{
-  "fix.analyze.delayMs": 300,
-  "fix.analyze.onSave": false
-}
-```
-
-In **Zed** (the [Fix extension](https://github.com/tttmmmyyyy/zed-fixlang-support)), put them under the `fix` language server's `settings` in your `settings.json`:
-
-```json
-{
-  "lsp": {
-    "fix": {
-      "settings": {
-        "analyze": { "delayMs": 300, "onSave": false }
-      }
-    }
-  }
-}
-```
+How to set them depends on the editor. The VSCode [Fix extension](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) lists them in the Settings editor, and the Zed [Fix extension](https://github.com/tttmmmyyyy/zed-fixlang-support#analysis-diagnostics) shows them in its README.
 
 ### Specifying parameter list in the documentation comment as a hint to the language server
 

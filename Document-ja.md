@@ -173,6 +173,8 @@ VSCodeを使用している場合は、[Fix拡張](https://marketplace.visualstu
 
 Zedを使用している場合は、[Fix拡張](https://github.com/tttmmmyyyy/zed-fixlang-support)をインストールしてください。
 
+Neovim（0.11以上）を使用している場合は、[ButterPeanuts](https://github.com/ButterPeanuts)のおかげで、[fix.nvim](https://github.com/ButterPeanuts/fix.nvim)プラグインが利用可能です。
+
 ## 最初のFixプログラムを実行する
 
 以下は、フィボナッチ数列の最初の30個の数値を計算するFixプログラムです。
@@ -3376,7 +3378,7 @@ impl MyType : MyTrait  {
 ## Language Server Protocol
 
 `fix language-server`を実行すると、Language Server Protocol（LSP）をサポートする言語サーバーが起動します。
-この言語サーバーに接続するエディタ拡張は、[VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) と [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) 向けに利用可能です。
+この言語サーバーに接続するエディタ拡張は、[VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)、[Zed](https://github.com/tttmmmyyyy/zed-fixlang-support)、[Neovim](https://github.com/ButterPeanuts/fix.nvim) 向けに利用可能です。
 言語サーバーは[プロジェクトファイル](#project-file)を必要とし、Fixソースファイルを認識します。
 
 言語サーバーは、入力を止めてから少し経つと、入力中の内容に対してFixプログラムを診断（解析）します。
@@ -3393,28 +3395,7 @@ impl MyType : MyTrait  {
 
 標準ライブラリや依存ライブラリに対する最初の解析は必ず完了まで実行され、その後の編集によって中断されることはありません。
 
-**VSCode**（[Fix拡張](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)）では、`settings.json` に次のように設定します：
-
-```json
-{
-  "fix.analyze.delayMs": 300,
-  "fix.analyze.onSave": false
-}
-```
-
-**Zed**（[Fix拡張](https://github.com/tttmmmyyyy/zed-fixlang-support)）では、`settings.json` の `fix` 言語サーバーの `settings` の下に設定します：
-
-```json
-{
-  "lsp": {
-    "fix": {
-      "settings": {
-        "analyze": { "delayMs": 300, "onSave": false }
-      }
-    }
-  }
-}
-```
+設定の方法はエディタによって異なります。VSCodeの[Fix拡張](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)では設定画面に表示され、Zedの[Fix拡張](https://github.com/tttmmmyyyy/zed-fixlang-support#analysis-diagnostics)ではREADMEで説明されています。
 
 ### ドキュメントコメントでパラメータリストを指定して言語サーバーにヒントを与える
 
