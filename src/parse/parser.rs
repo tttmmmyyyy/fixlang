@@ -344,21 +344,38 @@ pub fn validate_token_str(s: &str, category: TokenCategory) -> Result<(), String
     }
 }
 
-/// Run only the pest-level parse against the grammar. Returns `Ok`
-/// if the grammar accepts `source`, regardless of any later
-/// `Program`-build validation. Test-only — for acceptance / rejection
-/// assertions that should not depend on later semantic checks.
-#[cfg(test)]
-pub fn check_grammar_accepts(source: &str) -> Result<(), PestError<Rule>> {
-    FixParser::parse(Rule::file, source).map(|_| ())
+/// Where the syntax of a source file goes wrong.
+#[derive(Debug)]
+pub enum SyntaxError {
+    /// The grammar rejects the source.
+    Rejected(PestError<Rule>),
+    /// The grammar accepts the source, and it holds a `let` with no `in` or `;` after its value,
+    /// which the grammar accepts only so that the parser can report it (see
+    /// `parse_expr_let_without_in`). `value_end` is the byte offset just past that value.
+    LetWithoutIn { value_end: usize },
+}
+
+/// Checks the syntax of `source` as a Fix file, without building the program it declares.
+pub fn check_syntax(source: &str) -> Result<(), SyntaxError> {
+    let file = FixParser::parse(Rule::file, source).map_err(SyntaxError::Rejected)?;
+    match file
+        .flatten()
+        .find(|pair| pair.as_rule() == Rule::expr_let_without_in)
+    {
+        Some(let_without_in) => Err(SyntaxError::LetWithoutIn {
+            value_end: let_without_in.as_span().end(),
+        }),
+        None => Ok(()),
+    }
 }
 
 /// What kind of token the parser was looking for when it failed.
 /// Drives the splice decision in the LSP completion repair loop.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RepairHintKind {
-    /// Pest's expected set includes a `;` (or `in`-of-let, which the
-    /// repair fills with `;` since that satisfies `in_of_let`).
+    /// A `;` belongs here: pest's expected set includes a `;` (or
+    /// `in`-of-let, which a `;` satisfies), or a `let` lacks the `in` or
+    /// `;` after its value.
     Semicolon,
     /// Pest expected an expression-like construct — somewhere a
     /// hole `?` belongs.
@@ -377,23 +394,18 @@ pub struct RepairHint {
     pub kind: RepairHintKind,
 }
 
-/// Probe-parse `source` as a full Fix file. On parse failure return a
-/// `RepairHint` derived from the pest error so the caller can splice
-/// in a character and try again. A `let` missing its `in` or `;` is a
-/// parse failure too, although the grammar accepts it (see
-/// `parse_expr_let_without_in`): its hint is a `;` after the value.
+/// Probe-parse `source` as a full Fix file. On a syntax error return a
+/// `RepairHint` so the caller can splice in a character and try again:
+/// the one the pest error suggests, or a `;` after the value of a
+/// `let` missing its `in` or `;`.
 pub fn probe_parse_for_completion_repair(source: &str) -> Result<(), RepairHint> {
-    let file = FixParser::parse(Rule::file, source).map_err(|e| repair_hint_from_pest_error(&e))?;
-    match file
-        .flatten()
-        .find(|pair| pair.as_rule() == Rule::expr_let_without_in)
-    {
-        Some(let_without_in) => Err(RepairHint {
-            insert_at: let_without_in.as_span().end(),
+    check_syntax(source).map_err(|e| match e {
+        SyntaxError::Rejected(e) => repair_hint_from_pest_error(&e),
+        SyntaxError::LetWithoutIn { value_end } => RepairHint {
+            insert_at: value_end,
             kind: RepairHintKind::Semicolon,
-        }),
-        None => Ok(()),
-    }
+        },
+    })
 }
 
 /// Build a `RepairHint` from a pest parse error: pull out the failure

@@ -7,7 +7,7 @@ use crate::{
     error::{panic_if_err, panic_with_msg, Errors},
     generator::Generator,
     misc::{save_temporary_source, Map},
-    parse::parser::check_grammar_accepts,
+    parse::parser::check_syntax,
 };
 use inkwell::{context::Context, module::Module, targets::TargetMachine};
 use std::{
@@ -704,12 +704,12 @@ pub fn run_source_capture(source: &str, config: Configuration) -> Output {
     panic_if_err(run_source(source, config)).unwrap()
 }
 
-/// Verify that the pest grammar rejects `source` (parse-level
+/// Verify that the syntax of `source` is wrong (parse-level
 /// rejection). Use this for negative tests that want to assert "the
 /// parser rejects this construct" without going through later
 /// elaboration / typecheck stages.
 pub fn assert_grammar_rejects(source: &str) {
-    if check_grammar_accepts(source).is_ok() {
+    if check_syntax(source).is_ok() {
         panic_with_msg(&format!(
             "Grammar was expected to reject the source but accepted it.\nSource:\n{}",
             source
@@ -717,12 +717,12 @@ pub fn assert_grammar_rejects(source: &str) {
     }
 }
 
-/// Verify that the pest grammar accepts `source`. Use this for a positive parser regression
-/// test that only needs the source to parse, without compiling or running it.
+/// Verify that the syntax of `source` is right. Use this for a positive parser regression test
+/// that only needs the source to parse, without compiling or running it.
 pub fn assert_grammar_accepts(source: &str) {
-    if let Err(e) = check_grammar_accepts(source) {
+    if let Err(e) = check_syntax(source) {
         panic_with_msg(&format!(
-            "Grammar was expected to accept the source but rejected it: {}\nSource:\n{}",
+            "Grammar was expected to accept the source but rejected it: {:?}\nSource:\n{}",
             e, source
         ));
     }
