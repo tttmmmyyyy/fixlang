@@ -236,7 +236,7 @@ fn run_cli() {
         .long("verbose")
         .short('v')
         .takes_value(false)
-        .help("Show verbose messages.");
+        .help("Show verbose messages, including how long each step of the build takes.");
     let cu_size = Arg::new("cu-size")
         .long("cu-size")
         .takes_value(true)

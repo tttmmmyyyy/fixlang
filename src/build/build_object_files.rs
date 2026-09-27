@@ -257,7 +257,7 @@ pub fn build_object_files<'c>(
     mut program: Program,
     config: &Configuration,
 ) -> Result<BuildObjFilesResult, Errors> {
-    let _sw = StopWatch::new("build_object_files", config.show_build_times);
+    let _sw = StopWatch::new("build_object_files", config.verbose);
 
     // Return cached object files if available.
     // This cache is especially effective when running "fix run" repeatedly without editing the source code.

@@ -9,7 +9,7 @@ use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch
 /// setting in `config` that turns it on. A pass sees the program the passes above it left.
 // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run(prg: &mut Program, config: &Configuration) {
-    let _sw = StopWatch::new("optimization::run", config.show_build_times);
+    let _sw = StopWatch::new("optimization::run", config.verbose);
 
     if config.emit_symbols {
         prg.emit_symbols(&format!("{}", prg.optimization_step));
@@ -67,7 +67,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_defunctionalize_fix(),
         "defunctionalize_fix",
-        |prg| defunctionalize_fix::run(prg, config.show_build_times),
+        |prg| defunctionalize_fix::run(prg, config.verbose),
     );
 
     run_pass(
@@ -126,7 +126,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_closure_specialization(),
         "closure_specialization",
-        |prg| closure_specialization::run(prg, config.show_build_times),
+        |prg| closure_specialization::run(prg, config.verbose),
     );
 
     run_pass(
@@ -163,7 +163,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     );
 
     if config.emit_symbols {
-        let _sw = StopWatch::new("simplify_symbol_names::run", config.show_build_times);
+        let _sw = StopWatch::new("simplify_symbol_names::run", config.verbose);
         simplify_symbol_names::run(prg);
         prg.emit_symbols(&format!("{}.final", prg.optimization_step));
         prg.optimization_step += 1;
@@ -182,7 +182,7 @@ fn run_pass(
     if !enabled {
         return;
     }
-    let _sw = StopWatch::new(&format!("{}::run", pass_name), config.show_build_times);
+    let _sw = StopWatch::new(&format!("{}::run", pass_name), config.verbose);
     pass(prg);
     if config.emit_symbols {
         prg.emit_symbols(&format!("{}.{}", prg.optimization_step, pass_name));
