@@ -33,11 +33,11 @@ use crate::{
         name::FullName,
         program::{Program, Symbol},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
-        types::{type_fun, TyCon, TyConInfo, TypeNode},
+        types::{type_fun, TyCon, TyConInfo},
     },
     misc::{Map, Set},
     optimization::{
-        capture_struct::{fresh_global_name, CaptureStruct},
+        capture_struct::{captured_fields, fresh_global_name, CaptureStruct},
         let_elimination,
         rename::substitute_free_name,
         uncurry::{internalize_let_to_var_at_head, is_std_fix},
@@ -240,15 +240,7 @@ impl FixDefunctionalizer {
         let self_name = self_params[0].name.clone();
         let ab_ty = f_body.type_.as_ref().unwrap().clone(); // a -> b
 
-        // Capture = free local variables of `f`, with their types read from the current scope.
-        let cap_fields: Vec<(FullName, Arc<TypeNode>)> = f
-            .lambda_cap_names()
-            .iter()
-            .map(|n| {
-                let ty = state.scope.get_local(&n.name).unwrap().unwrap();
-                (n.clone(), ty)
-            })
-            .collect();
+        let cap_fields = captured_fields(f, state);
         // Name the lifted function first: the capture struct is named after it, so that a value of
         // that capture struct says which function consumes it.
         let func_name = fresh_global_name(

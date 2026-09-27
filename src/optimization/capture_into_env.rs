@@ -50,7 +50,7 @@ rewritten afterwards, with that capture among the others.
 */
 
 use super::{
-    capture_struct::CaptureStruct,
+    capture_struct::{captured_fields, CaptureStruct},
     find_usage_of_name::{self, UsageType},
 };
 use crate::{
@@ -312,8 +312,9 @@ impl CaptureMover<'_> {
         if !lam.is_lam() {
             return None;
         }
-        let cap_names = lam.lambda_cap_names();
-        if cap_names.is_empty() {
+        // The captured variables, with the types they have where the lambda is bound.
+        let fields = captured_fields(&lam, state);
+        if fields.is_empty() {
             return None;
         }
         let body = expr.get_let_value();
@@ -325,14 +326,6 @@ impl CaptureMover<'_> {
         let local =
             |suffix: &str| FullName::local(&format!("{}{}{}", CAPTURE_INTO_ENV_PREFIX, id, suffix));
 
-        // The capture struct, read where the lambda was bound.
-        let fields = cap_names
-            .iter()
-            .map(|name| {
-                let ty = state.scope.get_local(&name.name).unwrap().unwrap();
-                (name.clone(), ty)
-            })
-            .collect::<Vec<_>>();
         let cap = CaptureStruct::new(
             &format!("{}{}", CAPTURE_INTO_ENV_PREFIX, id),
             &self.symbol,
