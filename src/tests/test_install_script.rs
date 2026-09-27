@@ -103,7 +103,8 @@ if [ -n "$out" ]; then {}; else cat '{}'; fi
         temp_dir
     }
 
-    /// A command running `program` with `temp_dir`'s `PATH` and `HOME`.
+    /// A command running `program` with the stand-in commands of `temp_dir` in front of `PATH` and
+    /// `HOME` set to the home in `temp_dir`.
     fn install_script_command(program: &str, temp_dir: &TempDir) -> Command {
         let mut command = Command::new(program);
         command
@@ -142,10 +143,13 @@ if [ -n "$out" ]; then {}; else cat '{}'; fi
     }
 
     /// Runs `install.sh` in `temp_dir` on a pseudo-terminal, typing `input` at it, so it takes
-    /// the interactive path and reads its answers from `/dev/tty`. The output holds what the
-    /// terminal showed, the typed input echoed. A script still running after 60 seconds, waiting
+    /// the interactive path and reads its answers from `/dev/tty`. The stdout of the output holds
+    /// what the terminal showed, the echoed input included. A script still running after 60 seconds, waiting
     /// for an answer `input` did not give, is killed and the run fails with status 124.
     fn run_install_script_on_terminal(temp_dir: &TempDir, input: &str) -> Output {
+        /// A Python program that runs the script at its second argument on a pseudo-terminal, types
+        /// its first argument at it, copies what the terminal shows to stdout, and exits with the
+        /// script's status.
         const RUN_ON_PTY: &str = r#"
 import os, pty, select, signal, sys, time
 pid, fd = pty.fork()
@@ -338,7 +342,8 @@ sys.exit(os.waitstatus_to_exitcode(status) & 0xff)
         assert_eq!(installed_files(&temp_dir), Vec::<String>::new());
     }
 
-    /// Writes `content` to `~/.local/bin/fix` of `temp_dir`, as an installed binary.
+    /// Writes `content` to `~/.local/bin/fix` of `temp_dir` as an installed, executable binary, and
+    /// returns its path.
     fn install_existing_fix(temp_dir: &TempDir, content: &[u8]) -> PathBuf {
         fs::create_dir_all(install_dir(temp_dir)).unwrap();
         let path = install_dir(temp_dir).join("fix");
@@ -385,8 +390,9 @@ sys.exit(os.waitstatus_to_exitcode(status) & 0xff)
         let temp_dir = install_script_fixture(&["v1.5.0"], DOWNLOAD_SUCCEEDS);
         fs::create_dir_all(install_dir(&temp_dir)).unwrap();
         let installed = install_dir(&temp_dir).join("fix");
-        // Copied by `cp`, so that this process holds no descriptor writing the file, which a
-        // child forked meanwhile by another test would carry into the `exec` below (`ETXTBSY`).
+        // Copied by `cp` so that this process never opens the file for writing: a child that
+        // another test forks meanwhile would inherit that descriptor, and the `exec` below would
+        // then fail with `ETXTBSY`.
         let copied = Command::new("cp")
             .arg("/bin/sleep")
             .arg(&installed)
