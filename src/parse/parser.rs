@@ -2472,7 +2472,11 @@ fn parse_expr_let_without_in(
 }
 
 /// The `if` in the form `if c { a }; b` that the expression `pair` ends with, where the else branch
-/// `b` runs to the end of `pair`, together with its `;`. The outermost such `if` is the one returned.
+/// `b` runs to the end of `pair`, together with its `;`. Where several `if`s qualify, returns the
+/// outermost.
+///
+/// # Examples
+/// For `if c { a }; if d { b }; e`, returns the `if` on `c`, whose else branch holds the `if` on `d`.
 fn if_taking_the_rest_after_semicolon(pair: Pair<Rule>) -> Option<(Pair<Rule>, Pair<Rule>)> {
     let mut node = pair;
     loop {
