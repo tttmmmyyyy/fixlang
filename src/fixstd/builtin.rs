@@ -7697,7 +7697,7 @@ fn apply_with_env<'c, 'm>(
 /// The body of a function that gives the function `f_name` it takes to an op declaring
 /// `LLVMGen::env_operand`, with the empty environment:
 ///
-/// ```
+/// ```text
 /// let g = |p| (let ((), a_1, ..., a_n) = p; f(a_1)...(a_n));
 /// let env = ();
 /// op
@@ -8887,8 +8887,8 @@ pub struct InlineLLVMMutatePtrBody {
     env_name: FullName,
     /// The `IOState` the function is applied to.
     ios_name: FullName,
-    /// When true, clone the value first if it is shared, so the action writes into a uniquely owned
-    /// one. Set false only where the value is statically known to be unique.
+    /// When true, clone the value first if it is shared, so the function writes into a uniquely
+    /// owned one. Set false only where the value is statically known to be unique.
     pub(crate) force_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -8994,7 +8994,7 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
     ) -> Provenance {
         // The value comes back uniquely owned, since this op clones it when shared and is given it
         // unique otherwise — the same reasoning as an array set, and what lets an operation on the
-        // value that follows drop its check. The action's result comes out of an indirect call and
+        // value that follows drop its check. The function's result comes out of an indirect call and
         // stays `Unknown`.
         Provenance::fresh_under(result_ty, type_env, &MUTATE_PTR_VALUE_PATH)
     }
@@ -9009,7 +9009,7 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
         // dropped), so its root is local. What it reaches is another matter: the function may write a
         // reference to any object through the pointer it was given, so a payload that can hold one
         // loses the deep fact. A payload of scalars reaches nothing at all, which is the bottom. The
-        // action's result comes out of an indirect call.
+        // function's result comes out of an indirect call.
         let payload_holds_boxed = arg_tys[LENT_VALUE_ARG]
             .unpunched_field_types(type_env)
             .iter()
@@ -9042,7 +9042,7 @@ const LENT_PTR_ENV_OPERAND: EnvOperand = EnvOperand {
     function: 1,
     env: 2,
 };
-/// The path of the value in the result of `InlineLLVMMutatePtrBody`, `(ios, (value, action result))`.
+/// The path of the value in the result of `InlineLLVMMutatePtrBody`, `(ios, (value, function result))`.
 const MUTATE_PTR_VALUE_PATH: [usize; 2] = [1, 0];
 
 /// The definition of a function
