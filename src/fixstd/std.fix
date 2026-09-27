@@ -3091,6 +3091,42 @@ namespace String {
         _from_decimal_integer(negative, magnitude)
     );
 
+    // How many hexadecimal digits `_write_address` writes: every digit a 64-bit address holds.
+    _address_length : I64;
+    _address_length = 16;
+
+    // Writes the address `ptr` holds into `bytes` from `at`, as `_address_length` hexadecimal digits
+    // in lowercase, leading zeros among them.
+    //
+    // `bytes` must be unshared and hold at least `at + _address_length` bytes. This function does not
+    // check it, and violating it causes undefined behavior.
+    //
+    // # Parameters
+    // * `at` - The index of the first digit.
+    // * `ptr` - The pointer whose address is written.
+    // * `bytes` - The array to write into.
+    _write_address : I64 -> Ptr -> Array U8 -> Array U8;
+    _write_address = |at, ptr, bytes| (
+        // The digits are written from the last one backward, four bits at each step.
+        loop((at + _address_length, ptr.offset_from(nullptr).u64, bytes), |(end, rest, bytes)| (
+            if end == at { break $ bytes };
+            let digit = rest.bit_and(15_U64).u8;
+            let text = if digit < 10_U8 { '0' + digit } else { 'a' + (digit - 10_U8) };
+            continue $ (end - 1, rest.shift_right(4_U64), bytes.unsafe_set_bounds_unchecked(end - 1, text))
+        ))
+    );
+
+    // Creates the text of the address `ptr` holds, as `_write_address` writes it.
+    //
+    // # Parameters
+    // * `ptr` - The pointer whose address is written.
+    _from_address : Ptr -> String;
+    _from_address = |ptr| (
+        let bytes = Array::empty(_address_length + 1)._unsafe_grow_size(_address_length + 1);
+        let bytes = bytes._write_address(0, ptr);
+        String { _data : bytes.unsafe_set_bounds_unchecked(_address_length, 0_U8) }
+    );
+
     // Create a `String` from a pointer to a null-terminated C string, via an IO action.
     // 
     // If the pointer is not pointing to a valid null-terminated C string, this function causes undefined behavior.
@@ -4047,12 +4083,7 @@ namespace Ptr {
 }
 
 impl Ptr : ToString {
-    to_string = |v| (
-        // Holds the `FIXRUNTIME_PTR_DIGITS` digits `fixruntime_ptr_to_str` in runtime.c writes, and the null after them.
-        let data = Array::empty(17);
-        let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_ptr_to_str(Ptr, Ptr), ptr, v]);
-        data._unsafe_from_c_str_with_len(length)
-    );
+    to_string = |v| String::_from_address(v);
 }
 impl U8 : ToBytes {
     to_bytes = |v| (

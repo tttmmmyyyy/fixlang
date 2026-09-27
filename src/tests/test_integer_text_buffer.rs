@@ -1,7 +1,7 @@
 // The nine values that write an integer or a pointer as text write the digits into a buffer without
 // checking its bounds. An integer's buffer is sized by counting the digits before writing them, and
-// a pointer's by the widest text the C runtime writes for one, so that count and that width are the
-// whole of what keeps the write inside the buffer.
+// a pointer's by the fixed number of digits every address is written with, so that count and that
+// number are the whole of what keeps the write inside the buffer.
 //
 // This file writes the widest text each of the nine can produce, under Valgrind, so that a write
 // past the buffer shows up as an invalid write.

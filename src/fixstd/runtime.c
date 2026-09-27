@@ -84,28 +84,6 @@ double fixruntime_f64_from_bytes(double *buf)
     return *buf;
 }
 
-// The characters a hexadecimal digit is written with.
-static const char FIXRUNTIME_HEX_DIGITS[17] = "0123456789abcdef";
-
-// How many hexadecimal digits a pointer is written with: every digit a 64-bit address holds.
-// `impl Ptr : ToString` in std.fix allocates a buffer of these digits and the null after them.
-#define FIXRUNTIME_PTR_DIGITS 16
-_Static_assert(sizeof(uintptr_t) * 2 == FIXRUNTIME_PTR_DIGITS,
-               "FIXRUNTIME_PTR_DIGITS covers every hexadecimal digit of an address");
-
-// Writes the address `ptr` holds at `buf` as `FIXRUNTIME_PTR_DIGITS` hexadecimal digits,
-// null-terminated, leading zeros among them, and reports how many digits it wrote.
-int64_t fixruntime_ptr_to_str(char *buf, const void *ptr)
-{
-    uintptr_t address = (uintptr_t)ptr;
-    for (int i = 0; i < FIXRUNTIME_PTR_DIGITS; i++)
-    {
-        buf[i] = FIXRUNTIME_HEX_DIGITS[(address >> (4 * (FIXRUNTIME_PTR_DIGITS - 1 - i))) & 0xF];
-    }
-    buf[FIXRUNTIME_PTR_DIGITS] = '\0';
-    return FIXRUNTIME_PTR_DIGITS;
-}
-
 // The processor time the program has used so far, in the ticks C counts it in.
 int64_t fixruntime_clock()
 {
