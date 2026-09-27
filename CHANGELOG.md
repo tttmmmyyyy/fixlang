@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+#### Std
+
+- #772, #778: Removed `Std::FFI::_mutate_boxed_internal` and `Std::Array::_mutate_elements_internal`. Use `Std::FFI::mutate_boxed` and `Std::Array::mutate_elements`.
+
 ## [1.5.0] - 2026-09-27
 
 ### Performance
