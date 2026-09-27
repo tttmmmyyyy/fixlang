@@ -9423,6 +9423,35 @@ pub fn test_mutate_boxed_io_shared() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `mutate_elements` and `mutate_boxed` run in a global value's initializer, and a write through
+/// either one to the global afterwards goes to a copy: the global keeps what its initializer wrote.
+#[test]
+pub fn test_mutate_elements_and_mutate_boxed_in_global_initializer() {
+    let source = r##"
+        module Main;
+
+        g_arr : Array U8;
+        g_arr = [0_U8, 0_U8].mutate_elements(|ptr| FFI_CALL_IO[Ptr memset(Ptr, CInt, CSizeT), ptr, 7.c_int, 1.c_size_t]).@0;
+
+        g_box : Box I32;
+        g_box = Box { value : 0_I32 }.mutate_boxed(|ptr| FFI_CALL_IO[Ptr memset(Ptr, CInt, CSizeT), ptr, 7.c_int, 1.c_size_t]).@0;
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"", g_arr, [7_U8, 0_U8]);;
+            assert_eq(|_|"", g_box.@value, 7_I32);;
+            let (arr, _) = g_arr.mutate_elements(|ptr| FFI_CALL_IO[Ptr memset(Ptr, CInt, CSizeT), ptr, 9.c_int, 2.c_size_t]);
+            let (box, _) = g_box.mutate_boxed(|ptr| FFI_CALL_IO[Ptr memset(Ptr, CInt, CSizeT), ptr, 9.c_int, 1.c_size_t]);
+            assert_eq(|_|"", arr, [9_U8, 9_U8]);;
+            assert_eq(|_|"", box.@value, 9_I32);;
+            assert_eq(|_|"", g_arr, [7_U8, 0_U8]);;
+            assert_eq(|_|"", g_box.@value, 7_I32);;
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// `get_errno` reads the `errno` that a failing C call (`fopen` with an invalid mode) sets
 /// after `clear_errno`, so the value is nonzero.
 #[test]

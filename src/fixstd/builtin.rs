@@ -4761,89 +4761,6 @@ pub fn array_check_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_get_ptr`, which yields a pointer to the first element of an
-/// array's buffer, leaving the array borrowed.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayGetPtrBody {
-    arr_name: FullName,
-}
-
-#[typetag::serde]
-impl LLVMGen for InlineLLVMArrayGetPtrBody {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get argment
-        let array = gc.get_scoped_obj_noretain(&self.arr_name);
-
-        // Get pointer
-        let ptr = get_array_storage_buf(gc, &array);
-
-        // Make returned object
-        let obj = create_obj(
-            make_ptr_ty(),
-            &vec![],
-            None,
-            gc,
-            Some("alloca@get_ptr_array"),
-        );
-        obj.insert_field(gc, 0, ptr)
-    }
-
-    fn name(&self) -> String {
-        format!("array_data_ptr({})", self.arr_name.to_string())
-    }
-
-    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name]
-    }
-
-    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
-        i == 0
-    }
-
-    fn result_locality(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> ExtShape {
-        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-/// A pointer to the first element of an array's buffer. The array is borrowed, so the pointer is
-/// valid only while the array is alive.
-/// Type: Array a -> Ptr
-pub fn get_ptr_array() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const ARR_NAME: &str = "arr";
-    const ELEM_TYPE: &str = "a";
-
-    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
-
-    let expr = expr_abs(
-        vec![var_local(ARR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMArrayGetPtrBody {
-                arr_name: FullName::local(ARR_NAME),
-            }),
-            make_ptr_ty(),
-            None,
-        ),
-        None,
-    );
-    let scm = Scheme::generalize(
-        &[],
-        vec![],
-        vec![],
-        type_fun(array_ty.clone(), make_ptr_ty()),
-    );
-    (expr, scm)
-}
-
 /// The code generator for `Array::@size`, which reads an array's length out of the array value,
 /// leaving the array borrowed.
 #[derive(Clone, Serialize, Deserialize)]
@@ -8362,14 +8279,7 @@ fn rc_function_of_boxed_value<'c, 'm>(
     };
     let func_ptr = func.as_global_value().as_pointer_value();
 
-    let ret = create_obj(
-        make_ptr_ty(),
-        &vec![],
-        None,
-        gc,
-        Some(&format!("ret_val@get_funptr_{}", operation)),
-    );
-    ret.insert_field(gc, 0, func_ptr)
+    make_ptr_obj(gc, func_ptr, &format!("ret_val@get_funptr_{}", operation))
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -8503,68 +8413,24 @@ pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMGetBoxedDataPtrFunctionBody {
-    var_name: FullName,
-}
-
-#[typetag::serde]
-impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get argument.
-        let obj = gc.get_scoped_obj_noretain(&self.var_name);
-        assert!(obj.ty.is_box(gc.type_env()));
-
-        // Get data pointer.
-        let data_ptr = get_data_pointer_from_boxed_value(gc, &obj);
-
-        // Make returned object.
-        let ret = create_obj(
-            make_ptr_ty(),
-            &vec![],
-            None,
-            gc,
-            Some("ret_val@_get_boxed_ptr"),
-        );
-        ret.insert_field(gc, 0, data_ptr)
-    }
-
-    fn name(&self) -> String {
-        format!("boxed_data_ptr({})", self.var_name.to_string())
-    }
-
-    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.var_name]
-    }
-
-    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
-        i == 0
-    }
-
-    fn result_locality(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> ExtShape {
-        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-/// Applies `io_act` to `data_ptr` wrapped as a Fix `Ptr` value, and returns the IO action it
-/// yields.
-fn apply_io_act_to_data_ptr<'c, 'm>(
+/// Applies the function `f` to `ptr` wrapped as a Fix `Ptr` value, and returns what it returns.
+fn apply_to_ptr<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
-    io_act: Object<'c>,
-    data_ptr: PointerValue<'c>,
+    f: Object<'c>,
+    ptr: PointerValue<'c>,
 ) -> Object<'c> {
-    let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("alloca_data_ptr"));
-    let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
-    gc.apply_lambda(io_act, vec![data_ptr_obj], false).unwrap()
+    let ptr_obj = make_ptr_obj(gc, ptr, "lent_ptr");
+    gc.apply_lambda(f, vec![ptr_obj], false).unwrap()
+}
+
+/// Wraps `ptr` as a Fix `Ptr` value.
+fn make_ptr_obj<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    ptr: PointerValue<'c>,
+    name: &str,
+) -> Object<'c> {
+    let obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some(name));
+    obj.insert_field(gc, 0, ptr)
 }
 
 /// The pointer to the payload of a boxed value: the fields of a boxed struct, or the payload buffer
@@ -8573,8 +8439,7 @@ fn get_data_pointer_from_boxed_value<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     val: &Object<'c>,
 ) -> PointerValue<'c> {
-    // Get the pointer to the data field. `Array` is not `Boxed`, so it never reaches this generic;
-    // its element pointer comes from `Array::borrow_elements` / `mutate_elements` instead.
+    // Get the pointer to the data field.
     let data_field_idx = if val.ty.is_struct(gc.type_env()) {
         BOXED_TYPE_DATA_IDX
     } else {
@@ -8582,194 +8447,7 @@ fn get_data_pointer_from_boxed_value<'c, 'm>(
         ObjectFieldType::get_union_buf_idx(gc, val)
     };
 
-    // Get pointer
-    let ptr = val.gep_boxed(gc, data_field_idx);
-    ptr
-}
-
-pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const TYPE_NAME: &str = "a";
-    const VAR_NAME: &str = "x";
-    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
-    let ret_type = make_ptr_ty();
-    let scm = Scheme::generalize(
-        &[],
-        vec![Predicate::make(make_boxed_trait(), obj_type.clone())],
-        vec![],
-        type_fun(obj_type.clone(), ret_type.clone()),
-    );
-    let expr = expr_abs(
-        vec![var_local(VAR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMGetBoxedDataPtrFunctionBody {
-                var_name: FullName::local(VAR_NAME),
-            }),
-            ret_type,
-            None,
-        ),
-        None,
-    );
-    (expr, scm)
-}
-
-/// Evaluates `Std::FFI::_mutate_boxed_internal`: makes the boxed value unique, runs the action on a
-/// pointer to the value's payload, and evaluates to the value paired with the action's result.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
-    val_name: FullName,
-    io_act_name: FullName,
-    /// When true, clone the value first if it is shared, so the action writes into a uniquely owned
-    /// one. Set false only where the value is statically known to be unique.
-    pub(crate) force_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
-}
-
-#[typetag::serde]
-impl LLVMGen for InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
-    /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
-    fn applies_a_function_operand(&self) -> bool {
-        true
-    }
-
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get arguments.
-        let io_act = gc.get_scoped_obj(&self.io_act_name);
-        let val = gc.get_scoped_obj(&self.val_name);
-
-        // If `val` is not boxed, error.
-        assert!(val.is_box(gc.type_env()));
-
-        // Before mutating the value, force uniqueness of the value.
-        let val =
-            force_unique_or_assert(gc, val, self.force_unique, assumed_state(self.assume_local));
-
-        // Get the data pointer.
-        let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
-
-        // Run the IO action.
-        let io_act = apply_io_act_to_data_ptr(gc, io_act, data_ptr);
-        let (_ios, io_res) = run_ios_runner(gc, &io_act, None);
-
-        // Construct the return value.
-        let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &val);
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &io_res);
-
-        res
-    }
-
-    fn name(&self) -> String {
-        format!(
-            "mutate_boxed{}({}, {})",
-            if self.force_unique { "" } else { "[unique]" },
-            self.io_act_name.to_string(),
-            self.val_name.to_string()
-        )
-    }
-
-    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.val_name, &mut self.io_act_name]
-    }
-
-    fn unique_check_operand(
-        &self,
-        arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> Option<UniqueCheckOperand> {
-        if !self.force_unique {
-            return None;
-        }
-        unique_check_on_boxed_leaf(MUTATE_BOXED_VALUE_ARG, vec![], arg_tys, type_env)
-    }
-
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
-        let mut c = self.clone();
-        c.assume_local = true;
-        Box::new(c)
-    }
-
-    fn assumes_local(&self) -> bool {
-        self.assume_local
-    }
-
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
-        let mut c = self.clone();
-        c.force_unique = false;
-        Box::new(c)
-    }
-
-    fn result_prov(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        _arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> Provenance {
-        // The result is `(value, action result)`. The value comes back uniquely owned, since this op
-        // clones it when shared and is given it unique otherwise — the same reasoning as an array set,
-        // and what lets an operation on the value that follows drop its check. The action's result
-        // comes out of an indirect call and stays `Unknown`.
-        Provenance::fresh_under(result_ty, type_env, &[MUTATE_BOXED_VALUE_FIELD])
-    }
-
-    fn result_locality(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> ExtShape {
-        mutated_in_place_locality(
-            result_ty,
-            arg_tys,
-            type_env,
-            MUTATE_BOXED_VALUE_ARG,
-            &[MUTATE_BOXED_VALUE_FIELD],
-        )
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-/// The operand position of the value a `mutate_boxed` writes into.
-const MUTATE_BOXED_VALUE_ARG: usize = 0;
-/// The path of that value in the result of `_mutate_boxed_internal`, `(value, action result)`.
-const MUTATE_BOXED_VALUE_FIELD: usize = 0;
-
-/// The locality of the result of an op that hands a callback a raw pointer into a container's
-/// payload and returns that container at `value_path` of its result, alongside the callback's own
-/// result.
-///
-/// The container comes back force-uniqued (or unique by the caller's promise, where the check is
-/// dropped), so its root is local. What it reaches is another matter: the callback may write a
-/// reference to any object through the pointer it was given, so a payload that can hold one loses
-/// the deep fact. A payload of scalars reaches nothing at all, which is the bottom. The callback's
-/// result comes out of an indirect call.
-fn mutated_in_place_locality(
-    result_ty: &Arc<TypeNode>,
-    arg_tys: &[Arc<TypeNode>],
-    type_env: &TypeEnv,
-    value_arg: usize,
-    value_path: &[usize],
-) -> ExtShape {
-    let payload_holds_boxed = arg_tys[value_arg]
-        .unpunched_field_types(type_env)
-        .iter()
-        .any(|(_, fty)| !boxed_leaf_paths(fty, type_env).is_empty());
-    let value_leaf = if payload_holds_boxed {
-        LeafCond::new(ExtCond::bottom(), ExtCond::Always)
-    } else {
-        LeafCond::bottom()
-    };
-    ExtShape::build_shape(result_ty, type_env, &|path| {
-        if path.starts_with(value_path) {
-            value_leaf.clone()
-        } else {
-            LeafCond::always()
-        }
-    })
+    val.gep_boxed(gc, data_field_idx)
 }
 
 /// The operand position of the array an `Array::set` writes into.
@@ -8885,165 +8563,48 @@ fn assert_array_storage_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, array: &Objec
     gc.build_assert_unique(storage_ptr);
 }
 
-/// The definition of `Std::FFI::_mutate_boxed_internal`, which makes the boxed value unique, applies
-/// the action to a pointer to the value's payload, and returns the value with the action's result.
-///
-/// `_mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> (a, b)`
-pub fn get_mutate_boxed_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const TYPE_A_NAME: &str = "a";
-    const TYPE_B_NAME: &str = "b";
-    const IO_ACT_NAME: &str = "a";
-    const VAL_NAME: &str = "x";
-    let a_ty = type_tyvar(TYPE_A_NAME, &kind_star());
-    let b_ty = type_tyvar(TYPE_B_NAME, &kind_star());
-    let ab_ty = make_tuple_ty(vec![a_ty.clone(), b_ty.clone()]);
-    let scm = Scheme::generalize(
-        &[],
-        vec![Predicate::make(make_boxed_trait(), a_ty.clone())],
-        vec![],
-        type_fun(
-            type_fun(make_ptr_ty(), make_io_runner_ty(b_ty.clone())),
-            type_fun(a_ty.clone(), ab_ty.clone()),
-        ),
+/// The pointer that `InlineLLVMBorrowPtrBody` and `InlineLLVMMutatePtrBody` pass to their function
+/// operand: the first element of an array's element buffer, or the payload of a boxed value.
+fn get_lent_ptr<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) -> PointerValue<'c> {
+    if val.ty.is_array() {
+        return get_array_storage_buf(gc, val);
+    }
+    assert!(
+        val.is_box(gc.type_env()),
+        "a pointer is lent into an array or a boxed value, and `{}` is neither.",
+        val.ty.to_string()
     );
-    let expr = expr_abs(
-        vec![var_local(IO_ACT_NAME)],
-        expr_abs(
-            vec![var_local(VAL_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMUnsafeMutateBoxedInternalFunctionBody {
-                    assume_local: false,
-                    val_name: FullName::local(VAL_NAME),
-                    io_act_name: FullName::local(IO_ACT_NAME),
-                    force_unique: true,
-                }),
-                ab_ty,
-                None,
-            ),
-            None,
-        ),
-        None,
-    );
-    (expr, scm)
+    get_data_pointer_from_boxed_value(gc, val)
 }
 
-/// Evaluates `Std::FFI::_mutate_boxed_ios_internal`: makes the boxed value unique, runs the action on
-/// a pointer to the value's payload while threading the caller's `IOState`, and evaluates to that
-/// state paired with the value and the action's result.
+/// Evaluates to the pointer `get_lent_ptr` computes for a value: the first element of an array's
+/// element buffer, or the payload of a boxed value.
+///
+/// The value is borrowed, so the pointer is valid only while the value is alive.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUnsafeMutateBoxedIOSInternalBody {
-    val_name: FullName,
-    io_act_name: FullName,
-    iostate_name: FullName,
-    /// As in `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`.
-    pub(crate) force_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+pub struct InlineLLVMGetLentPtrBody {
+    /// The value the pointer points into.
+    x_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
-    /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
-    fn applies_a_function_operand(&self) -> bool {
-        true
-    }
-
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get arguments.
-        let io_act = gc.get_scoped_obj(&self.io_act_name);
-        let val = gc.get_scoped_obj(&self.val_name);
-        let ios = gc.get_scoped_obj(&self.iostate_name);
-
-        // If `val` is not boxed, error.
-        assert!(val.is_box(gc.type_env()));
-
-        // Before mutating the value, force uniqueness of the value.
-        let val =
-            force_unique_or_assert(gc, val, self.force_unique, assumed_state(self.assume_local));
-
-        // Get the data pointer.
-        let data_ptr = get_data_pointer_from_boxed_value(gc, &val);
-
-        // Run the IO action.
-        let io_act = apply_io_act_to_data_ptr(gc, io_act, data_ptr);
-        let (ios, io_res) = run_ios_runner(gc, &io_act, Some(&ios));
-
-        // Construct the return value.
-        let val_and_res = create_obj(
-            make_tuple_ty(vec![val.ty.clone(), io_res.ty.clone()]),
-            &vec![],
-            None,
-            gc,
-            Some("val_and_res"),
-        );
-        let val_and_res = ObjectFieldType::move_into_struct_field(gc, val_and_res, 0, &val);
-        let val_and_res = ObjectFieldType::move_into_struct_field(gc, val_and_res, 1, &io_res);
-        let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &ios);
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 1, &val_and_res);
-
-        res
+impl LLVMGen for InlineLLVMGetLentPtrBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
+        let x = gc.get_scoped_obj_noretain(&self.x_name);
+        let ptr = get_lent_ptr(gc, &x);
+        make_ptr_obj(gc, ptr, "lent_ptr")
     }
 
     fn name(&self) -> String {
-        format!(
-            "mutate_boxed_ios{}({}, {}, {})",
-            if self.force_unique { "" } else { "[unique]" },
-            self.io_act_name.to_string(),
-            self.val_name.to_string(),
-            self.iostate_name.to_string(),
-        )
+        format!("lent_ptr({})", self.x_name.to_string())
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![
-            &mut self.val_name,
-            &mut self.io_act_name,
-            &mut self.iostate_name,
-        ]
+        vec![&mut self.x_name]
     }
 
-    fn unique_check_operand(
-        &self,
-        arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> Option<UniqueCheckOperand> {
-        if !self.force_unique {
-            return None;
-        }
-        unique_check_on_boxed_leaf(MUTATE_BOXED_VALUE_ARG, vec![], arg_tys, type_env)
-    }
-
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
-        let mut c = self.clone();
-        c.assume_local = true;
-        Box::new(c)
-    }
-
-    fn assumes_local(&self) -> bool {
-        self.assume_local
-    }
-
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
-        let mut c = self.clone();
-        c.force_unique = false;
-        Box::new(c)
-    }
-
-    fn result_prov(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        _arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> Provenance {
-        // As in `InlineLLVMUnsafeMutateBoxedInternalFunctionBody`, with the pair this op returns
-        // wrapped in the `IOState` it threads.
-        Provenance::fresh_under(
-            result_ty,
-            type_env,
-            &[MUTATE_BOXED_IOS_PAIR_FIELD, MUTATE_BOXED_VALUE_FIELD],
-        )
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
+        i == LENT_VALUE_ARG
     }
 
     fn result_locality(
@@ -9052,13 +8613,7 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        mutated_in_place_locality(
-            result_ty,
-            arg_tys,
-            type_env,
-            MUTATE_BOXED_VALUE_ARG,
-            &[MUTATE_BOXED_IOS_PAIR_FIELD, MUTATE_BOXED_VALUE_FIELD],
-        )
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9066,99 +8621,82 @@ impl LLVMGen for InlineLLVMUnsafeMutateBoxedIOSInternalBody {
     }
 }
 
-/// The path of the returned pair in the result of `_mutate_boxed_ios_internal`, `(state, pair)`.
-const MUTATE_BOXED_IOS_PAIR_FIELD: usize = 1;
-
-// _mutate_boxed_internal : (Ptr -> IOState -> (IOState, b)) -> a -> IOState -> (IOState, (a, b))
-pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const A_TYPE_NAME: &str = "a";
-    const B_TYPE_NAME: &str = "b";
-    const IO_ACT_NAME: &str = "act";
-    const VAL_NAME: &str = "x";
-    const IOSTATE_NAME: &str = "ios";
-    let a_ty = type_tyvar(A_TYPE_NAME, &kind_star());
-    let iostate_ty = make_iostate_ty();
-    let b_ty = type_tyvar(B_TYPE_NAME, &kind_star());
-    let ab_ty = make_tuple_ty(vec![a_ty.clone(), b_ty.clone()]);
-    let ret_ty = make_tuple_ty(vec![iostate_ty.clone(), ab_ty.clone()]);
-    let scm = Scheme::generalize(
-        &[],
-        vec![Predicate::make(make_boxed_trait(), a_ty.clone())],
-        vec![],
-        type_fun(
-            type_fun(make_ptr_ty(), make_io_runner_ty(b_ty.clone())),
-            type_fun(a_ty.clone(), make_io_runner_ty(ab_ty.clone())),
-        ),
-    );
-    let expr = expr_abs_many(
-        vec![
-            var_local(IO_ACT_NAME),
-            var_local(VAL_NAME),
-            var_local(IOSTATE_NAME),
-        ],
+/// The definition of a function `x_ty -> Ptr` evaluated by `InlineLLVMGetLentPtrBody`, whose type
+/// scheme has the predicates `preds`.
+fn get_lent_ptr_function(
+    x_ty: Arc<TypeNode>,
+    preds: Vec<Predicate>,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const X_NAME: &str = "x";
+    let scm = Scheme::generalize(&[], preds, vec![], type_fun(x_ty, make_ptr_ty()));
+    let expr = expr_abs(
+        vec![var_local(X_NAME)],
         expr_llvm(
-            Box::new(InlineLLVMUnsafeMutateBoxedIOSInternalBody {
-                assume_local: false,
-                io_act_name: FullName::local(IO_ACT_NAME),
-                val_name: FullName::local(VAL_NAME),
-                iostate_name: FullName::local(IOSTATE_NAME),
-                force_unique: true,
+            Box::new(InlineLLVMGetLentPtrBody {
+                x_name: FullName::local(X_NAME),
             }),
-            ret_ty,
+            make_ptr_ty(),
             None,
         ),
+        None,
     );
     (expr, scm)
 }
 
-// `Array` is not `Boxed`, so its element data pointer cannot come from the generic `Boxed` FFI
-// helpers. These three Array-specific ops compute the pointer to the first element (the storage's
-// element buffer) directly and hand it to a callback: `borrow_elements` for read-only access (the
-// array is borrowed, so no retain), and `_mutate_elements_internal` / `_mutate_elements_ios_internal`
-// for in-place writes (clone-if-shared first). `String` C-interop and the numeric `to_bytes` /
-// `from_bytes` routes go through these.
+/// `Std::Array::_get_ptr : Array a -> Ptr`
+pub fn get_ptr_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+    get_lent_ptr_function(type_tyapp(make_array_ty(), type_tyvar_star("a")), vec![])
+}
 
+/// `Std::FFI::_get_boxed_ptr : [a : Boxed] a -> Ptr`
+pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
+    let a_ty = type_tyvar_star("a");
+    let preds = vec![Predicate::make(make_boxed_trait(), a_ty.clone())];
+    get_lent_ptr_function(a_ty, preds)
+}
+
+/// Applies a function to a pointer into a value, and evaluates to what the function returns. The
+/// pointer points to the first element of an array's element buffer, or to the payload of a boxed
+/// value.
+///
+/// The value is borrowed, so its reference count is left alone and the pointer is valid while the
+/// function runs.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayBorrowElementsBody {
-    arr_name: FullName,
-    borrower_name: FullName,
+pub struct InlineLLVMBorrowPtrBody {
+    /// The value the pointer points into.
+    x_name: FullName,
+    /// The function applied to the pointer.
+    f_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayBorrowElementsBody {
-    /// This op applies an operand: the borrower is applied to the pointer to the elements.
+impl LLVMGen for InlineLLVMBorrowPtrBody {
+    /// This op applies an operand: the function is applied to the pointer.
     fn applies_a_function_operand(&self) -> bool {
         true
     }
 
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        // The array is borrowed: its pointer stays valid through the callback without a retain here.
-        let borrower = gc.get_scoped_obj(&self.borrower_name);
-        let array = gc.get_scoped_obj_noretain(&self.arr_name);
-        assert!(array.ty.is_array());
-
-        // Pass a pointer to the first element to the callback.
-        let data_ptr = get_array_storage_buf(gc, &array);
-        let data_ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("elem_ptr"));
-        let data_ptr_obj = data_ptr_obj.insert_field(gc, 0, data_ptr);
-        gc.apply_lambda(borrower, vec![data_ptr_obj], false)
-            .unwrap()
+        let f = gc.get_scoped_obj(&self.f_name);
+        let x = gc.get_scoped_obj_noretain(&self.x_name);
+        let ptr = get_lent_ptr(gc, &x);
+        apply_to_ptr(gc, f, ptr)
     }
 
     fn name(&self) -> String {
         format!(
-            "array_borrow_elements({}, {})",
-            self.borrower_name.to_string(),
-            self.arr_name.to_string(),
+            "borrow_ptr({}, {})",
+            self.f_name.to_string(),
+            self.x_name.to_string(),
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name, &mut self.borrower_name]
+        vec![&mut self.x_name, &mut self.f_name]
     }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
-        i == 0
+        i == LENT_VALUE_ARG
     }
 
     fn result_locality(
@@ -9176,193 +8714,75 @@ impl LLVMGen for InlineLLVMArrayBorrowElementsBody {
     }
 }
 
-// borrow_elements : (Ptr -> b) -> Array a -> b
-pub fn array_borrow_elements() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const BORROWER_NAME: &str = "borrower";
-    const ARR_NAME: &str = "array";
-    let a_ty = type_tyvar_star("a");
-    let b_ty = type_tyvar_star("b");
-    let array_ty = type_tyapp(make_array_ty(), a_ty);
+/// The type variable `b` that the function operand of `InlineLLVMBorrowPtrBody` or
+/// `InlineLLVMMutatePtrBody` returns.
+///
+/// Panics if `x_ty`, the type of the value the pointer points into, mentions `b`.
+fn lent_ptr_result_tyvar(x_ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+    const B_TYPE_NAME: &str = "b";
+    assert!(
+        !x_ty.free_vars().contains_key(B_TYPE_NAME),
+        "the type `{}` of the lent value mentions `{}`, the function's result type.",
+        x_ty.to_string(),
+        B_TYPE_NAME
+    );
+    type_tyvar_star(B_TYPE_NAME)
+}
+
+/// The definition of a function `(Ptr -> b) -> x_ty -> b` evaluated by `InlineLLVMBorrowPtrBody`,
+/// whose type scheme has the predicates `preds`. `x_ty` must not mention `b`.
+fn borrow_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const F_NAME: &str = "f";
+    const X_NAME: &str = "x";
+    let b_ty = lent_ptr_result_tyvar(&x_ty);
     let scm = Scheme::generalize(
         &[],
-        vec![],
+        preds,
         vec![],
         type_fun(
             type_fun(make_ptr_ty(), b_ty.clone()),
-            type_fun(array_ty, b_ty.clone()),
+            type_fun(x_ty, b_ty.clone()),
         ),
     );
-    let expr = expr_abs(
-        vec![var_local(BORROWER_NAME)],
-        expr_abs(
-            vec![var_local(ARR_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMArrayBorrowElementsBody {
-                    arr_name: FullName::local(ARR_NAME),
-                    borrower_name: FullName::local(BORROWER_NAME),
-                }),
-                b_ty,
-                None,
-            ),
+    let expr = expr_abs_many(
+        vec![var_local(F_NAME), var_local(X_NAME)],
+        expr_llvm(
+            Box::new(InlineLLVMBorrowPtrBody {
+                x_name: FullName::local(X_NAME),
+                f_name: FullName::local(F_NAME),
+            }),
+            b_ty,
             None,
         ),
-        None,
     );
     (expr, scm)
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayMutateElementsInternalBody {
-    arr_name: FullName,
-    io_act_name: FullName,
-    /// As in `InlineLLVMArrayTruncateBoundsUnchecked`: clone the array when shared so the write lands
-    /// in a uniquely owned one. Set false only where the array is statically known to be unique.
-    pub(crate) force_unique: bool,
-    /// Whether the object this op's declared uniqueness check tests is known to be in the local
-    /// reference-counting state, so that the check reads the count without reading the state.
-    pub(crate) assume_local: bool,
+/// `Std::Array::borrow_elements : (Ptr -> b) -> Array a -> b`
+pub fn array_borrow_elements() -> (Arc<ExprNode>, Arc<Scheme>) {
+    borrow_ptr_function(type_tyapp(make_array_ty(), type_tyvar_star("a")), vec![])
 }
 
-#[typetag::serde]
-impl LLVMGen for InlineLLVMArrayMutateElementsInternalBody {
-    /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
-    fn applies_a_function_operand(&self) -> bool {
-        true
-    }
-
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        let io_act = gc.get_scoped_obj(&self.io_act_name);
-        let array = gc.get_scoped_obj(&self.arr_name);
-        assert!(array.ty.is_array());
-
-        // Clone the array first if it is shared, so the callback writes into a uniquely owned one.
-        let array = force_unique_or_assert(
-            gc,
-            array,
-            self.force_unique,
-            assumed_state(self.assume_local),
-        );
-
-        // Run the callback with a pointer to the first element.
-        let data_ptr = get_array_storage_buf(gc, &array);
-        let io_act = apply_io_act_to_data_ptr(gc, io_act, data_ptr);
-        let (_ios, io_res) = run_ios_runner(gc, &io_act, None);
-
-        // Construct the return value `(array, action result)`.
-        let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &array);
-        ObjectFieldType::move_into_struct_field(gc, res, 1, &io_res)
-    }
-
-    fn name(&self) -> String {
-        format!(
-            "array_mutate_elements{}({}, {})",
-            if self.force_unique { "" } else { "[unique]" },
-            self.io_act_name.to_string(),
-            self.arr_name.to_string(),
-        )
-    }
-
-    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name, &mut self.io_act_name]
-    }
-
-    fn unique_check_operand(
-        &self,
-        arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> Option<UniqueCheckOperand> {
-        if !self.force_unique {
-            return None;
-        }
-        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
-    }
-
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
-        let mut c = self.clone();
-        c.assume_local = true;
-        Box::new(c)
-    }
-
-    fn assumes_local(&self) -> bool {
-        self.assume_local
-    }
-
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
-        let mut c = self.clone();
-        c.force_unique = false;
-        Box::new(c)
-    }
-
-    fn result_prov(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        _arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> Provenance {
-        // The array field comes back uniquely owned (cloned when shared, given unique otherwise); the
-        // action result comes out of an indirect call and stays `Unknown`.
-        Provenance::fresh_under(result_ty, type_env, &[0])
-    }
-
-    fn result_locality(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> ExtShape {
-        mutated_in_place_locality(result_ty, arg_tys, type_env, 0, &[0])
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-// _mutate_elements_internal : (Ptr -> IOState -> (IOState, b)) -> Array a -> (Array a, b)
-pub fn array_mutate_elements_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const IO_ACT_NAME: &str = "act";
-    const ARR_NAME: &str = "array";
+/// `Std::FFI::borrow_boxed : [a : Boxed] (Ptr -> b) -> a -> b`
+pub fn borrow_boxed_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     let a_ty = type_tyvar_star("a");
-    let b_ty = type_tyvar_star("b");
-    let array_ty = type_tyapp(make_array_ty(), a_ty);
-    let ab_ty = make_tuple_ty(vec![array_ty.clone(), b_ty.clone()]);
-    let scm = Scheme::generalize(
-        &[],
-        vec![],
-        vec![],
-        type_fun(
-            type_fun(make_ptr_ty(), make_io_runner_ty(b_ty)),
-            type_fun(array_ty, ab_ty.clone()),
-        ),
-    );
-    let expr = expr_abs(
-        vec![var_local(IO_ACT_NAME)],
-        expr_abs(
-            vec![var_local(ARR_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMArrayMutateElementsInternalBody {
-                    assume_local: false,
-                    arr_name: FullName::local(ARR_NAME),
-                    io_act_name: FullName::local(IO_ACT_NAME),
-                    force_unique: true,
-                }),
-                ab_ty,
-                None,
-            ),
-            None,
-        ),
-        None,
-    );
-    (expr, scm)
+    let preds = vec![Predicate::make(make_boxed_trait(), a_ty.clone())];
+    borrow_ptr_function(a_ty, preds)
 }
 
+/// Makes a value unique, applies a function to a pointer into it, runs the IO action the function
+/// returns, and evaluates to `(ios, (value, action result))`. The pointer points to the first
+/// element of an array's element buffer, or to the payload of a boxed value.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayMutateElementsIosInternalBody {
-    arr_name: FullName,
-    io_act_name: FullName,
-    iostate_name: FullName,
-    /// As in `InlineLLVMArrayMutateElementsInternalBody`.
+pub struct InlineLLVMMutatePtrBody {
+    /// The value the pointer points into.
+    x_name: FullName,
+    /// The function applied to the pointer.
+    f_name: FullName,
+    /// The `IOState` the action runs under.
+    ios_name: FullName,
+    /// When true, clone the value first if it is shared, so the action writes into a uniquely owned
+    /// one. Set false only where the value is statically known to be unique.
     pub(crate) force_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -9370,62 +8790,53 @@ pub struct InlineLLVMArrayMutateElementsIosInternalBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
-    /// This op applies an operand: the `IO` action is applied to the pointer, and the action it yields is run.
+impl LLVMGen for InlineLLVMMutatePtrBody {
+    /// This op applies an operand: the function is applied to the pointer, and the action it gives
+    /// is run.
     fn applies_a_function_operand(&self) -> bool {
         true
     }
 
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        let io_act = gc.get_scoped_obj(&self.io_act_name);
-        let array = gc.get_scoped_obj(&self.arr_name);
-        let ios = gc.get_scoped_obj(&self.iostate_name);
-        assert!(array.ty.is_array());
+        let f = gc.get_scoped_obj(&self.f_name);
+        let x = gc.get_scoped_obj(&self.x_name);
+        let ios = gc.get_scoped_obj(&self.ios_name);
 
-        // Clone the array first if it is shared, so the callback writes into a uniquely owned one.
-        let array = force_unique_or_assert(
-            gc,
-            array,
-            self.force_unique,
-            assumed_state(self.assume_local),
-        );
+        // Clone the value first if it is shared, so the action writes into a uniquely owned one.
+        let x = force_unique_or_assert(gc, x, self.force_unique, assumed_state(self.assume_local));
 
-        // Run the callback with a pointer to the first element, threading the real `ios`.
-        let data_ptr = get_array_storage_buf(gc, &array);
-        let io_act = apply_io_act_to_data_ptr(gc, io_act, data_ptr);
-        let (ios, io_res) = run_ios_runner(gc, &io_act, Some(&ios));
+        // Run the action on the pointer, threading `ios`.
+        let ptr = get_lent_ptr(gc, &x);
+        let act = apply_to_ptr(gc, f, ptr);
+        let (ios, act_res) = run_ios_runner(gc, &act, Some(&ios));
 
-        // Construct the return value `(ios, (array, action result))`.
-        let array_and_res = create_obj(
-            make_tuple_ty(vec![array.ty.clone(), io_res.ty.clone()]),
+        // Construct the return value `(ios, (value, action result))`.
+        let x_and_res = create_obj(
+            make_tuple_ty(vec![x.ty.clone(), act_res.ty.clone()]),
             &vec![],
             None,
             gc,
-            Some("array_and_res"),
+            Some("x_and_res"),
         );
-        let array_and_res = ObjectFieldType::move_into_struct_field(gc, array_and_res, 0, &array);
-        let array_and_res = ObjectFieldType::move_into_struct_field(gc, array_and_res, 1, &io_res);
+        let x_and_res = ObjectFieldType::move_into_struct_field(gc, x_and_res, 0, &x);
+        let x_and_res = ObjectFieldType::move_into_struct_field(gc, x_and_res, 1, &act_res);
         let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
         let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &ios);
-        ObjectFieldType::move_into_struct_field(gc, res, 1, &array_and_res)
+        ObjectFieldType::move_into_struct_field(gc, res, 1, &x_and_res)
     }
 
     fn name(&self) -> String {
         format!(
-            "array_mutate_elements_ios{}({}, {}, {})",
+            "mutate_ptr{}({}, {}, {})",
             if self.force_unique { "" } else { "[unique]" },
-            self.io_act_name.to_string(),
-            self.arr_name.to_string(),
-            self.iostate_name.to_string(),
+            self.f_name.to_string(),
+            self.x_name.to_string(),
+            self.ios_name.to_string(),
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![
-            &mut self.arr_name,
-            &mut self.io_act_name,
-            &mut self.iostate_name,
-        ]
+        vec![&mut self.x_name, &mut self.f_name, &mut self.ios_name]
     }
 
     fn unique_check_operand(
@@ -9436,7 +8847,7 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
         if !self.force_unique {
             return None;
         }
-        unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
+        unique_check_on_boxed_leaf(LENT_VALUE_ARG, vec![], arg_tys, type_env)
     }
 
     fn assuming_local(&self) -> Box<dyn LLVMGen> {
@@ -9461,9 +8872,11 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // As in `InlineLLVMArrayMutateElementsInternalBody`, with the pair wrapped in the threaded
-        // `IOState`: result is `(ios, (array, action result))`.
-        Provenance::fresh_under(result_ty, type_env, &[1, 0])
+        // The value comes back uniquely owned, since this op clones it when shared and is given it
+        // unique otherwise — the same reasoning as an array set, and what lets an operation on the
+        // value that follows drop its check. The action's result comes out of an indirect call and
+        // stays `Unknown`.
+        Provenance::fresh_under(result_ty, type_env, &MUTATE_PTR_VALUE_PATH)
     }
 
     fn result_locality(
@@ -9472,7 +8885,27 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        mutated_in_place_locality(result_ty, arg_tys, type_env, 0, &[1, 0])
+        // The value comes back force-uniqued (or unique by the caller's promise, where the check is
+        // dropped), so its root is local. What it reaches is another matter: the function may write a
+        // reference to any object through the pointer it was given, so a payload that can hold one
+        // loses the deep fact. A payload of scalars reaches nothing at all, which is the bottom. The
+        // action's result comes out of an indirect call.
+        let payload_holds_boxed = arg_tys[LENT_VALUE_ARG]
+            .unpunched_field_types(type_env)
+            .iter()
+            .any(|(_, fty)| !boxed_leaf_paths(fty, type_env).is_empty());
+        let value_leaf = if payload_holds_boxed {
+            LeafCond::new(ExtCond::bottom(), ExtCond::Always)
+        } else {
+            LeafCond::bottom()
+        };
+        ExtShape::build_shape(result_ty, type_env, &|path| {
+            if path.starts_with(&MUTATE_PTR_VALUE_PATH) {
+                value_leaf.clone()
+            } else {
+                LeafCond::always()
+            }
+        })
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -9480,45 +8913,61 @@ impl LLVMGen for InlineLLVMArrayMutateElementsIosInternalBody {
     }
 }
 
-// _mutate_elements_ios_internal
-//   : (Ptr -> IOState -> (IOState, b)) -> Array a -> IOState -> (IOState, (Array a, b))
-pub fn array_mutate_elements_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const IO_ACT_NAME: &str = "act";
-    const ARR_NAME: &str = "array";
-    const IOSTATE_NAME: &str = "ios";
-    let a_ty = type_tyvar_star("a");
-    let b_ty = type_tyvar_star("b");
-    let array_ty = type_tyapp(make_array_ty(), a_ty);
-    let ab_ty = make_tuple_ty(vec![array_ty.clone(), b_ty.clone()]);
+/// The operand position of the value `InlineLLVMBorrowPtrBody` and `InlineLLVMMutatePtrBody` lend a
+/// pointer into.
+const LENT_VALUE_ARG: usize = 0;
+/// The path of the value in the result of `InlineLLVMMutatePtrBody`, `(ios, (value, action result))`.
+const MUTATE_PTR_VALUE_PATH: [usize; 2] = [1, 0];
+
+/// The definition of a function
+/// `(Ptr -> IOState -> (IOState, b)) -> x_ty -> IOState -> (IOState, (x_ty, b))` evaluated by
+/// `InlineLLVMMutatePtrBody`, whose type scheme has the predicates `preds`. `x_ty` must not
+/// mention `b`.
+fn mutate_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const F_NAME: &str = "f";
+    const X_NAME: &str = "x";
+    const IOS_NAME: &str = "ios";
+    let b_ty = lent_ptr_result_tyvar(&x_ty);
+    let xb_ty = make_tuple_ty(vec![x_ty.clone(), b_ty.clone()]);
     let scm = Scheme::generalize(
         &[],
-        vec![],
+        preds,
         vec![],
         type_fun(
             type_fun(make_ptr_ty(), make_io_runner_ty(b_ty)),
-            type_fun(array_ty, make_io_runner_ty(ab_ty.clone())),
+            type_fun(x_ty, make_io_runner_ty(xb_ty.clone())),
         ),
     );
-    let ret_ty = make_tuple_ty(vec![make_iostate_ty(), ab_ty]);
+    let ret_ty = make_tuple_ty(vec![make_iostate_ty(), xb_ty]);
     let expr = expr_abs_many(
-        vec![
-            var_local(IO_ACT_NAME),
-            var_local(ARR_NAME),
-            var_local(IOSTATE_NAME),
-        ],
+        vec![var_local(F_NAME), var_local(X_NAME), var_local(IOS_NAME)],
         expr_llvm(
-            Box::new(InlineLLVMArrayMutateElementsIosInternalBody {
-                assume_local: false,
-                arr_name: FullName::local(ARR_NAME),
-                io_act_name: FullName::local(IO_ACT_NAME),
-                iostate_name: FullName::local(IOSTATE_NAME),
+            Box::new(InlineLLVMMutatePtrBody {
+                x_name: FullName::local(X_NAME),
+                f_name: FullName::local(F_NAME),
+                ios_name: FullName::local(IOS_NAME),
                 force_unique: true,
+                assume_local: false,
             }),
             ret_ty,
             None,
         ),
     );
     (expr, scm)
+}
+
+/// `Std::Array::_mutate_elements_ios_internal
+///   : (Ptr -> IOState -> (IOState, b)) -> Array a -> IOState -> (IOState, (Array a, b))`
+pub fn array_mutate_elements_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
+    mutate_ptr_function(type_tyapp(make_array_ty(), type_tyvar_star("a")), vec![])
+}
+
+/// `Std::FFI::_mutate_boxed_ios_internal
+///   : [a : Boxed] (Ptr -> IOState -> (IOState, b)) -> a -> IOState -> (IOState, (a, b))`
+pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
+    let a_ty = type_tyvar_star("a");
+    let preds = vec![Predicate::make(make_boxed_trait(), a_ty.clone())];
+    mutate_ptr_function(a_ty, preds)
 }
 
 #[derive(Clone, Serialize, Deserialize)]
