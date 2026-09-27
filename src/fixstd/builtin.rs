@@ -55,6 +55,7 @@ use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use num_bigint::BigInt;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
+use std::iter;
 use std::sync::Arc;
 
 // Implement built-in functions, types, etc.
@@ -7687,7 +7688,7 @@ fn apply_with_env<'c, 'm>(
         args.len()
     );
     let mut tuple = create_obj(tuple_ty, &vec![], None, gc, Some("env_and_args"));
-    for (i, field) in std::iter::once(env).chain(args).enumerate() {
+    for (i, field) in iter::once(env).chain(args).enumerate() {
         tuple = ObjectFieldType::move_into_struct_field(gc, tuple, i as u32, &field);
     }
     gc.apply_lambda(f, vec![tuple], false).unwrap()
@@ -7717,7 +7718,7 @@ fn with_empty_env(
         .collect::<Vec<_>>();
 
     // `let ((), a_1, ..., a_n) = p; f(a_1)...(a_n)`
-    let field_pats = std::iter::once((
+    let field_pats = iter::once((
         "0".to_string(),
         PatternNode::make_struct(tycon(make_tuple_name_abs(0)), vec![]),
     ))
