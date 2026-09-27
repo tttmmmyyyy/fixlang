@@ -2,7 +2,7 @@ use crate::ast::name::FullName;
 use crate::commands::run::{build_executable, run, run_command};
 use crate::configuration::{BuildConfigType, Configuration};
 use crate::constants::{PROJECT_FILE_PATH, TEST_FUNCTION_NAME, TEST_MODULE_NAME};
-use crate::doc_test::{check_doc_test_module_name_is_free, collect_examples, ExampleTask};
+use crate::doc_test::{check_doc_test_module_name_is_free, collect_examples, ExampleTask, FixExample};
 use crate::elaboration::load_source_files;
 use crate::error::{panic_if_err, Errors};
 use crate::metafiles::project_file::ProjectFile;
@@ -62,35 +62,20 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
     // A Fix example is built without the arguments and the output path given for `Test::test`.
     config.run_program_args.clear();
     config.out_file_path = None;
-    let config_of_example = |source: &SourceFile| {
-        let mut config = config.clone();
-        config.doc_test_example = Some(source.clone());
-        config
-    };
     let mut passed = 0;
     let mut ignored = 0;
     for example in &examples {
         let location = example.location();
-        let failure = match &example.task {
-            ExampleTask::Ignore => {
+        match test_example(&config, example) {
+            ExampleOutcome::Ignored => {
                 eprintln!("doc test {} ... ignored", location);
                 ignored += 1;
-                continue;
             }
-            ExampleTask::Compile(source) => build_executable(config_of_example(source))
-                .err()
-                .map(|errors| errors.to_string()),
-            ExampleTask::Run(source) => match run(config_of_example(source), false) {
-                Ok(output) => run_failure(output),
-                Err(errors) => Some(errors.to_string()),
-            },
-        };
-        match failure {
-            None => {
+            ExampleOutcome::Passed => {
                 eprintln!("doc test {} ... {}", location, "ok".green());
                 passed += 1;
             }
-            Some(failure) => {
+            ExampleOutcome::Failed(failure) => {
                 eprintln!("doc test {} ... {}", location, "FAILED".red());
                 eprintln!("{}", failure);
                 failures.push(location);
@@ -112,6 +97,42 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
         eprintln!("    {}", failure);
     }
     process::exit(1);
+}
+
+/// What became of a Fix example `fix test` tested.
+pub enum ExampleOutcome {
+    /// The example did what its task asks: it compiled, and where it was run, it exited with status
+    /// 0.
+    Passed,
+    /// The example failed, for the reason given: the compile errors, or how the program ended and
+    /// what it wrote to the standard error.
+    Failed(String),
+    /// The example is marked `ignore`, so nothing was done with it.
+    Ignored,
+}
+
+/// Tests the Fix example `example` as its task asks: builds it under `config`, beside the sources
+/// `config` names, and runs it in a process of its own with its output collected.
+pub fn test_example(config: &Configuration, example: &FixExample) -> ExampleOutcome {
+    let config_of = |source: &SourceFile| {
+        let mut config = config.clone();
+        config.doc_test_example = Some(source.clone());
+        config
+    };
+    let failure = match &example.task {
+        ExampleTask::Ignore => return ExampleOutcome::Ignored,
+        ExampleTask::Compile(source) => build_executable(config_of(source))
+            .err()
+            .map(|errors| errors.to_string()),
+        ExampleTask::Run(source) => match run(config_of(source), false) {
+            Ok(output) => run_failure(output),
+            Err(errors) => Some(errors.to_string()),
+        },
+    };
+    match failure {
+        None => ExampleOutcome::Passed,
+        Some(failure) => ExampleOutcome::Failed(failure),
+    }
 }
 
 /// The files whose doc comments `fix test` takes the Fix examples of: those the `build` section of

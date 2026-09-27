@@ -1,9 +1,9 @@
 //! Tests of the Fix examples written in doc comments: the examples of `Std` itself, and what
 //! `fix test` does with the examples of a project.
 
-use crate::commands::run::{build_executable, run};
+use crate::commands::test::{test_example, ExampleOutcome};
 use crate::configuration::Configuration;
-use crate::doc_test::{collect_examples, examples_in_document, ExampleTask};
+use crate::doc_test::{collect_examples, examples_in_document};
 use crate::error::panic_if_err;
 use crate::parse::parser::parse_file_path;
 use crate::parse::sourcefile::{DocLine, SourceFile, Span};
@@ -40,33 +40,13 @@ fn test_std_doc_examples() {
     let mut failures = vec![];
     let mut tested = 0;
     for example in &examples {
-        let failure = match &example.task {
-            ExampleTask::Ignore => continue,
-            ExampleTask::Compile(source) => {
-                let mut config = config.clone();
-                config.doc_test_example = Some(source.clone());
-                build_executable(config)
-                    .err()
-                    .map(|errors| errors.to_string())
+        match test_example(&config, example) {
+            ExampleOutcome::Ignored => {}
+            ExampleOutcome::Passed => tested += 1,
+            ExampleOutcome::Failed(failure) => {
+                tested += 1;
+                failures.push(format!("{}:\n{}", example.location(), failure));
             }
-            ExampleTask::Run(source) => {
-                let mut config = config.clone();
-                config.doc_test_example = Some(source.clone());
-                match run(config, false) {
-                    Err(errors) => Some(errors.to_string()),
-                    Ok(Err(e)) => Some(format!("Failed to run the program: {}", e)),
-                    Ok(Ok(output)) if output.status.success() => None,
-                    Ok(Ok(output)) => Some(format!(
-                        "The program ended with {}.\n{}",
-                        output.status,
-                        String::from_utf8_lossy(&output.stderr)
-                    )),
-                }
-            }
-        };
-        tested += 1;
-        if let Some(failure) = failure {
-            failures.push(format!("{}:\n{}", example.location(), failure));
         }
     }
     assert!(
