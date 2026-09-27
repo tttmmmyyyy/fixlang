@@ -139,7 +139,7 @@ pub fn test_external_project_binary_heap() {
 }
 
 // `Std.Experimental` calls functions of the Fix runtime and private values of `Std`, so a change to
-// either can break it; this test is where that shows.
+// either can break it. This test catches such a change.
 #[test]
 pub fn test_external_project_std_experimental() {
     test_external_project(
