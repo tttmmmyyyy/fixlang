@@ -32,7 +32,12 @@ mod integration_tests {
 
         let releases_json = tags
             .iter()
-            .map(|tag| format!("  {{\n    \"tag_name\": \"{}\",\n    \"prerelease\": false\n  }}", tag))
+            .map(|tag| {
+                format!(
+                    "  {{\n    \"tag_name\": \"{}\",\n    \"prerelease\": false\n  }}",
+                    tag
+                )
+            })
             .collect::<Vec<_>>()
             .join(",\n");
         let releases_path = temp_dir.path().join("releases.json");
