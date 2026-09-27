@@ -1507,9 +1507,9 @@ namespace IO {
     // Reads one line from an IOHandle: the characters up to and including the next newline, or up to
     // the end of the file where the last line has no newline.
     //
-    // A line keeps its newline, so an empty line is returned as `"\n"`. At the end of the file, this
-    // function returns the empty string, and it is the only case in which it does. To read every line,
-    // call this function until it returns the empty string.
+    // A line keeps its newline, so an empty line is returned as `"\n"`. Once every line has been read,
+    // this function returns the empty string, and it is the only case in which it does. To read every
+    // line, call this function until it returns the empty string.
     // 
     // # Parameters
     // 
