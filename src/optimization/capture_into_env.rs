@@ -208,7 +208,11 @@ impl ExprVisitor for EnvFunctionCollector {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_tyanno(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_tyanno(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -220,7 +224,11 @@ impl ExprVisitor for EnvFunctionCollector {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_make_struct(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_make_struct(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -232,7 +240,11 @@ impl ExprVisitor for EnvFunctionCollector {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_array_lit(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_array_lit(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -244,7 +256,11 @@ impl ExprVisitor for EnvFunctionCollector {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_ffi_call(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_ffi_call(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -303,9 +319,8 @@ impl CaptureMover<'_> {
         }
 
         let id = self.counter;
-        let local = |suffix: &str| {
-            FullName::local(&format!("{}{}{}", CAPTURE_INTO_ENV_PREFIX, id, suffix))
-        };
+        let local =
+            |suffix: &str| FullName::local(&format!("{}{}{}", CAPTURE_INTO_ENV_PREFIX, id, suffix));
 
         // The capture struct, read where the lambda was bound.
         let fields = cap_names
@@ -504,7 +519,11 @@ impl ExprVisitor for CaptureMover<'_> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_tyanno(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_tyanno(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -516,7 +535,11 @@ impl ExprVisitor for CaptureMover<'_> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_make_struct(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_make_struct(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -528,7 +551,11 @@ impl ExprVisitor for CaptureMover<'_> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_array_lit(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_array_lit(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -540,7 +567,11 @@ impl ExprVisitor for CaptureMover<'_> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_ffi_call(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_ffi_call(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -704,7 +735,11 @@ impl ExprVisitor for UseFinder<'_> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_tyanno(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_tyanno(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -716,7 +751,11 @@ impl ExprVisitor for UseFinder<'_> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_make_struct(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_make_struct(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -728,7 +767,11 @@ impl ExprVisitor for UseFinder<'_> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_array_lit(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_array_lit(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -740,7 +783,11 @@ impl ExprVisitor for UseFinder<'_> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_ffi_call(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_ffi_call(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -895,7 +942,11 @@ impl ExprVisitor for OpRewriter<'_> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_tyanno(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_tyanno(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -907,7 +958,11 @@ impl ExprVisitor for OpRewriter<'_> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_make_struct(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_make_struct(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -919,7 +974,11 @@ impl ExprVisitor for OpRewriter<'_> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_array_lit(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_array_lit(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -931,7 +990,11 @@ impl ExprVisitor for OpRewriter<'_> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_ffi_call(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_ffi_call(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 

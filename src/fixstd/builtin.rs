@@ -7713,9 +7713,7 @@ fn with_empty_env(
     const G_NAME: &str = "#g";
     const ENV_NAME: &str = "#env";
     const P_NAME: &str = "#p";
-    let arg_names = (0..arity)
-        .map(|i| format!("#a{}", i))
-        .collect::<Vec<_>>();
+    let arg_names = (0..arity).map(|i| format!("#a{}", i)).collect::<Vec<_>>();
 
     // `let ((), a_1, ..., a_n) = p; f(a_1)...(a_n)`
     let field_pats = iter::once((
