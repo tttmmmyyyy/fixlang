@@ -3083,14 +3083,14 @@ impl Program {
         Ok(())
     }
 
-    /// The spans of the declarations that carry a doc comment of their own, each the span
+    /// The spans of the declarations that can carry a doc comment of their own, each the span
     /// `Span::get_document` reads the comment above: the modules, the global values, the types
     /// with their fields and variants, the traits with their members and associated types, the
     /// trait aliases, and the trait implementations. Each span is given once, in order.
     ///
     /// Asked of a program as it is loaded from its sources, before the compiler adds declarations
     /// of its own, these are the declarations written in the sources.
-    pub fn documented_declarations(&self) -> Vec<Span> {
+    pub fn documentable_declaration_spans(&self) -> Vec<Span> {
         let mut spans = vec![];
         spans.extend(self.modules.iter().map(|mi| mi.source.clone()));
         spans.extend(

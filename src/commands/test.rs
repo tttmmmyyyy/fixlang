@@ -2,7 +2,9 @@ use crate::ast::name::FullName;
 use crate::commands::run::{build_executable, run, run_command};
 use crate::configuration::{BuildConfigType, Configuration};
 use crate::constants::{PROJECT_FILE_PATH, TEST_FUNCTION_NAME, TEST_MODULE_NAME};
-use crate::doc_test::{check_doc_test_module_name_is_free, collect_examples, ExampleTask, FixExample};
+use crate::doc_test::{
+    check_doc_test_module_name_is_free, collect_examples, ExampleTask, FixExample,
+};
 use crate::elaboration::load_source_files;
 use crate::error::{panic_if_err, Errors};
 use crate::metafiles::project_file::ProjectFile;

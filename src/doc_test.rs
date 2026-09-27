@@ -120,8 +120,8 @@ pub fn collect_examples(program: &Program, files: &[PathBuf]) -> Result<Vec<FixE
 
     let mut examples = vec![];
     let mut errors = Errors::empty();
-    for declaration in program.documented_declarations() {
-        let path = to_absolute_path(&declaration.input.file_path)?;
+    for span in program.documentable_declaration_spans() {
+        let path = to_absolute_path(&span.input.file_path)?;
         if !files.contains(&path) {
             continue;
         }
@@ -132,7 +132,7 @@ pub fn collect_examples(program: &Program, files: &[PathBuf]) -> Result<Vec<FixE
             )
         });
         errors.eat_err_or(
-            examples_in_document(&declaration.document_lines()?, module),
+            examples_in_document(&span.document_lines()?, module),
             |found| examples.extend(found),
         );
     }
@@ -273,8 +273,7 @@ fn assemble_example(
 
     // The source is saved under a name the origin decides, so that a source read back from a
     // cache, which carries its path, finds this content and this origin at that path.
-    let origin_text =
-        serde_json::to_string(&origin).expect("a `SourceOrigin` is written as JSON");
+    let origin_text = serde_json::to_string(&origin).expect("a `SourceOrigin` is written as JSON");
     let file_name = format!("doc_test.{}", md5_hex(&origin_text));
     let save = |content: String| -> Result<SourceFile, Errors> {
         Ok(save_temporary_source(&content, &file_name)?.with_origin(origin.clone()))
