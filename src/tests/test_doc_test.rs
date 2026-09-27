@@ -730,3 +730,36 @@ second = 2;
         document
     );
 }
+
+/// A compile error at the end of a Fix example's source is reported inside the doc comment, at the
+/// closing fence: an unterminated string swallows the end of an example written as statements, and
+/// an unclosed call ends an example written as a module.
+#[test]
+fn test_error_at_the_end_of_an_example_is_reported_at_the_closing_fence() {
+    let lib = r#"module Lib;
+
+// ```fix
+// println("abc
+// ```
+value : I64;
+value = 1;
+
+// ```fix
+// module DocTest;
+// main : IO () = pure(
+// ```
+other : I64;
+other = 1;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for (position, fence) in [("5:4-5:4", "5 | // ```"), ("12:4-12:4", "12 | // ```")] {
+        assert!(
+            stderr.contains(&format!("{} in \"lib.fix\"", position)) && stderr.contains(fence),
+            "the error is reported at the closing fence \"{}\"\n{}",
+            fence,
+            streams(&output)
+        );
+    }
+}

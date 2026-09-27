@@ -191,8 +191,9 @@ pub struct SourceOrigin {
     pub file_path: PathBuf,
     /// The line of `file_path` the first line of the assembled source was taken from, counted from 1.
     pub first_line: usize,
-    /// How each line of the assembled source relates to its line of `file_path`, in order. A line
-    /// past the end of this list stands where its line of `file_path` does.
+    /// How each line of the assembled source relates to its line of `file_path`, in order. It is
+    /// never empty. The end of the source, past the line break that ends its last line, stands
+    /// where the last line does.
     pub lines: Vec<LineOrigin>,
 }
 
@@ -212,12 +213,23 @@ impl SourceOrigin {
     /// The line and the column of the origin's file that the position at `line` and `column` of
     /// the assembled source stands at. All of them count from 1.
     pub fn position(&self, (line, column): (usize, usize)) -> (usize, usize) {
-        let origin_line = self.first_line + line - 1;
-        match self.lines.get(line - 1) {
-            Some(LineOrigin::Taken { shift }) => (origin_line, column + shift),
-            Some(LineOrigin::Written { column, .. }) => (origin_line, *column),
-            None => (origin_line, column),
+        let (origin_line, line_origin) = self.line(line);
+        match line_origin {
+            LineOrigin::Taken { shift } => (origin_line, column + shift),
+            LineOrigin::Written { column, .. } => (origin_line, *column),
         }
+    }
+
+    /// The line of the origin's file that line `line` of the assembled source stands for, counted
+    /// from 1, and how the two relate.
+    fn line(&self, line: usize) -> (usize, &LineOrigin) {
+        assert!(
+            !self.lines.is_empty(),
+            "an assembled source taken from \"{}\" has a line",
+            self.file_path.to_string_lossy()
+        );
+        let index = (line - 1).min(self.lines.len() - 1);
+        (self.first_line + index, &self.lines[index])
     }
 
     /// `quoted`, a line of the assembled source quoted under a diagnostic, as the line of the
@@ -226,9 +238,9 @@ impl SourceOrigin {
     /// cannot be read, in which case the text quoted is the assembled one.
     fn quote(&self, quoted: QuotedLine, origin_lines: Option<&Vec<&str>>) -> QuotedLine {
         let (line, column) = self.position((quoted.line, quoted.column));
-        let width = match self.lines.get(quoted.line - 1) {
-            Some(LineOrigin::Written { width, .. }) => *width,
-            _ => quoted.width,
+        let width = match self.line(quoted.line).1 {
+            LineOrigin::Written { width, .. } => *width,
+            LineOrigin::Taken { .. } => quoted.width,
         };
         match origin_lines.and_then(|lines| lines.get(line - 1)) {
             Some(text) => QuotedLine {
@@ -450,6 +462,16 @@ impl Span {
             })
             .collect::<Vec<_>>();
         if let Some(origin) = &self.input.origin {
+            // A span at the end of the source reaches no line of it, and the origin still has the
+            // line that end stands for, so that line is quoted.
+            if quoted_lines.is_empty() {
+                quoted_lines.push(QuotedLine {
+                    line: start.0,
+                    text: String::new(),
+                    column: start.1,
+                    width: 1,
+                });
+            }
             start = origin.position(start);
             end = origin.position(end);
             let origin_string = SourceFile::from_file_path(origin.file_path.clone()).string();
