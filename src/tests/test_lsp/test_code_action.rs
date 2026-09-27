@@ -322,6 +322,16 @@ mod tests {
             new_text
         );
         assert!(
+            new_text.contains("size_of : Main::MyData -> Std::I64 = |x| ?;"),
+            "A document listing more names than the type has arguments should give a lambda of as many parameters as the type has arguments. Got: {:?}",
+            new_text
+        );
+        assert!(
+            new_text.contains("label : Std::String -> Main::MyData -> Std::String = |prefix| ?;"),
+            "A lambda should stop before a name that cannot name a variable. Got: {:?}",
+            new_text
+        );
+        assert!(
             new_text.contains("get_elem : Main::MyData -> Main::MyTrait::Elem Main::MyData = ?;"),
             "Member get_elem, whose document lists no parameters, should be stubbed without a lambda. Got: {:?}",
             new_text

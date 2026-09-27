@@ -932,6 +932,21 @@ impl TypeNode {
         );
     }
 
+    /// The number of arguments a function type `a -> b -> c` takes, counting each arrow of the
+    /// chain; a type that is not a function type takes none.
+    ///
+    /// # Examples
+    /// `a -> b -> c` gives 2, `a -> (b -> c)` gives 2 as well, and `(a -> b) -> c` gives 1.
+    pub fn closure_arity(self: &Arc<TypeNode>) -> usize {
+        let mut arity = 0;
+        let mut ty = self.clone();
+        while ty.is_closure() {
+            arity += 1;
+            ty = ty.get_lambda_dst();
+        }
+        arity
+    }
+
     /// The result type of a closure type or a function pointer type. Panics for any other type.
     ///
     /// # Examples
