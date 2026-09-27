@@ -12,7 +12,7 @@ mod integration_tests {
     use std::fs::{self, Permissions};
     use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
-    use std::process::{Command, Output, Stdio};
+    use std::process::{Command, ExitStatus, Output, Stdio};
     use tempfile::TempDir;
 
     /// Writes `content` to `path` as a stand-in command that `install.sh` finds on `PATH`.
@@ -153,16 +153,25 @@ sys.exit(os.waitstatus_to_exitcode(status) & 0xff)
             .expect("Failed to run install.sh on a pseudo-terminal")
     }
 
+    /// Runs `install.sh` in `temp_dir` on a pseudo-terminal, taking the default version and
+    /// agreeing to overwrite the installed `fix`, and returns its exit status and what the terminal
+    /// showed. Asserts that the script asked whether to overwrite and read the answer from the
+    /// terminal.
+    fn run_install_script_agreeing_to_overwrite(temp_dir: &TempDir) -> (ExitStatus, String) {
+        let output = run_install_script_on_terminal(temp_dir, "\ny\n");
+        let terminal = String::from_utf8_lossy(&output.stdout).into_owned();
+        assert!(terminal.contains("Overwrite? [y/N]"), "{}", terminal);
+        assert!(!terminal.contains("non-interactive"), "{}", terminal);
+        (output.status, terminal)
+    }
+
     /// The file names in the install directory, `~/.local/bin`, of a run's home.
     fn installed_files(temp_dir: &TempDir) -> Vec<String> {
         let install_dir = temp_dir.path().join("home/.local/bin");
         let mut names = fs::read_dir(&install_dir)
-            .map(|entries| {
-                entries
-                    .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+            .expect("install.sh did not reach the download: it made no install directory")
+            .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
         names.sort();
         names
     }
@@ -310,11 +319,8 @@ sys.exit(os.waitstatus_to_exitcode(status) & 0xff)
     fn test_install_script_keeps_the_installed_binary_after_a_failed_download() {
         let temp_dir = install_script_fixture(&["v1.5.0"], DOWNLOAD_DROPS);
         let installed = install_existing_fix(&temp_dir, b"installed\n");
-        let output = run_install_script_on_terminal(&temp_dir, "\ny\n");
-        let terminal = String::from_utf8_lossy(&output.stdout);
-        assert!(terminal.contains("Overwrite? [y/N]"), "{}", terminal);
-        assert!(!terminal.contains("non-interactive"), "{}", terminal);
-        assert!(!output.status.success(), "{}", terminal);
+        let (status, terminal) = run_install_script_agreeing_to_overwrite(&temp_dir);
+        assert!(!status.success(), "{}", terminal);
         assert_eq!(installed_files(&temp_dir), vec!["fix"], "{}", terminal);
         assert_eq!(fs::read_to_string(&installed).unwrap(), "installed\n");
     }
@@ -357,13 +363,10 @@ sys.exit(os.waitstatus_to_exitcode(status) & 0xff)
             .arg("60")
             .spawn()
             .expect("Failed to run the installed binary");
-        let output = run_install_script_on_terminal(&temp_dir, "\ny\n");
+        let (status, terminal) = run_install_script_agreeing_to_overwrite(&temp_dir);
         running.kill().unwrap();
         running.wait().unwrap();
-        let terminal = String::from_utf8_lossy(&output.stdout);
-        assert!(terminal.contains("Overwrite? [y/N]"), "{}", terminal);
-        assert!(!terminal.contains("non-interactive"), "{}", terminal);
-        assert!(output.status.success(), "{}", terminal);
+        assert!(status.success(), "{}", terminal);
         assert_eq!(installed_files(&temp_dir), vec!["fix"], "{}", terminal);
         assert_eq!(fs::read_to_string(&installed).unwrap(), "placeholder\n");
     }
