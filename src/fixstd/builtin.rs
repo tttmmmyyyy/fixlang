@@ -4850,15 +4850,7 @@ impl LLVMGen for InlineLLVMArrayGetPtrBody {
         // Get pointer
         let ptr = get_array_storage_buf(gc, &array);
 
-        // Make returned object
-        let obj = create_obj(
-            make_ptr_ty(),
-            &vec![],
-            None,
-            gc,
-            Some("alloca@get_ptr_array"),
-        );
-        obj.insert_field(gc, 0, ptr)
+        make_ptr_obj(gc, ptr, "alloca@get_ptr_array")
     }
 
     fn name(&self) -> String {
@@ -8514,14 +8506,7 @@ fn rc_function_of_boxed_value<'c, 'm>(
     };
     let func_ptr = func.as_global_value().as_pointer_value();
 
-    let ret = create_obj(
-        make_ptr_ty(),
-        &vec![],
-        None,
-        gc,
-        Some(&format!("ret_val@get_funptr_{}", operation)),
-    );
-    ret.insert_field(gc, 0, func_ptr)
+    make_ptr_obj(gc, func_ptr, &format!("ret_val@get_funptr_{}", operation))
 }
 
 // PROOF: D/A, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -8675,15 +8660,7 @@ impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
         // Get data pointer.
         let data_ptr = get_data_pointer_from_boxed_value(gc, &obj);
 
-        // Make returned object.
-        let ret = create_obj(
-            make_ptr_ty(),
-            &vec![],
-            None,
-            gc,
-            Some("ret_val@_get_boxed_ptr"),
-        );
-        ret.insert_field(gc, 0, data_ptr)
+        make_ptr_obj(gc, data_ptr, "ret_val@_get_boxed_ptr")
     }
 
     fn name(&self) -> String {
@@ -8718,9 +8695,14 @@ fn apply_to_ptr<'c, 'm>(
     f: Object<'c>,
     ptr: PointerValue<'c>,
 ) -> Object<'c> {
-    let ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("lent_ptr"));
-    let ptr_obj = ptr_obj.insert_field(gc, 0, ptr);
+    let ptr_obj = make_ptr_obj(gc, ptr, "lent_ptr");
     gc.apply_lambda(f, vec![ptr_obj], false).unwrap()
+}
+
+/// Wraps `ptr` as a Fix `Ptr` value.
+fn make_ptr_obj<'c, 'm>(gc: &mut Generator<'c, 'm>, ptr: PointerValue<'c>, name: &str) -> Object<'c> {
+    let obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some(name));
+    obj.insert_field(gc, 0, ptr)
 }
 
 /// The pointer to the payload of a boxed value: the fields of a boxed struct, or the payload buffer
@@ -8737,9 +8719,7 @@ fn get_data_pointer_from_boxed_value<'c, 'm>(
         ObjectFieldType::get_union_buf_idx(gc, val)
     };
 
-    // Get pointer
-    let ptr = val.gep_boxed(gc, data_field_idx);
-    ptr
+    val.gep_boxed(gc, data_field_idx)
 }
 
 pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
