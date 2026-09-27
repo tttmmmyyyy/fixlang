@@ -7,7 +7,7 @@
 
 use crate::{
     ast::{name::Name, program::Program},
-    commands::docs::is_fence_line,
+    commands::docs::CodeFence,
     constants::{DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME},
     error::Errors,
     hash::md5_hex,
@@ -38,7 +38,7 @@ pub fn docstring_for_display(docstring: &str) -> String {
         .map(|line| Some(line.to_string()))
         .collect::<Vec<_>>();
     for block in fix_example_blocks(&lines) {
-        shown_lines[block.open] = Some(fence_with_info(lines[block.open], "fix"));
+        shown_lines[block.open] = Some(format!("{}fix", block.fence.prefix));
         for index in block.open + 1..block.close.unwrap_or(lines.len()) {
             if !matches!(ExampleLine::classify(lines[index]), ExampleLine::Shown(_)) {
                 shown_lines[index] = None;
@@ -177,7 +177,7 @@ fn example_of_block(
 
     let mut ignore = false;
     let mut no_run = false;
-    for mark in info_items(info_string(&opening.text)).skip(1) {
+    for mark in info_items(block.fence.info).skip(1) {
         match mark {
             IGNORE_MARK => ignore = true,
             NO_RUN_MARK => no_run = true,
@@ -318,47 +318,46 @@ fn fence_origin(line: &DocLine) -> (usize, LineOrigin) {
 }
 
 /// A fenced code block of a docstring, by the indices of its lines.
-struct FencedBlock {
+struct FencedBlock<'a> {
     /// The index of the line opening the block.
     open: usize,
+    /// The fence that line opens the block with.
+    fence: CodeFence<'a>,
     /// The index of the line closing the block, or `None` for a block the docstring ends inside.
     close: Option<usize>,
 }
 
-/// The fenced code blocks of the docstring whose lines are `lines`, in order. A fence line opens a
-/// block, and the next fence line closes it.
-fn fenced_blocks(lines: &[&str]) -> Vec<FencedBlock> {
+/// The fenced code blocks of the docstring whose lines are `lines`, in order.
+fn fenced_blocks<'a>(lines: &[&'a str]) -> Vec<FencedBlock<'a>> {
     let mut blocks = vec![];
-    let mut open = None;
+    let mut open: Option<(usize, CodeFence)> = None;
     for (index, line) in lines.iter().enumerate() {
-        if !is_fence_line(line) {
-            continue;
-        }
         match open.take() {
-            None => open = Some(index),
-            Some(open) => blocks.push(FencedBlock {
-                open,
+            None => open = CodeFence::opening(line).map(|fence| (index, fence)),
+            Some((open_index, fence)) if fence.is_closed_by(line) => blocks.push(FencedBlock {
+                open: open_index,
+                fence,
                 close: Some(index),
             }),
+            Some(still_open) => open = Some(still_open),
         }
     }
-    if let Some(open) = open {
-        blocks.push(FencedBlock { open, close: None });
+    if let Some((open, fence)) = open {
+        blocks.push(FencedBlock {
+            open,
+            fence,
+            close: None,
+        });
     }
     blocks
 }
 
 /// The fenced code blocks of the docstring whose lines are `lines` that are Fix examples, in order.
-fn fix_example_blocks(lines: &[&str]) -> Vec<FencedBlock> {
+fn fix_example_blocks<'a>(lines: &[&'a str]) -> Vec<FencedBlock<'a>> {
     fenced_blocks(lines)
         .into_iter()
-        .filter(|block| is_fix_example(info_string(lines[block.open])))
+        .filter(|block| is_fix_example(block.fence.info))
         .collect()
-}
-
-/// The info string of the block `fence` opens: what follows its backticks, trimmed.
-fn info_string(fence: &str) -> &str {
-    fence.trim_start().trim_start_matches('`').trim()
 }
 
 /// The items of the info string `info`, separated by `,` and trimmed. The first is the language of
@@ -371,14 +370,6 @@ fn info_items(info: &str) -> impl Iterator<Item = &str> {
 /// string is `fix`.
 fn is_fix_example(info: &str) -> bool {
     info_items(info).next() == Some("fix")
-}
-
-/// The fence `fence` with its info string replaced by `info`.
-fn fence_with_info(fence: &str, info: &str) -> String {
-    let (indent, after_indent) = split_indent(fence);
-    let backticks =
-        &after_indent[..after_indent.len() - after_indent.trim_start_matches('`').len()];
-    format!("{}{}{}", indent, backticks, info)
 }
 
 /// `line` split into its indentation and the text that follows it.
@@ -454,6 +445,29 @@ mod tests {
             docstring_for_display("```fix\n# hidden\nshown"),
             "```fix\nshown",
             "an example the docstring ends inside is shown up to the end"
+        );
+    }
+
+    /// A fenced code block is closed by a fence of its own character, at least as long as the one
+    /// that opened it, with nothing else on the line, as in CommonMark. A Fix example can therefore
+    /// hold a shorter fence, a block of tildes can hold a Fix example as text, and a line of inline
+    /// code opens nothing.
+    #[test]
+    fn test_code_fences_pair_as_in_commonmark() {
+        assert_eq!(
+            docstring_for_display("````fix\n# hidden\n```\n# hidden after the inner fence\n````\n"),
+            "````fix\n```\n````\n",
+            "a shorter fence inside a Fix example belongs to the example"
+        );
+        assert_eq!(
+            docstring_for_display("~~~text\n```fix\n# shown\n```\n~~~\n"),
+            "~~~text\n```fix\n# shown\n```\n~~~\n",
+            "a Fix example written inside a block of tildes is text of that block"
+        );
+        assert_eq!(
+            docstring_for_display("```x```\n```fix\n# hidden\n```\n"),
+            "```x```\n```fix\n```\n",
+            "a line of inline code opens no block"
         );
     }
 }
