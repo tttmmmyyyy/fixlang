@@ -51,7 +51,7 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
-        mpsc::{self, Receiver, Sender},
+        mpsc::{self, Receiver, RecvTimeoutError, Sender},
         Arc,
     },
 };
@@ -195,12 +195,7 @@ impl LatestContent {
     /// content does not parse.
     pub(super) fn get_import_stmts(&mut self) -> &Option<Vec<ImportStatement>> {
         if self.import_stmts.is_none() {
-            let import_stmts = parse_str_import_statements(self.path.clone(), &self.content);
-            if let Ok(import_stmts) = import_stmts {
-                self.import_stmts = Some(import_stmts);
-            } else {
-                self.import_stmts = None;
-            }
+            self.import_stmts = parse_str_import_statements(self.path.clone(), &self.content).ok();
         }
         &self.import_stmts
     }
@@ -209,12 +204,7 @@ impl LatestContent {
     /// not parse.
     pub(super) fn get_module_info(&mut self) -> &Option<ModuleInfo> {
         if self.module_info.is_none() {
-            let module_info = parse_str_module_defn(self.path.clone(), &self.content);
-            if let Ok(module_info) = module_info {
-                self.module_info = Some(module_info);
-            } else {
-                self.module_info = None;
-            }
+            self.module_info = parse_str_module_defn(self.path.clone(), &self.content).ok();
         }
         &self.module_info
     }
@@ -229,7 +219,7 @@ pub fn launch_language_server() {
     let (diag_req_send, diag_req_recv) = mpsc::channel::<DiagnosticsMessage>();
     let mut diag_req_recv = Some(diag_req_recv);
 
-    // Prepare a channel to response from the diagnostics thread.
+    // Prepare a channel to receive the results of the diagnostics thread.
     let (diag_res_send, diag_res_recv) = mpsc::channel::<DiagnosticsResult>();
 
     // Session-scoped typecheck cache, owned by this loop and shared with the diagnostics thread
@@ -312,17 +302,12 @@ pub fn launch_language_server() {
         if let Some(method) = message.method.as_ref() {
             write_log!("Handling method: {}", method);
             if method == "initialize" {
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<InitializeParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<InitializeParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                handle_initialize(id.unwrap(), &params.unwrap());
+                };
+                handle_initialize(id, &params);
             } else if method == "initialized" {
-                let params: Option<InitializedParams> = parase_params(message.params.unwrap());
+                let params: Option<InitializedParams> = parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -350,14 +335,14 @@ pub fn launch_language_server() {
                 break;
             } else if method == "textDocument/didOpen" {
                 let params: Option<DidOpenTextDocumentParams> =
-                    parase_params(message.params.unwrap());
+                    parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
                 handle_textdocument_did_open(&params.unwrap(), &mut uri_to_latest_content);
             } else if method == "textDocument/didChange" {
                 let params: Option<DidChangeTextDocumentParams> =
-                    parase_params(message.params.unwrap());
+                    parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -372,7 +357,7 @@ pub fn launch_language_server() {
                 );
             } else if method == "textDocument/didSave" {
                 let params: Option<DidSaveTextDocumentParams> =
-                    parase_params(message.params.unwrap());
+                    parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -384,7 +369,7 @@ pub fn launch_language_server() {
                 );
             } else if method == "workspace/didChangeConfiguration" {
                 let params: Option<DidChangeConfigurationParams> =
-                    parase_params(message.params.unwrap());
+                    parse_params(message.params.unwrap());
                 if params.is_none() {
                     continue;
                 }
@@ -394,27 +379,22 @@ pub fn launch_language_server() {
                     &mut analyze_on_save,
                 );
             } else if method == "textDocument/completion" {
-                // Don't gate on `last_diag.is_some()` — the dot-context
+                // Answered whether or not `last_diag` is set: the dot-context
                 // completion pipeline runs its own `error_tolerant`
                 // elaborate over the live buffer, so it can produce
                 // candidates even when the saved file fails to parse
                 // and the diagnostics thread therefore never sends a
-                // `DiagnosticsResult`. Silently dropping the request
-                // in that state makes the client wait forever (looks
-                // like the LSP crashed). Pass `None` for the snapshot
-                // program and let `handle_completion` fall back to the
-                // dot-extract program (or reply empty).
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                // `DiagnosticsResult`. The client waits for an answer to
+                // every completion request, and an unanswered one looks
+                // like a crashed server. With `None` for the snapshot
+                // program, `handle_completion` falls back to the
+                // dot-extract program (or replies empty).
+                let Some((id, params)) = parse_request::<CompletionParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<CompletionParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 completion::handle_completion(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     last_diag.as_ref().map(|d| &d.program),
                     &uri_to_latest_content,
                     typecheck_cache.clone(),
@@ -424,17 +404,12 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<CompletionItem>(&message, method) else {
                     continue;
-                }
-                let params: Option<CompletionItem> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 completion::handle_completion_resolve_document(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     &mut uri_to_latest_content,
                     program,
                 );
@@ -443,161 +418,95 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<HoverParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<HoverParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                hover::handle_hover(
-                    id.unwrap(),
-                    &params.unwrap(),
-                    program,
-                    &uri_to_latest_content,
-                );
+                };
+                hover::handle_hover(id, &params, program, &uri_to_latest_content);
             } else if method == "textDocument/definition" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<GotoDefinitionParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<GotoDefinitionParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 goto_definition::handle_goto_definition(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     program,
                     &uri_to_latest_content,
                 );
             } else if method == "textDocument/documentSymbol" {
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<DocumentSymbolParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<DocumentSymbolParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 if last_diag.is_none() {
-                    pending_requests.push_back(PendingRequest::DocumentSymbol {
-                        id: id.unwrap(),
-                        params: params.unwrap(),
-                    });
+                    pending_requests.push_back(PendingRequest::DocumentSymbol { id, params });
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                document_symbol::handle_document_symbol(id.unwrap(), &params.unwrap(), program);
+                document_symbol::handle_document_symbol(id, &params, program);
             } else if method == "workspace/symbol" {
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<WorkspaceSymbolParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<WorkspaceSymbolParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 if last_diag.is_none() {
-                    pending_requests.push_back(PendingRequest::WorkspaceSymbol {
-                        id: id.unwrap(),
-                        params: params.unwrap(),
-                    });
+                    pending_requests.push_back(PendingRequest::WorkspaceSymbol { id, params });
                     continue;
                 }
                 let diag = last_diag.as_ref().unwrap();
-                workspace_symbol::handle_workspace_symbol(id.unwrap(), &params.unwrap(), diag);
+                workspace_symbol::handle_workspace_symbol(id, &params, diag);
             } else if method == "textDocument/codeAction" {
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<CodeActionParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<CodeActionParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 let program = last_diag.as_ref().map(|d| &d.program);
-                code_action::handle_code_action(
-                    id.unwrap(),
-                    &params.unwrap(),
-                    program,
-                    &mut uri_to_latest_content,
-                );
+                code_action::handle_code_action(id, &params, program, &mut uri_to_latest_content);
             } else if method == "textDocument/references" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<ReferenceParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<ReferenceParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                references::handle_references(
-                    id.unwrap(),
-                    &params.unwrap(),
-                    program,
-                    &uri_to_latest_content,
-                );
+                };
+                references::handle_references(id, &params, program, &uri_to_latest_content);
             } else if method == "textDocument/rename" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let diag = last_diag.as_ref().unwrap();
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<RenameParams>(&message, method) else {
                     continue;
-                }
-                let params: Option<RenameParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                rename::handle_rename(id.unwrap(), &params.unwrap(), diag, &uri_to_latest_content);
+                };
+                rename::handle_rename(id, &params, diag, &uri_to_latest_content);
             } else if method == "textDocument/prepareRename" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let diag = last_diag.as_ref().unwrap();
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) =
+                    parse_request::<TextDocumentPositionParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<TextDocumentPositionParams> =
-                    parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                rename::handle_prepare_rename(
-                    id.unwrap(),
-                    &params.unwrap(),
-                    diag,
-                    &uri_to_latest_content,
-                );
+                };
+                rename::handle_prepare_rename(id, &params, diag, &uri_to_latest_content);
             } else if method == "textDocument/prepareCallHierarchy" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) =
+                    parse_request::<CallHierarchyPrepareParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<CallHierarchyPrepareParams> =
-                    parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 references::handle_call_hierarchy_prepare(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     program,
                     &uri_to_latest_content,
                 );
@@ -606,46 +515,34 @@ pub fn launch_language_server() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) =
+                    parse_request::<CallHierarchyIncomingCallsParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<CallHierarchyIncomingCallsParams> =
-                    parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                references::handle_call_hierarchy_incoming(id.unwrap(), &params.unwrap(), program);
+                };
+                references::handle_call_hierarchy_incoming(id, &params, program);
             } else if method == "callHierarchy/outgoingCalls" {
                 if last_diag.is_none() {
                     continue;
                 }
                 let program = &last_diag.as_ref().unwrap().program;
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) =
+                    parse_request::<CallHierarchyOutgoingCallsParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<CallHierarchyOutgoingCallsParams> =
-                    parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
-                references::handle_call_hierarchy_outgoing(id.unwrap(), &params.unwrap(), program);
+                };
+                references::handle_call_hierarchy_outgoing(id, &params, program);
             } else if method == "textDocument/semanticTokens/full" {
-                // Intentionally not gated on `last_diag`: semantic tokens are
+                // Answered whether or not `last_diag` is set: semantic tokens are
                 // produced by a never-failing lexer over the live buffer, so
                 // highlighting works even while the file does not parse.
-                let id = parse_id(&message, method);
-                if id.is_none() {
+                let Some((id, params)) = parse_request::<SemanticTokensParams>(&message, method)
+                else {
                     continue;
-                }
-                let params: Option<SemanticTokensParams> = parase_params(message.params.unwrap());
-                if params.is_none() {
-                    continue;
-                }
+                };
                 semantic_tokens::handle_semantic_tokens_full(
-                    id.unwrap(),
-                    &params.unwrap(),
+                    id,
+                    &params,
                     &uri_to_latest_content,
                     last_diag.as_ref(),
                 );
@@ -655,7 +552,7 @@ pub fn launch_language_server() {
 }
 
 /// Read the `params` of a message as `T`. A payload that does not read as `T` is logged.
-pub(super) fn parase_params<T: DeserializeOwned>(params: Value) -> Option<T> {
+pub(super) fn parse_params<T: DeserializeOwned>(params: Value) -> Option<T> {
     let params: Result<T, _> = serde_json::from_value(params);
     if params.is_err() {
         let mut msg = "Failed to parse the params: \n".to_string();
@@ -677,6 +574,14 @@ fn parse_id(message: &JSONRPCMessage, method: &str) -> Option<u32> {
         return None;
     }
     message.id
+}
+
+/// The `id` of the request `message` and its `params` read as `T`. A request missing either is
+/// logged, the missing `id` under `method`, the request's method.
+fn parse_request<T: DeserializeOwned>(message: &JSONRPCMessage, method: &str) -> Option<(u32, T)> {
+    let id = parse_id(message, method)?;
+    let params = parse_params(message.params.clone().unwrap())?;
+    Some((id, params))
 }
 
 /// Send a server-initiated JSON-RPC request (carrying both an `id` and a
@@ -946,7 +851,7 @@ fn handle_textdocument_did_change(
     uri_to_latest_content: &mut Map<Uri, LatestContent>,
     analyze_on_type: bool,
 ) {
-    // Store the content of the file into `uri_to_content`. This must
+    // Store the content of the file into `uri_to_latest_content`. This must
     // happen even when on-type analysis is off, so other features
     // (completion, hover) still see the live buffer.
     if let Some(last_change) = params.content_changes.last() {
@@ -972,7 +877,7 @@ fn handle_textdocument_did_save(
     uri_to_latest_content: &mut Map<Uri, LatestContent>,
     analyze_on_save: bool,
 ) {
-    // Store the content of the file into maps.
+    // Store the content of the file into `uri_to_latest_content`.
     if let Some(text) = &params.text {
         record_latest_content(uri_to_latest_content, &params.text_document.uri, text);
     } else {
@@ -1050,7 +955,7 @@ fn diagnostics_thread(
             let debounce = Duration::from_millis(debounce_ms.load(Ordering::Relaxed));
             match req_recv.recv_timeout(debounce) {
                 Ok(msg) => Some(msg),
-                Err(mpsc::RecvTimeoutError::Timeout) => {
+                Err(RecvTimeoutError::Timeout) => {
                     run_diagnostics_pass(
                         pending.take().unwrap(),
                         &typecheck_cache,
@@ -1060,7 +965,7 @@ fn diagnostics_thread(
                     continue;
                 }
                 // The sender was dropped: stop the diagnostics thread.
-                Err(mpsc::RecvTimeoutError::Disconnected) => None,
+                Err(RecvTimeoutError::Disconnected) => None,
             }
         };
         match msg {
@@ -1206,17 +1111,15 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> Diagnostic {
         .map(|(_, span)| span_to_range(span))
         .unwrap_or_default();
 
-    // Other spans are shown in related informations.
+    // Other spans are shown as related information.
     let mut related_information = vec![];
     for (msg, span) in err.srcs.iter().skip(1) {
         // Convert span to location.
-        let location = span_to_location(span, cdir);
-        if location.is_none() {
+        let Some(location) = span_to_location(span, cdir) else {
             continue;
-        }
-        let location = location.unwrap();
+        };
 
-        // Create related informations.
+        // Create the related information.
         let related = DiagnosticRelatedInformation {
             location,
             message: if msg.len() > 0 {
@@ -1266,36 +1169,27 @@ pub(super) fn get_file_content_at_previous_diagnostics(
     program: &Program,
     queried_path: &Path,
 ) -> Result<String, String> {
+    let queried_path_abs = to_absolute_path(queried_path).map_err(|_| {
+        format!(
+            "Failed to get the absolute path of the file: \"{}\"",
+            queried_path.to_string_lossy()
+        )
+    })?;
     for mi in &program.modules {
         let src = &mi.source.input;
-        let path_abs = to_absolute_path(&queried_path);
-        if path_abs.is_err() {
-            let msg = format!(
-                "Failed to get the absolute path of the file: \"{}\"",
-                queried_path.to_string_lossy().to_string()
-            );
-            return Err(msg);
-        }
-        let queried_path_abs = path_abs.ok().unwrap();
-        let src_file_path_abs = to_absolute_path(&src.file_path);
-        if src_file_path_abs.is_err() {
-            let msg = format!(
+        let src_file_path = to_absolute_path(&src.file_path).map_err(|_| {
+            format!(
                 "Failed to get the absolute path of the source file: \"{}\"",
-                src.file_path.to_string_lossy().to_string()
-            );
-            return Err(msg);
-        }
-        let src_file_path = src_file_path_abs.ok().unwrap();
+                src.file_path.to_string_lossy()
+            )
+        })?;
         if src_file_path == queried_path_abs {
-            let content = src.string();
-            if let Err(_e) = content {
-                let msg = format!(
+            return src.string().map_err(|_| {
+                format!(
                     "Failed to get the content of the file: \"{}\"",
-                    src.file_path.to_string_lossy().to_string()
-                );
-                return Err(msg);
-            }
-            return Ok(content.ok().unwrap());
+                    src.file_path.to_string_lossy()
+                )
+            });
         }
     }
     let msg = format!(

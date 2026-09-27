@@ -1,11 +1,11 @@
-// LSP "Rename Symbol" implementation.
-//
-// Supports renaming local variables, global values, type aliases, traits,
-// trait aliases, associated types, struct fields, union variants, and
-// struct/union types (the last carries the auto-implemented method
-// namespace along with the type). Rename is gated on a stale-buffer
-// check, refusal of symbols defined outside the project, and refusal of
-// auto-generated accessors clicked directly.
+//! LSP "Rename Symbol" implementation.
+//!
+//! Supports renaming local variables, global values, type aliases, traits,
+//! trait aliases, associated types, struct fields, union variants, and
+//! struct/union types (the last carries the auto-implemented method
+//! namespace along with the type). Rename is gated on a stale-buffer
+//! check, refusal of symbols defined outside the project, and refusal of
+//! auto-generated accessors clicked directly.
 
 use super::references::{
     find_assoc_type_references, find_field_occurrences, find_global_value_references,
@@ -33,18 +33,17 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-// Handle "textDocument/prepareRename".
-//
-// LSP clients usually surface the result like this:
-//   - `null`                     => "This element can't be renamed."
-//                                   (a generic, not-very-helpful message)
-//   - `ResponseError { message }` => the message verbatim, in a popup
-//   - `DefaultBehavior { true }` => proceed to the rename input box
-//
-// So we use `ResponseError` whenever there is a clear, actionable reason
-// to refuse (stale buffer, external symbol, auto-method click). We keep
-// `null` for cases where the cursor is not on anything renameable in the
-// first place — there's no element to talk about.
+/// Answers a `textDocument/prepareRename` request: whether the symbol at the cursor can be renamed.
+///
+/// LSP clients usually surface the result like this:
+/// - `null` => "This element can't be renamed." (a generic, not-very-helpful message)
+/// - `ResponseError { message }` => the message verbatim, in a popup
+/// - `DefaultBehavior { true }` => proceed to the rename input box
+///
+/// So we use `ResponseError` whenever there is a clear, actionable reason
+/// to refuse (stale buffer, external symbol, auto-method click). We keep
+/// `null` for cases where the cursor is not on anything renameable in the
+/// first place — there's no element to talk about.
 pub(super) fn handle_prepare_rename(
     id: u32,
     params: &TextDocumentPositionParams,
@@ -77,23 +76,8 @@ pub(super) fn handle_prepare_rename(
         send_response(id, Ok::<_, ()>(None::<PrepareRenameResponse>));
         return;
     }
-    if is_auto_method_var(program, &node) {
-        send_response(
-            id,
-            Err::<(), _>(ResponseError::invalid_request(
-                "Cannot rename an auto-generated accessor. \
-                 Rename the field or variant declaration instead.",
-            )),
-        );
-        return;
-    }
-    if !target_is_user_defined(diag, &node, &pos) {
-        send_response(
-            id,
-            Err::<(), _>(ResponseError::invalid_request(
-                "Cannot rename a symbol defined outside this project.",
-            )),
-        );
+    if let Err(msg) = check_rename_allowed(diag, &node, &pos) {
+        send_response(id, Err::<(), _>(ResponseError::invalid_request(msg)));
         return;
     }
 
@@ -103,7 +87,8 @@ pub(super) fn handle_prepare_rename(
     send_response(id, Ok::<_, ()>(Some(resp)));
 }
 
-// Handle "textDocument/rename".
+/// Answers a `textDocument/rename` request with the `WorkspaceEdit` that renames the symbol at the
+/// cursor across the project, or with the error message the client shows when it cannot be renamed.
 pub(super) fn handle_rename(
     id: u32,
     params: &RenameParams,
@@ -113,7 +98,7 @@ pub(super) fn handle_rename(
     let program = &diag.program;
     let new_name = &params.new_name;
 
-    // Stale-buffer check first (see prepareRename for reasoning).
+    // Stale-buffer check first (see handle_prepare_rename for reasoning).
     if let Err(msg) = check_buffer_in_sync(&diag.user_source_contents, uri_to_content) {
         send_response(id, Err::<(), _>(ResponseError::invalid_request(msg)));
         return;
@@ -139,30 +124,8 @@ pub(super) fn handle_rename(
         return;
     }
 
-    // Reject auto-generated accessors before any further analysis. The
-    // user must rename the field/variant itself instead, where they don't
-    // have to think about whether the new name should include the `@`,
-    // `set_`, etc. prefix.
-    if is_auto_method_var(program, &node) {
-        send_response(
-            id,
-            Err::<(), _>(ResponseError::invalid_request(
-                "Cannot rename an auto-generated accessor. \
-                 Rename the field or variant declaration instead.",
-            )),
-        );
-        return;
-    }
-
-    // Reject symbols whose declaration lives outside this project's source
-    // tree (i.e. not listed in `fixproj.toml`'s `files` section).
-    if !target_is_user_defined(diag, &node, &pos) {
-        send_response(
-            id,
-            Err::<(), _>(ResponseError::invalid_request(
-                "Cannot rename a symbol defined outside this project.",
-            )),
-        );
+    if let Err(msg) = check_rename_allowed(diag, &node, &pos) {
+        send_response(id, Err::<(), _>(ResponseError::invalid_request(msg)));
         return;
     }
 
@@ -184,18 +147,14 @@ pub(super) fn handle_rename(
                 };
                 let mut spans = vec![occ.definition];
                 spans.extend(occ.uses);
-                spans.into_iter().map(|s| (s, new_name.clone())).collect()
+                rename_edits(spans, new_name)
             } else {
-                find_global_value_references(program, name, true)
-                    .into_iter()
-                    .map(|s| (s, new_name.clone()))
-                    .collect()
+                rename_edits(find_global_value_references(program, name, true), new_name)
             }
         }
-        EndNode::ValueDecl(name) => find_global_value_references(program, name, true)
-            .into_iter()
-            .map(|s| (s, new_name.clone()))
-            .collect(),
+        EndNode::ValueDecl(name) => {
+            rename_edits(find_global_value_references(program, name, true), new_name)
+        }
         EndNode::Type(tycon) => collect_type_rename_edits(program, tycon, new_name),
         EndNode::TypeOrTrait(name) => {
             // Resolve to either a type or a trait. Type takes precedence
@@ -207,17 +166,14 @@ pub(super) fn handle_rename(
                 collect_type_rename_edits(program, &tycon, new_name)
             } else {
                 let trait_id = TraitId::from_fullname(name.clone());
-                find_trait_references(program, &trait_id, true)
-                    .into_iter()
-                    .map(|s| (s, new_name.clone()))
-                    .collect()
+                rename_edits(find_trait_references(program, &trait_id, true), new_name)
             }
         }
         EndNode::Trait(trait_id) => collect_trait_rename_edits(program, trait_id, new_name),
-        EndNode::AssocType(assoc_type) => find_assoc_type_references(program, assoc_type, true)
-            .into_iter()
-            .map(|s| (s, new_name.clone()))
-            .collect(),
+        EndNode::AssocType(assoc_type) => rename_edits(
+            find_assoc_type_references(program, assoc_type, true),
+            new_name,
+        ),
         EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
             find_field_occurrences(program, tc, name, true)
                 .into_iter()
@@ -236,8 +192,36 @@ pub(super) fn handle_rename(
     send_response(id, Ok::<_, ()>(Some(workspace_edit)));
 }
 
-// Whether the symbol at this EndNode is renameable at all. Used by both
-// prepareRename and rename to keep their answers consistent.
+/// One edit per span, each replacing the span with `new_text`.
+fn rename_edits(spans: Vec<Span>, new_text: &Name) -> Vec<(Span, String)> {
+    spans.into_iter().map(|s| (s, new_text.clone())).collect()
+}
+
+/// Refuses a rename starting on an auto-generated accessor, or on a symbol
+/// declared outside this project's source tree (i.e. not listed in
+/// `fixproj.toml`'s `files` section). The error is the message the client
+/// shows the user.
+///
+/// For an accessor, the user renames the field/variant itself instead,
+/// where they don't have to think about whether the new name should include
+/// the `@`, `set_`, etc. prefix.
+fn check_rename_allowed(
+    diag: &DiagnosticsResult,
+    node: &EndNode,
+    pos: &SourcePos,
+) -> Result<(), &'static str> {
+    if is_auto_method_var(&diag.program, node) {
+        return Err("Cannot rename an auto-generated accessor. \
+                    Rename the field or variant declaration instead.");
+    }
+    if !target_is_user_defined(diag, node, pos) {
+        return Err("Cannot rename a symbol defined outside this project.");
+    }
+    Ok(())
+}
+
+/// Whether rename handles the kind of symbol `node` is. Modules and the types
+/// inferred for a `_` wildcard are the kinds it refuses.
 fn rename_target_supported(node: &EndNode) -> bool {
     match node {
         EndNode::Expr(_, _) | EndNode::Pattern(_, _) | EndNode::ValueDecl(_) => true,
@@ -249,8 +233,7 @@ fn rename_target_supported(node: &EndNode) -> bool {
     }
 }
 
-// Diagnostic message for the unsupported-target rejection. Keeps
-// prepareRename and rename consistent in what they tell the user.
+/// The error message the client shows for a symbol whose kind rename refuses.
 fn rename_unsupported_message(node: &EndNode) -> String {
     match node {
         EndNode::Module(_) => "Renaming modules is not supported.".to_string(),
@@ -258,10 +241,10 @@ fn rename_unsupported_message(node: &EndNode) -> String {
     }
 }
 
-// True iff `tc` is defined as a struct or union (as opposed to a type
-// alias or a built-in TyCon). Struct/union types own an auto-namespace
-// of compiler-generated methods that must be rewritten alongside the
-// type name during rename.
+/// True iff `tc` is declared by a struct or union definition; a type alias
+/// or a built-in `TyCon` gives false. Struct/union types own an auto-namespace
+/// of compiler-generated methods that must be rewritten alongside the
+/// type name during rename.
 fn is_struct_or_union_type(program: &Program, tc: &TyCon) -> bool {
     program
         .type_defns
@@ -271,7 +254,7 @@ fn is_struct_or_union_type(program: &Program, tc: &TyCon) -> bool {
         .unwrap_or(false)
 }
 
-// Pick the pest grammar token category that the new name must satisfy.
+/// The pest grammar token category that a new name for the symbol `node` must satisfy.
 fn token_category_for(node: &EndNode) -> TokenCategory {
     match node {
         EndNode::Expr(_, _) | EndNode::Pattern(_, _) | EndNode::ValueDecl(_) => TokenCategory::Name,
@@ -284,11 +267,11 @@ fn token_category_for(node: &EndNode) -> TokenCategory {
     }
 }
 
-// Group `(Span, new_text)` pairs by URI and produce a `WorkspaceEdit`.
-// Spans whose paths cannot be converted to URIs are silently dropped.
-// Within each URI, edits are deduplicated to avoid multiple TextEdits at
-// the same range (which can happen when refs reports both decl_src and
-// defn_src for a `name : T = ...` form).
+/// Groups `(Span, new_text)` pairs by URI and produces a `WorkspaceEdit`.
+/// Spans whose paths cannot be converted to URIs are silently dropped.
+/// Within each URI, edits are deduplicated to avoid multiple TextEdits at
+/// the same range (which can happen when refs reports both decl_src and
+/// defn_src for a `name : T = ...` form).
 fn build_workspace_edit(edits: Vec<(Span, String)>, cdir: &PathBuf) -> WorkspaceEdit {
     let mut by_uri: HashMap<Uri, Vec<TextEdit>> = HashMap::new();
     for (span, new_text) in edits {
@@ -314,24 +297,19 @@ fn build_workspace_edit(edits: Vec<(Span, String)>, cdir: &PathBuf) -> Workspace
     }
 }
 
-// =====================================================================
-// Collect every edit needed to rename trait `trait_id` to `new_name`:
-//   - bare-name occurrences (declaration, impl headers, predicates,
-//     imports), and
-//   - the trait-name component of every inline qualified reference to
-//     one of its methods (e.g. `PrimeProvider::create`). Without this
-//     second pass the rewritten program would still refer to the trait
-//     by its old name at those callsites and fail to compile.
-// =====================================================================
+/// Collects every edit needed to rename trait `trait_id` to `new_name`:
+///   - bare-name occurrences (declaration, impl headers, predicates,
+///     imports), and
+///   - the trait-name component of every inline qualified reference to
+///     one of its methods (e.g. `PrimeProvider::create`). Without this
+///     second pass the rewritten program would still refer to the trait
+///     by its old name at those callsites and fail to compile.
 fn collect_trait_rename_edits(
     program: &Program,
     trait_id: &TraitId,
     new_name: &Name,
 ) -> Vec<(Span, String)> {
-    let mut edits: Vec<(Span, String)> = find_trait_references(program, trait_id, true)
-        .into_iter()
-        .map(|s| (s, new_name.clone()))
-        .collect();
+    let mut edits = rename_edits(find_trait_references(program, trait_id, true), new_name);
 
     // Walk every global value's expression for Var refs whose resolved
     // name is `<trait_ns>::<trait_name>::<member>` and rewrite the
@@ -350,19 +328,17 @@ fn collect_trait_rename_edits(
     edits
 }
 
-// =====================================================================
-// Type rename: bare-name occurrences plus the struct/union auto-namespace
-// rewrite.
-//
-// For type aliases and other types without an auto-namespace, this is
-// just `find_type_references`. For struct/union types whose
-// auto-namespace owns user-callable methods (`@x`, `set_x`, ...), the
-// auto-namespace path itself moves with the type, so:
-//   - import-tree NameSpace components on that path are rewritten,
-//     splitting the import into auto/user halves where necessary;
-//   - inline qualified references like `Point::@x` and `[^Point::x]`
-//     have just their `Point` sub-span rewritten.
-// =====================================================================
+/// Collects every edit needed to rename type `tc` to `new_name`: its
+/// bare-name occurrences, plus the rewrite of its struct/union auto-namespace.
+///
+/// For type aliases and other types without an auto-namespace, the edits
+/// are the bare-name occurrences alone. For struct/union types whose
+/// auto-namespace owns user-callable methods (`@x`, `set_x`, ...), the
+/// auto-namespace path itself moves with the type, so:
+///   - import-tree NameSpace components on that path are rewritten,
+///     splitting the import into auto/user halves where necessary;
+///   - inline qualified references like `Point::@x` and `[^Point::x]`
+///     have just their `Point` sub-span rewritten.
 fn collect_type_rename_edits(
     program: &Program,
     tc: &TyCon,
@@ -371,10 +347,7 @@ fn collect_type_rename_edits(
     // (A) Bare token spans: declaration, type annotations, MakeStruct,
     // Pattern::Struct, impl blocks, `import Foo::{Point}` (TypeOrTrait
     // import). Already handled by `find_type_references`.
-    let mut edits: Vec<(Span, String)> = find_type_references(program, tc, true)
-        .into_iter()
-        .map(|s| (s, new_name.clone()))
-        .collect();
+    let mut edits = rename_edits(find_type_references(program, tc, true), new_name);
 
     // For non-struct/non-union types (aliases, builtins) the auto-namespace
     // doesn't exist, so (B) and (C) are no-ops. Bail out early.
@@ -432,28 +405,34 @@ fn collect_type_rename_edits(
     filtered
 }
 
-// Classification of the children of an `ImportTreeNode::NameSpace` whose
-// path equals a struct/union type's auto-namespace.
+/// Classification of the children of an `ImportTreeNode::NameSpace` whose
+/// path equals a struct/union type's auto-namespace.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum NamespaceClassification {
-    // Every child resolves to a compiler-generated method.
+    /// Every child resolves to a compiler-generated method.
     AllAuto,
-    // Every child resolves to a user-defined item, or no children resolve.
+    /// Every child resolves to a user-defined item, or no children resolve.
     AllUser,
-    // Some children are auto, some are user — the import must be split
-    // when the type is renamed.
+    /// Some children are auto, some are user — the import must be split
+    /// when the type is renamed.
     Mixed,
 }
 
-// Walk one ImportStatement and emit (B)-phase edits for it.
-//
-// - For each `NameSpace` whose resolved path equals `auto_ns` and whose
-//   children are uniformly auto-method imports: emit a single
-//   `(name_span, new_name)` edit.
-// - When children are mixed (auto + user), rebuild the entire statement
-//   via `stringify()` and record the original statement span as
-//   "rebuilt" so other edits inside it can be filtered out.
-// - All-user NameSpace nodes are left alone.
+/// Emits the edits that rename type `type_old` to `type_new` in the
+/// namespace components of one import statement.
+///
+/// - For each `NameSpace` whose resolved path equals `auto_ns` and whose
+///   children are uniformly auto-method imports: emit a single
+///   `(name_span, new_name)` edit.
+/// - When children are mixed (auto + user), rebuild the entire statement
+///   via `stringify()` and record the original statement span as
+///   "rebuilt" so other edits inside it can be filtered out.
+/// - All-user NameSpace nodes are left alone.
+///
+/// # Arguments
+/// * `auto_ns` — the type's auto-namespace path, e.g. `["Foo", "Point"]` for `Foo::Point`.
+/// * `edits` — receives the edits of single `NameSpace` name components.
+/// * `rebuilt_stmt_edits` — receives the edits that replace a whole statement.
 fn collect_import_edits_for_type(
     program: &Program,
     auto_ns: &[Name],
@@ -461,7 +440,7 @@ fn collect_import_edits_for_type(
     type_new: &Name,
     stmt: &ImportStatement,
     edits: &mut Vec<(Span, String)>,
-    rebuilt_stmt_spans: &mut Vec<(Span, String)>,
+    rebuilt_stmt_edits: &mut Vec<(Span, String)>,
 ) {
     let module = &stmt.module_name;
     let stmt_classifications =
@@ -493,7 +472,7 @@ fn collect_import_edits_for_type(
                 &[module.clone()],
                 &mut new_stmt.hiding,
             );
-            rebuilt_stmt_spans.push((stmt_span.clone(), new_stmt.stringify()));
+            rebuilt_stmt_edits.push((stmt_span.clone(), new_stmt.stringify()));
         }
     } else {
         // Emit individual NameSpace name-span edits for all-auto nodes.
@@ -510,19 +489,22 @@ fn collect_import_edits_for_type(
     }
 }
 
-// One entry produced by `scan_import_tree_for_type`: a classification of
-// the children of a `NameSpace` whose resolved path equals the type's
-// auto-namespace, paired with the span of that `NameSpace`'s own name
-// component.
+/// A `NameSpace` import-tree node whose resolved path equals a type's
+/// auto-namespace: the classification of its children, paired with the
+/// span of its own name component.
 struct NamespaceClassificationEntry {
+    /// Whether the node's children are compiler-generated methods, user items, or both.
     classification: NamespaceClassification,
-    // The source span of just the NameSpace's name component; None if the
-    // grammar didn't record one (only happens for synthetic imports).
+    /// The source span of just the NameSpace's name component; None if the
+    /// grammar didn't record one (only happens for synthetic imports).
     name_span: Option<Span>,
 }
 
-// Walk an import-tree, returning a classification entry for each
-// `NameSpace` node whose resolved path equals `auto_ns`.
+/// Walks an import-tree, returning a classification entry for each
+/// `NameSpace` node whose resolved path equals `auto_ns`.
+///
+/// # Arguments
+/// * `parent_path` — the resolved path of the node holding `nodes`, starting with the module name.
 fn scan_import_tree_for_type(
     program: &Program,
     auto_ns: &[Name],
@@ -548,11 +530,11 @@ fn scan_import_tree_for_type(
     out
 }
 
-// Mutate an import-tree in place to apply the type rename:
-//   - rewrite each `TypeOrTrait(type_old, _)` at parent_path == auto_ns[..-1]
-//     to `TypeOrTrait(type_new, _)`;
-//   - rewrite each `NameSpace(type_old, ...)` at the same depth, splitting
-//     the children when mixed.
+/// Mutates an import-tree in place to apply the type rename:
+///   - rewrite each `TypeOrTrait(type_old, _)` at parent_path == auto_ns[..-1]
+///     to `TypeOrTrait(type_new, _)`;
+///   - rewrite each `NameSpace(type_old, ...)` at the same depth, splitting
+///     the children when mixed.
 fn rewrite_import_tree_for_type(
     program: &Program,
     auto_ns: &[Name],
@@ -624,8 +606,8 @@ fn rewrite_import_tree_for_type(
     *nodes = new_nodes;
 }
 
-// Classify the children of a `NameSpace` whose path equals the type's
-// auto-namespace into AllAuto / AllUser / Mixed.
+/// Classifies the children of a `NameSpace` whose path equals the type's
+/// auto-namespace into AllAuto / AllUser / Mixed.
 fn classify_namespace_children(
     program: &Program,
     namespace_path: &[Name],
@@ -648,9 +630,9 @@ fn classify_namespace_children(
     }
 }
 
-// Decide whether a single import-tree child of a NameSpace resolves to
-// auto-generated method(s), user-defined item(s), or both. The two flags
-// are independent because `Any(*)` can match both kinds at once.
+/// Decides whether a single import-tree child of a NameSpace resolves to
+/// auto-generated method(s), user-defined item(s), or both. The two flags
+/// are independent because `Any(*)` can match both kinds at once.
 fn classify_child(
     program: &Program,
     namespace_path: &[Name],
@@ -660,12 +642,7 @@ fn classify_child(
         ImportTreeNode::Any(_) => scan_namespace_for_auto_user(program, namespace_path),
         ImportTreeNode::Symbol(name, _) => {
             let full = make_fullname(namespace_path, name);
-            let is_auto = program
-                .global_values
-                .get(&full)
-                .map(|gv| gv.compiler_defined_method)
-                .unwrap_or(false);
-            if is_auto {
+            if is_compiler_defined_method(program, &full) {
                 (true, false)
             } else {
                 (false, true)
@@ -678,9 +655,9 @@ fn classify_child(
     }
 }
 
-// Scan `program.global_values` for entries whose namespace exactly equals
-// `namespace_path`, returning whether any compiler-defined and any
-// user-defined items live there.
+/// Scans `program.global_values` for entries whose namespace exactly equals
+/// `namespace_path`, returning whether any compiler-defined and any
+/// user-defined items live there.
 fn scan_namespace_for_auto_user(program: &Program, namespace_path: &[Name]) -> (bool, bool) {
     let mut has_auto = false;
     let mut has_user = false;
@@ -699,11 +676,11 @@ fn scan_namespace_for_auto_user(program: &Program, namespace_path: &[Name]) -> (
     (has_auto, has_user)
 }
 
-// Partition the children of a NameSpace into (auto_children, user_children)
-// halves for the mixed-import rebuild.
-//
-// `Any(*)` is replicated into both halves so the wildcard semantics are
-// preserved for both auto and user items.
+/// Partitions the children of a NameSpace into (auto_children, user_children)
+/// halves for the mixed-import rebuild.
+///
+/// `Any(*)` is replicated into both halves so the wildcard semantics are
+/// preserved for both auto and user items.
 fn split_children_auto_user(
     program: &Program,
     namespace_path: &[Name],
@@ -728,8 +705,8 @@ fn split_children_auto_user(
     (auto_children, user_children)
 }
 
-// Build a `FullName` whose namespace is exactly `namespace_path` and
-// whose simple name is `name`.
+/// The `FullName` whose namespace is exactly `namespace_path` and
+/// whose simple name is `name`.
 fn make_fullname(namespace_path: &[Name], name: &Name) -> FullName {
     let mut ns_names = namespace_path.to_vec();
     ns_names.push(name.clone());
@@ -740,12 +717,12 @@ fn make_fullname(namespace_path: &[Name], name: &Name) -> FullName {
     }
 }
 
-// (C) Walk every Var node in `expr` and emit an edit when it is a
-// qualified reference to an auto-method of the type identified by
-// `auto_ns`. User-defined items that happen to live in the same
-// namespace (because the user wrote `namespace Point { ... }` next to
-// the type definition) are intentionally left alone — the type rename
-// only moves compiler-generated accessors.
+/// Walks every Var node in `expr` and emits an edit when it is a
+/// qualified reference to an auto-method of the type identified by
+/// `auto_ns`. User-defined items that happen to live in the same
+/// namespace (because the user wrote `namespace Point { ... }` next to
+/// the type definition) are intentionally left alone — the type rename
+/// only moves compiler-generated accessors.
 fn collect_inline_qualified_edits(
     program: &Program,
     expr: &SymbolExpr,
@@ -764,20 +741,16 @@ fn collect_inline_qualified_edits(
         if name.namespace.names != auto_ns {
             return false;
         }
-        program
-            .global_values
-            .get(name)
-            .map(|gv| gv.compiler_defined_method)
-            .unwrap_or(false)
+        is_compiler_defined_method(program, name)
     };
     walk_symbol_expr_for_inline_qualified(expr, &predicate, type_old, new_name, edits);
 }
 
-// Walk every Var node in `expr` and emit an edit when it is a
-// qualified reference to a member of the trait identified by
-// `trait_id`. The Var's source covers the user-written qualified name
-// (e.g. `PrimeProvider::create`); we rewrite just the trait-name
-// component, keeping `::create` intact.
+/// Walks every Var node in `expr` and emits an edit when it is a
+/// qualified reference to a member of the trait identified by
+/// `trait_id`. The Var's source covers the user-written qualified name
+/// (e.g. `PrimeProvider::create`); we rewrite just the trait-name
+/// component, keeping `::create` intact.
 fn collect_inline_qualified_trait_edits(
     program: &Program,
     expr: &SymbolExpr,
@@ -790,10 +763,9 @@ fn collect_inline_qualified_trait_edits(
     walk_symbol_expr_for_inline_qualified(expr, &predicate, trait_old, new_name, edits);
 }
 
-// True iff `member_fullname` is the resolved name of a trait method
-// belonging to `trait_id`. Reuses the same convention the codebase uses
-// elsewhere: a trait method's `GlobalValue` is keyed under the namespace
-// `<trait_ns>::<trait_name>` with the bare member name as its leaf.
+/// True iff `member_fullname` is the resolved name of a trait method
+/// belonging to `trait_id`. A trait method's `GlobalValue` is keyed under
+/// the namespace `<trait_ns>::<trait_name>` with the bare member name as its leaf.
 fn is_method_of_trait(program: &Program, trait_id: &TraitId, member_fullname: &FullName) -> bool {
     let Some((owner_trait, member_name)) = TraitId::split_member_fullname(member_fullname) else {
         return false;
@@ -809,9 +781,9 @@ fn is_method_of_trait(program: &Program, trait_id: &TraitId, member_fullname: &F
         .unwrap_or(false)
 }
 
-// Traverse the expression(s) inside `expr`, and for every `Var` whose
-// resolved `FullName` satisfies `pick`, rewrite the `old_name`
-// component of the Var's source span to `new_name`.
+/// Traverses the expression(s) inside `expr`, and for every `Var` whose
+/// resolved `FullName` satisfies `pick`, emits an edit rewriting the `old_name`
+/// component of the Var's source span to `new_name`.
 fn walk_symbol_expr_for_inline_qualified(
     expr: &SymbolExpr,
     pick: &impl Fn(&FullName) -> bool,
@@ -831,9 +803,9 @@ fn walk_symbol_expr_for_inline_qualified(
     }
 }
 
-// Recursive walker over an expression tree: for every `Var` whose
-// resolved `FullName` satisfies `pick`, rewrite the `old_name`
-// component of the Var's source span to `new_name`.
+/// Walks an expression tree recursively: for every `Var` whose
+/// resolved `FullName` satisfies `pick`, emits an edit rewriting the `old_name`
+/// component of the Var's source span to `new_name`.
 fn walk_expr_for_inline_qualified(
     expr: &Arc<ExprNode>,
     pick: &impl Fn(&FullName) -> bool,
@@ -901,12 +873,16 @@ fn walk_expr_for_inline_qualified(
     }
 }
 
-// Re-parse a Var's source span (covering whatever qualified name the
-// user actually wrote) and return an edit that rewrites just the type
-// component within it.
+/// Re-parses a Var's source span (covering whatever qualified name the
+/// user actually wrote) and returns an edit that rewrites its last
+/// namespace component to `new_name`, when that component is `old_name`.
+///
+/// # Examples
+/// For the source `Point::@x` and `old_name` `Point`, the edit covers `Point`.
+/// For the source `PrimeProvider::create` and `old_name` `PrimeProvider`, it covers `PrimeProvider`.
 fn extract_inline_qualified_edit(
     var_source: &Span,
-    type_old: &Name,
+    old_name: &Name,
     new_name: &Name,
 ) -> Option<(Span, String)> {
     let content = var_source.input.string().ok()?;
@@ -921,11 +897,11 @@ fn extract_inline_qualified_edit(
     let inner = &text_slice[caret_skip..];
     let items = parse_namespace_items_in_fullname(inner)?;
     // Rewrite only the LAST namespace_item — that's the one immediately
-    // before the simple name and corresponds to the type's position in
-    // the auto-namespace path. If the user wrote an unqualified
+    // before the simple name: the type in `Point::@x`, the trait in
+    // `PrimeProvider::create`. If the user wrote an unqualified
     // reference, items is empty and there's nothing to do.
     let last = items.last()?;
-    if &last.name != type_old {
+    if &last.name != old_name {
         return None;
     }
     let abs_start = s_start + caret_skip + last.start;
@@ -940,14 +916,14 @@ fn extract_inline_qualified_edit(
     ))
 }
 
-// Compare each user source file's current content (from the editor buffer
-// if open, otherwise from disk) against the content recorded at
-// elaboration time. If any mismatch is found, return an error message
-// suitable for surfacing to the user.
-//
-// The strict whole-project policy (per the rename plan) is intentional:
-// rename touches AST spans, and any drift between the AST and the buffer
-// can produce silently corrupt edits.
+/// Compares each user source file's current content (from the editor buffer
+/// if open, otherwise from disk) against the content recorded at
+/// elaboration time. If any mismatch is found, returns an error message
+/// suitable for surfacing to the user.
+///
+/// The check covers the whole project because rename touches AST spans in
+/// every file, and any drift between the AST and a buffer can produce
+/// silently corrupt edits.
 fn check_buffer_in_sync(
     user_source_contents: &Map<PathBuf, String>,
     uri_to_content: &Map<Uri, LatestContent>,
@@ -993,11 +969,9 @@ fn check_buffer_in_sync(
     Ok(())
 }
 
-// True if the EndNode at `pos` resolves to an auto-generated accessor
-// (a global value with `compiler_defined_method == true`). Used to reject
-// rename starting on `@x`, `set_x`, `act_x`, `[^x]`, `as_v`, `is_v`,
-// `mod_v` and the union variant constructor — the user should rename the
-// field or variant declaration itself.
+/// True if `node` resolves to an auto-generated accessor (a global value
+/// with `compiler_defined_method == true`), such as `@x`, `set_x`, `act_x`,
+/// `[^x]`, `as_v`, `is_v`, `mod_v` or a union variant constructor.
 fn is_auto_method_var(program: &Program, node: &EndNode) -> bool {
     let name = match node {
         EndNode::Expr(var, _) | EndNode::Pattern(var, _) => &var.name,
@@ -1007,6 +981,12 @@ fn is_auto_method_var(program: &Program, node: &EndNode) -> bool {
     if name.is_local() {
         return false;
     }
+    is_compiler_defined_method(program, name)
+}
+
+/// True if `name` is a global value the compiler generated for a type
+/// (`compiler_defined_method == true`). A name that is no global value gives false.
+fn is_compiler_defined_method(program: &Program, name: &FullName) -> bool {
     program
         .global_values
         .get(name)
@@ -1014,9 +994,9 @@ fn is_auto_method_var(program: &Program, node: &EndNode) -> bool {
         .unwrap_or(false)
 }
 
-// True if the symbol at `node` is declared in a file listed in
-// `fixproj.toml`'s `files` section. `pos` is the cursor position; for
-// local variables we use the scope walker to find the binder span.
+/// True if the symbol at `node` is declared in a file listed in
+/// `fixproj.toml`'s `files` section. `pos` is the cursor position, which
+/// locates the binder of a local variable.
 fn target_is_user_defined(diag: &DiagnosticsResult, node: &EndNode, pos: &SourcePos) -> bool {
     let decl_span = declaration_span(&diag.program, node, pos);
     let Some(span) = decl_span else {
@@ -1029,8 +1009,8 @@ fn target_is_user_defined(diag: &DiagnosticsResult, node: &EndNode, pos: &Source
     diag.user_source_contents.contains_key(&abs)
 }
 
-// Return a span pointing to where the symbol at `node` is declared
-// (defined) in source, used for the user-defined check.
+/// The span where the symbol at `node` is declared (defined) in source.
+/// `pos` is the cursor position, which locates the binder of a local variable.
 fn declaration_span(program: &Program, node: &EndNode, pos: &SourcePos) -> Option<Span> {
     match node {
         EndNode::Expr(var, _) | EndNode::Pattern(var, _) => {
@@ -1038,16 +1018,10 @@ fn declaration_span(program: &Program, node: &EndNode, pos: &SourcePos) -> Optio
             if name.is_local() {
                 find_local_occurrences(program, pos, name).map(|o| o.definition)
             } else {
-                program
-                    .global_values
-                    .get(name)
-                    .and_then(|gv| gv.decl_src.clone().or_else(|| gv.defn_src.clone()))
+                global_value_declaration_span(program, name)
             }
         }
-        EndNode::ValueDecl(name) => program
-            .global_values
-            .get(name)
-            .and_then(|gv| gv.decl_src.clone().or_else(|| gv.defn_src.clone())),
+        EndNode::ValueDecl(name) => global_value_declaration_span(program, name),
         EndNode::Type(tc) => program
             .type_defns
             .iter()
@@ -1058,35 +1032,10 @@ fn declaration_span(program: &Program, node: &EndNode, pos: &SourcePos) -> Optio
             if let Some(td) = program.type_defns.iter().find(|td| td.tycon() == tc) {
                 td.name_src.clone()
             } else {
-                let trait_id = TraitId::from_fullname(name.clone());
-                program
-                    .trait_env
-                    .traits
-                    .get(&trait_id)
-                    .and_then(|ti| ti.name_src.clone())
-                    .or_else(|| {
-                        program
-                            .trait_env
-                            .aliases
-                            .data
-                            .get(&trait_id)
-                            .and_then(|ta| ta.name_src.clone())
-                    })
+                trait_declaration_span(program, &TraitId::from_fullname(name.clone()))
             }
         }
-        EndNode::Trait(trait_id) => program
-            .trait_env
-            .traits
-            .get(trait_id)
-            .and_then(|ti| ti.name_src.clone())
-            .or_else(|| {
-                program
-                    .trait_env
-                    .aliases
-                    .data
-                    .get(trait_id)
-                    .and_then(|ta| ta.name_src.clone())
-            }),
+        EndNode::Trait(trait_id) => trait_declaration_span(program, trait_id),
         EndNode::AssocType(at) => {
             let trait_id = at.trait_id();
             program
@@ -1114,4 +1063,31 @@ fn declaration_span(program: &Program, node: &EndNode, pos: &SourcePos) -> Optio
         EndNode::Module(_) => None,
         EndNode::InferredType(_) => None,
     }
+}
+
+/// The span of the declaration of the global value `name`, or of its
+/// definition when it has no separate declaration.
+fn global_value_declaration_span(program: &Program, name: &FullName) -> Option<Span> {
+    program
+        .global_values
+        .get(name)
+        .and_then(|gv| gv.decl_src.clone().or_else(|| gv.defn_src.clone()))
+}
+
+/// The span of the name of the trait or trait alias `trait_id` where it is
+/// declared.
+fn trait_declaration_span(program: &Program, trait_id: &TraitId) -> Option<Span> {
+    program
+        .trait_env
+        .traits
+        .get(trait_id)
+        .and_then(|ti| ti.name_src.clone())
+        .or_else(|| {
+            program
+                .trait_env
+                .aliases
+                .data
+                .get(trait_id)
+                .and_then(|ta| ta.name_src.clone())
+        })
 }

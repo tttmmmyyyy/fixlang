@@ -1,4 +1,9 @@
-// LSP integration tests module
+//! LSP integration tests.
+//!
+//! The tests in this file cover the lock file the language server writes for the project it is
+//! serving, and the report the editor is shown when that project's dependencies cannot be
+//! resolved.
+
 pub mod bench_completion;
 pub mod case_project;
 pub mod completion_harness;
@@ -17,9 +22,6 @@ pub mod test_request_handling;
 pub mod test_semantic_tokens;
 pub mod test_stdin_eof;
 pub mod test_workspace_symbol;
-
-// The lock file the language server writes for the project it is serving, and the report the
-// editor is shown when that project's dependencies cannot be resolved.
 
 #[cfg(test)]
 mod tests {
@@ -294,8 +296,8 @@ mod tests {
             all_diagnostics
         );
 
-        // Verify that at least one error has Error severity (not just warning)
-        // This ensures the failure is not silent - user can see it as an error
+        // Verify that at least one diagnostic has Error severity, so that the user sees the
+        // failure as an error.
         let has_error_severity = all_diagnostics.values().flatten().any(|diag| {
             if let Some(severity) = diag.get("severity").and_then(|s| s.as_u64()) {
                 severity == 1 // 1 = Error in LSP protocol

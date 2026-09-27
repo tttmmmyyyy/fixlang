@@ -106,7 +106,8 @@ fn is_publish_diagnostics(message: &Value) -> bool {
 /// diagnostics pass into the count of the passes that have ended, the diagnostics of a file under
 /// the file's path, and the message itself into the queue.
 fn process_message(message: Value, shared: &SharedState) {
-    /// Handle a `textDocument/publishDiagnostics` notification.
+    /// Record the diagnostics a `textDocument/publishDiagnostics` notification carries, under the
+    /// path of the file it names. Any other message is left alone.
     fn process_publish_diagnostics(message: &Value, shared: &SharedState) {
         if !is_publish_diagnostics(message) {
             return;
