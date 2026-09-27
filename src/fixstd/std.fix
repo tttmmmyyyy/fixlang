@@ -2942,13 +2942,13 @@ namespace String {
     // * `str` - The text to read.
     _read_signed_decimal_integer : I64 -> String -> Result ErrMsg I64;
     _read_signed_decimal_integer = |max, str| (
-        str._read_decimal_integer(max.u64, max.u64 + 1_U64).map(|(negative, magnitude)|
-            if !negative { magnitude.i64 }
+        str._read_decimal_integer(max.u64, max.u64 + 1_U64).map(|(negative, magnitude)| (
+            if !negative { magnitude.i64 };
+            if magnitude == 0_U64 { 0 };
             // The magnitude of `I64::minimum` exceeds `I64::maximum`, so this negates one less than
             // the magnitude and subtracts 1.
-            else if magnitude == 0_U64 { 0 }
-            else { -(magnitude - 1_U64).i64 - 1 }
-        )
+            -(magnitude - 1_U64).i64 - 1
+        ))
     );
 
     // Reads the whole of `str` as a decimal integer from 0 to `max`, the way
@@ -2982,7 +2982,10 @@ namespace String {
     // * `bytes` - The bytes to scan, which must hold a byte other than a digit after the digits, as
     //   the null at the end of a `String`'s data is.
     _skip_decimal_digits : I64 -> Array U8 -> I64;
-    _skip_decimal_digits = |i, bytes| loop(i, |i| if bytes.@(i) - '0' < 10_U8 { continue $ i + 1 } else { break $ i });
+    _skip_decimal_digits = |i, bytes| loop(i, |i| (
+        if bytes.@(i) - '0' < 10_U8 { continue $ i + 1 };
+        break $ i
+    ));
 
     // Create a `String` from a pointer to a null-terminated C string, via an IO action.
     // 
