@@ -50,7 +50,6 @@ pub struct ExprNode {
 impl ExprNode {
     /// Every field of this node except the set of free variables, which the new node leaves to be
     /// calculated again.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn clone_except_fvs(&self) -> ExprNode {
         ExprNode {
             expr: self.expr.clone(),
@@ -64,7 +63,6 @@ impl ExprNode {
     }
 
     /// Every field of this node, the set of free variables included.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn clone_all(&self) -> Self {
         ExprNode {
             expr: self.expr.clone(),
@@ -107,7 +105,6 @@ impl ExprNode {
     }
 
     // Set inferred type.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_type(&self, ty: Arc<TypeNode>) -> Arc<Self> {
         let mut ret = self.clone_all();
         ret.type_ = Some(ty);
@@ -1217,7 +1214,6 @@ impl ExprNode {
 
     /// The names this expression uses without binding them itself, global names included, walked
     /// afresh each time. `free_vars` reads the same set from this node's cache.
-    // PROOF: A21 (dev-docs/proof/rc_ir/borrow-cancel)
     fn calc_free_vars(&self) -> Set<FullName> {
         match &*self.expr {
             Expr::Var(var) => vec![var.name.clone()].into_iter().collect(),
@@ -1474,7 +1470,6 @@ impl Expr {
 
     /// This expression as a node of its own, written at `src`, with `aux_src` for the parameter of
     /// a lambda or for the type constructor name of a struct construction.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn into_expr_node_with_aux_src(
         self: &Arc<Self>,
         src: Option<Span>,

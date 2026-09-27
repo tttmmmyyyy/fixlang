@@ -70,7 +70,6 @@ impl<K: Clone + Eq + Hash> CloneRegistry<K> {
     /// name, minted once per key, until the function has as many as `MAX_CLONES_PER_FUNCTION`
     /// allows — past that the answer is the canonical name, which is always available and proves
     /// nothing, so the call it routes keeps every dispatch it had.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn request(&mut self, fref: &FuncRef, key: K, is_canonical: bool) -> FuncRef {
         if is_canonical {
             self.enqueue(fref, key);
@@ -112,7 +111,6 @@ impl<K: Clone + Eq + Hash> CloneRegistry<K> {
     /// Assemble the clone of `func` named `name` from its rewritten `body`. The canonical clone is
     /// the original function carrying the new body; a fresh clone additionally gets fresh local
     /// names, so that its names do not collide with the original's.
-    // PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn finish_clone(&mut self, func: &RcFunc, name: FuncRef, body: RcExprNode) -> RcFunc {
         if name == func.name {
             return RcFunc {
