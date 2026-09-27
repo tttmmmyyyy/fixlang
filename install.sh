@@ -78,6 +78,7 @@ download_to() {
 
 # Succeed when the release tag `$1` names a pre-release, i.e. carries a suffix after `-`
 # (`v1.5.0-rc.1`).
+# Must stay in sync with the `prerelease:` input in .github/workflows/release.yml.
 is_prerelease() {
     case "$1" in
         *-*) return 0 ;;
@@ -124,14 +125,15 @@ if [ -z "$VERSIONS" ]; then
 fi
 
 # The default is the newest release without a pre-release suffix.
-LATEST="$(printf '%s\n' "$VERSIONS" | while IFS= read -r v; do
+DEFAULT_VERSION="$(printf '%s\n' "$VERSIONS" | while IFS= read -r v; do
     if ! is_prerelease "$v"; then
         say "$v"
         break
     fi
 done)"
-if [ -z "$LATEST" ]; then
-    LATEST="$(printf '%s\n' "$VERSIONS" | head -n1)"
+# A repository with no stable release yet offers its newest pre-release.
+if [ -z "$DEFAULT_VERSION" ]; then
+    DEFAULT_VERSION="$(printf '%s\n' "$VERSIONS" | head -n1)"
 fi
 TOTAL="$(echo "$VERSIONS" | wc -l | tr -d ' ')"
 
@@ -149,12 +151,12 @@ fi
 
 say ""
 if [ "$NON_INTERACTIVE" = "1" ]; then
-    VERSION="$LATEST"
-    say "Version to install [${LATEST}]: ${VERSION} (non-interactive, using default)"
+    VERSION="$DEFAULT_VERSION"
+    say "Version to install [${DEFAULT_VERSION}]: ${VERSION} (non-interactive, using default)"
 else
-    printf "Version to install [%s]: " "$LATEST"
+    printf "Version to install [%s]: " "$DEFAULT_VERSION"
     read -r VERSION_INPUT </dev/tty
-    VERSION="${VERSION_INPUT:-$LATEST}"
+    VERSION="${VERSION_INPUT:-$DEFAULT_VERSION}"
 fi
 
 # Basic sanity check: version tag should start with 'v'.
