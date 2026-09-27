@@ -205,9 +205,11 @@ mkdir -p "$INSTALL_DIR"
 
 # Download into a temporary file beside the target and move it into place, so a failed or
 # interrupted download leaves any installed binary as it was, and a running one can be replaced.
-DOWNLOAD_PATH="$(mktemp "${INSTALL_DIR}/.${BINARY_NAME}.XXXXXX")"
+# The download tool creates the file, so it gets the mode the umask gives a new file.
+DOWNLOAD_PATH="${INSTALL_DIR}/.${BINARY_NAME}.download.$$"
 trap 'rm -f "$DOWNLOAD_PATH"' EXIT
-trap 'exit 1' INT TERM
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 if ! download_to "$DOWNLOAD_URL" "$DOWNLOAD_PATH"; then
     err "Download failed. Version '${VERSION}' may have no pre-built binary for ${TARGET}, or the connection failed."

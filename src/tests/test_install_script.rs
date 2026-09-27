@@ -1,5 +1,7 @@
 //! `install.sh` lists the releases newest version first, marks the pre-releases, and offers the
-//! newest full release as the default, whatever order the GitHub API returns them in.
+//! newest full release as the default, whatever order the GitHub API returns them in. It installs
+//! the binary by moving a finished download into place, so a failed or interrupted download leaves
+//! `~/.local/bin` as it was.
 //!
 //! The script runs under POSIX `sh` against a stand-in `curl` that serves a fixed release list and
 //! a stand-in `uname` that names a platform with a pre-built binary. Most tests run it in a session
@@ -38,8 +40,13 @@ mod integration_tests {
     /// Runs `install.sh` against a GitHub API that lists `tags` in the given order, and returns
     /// its stdout.
     fn run_install_script(tags: &[&str]) -> String {
-        let temp_dir = install_script_fixture(tags, DOWNLOAD_SUCCEEDS);
-        let output = run_install_script_without_terminal(&temp_dir);
+        run_install_script_to_success(&install_script_fixture(tags, DOWNLOAD_SUCCEEDS))
+    }
+
+    /// Runs `install.sh` in `temp_dir` without a terminal, asserts that it succeeded, and returns
+    /// its stdout.
+    fn run_install_script_to_success(temp_dir: &TempDir) -> String {
+        let output = run_install_script_without_terminal(temp_dir);
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         assert!(
             output.status.success(),
@@ -108,16 +115,26 @@ if [ -n "$out" ]; then {}; else cat '{}'; fi
         command
     }
 
+    /// The install directory, `~/.local/bin`, of the home in `temp_dir`.
+    fn install_dir(temp_dir: &TempDir) -> PathBuf {
+        temp_dir.path().join("home/.local/bin")
+    }
+
     /// The path of `install.sh`.
     fn install_script_path() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("install.sh")
     }
 
     /// Runs `install.sh` in `temp_dir` in a session of its own, so it has no `/dev/tty` and takes
-    /// the non-interactive path.
+    /// the non-interactive path. The umask is `022`.
     fn run_install_script_without_terminal(temp_dir: &TempDir) -> Output {
         install_script_command("perl", temp_dir)
-            .args(["-MPOSIX", "-e", "POSIX::setsid(); exec @ARGV or die", "sh"])
+            .args([
+                "-MPOSIX",
+                "-e",
+                "umask 022; POSIX::setsid(); exec @ARGV or die",
+                "sh",
+            ])
             .arg(install_script_path())
             .stdin(Stdio::null())
             .output()
@@ -126,15 +143,22 @@ if [ -n "$out" ]; then {}; else cat '{}'; fi
 
     /// Runs `install.sh` in `temp_dir` on a pseudo-terminal, typing `input` at it, so it takes
     /// the interactive path and reads its answers from `/dev/tty`. The output holds what the
-    /// terminal showed, the typed input echoed.
+    /// terminal showed, the typed input echoed. A script still running after 60 seconds, waiting
+    /// for an answer `input` did not give, is killed and the run fails with status 124.
     fn run_install_script_on_terminal(temp_dir: &TempDir, input: &str) -> Output {
         const RUN_ON_PTY: &str = r#"
-import os, pty, sys
+import os, pty, select, signal, sys, time
 pid, fd = pty.fork()
 if pid == 0:
     os.execvp("sh", ["sh", sys.argv[2]])
 os.write(fd, sys.argv[1].encode())
+deadline = time.monotonic() + 60
 while True:
+    ready, _, _ = select.select([fd], [], [], max(0, deadline - time.monotonic()))
+    if not ready:
+        os.kill(pid, signal.SIGKILL)
+        os.waitpid(pid, 0)
+        sys.exit(124)
     try:
         data = os.read(fd, 4096)
     except OSError:
@@ -167,8 +191,7 @@ sys.exit(os.waitstatus_to_exitcode(status) & 0xff)
 
     /// The file names in the install directory, `~/.local/bin`, of a run's home.
     fn installed_files(temp_dir: &TempDir) -> Vec<String> {
-        let install_dir = temp_dir.path().join("home/.local/bin");
-        let mut names = fs::read_dir(&install_dir)
+        let mut names = fs::read_dir(install_dir(temp_dir))
             .expect("install.sh did not reach the download: it made no install directory")
             .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
             .collect::<Vec<_>>();
@@ -284,13 +307,25 @@ sys.exit(os.waitstatus_to_exitcode(status) & 0xff)
     #[test]
     fn test_install_script_moves_the_download_into_place() {
         let temp_dir = install_script_fixture(&["v1.5.0"], DOWNLOAD_SUCCEEDS);
-        let output = run_install_script_without_terminal(&temp_dir);
-        assert!(output.status.success(), "{:?}", output);
+        run_install_script_to_success(&temp_dir);
         assert_eq!(installed_files(&temp_dir), vec!["fix"]);
         assert_eq!(
-            fs::read_to_string(temp_dir.path().join("home/.local/bin/fix")).unwrap(),
+            fs::read_to_string(install_dir(&temp_dir).join("fix")).unwrap(),
             "placeholder\n"
         );
+    }
+
+    /// The installed binary gets the mode the umask gives a new file, made executable: `0755`
+    /// under the usual umask `022`.
+    #[test]
+    fn test_install_script_installs_the_binary_with_the_umask_mode() {
+        let temp_dir = install_script_fixture(&["v1.5.0"], DOWNLOAD_SUCCEEDS);
+        run_install_script_to_success(&temp_dir);
+        let mode = fs::metadata(install_dir(&temp_dir).join("fix"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o7777, 0o755, "mode {:o}", mode & 0o7777);
     }
 
     /// A download that fails part-way leaves nothing in `~/.local/bin`: no truncated `fix`, which
@@ -305,9 +340,8 @@ sys.exit(os.waitstatus_to_exitcode(status) & 0xff)
 
     /// Writes `content` to `~/.local/bin/fix` of `temp_dir`, as an installed binary.
     fn install_existing_fix(temp_dir: &TempDir, content: &[u8]) -> PathBuf {
-        let install_dir = temp_dir.path().join("home/.local/bin");
-        fs::create_dir_all(&install_dir).unwrap();
-        let path = install_dir.join("fix");
+        fs::create_dir_all(install_dir(temp_dir)).unwrap();
+        let path = install_dir(temp_dir).join("fix");
         fs::write(&path, content).unwrap();
         fs::set_permissions(&path, Permissions::from_mode(0o755)).unwrap();
         path
@@ -349,8 +383,8 @@ sys.exit(os.waitstatus_to_exitcode(status) & 0xff)
     #[test]
     fn test_install_script_replaces_a_running_binary() {
         let temp_dir = install_script_fixture(&["v1.5.0"], DOWNLOAD_SUCCEEDS);
-        let installed = temp_dir.path().join("home/.local/bin/fix");
-        fs::create_dir_all(installed.parent().unwrap()).unwrap();
+        fs::create_dir_all(install_dir(&temp_dir)).unwrap();
+        let installed = install_dir(&temp_dir).join("fix");
         // Copied by `cp`, so that this process holds no descriptor writing the file, which a
         // child forked meanwhile by another test would carry into the `exec` below (`ETXTBSY`).
         let copied = Command::new("cp")
