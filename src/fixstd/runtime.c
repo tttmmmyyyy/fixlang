@@ -15,11 +15,6 @@ The C functions and values the Fix standard library is implemented with.
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#ifndef __MINGW32__
-#include <sys/wait.h>
-#endif // __MINGW32__
-#include <unistd.h>
-#include <pthread.h>
 
 // Defined by the compiler, and declared in `float_text.c` as well; the two translation units carry
 // the declaration because the runtime has no header of its own.
