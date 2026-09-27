@@ -8926,7 +8926,7 @@ fn get_lent_ptr<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) -> Pointer
     }
     assert!(
         val.is_box(gc.type_env()),
-        "a scope op lends a pointer into an array or a boxed value, and `{}` is neither.",
+        "a pointer is lent into an array or a boxed value, and `{}` is neither.",
         val.ty.to_string()
     );
     get_data_pointer_from_boxed_value(gc, val)
@@ -8973,7 +8973,7 @@ impl LLVMGen for InlineLLVMBorrowPtrBody {
     }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
-        i == SCOPE_VALUE_ARG
+        i == LENT_VALUE_ARG
     }
 
     fn result_locality(
@@ -8995,7 +8995,7 @@ impl LLVMGen for InlineLLVMBorrowPtrBody {
 /// `InlineLLVMMutatePtrBody` returns.
 ///
 /// Panics if `x_ty`, the type of the value the pointer points into, mentions `b`.
-fn scope_result_tyvar(x_ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+fn lent_ptr_result_tyvar(x_ty: &Arc<TypeNode>) -> Arc<TypeNode> {
     const B_TYPE_NAME: &str = "b";
     assert!(
         !x_ty.free_vars().contains_key(B_TYPE_NAME),
@@ -9011,7 +9011,7 @@ fn scope_result_tyvar(x_ty: &Arc<TypeNode>) -> Arc<TypeNode> {
 fn borrow_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const F_NAME: &str = "f";
     const X_NAME: &str = "x";
-    let b_ty = scope_result_tyvar(&x_ty);
+    let b_ty = lent_ptr_result_tyvar(&x_ty);
     let scm = Scheme::generalize(
         &[],
         preds,
@@ -9124,7 +9124,7 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
         if !self.force_unique {
             return None;
         }
-        unique_check_on_boxed_leaf(SCOPE_VALUE_ARG, vec![], arg_tys, type_env)
+        unique_check_on_boxed_leaf(LENT_VALUE_ARG, vec![], arg_tys, type_env)
     }
 
     fn assuming_local(&self) -> Box<dyn LLVMGen> {
@@ -9166,7 +9166,7 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
             result_ty,
             arg_tys,
             type_env,
-            SCOPE_VALUE_ARG,
+            LENT_VALUE_ARG,
             &MUTATE_PTR_VALUE_PATH,
         )
     }
@@ -9178,7 +9178,7 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
 
 /// The operand position of the value `InlineLLVMBorrowPtrBody` and `InlineLLVMMutatePtrBody` lend a
 /// pointer into.
-const SCOPE_VALUE_ARG: usize = 0;
+const LENT_VALUE_ARG: usize = 0;
 /// The path of the value in the result of `InlineLLVMMutatePtrBody`, `(ios, (value, action result))`.
 const MUTATE_PTR_VALUE_PATH: [usize; 2] = [1, 0];
 
@@ -9190,7 +9190,7 @@ fn mutate_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprN
     const F_NAME: &str = "f";
     const X_NAME: &str = "x";
     const IOS_NAME: &str = "ios";
-    let b_ty = scope_result_tyvar(&x_ty);
+    let b_ty = lent_ptr_result_tyvar(&x_ty);
     let xb_ty = make_tuple_ty(vec![x_ty.clone(), b_ty.clone()]);
     let scm = Scheme::generalize(
         &[],
