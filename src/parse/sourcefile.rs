@@ -30,7 +30,7 @@ pub struct SourceFile {
     ///
     /// The path of an assembled source is chosen for its origin, so two sources of one path share
     /// their origin, as equality by path requires.
-    pub origin: Option<Arc<SourceOrigin>>,
+    origin: Option<Arc<SourceOrigin>>,
 }
 
 // PROOF: D/A, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)

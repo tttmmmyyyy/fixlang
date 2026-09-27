@@ -10,7 +10,7 @@ use crate::{
     constants::{DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME},
     error::Errors,
     hash::md5_hex,
-    misc::{save_temporary_source, to_absolute_path, Map},
+    misc::{save_temporary_source, to_absolute_path, Map, Set},
     parse::{
         parser::parse_source_module_defn,
         sourcefile::{DocLine, LineOrigin, SourceFile, SourceOrigin, Span},
@@ -36,10 +36,7 @@ pub fn docstring_for_display(docstring: &str) -> String {
         .iter()
         .map(|line| Some(line.to_string()))
         .collect::<Vec<_>>();
-    for block in fenced_blocks(&lines) {
-        if !is_fix_example(info_string(lines[block.open])) {
-            continue;
-        }
+    for block in fix_example_blocks(&lines) {
         shown_lines[block.open] = Some(fence_with_info(lines[block.open], "fix"));
         for index in block.open + 1..block.close.unwrap_or(lines.len()) {
             if !matches!(ExampleLine::classify(lines[index]), ExampleLine::Shown(_)) {
@@ -114,7 +111,7 @@ pub fn collect_examples(program: &Program, files: &[PathBuf]) -> Result<Vec<FixE
     let files = files
         .iter()
         .map(|file| to_absolute_path(file))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Set<_>, _>>()?;
     let mut module_of_file: Map<PathBuf, Name> = Map::default();
     for module in &program.modules {
         module_of_file.insert(module.absolute_source_path()?, module.name.clone());
@@ -159,10 +156,7 @@ pub fn examples_in_document(
         .collect::<Vec<_>>();
     let mut examples = vec![];
     let mut errors = Errors::empty();
-    for block in fenced_blocks(&texts) {
-        if !is_fix_example(info_string(texts[block.open])) {
-            continue;
-        }
+    for block in fix_example_blocks(&texts) {
         errors.eat_err_or(example_of_block(doc_lines, &block, module), |example| {
             examples.push(example)
         });
@@ -313,9 +307,9 @@ fn assemble_example(
 /// fence relates to the fence: a position on it is reported at the fence.
 fn fence_origin(line: &DocLine) -> (usize, LineOrigin) {
     let (line_number, column) = line.span.start_line_col();
-    let indent = line.text.len() - line.text.trim_start().len();
+    let (indent, _) = split_indent(&line.text);
     let origin = LineOrigin::Written {
-        column: column + line.text[..indent].chars().count(),
+        column: column + indent.chars().count(),
         width: line.text.trim().chars().count(),
     };
     (line_number, origin)
@@ -353,6 +347,14 @@ fn fenced_blocks(lines: &[&str]) -> Vec<FencedBlock> {
     blocks
 }
 
+/// The fenced code blocks of the docstring whose lines are `lines` that are Fix examples, in order.
+fn fix_example_blocks(lines: &[&str]) -> Vec<FencedBlock> {
+    fenced_blocks(lines)
+        .into_iter()
+        .filter(|block| is_fix_example(info_string(lines[block.open])))
+        .collect()
+}
+
 /// The info string of the block `fence` opens: what follows its backticks, trimmed.
 fn info_string(fence: &str) -> &str {
     fence.trim_start().trim_start_matches('`').trim()
@@ -372,10 +374,14 @@ fn is_fix_example(info: &str) -> bool {
 
 /// The fence `fence` with its info string replaced by `info`.
 fn fence_with_info(fence: &str, info: &str) -> String {
-    let after_indent = fence.trim_start();
-    let backticks = after_indent.len() - after_indent.trim_start_matches('`').len();
-    let fence_end = fence.len() - after_indent.len() + backticks;
-    format!("{}{}", &fence[..fence_end], info)
+    let (indent, after_indent) = split_indent(fence);
+    let backticks = &after_indent[..after_indent.len() - after_indent.trim_start_matches('`').len()];
+    format!("{}{}{}", indent, backticks, info)
+}
+
+/// `line` split into its indentation and the text that follows it.
+fn split_indent(line: &str) -> (&str, &str) {
+    line.split_at(line.len() - line.trim_start().len())
 }
 
 /// A line of a Fix example, by the part it takes in the program and in what a reader is shown.
@@ -392,8 +398,7 @@ enum ExampleLine<'a> {
 impl<'a> ExampleLine<'a> {
     /// The kind of the line `line` of a Fix example.
     fn classify(line: &'a str) -> Self {
-        let after_indent = line.trim_start();
-        let indent = &line[..line.len() - after_indent.len()];
+        let (indent, after_indent) = split_indent(line);
         if after_indent == "#" {
             ExampleLine::HiddenBlank
         } else if let Some(code) = after_indent.strip_prefix("# ") {

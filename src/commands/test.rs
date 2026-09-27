@@ -6,6 +6,7 @@ use crate::doc_test::{check_doc_test_module_name_is_free, collect_examples, Exam
 use crate::elaboration::load_source_files;
 use crate::error::{panic_if_err, Errors};
 use crate::metafiles::project_file::ProjectFile;
+use crate::parse::sourcefile::SourceFile;
 use colored::Colorize;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -61,6 +62,11 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
     // A Fix example is built without the arguments and the output path given for `Test::test`.
     config.run_program_args.clear();
     config.out_file_path = None;
+    let config_of_example = |source: &SourceFile| {
+        let mut config = config.clone();
+        config.doc_test_example = Some(source.clone());
+        config
+    };
     let mut passed = 0;
     let mut ignored = 0;
     for example in &examples {
@@ -71,21 +77,13 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
                 ignored += 1;
                 continue;
             }
-            ExampleTask::Compile(source) => {
-                let mut config = config.clone();
-                config.doc_test_example = Some(source.clone());
-                build_executable(config)
-                    .err()
-                    .map(|errors| errors.to_string())
-            }
-            ExampleTask::Run(source) => {
-                let mut config = config.clone();
-                config.doc_test_example = Some(source.clone());
-                match run(config, false) {
-                    Ok(output) => run_failure(output),
-                    Err(errors) => Some(errors.to_string()),
-                }
-            }
+            ExampleTask::Compile(source) => build_executable(config_of_example(source))
+                .err()
+                .map(|errors| errors.to_string()),
+            ExampleTask::Run(source) => match run(config_of_example(source), false) {
+                Ok(output) => run_failure(output),
+                Err(errors) => Some(errors.to_string()),
+            },
         };
         match failure {
             None => {
