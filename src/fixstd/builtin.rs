@@ -8603,40 +8603,6 @@ fn get_data_pointer_from_boxed_value<'c, 'm>(
     val.gep_boxed(gc, data_field_idx)
 }
 
-/// The locality of the result of an op that hands a callback a raw pointer into a container's
-/// payload and returns that container at `value_path` of its result, alongside the callback's own
-/// result.
-///
-/// The container comes back force-uniqued (or unique by the caller's promise, where the check is
-/// dropped), so its root is local. What it reaches is another matter: the callback may write a
-/// reference to any object through the pointer it was given, so a payload that can hold one loses
-/// the deep fact. A payload of scalars reaches nothing at all, which is the bottom. The callback's
-/// result comes out of an indirect call.
-fn mutated_in_place_locality(
-    result_ty: &Arc<TypeNode>,
-    arg_tys: &[Arc<TypeNode>],
-    type_env: &TypeEnv,
-    value_arg: usize,
-    value_path: &[usize],
-) -> ExtShape {
-    let payload_holds_boxed = arg_tys[value_arg]
-        .unpunched_field_types(type_env)
-        .iter()
-        .any(|(_, fty)| !boxed_leaf_paths(fty, type_env).is_empty());
-    let value_leaf = if payload_holds_boxed {
-        LeafCond::new(ExtCond::bottom(), ExtCond::Always)
-    } else {
-        LeafCond::bottom()
-    };
-    ExtShape::build_shape(result_ty, type_env, &|path| {
-        if path.starts_with(value_path) {
-            value_leaf.clone()
-        } else {
-            LeafCond::always()
-        }
-    })
-}
-
 /// The operand position of the array an `Array::set` writes into.
 const ARRAY_SET_ARRAY_ARG: usize = 0;
 /// The operand position of the value `_unsafe_append_value_capacity_unchecked` fills slots with.
@@ -9073,13 +9039,27 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        mutated_in_place_locality(
-            result_ty,
-            arg_tys,
-            type_env,
-            LENT_VALUE_ARG,
-            &MUTATE_PTR_VALUE_PATH,
-        )
+        // The value comes back force-uniqued (or unique by the caller's promise, where the check is
+        // dropped), so its root is local. What it reaches is another matter: the function may write a
+        // reference to any object through the pointer it was given, so a payload that can hold one
+        // loses the deep fact. A payload of scalars reaches nothing at all, which is the bottom. The
+        // action's result comes out of an indirect call.
+        let payload_holds_boxed = arg_tys[LENT_VALUE_ARG]
+            .unpunched_field_types(type_env)
+            .iter()
+            .any(|(_, fty)| !boxed_leaf_paths(fty, type_env).is_empty());
+        let value_leaf = if payload_holds_boxed {
+            LeafCond::new(ExtCond::bottom(), ExtCond::Always)
+        } else {
+            LeafCond::bottom()
+        };
+        ExtShape::build_shape(result_ty, type_env, &|path| {
+            if path.starts_with(&MUTATE_PTR_VALUE_PATH) {
+                value_leaf.clone()
+            } else {
+                LeafCond::always()
+            }
+        })
     }
 
     fn as_any(&self) -> &dyn Any {
