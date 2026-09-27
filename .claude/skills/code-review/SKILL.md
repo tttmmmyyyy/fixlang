@@ -42,7 +42,7 @@ An aspect **edits inside the diff hunks** and **reads anywhere**:
 - **The diff hunks.** Every convention of the aspect applies in full, editing and flagging alike.
 - **Everything else** — the rest of each touched file, and the rest of the project. Findings only. Aspects read it freely — `code-quality`'s search for an existing helper and `refactor-scope`'s hunt for near-duplicates both need it — and they edit nothing there.
 
-Code the change did not write stays as it is, so the diff the author reads for the change carries the change alone. What an aspect notices outside the hunks reaches the author as a finding, and the orchestrator decides what becomes of it — see *Act on the findings the change is responsible for*.
+What an aspect notices outside the hunks reaches the orchestrator as a finding, and the orchestrator decides what becomes of it — see *Act on the findings the change is responsible for*. Existing code the change made stale is reshaped there, on the branch under review; the rest stays as it is, so the diff the author reads carries the change and its consequences alone.
 
 ## Aspect Sequence
 
@@ -104,7 +104,7 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 6. **Apply `cargo fmt` to the branch under review as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
 7. **Act on the findings the change is responsible for** — see the section of that name below — each in a commit of its own on the branch under review. Then run the **whole** suite once, over all of those commits together.
 8. **Record the checkpoint.** Take `git rev-parse --short HEAD` on the branch under review and write it to the `code-review-checkpoints` memory under that branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
-9. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); say what each test you committed pins, and name each proposal you dropped with the reason; say which findings you fixed and what each now does; surface the findings you left, each with the reason it is the author's — the findings about code the change did not write among them; list every commit created, with its short hash; and state the base ref the review covered and the checkpoint now recorded.
+9. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); say what each test you committed pins, and name each proposal you dropped with the reason; say which findings you fixed and what each now does; surface the findings you left, each with the reason it is the author's — the findings about code the change neither wrote nor made stale among them; list every commit created, with its short hash; and state the base ref the review covered and the checkpoint now recorded.
 10. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue, and leave the checkpoint at its previous value. If `cargo fmt` itself fails, surface that and skip the formatting commit.
 
 ## Act on the findings the change is responsible for
@@ -113,7 +113,7 @@ An aspect reports rather than edits outside the hunks, and reports rather than e
 
 Read every finding the review produced — from the flag-only aspects and from the editing aspects' report-only items — and sort each into one of three piles.
 
-**Fix it, on the branch under review**, when the change is responsible for it and the suite answers whether the fix is right. The change is responsible for the code the diff writes, and for a scar `refactor-scope` names — existing code the change bent around, whose reshaping is part of the change even where it reaches outside the hunks. The question in these is "did I break something", and the suite answers it:
+**Fix it, on the branch under review**, when the change is responsible for it and the suite answers whether the fix is right. The change is responsible for the code the diff writes, and for existing code the change bent around or made stale — the code someone who knew the change would now write differently: the callers of a helper the change superseded, a comment the change made untrue, a sibling that now disagrees with it. Reshaping that code is part of the change even where it reaches outside the hunks, and the diff grows for a reason its reader can follow. The question in these is "did I break something", and the suite answers it:
 
 - a signature every caller reaches from inside this repository;
 - a fallback over a case the code cannot produce, turned into a hard failure;
@@ -130,7 +130,7 @@ Read every finding the review produced — from the flag-only aspects and from t
 - a property the suite does not measure — performance, memory, concurrency, a platform this machine is not;
 - a redesign, where what the author settles is the direction rather than the risk: a rewritten pipeline, a different data structure carrying the same information, a rule imposed on the language.
 
-**Report it, and edit nothing**, when it is about code the change did not write and did not bend around. The summary names it with its place, so the author can take it up in a change of its own. A defect there that a user can reach — a program compiled into the wrong code, a diagnostic reported at the wrong place or missing, a `fix` command answering wrongly — is filed as an issue, since it wants a change of its own with the changelog entry and the regression test such a change owes.
+**Report it, and edit nothing**, when it is about code the change did not write, did not bend around, and did not make stale — code that would want the same edit had the change never happened. The summary names it with its place, so the author can take it up in a change of its own. A defect there that a user can reach — a program compiled into the wrong code, a diagnostic reported at the wrong place or missing, a `fix` command answering wrongly — is filed as an issue, since it wants a change of its own with the changelog entry and the regression test such a change owes.
 
 **Verify the fixes together.** Commit each fix on its own, then run the **whole** suite once over all of them. A filtered run answers a smaller question, and it answers it wrongly here more often than anywhere else: a finding sits by definition outside what the change's own tests exercise, so the tests that would catch a mistake in it are the ones you would not think to filter for. When the run goes red, the commits say which fix to look at first.
 
@@ -187,7 +187,7 @@ it.
 - Don't let subagents decide their own scope — always pass the resolved base.
 - Don't let an aspect edit outside the hunks: what it notices there is a finding. Acting on findings is the orchestrator's own step, verified by one whole-suite run over the fixes.
 - Don't hand the author a finding the change is responsible for and the suite could have settled. A finding whose only question is "does this break something" is work the review is holding rather than work the author asked for.
-- Don't edit code the change did not write and did not bend around. Report what you found there; the diff the author reads for the change carries the change alone.
+- Don't edit code that would want the same edit had the change never happened. Report what you found there; the diff the author reads for the change carries the change and its consequences alone.
 - Don't commit a proposed test that pins behavior the project has never decided on. The test would make the current output the required one, which is the author's decision about the language and its API — raise it as a question instead.
 - Don't commit a proposed test you have not watched go red. A test that cannot fail is a green light wired to nothing, and it costs every future run.
 - Don't continue the chain if a step fails.
@@ -324,11 +324,11 @@ Look for concrete evidence, in the code as written, that the chosen design fight
 
 ## Aspect: refactor-scope
 
-A change is judged by the codebase it leaves behind, so reshaping existing code is part of a change's legitimate scope — the project's standing instruction is to prefer the cleanliness of the end state over the smallness of the diff. This aspect reads the seam between the new code and the code it was grafted onto, and asks: **did the change bend itself out of shape so that the existing code could stay untouched?**
+A change is judged by the codebase it leaves behind, so reshaping existing code is part of a change's legitimate scope — the project's standing instruction is to prefer the cleanliness of the end state over the smallness of the diff. This aspect reads the seam between the new code and the code it was grafted onto, and asks two questions: **did the change bend itself out of shape so that the existing code could stay untouched?** And **did the change leave existing code stale — code that someone who knew the change would now write differently?**
 
-Every other editing aspect confines itself to the diff hunks by design. That discipline keeps them safe, and it also makes them blind to this: a duplicate created to avoid editing an existing function looks perfectly clean from inside its own hunk, because the defect lives in the relationship between the new item and the old one.
+Every other editing aspect confines itself to the diff hunks by design. That discipline keeps them safe, and it also makes them blind to this: a duplicate created to avoid editing an existing function looks perfectly clean from inside its own hunk, and so does a new helper whose older, weaker twin keeps its callers, because the defect lives in the relationship between the new item and the old one.
 
-This aspect **only flags**; it never refactors. Widening a change to reshape existing code is the author's call, and the ripple through call sites, tests, and downstream Fix programs needs judgment this review does not have.
+This aspect **only flags**; it never refactors. Its findings go to the orchestrator, which reshapes the existing code on the branch under review where the suite can judge the result, and leaves to the author what reaches past this repository.
 
 ### Distinguish from design-fit
 
@@ -348,10 +348,20 @@ Each of these is concrete evidence in the diff that existing code was routed aro
 
 The litmus test: **explain the resulting code to someone who never saw the diff.** If the explanation of why there are two of something, why a flag exists, or why a conversion happens is "so that the change would touch fewer files", then the reason describes the diff — and the diff is gone the moment it lands, leaving behind only the thing it justified.
 
+### Consequences to look for
+
+The second question looks outward from the change, at existing code the change did not touch and has made stale. The predicate: **would someone who knows the change write this existing code differently now?** When the answer is yes because of the change, the stale code is part of the change's work. When the code would want the same edit had the change never happened, it is not this aspect's — that is ordinary old code, and it waits for a change of its own.
+
+- **An existing item the new one subsumes.** The change added a helper, a type, or a pass that does what an older one does and more. The older one's callers belong on the new one, and the older one is deleted once it has none.
+- **Existing code re-deriving what the change now provides.** A new type carries an invariant, a new helper computes a value, a new field stores a fact — and code elsewhere still works it out by hand.
+- **Text the change made untrue.** A comment, a doc comment, a test's description, or a document elsewhere that states the behavior the change replaced.
+- **A sibling that now disagrees.** The change fixed or extended how one function treats a case, and a sibling that handles the same case — another arm of the same dispatch, the other half of a read/write pair, the same check in another handler — still treats it the old way.
+- **A workaround for what the change removed.** Existing code routes around a limitation — an extra argument, a special case, a retry — that the change lifted.
+
 ### Discipline
 
 - **Flag only, never refactor.** No edits.
-- **Anchor every finding on a scar in the new code** — the duplicate, the flag, the adapter, the wrapper, the stranded path. Pre-existing mess that the change neither created nor bent around is outside this aspect; raising it here buries the findings that the diff is actually responsible for.
+- **Anchor every finding on the change** — a scar in the new code (the duplicate, the flag, the adapter, the wrapper, the stranded path), or existing code the change made stale, named together with what in the change made it so. Pre-existing mess that the change neither created, bent around, nor made stale is outside this aspect; raising it here buries the findings that the diff is actually responsible for.
 - **Price the ripple.** A finding must say what the refactor would touch: which files, roughly how many call sites, which tests. "Generalize this" with no estimate leaves the author no basis to decide.
 - **Name the compatibility cost.** Some existing items have consumers outside this repository — Fix standard-library signatures, the LSP protocol surface, APIs that external Fix projects call. Reshaping those is a compatibility decision; flag it all the same, and state that cost as part of the finding.
 - **An author who priced it already has answered.** When a commit message or a comment states why the existing code was left as it is, treat that as the decision and skip the finding.
@@ -362,11 +372,12 @@ The litmus test: **explain the resulting code to someone who never saw the diff.
 2. List the items the diff adds — functions, types, traits, passes, constants. For each, search `src/` for an existing counterpart it resembles in name, signature, or shape, and read any candidate in full before judging.
 3. For each existing item the diff **modifies**, read its pre-diff version (`git show <base>:<file>`) and ask whether the modification is a graft — a flag, an extra case, a widened type — where reshaping would have served the old and new callers together.
 4. For each existing item the diff **calls but leaves alone**, ask whether the new code bends around it: a conversion at every call site, a re-stated constant, a value threaded through only to satisfy its signature.
-5. Confirm each candidate against the code, check it against *Discipline*, and collect the survivors. Make no edits.
+5. For each thing the change adds or alters — an item, an invariant, a behavior — search `src/` for existing code it makes stale, per *Consequences to look for*: the callers of an item it subsumes, a hand derivation of what it now provides, text describing what it replaced, a sibling handling the same case.
+6. Confirm each candidate against the code, check it against *Discipline*, and collect the survivors. Make no edits.
 
 ### Report
 
-- **Flagged for review**: per finding — the scar in the new code (file, and what it is), the existing code that would have to change, the end state you would aim for, and the cost of getting there.
+- **Flagged for review**: per finding — the scar in the new code or the stale existing code (file, and what it is), what in the change it comes from, the existing code that would have to change, the end state you would aim for, and the cost of getting there.
 - If the change reshaped existing code wherever it needed to, say so in one line and flag nothing.
 
 ---
