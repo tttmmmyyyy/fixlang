@@ -1086,13 +1086,13 @@ mod tests {
     /// empty list).
     #[test]
     fn test_parameters_in_document() {
-        let owned = |v: &[&str]| Some(v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+        let some_names = |v: &[&str]| Some(v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
 
         assert_eq!(
             parameters_in_document(
                 "Show it.\n\n# Parameters\n* `prefix` - the text\n- `value : a` - the value\n"
             ),
-            owned(&["prefix", "value"]),
+            some_names(&["prefix", "value"]),
             "names come from `*` and `-` items, cut at the first character an identifier cannot hold"
         );
         assert_eq!(
@@ -1102,7 +1102,7 @@ mod tests {
         );
         assert_eq!(
             parameters_in_document("Show it.\n\n# Parameters\nnone\n"),
-            owned(&[]),
+            some_names(&[]),
             "a Parameters section that lists nothing yields an empty list"
         );
     }
