@@ -145,6 +145,24 @@ Present the diff to the user and wait for approval before proceeding to commit, 
    git push --tags
    ```
 
+### Step 11: Check the GitHub Release
+
+Pushing the tag starts `.github/workflows/release.yml`, which builds the binaries and creates the GitHub release for the tag. A tag with a suffix (`-alpha`, `-beta.2`, `-rc.1`, ...) becomes a pre-release, and a tag without one becomes a full release that GitHub shows as "Latest".
+
+1. Once the workflow finishes, confirm the release carries a binary for every target and the pre-release mark its tag calls for:
+   ```bash
+   gh release view vX.Y.Z --json isPrerelease,assets --jq '.isPrerelease, .assets[].name'
+   ```
+2. For a stable release, set the release body to the version's section of `CHANGELOG.md`, from its `## [X.Y.Z] - YYYY-MM-DD` heading to the next version's heading:
+   ```bash
+   awk '/^## \[X.Y.Z\]/{p=1; print; next} /^## \[/{p=0} p' CHANGELOG.md > body.md
+   gh api -X PATCH repos/tttmmmyyyy/fixlang/releases/$(gh release view vX.Y.Z --json databaseId --jq .databaseId) -F body=@body.md
+   ```
+
+### Step 12: Advance the Version on main (for stable releases)
+
+After a stable release, set the version on main to the next patch version (`X.Y.Z` -> `X.Y.(Z+1)`), so a compiler built from main names a version the release does not. Update the three places Step 1 and Step 2 name — `Cargo.toml`, `std_doc/fixproj.toml`, and the header of `std_doc/Std.md` — together with `Cargo.lock`, and commit them.
+
 ## Checklist Summary
 
 - [ ] `Cargo.toml` version updated
@@ -158,3 +176,5 @@ Present the diff to the user and wait for approval before proceeding to commit, 
 - [ ] CHANGELOG.md updated (stable releases only)
 - [ ] Diff reviewed and approved by user
 - [ ] Changes committed, tagged as `vX.Y.Z`, and pushed to main
+- [ ] GitHub release has every target's binary and the right pre-release mark; a stable release's body is its CHANGELOG section
+- [ ] Version on main advanced to the next patch version (stable releases only)

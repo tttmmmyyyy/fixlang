@@ -76,6 +76,25 @@ download_to() {
     fi
 }
 
+# Sort release tags read from stdin, newest first, in semver order: `v1.5.0` comes before
+# `v1.5.0-rc.1`, which comes before `v1.5.0-beta.10`, which comes before `v1.5.0-beta.9`.
+# A pre-release suffix is a word (`alpha` < `beta` < `rc`) optionally followed by `.` and a number.
+sort_versions() {
+    awk '{
+        tag = $0; v = tag; sub(/^v/, "", v)
+        pre = ""; i = index(v, "-")
+        if (i > 0) { pre = substr(v, i + 1); v = substr(v, 1, i - 1) }
+        n = split(v, a, ".")
+        if (pre == "") { final = 1; word = "-"; num = 0 }
+        else {
+            final = 0; j = index(pre, ".")
+            if (j > 0) { word = substr(pre, 1, j - 1); num = substr(pre, j + 1) + 0 }
+            else { word = pre; num = 0 }
+        }
+        printf "%d %d %d %d %s %d %s\n", a[1] + 0, a[2] + 0, a[3] + 0, final, word, num, tag
+    }' | LC_ALL=C sort -k1,1nr -k2,2nr -k3,3nr -k4,4nr -k5,5r -k6,6nr | awk '{ print $7 }'
+}
+
 # ---- Main ----------------------------------------------------------------
 
 TARGET="$(detect_target)"
@@ -88,19 +107,26 @@ say ""
 
 # Fetch available releases from GitHub API.
 say "Fetching release list from GitHub..."
-RELEASES_JSON="$(fetch "https://api.github.com/repos/${REPO}/releases")"
-VERSIONS="$(printf '%s' "$RELEASES_JSON" | grep '"tag_name"' | sed 's/.*"tag_name":[ ]*"\([^"]*\)".*/\1/')"
+RELEASES_JSON="$(fetch "https://api.github.com/repos/${REPO}/releases?per_page=100")"
+VERSIONS="$(printf '%s' "$RELEASES_JSON" | grep '"tag_name"' | sed 's/.*"tag_name":[ ]*"\([^"]*\)".*/\1/' | sort_versions)"
 
 if [ -z "$VERSIONS" ]; then
     err "Failed to retrieve release information. Check your internet connection."
 fi
 
-LATEST="$(printf '%s\n' "$VERSIONS" | head -n1)"
+# The default is the newest release without a pre-release suffix.
+LATEST="$(printf '%s\n' "$VERSIONS" | grep -v -e '-' | head -n1)"
+if [ -z "$LATEST" ]; then
+    LATEST="$(printf '%s\n' "$VERSIONS" | head -n1)"
+fi
 TOTAL="$(echo "$VERSIONS" | wc -l | tr -d ' ')"
 
 say "Available versions:"
 printf '%s\n' "$VERSIONS" | head -n10 | while IFS= read -r v; do
-    say "  ${v}"
+    case "$v" in
+        *-*) say "  ${v} (pre-release)" ;;
+        *) say "  ${v}" ;;
+    esac
 done
 if [ "$TOTAL" -gt 10 ]; then
     say "  ... (${TOTAL} versions total)"

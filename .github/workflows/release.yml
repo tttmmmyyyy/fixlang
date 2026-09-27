@@ -115,5 +115,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          # A tag with a suffix such as `-beta.1` or `-rc.1` is a pre-release.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             target/${{ matrix.job.target }}/release/fix-${{ github.ref_name }}-${{ matrix.job.target }}${{ matrix.job.extension }}
