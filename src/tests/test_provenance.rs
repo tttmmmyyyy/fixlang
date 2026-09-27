@@ -708,7 +708,7 @@ mod integration_tests {
     /// Assert both halves of what the two writes through a lent pointer in the case `case` declare:
     /// that each drops its own check on a value proven unique, and that the value each returns,
     /// bound as `mutated` and `mutated_io`, is `fresh`.
-    fn assert_writes_through_lent_pointer_elide_checks(case: &str) {
+    fn assert_writes_through_lent_pointer_are_unique(case: &str) {
         let (_temp_dir, project_dir) = setup_test_env(case);
         let dump = emit_main_rc_ir(&project_dir);
 
@@ -736,7 +736,7 @@ mod integration_tests {
     /// own check is dropped on an array proven unique, and that the array it returns is `fresh`.
     #[test]
     fn test_unique_check_elim_mutate_elements() {
-        assert_writes_through_lent_pointer_elide_checks("unique_elim_mutate_elements");
+        assert_writes_through_lent_pointer_are_unique("unique_elim_mutate_elements");
     }
 
     /// Verifies both halves of what a write through the pointer to a boxed value's payload
@@ -744,7 +744,7 @@ mod integration_tests {
     /// returns is `fresh`.
     #[test]
     fn test_unique_check_elim_mutate_boxed() {
-        assert_writes_through_lent_pointer_elide_checks("unique_elim_mutate_boxed");
+        assert_writes_through_lent_pointer_are_unique("unique_elim_mutate_boxed");
     }
 
     /// Verifies that `borrow_boxed` borrows the value it lends a pointer into: nothing retains the
