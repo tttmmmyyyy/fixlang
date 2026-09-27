@@ -7,7 +7,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use std::env;
+    use crate::tests::test_util::path_env_with_dir_in_front;
     use std::fs::{self, Permissions};
     use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
@@ -64,15 +64,10 @@ if [ -n "$out" ]; then echo placeholder > "$out"; else cat '{}'; fi
         );
 
         let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("install.sh");
-        let path_env = format!(
-            "{}:{}",
-            bin_dir.display(),
-            env::var("PATH").unwrap_or_default()
-        );
         let output = Command::new("perl")
             .args(["-MPOSIX", "-e", "POSIX::setsid(); exec @ARGV or die", "sh"])
             .arg(&script)
-            .env("PATH", path_env)
+            .env("PATH", path_env_with_dir_in_front(bin_dir))
             .env("HOME", &home_dir)
             .stdin(Stdio::null())
             .output()
