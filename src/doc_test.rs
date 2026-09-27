@@ -375,7 +375,8 @@ fn is_fix_example(info: &str) -> bool {
 /// The fence `fence` with its info string replaced by `info`.
 fn fence_with_info(fence: &str, info: &str) -> String {
     let (indent, after_indent) = split_indent(fence);
-    let backticks = &after_indent[..after_indent.len() - after_indent.trim_start_matches('`').len()];
+    let backticks =
+        &after_indent[..after_indent.len() - after_indent.trim_start_matches('`').len()];
     format!("{}{}{}", indent, backticks, info)
 }
 
