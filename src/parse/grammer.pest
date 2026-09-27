@@ -106,7 +106,7 @@ expr_let = { (keyword_let ~ sep+ ~ pattern_nounion ~ sep* ~ eq_of_let ~ sep* ~ e
 
 // A `let` whose value runs up to the bracket or comma closing the enclosing expression, with no `in`
 // or `;` after it. It is always an error: the grammar accepts it only so that the parser can report
-// what left the `let` without its `;` (see `parse_expr_let_without_in`).
+// what left the `let` without its `;` (see `report_let_without_in`).
 expr_let_without_in = { keyword_let ~ sep+ ~ pattern_nounion ~ sep* ~ eq_of_let ~ sep* ~ expr ~ &(sep* ~ (")" | "]" | "}" | ",")) }
 
 match_arrow = { "=>" }

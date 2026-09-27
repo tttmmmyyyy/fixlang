@@ -351,7 +351,7 @@ pub enum SyntaxError {
     Rejected(PestError<Rule>),
     /// The grammar accepts the source, and it holds a `let` with no `in` or `;` after its value,
     /// which the grammar accepts only so that the parser can report it (see
-    /// `parse_expr_let_without_in`). `value_end` is the byte offset just past that value.
+    /// `report_let_without_in`). `value_end` is the byte offset just past that value.
     LetWithoutIn { value_end: usize },
 }
 
@@ -2268,7 +2268,7 @@ fn parse_expr_nlr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
         Rule::expr_hole => parse_expr_hole(pair, ctx),
         Rule::expr_var => parse_expr_var(pair, ctx),
         Rule::expr_let => parse_expr_let(pair, ctx)?,
-        Rule::expr_let_without_in => parse_expr_let_without_in(pair, ctx)?,
+        Rule::expr_let_without_in => return Err(report_let_without_in(pair, ctx)),
         Rule::expr_eval => parse_expr_eval(pair, ctx)?,
         Rule::expr_if => parse_expr_if(pair, ctx)?,
         Rule::expr_match => parse_expr_match(pair, ctx)?,
@@ -2449,10 +2449,7 @@ fn parse_expr_let_recursively(
 /// When the value ends with an `if` in the form `if c { a }; b`, the error points at that `if`: its
 /// `;` took the rest of the enclosing expression as the else branch `b`, which is what a forgotten
 /// `else` does to `let x = if c { a }; rest`.
-fn parse_expr_let_without_in(
-    pair: Pair<Rule>,
-    ctx: &mut ParseContext,
-) -> Result<Arc<ExprNode>, Errors> {
+fn report_let_without_in(pair: Pair<Rule>, ctx: &ParseContext) -> Errors {
     assert_eq!(pair.as_rule(), Rule::expr_let_without_in);
     let mut pairs = pair.into_inner();
     let keyword = pairs.next().unwrap();
@@ -2464,10 +2461,10 @@ fn parse_expr_let_without_in(
     let let_head = Span::from_pair(&ctx.source, &keyword).unite(&Span::from_pair(&ctx.source, &eq));
 
     let Some((if_pair, else_marker)) = if_taking_the_rest_after_semicolon(bound) else {
-        return Err(Errors::from_msg_srcs(
+        return Errors::from_msg_srcs(
             "This `let` has no `in` or `;` after its value.".to_string(),
             &[&Some(let_head)],
-        ));
+        );
     };
     let if_span = Span::from_pair(&ctx.source, &if_pair);
     let if_head = if_span.part(0, else_marker.as_span().end() - if_span.start);
@@ -2480,7 +2477,7 @@ fn parse_expr_let_without_in(
         &[&Some(if_head)],
     );
     error.add_src("The `let`:".to_string(), let_head);
-    Err(Errors::from_err(error))
+    Errors::from_err(error)
 }
 
 /// The `if` in the form `if c { a }; b` that the expression `pair` ends with, where the else branch
