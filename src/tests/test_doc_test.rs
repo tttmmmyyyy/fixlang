@@ -294,7 +294,10 @@ fn test_fix_test_without_the_test_function() {
         streams(&output)
     );
 
-    let dir = project_dir(&[("lib.fix", "module Lib;\nvalue : I64;\nvalue = 1;\n")], &[]);
+    let dir = project_dir(
+        &[("lib.fix", "module Lib;\nvalue : I64;\nvalue = 1;\n")],
+        &[],
+    );
     let output = fix_test(&dir, &[]);
     assert!(
         !output.status.success()
@@ -463,7 +466,10 @@ module Test;
 test : IO ();
 test = pure();
 "#;
-    let dir = project_dir(&[("lib.fix", "module Lib;\nvalue : I64;\nvalue = 1;\n")], &[("test.fix", test)]);
+    let dir = project_dir(
+        &[("lib.fix", "module Lib;\nvalue : I64;\nvalue = 1;\n")],
+        &[("test.fix", test)],
+    );
     let output = fix_test(&dir, &[]);
     assert!(
         output.status.success(),
@@ -503,5 +509,205 @@ fn test_fix_docs_hides_the_hidden_lines() {
             && !document.contains("ignore"),
         "the marks are left out of the document:\n{}",
         document
+    );
+}
+
+/// A module `Lib` that documents a declaration of each kind with a Fix example: the module, a union
+/// and its variant, a struct and its field, a trait with its associated type and its member, a
+/// trait implementation, a trait alias and a global value.
+const LIB_DOCUMENTING_EVERY_KIND: &str = r#"// ```fix
+// assert_eq(|_|"", Shape::circle(1).is_circle, true)
+// ```
+module Lib;
+
+// ```fix
+// assert_eq(|_|"", Shape::square(2).as_square, 2)
+// ```
+type Shape = union {
+    // ```fix
+    // assert_eq(|_|"", Shape::circle(3).as_circle, 3)
+    // ```
+    circle : I64,
+    square : I64
+};
+
+// ```fix
+// assert_eq(|_|"", Point { x : 1 }.@x, 1)
+// ```
+type Point = struct {
+    // ```fix
+    // assert_eq(|_|"", Point { x : 2 }.@x, 2)
+    // ```
+    x : I64
+};
+
+// ```fix
+// assert_eq(|_|"", 3.describe, "a number")
+// ```
+trait a : Describe {
+    // ```fix
+    // assert_eq(|_|"", 4.describe, "a number")
+    // ```
+    type Kind a;
+    // ```fix
+    // assert_eq(|_|"", 5.describe, "a number")
+    // ```
+    describe : a -> String;
+}
+
+// ```fix
+// assert_eq(|_|"", 6.describe, "a number")
+// ```
+impl I64 : Describe {
+    type Kind I64 = Bool;
+    describe = |_| "a number";
+}
+
+// ```fix
+// assert_eq(|_|"", 7.describe, "a number")
+// ```
+trait Numeric = Describe + Add;
+
+// ```fix
+// assert_eq(|_|"", double(4), 8)
+// ```
+double : I64 -> I64;
+double = |x| 2 * x;
+"#;
+
+/// A module `Util` whose doc comment holds a Fix example that uses `Util` by the short names.
+const UTIL_DOCUMENTING_A_VALUE: &str = r#"module Util;
+
+// ```fix
+// assert_eq(|_|"", triple(1), 3)
+// ```
+triple : I64 -> I64;
+triple = |x| 3 * x;
+"#;
+
+/// The line numbers of the lines of `source` that open a Fix example.
+fn fix_fence_lines(source: &str) -> Vec<usize> {
+    source
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| line.trim_start().starts_with("// ```fix"))
+        .map(|(index, _)| index + 1)
+        .collect()
+}
+
+/// `fix test` runs the Fix example of every declaration that carries a doc comment, each once, and
+/// an example written as statements imports the module of the file its doc comment is written in.
+#[test]
+fn test_examples_of_every_kind_of_declaration_run_once() {
+    let dir = project_dir(
+        &[
+            ("lib.fix", LIB_DOCUMENTING_EVERY_KIND),
+            ("util.fix", UTIL_DOCUMENTING_A_VALUE),
+        ],
+        &[],
+    );
+    let output = fix_test(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "fix test passes\n{}",
+        streams(&output)
+    );
+    let mut examples = 0;
+    for (file, source) in [
+        ("lib.fix", LIB_DOCUMENTING_EVERY_KIND),
+        ("util.fix", UTIL_DOCUMENTING_A_VALUE),
+    ] {
+        for line in fix_fence_lines(source) {
+            let report = format!("doc test {}:{} ... ok", file, line);
+            assert_eq!(
+                stderr.matches(&report).count(),
+                1,
+                "the example opened at {}:{} runs once and passes\n{}",
+                file,
+                line,
+                streams(&output)
+            );
+            examples += 1;
+        }
+    }
+    assert!(
+        stderr.contains(&format!(
+            "doc tests: {} passed, 0 failed, 0 ignored.",
+            examples
+        )),
+        "each example runs once\n{}",
+        streams(&output)
+    );
+}
+
+/// A failure of `Test::test` makes `fix test` fail and is listed among the failures, and the Fix
+/// examples still run after it.
+#[test]
+fn test_failing_test_function_is_reported_and_the_examples_run() {
+    let test = "module Test;\ntest : IO ();\ntest = assert_eq(|_|\"Test::test fails\", 1, 2);\n";
+    let dir = project_dir(
+        &[("lib.fix", LIB_WITH_PASSING_EXAMPLES)],
+        &[("test.fix", test)],
+    );
+    let output = fix_test(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "fix test fails\n{}",
+        streams(&output)
+    );
+    assert!(
+        stderr.contains("doc tests: 3 passed, 0 failed, 1 ignored."),
+        "the examples run after `Test::test` fails\n{}",
+        streams(&output)
+    );
+    assert!(
+        stderr.contains("failures:\n    Test::test\n"),
+        "`Test::test` is listed among the failures\n{}",
+        streams(&output)
+    );
+}
+
+/// A compile error of `Test::test` stops `fix test` before it runs a Fix example.
+#[test]
+fn test_compile_error_of_the_test_function_stops_before_the_examples() {
+    let test = "module Test;\ntest : IO ();\ntest = pure(1);\n";
+    let dir = project_dir(
+        &[("lib.fix", LIB_WITH_PASSING_EXAMPLES)],
+        &[("test.fix", test)],
+    );
+    let output = fix_test(&dir, &[]);
+    assert!(
+        !output.status.success(),
+        "fix test fails\n{}",
+        streams(&output)
+    );
+    assert!(
+        !String::from_utf8_lossy(&output.stderr).contains("doc test"),
+        "no example runs\n{}",
+        streams(&output)
+    );
+}
+
+/// A Fix example marked `no_run` that does not compile fails.
+#[test]
+fn test_no_run_example_that_does_not_compile_fails() {
+    let lib = r#"module Lib;
+
+// ```fix,no_run
+// let x : I64 = "a string";
+// pure()
+// ```
+value : I64;
+value = 1;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success() && stderr.contains("doc test lib.fix:3 ... FAILED"),
+        "the example that does not compile fails\n{}",
+        streams(&output)
     );
 }
