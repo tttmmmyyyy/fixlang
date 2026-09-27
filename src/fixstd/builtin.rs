@@ -8581,7 +8581,11 @@ fn apply_to_ptr<'c, 'm>(
 }
 
 /// Wraps `ptr` as a Fix `Ptr` value.
-fn make_ptr_obj<'c, 'm>(gc: &mut Generator<'c, 'm>, ptr: PointerValue<'c>, name: &str) -> Object<'c> {
+fn make_ptr_obj<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    ptr: PointerValue<'c>,
+    name: &str,
+) -> Object<'c> {
     let obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some(name));
     obj.insert_field(gc, 0, ptr)
 }
@@ -8780,7 +8784,10 @@ impl LLVMGen for InlineLLVMGetLentPtrBody {
 
 /// The definition of a function `x_ty -> Ptr` evaluated by `InlineLLVMGetLentPtrBody`, whose type
 /// scheme has the predicates `preds`.
-fn get_lent_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprNode>, Arc<Scheme>) {
+fn get_lent_ptr_function(
+    x_ty: Arc<TypeNode>,
+    preds: Vec<Predicate>,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     const X_NAME: &str = "x";
     let scm = Scheme::generalize(&[], preds, vec![], type_fun(x_ty, make_ptr_ty()));
     let expr = expr_abs(
