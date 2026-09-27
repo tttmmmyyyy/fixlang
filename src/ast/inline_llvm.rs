@@ -100,6 +100,15 @@ pub trait LLVMGen: DynClone + Send + Sync {
         false
     }
 
+    /// The operand this op applies as a function, and the operand it hands that function as the
+    /// first field of the tuple it applies it to. Default: the op has no such pair.
+    ///
+    /// The pair is what lets `capture_into_env` move what a lambda given to the op captures into the
+    /// environment operand, so that the lambda captures nothing and needs no closure object.
+    fn env_operand(&self) -> Option<EnvOperand> {
+        None
+    }
+
     /// The container operand and boxed-leaf path whose runtime uniqueness this op branches on, for
     /// the operand types the op is instantiated at. Default: the op carries no such branch.
     ///
@@ -203,6 +212,15 @@ pub trait LLVMGen: DynClone + Send + Sync {
     fn as_any(&self) -> &dyn Any;
 }
 dyn_clone::clone_trait_object!(LLVMGen);
+
+/// The two operands `LLVMGen::env_operand` names, by their positions among the op's operands.
+#[derive(Clone, Copy)]
+pub struct EnvOperand {
+    /// The operand the op applies as a function.
+    pub function: usize,
+    /// The operand the op hands the function as the first field of the tuple it applies it to.
+    pub env: usize,
+}
 
 /// The uniqueness check an op emits on the value at `path` of operand `container_index`, if that
 /// value is reference-counted. `None` where it is not: an unboxed value is taken to be unique

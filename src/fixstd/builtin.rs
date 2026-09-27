@@ -3,7 +3,7 @@ use crate::ast::{
         expr_abs, expr_abs_many, expr_app, expr_if, expr_let, expr_llvm, expr_make_struct,
         expr_var, var_local, AppSourceCodeOrderType, ExprNode,
     },
-    inline_llvm::{clone_path_rc_targets, unique_check_on_boxed_leaf, LLVMGen},
+    inline_llvm::{clone_path_rc_targets, unique_check_on_boxed_leaf, EnvOperand, LLVMGen},
     name::{FullName, Name, NameSpace},
     pattern::PatternNode,
     predicate::Predicate,
@@ -7565,11 +7565,22 @@ pub fn hole_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Applies a function to a value while the value is held retained, and evaluates to what the function
+/// returns. The function is given the tuple `(env, x)`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMWithRetainedFunctionBody {
+    /// The function applied to the value.
     f_name: FullName,
+    /// The environment handed to the function beside the value.
+    env_name: FullName,
+    /// The value held retained while the function runs.
     x_name: FullName,
 }
+
+/// The operand position of the function `InlineLLVMWithRetainedFunctionBody` applies.
+const WITH_RETAINED_FUNCTION_ARG: usize = 0;
+/// The operand position of the environment `InlineLLVMWithRetainedFunctionBody` hands the function.
+const WITH_RETAINED_ENV_ARG: usize = 1;
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
@@ -7578,36 +7589,36 @@ impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
         true
     }
 
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get the argument "f".
-        let f = gc.get_scoped_obj(&self.f_name);
+    fn env_operand(&self) -> Option<EnvOperand> {
+        Some(EnvOperand {
+            function: WITH_RETAINED_FUNCTION_ARG,
+            env: WITH_RETAINED_ENV_ARG,
+        })
+    }
 
-        // Get the argument "x".
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
+        let f = gc.get_scoped_obj(&self.f_name);
+        let env = gc.get_scoped_obj(&self.env_name);
         let x = gc.get_scoped_obj(&self.x_name);
 
         // Retain "x" around the call so that "f" sees it as shared and cannot mutate it in place.
         gc.retain(x.clone(), RcState::Unknown);
-
-        // Call "f" with "x".
-        let ret = gc.apply_lambda(f, vec![x.clone()], false).unwrap();
-
-        // Release "x".
+        let ret = apply_with_env(gc, f, env, vec![x.clone()]);
         gc.release(x, RcState::Unknown);
-
-        // Return the result.
         ret
     }
 
     fn name(&self) -> String {
         format!(
-            "with_retained({}, {})",
-            self.x_name.to_string(),
-            self.f_name.to_string()
+            "with_retained({}, {}, {})",
+            self.f_name.to_string(),
+            self.env_name.to_string(),
+            self.x_name.to_string()
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.f_name, &mut self.x_name]
+        vec![&mut self.f_name, &mut self.env_name, &mut self.x_name]
     }
 
     fn result_locality(
@@ -7630,24 +7641,22 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const A_NAME: &str = "a";
     const B_NAME: &str = "b";
 
-    const WITH_RETAINED_F_ARG_NAME: &str = "f";
-    const WITH_RETAINED_X_ARG_NAME: &str = "x";
+    const F_NAME: &str = "f";
+    const X_NAME: &str = "x";
 
-    let expr = expr_abs(
-        vec![var_local(WITH_RETAINED_F_ARG_NAME)],
-        expr_abs(
-            vec![var_local(WITH_RETAINED_X_ARG_NAME)],
+    let expr = expr_abs_many(
+        vec![var_local(F_NAME), var_local(X_NAME)],
+        with_empty_env(F_NAME, 1, |g_name, env_name| {
             expr_llvm(
                 Box::new(InlineLLVMWithRetainedFunctionBody {
-                    f_name: FullName::local(WITH_RETAINED_F_ARG_NAME),
-                    x_name: FullName::local(WITH_RETAINED_X_ARG_NAME),
+                    f_name: g_name,
+                    env_name,
+                    x_name: FullName::local(X_NAME),
                 }),
                 type_tyvar_star(B_NAME),
                 None,
-            ),
-            None,
-        ),
-        None,
+            )
+        }),
     );
     let scm = Scheme::generalize(
         &[],
@@ -7659,6 +7668,86 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         ),
     );
     (expr, scm)
+}
+
+/// Applies the function operand `f` of an op that declares `LLVMGen::env_operand` to the tuple
+/// `(env, args...)`, and returns what it returns.
+fn apply_with_env<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    f: Object<'c>,
+    env: Object<'c>,
+    args: Vec<Object<'c>>,
+) -> Object<'c> {
+    let tuple_ty = f.ty.get_lambda_srcs()[0].clone();
+    let mut tuple = create_obj(tuple_ty, &vec![], None, gc, Some("env_and_args"));
+    for (i, field) in std::iter::once(env).chain(args).enumerate() {
+        tuple = ObjectFieldType::move_into_struct_field(gc, tuple, i as u32, &field);
+    }
+    gc.apply_lambda(f, vec![tuple], false).unwrap()
+}
+
+/// The body of a function that gives the function `f_name` it takes to an op declaring
+/// `LLVMGen::env_operand`, with the empty environment:
+///
+/// ```
+/// let g = |p| (let ((), a_1, ..., a_n) = p; f(a_1)...(a_n));
+/// let env = ();
+/// op
+/// ```
+///
+/// where `op`, built by `make_op` from the names of `g` and `env`, applies `g` to `(env, a_1, ...,
+/// a_n)`. `capture_into_env` later moves what `f` captures into `env`.
+fn with_empty_env(
+    f_name: &str,
+    arity: usize,
+    make_op: impl FnOnce(FullName, FullName) -> Arc<ExprNode>,
+) -> Arc<ExprNode> {
+    const G_NAME: &str = "#g";
+    const ENV_NAME: &str = "#env";
+    const P_NAME: &str = "#p";
+    let arg_names = (0..arity)
+        .map(|i| format!("#a{}", i))
+        .collect::<Vec<_>>();
+
+    // `let ((), a_1, ..., a_n) = p; f(a_1)...(a_n)`
+    let mut field_pats = vec![(
+        "0".to_string(),
+        PatternNode::make_struct(tycon(make_tuple_name_abs(0)), vec![]),
+    )];
+    let mut applied = expr_var(FullName::local(f_name), None);
+    for (i, arg_name) in arg_names.iter().enumerate() {
+        field_pats.push((
+            (i + 1).to_string(),
+            PatternNode::make_var(var_local(arg_name), None),
+        ));
+        applied = expr_app(
+            applied,
+            vec![expr_var(FullName::local(arg_name), None)],
+            None,
+        );
+    }
+    let g = expr_abs(
+        vec![var_local(P_NAME)],
+        expr_let(
+            PatternNode::make_struct(tycon(make_tuple_name_abs(arity as u32 + 1)), field_pats),
+            expr_var(FullName::local(P_NAME), None),
+            applied,
+            None,
+        ),
+        None,
+    );
+
+    expr_let(
+        PatternNode::make_var(var_local(G_NAME), None),
+        g,
+        expr_let(
+            PatternNode::make_var(var_local(ENV_NAME), None),
+            expr_make_struct(tycon(make_tuple_name_abs(0)), vec![]),
+            make_op(FullName::local(G_NAME), FullName::local(ENV_NAME)),
+            None,
+        ),
+        None,
+    )
 }
 
 /// Tests whether a boxed value is the only reference to its object, by reading the object's
@@ -8413,16 +8502,6 @@ pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// Applies the function `f` to `ptr` wrapped as a Fix `Ptr` value, and returns what it returns.
-fn apply_to_ptr<'c, 'm>(
-    gc: &mut Generator<'c, 'm>,
-    f: Object<'c>,
-    ptr: PointerValue<'c>,
-) -> Object<'c> {
-    let ptr_obj = make_ptr_obj(gc, ptr, "lent_ptr");
-    gc.apply_lambda(f, vec![ptr_obj], false).unwrap()
-}
-
 /// Wraps `ptr` as a Fix `Ptr` value.
 fn make_ptr_obj<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
@@ -8657,7 +8736,7 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// Applies a function to a pointer into a value, and evaluates to what the function returns. The
 /// pointer points to the first element of an array's element buffer, or to the payload of a boxed
-/// value.
+/// value, and the function is given the tuple `(env, ptr)`.
 ///
 /// The value is borrowed, so its reference count is left alone and the pointer is valid while the
 /// function runs.
@@ -8667,6 +8746,8 @@ pub struct InlineLLVMBorrowPtrBody {
     x_name: FullName,
     /// The function applied to the pointer.
     f_name: FullName,
+    /// The environment handed to the function beside the pointer.
+    env_name: FullName,
 }
 
 #[typetag::serde]
@@ -8676,23 +8757,30 @@ impl LLVMGen for InlineLLVMBorrowPtrBody {
         true
     }
 
+    fn env_operand(&self) -> Option<EnvOperand> {
+        Some(LENT_PTR_ENV_OPERAND)
+    }
+
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let f = gc.get_scoped_obj(&self.f_name);
+        let env = gc.get_scoped_obj(&self.env_name);
         let x = gc.get_scoped_obj_noretain(&self.x_name);
         let ptr = get_lent_ptr(gc, &x);
-        apply_to_ptr(gc, f, ptr)
+        let ptr = make_ptr_obj(gc, ptr, "lent_ptr");
+        apply_with_env(gc, f, env, vec![ptr])
     }
 
     fn name(&self) -> String {
         format!(
-            "borrow_ptr({}, {})",
+            "borrow_ptr({}, {}, {})",
             self.f_name.to_string(),
+            self.env_name.to_string(),
             self.x_name.to_string(),
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.x_name, &mut self.f_name]
+        vec![&mut self.x_name, &mut self.f_name, &mut self.env_name]
     }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
@@ -8729,8 +8817,9 @@ fn lent_ptr_result_tyvar(x_ty: &Arc<TypeNode>) -> Arc<TypeNode> {
     type_tyvar_star(B_TYPE_NAME)
 }
 
-/// The definition of a function `(Ptr -> b) -> x_ty -> b` evaluated by `InlineLLVMBorrowPtrBody`,
-/// whose type scheme has the predicates `preds`. `x_ty` must not mention `b`.
+/// The definition of a function `(Ptr -> b) -> x_ty -> b` evaluated by `InlineLLVMBorrowPtrBody`
+/// with the empty environment, whose type scheme has the predicates `preds`. `x_ty` must not mention
+/// `b`.
 fn borrow_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const F_NAME: &str = "f";
     const X_NAME: &str = "x";
@@ -8746,14 +8835,17 @@ fn borrow_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprN
     );
     let expr = expr_abs_many(
         vec![var_local(F_NAME), var_local(X_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMBorrowPtrBody {
-                x_name: FullName::local(X_NAME),
-                f_name: FullName::local(F_NAME),
-            }),
-            b_ty,
-            None,
-        ),
+        with_empty_env(F_NAME, 1, |g_name, env_name| {
+            expr_llvm(
+                Box::new(InlineLLVMBorrowPtrBody {
+                    x_name: FullName::local(X_NAME),
+                    f_name: g_name,
+                    env_name,
+                }),
+                b_ty,
+                None,
+            )
+        }),
     );
     (expr, scm)
 }
@@ -8770,16 +8862,19 @@ pub fn borrow_boxed_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     borrow_ptr_function(a_ty, preds)
 }
 
-/// Makes a value unique, applies a function to a pointer into it, runs the IO action the function
-/// returns, and evaluates to `(ios, (value, action result))`. The pointer points to the first
-/// element of an array's element buffer, or to the payload of a boxed value.
+/// Makes a value unique, applies a function to a pointer into it and an `IOState`, and evaluates to
+/// `(ios, (value, function result))` for the `(ios, function result)` the function returns. The
+/// pointer points to the first element of an array's element buffer, or to the payload of a boxed
+/// value, and the function is given the tuple `(env, ptr, ios)`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMutatePtrBody {
     /// The value the pointer points into.
     x_name: FullName,
-    /// The function applied to the pointer.
+    /// The function applied to the pointer and the `IOState`.
     f_name: FullName,
-    /// The `IOState` the action runs under.
+    /// The environment handed to the function beside the pointer and the `IOState`.
+    env_name: FullName,
+    /// The `IOState` the function is applied to.
     ios_name: FullName,
     /// When true, clone the value first if it is shared, so the action writes into a uniquely owned
     /// one. Set false only where the value is statically known to be unique.
@@ -8791,26 +8886,33 @@ pub struct InlineLLVMMutatePtrBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMutatePtrBody {
-    /// This op applies an operand: the function is applied to the pointer, and the action it gives
-    /// is run.
+    /// This op applies an operand: the function is applied to the pointer and the `IOState`.
     fn applies_a_function_operand(&self) -> bool {
         true
     }
 
+    fn env_operand(&self) -> Option<EnvOperand> {
+        Some(LENT_PTR_ENV_OPERAND)
+    }
+
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let f = gc.get_scoped_obj(&self.f_name);
+        let env = gc.get_scoped_obj(&self.env_name);
         let x = gc.get_scoped_obj(&self.x_name);
         let ios = gc.get_scoped_obj(&self.ios_name);
 
-        // Clone the value first if it is shared, so the action writes into a uniquely owned one.
+        // Clone the value first if it is shared, so the function writes into a uniquely owned one.
         let x = force_unique_or_assert(gc, x, self.force_unique, assumed_state(self.assume_local));
 
-        // Run the action on the pointer, threading `ios`.
+        // Apply the function to the pointer, threading `ios`.
         let ptr = get_lent_ptr(gc, &x);
-        let act = apply_to_ptr(gc, f, ptr);
-        let (ios, act_res) = run_ios_runner(gc, &act, Some(&ios));
+        let ptr = make_ptr_obj(gc, ptr, "lent_ptr");
+        let ios_res = apply_with_env(gc, f, env, vec![ptr, ios]);
+        let ios_res = ObjectFieldType::get_struct_fields(gc, &ios_res, &[0, 1], RcState::Unknown);
+        let ios = ios_res[0].clone();
+        let act_res = ios_res[1].clone();
 
-        // Construct the return value `(ios, (value, action result))`.
+        // Construct the return value `(ios, (value, function result))`.
         let x_and_res = create_obj(
             make_tuple_ty(vec![x.ty.clone(), act_res.ty.clone()]),
             &vec![],
@@ -8827,16 +8929,22 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
 
     fn name(&self) -> String {
         format!(
-            "mutate_ptr{}({}, {}, {})",
+            "mutate_ptr{}({}, {}, {}, {})",
             if self.force_unique { "" } else { "[unique]" },
             self.f_name.to_string(),
+            self.env_name.to_string(),
             self.x_name.to_string(),
             self.ios_name.to_string(),
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.x_name, &mut self.f_name, &mut self.ios_name]
+        vec![
+            &mut self.x_name,
+            &mut self.f_name,
+            &mut self.env_name,
+            &mut self.ios_name,
+        ]
     }
 
     fn unique_check_operand(
@@ -8916,13 +9024,19 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
 /// The operand position of the value `InlineLLVMBorrowPtrBody` and `InlineLLVMMutatePtrBody` lend a
 /// pointer into.
 const LENT_VALUE_ARG: usize = 0;
+/// The function operand of `InlineLLVMBorrowPtrBody` and `InlineLLVMMutatePtrBody`, and the
+/// environment operand they hand it.
+const LENT_PTR_ENV_OPERAND: EnvOperand = EnvOperand {
+    function: 1,
+    env: 2,
+};
 /// The path of the value in the result of `InlineLLVMMutatePtrBody`, `(ios, (value, action result))`.
 const MUTATE_PTR_VALUE_PATH: [usize; 2] = [1, 0];
 
 /// The definition of a function
 /// `(Ptr -> IOState -> (IOState, b)) -> x_ty -> IOState -> (IOState, (x_ty, b))` evaluated by
-/// `InlineLLVMMutatePtrBody`, whose type scheme has the predicates `preds`. `x_ty` must not
-/// mention `b`.
+/// `InlineLLVMMutatePtrBody` with the empty environment, whose type scheme has the predicates
+/// `preds`. `x_ty` must not mention `b`.
 fn mutate_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const F_NAME: &str = "f";
     const X_NAME: &str = "x";
@@ -8941,17 +9055,20 @@ fn mutate_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprN
     let ret_ty = make_tuple_ty(vec![make_iostate_ty(), xb_ty]);
     let expr = expr_abs_many(
         vec![var_local(F_NAME), var_local(X_NAME), var_local(IOS_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMMutatePtrBody {
-                x_name: FullName::local(X_NAME),
-                f_name: FullName::local(F_NAME),
-                ios_name: FullName::local(IOS_NAME),
-                force_unique: true,
-                assume_local: false,
-            }),
-            ret_ty,
-            None,
-        ),
+        with_empty_env(F_NAME, 2, |g_name, env_name| {
+            expr_llvm(
+                Box::new(InlineLLVMMutatePtrBody {
+                    x_name: FullName::local(X_NAME),
+                    f_name: g_name,
+                    env_name,
+                    ios_name: FullName::local(IOS_NAME),
+                    force_unique: true,
+                    assume_local: false,
+                }),
+                ret_ty,
+                None,
+            )
+        }),
     );
     (expr, scm)
 }

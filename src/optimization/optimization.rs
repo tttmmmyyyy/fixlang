@@ -1,5 +1,5 @@
 use super::{
-    application_inlining, closure_specialization, collapse_constructions, dead_symbol_elimination,
+    application_inlining, capture_into_env, closure_specialization, collapse_constructions, dead_symbol_elimination,
     defunctionalize_fix, inline, inline_local, optimize_act, remove_tyanno, simplify_symbol_names,
     skip_eval, split_struct_args, uncurry, unwrap_newtype,
 };
@@ -107,6 +107,18 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config.enable_split_struct_args() && config.enable_inline_optimization(),
         "inline",
         inline::run,
+    );
+
+    // Move what a lambda given to a scope op such as `Std::Array::borrow_elements` captures into the
+    // op's environment operand, so that the lambda needs no closure object. It runs after inlining,
+    // which puts the lambda and the op into one expression, and above `collapse_constructions`,
+    // which folds the tuples it builds into the patterns taking them apart.
+    run_pass(
+        prg,
+        config,
+        config.enable_capture_into_env(),
+        "capture_into_env",
+        capture_into_env::run,
     );
 
     // Read every construction the code taking it apart can see. That is what turns the two lines a
