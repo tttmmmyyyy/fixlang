@@ -57,7 +57,7 @@ if [ -n "$out" ]; then echo placeholder > "$out"; else cat '{}'; fi
         );
 
         let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("install.sh");
-        let path = format!(
+        let path_env = format!(
             "{}:{}",
             bin_dir.display(),
             std::env::var("PATH").unwrap_or_default()
@@ -65,7 +65,7 @@ if [ -n "$out" ]; then echo placeholder > "$out"; else cat '{}'; fi
         let output = Command::new("perl")
             .args(["-MPOSIX", "-e", "POSIX::setsid(); exec @ARGV or die", "sh"])
             .arg(&script)
-            .env("PATH", path)
+            .env("PATH", path_env)
             .env("HOME", &home_dir)
             .stdin(Stdio::null())
             .output()

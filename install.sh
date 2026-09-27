@@ -93,14 +93,14 @@ sort_versions() {
         tag = $0; v = tag; sub(/^v/, "", v)
         pre = ""; i = index(v, "-")
         if (i > 0) { pre = substr(v, i + 1); v = substr(v, 1, i - 1) }
-        split(v, a, ".")
-        if (pre == "") { final = 1; word = "-"; num = 0 }
+        split(v, core, ".")
+        if (pre == "") { is_full = 1; word = "-"; num = 0 }
         else {
-            final = 0; j = index(pre, ".")
+            is_full = 0; j = index(pre, ".")
             if (j > 0) { word = substr(pre, 1, j - 1); num = substr(pre, j + 1) + 0 }
             else { word = pre; num = 0 }
         }
-        printf "%d %d %d %d %s %d %s\n", a[1] + 0, a[2] + 0, a[3] + 0, final, word, num, tag
+        printf "%d %d %d %d %s %d %s\n", core[1] + 0, core[2] + 0, core[3] + 0, is_full, word, num, tag
     }' | LC_ALL=C sort -k1,1nr -k2,2nr -k3,3nr -k4,4nr -k5,5r -k6,6nr | awk '{ print $7 }'
 }
 
