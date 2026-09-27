@@ -4334,8 +4334,6 @@ impl F32 : FromString {
     // The number is rounded to the nearest `F32`. A text naming a number too large for `F32`, or a
     // number other than zero too small for it to hold at all, is an error.
     from_string = |str| (
-        // The function given to `borrow_c_str_io` refers to nothing but its argument, so calling it
-        // allocates no closure.
         let (v, outcome) = str.borrow_c_str_io(|c_str| (
             let v = *FFI_CALL_IO[F32 fixruntime_read_f32(Ptr), c_str];
             let outcome = *FFI_CALL_IO[U8 fixruntime_float_text_outcome()];
@@ -4423,8 +4421,6 @@ impl F64 : FromString {
     // The number is rounded to the nearest `F64`. A text naming a number too large for `F64`, or a
     // number other than zero too small for it to hold at all, is an error.
     from_string = |str| (
-        // The function given to `borrow_c_str_io` refers to nothing but its argument, so calling it
-        // allocates no closure.
         let (v, outcome) = str.borrow_c_str_io(|c_str| (
             let v = *FFI_CALL_IO[F64 fixruntime_read_f64(Ptr), c_str];
             let outcome = *FFI_CALL_IO[U8 fixruntime_float_text_outcome()];
