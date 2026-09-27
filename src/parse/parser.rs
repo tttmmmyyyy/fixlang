@@ -2448,10 +2448,10 @@ fn parse_expr_let_without_in(
     let _pat = pairs.next().unwrap();
     let eq = pairs.next().unwrap();
     assert_eq!(eq.as_rule(), Rule::eq_of_let);
-    let value = pairs.next().unwrap();
+    let bound = pairs.next().unwrap();
     let let_head = Span::from_pair(&ctx.source, &keyword).unite(&Span::from_pair(&ctx.source, &eq));
 
-    let Some((if_pair, else_marker)) = if_taking_the_rest_after_semicolon(value) else {
+    let Some((if_pair, else_marker)) = if_taking_the_rest_after_semicolon(bound) else {
         return Err(Errors::from_msg_srcs(
             "This `let` has no `in` or `;` after its value.".to_string(),
             &[&Some(let_head)],
