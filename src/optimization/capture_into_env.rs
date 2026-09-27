@@ -361,7 +361,7 @@ impl CaptureMover<'_> {
             param_field_pats.push((i.to_string(), var_pattern(&field_name, ty)));
             param_field_exprs.push((i.to_string(), var_expr(&field_name, ty)));
         }
-        let arg = local("_arg");
+        let new_param = local("_arg");
         let old_params = lam.get_lam_params();
         assert_eq!(
             old_params.len(),
@@ -371,12 +371,12 @@ impl CaptureMover<'_> {
         );
         let old_param = old_params[0].name.clone();
         let new_lam = expr_abs_typed(
-            var_local(&arg.name),
+            var_local(&new_param.name),
             new_param_ty.clone(),
             expr_let_typed(
                 PatternNode::make_struct(param_tycon.clone(), param_field_pats)
                     .set_type(new_param_ty.clone()),
-                var_expr(&arg, &new_param_ty),
+                var_expr(&new_param, &new_param_ty),
                 expr_let_typed(
                     var_pattern(&old_param, &param_ty),
                     expr_make_struct(param_tycon, param_field_exprs).set_type(param_ty.clone()),
@@ -783,7 +783,7 @@ impl ExprVisitor for OpRewriter<'_> {
         let env = &mut *operands[env_index];
         let old_env = env.clone();
         *env = self.new_env.clone();
-        let new_env = expr_make_struct(
+        let env_and_cap = expr_make_struct(
             tycon(make_tuple_name_abs(2)),
             vec![
                 ("0".to_string(), var_expr(&old_env, &self.env_ty)),
@@ -793,7 +793,7 @@ impl ExprVisitor for OpRewriter<'_> {
         .set_type(self.new_env_ty.clone());
         StartVisitResult::ReplaceAndReturn(expr_let_typed(
             var_pattern(&self.new_env, &self.new_env_ty),
-            new_env,
+            env_and_cap,
             expr.set_llvm(llvm),
         ))
     }

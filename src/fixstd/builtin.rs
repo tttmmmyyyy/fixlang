@@ -8920,20 +8920,21 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
         let ptr = get_lent_ptr(gc, &x);
         let ptr = make_ptr_obj(gc, ptr, "lent_ptr");
         let ios_res = apply_with_env(gc, f, env, vec![ptr, ios]);
-        let ios_res = ObjectFieldType::get_struct_fields(gc, &ios_res, &[0, 1], RcState::Unknown);
-        let ios = ios_res[0].clone();
-        let act_res = ios_res[1].clone();
+        let ios_res_fields =
+            ObjectFieldType::get_struct_fields(gc, &ios_res, &[0, 1], RcState::Unknown);
+        let ios = ios_res_fields[0].clone();
+        let f_res = ios_res_fields[1].clone();
 
         // Construct the return value `(ios, (value, function result))`.
         let x_and_res = create_obj(
-            make_tuple_ty(vec![x.ty.clone(), act_res.ty.clone()]),
+            make_tuple_ty(vec![x.ty.clone(), f_res.ty.clone()]),
             &vec![],
             None,
             gc,
             Some("x_and_res"),
         );
         let x_and_res = ObjectFieldType::move_into_struct_field(gc, x_and_res, 0, &x);
-        let x_and_res = ObjectFieldType::move_into_struct_field(gc, x_and_res, 1, &act_res);
+        let x_and_res = ObjectFieldType::move_into_struct_field(gc, x_and_res, 1, &f_res);
         let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
         let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &ios);
         ObjectFieldType::move_into_struct_field(gc, res, 1, &x_and_res)
