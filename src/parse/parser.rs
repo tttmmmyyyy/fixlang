@@ -2444,6 +2444,7 @@ fn parse_expr_let_without_in(
     assert_eq!(pair.as_rule(), Rule::expr_let_without_in);
     let mut pairs = pair.into_inner();
     let keyword = pairs.next().unwrap();
+    assert_eq!(keyword.as_rule(), Rule::keyword_let);
     let _pat = pairs.next().unwrap();
     let eq = pairs.next().unwrap();
     assert_eq!(eq.as_rule(), Rule::eq_of_let);
@@ -2477,7 +2478,15 @@ fn if_taking_the_rest_after_semicolon(pair: Pair<Rule>) -> Option<(Pair<Rule>, P
     loop {
         if node.as_rule() == Rule::expr_if {
             let mut parts = node.clone().into_inner();
-            let else_marker = parts.nth(2).unwrap(); // `else_of_if` or `else_of_if_with_space`.
+            let else_marker = parts.nth(2).unwrap();
+            assert!(
+                matches!(
+                    else_marker.as_rule(),
+                    Rule::else_of_if | Rule::else_of_if_with_space
+                ),
+                "the third part of an `if` is its `else` or `;`, but got {:?}",
+                else_marker.as_rule()
+            );
             let else_val = parts.next().unwrap();
             let marker_token = else_marker.clone().into_inner().next().unwrap();
             if marker_token.as_rule() == Rule::semicolon
