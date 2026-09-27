@@ -5,7 +5,7 @@
 //
 // Two stages:
 //   A0     — replace the post-dot identifier the cursor is in with `?`
-//   outer  — pest error-driven outer-source repair loop, splicing in
+//   outer  — syntax-error-driven outer-source repair loop, splicing in
 //            `;` or `?` to satisfy the surrounding grammar
 //
 // Both stages run unconditionally; outer repair is a no-op when A0's
@@ -44,7 +44,7 @@ pub(super) struct RepairOutput {
 ///
 /// 1. Apply A0 — replace the post-dot identifier containing or ending
 ///    at the cursor with `?`.
-/// 2. Loop: try to parse, and on each parse error splice in a `;` /
+/// 2. Loop: try to parse, and on each syntax error splice in a `;` /
 ///    `?` per `RepairHint`. Bounded to `MAX_ATTEMPTS` iterations to
 ///    keep pathological inputs from looping forever.
 pub(super) fn repair_for_completion(live_buffer: &str, cursor_byte: usize) -> Option<RepairOutput> {
@@ -55,13 +55,13 @@ pub(super) fn repair_for_completion(live_buffer: &str, cursor_byte: usize) -> Op
     apply_outer_repair(source, cursor_byte)
 }
 
-/// Bound on the number of pest-error-driven splices the outer-repair
+/// Bound on the number of syntax-error-driven splices the outer-repair
 /// loop will attempt before giving up. 8 is enough to fix several
 /// layered `let ... ;` / unclosed-call shapes while still terminating
 /// quickly on hopeless inputs.
 const MAX_ATTEMPTS: usize = 8;
 
-/// Run the pest-error-driven splice loop on `source`, advancing
+/// Run the syntax-error-driven splice loop on `source`, advancing
 /// `cursor_byte` whenever an insertion lands before it. Returns the
 /// repaired source on success, or `None` if no progress can be made
 /// within `MAX_ATTEMPTS` iterations.
