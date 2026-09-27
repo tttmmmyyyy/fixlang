@@ -3313,15 +3313,6 @@ In **Zed** (the [Fix extension](https://github.com/tttmmmyyyy/zed-fixlang-suppor
 }
 ```
 
-In **Neovim** ([fix.nvim](https://github.com/ButterPeanuts/fix.nvim)), pass them as the `settings` of the `fix_lsp` configuration in your `init.lua`:
-
-```lua
-vim.lsp.config("fix_lsp", {
-  settings = {
-    fix = { analyze = { delayMs = 300, onSave = false } },
-  },
-})
-```
 
 ### Specifying parameter list in the documentation comment as a hint to the language server
 

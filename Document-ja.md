@@ -3418,15 +3418,6 @@ impl MyType : MyTrait  {
 }
 ```
 
-**Neovim**（[fix.nvim](https://github.com/ButterPeanuts/fix.nvim)）では、`init.lua` で `fix_lsp` の設定の `settings` に渡します：
-
-```lua
-vim.lsp.config("fix_lsp", {
-  settings = {
-    fix = { analyze = { delayMs = 300, onSave = false } },
-  },
-})
-```
 
 ### ドキュメントコメントでパラメータリストを指定して言語サーバーにヒントを与える
 
