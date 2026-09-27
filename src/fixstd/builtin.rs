@@ -7679,6 +7679,13 @@ fn apply_with_env<'c, 'm>(
     args: Vec<Object<'c>>,
 ) -> Object<'c> {
     let tuple_ty = f.ty.get_lambda_srcs()[0].clone();
+    assert_eq!(
+        tuple_ty.field_types(gc.type_env()).len(),
+        1 + args.len(),
+        "the tuple `{}` holds the environment and {} arguments",
+        tuple_ty.to_string(),
+        args.len()
+    );
     let mut tuple = create_obj(tuple_ty, &vec![], None, gc, Some("env_and_args"));
     for (i, field) in std::iter::once(env).chain(args).enumerate() {
         tuple = ObjectFieldType::move_into_struct_field(gc, tuple, i as u32, &field);
@@ -7710,22 +7717,27 @@ fn with_empty_env(
         .collect::<Vec<_>>();
 
     // `let ((), a_1, ..., a_n) = p; f(a_1)...(a_n)`
-    let mut field_pats = vec![(
+    let field_pats = std::iter::once((
         "0".to_string(),
         PatternNode::make_struct(tycon(make_tuple_name_abs(0)), vec![]),
-    )];
-    let mut applied = expr_var(FullName::local(f_name), None);
-    for (i, arg_name) in arg_names.iter().enumerate() {
-        field_pats.push((
+    ))
+    .chain(arg_names.iter().enumerate().map(|(i, arg_name)| {
+        (
             (i + 1).to_string(),
             PatternNode::make_var(var_local(arg_name), None),
-        ));
-        applied = expr_app(
-            applied,
-            vec![expr_var(FullName::local(arg_name), None)],
-            None,
-        );
-    }
+        )
+    }))
+    .collect::<Vec<_>>();
+    let applied = arg_names.iter().fold(
+        expr_var(FullName::local(f_name), None),
+        |applied, arg_name| {
+            expr_app(
+                applied,
+                vec![expr_var(FullName::local(arg_name), None)],
+                None,
+            )
+        },
+    );
     let g = expr_abs(
         vec![var_local(P_NAME)],
         expr_let(

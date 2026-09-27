@@ -362,7 +362,14 @@ impl CaptureMover<'_> {
             param_field_exprs.push((i.to_string(), var_expr(&field_name, ty)));
         }
         let arg = local("_arg");
-        let old_param = lam.get_lam_params()[0].name.clone();
+        let old_params = lam.get_lam_params();
+        assert_eq!(
+            old_params.len(),
+            1,
+            "a function given to an op declaring `env_operand` takes one tuple: {}",
+            name.to_string()
+        );
+        let old_param = old_params[0].name.clone();
         let new_lam = expr_abs_typed(
             var_local(&arg.name),
             new_param_ty.clone(),
@@ -763,14 +770,14 @@ impl ExprVisitor for OpRewriter<'_> {
         expr: &Arc<ExprNode>,
         state: &mut VisitState,
     ) -> StartVisitResult {
-        let mut llvm = expr.get_llvm().as_ref().clone();
-        if env_function_operand(&llvm).as_ref() != Some(self.function)
+        if env_function_operand(&expr.get_llvm()).as_ref() != Some(self.function)
             || shadowed(self.function, state)
         {
             return StartVisitResult::VisitChildren;
         }
 
         // `let env1 = (env, cap); op(.., env1, ..)`
+        let mut llvm = expr.get_llvm().as_ref().clone();
         let env_index = llvm.generator.env_operand().unwrap().env;
         let mut operands = llvm.generator.free_vars_mut();
         let env = &mut *operands[env_index];
