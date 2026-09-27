@@ -172,6 +172,8 @@ If you are using VSCode, install the [Fix extension](https://marketplace.visuals
 
 If you are using Zed, install the [Fix extension](https://github.com/tttmmmyyyy/zed-fixlang-support).
 
+If you are using Neovim (0.11 or later), thanks to [ButterPeanuts](https://github.com/ButterPeanuts), the plugin [fix.nvim](https://github.com/ButterPeanuts/fix.nvim) is available.
+
 ## Running Your First Fix Program
 
 Below is a Fix program that calculates the first 30 numbers of the Fibonacci sequence.
@@ -3270,7 +3272,7 @@ impl MyType : MyTrait  {
 ## Language Server Protocol
 
 Running `fix language-server` starts a language server which supports Language Server Protocol (LSP). 
-Editor extensions that connect to this language server are available for [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support).
+Editor extensions that connect to this language server are available for [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client), [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) and [Neovim](https://github.com/ButterPeanuts/fix.nvim).
 
 The language server requires [the project file](#project-file) to recognize the Fix source files.
 
@@ -3309,6 +3311,16 @@ In **Zed** (the [Fix extension](https://github.com/tttmmmyyyy/zed-fixlang-suppor
     }
   }
 }
+```
+
+In **Neovim** ([fix.nvim](https://github.com/ButterPeanuts/fix.nvim)), pass them as the `settings` of the `fix_lsp` configuration in your `init.lua`:
+
+```lua
+vim.lsp.config("fix_lsp", {
+  settings = {
+    fix = { analyze = { delayMs = 300, onSave = false } },
+  },
+})
 ```
 
 ### Specifying parameter list in the documentation comment as a hint to the language server

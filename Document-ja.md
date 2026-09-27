@@ -173,6 +173,8 @@ VSCodeを使用している場合は、[Fix拡張](https://marketplace.visualstu
 
 Zedを使用している場合は、[Fix拡張](https://github.com/tttmmmyyyy/zed-fixlang-support)をインストールしてください。
 
+Neovim（0.11以上）を使用している場合は、[ButterPeanuts](https://github.com/ButterPeanuts)のおかげで、[fix.nvim](https://github.com/ButterPeanuts/fix.nvim)プラグインが利用可能です。
+
 ## 最初のFixプログラムを実行する
 
 以下は、フィボナッチ数列の最初の30個の数値を計算するFixプログラムです。
@@ -3376,7 +3378,7 @@ impl MyType : MyTrait  {
 ## Language Server Protocol
 
 `fix language-server`を実行すると、Language Server Protocol（LSP）をサポートする言語サーバーが起動します。
-この言語サーバーに接続するエディタ拡張は、[VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) と [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) 向けに利用可能です。
+この言語サーバーに接続するエディタ拡張は、[VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)、[Zed](https://github.com/tttmmmyyyy/zed-fixlang-support)、[Neovim](https://github.com/ButterPeanuts/fix.nvim) 向けに利用可能です。
 言語サーバーは[プロジェクトファイル](#project-file)を必要とし、Fixソースファイルを認識します。
 
 言語サーバーは、入力を止めてから少し経つと、入力中の内容に対してFixプログラムを診断（解析）します。
@@ -3414,6 +3416,16 @@ impl MyType : MyTrait  {
     }
   }
 }
+```
+
+**Neovim**（[fix.nvim](https://github.com/ButterPeanuts/fix.nvim)）では、`init.lua` で `fix_lsp` の設定の `settings` に渡します：
+
+```lua
+vim.lsp.config("fix_lsp", {
+  settings = {
+    fix = { analyze = { delayMs = 300, onSave = false } },
+  },
+})
 ```
 
 ### ドキュメントコメントでパラメータリストを指定して言語サーバーにヒントを与える
