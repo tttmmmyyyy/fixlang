@@ -14,6 +14,7 @@ mod integration_tests {
     use std::process::{Command, Stdio};
     use tempfile::TempDir;
 
+    /// Writes `content` to `path` as a stand-in command that `install.sh` finds on `PATH`.
     fn write_executable(path: &Path, content: &str) {
         fs::write(path, content).expect("Failed to write a stand-in command");
         fs::set_permissions(path, Permissions::from_mode(0o755))
@@ -81,7 +82,7 @@ if [ -n "$out" ]; then echo placeholder > "$out"; else cat '{}'; fi
         stdout
     }
 
-    /// The lines of the "Available versions:" list.
+    /// Returns the entries of the "Available versions:" list in `stdout`, trimmed.
     fn listed_versions(stdout: &str) -> Vec<String> {
         stdout
             .lines()

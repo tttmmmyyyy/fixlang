@@ -147,7 +147,7 @@ Present the diff to the user and wait for approval before proceeding to commit, 
 
 ### Step 11: Check the GitHub Release
 
-Pushing the tag starts `.github/workflows/release.yml`, which builds the binaries and creates the GitHub release for the tag. A tag with a suffix (`-alpha`, `-beta.2`, `-rc.1`, ...) becomes a pre-release, and a tag without one becomes a full release that GitHub shows as "Latest".
+Pushing the tag starts `.github/workflows/release.yml`, which builds the binaries and creates the GitHub release for the tag. A tag with a suffix (`-alpha`, `-beta.2`, `-rc.1`, ...) becomes a pre-release, and a tag without one becomes a stable release that GitHub shows as "Latest".
 
 1. Once the workflow finishes, confirm the release carries a binary for every target and the pre-release mark its tag calls for:
    ```bash
