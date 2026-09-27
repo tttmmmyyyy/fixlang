@@ -278,7 +278,7 @@ fn test_fix_test_selects_the_tests_by_the_doc_options() {
 }
 
 /// A project without `Test::test` has its Fix examples run alone, and a project with neither is
-/// reported as missing `Test::test`, as before.
+/// reported as missing `Test::test`.
 #[test]
 fn test_fix_test_without_the_test_function() {
     let dir = project_dir(&[("lib.fix", LIB_WITH_PASSING_EXAMPLES)], &[]);

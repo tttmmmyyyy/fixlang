@@ -6,7 +6,7 @@
 
 #### Tool
 
-- `fix test` now runs the Fix examples in documentation comments: the code blocks whose info string is `fix`. An example is an expression of type `IO ()`, or a whole module named `DocTest` with its `main`, and it passes when the program exits with status 0. A line beginning with `# ` is compiled but not shown by `fix docs` and the language server. Mark an example `fix,no_run` to compile it without running it, or `fix,ignore` to leave it out. `fix test --doc` runs the examples alone, and `fix test --no-doc` runs `Test::test` alone. The module name `DocTest` is now reserved for the examples.
+- `fix test` now runs the Fix examples in documentation comments, the code blocks whose info string is `fix`. An example passes when it exits with status 0. `fix test --doc` runs the examples alone, and `fix test --no-doc` runs `Test::test` alone. The module name `DocTest` is now reserved for the examples. See "Fix examples in documentation comments" in `Document.md` for how to write an example.
 
 ## [1.5.0] - 2026-09-27
 

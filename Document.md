@@ -3269,7 +3269,7 @@ main : IO () = (
 );
 ```
 
-An example passes when this program exits with status 0; what it writes to the standard output and the standard error is not compared with anything. A failing `assert_eq`, `undefined` or an index out of range therefore makes the example fail. Each example runs in a process of its own, and a compile error in an example is reported at its place in the documentation comment.
+An example passes when this program exits with status 0, whatever it writes to the standard output and the standard error. A failing `assert_eq`, `undefined` or an index out of range therefore makes the example fail. Each example runs in a process of its own, and a compile error in an example is reported at its place in the documentation comment.
 
 An example that begins with a `module` declaration is the source of the module as it stands. It declares the module `DocTest`, imports what it uses, including the module the comment is written in, and defines `main : IO ()`. Write an example in this form to define types or functions, or to import only some of the entities of a module:
 
@@ -3312,9 +3312,9 @@ Marks after `fix`, separated by commas, change what `fix test` does with an exam
 | `fix,no_run` | Compiles the example (including type checking) without running it. Use it for an example that reads the standard input, touches files or the network, or does not terminate. |
 | `fix,ignore` | Does nothing. Use it for a fragment that does not compile on its own. |
 
-`fix test` reports any other mark as an error. A code block with an empty info string, or whose info string does not begin with the item `fix`, is not a Fix example.
+`fix test` reports any other mark as an error. A code block whose info string is empty or begins with another word, such as `fixme`, is not a Fix example.
 
-`fix test` runs the Fix examples of every documentation comment in the files listed in the `build` section of the project file, private entities included. The examples in the files listed in the `build.test` section alone and those in dependencies are not run. The examples are built with the same settings as `Test::test`, so they can use the test dependencies.
+`fix test` runs the Fix examples of every documentation comment in the files listed in the `build` section of the project file, private entities included. The examples in dependencies, and in files listed only in the `build.test` section, are not run. The examples are built with the same settings as `Test::test`, so they can use the test dependencies.
 
 ## Generating documentation
 
