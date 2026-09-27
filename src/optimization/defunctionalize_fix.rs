@@ -90,7 +90,6 @@ pub fn run(prg: &mut Program, show_build_times: bool) {
 //
 // `stable` holds symbols already known to contain no further `fix` to defunctionalize; they are
 // carried over untouched.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 fn run_one(
     prg: &mut Program,
     stable: &mut Set<FullName>,

@@ -1,0 +1,269 @@
+# doc test: 設計
+
+doc comment の中に書いた Fix のコード例を、`fix test` でテストとして実行する。同じ例を `fix docs` と言語サーバで表示するときは、import 文や入口の定義のような、読み手に見せる必要のない行を隠す。
+
+## 前提
+
+### doc comment の取り出し方
+
+Fix の文法はコメントを空白として捨てるので、doc comment は AST に残らない。宣言の直前にあるコメントは、必要になったときに `Span::get_document`（`src/parse/sourcefile.rs`）がソースの文字列から読み直す。
+
+- 宣言の開始位置から行単位で後ろ向きに読み、`//` で始まる行が続く限り集める。空行や `//` で始まらない行で止まる。
+- 各行の前後の空白を取り除いたうえで、先頭の `// `（`//` とスペース 1 つ）を取り除く。スペースが無ければ `//` だけを取り除く。
+- 結果は各行を `\n` でつないだ文字列で、Markdown として読まれる。この文書では以後これを docstring と呼ぶ。
+
+doc を持つ entity は、module（`module X;` の直前のコメント）、グローバル値、型と型エイリアス、構造体のフィールドと union の variant、トレイトとトレイトエイリアス、トレイトのメンバと関連型、トレイトの impl である。
+
+### docstring を読み手に見せる 3 か所
+
+- **`fix docs`**（`src/commands/docs.rs`）: module ごとに Markdown のファイルを書く。docstring への加工は、`MarkdownSection` による見出しのレベルの付け直しだけで、コードブロックは info string ごとそのまま出力する。
+- **言語サーバの hover** と **補完の説明**（どちらも `src/commands/lsp/util.rs` の `document_from_endnode` を通る）: シグネチャのコードブロックの後に docstring をそのまま付け、`MarkupKind::Markdown` として送る。エディタはこれを Markdown として描画する。
+
+### `fix test`
+
+`fix test` は、`fixproj.toml` の設定を `BuildConfigType::Test` で読んでプログラムを 1 つビルドし、`Test::test : IO ()` を入口として実行する。この設定では次のものが `[build]` に足される。
+
+- ソースファイル: `[build.test]` の `files`
+- 依存: `[[test_dependencies]]`
+- リンクの設定（`objects`、リンクするライブラリ、`ld_flags` など）: `[build.test]` のもの
+
+`opt_level`、`debug`、`sanitize`、`memcheck`、`check_integer_operations` などは、`[build.test]` に書いてあればその値を使い、無ければ `[build]` の値を使う。
+
+`Test::test` が定義されていなければ、`Program::instantiate_entry_io_value` が「Value `Test::test` is not found.」のエラーを返す。
+
+### 1 つのプログラムの中の module
+
+1 つのファイルは 1 つの module で、先頭の `module X;` で名前を宣言する。同じ名前の module が 2 つのファイルにあると、「Module `X` is defined in two files」のエラーになる。`Std` はすべての module に暗黙に import される。他の module のものを短い名前で使うには `import` が要る。`::Other::foo` のように `::` から書いた名前は、import しなくても使える。
+
+## 仕様
+
+### Fix の例になるブロック
+
+docstring の中の fenced code block（```` ``` ```` で囲んだもの）のうち、info string の最初の要素が `fix` であるものを **Fix の例** と呼ぶ。Fix の例は、次に述べる印で外さない限りテストとして実行する。
+
+info string は `,` で区切り、各要素の前後の空白を取り除いて読む。
+
+- 最初の要素がちょうど `fix` なら Fix の例である。
+- 2 つ目以降の要素は **印** で、`ignore` か `no_run` のどちらかである。
+- 最初の要素が `fix` でないブロック（info string が空、`sh`、`fixme` など）は Fix の例ではない。表示されるだけで、テストにも隠し行の処理にもかからない。
+
+印の意味は次のとおり。
+
+| 印 | 扱い |
+| --- | --- |
+| （なし） | コンパイルして実行し、合格の条件を確かめる |
+| `no_run` | コンパイル（型検査を含む）だけをする。ファイルやネットワークに触れる例、stdin を読む例、終わらないサーバの例に使う |
+| `ignore` | コンパイルもしない。どこにも定義されていない変数を使う断片のような、単独では成り立たない例に使う |
+
+`fix test` は、次の info string をエラーにする。エラーは docstring のその行を指す。
+
+- 2 つ目以降の要素に、`ignore` と `no_run` 以外のものがある。
+- `ignore` と `no_run` が両方ある。
+
+`fix docs` と言語サーバは、これらをエラーにしない。印は実行するときにだけ意味を持ち、表示には影響しないからである（後述の「表示」で、info string は `fix` に書き換えられる）。
+
+**Examples**
+
+```
+fix              ->  テストする
+fix,no_run       ->  コンパイルだけ
+fix, ignore      ->  テストしない
+fix,no-run       ->  fix test のエラー（知らない印）
+fixme            ->  Fix の例ではない
+```
+
+### 隠し行
+
+Fix の例の中の行は、先頭の空白を飛ばした後の形で 3 つに分かれる。
+
+- **`# ` で始まる行は隠し行である。** コンパイルには、その行から `# ` の 2 文字だけを取り除いたものを使う。`#` より前の空白は残るので、隠し行は表示される行と同じインデントで書ける。
+- **ちょうど `#` だけの行は、隠れた空行である。** コンパイルには空行を使う。
+- **それ以外の行は、表示される行である。** コンパイルにもそのまま使う。
+
+隠し行と隠れた空行は、`fix docs` と言語サーバの表示から取り除かれる。
+
+Fix の文法は `#` を使わないので、行頭に `#` が来るのは複数行にまたがる文字列リテラルの中だけである。そこで `#` から始まる行を書く手段は用意しない。
+
+処理の順序は次のとおり。
+
+1. `Span::get_document` が docstring を作る（`// ` を取り除く）。
+2. docstring から Fix の例を取り出す。
+3. Fix の例の各行を、上の規則で隠し行・隠れた空行・表示される行に分ける。
+
+### 例の形
+
+隠し行を戻した後の例（以後、**例のソース**）は、次の 2 つの形のどちらかである。先頭が文法規則 `module_defn`（`module` の後に名前と `;` が続くもの）に一致すれば module の形、それ以外は文の形である。`module` は予約語ではないが、`module DocTest;` という並びは式として成り立たないので、2 つの形が紛れることはない。
+
+#### module の形
+
+例のソースが、そのまま 1 つの module のソースである。書き手は次のものをすべて自分で書く。
+
+- `module DocTest;`
+- 必要な `import`（文書化している module のものも含む）
+- 入口 `main : IO ()`
+
+型や関数を定義する例や、`import Std hiding Tuple2;` のように import を絞りたい例は、この形で書く。例の中の定義は `DocTest::Tuple2` のように module の名前で修飾して指せる。
+
+```fix
+# module DocTest;
+# import Geometry;
+type Point = struct { x : I64, y : I64 };
+# main : IO () = (
+assert_eq(|_|"", Point { x : 1, y : 2 }.@x, 1)
+# );
+```
+
+#### 文の形
+
+例のソースは、型 `IO ()` の式である。ツールがこれを次のように包む。`<M>` は、その doc comment が書かれているファイルの module である。
+
+```
+module DocTest;
+import <M>;
+main : IO () = (
+<例のソース>
+);
+```
+
+**Examples**
+
+表示されるのは次の 2 行だけである。
+
+```fix
+let arr = [1, 2, 3];
+assert_eq(|_|"", arr.@(0), 1)
+```
+
+最後のアクションの後に `;;` を書くと、後ろに式が無いので構文エラーになる。最後のアクションが `IO ()` 以外（`IO String` など）を返すと型エラーになるので、`.forget` などで `IO ()` に直して書く。
+
+`[1, 1, 2].dedup == [1, 2]` のような式だけの例は、`assert_eq(|_|"", [1, 1, 2].dedup, [1, 2])` と書く。
+
+#### module の名前 `DocTest`
+
+例の module は、どちらの形でも `DocTest` という名前で書き、その名前で読む。
+
+- 例の外（root プロジェクトとその依存）に `DocTest` という module があれば、エラーにする。そのため、例の中の `DocTest` で始まる名前は、必ずその例自身を指す。
+- ツールは、例の module の名前を、例ごとに異なる生成した名前に付け替えてよい。付け替えは parse の段で、`module DocTest;` の宣言と、`DocTest` で始まる名前の参照の両方に対して行う。こうすると、複数の例を 1 回のビルドにまとめられる。付け替えを行うかどうかは実装が決め、利用者からは見えない。
+
+### 合格の条件
+
+例のプログラムが終了コード 0 で終われば合格である。stdout と stderr の中身は照合しない。`assert` / `assert_eq` の失敗、`undefined`、範囲外の添字はどれもメッセージを stderr に出して abort するので、不合格になる。
+
+例はそれぞれ別のプロセスで実行する。Fix には abort を捕まえる仕組みが無いので、1 つのプロセスで複数の例を順に実行すると、1 つの失敗で残りの例が実行されなくなるからである。
+
+### 対象の範囲
+
+root プロジェクト（カレントディレクトリの `fixproj.toml` のプロジェクト）の `[build]` のファイルにある、すべての entity の docstring の中の Fix の例を対象にする。`fix docs --with-private` が出力する範囲と同じである。
+
+- `_` で始まる名前の entity の例も対象にする。
+- `[build.test]` にだけあるファイルの例は対象にしない。
+- 依存しているプロジェクトの例は対象にしない。
+- entity に付いていないコメント（関数の本体の中のコメント、宣言との間に空行があるコメント）は docstring にならないので、その中のブロックは対象にならない。
+- コンパイラが定義するメソッドの docstring は、Std の docstring なので対象にしない。std 自身の例（`src/fixstd/std.fix` と `src/docs/std_*.md`）は、コンパイラのリポジトリのテストから実行する。
+
+### ビルドの設定
+
+例は、root プロジェクトの `fixproj.toml` を `BuildConfigType::Test` で読んだ設定でビルドし、実行する。`fix test` が `Test::test` のために使う設定と同じである。
+
+- 例から `[[test_dependencies]]` のプロジェクトを使える。
+- `[build.test]` の `memcheck`、`sanitize`、`check_integer_operations` などが例にも効く。
+- `[build.test]` のファイル（`Test` module など）も一緒にリンクされる。例の入口は `DocTest::main` なので、`Test::test` とは衝突しない。
+
+### `fix test` のふるまい
+
+`fix test` は、`Test::test` を実行した後、対象のすべての例を実行する。
+
+- `--doc` を付けると、例だけを実行する。
+- `--no-doc` を付けると、`Test::test` だけを実行する。
+- `Test::test` が定義されていなければ、それを飛ばして例だけを実行する。`Test::test` も例も無いとき、および `--no-doc` を付けて `Test::test` が無いときは、今と同じ「Value `Test::test` is not found.」のエラーにする。
+- 例が 1 つ失敗しても、残りの例を実行する。
+- すべて実行し終えた後、失敗した例の一覧と数を出す。1 つでも失敗があれば、`fix test` は 0 でない終了コードで終わる。
+- 実行時に失敗した例については、例の位置（ファイルと、```` ```fix ```` の行）と、その例が stderr に出したものを表示する。
+
+### エラーの位置
+
+例のコンパイルエラーは、元の `.fix` ファイルの、doc comment の中の位置を指す。
+
+隠し行の処理までの手順はすべて行単位なので、例のソースの各行は元のファイルの 1 行に対応する。列は、その行で取り除いた `// ` の前の空白、`// `、`# ` の長さだけずれる。ツールが足した行（文の形の `module DocTest;`、`import <M>;`、`main : IO () = (`、`);`）は元のファイルに対応する行を持たないので、それらの行で起きたエラーは ```` ```fix ```` の行を指す。
+
+**Examples**
+
+```
+error: Unknown name `deduplicate`.
+  --> src/fixstd/std.fix:1234:18
+```
+
+`Span` は今は 1 つのファイルの中の連続した範囲を表すので、「例のソースの位置 -> 元のファイルの位置」の対応表を持つ層を足して実現する。
+
+### 表示
+
+`fix docs`、言語サーバの hover、補完の説明の 3 か所は、docstring を出力する前に同じ変換を通す。変換は 1 つの関数にまとめる。
+
+- Fix の例から、隠し行と隠れた空行を取り除く。
+- Fix の例の info string を `fix` に書き換える。印は表示に関係しないので落とす。また mkdocs などの Markdown の処理系は info string の最初の語を言語の名前として読むので、`fix,no_run` のままでは Fix のコードとして扱われない。
+
+`fix docs` は例を型検査しない。これまでどおり、コードの本体を型検査せずに文書を作る。
+
+## 後の課題
+
+- **言語サーバでの診断。** 例のコンパイルエラーを、doc comment の中に診断として出す。「エラーの位置」の対応表で位置は写せる。言語サーバは打鍵ごとにプロジェクトを型検査するので、例を足したときの費用を測ってから決める。
+- **例の中での補完と hover。**
+- **例を 1 回のビルドにまとめること。** `DocTest` の付け替えを使い、全部の例を 1 つの実行ファイルにコンパイルし、その実行ファイルを例ごとに引数付きで起動する。Rust の 2024 edition の doctest がこの方式である。
+
+## 付録
+
+### A. 既存のコードブロックの調査
+
+2026-09-27 の main（d87e8f054）と `~/fixlang-projs` の doc comment の中の fenced code block を、スクリプトで取り出して調べた。
+
+- **info string:** どのブロックも空である。`fix` と書いたブロックは 1 つも無い。そのため、`fix` で始まるものだけをテストにする規則は、既存のプロジェクトの `fix test` の結果を変えない。
+- **`src/fixstd/std.fix`:** 17 個。`module Main;` から書いた完全なプログラムが 2 個（`loop` と `loop_m` の doc）で、どちらも動く。残る 15 個は断片である。
+  - 文の形に包んで通るもの: `product`、`intersperse`、`split`、`String::from_U8`、`iget`、`iset`、`imod`、`iact`。
+  - `ixchg` の例は、`assert_eq(...)` の後が `;` 1 つで、構文エラーになる。
+  - `Array::dedup` の例は、存在しない `deduplicate` を呼び、しかも `==` の式として書かれている。`[1,1,2,2,3].dedup == [1,2,3]` は成り立つ。
+  - `unsafe_from_c_str_ptr` の 2 つの例は、どこにも定義していない `ptr` を使う。`fix,ignore` に当たる。
+- **`src/docs/std_*.md`:** `std_fix.md`、`std_ffi_get_funptr_release.md`、`std_unsafe_is_unique.md` の最初のブロックは完全なプログラムで、動く。`std_unsafe_is_unique.md` の 2 つ目のブロックは、定義していない `SomeBoxedType` を使う断片である。
+- **`~/fixlang-projs`:** 重複を除いて 102 個。完全なプログラムが 4 個、`module` を持たず `main` などを定義するものが 7 個、宣言が約 15 個、断片が約 76 個である。断片には、`"x = {}".format((42,))   // "x = 42"` のような結果のコメント付きのもの、`==>` で結果を書くもの、定義していない変数を使うもの、Fix でないもの（BNF の文法）がある。
+
+### B. 他の言語の doc test
+
+| 言語 | 例の置き場所 | boilerplate の隠し方 | 合格の条件 | 既定 |
+| --- | --- | --- | --- | --- |
+| Rust（rustdoc） | doc comment の fenced block | `# ` の行。`fn main` と `extern crate` を自動で足す | コンパイルでき、panic せずに終わる | info string の無いブロックもテストする |
+| Python（doctest） | docstring の `>>>` の行 | 無し | 表示の文字列が一致する | `testmod()` を呼んだ module |
+| Elixir（ExUnit.DocTest） | `iex>` の行 | `:import` の option | 期待値の式と `===` で等しい | `doctest Module` を書いた module |
+| Go | `_test.go` の関数 `ExampleXxx` | 要らない（普通の関数） | `// Output:` と stdout が一致する。無ければコンパイルだけ | 例として書いた関数 |
+| Haskell（doctest） | Haddock の `>>>` の行 | `$setup` の chunk | 表示の文字列が一致する | ツールを走らせた module |
+| Julia（Documenter） | ```` ```jldoctest ```` のブロック | `setup=`、`DocTestSetup` | 表示の文字列が一致する | `jldoctest` のブロックだけ |
+| Zig | `test <名前>` の宣言 | 要らない（普通の test） | 失敗せずに終わる | 名前付きの test |
+
+Rust の doctest は、2021 edition までは例ごとに別々にコンパイルしていた。core の doctest では、コンパイルが合計 775 秒、実行が 15 秒だった。2024 edition からは、互換な例を 1 つにまとめてコンパイルし、実行だけを例ごとの別プロセスにしている（rust-lang/rust#126245）。
+
+出典:
+
+- https://doc.rust-lang.org/rustdoc/write-documentation/documentation-tests.html
+- https://doc.rust-lang.org/edition-guide/rust-2024/rustdoc-doctests.html
+- https://docs.python.org/3/library/doctest.html
+- https://hexdocs.pm/ex_unit/ExUnit.DocTest.html
+- https://pkg.go.dev/testing#hdr-Examples
+- https://github.com/sol/doctest
+- https://documenter.juliadocs.org/stable/man/doctests/
+- https://ziglang.org/documentation/master/
+
+### C. 採らなかった案
+
+- **info string の無いブロックもテストする（Rust の既定）。** 付録 A のとおり、既存のブロックの大半は単独では動かない断片で、ほぼすべてのライブラリの `fix test` が失敗するようになる。
+- **テスト専用の印 ```` ```fix-test ````（Julia の `jldoctest` の方式）。** ハイライトのための `fix` とは衝突しないが、テストしない Fix のコードにどの印を付けるかがぼやける。`fix` をテストにし、外すものに `ignore` を付けるほうが規則が単純である。
+- **例を doc の外に普通の Fix のコードとして書き、名前で結び付ける（Go、Zig の方式）。** エディタや型検査がそのまま効き、隠し行も要らない。しかし宣言に印を付ける新しい文法が要る。docstring の中に書く方式は、文法を変えずにツールの変更だけで済む。
+- **main を自動で補わず、例には常にプログラム全体を書く。** 規則は無くなるが、断片の形の例のすべてに同じ 3 行から 4 行の隠し行が付く。
+- **例の module を `Main` と書く。** `main.fix` を持つプロジェクトの `Main` と衝突する。アプリケーションが自分の `Main` を文書化した例では `import Main;` が要り、例自身が `Main` を名乗れない。また、名前を付け替えるときに、`Main::` が例自身を指すのかプロジェクトの `Main` を指すのかが決まらない。
+- **例の module を `Test` と書く。** 例は `Test` の設定でビルドするので、`[build.test]` のファイルの `Test` module と衝突する。
+- **例の module の名前を書き手に書かせず、ツールだけが知る名前にする。** 例の中で定義したものを module の名前で修飾して指せなくなる（Std の `Tuple2` と例の `Tuple2` を区別できない）。また、ツールが足す `import` を書き手が絞れない。
+- **文の形の例の後ろに `pure()` を足して包む。** 最後のアクションにも `;;` が要り、std の既存の例（`iget` など）の書き方と合わない。
+- **式だけの例を独立した形にする。** 合格の条件（`Bool` なら `true`、それ以外は表示との照合など）を別に決める必要がある。表示との照合は、浮動小数の表示や順序の違いで壊れる。
+- **例にも explicit import を求める。** explicit import が防ぐのは、Std に名前が足されたときに依存する側のビルドが壊れることである。例は root プロジェクトの `fix test` でしかコンパイルしないので、壊れて困るのは作者だけで、作者は `fix test` で気づいて直せる。
+- **`should_abort`（abort で終われば合格）の印。** abort する条件は散文で十分に伝わり、調べた範囲に abort を実演する例は無かった。知らない印をエラーにしておけば、後から足しても既存の例の意味は変わらない。
+- **`compile_fail`（コンパイルに失敗すれば合格）の印。** どのエラーで失敗したかを確かめないので、無関係の理由で失敗しても合格になる。今のコンパイラで失敗するコードが、将来の版で通ることもある。
+- **`##` で `#` から始まる行を書く（Rust のエスケープ）。** Rust では attribute やマクロのために要る。Fix のコードで行頭に `#` が来るのは複数行の文字列リテラルの中だけである。
+- **例を `build` の設定でビルドする。** 依存するプロジェクトの利用者の環境に近いが、`[build.test]` の `memcheck` などが例に効かなくなる。Rust の doctest も dev-dependencies を使える。
+- **`fix test --doc` のときだけ例を実行する。** 旗を知っている人しか実行しないので、例は古くなりやすい。std の `dedup` の例が存在しない関数を呼んだまま残っていたのは、誰も実行していなかったからである。
