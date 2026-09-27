@@ -22,7 +22,7 @@ use crate::{
         array_append_capacity_unchecked, array_append_value_capacity_unchecked,
         array_borrow_elements, array_check_range, array_check_size,
         array_copy_capacity_bounds_unchecked, array_get_capacity, array_get_size,
-        array_is_storage_unique_function, array_mutate_elements_internal,
+        array_is_storage_unique_function,
         array_mutate_elements_ios_internal, array_punch, array_set_capacity_bounds_unchecked,
         array_truncate_bounds_unchecked, array_unsafe_empty, array_unsafe_get_bounds_unchecked,
         bit_not_function, bitwise_operation_function, boxed_from_retained_ptr_ios,
@@ -30,7 +30,7 @@ use crate::{
         cast_between_integral_function, cast_float_to_int_function, cast_int_to_float_function,
         destructor_make, divide_trait_instance_float, divide_trait_instance_int,
         eq_trait_instance_float, eq_trait_instance_int, eq_trait_instance_ptr, fix, floating_types,
-        get_get_boxed_ptr, get_mutate_boxed_internal, get_mutate_boxed_ios_internal, get_ptr_array,
+        borrow_boxed_function, get_get_boxed_ptr, get_mutate_boxed_ios_internal, get_ptr_array,
         get_release_function_of_boxed_value, get_retain_function_of_boxed_value, grow_size_array,
         hole_function, infinity_value, integral_types, is_unique_function,
         less_than_or_equal_to_trait_instance_float, less_than_or_equal_to_trait_instance_int,
@@ -561,13 +561,6 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("../docs/std_array_borrow_elements.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_mutate_elements_internal"),
-        array_mutate_elements_internal(),
-        None,
-        None,
-        Some(include_str!("../docs/std_array_mutate_elements_internal.md").to_string()),
-    ));
-    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_mutate_elements_ios_internal"),
         array_mutate_elements_ios_internal(),
         None,
@@ -681,11 +674,11 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("../docs/std_ffi_get_boxed_ptr.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "_mutate_boxed_internal"),
-        get_mutate_boxed_internal(),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "borrow_boxed"),
+        borrow_boxed_function(),
         None,
         None,
-        Some(include_str!("../docs/std_ffi_mutate_boxed_internal.md").to_string()),
+        Some(include_str!("../docs/std_ffi_borrow_boxed.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME], "_mutate_boxed_ios_internal"),

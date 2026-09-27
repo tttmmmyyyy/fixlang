@@ -630,9 +630,9 @@ mod integration_tests {
             "struct_plug_in_0[unique]",
             // An `unsafe_is_unique`, whose flag folds to the constant `true`.
             "is_unique[unique]",
-            // The two `_mutate_boxed_internal` cores, on a freshly allocated value.
-            "mutate_boxed[unique]",
-            "mutate_boxed_ios[unique]",
+            // The `_mutate_boxed_ios_internal` core of `mutate_boxed` and `mutate_boxed_io`, on a
+            // freshly allocated value.
+            "mutate_ptr[unique]",
         ] {
             assert!(
                 dump.contains(elided),
@@ -705,9 +705,8 @@ mod integration_tests {
         );
     }
 
-    /// Verifies both halves of what a write through an array's element pointer declares — that its
-    /// own check is dropped on an array proven unique, and that the array it returns is `fresh` — for
-    /// the plain and the IO-context variant, which carry that array at different result positions.
+    /// Verifies both halves of what a write through an array's element pointer declares: that its
+    /// own check is dropped on an array proven unique, and that the array it returns is `fresh`.
     #[test]
     fn test_unique_check_elim_mutate_elements() {
         let (_temp_dir, project_dir) = setup_test_env("unique_elim_mutate_elements");
@@ -720,25 +719,17 @@ mod integration_tests {
 
         // Both writes go to an array nothing else holds, so both drop their check. The case's own
         // writes are the only ones in the dump, so the checked form appearing at all is a failure.
-        for elided in [
-            "array_mutate_elements[unique]",
-            "array_mutate_elements_ios[unique]",
-        ] {
-            assert!(
-                dump.contains(elided),
-                "the write to an array proven unique should render `{}`:\n{}",
-                elided,
-                dump
-            );
-        }
-        for checked in ["array_mutate_elements(", "array_mutate_elements_ios("] {
-            assert!(
-                !dump.contains(checked),
-                "no write should keep its check, but `{}` is in the dump:\n{}",
-                checked,
-                dump
-            );
-        }
+        assert_eq!(
+            dump.matches("mutate_ptr[unique]").count(),
+            2,
+            "both writes to an array proven unique should render `mutate_ptr[unique]`:\n{}",
+            dump
+        );
+        assert!(
+            !dump.contains("mutate_ptr("),
+            "no write should keep its check:\n{}",
+            dump
+        );
     }
 
     /// Verifies that a write into an array read out of a global keeps its uniqueness check.

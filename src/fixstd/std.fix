@@ -264,7 +264,7 @@ namespace Array {
     // * `act` - The action to perform on the pointer to the first element.
     // * `array` - The array to mutate.
     mutate_elements : (Ptr -> IO b) -> Array a -> (Array a, b);
-    mutate_elements = |act, arr| arr._mutate_elements_internal(|ptr| act(ptr).@runner);
+    mutate_elements = |act, arr| mutate_elements_ios(act, arr, IOState::_unsafe_create).@1;
 
     // `arr.mutate_elements_io(io)` gets a pointer `ptr` to the first element of `arr`, executes `io(ptr)`,
     // and then returns the mutated `arr` paired with the result of `io(ptr)`.
@@ -975,7 +975,7 @@ namespace FFI {
     // * `act` - The action to perform on the pointer to the boxed value.
     // * `value` - The boxed value to mutate.
     mutate_boxed : [a : Boxed] (Ptr -> IO b) -> a -> (a, b);
-    mutate_boxed = |act, val| val._mutate_boxed_internal(|ptr| act(ptr).@runner);
+    mutate_boxed = |act, val| mutate_boxed_ios(act, val, IOState::_unsafe_create).@1;
 
     // `x.mutate_boxed_io(io)` gets a pointer `ptr` to the data that `x` points to, executes `io(ptr)`, and then returns mutated `x` paired with the result of `io(ptr)`.
     // 
@@ -1003,28 +1003,6 @@ namespace FFI {
     // * `ios` - The `IOState` to use for the action.
     mutate_boxed_ios : [a : Boxed] (Ptr -> IO b) -> a -> IOState -> (IOState, (a, b));
     mutate_boxed_ios = |act, val, ios| ios._mutate_boxed_ios_internal(|ptr| act(ptr).@runner, val);
-
-    // Borrows a pointer to the data of a boxed value.
-    // 
-    // The returned pointer points to:
-    // 
-    // - if the value is an `Array`, the first element of the array,
-    // - if the value is a struct, the first field,
-    // - if the value is an union, the data field (not the tag field).
-    // 
-    // The difference from `boxed_to_retained_ptr` is that this function returns a pointer to region where the payload of a boxed value is stored;
-    // on the other hand, `boxed_to_retained_ptr` returns a pointer to the boxed value itself (which currently points to the reference counter of the boxed value).
-    // 
-    // It is not allowed to mutate a boxed value through the borrowed pointer. If you want to do so, use `mutate_boxed`.
-    // 
-    // See also: `borrow_boxed_io`, `mutate_boxed`, `mutate_boxed_io`.
-    // 
-    // # Parameters
-    // 
-    // * `borrower` - The action to be performed on the pointer.
-    // * `value` - The boxed value to be borrowed.
-    borrow_boxed : [a : Boxed] (Ptr -> b) -> a -> b;
-    borrow_boxed = |act, val| val.with_retained(|val| act(val._get_boxed_ptr));
 
     // Gets a retained pointer to a boxed value.
     // This function is used to share ownership of Fix's boxed values with foreign languages.
