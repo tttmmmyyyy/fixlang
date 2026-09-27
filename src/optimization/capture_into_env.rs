@@ -101,14 +101,15 @@ fn env_function_operand(llvm: &InlineLLVM) -> Option<FullName> {
 }
 
 /// Collects the names an expression passes as the function operand of an op declaring
-/// `LLVMGen::env_operand`, wherever they are bound. A lambda bound to any other name is left alone,
-/// so these bound the bindings whose uses `CaptureMover` looks through.
+/// `LLVMGen::env_operand`, wherever they are bound. Only a lambda bound to one of these names can be
+/// rewritten, so `CaptureMover` checks the uses of these names alone.
 struct EnvFunctionCollector {
     /// The names collected so far.
     names: Set<FullName>,
 }
 
 impl ExprVisitor for EnvFunctionCollector {
+    /// Collects the function operand of an op declaring `LLVMGen::env_operand`.
     fn start_visit_llvm(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -276,9 +277,9 @@ struct CaptureMover<'a> {
 }
 
 impl CaptureMover<'_> {
-    /// `let v = lambda; body` rewritten as the module comment describes, or `None` where `expr` is
-    /// not such a binding, the lambda captures nothing, or `v` is used other than as the function
-    /// operand of an op declaring `LLVMGen::env_operand`.
+    /// `expr` rewritten as the module comment describes, where it is `let v = lambda; body`, the
+    /// lambda captures something, and every use of `v` in `body` is the function operand of an op
+    /// declaring `LLVMGen::env_operand`.
     fn rewrite(&mut self, expr: &Arc<ExprNode>, state: &VisitState) -> Option<Arc<ExprNode>> {
         let pat = expr.get_let_pat();
         if !pat.is_var() {
@@ -403,6 +404,8 @@ fn var_expr(name: &FullName, ty: &Arc<TypeNode>) -> Arc<ExprNode> {
 }
 
 impl ExprVisitor for CaptureMover<'_> {
+    /// Rewrites a `let` binding a lambda, and revisits the result so that the lambdas nested in it
+    /// are rewritten with the name of the new capture struct among their captures.
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -566,13 +569,14 @@ fn used_only_as_env_function(expr: &Arc<ExprNode>, name: &FullName) -> bool {
     finder.env_function_uses > 0 && !finder.other_use
 }
 
-/// Whether an inner binding of `name` stands between here and the binding of it that a walk looks
-/// at, which makes an occurrence of the name here one of the inner binding.
+/// Whether `name` is bound again inside the expression a walk started from, so that an occurrence
+/// of the name here refers to that inner binding.
 fn shadowed(name: &FullName, state: &VisitState) -> bool {
     state.scope.has_value(&name.name)
 }
 
-/// Counts the uses of one name for `used_only_as_env_function`.
+/// Counts the uses of one name as the function operand of an op declaring `LLVMGen::env_operand`,
+/// and notes whether it is used anywhere else.
 struct UseFinder<'a> {
     /// The name whose uses are counted.
     name: &'a FullName,
@@ -583,6 +587,8 @@ struct UseFinder<'a> {
 }
 
 impl ExprVisitor for UseFinder<'_> {
+    /// Notes an occurrence of the name as a variable, which is a use other than as an op's function
+    /// operand.
     fn start_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -594,6 +600,8 @@ impl ExprVisitor for UseFinder<'_> {
         StartVisitResult::VisitChildren
     }
 
+    /// Counts each operand of an op that is the name, as the function operand of an op declaring
+    /// `LLVMGen::env_operand` or as another use.
     fn start_visit_llvm(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -765,6 +773,8 @@ struct OpRewriter<'a> {
 }
 
 impl ExprVisitor for OpRewriter<'_> {
+    /// Binds `(env, cap)` ahead of an op applying the lambda, and gives the op that name as its
+    /// environment.
     fn start_visit_llvm(
         &mut self,
         expr: &Arc<ExprNode>,

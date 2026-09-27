@@ -103,8 +103,8 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// The operand this op applies as a function, and the operand it hands that function as the
     /// first field of the tuple it applies it to. Default: the op has no such pair.
     ///
-    /// The pair is what lets `capture_into_env` move what a lambda given to the op captures into the
-    /// environment operand, so that the lambda captures nothing and needs no closure object.
+    /// With the pair, what a lambda given to the op captures can travel in the environment operand,
+    /// so that the lambda captures nothing and needs no closure object.
     fn env_operand(&self) -> Option<EnvOperand> {
         None
     }
