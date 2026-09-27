@@ -2954,11 +2954,7 @@ namespace String {
     _read_signed_decimal_integer : I64 -> String -> Result ErrMsg I64;
     _read_signed_decimal_integer = |max, str| (
         str._read_decimal_integer(max.u64, max.u64 + 1_U64).map(|(negative, magnitude)| (
-            if !negative { magnitude.i64 };
-            if magnitude == 0_U64 { 0 };
-            // The magnitude of `I64::minimum` exceeds `I64::maximum`, so this negates one less than
-            // the magnitude and subtracts 1.
-            -(magnitude - 1_U64).i64 - 1
+            I64::_from_sign_and_magnitude(negative, magnitude)
         ))
     );
 
@@ -4014,6 +4010,23 @@ namespace I64 {
         // at `I64::minimum`.
         if v < 0 { (true, -(v.u64)) };
         (false, v.u64)
+    );
+
+    // Returns the integer whose sign is `negative` and whose absolute value is `magnitude`: the
+    // inverse of `_sign_and_magnitude`.
+    //
+    // `magnitude` must be at most `I64::maximum`, or one more than it where `negative` is true.
+    // A larger one gives an integer of the wrong value.
+    //
+    // # Parameters
+    // * `negative` - Whether the integer is below zero.
+    // * `magnitude` - The absolute value of the integer.
+    _from_sign_and_magnitude : Bool -> U64 -> I64;
+    _from_sign_and_magnitude = |negative, magnitude| (
+        // Negating in `U64` and then converting gives `I64::minimum` for its magnitude, which
+        // `I64` cannot negate.
+        if negative { (-magnitude).i64 };
+        magnitude.i64
     );
 }
 
