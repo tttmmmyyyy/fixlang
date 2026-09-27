@@ -138,6 +138,17 @@ pub fn test_external_project_binary_heap() {
     );
 }
 
+// `Std.Experimental` calls functions of the Fix runtime and private values of `Std`, so a change to
+// either can break it. This test catches such a change.
+#[test]
+pub fn test_external_project_std_experimental() {
+    test_external_project(
+        "https://github.com/tttmmmyyyy/fixlang-std-experimental.git",
+        "fixlang-std-experimental",
+        None,
+    );
+}
+
 #[test]
 pub fn test_external_project_cp_library() {
     if env_vars::get_max_opt_level() <= FixOptimizationLevel::None {
