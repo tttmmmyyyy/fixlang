@@ -317,32 +317,41 @@ mod tests {
     /// environment the built-in hands it, so the closure built from it stores nothing and allocates
     /// no capture object.
     ///
+    /// At `-O basic` nothing is inlined, and the lambdas under test are the ones the standard
+    /// library's functions build around the function they are given, capturing it. At `-O max` they
+    /// are the lambdas the program writes.
+    ///
     /// The capture struct the environment carries is what names the closures under test: its type
     /// constructor is named with `#EnvCap`.
     #[test]
     fn test_a_lambda_given_to_a_scope_builtin_stores_nothing() {
-        let dump = build_run_and_read_rc_ir(
-            SCOPE_BUILTINS_SOURCE,
-            "max",
-            SCOPE_BUILTINS_OUTPUT,
-            "lambdas capturing values, given to built-ins applying a function in a scope",
-        );
-        let built = dump
-            .lines()
-            .filter(|line| line.contains("= closure ") && line.contains("#EnvCap"))
-            .collect::<Vec<_>>();
-        // One per lambda the program writes, and one for `println`, which borrows `stdout`.
-        assert!(
-            built.len() >= 4,
-            "a closure taking a capture struct should be built for each lambda:\n{}",
-            dump
-        );
-        for line in built {
-            assert!(
-                line.trim_end().ends_with("[]"),
-                "a closure taking its captures through the environment should store nothing:\n{}",
-                line
+        for opt_level in ["basic", "max"] {
+            let dump = build_run_and_read_rc_ir(
+                SCOPE_BUILTINS_SOURCE,
+                opt_level,
+                SCOPE_BUILTINS_OUTPUT,
+                "lambdas capturing values, given to built-ins applying a function in a scope",
             );
+            let built = dump
+                .lines()
+                .filter(|line| line.contains("= closure ") && line.contains("#EnvCap"))
+                .collect::<Vec<_>>();
+            // At least one for each of `borrow_elements`, `mutate_elements` and `Destructor::borrow`.
+            assert!(
+                built.len() >= 3,
+                "at -O {}, a closure taking a capture struct should be built for each built-in:\n{}",
+                opt_level,
+                dump
+            );
+            for line in built {
+                assert!(
+                    line.trim_end().ends_with("[]"),
+                    "at -O {}, a closure taking its captures through the environment should store \
+                     nothing:\n{}",
+                    opt_level,
+                    line
+                );
+            }
         }
     }
 
