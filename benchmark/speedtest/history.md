@@ -2,6 +2,30 @@
 
 Newer is above.
 
+**LangArena rows measured before the pinned revision rose from `3d8a862` to `85ac364` are
+comparable with rows after it on forty-seven of the fifty programs.** The three were measured with
+one compiler on both sides -- `main` at `f7d3a2b` -- and the first row on `85ac364` is the first one
+recorded once this change is on `main`. `85ac364` needs a compiler from `f29127480` on, since the
+`std-experimental` release it builds on writes an integer with what that commit added.
+
+| program | instructions | |
+| --- | --- | --- |
+| `Etc::CacheSimulation` | **-8.55%** | builds its keys and values with `format` |
+| `Json::Generate` | +0.24% | `json` 0.7.0 builds on `std-experimental` 0.2 |
+| `Template::Parse` | -0.01% | |
+
+`Etc::CacheSimulation` builds two strings for each of its asks, a key and a value, each a word
+followed by a number. It wrote them as `"item_" + index.to_string`, which allocates the number's
+text and then the joined string; it now writes `"item_{}".format((index,))`, which writes the
+number straight into the one string, as the Rust implementation's `format!` does. The run resolved
+`std-experimental` to 0.2.1.
+
+`Json::Generate` writes its numbers through the same `F64` writer on both sides; `json` 0.7.0 differs
+from 0.6.0 only in the `std-experimental` release it names. `Template::Parse` uses neither
+library.
+
+The other forty-seven moved by less than 0.01%.
+
 **LangArena rows measured before the pinned revision rose from `53067d5` to `3d8a862` are
 comparable with rows after it on thirty-four of the fifty programs, and on sixteen they are not.**
 The sixteen were measured with one compiler on both sides -- `main` at `732460b` -- so nothing but
