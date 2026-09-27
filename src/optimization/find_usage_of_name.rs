@@ -19,10 +19,13 @@ pub enum UsageType {
     // constructor of that struct, and the second the position of the field among the fields the
     // type constructor declares.
     CapturedInto(FullName, usize),
+    // The name is the operand an inline-LLVM operation declaring `LLVMGen::env_operand` applies as
+    // a function.
+    EnvFunctionOperand,
     // The name stands where none of the above receives it: the bound value of a `let`, a branch of
     // an `if` or a `match`, an element of an array literal, under a type annotation, either side of
-    // an `eval`, or an operand of an inline-LLVM operation. What holds it there passes it on whole,
-    // so the position says nothing about the name beyond its being there.
+    // an `eval`, or another operand of an inline-LLVM operation. What holds it there passes it on
+    // whole, so the position says nothing about the name beyond its being there.
     Elsewhere,
 }
 
@@ -90,13 +93,17 @@ impl ExprVisitor for UsageFinder<'_> {
         state: &mut VisitState,
     ) -> StartVisitResult {
         if !self.shadowed(state) {
-            let operands = expr.get_llvm().generator.free_vars();
-            let written = operands
-                .iter()
-                .filter(|operand| *operand == self.name)
-                .count();
-            for _ in 0..written {
-                self.add_usage(UsageType::Elsewhere);
+            let generator = &expr.get_llvm().generator;
+            let function = generator.env_operand().map(|env| env.function);
+            for (i, operand) in generator.free_vars().iter().enumerate() {
+                if operand != self.name {
+                    continue;
+                }
+                self.add_usage(if Some(i) == function {
+                    UsageType::EnvFunctionOperand
+                } else {
+                    UsageType::Elsewhere
+                });
             }
         }
         StartVisitResult::VisitChildren

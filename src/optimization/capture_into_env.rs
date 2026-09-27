@@ -49,7 +49,10 @@ rewritten afterwards, with that capture among the others.
   capture list the lambda now has costs no allocation.
 */
 
-use super::capture_struct::CaptureStruct;
+use super::{
+    capture_struct::CaptureStruct,
+    find_usage_of_name::{self, UsageType},
+};
 use crate::{
     ast::{
         expr::{expr_abs_typed, expr_let_typed, expr_make_struct, expr_var, var_local, ExprNode},
@@ -591,217 +594,17 @@ impl ExprVisitor for CaptureMover<'_> {
 /// Whether every use of `name` in `expr` is the function operand of an op declaring
 /// `LLVMGen::env_operand`, and there is one.
 fn used_only_as_env_function(expr: &Arc<ExprNode>, name: &FullName) -> bool {
-    let mut finder = UseFinder {
-        name,
-        env_function_uses: 0,
-        other_use: false,
-    };
-    finder.traverse(expr);
-    finder.env_function_uses > 0 && !finder.other_use
+    let usages = find_usage_of_name::run(expr, name);
+    !usages.is_empty()
+        && usages
+            .iter()
+            .all(|usage| matches!(usage, UsageType::EnvFunctionOperand))
 }
 
 /// Whether `name` is bound again inside the expression a walk started from, so that an occurrence
 /// of the name here refers to that inner binding.
 fn shadowed(name: &FullName, state: &VisitState) -> bool {
     state.scope.has_value(&name.name)
-}
-
-/// Counts the uses of one name as the function operand of an op declaring `LLVMGen::env_operand`,
-/// and notes whether it is used anywhere else.
-struct UseFinder<'a> {
-    /// The name whose uses are counted.
-    name: &'a FullName,
-    /// How many ops declaring `LLVMGen::env_operand` apply the name as their function.
-    env_function_uses: usize,
-    /// Whether the name stands anywhere else.
-    other_use: bool,
-}
-
-impl ExprVisitor for UseFinder<'_> {
-    /// Notes an occurrence of the name as a variable, which is a use other than as an op's function
-    /// operand.
-    fn start_visit_var(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        state: &mut VisitState,
-    ) -> StartVisitResult {
-        if &expr.get_var().name == self.name && !shadowed(self.name, state) {
-            self.other_use = true;
-        }
-        StartVisitResult::VisitChildren
-    }
-
-    /// Counts each operand of an op that is the name, as the function operand of an op declaring
-    /// `LLVMGen::env_operand` or as another use.
-    fn start_visit_llvm(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        state: &mut VisitState,
-    ) -> StartVisitResult {
-        if shadowed(self.name, state) {
-            return StartVisitResult::VisitChildren;
-        }
-        let llvm = expr.get_llvm();
-        let function = llvm.generator.env_operand().map(|env| env.function);
-        for (i, operand) in llvm.generator.free_vars().iter().enumerate() {
-            if operand != self.name {
-                continue;
-            }
-            if Some(i) == function {
-                self.env_function_uses += 1;
-            } else {
-                self.other_use = true;
-            }
-        }
-        StartVisitResult::VisitChildren
-    }
-
-    // The rest of the expression kinds are passed through: their children are visited, and the
-    // expression itself is left as it is.
-
-    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_app(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_lam(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_let(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_if(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_match(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_tyanno(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_make_struct(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_make_struct(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_array_lit(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_array_lit(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_ffi_call(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_ffi_call(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_eval(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
 }
 
 /// Gives each op that applies one lambda as its function the environment `(env, cap)` in place of

@@ -1026,6 +1026,9 @@ fn reaches_a_direct_call(
                     )
                 })
             }
+            // An inline-LLVM operation applies the function it is given through a pointer, which
+            // is an indirect call.
+            UsageType::EnvFunctionOperand => false,
             // A value held where nothing takes it apart is passed on whole, so a way in is reached
             // through whatever holds it rather than here.
             UsageType::Elsewhere => false,
