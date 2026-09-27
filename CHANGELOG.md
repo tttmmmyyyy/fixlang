@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-27
+
+### Performance
+
+Fix 1.5.0 makes programs faster, and builds them faster, than Fix 1.4.0.
+
+**Programs run faster.** On eight benchmarks built on [cp-library](https://github.com/tttmmmyyyy/cp-library), a library of algorithms for competitive programming, 1.5.0 runs faster than 1.4.0 on every one:
+
+| Benchmark | Speedup |
+| --- | ---: |
+| Bipartite matching (max flow) | 9.32x |
+| Lazy segment tree | 2.70x |
+| Prime sieve up to 10^8 | 1.92x |
+| Segment tree | 1.59x |
+| Dijkstra | 1.19x |
+| Strongly connected components | 1.10x |
+| Union-find | 1.06x |
+| Convolution modulo a prime | 1.05x |
+
+**Builds take less time and memory.** Building cp-library's test suite from scratch takes 29% less time (53.3 s -> 37.7 s) and 38% less memory (1.46 GB -> 0.90 GB). Rebuilding it after a one-line edit takes 9% less time (39.1 s -> 35.6 s) and 48% less memory.
+
 ### Added
 
 #### Language
