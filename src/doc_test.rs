@@ -7,6 +7,7 @@
 
 use crate::{
     ast::{name::Name, program::Program},
+    commands::docs::is_fence_line,
     constants::{DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME},
     error::Errors,
     hash::md5_hex,
@@ -323,14 +324,13 @@ struct FencedBlock {
     close: Option<usize>,
 }
 
-/// The fenced code blocks of the docstring whose lines are `lines`, in order. A line whose text
-/// begins with ```` ``` ```` after its indentation opens a block, and the next such line closes it,
-/// which is how `MarkdownSection::parse` reads them.
+/// The fenced code blocks of the docstring whose lines are `lines`, in order. A fence line opens a
+/// block, and the next fence line closes it.
 fn fenced_blocks(lines: &[&str]) -> Vec<FencedBlock> {
     let mut blocks = vec![];
     let mut open = None;
     for (index, line) in lines.iter().enumerate() {
-        if !line.trim_start().starts_with("```") {
+        if !is_fence_line(line) {
             continue;
         }
         match open.take() {

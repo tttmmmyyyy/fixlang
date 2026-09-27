@@ -80,6 +80,12 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
     Ok(())
 }
 
+/// Whether `line` opens or closes a fenced code block of Markdown: its text begins with ```` ``` ````
+/// after its indentation.
+pub fn is_fence_line(line: &str) -> bool {
+    line.trim_start().starts_with("```")
+}
+
 /*
 #[m] {title}
 
@@ -143,8 +149,8 @@ impl MarkdownSection {
         let mut paragraph = String::new();
         let mut in_code_block = false;
         while let Some(line) = line_it.peek() {
-            // If the line starts with "```", toggle the code block state.
-            if line.trim().starts_with("```") {
+            // A fence line toggles the code block state.
+            if is_fence_line(line) {
                 in_code_block = !in_code_block;
                 append_line(&mut paragraph, line);
                 line_it.next();
@@ -195,6 +201,12 @@ impl MarkdownSection {
         }
 
         (ret, line_it.collect())
+    }
+
+    /// The sections of the docstring `docstring` as a reader is shown it: the Fix examples in it
+    /// pass through `docstring_for_display` before the sections are read.
+    pub fn parse_docstring(docstring: &str) -> Vec<Self> {
+        Self::parse_many(docstring_for_display(docstring).lines().collect())
     }
 
     pub fn parse_many(mut lines: Vec<&str>) -> Vec<Self> {
@@ -292,7 +304,6 @@ fn docgen_for_module(
     let markdown = write_module(program, mod_name, project, config)?;
     let mut markdown_str = String::new();
     markdown.format(0, &mut markdown_str);
-    let markdown_str = docstring_for_display(&markdown_str);
 
     // Write `doc` into `{mod_name}.md` file.
     let doc_file = format!("{}.md", mod_name);
@@ -358,7 +369,7 @@ fn write_module(
 
     if let Some(mod_info) = program.modules.iter().find(|mi| mi.name == *mod_name) {
         let docstring = mod_info.source.get_document().ok().unwrap_or_default();
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         doc.concatenate_many(docstring);
     }
 
@@ -584,7 +595,7 @@ fn type_entries(
             .unwrap_or_default()
             .trim()
             .to_string();
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         doc.concatenate_many(docstring);
 
         if ty_info.variant == TyConVariant::Struct {
@@ -637,7 +648,7 @@ fn type_entries(
             .map(|src| src.get_document())
             .transpose()?
             .unwrap_or_default();
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         doc.concatenate_many(docstring);
 
         let entry = Entry {
@@ -663,7 +674,7 @@ fn field_subsection(
     field_sec.add_paragraph(format!("Type: `{}`", field.syn_ty.to_string()));
     if let Some(src) = &field.source {
         let docstring = src.get_document()?;
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         field_sec.concatenate_many(docstring);
     }
     Ok(field_sec)
@@ -713,7 +724,7 @@ fn trait_entries(
             .map(|src| src.get_document())
             .transpose()?
             .unwrap_or_default();
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         doc.concatenate_many(docstring);
 
         for (assoc_ty_name, assoc_ty_defn) in &info.assoc_types {
@@ -737,7 +748,7 @@ fn trait_entries(
                 .map(|src| src.get_document())
                 .transpose()?
                 .unwrap_or_default();
-            let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+            let docstring = MarkdownSection::parse_docstring(&docstring);
             subsection.concatenate_many(docstring);
             doc.add_subsection(subsection);
         }
@@ -746,7 +757,7 @@ fn trait_entries(
             let mut subsection = MarkdownSection::new(title);
             subsection.add_paragraph(format!("Type: `{}`", method.qual_ty.to_string()));
             let docstring = docstring_from_opt_span(&method.decl_src)?;
-            let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+            let docstring = MarkdownSection::parse_docstring(&docstring);
             subsection.concatenate_many(docstring);
             doc.add_subsection(subsection);
         }
@@ -786,7 +797,7 @@ fn trait_entries(
             .map(|src| src.get_document())
             .transpose()?
             .unwrap_or_default();
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         doc.concatenate_many(docstring);
 
         let entry = Entry {
@@ -818,7 +829,7 @@ fn trait_impl_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, 
             let mut doc = MarkdownSection::new(title);
 
             let docstring = docstring_from_opt_span(&impl_.source)?;
-            let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+            let docstring = MarkdownSection::parse_docstring(&docstring);
             doc.concatenate_many(docstring);
 
             let entry = Entry {
@@ -877,7 +888,7 @@ fn value_entries(
         }
 
         let docstring = gv.get_document().unwrap_or_default();
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         doc.concatenate_many(docstring);
 
         let entry = Entry {

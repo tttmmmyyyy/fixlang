@@ -711,3 +711,42 @@ value = 1;
         streams(&output)
     );
 }
+
+/// `fix docs` hides the hidden lines of each doc comment on its own: a Fix example one doc comment
+/// leaves unclosed does not change how the examples of the doc comments after it are shown.
+#[test]
+fn test_fix_docs_reads_each_doc_comment_on_its_own() {
+    let lib = r#"module Lib;
+
+// ```fix
+// unclosed(1)
+first : I64;
+first = 1;
+
+// ```fix,no_run
+// # let hidden = 1;
+// let shown = 2;
+// pure()
+// ```
+second : I64;
+second = 2;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_command()
+        .arg("docs")
+        .current_dir(dir.path())
+        .output()
+        .expect("Failed to execute fix docs");
+    assert!(
+        output.status.success(),
+        "fix docs passes\n{}",
+        streams(&output)
+    );
+    let document =
+        fs::read_to_string(dir.path().join("docs/Lib.md")).expect("fix docs writes Lib.md");
+    assert!(
+        document.contains("```fix\nlet shown = 2;\npure()\n```") && !document.contains("hidden"),
+        "the example of the second doc comment is shown without its hidden line:\n{}",
+        document
+    );
+}
