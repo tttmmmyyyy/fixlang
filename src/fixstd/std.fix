@@ -2998,7 +2998,7 @@ namespace String {
         break $ i
     ));
 
-    // Answers with how many bytes `_write_decimal_integer` writes for the integer whose sign is
+    // Counts the bytes `_write_decimal_integer` writes for the integer whose sign is
     // `negative` and whose magnitude is `magnitude`: the digits, and the `-` where `negative` is
     // true.
     //
@@ -4003,8 +4003,8 @@ namespace I64 {
     abs : I64 -> I64;
     abs = |v| if v < 0 { -v } else { v };
 
-    // Answers with whether `v` is below zero, and its absolute value. The absolute value of
-    // `I64::minimum` is one more than `I64::maximum`, and it is answered as it is.
+    // Returns whether `v` is below zero, and its absolute value. The absolute value is a `U64`, so it
+    // holds that of `I64::minimum`, which is one more than `I64::maximum`.
     //
     // # Parameters
     // * `v` - The integer to split.

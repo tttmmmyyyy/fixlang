@@ -27,22 +27,22 @@ number of the type, and takes `.` for the point whatever locale the program runs
 // the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
 
-// The two digits each number below a hundred is written with, laid end to end, so that a number is
-// written two digits at a time.
+// The two decimal digits of each number from 0 to 99, in order, so that a number is written two
+// digits at a time: `n` is at index `2 * n`.
 //
-// Ryu carries the same table in `ryu/digit_table.h`, where it is `static`, so a source including
-// that header takes a copy of it rather than sharing this one.
+// Ryu carries the same table in `ryu/digit_table.h`, where it is `static`, so each source including
+// that header gets a copy of its own.
 static const char FIXRUNTIME_DIGIT_PAIRS[201] =
     "0001020304050607080910111213141516171819202122232425262728293031323334353637383940414243444546474849"
     "5051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899";
 
-// The digits a `uint64_t` takes in decimal: `18446744073709551615` is the longest.
+// The largest number of digits a `uint64_t` takes in decimal, which `18446744073709551615` takes.
 #define FIXRUNTIME_U64_DIGITS 20
 
 // Writes `v` at `buf` in decimal, null-terminated, and reports how many digits it took.
 //
 // The digits are produced from the last backwards into a scratch buffer, so that one pass writes
-// them without first counting how many there are. The scratch is then copied to `buf`.
+// them before their count is known. The scratch is then copied to `buf`.
 static int64_t fixruntime_write_u64(char *buf, uint64_t v)
 {
     char digits[FIXRUNTIME_U64_DIGITS];
