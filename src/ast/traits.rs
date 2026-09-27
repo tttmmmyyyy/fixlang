@@ -48,8 +48,8 @@ pub struct MissingMember {
     pub name: FullName,
     /// The type of the member with the trait type variable substituted by the impl type.
     pub ty: Arc<TypeNode>,
-    /// The document of the member in the trait's declaration. The quick fix reads the parameter
-    /// names it lists.
+    /// The document of the member in the trait's declaration. Its "Parameters" section names the
+    /// member's parameters.
     pub document: Option<String>,
 }
 

@@ -740,8 +740,8 @@ pub(super) fn parameters_of_global_value(
     parameters_in_document(&docs)
 }
 
-// Get the parameters listed in the "Parameters" section of a documentation comment (a markdown
-// string). `None` says the document has no such section.
+/// The parameter names listed in the "Parameters" section of a documentation comment (a markdown
+/// string). `None` says the document has no such section.
 pub(super) fn parameters_in_document(docs: &str) -> Option<Vec<String>> {
     let sections = MarkdownSection::parse_many(docs.lines().collect());
 
