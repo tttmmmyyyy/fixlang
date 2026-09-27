@@ -40,12 +40,12 @@ mod integration_tests {
     /// Runs `install.sh` against a GitHub API that lists `tags` in the given order, and returns
     /// its stdout.
     fn run_install_script(tags: &[&str]) -> String {
-        run_install_script_to_success(&install_script_fixture(tags, DOWNLOAD_SUCCEEDS))
+        run_install_script_asserting_success(&install_script_fixture(tags, DOWNLOAD_SUCCEEDS))
     }
 
     /// Runs `install.sh` in `temp_dir` without a terminal, asserts that it succeeded, and returns
     /// its stdout.
-    fn run_install_script_to_success(temp_dir: &TempDir) -> String {
+    fn run_install_script_asserting_success(temp_dir: &TempDir) -> String {
         let output = run_install_script_without_terminal(temp_dir);
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         assert!(
@@ -307,7 +307,7 @@ sys.exit(os.waitstatus_to_exitcode(status) & 0xff)
     #[test]
     fn test_install_script_moves_the_download_into_place() {
         let temp_dir = install_script_fixture(&["v1.5.0"], DOWNLOAD_SUCCEEDS);
-        run_install_script_to_success(&temp_dir);
+        run_install_script_asserting_success(&temp_dir);
         assert_eq!(installed_files(&temp_dir), vec!["fix"]);
         assert_eq!(
             fs::read_to_string(install_dir(&temp_dir).join("fix")).unwrap(),
@@ -320,7 +320,7 @@ sys.exit(os.waitstatus_to_exitcode(status) & 0xff)
     #[test]
     fn test_install_script_installs_the_binary_with_the_umask_mode() {
         let temp_dir = install_script_fixture(&["v1.5.0"], DOWNLOAD_SUCCEEDS);
-        run_install_script_to_success(&temp_dir);
+        run_install_script_asserting_success(&temp_dir);
         let mode = fs::metadata(install_dir(&temp_dir).join("fix"))
             .unwrap()
             .permissions()
