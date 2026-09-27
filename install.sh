@@ -203,11 +203,18 @@ say ""
 
 mkdir -p "$INSTALL_DIR"
 
-if ! download_to "$DOWNLOAD_URL" "$INSTALL_PATH"; then
-    err "Download failed. Version '${VERSION}' may not have a pre-built binary for ${TARGET}."
+# Download into a temporary file beside the target and move it into place, so a failed or
+# interrupted download leaves any installed binary as it was, and a running one can be replaced.
+DOWNLOAD_PATH="$(mktemp "${INSTALL_DIR}/.${BINARY_NAME}.XXXXXX")"
+trap 'rm -f "$DOWNLOAD_PATH"' EXIT
+trap 'exit 1' INT TERM
+
+if ! download_to "$DOWNLOAD_URL" "$DOWNLOAD_PATH"; then
+    err "Download failed. Version '${VERSION}' may have no pre-built binary for ${TARGET}, or the connection failed."
 fi
 
-chmod +x "$INSTALL_PATH"
+chmod +x "$DOWNLOAD_PATH"
+mv -f "$DOWNLOAD_PATH" "$INSTALL_PATH"
 
 say "Installed: ${INSTALL_PATH}"
 

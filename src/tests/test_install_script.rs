@@ -11,7 +11,7 @@ mod integration_tests {
     use std::fs::{self, Permissions};
     use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
-    use std::process::{Command, Stdio};
+    use std::process::{Command, Output, Stdio};
     use tempfile::TempDir;
 
     /// Writes `content` to `path` as a stand-in command that `install.sh` finds on `PATH`.
@@ -24,6 +24,22 @@ mod integration_tests {
     /// Runs `install.sh` against a GitHub API that lists `tags` in the given order, and returns
     /// its stdout.
     fn run_install_script(tags: &[&str]) -> String {
+        let (output, _temp_dir) = run_install_script_downloading(tags, true);
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        assert!(
+            output.status.success(),
+            "install.sh failed:\nstdout: {}\nstderr: {}",
+            stdout,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        stdout
+    }
+
+    /// Runs `install.sh` against a GitHub API that lists `tags` in the given order, with `HOME`
+    /// at `home` inside the returned directory. The download of the binary succeeds when
+    /// `download_succeeds`, and otherwise writes part of a body and fails the way a dropped
+    /// connection does (curl's exit 18).
+    fn run_install_script_downloading(tags: &[&str], download_succeeds: bool) -> (Output, TempDir) {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let bin_dir = temp_dir.path().join("bin");
         let home_dir = temp_dir.path().join("home");
@@ -44,6 +60,11 @@ mod integration_tests {
         fs::write(&releases_path, format!("[\n{}\n]\n", releases_json)).unwrap();
 
         // Serves the release list for the API URL, and a placeholder binary for `-o <dest>`.
+        let download = if download_succeeds {
+            "echo placeholder > \"$out\""
+        } else {
+            "echo partial > \"$out\"; exit 18"
+        };
         write_executable(
             &bin_dir.join("curl"),
             &format!(
@@ -53,8 +74,9 @@ while [ $# -gt 0 ]; do
   if [ "$1" = -o ]; then out="$2"; shift; fi
   shift
 done
-if [ -n "$out" ]; then echo placeholder > "$out"; else cat '{}'; fi
+if [ -n "$out" ]; then {}; else cat '{}'; fi
 "#,
+                download,
                 releases_path.display()
             ),
         );
@@ -72,14 +94,21 @@ if [ -n "$out" ]; then echo placeholder > "$out"; else cat '{}'; fi
             .stdin(Stdio::null())
             .output()
             .expect("Failed to run install.sh");
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        assert!(
-            output.status.success(),
-            "install.sh failed:\nstdout: {}\nstderr: {}",
-            stdout,
-            String::from_utf8_lossy(&output.stderr)
-        );
-        stdout
+        (output, temp_dir)
+    }
+
+    /// The file names in the install directory, `~/.local/bin`, of a run's home.
+    fn installed_files(temp_dir: &TempDir) -> Vec<String> {
+        let install_dir = temp_dir.path().join("home/.local/bin");
+        let mut names = fs::read_dir(&install_dir)
+            .map(|entries| {
+                entries
+                    .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        names.sort();
+        names
     }
 
     /// Returns the entries of the "Available versions:" list in `stdout`, trimmed.
@@ -183,5 +212,27 @@ if [ -n "$out" ]; then echo placeholder > "$out"; else cat '{}'; fi
             "stdout:\n{}",
             stdout
         );
+    }
+
+    /// A successful install leaves the binary at `~/.local/bin/fix` and nothing else in the
+    /// directory, the temporary file it downloaded into included.
+    #[test]
+    fn test_install_script_moves_the_download_into_place() {
+        let (output, temp_dir) = run_install_script_downloading(&["v1.5.0"], true);
+        assert!(output.status.success(), "{:?}", output);
+        assert_eq!(installed_files(&temp_dir), vec!["fix"]);
+        assert_eq!(
+            fs::read_to_string(temp_dir.path().join("home/.local/bin/fix")).unwrap(),
+            "placeholder\n"
+        );
+    }
+
+    /// A download that fails part-way leaves nothing in `~/.local/bin`: no truncated `fix`, which
+    /// a later run would take for an installed one, and no temporary file.
+    #[test]
+    fn test_install_script_leaves_nothing_after_a_failed_download() {
+        let (output, temp_dir) = run_install_script_downloading(&["v1.5.0"], false);
+        assert!(!output.status.success(), "{:?}", output);
+        assert_eq!(installed_files(&temp_dir), Vec::<String>::new());
     }
 }
