@@ -3395,29 +3395,7 @@ impl MyType : MyTrait  {
 
 標準ライブラリや依存ライブラリに対する最初の解析は必ず完了まで実行され、その後の編集によって中断されることはありません。
 
-**VSCode**（[Fix拡張](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)）では、`settings.json` に次のように設定します：
-
-```json
-{
-  "fix.analyze.delayMs": 300,
-  "fix.analyze.onSave": false
-}
-```
-
-**Zed**（[Fix拡張](https://github.com/tttmmmyyyy/zed-fixlang-support)）では、`settings.json` の `fix` 言語サーバーの `settings` の下に設定します：
-
-```json
-{
-  "lsp": {
-    "fix": {
-      "settings": {
-        "analyze": { "delayMs": 300, "onSave": false }
-      }
-    }
-  }
-}
-```
-
+設定の方法はエディタによって異なります。VSCodeの[Fix拡張](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)では設定画面に表示され、Zedの[Fix拡張](https://github.com/tttmmmyyyy/zed-fixlang-support#analysis-diagnostics)ではREADMEで説明されています。
 
 ### ドキュメントコメントでパラメータリストを指定して言語サーバーにヒントを与える
 

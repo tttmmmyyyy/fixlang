@@ -3290,29 +3290,7 @@ The server re-analyzes your code shortly after you stop typing (the burst of edi
 
 The initial analysis over the standard library and dependencies always runs to completion and is never interrupted by subsequent edits.
 
-In **VSCode** (the [Fix extension](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client)), set them in `settings.json`:
-
-```json
-{
-  "fix.analyze.delayMs": 300,
-  "fix.analyze.onSave": false
-}
-```
-
-In **Zed** (the [Fix extension](https://github.com/tttmmmyyyy/zed-fixlang-support)), put them under the `fix` language server's `settings` in your `settings.json`:
-
-```json
-{
-  "lsp": {
-    "fix": {
-      "settings": {
-        "analyze": { "delayMs": 300, "onSave": false }
-      }
-    }
-  }
-}
-```
-
+How to set them depends on the editor. The VSCode [Fix extension](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) lists them in the Settings editor, and the Zed [Fix extension](https://github.com/tttmmmyyyy/zed-fixlang-support#analysis-diagnostics) shows them in its README.
 
 ### Specifying parameter list in the documentation comment as a hint to the language server
 
