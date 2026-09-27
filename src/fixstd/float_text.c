@@ -15,6 +15,7 @@ number of the type, and takes `.` for the point whatever locale the program runs
 #include <stdint.h>
 #include <string.h>
 #include "ryu/ryu.h"
+#include "ryu/digit_table.h"
 
 // fast_float's implementation, compiled into this translation unit alone. `ffc/ffc.h` declares
 // every function it defines `static`, and the definitions take their linkage from those
@@ -27,49 +28,23 @@ number of the type, and takes `.` for the point whatever locale the program runs
 // the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
 
-// The two decimal digits of each number from 0 to 99, in order, so that a number is written two
-// digits at a time: `n` is at index `2 * n`.
-//
-// Ryu carries the same table in `ryu/digit_table.h`, where it is `static`, so each source including
-// that header gets a copy of its own.
-static const char FIXRUNTIME_DIGIT_PAIRS[201] =
-    "0001020304050607080910111213141516171819202122232425262728293031323334353637383940414243444546474849"
-    "5051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899";
-
-// The largest number of digits a `uint64_t` takes in decimal, which `18446744073709551615` takes.
-#define FIXRUNTIME_U64_DIGITS 20
-
-// Writes `v` at `buf` in decimal, null-terminated, and reports how many digits it took.
-//
-// The digits are produced from the last backwards into a scratch buffer, so that one pass writes
-// them before their count is known. The scratch is then copied to `buf`.
-static int64_t fixruntime_write_u64(char *buf, uint64_t v)
+// Writes `exponent`, a power of ten from 0 to 999, at `buf` in decimal, and reports how many digits
+// it took. No null follows them.
+static int fixruntime_write_exponent(char *buf, int exponent)
 {
-    char digits[FIXRUNTIME_U64_DIGITS];
-    int start = FIXRUNTIME_U64_DIGITS;
-    while (v >= 100)
+    if (exponent >= 100)
     {
-        uint64_t higher = v / 100;
-        unsigned int pair = (unsigned int)(v - higher * 100);
-        start -= 2;
-        digits[start] = FIXRUNTIME_DIGIT_PAIRS[2 * pair];
-        digits[start + 1] = FIXRUNTIME_DIGIT_PAIRS[2 * pair + 1];
-        v = higher;
+        memcpy(buf, DIGIT_TABLE + 2 * (exponent / 10), 2);
+        buf[2] = (char)('0' + exponent % 10);
+        return 3;
     }
-    if (v >= 10)
+    if (exponent >= 10)
     {
-        start -= 2;
-        digits[start] = FIXRUNTIME_DIGIT_PAIRS[2 * v];
-        digits[start + 1] = FIXRUNTIME_DIGIT_PAIRS[2 * v + 1];
+        memcpy(buf, DIGIT_TABLE + 2 * exponent, 2);
+        return 2;
     }
-    else
-    {
-        digits[--start] = (char)('0' + v);
-    }
-    int64_t length = FIXRUNTIME_U64_DIGITS - start;
-    memcpy(buf, digits + start, (size_t)length);
-    buf[length] = '\0';
-    return length;
+    buf[0] = (char)('0' + exponent);
+    return 1;
 }
 
 // The bytes `fixruntime_write_float_text` builds a text in. The static assertions at the two
@@ -305,7 +280,7 @@ static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t s
             text[written++] = '-';
             exponent = -exponent;
         }
-        written += (int)fixruntime_write_u64(text + written, (uint64_t)exponent);
+        written += fixruntime_write_exponent(text + written, exponent);
     }
 
     return fixruntime_copy_float_text(text, written, buf, size);
