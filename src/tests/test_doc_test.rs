@@ -613,7 +613,7 @@ fn test_examples_of_every_kind_of_declaration_run_once() {
         "fix test passes\n{}",
         streams(&output)
     );
-    let mut examples = 0;
+    let mut example_count = 0;
     for (file, source) in [
         ("lib.fix", LIB_DOCUMENTING_EVERY_KIND),
         ("util.fix", UTIL_DOCUMENTING_A_VALUE),
@@ -628,13 +628,13 @@ fn test_examples_of_every_kind_of_declaration_run_once() {
                 line,
                 streams(&output)
             );
-            examples += 1;
+            example_count += 1;
         }
     }
     assert!(
         stderr.contains(&format!(
             "doc tests: {} passed, 0 failed, 0 ignored.",
-            examples
+            example_count
         )),
         "each example runs once\n{}",
         streams(&output)

@@ -57,7 +57,7 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
             failures.push(test_function.to_string());
         }
     }
-    let test_function_failures = failures.len();
+    let test_function_failure_count = failures.len();
 
     // A Fix example is built without the arguments and the output path given for `Test::test`.
     config.run_program_args.clear();
@@ -101,7 +101,7 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
     eprintln!(
         "doc tests: {} passed, {} failed, {} ignored.",
         passed,
-        failures.len() - test_function_failures,
+        failures.len() - test_function_failure_count,
         ignored
     );
     if failures.is_empty() {
