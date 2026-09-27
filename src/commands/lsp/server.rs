@@ -125,7 +125,7 @@ pub struct DiagnosticsResult {
 }
 
 /// A request that waits until an analysis yields a program, which it is answered out of.
-pub enum PendingRequest {
+enum PendingRequest {
     /// A `textDocument/documentSymbol` request.
     DocumentSymbol {
         /// The id the response carries.
