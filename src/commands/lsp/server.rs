@@ -124,7 +124,7 @@ pub struct DiagnosticsResult {
     pub user_source_contents: Map<PathBuf, String>,
 }
 
-/// A request that waits until an analysis yields a program, which it is answered out of.
+/// A request that waits for an analysis to yield a program, and is then answered from it.
 enum PendingRequest {
     /// A `textDocument/documentSymbol` request.
     DocumentSymbol {
@@ -151,7 +151,7 @@ impl PendingRequest {
         }
     }
 
-    /// Answer the request out of the program `diag` holds.
+    /// Answer the request from the program `diag` holds.
     fn answer(&self, diag: &DiagnosticsResult) {
         match self {
             PendingRequest::DocumentSymbol { id, params } => {
@@ -296,7 +296,8 @@ pub fn launch_language_server() {
                 send_response(id, Err::<(), _>(ResponseError::request_cancelled()));
                 continue;
             }
-            // A request waiting for a program has been handed out and not answered.
+            // The cancelled request has been handed out already. It is answered `RequestCancelled`
+            // here when it is still waiting for a program.
             Some(Incoming::LateCancellation(id)) => {
                 if let Some(index) = pending_requests.iter().position(|req| req.id() == id) {
                     pending_requests.remove(index);
