@@ -736,17 +736,13 @@ pub(super) fn parameters_of_global_value(
     full_name: &FullName,
     program: &Program,
 ) -> Option<Vec<String>> {
-    // Get the document of the global value, which is a markdown string.
-    let opt_gv = program.global_values.get(full_name);
-    if opt_gv.is_none() {
-        return None;
-    }
-    let gv = opt_gv.unwrap();
-    let opt_docs = gv.get_document();
-    if opt_docs.is_none() {
-        return None;
-    }
-    let docs = opt_docs.unwrap();
+    let docs = program.global_values.get(full_name)?.get_document()?;
+    parameters_in_document(&docs)
+}
+
+// Get the parameters listed in the "Parameters" section of a documentation comment (a markdown
+// string). `None` says the document has no such section.
+pub(super) fn parameters_in_document(docs: &str) -> Option<Vec<String>> {
     let sections = MarkdownSection::parse_many(docs.lines().collect());
 
     // Find the first top-level or second-level section named "Parameters".

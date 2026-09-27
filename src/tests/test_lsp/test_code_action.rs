@@ -315,13 +315,15 @@ mod tests {
             new_text
         );
         assert!(
-            new_text.contains("get_elem : Main::MyData -> Main::MyTrait::Elem Main::MyData"),
-            "Member get_elem should have the correct type. Got: {:?}",
+            new_text.contains(
+                "show_it : Std::String -> Main::MyData -> Std::String = |prefix, value| ?;"
+            ),
+            "Member show_it should be stubbed with the parameters its document lists. Got: {:?}",
             new_text
         );
         assert!(
-            new_text.contains("show_it : Main::MyData -> Std::String"),
-            "Member show_it should have the correct type. Got: {:?}",
+            new_text.contains("get_elem : Main::MyData -> Main::MyTrait::Elem Main::MyData = ?;"),
+            "Member get_elem, whose document lists no parameters, should be stubbed without a lambda. Got: {:?}",
             new_text
         );
 
