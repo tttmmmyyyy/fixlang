@@ -8988,12 +8988,25 @@ impl LLVMGen for InlineLLVMBorrowPtrBody {
     }
 }
 
+/// The type variable `b` a scope op's function operand returns, which the type `x_ty` of the value
+/// the op lends a pointer into leaves free.
+fn scope_result_tyvar(x_ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+    const B_TYPE_NAME: &str = "b";
+    assert!(
+        !x_ty.free_vars().contains_key(B_TYPE_NAME),
+        "the type `{}` of the lent value mentions `{}`, the function's result type.",
+        x_ty.to_string(),
+        B_TYPE_NAME
+    );
+    type_tyvar_star(B_TYPE_NAME)
+}
+
 /// The definition of a function `(Ptr -> b) -> x_ty -> b` evaluated by `InlineLLVMBorrowPtrBody`,
 /// where `x_ty` has type variable `a` and satisfies `preds`.
 fn borrow_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const F_NAME: &str = "f";
     const X_NAME: &str = "x";
-    let b_ty = type_tyvar_star("b");
+    let b_ty = scope_result_tyvar(&x_ty);
     let scm = Scheme::generalize(
         &[],
         preds,
@@ -9168,7 +9181,7 @@ fn mutate_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprN
     const F_NAME: &str = "f";
     const X_NAME: &str = "x";
     const IOS_NAME: &str = "ios";
-    let b_ty = type_tyvar_star("b");
+    let b_ty = scope_result_tyvar(&x_ty);
     let xb_ty = make_tuple_ty(vec![x_ty.clone(), b_ty.clone()]);
     let scm = Scheme::generalize(
         &[],

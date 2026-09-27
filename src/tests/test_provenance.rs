@@ -705,39 +705,11 @@ mod integration_tests {
         );
     }
 
-    /// Verifies both halves of what a write through an array's element pointer declares: that its
-    /// own check is dropped on an array proven unique, and that the array it returns is `fresh`.
-    #[test]
-    fn test_unique_check_elim_mutate_elements() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_mutate_elements");
-        let dump = emit_main_rc_ir(&project_dir);
-
-        // The array each write hands back is uniquely owned, which is what lets the write that
-        // follows drop its check. A wrong result position would leave these of unknown sharing.
-        assert_binding_prov(&dump, "mutated", "[fresh]");
-        assert_binding_prov(&dump, "mutated_io", "[fresh]");
-
-        // Both writes go to an array nothing else holds, so both drop their check. The case's own
-        // writes are the only ones in the dump, so the checked form appearing at all is a failure.
-        assert_eq!(
-            dump.matches("mutate_ptr[unique]").count(),
-            2,
-            "both writes to an array proven unique should render `mutate_ptr[unique]`:\n{}",
-            dump
-        );
-        assert!(
-            !dump.contains("mutate_ptr("),
-            "no write should keep its check:\n{}",
-            dump
-        );
-    }
-
-    /// Verifies both halves of what a write through the pointer to a boxed value's payload
-    /// declares: that its own check is dropped on a value proven unique, and that the value it
-    /// returns is `fresh`.
-    #[test]
-    fn test_unique_check_elim_mutate_boxed() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_mutate_boxed");
+    /// Assert both halves of what the two writes through a lent pointer in the case `case` declare:
+    /// that each drops its own check on a value proven unique, and that the value each returns,
+    /// bound as `mutated` and `mutated_io`, is `fresh`.
+    fn assert_writes_through_lent_pointer_elide_checks(case: &str) {
+        let (_temp_dir, project_dir) = setup_test_env(case);
         let dump = emit_main_rc_ir(&project_dir);
 
         // The value each write hands back is uniquely owned, which is what lets the write that
@@ -750,7 +722,7 @@ mod integration_tests {
         assert_eq!(
             dump.matches("mutate_ptr[unique]").count(),
             2,
-            "both writes to a boxed value proven unique should render `mutate_ptr[unique]`:\n{}",
+            "both writes to a value proven unique should render `mutate_ptr[unique]`:\n{}",
             dump
         );
         assert!(
@@ -758,6 +730,21 @@ mod integration_tests {
             "no write should keep its check:\n{}",
             dump
         );
+    }
+
+    /// Verifies both halves of what a write through an array's element pointer declares: that its
+    /// own check is dropped on an array proven unique, and that the array it returns is `fresh`.
+    #[test]
+    fn test_unique_check_elim_mutate_elements() {
+        assert_writes_through_lent_pointer_elide_checks("unique_elim_mutate_elements");
+    }
+
+    /// Verifies both halves of what a write through the pointer to a boxed value's payload
+    /// declares: that its own check is dropped on a value proven unique, and that the value it
+    /// returns is `fresh`.
+    #[test]
+    fn test_unique_check_elim_mutate_boxed() {
+        assert_writes_through_lent_pointer_elide_checks("unique_elim_mutate_boxed");
     }
 
     /// Verifies that `borrow_boxed` borrows the value it lends a pointer into: nothing retains the
