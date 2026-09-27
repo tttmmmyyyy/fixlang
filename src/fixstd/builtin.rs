@@ -7681,10 +7681,8 @@ fn apply_with_env<'c, 'm>(
         tuple_ty.to_string(),
         args.len()
     );
-    let mut tuple = create_obj(tuple_ty, &vec![], None, gc, Some("env_and_args"));
-    for (i, field) in iter::once(env).chain(args).enumerate() {
-        tuple = ObjectFieldType::move_into_struct_field(gc, tuple, i as u32, &field);
-    }
+    let fields = iter::once(env).chain(args).collect::<Vec<_>>();
+    let tuple = ObjectFieldType::make_struct(gc, tuple_ty, &fields, Some("env_and_args"));
     gc.apply_lambda(f, vec![tuple], false).unwrap()
 }
 
@@ -8906,18 +8904,13 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
         let (ios, f_res) = split_ios_result(gc, &ios_res);
 
         // Construct the return value `(ios, (value, function result))`.
-        let x_and_res = create_obj(
-            make_tuple_ty(vec![x.ty.clone(), f_res.ty.clone()]),
-            &vec![],
-            None,
+        let x_and_res = ObjectFieldType::make_struct(
             gc,
+            make_tuple_ty(vec![x.ty.clone(), f_res.ty.clone()]),
+            &[x, f_res],
             Some("x_and_res"),
         );
-        let x_and_res = ObjectFieldType::move_into_struct_field(gc, x_and_res, 0, &x);
-        let x_and_res = ObjectFieldType::move_into_struct_field(gc, x_and_res, 1, &f_res);
-        let res = create_obj(ret_ty.clone(), &vec![], None, gc, None);
-        let res = ObjectFieldType::move_into_struct_field(gc, res, 0, &ios);
-        ObjectFieldType::move_into_struct_field(gc, res, 1, &x_and_res)
+        ObjectFieldType::make_struct(gc, ret_ty.clone(), &[ios, x_and_res], None)
     }
 
     fn name(&self) -> String {
@@ -9158,17 +9151,12 @@ impl LLVMGen for InlineLLVMDestructorMake {
         );
 
         // Create returned object.
-        let ret_obj = create_obj(
-            ret_ty.clone(),
-            &vec![],
-            None,
+        ObjectFieldType::make_struct(
             gc,
+            ret_ty.clone(),
+            &[ios, dtor_obj],
             Some("ret_obj@destructor_make"),
-        );
-        let ret_obj = ObjectFieldType::move_into_struct_field(gc, ret_obj, 0, &ios);
-        let ret_obj = ObjectFieldType::move_into_struct_field(gc, ret_obj, 1, &dtor_obj);
-
-        ret_obj
+        )
     }
 
     fn name(&self) -> String {
