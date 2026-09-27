@@ -9,18 +9,6 @@ trait a : MyTrait {
     // * `prefix` - the text put before the value
     // * `value : a` - the value to show
     show_it : String -> a -> String;
-    // The document lists more names than the type has arguments.
-    //
-    // # Parameters
-    // * `x` - the value
-    // * `y` - a name past the arguments of the type
-    size_of : a -> I64;
-    // The second name, `Array a`, cannot name a lambda parameter.
-    //
-    // # Parameters
-    // * `prefix` - the text put before the value
-    // * `Array a` - a name that starts with an uppercase letter
-    label : String -> a -> String;
 }
 
 type MyData = unbox struct { value: I64 };

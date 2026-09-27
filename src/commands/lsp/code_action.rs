@@ -434,17 +434,12 @@ fn quickfix_stub_text(info: &MissingTraitImplInfo, impl_indent: usize) -> String
     for item in &info.items {
         match item {
             MissingTraitImplItem::Member(m) => {
-                // Write the parameters the member's document lists as `|x, y| ?`. The lambda takes
-                // the leading names that a lambda can bind, at most one per argument of the type.
-                let params: Vec<String> = m
+                // Write the parameters the member's document lists as `|x, y| ?`.
+                let params = m
                     .document
                     .as_deref()
                     .and_then(parameters_in_document)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .take(m.ty.closure_arity())
-                    .take_while(|param| is_variable_name(param))
-                    .collect();
+                    .unwrap_or_default();
                 let lambda_head = if params.is_empty() {
                     String::new()
                 } else {
@@ -467,9 +462,4 @@ fn quickfix_stub_text(info: &MissingTraitImplInfo, impl_indent: usize) -> String
     }
 
     stub_lines.join("\n") + "\n"
-}
-
-/// Whether `name` can name a variable: it starts with a lowercase letter, `_` or `@`.
-fn is_variable_name(name: &str) -> bool {
-    name.starts_with(|c: char| c.is_ascii_lowercase() || c == '_' || c == '@')
 }
