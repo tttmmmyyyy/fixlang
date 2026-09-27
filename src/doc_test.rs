@@ -273,7 +273,9 @@ fn assemble_example(
 
     // The source is saved under a name the origin decides, so that a source read back from a
     // cache, which carries its path, finds this content and this origin at that path.
-    let file_name = format!("doc_test.{}", md5_hex(&format!("{:?}", origin)));
+    let origin_text =
+        serde_json::to_string(&origin).expect("a `SourceOrigin` is written as JSON");
+    let file_name = format!("doc_test.{}", md5_hex(&origin_text));
     let save = |content: String| -> Result<SourceFile, Errors> {
         Ok(save_temporary_source(&content, &file_name)?.with_origin(origin.clone()))
     };
