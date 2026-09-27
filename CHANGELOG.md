@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-27
+
 ### Performance
 
 Fix 1.5.0 makes programs faster, and builds them faster, than Fix 1.4.0.
