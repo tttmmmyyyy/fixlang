@@ -1,7 +1,7 @@
-// The nine values that write an integer or a pointer as text hand a buffer to the C runtime. Each
-// buffer's size is derived from the widest text the value can be asked for, and the runtime writes
-// the digits into it without reading that size, so the derivation is the whole of what keeps the
-// write inside the buffer.
+// The nine values that write an integer or a pointer as text write the digits into a buffer without
+// checking its bounds. An integer's buffer is sized by counting the digits before writing them, and
+// a pointer's by the widest text the C runtime writes for one, so that count and that width are the
+// whole of what keeps the write inside the buffer.
 //
 // This file writes the widest text each of the nine can produce, under Valgrind, so that a write
 // past the buffer shows up as an invalid write.

@@ -27,9 +27,50 @@ number of the type, and takes `.` for the point whatever locale the program runs
 // the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
 
-// Writes `v` at `buf` in decimal, null-terminated, and reports how many digits it took. Defined
-// in `runtime.c`, and declared here because the runtime has no header of its own.
-int64_t fixruntime_write_u64(char *buf, uint64_t v);
+// The two digits each number below a hundred is written with, laid end to end, so that a number is
+// written two digits at a time.
+//
+// Ryu carries the same table in `ryu/digit_table.h`, where it is `static`, so a source including
+// that header takes a copy of it rather than sharing this one.
+static const char FIXRUNTIME_DIGIT_PAIRS[201] =
+    "0001020304050607080910111213141516171819202122232425262728293031323334353637383940414243444546474849"
+    "5051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899";
+
+// The digits a `uint64_t` takes in decimal: `18446744073709551615` is the longest.
+#define FIXRUNTIME_U64_DIGITS 20
+
+// Writes `v` at `buf` in decimal, null-terminated, and reports how many digits it took.
+//
+// The digits are produced from the last backwards into a scratch buffer, so that one pass writes
+// them without first counting how many there are. The scratch is then copied to `buf`.
+static int64_t fixruntime_write_u64(char *buf, uint64_t v)
+{
+    char digits[FIXRUNTIME_U64_DIGITS];
+    int start = FIXRUNTIME_U64_DIGITS;
+    while (v >= 100)
+    {
+        uint64_t higher = v / 100;
+        unsigned int pair = (unsigned int)(v - higher * 100);
+        start -= 2;
+        digits[start] = FIXRUNTIME_DIGIT_PAIRS[2 * pair];
+        digits[start + 1] = FIXRUNTIME_DIGIT_PAIRS[2 * pair + 1];
+        v = higher;
+    }
+    if (v >= 10)
+    {
+        start -= 2;
+        digits[start] = FIXRUNTIME_DIGIT_PAIRS[2 * v];
+        digits[start + 1] = FIXRUNTIME_DIGIT_PAIRS[2 * v + 1];
+    }
+    else
+    {
+        digits[--start] = (char)('0' + v);
+    }
+    int64_t length = FIXRUNTIME_U64_DIGITS - start;
+    memcpy(buf, digits + start, (size_t)length);
+    buf[length] = '\0';
+    return length;
+}
 
 // The bytes `fixruntime_write_float_text` builds a text in. The static assertions at the two
 // entry points hold each window to what fits here, since a wider one would write past it.
