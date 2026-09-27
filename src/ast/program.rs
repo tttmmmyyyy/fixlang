@@ -16,12 +16,11 @@ use crate::configuration::{
     Configuration, DeprecationMode, OutputFileType, ProjectSources, SubCommand,
 };
 use crate::constants::{
-    C_ENTRY_POINT_NAME, DOT_FIXLANG, INSTANCIATED_NAME_SEPARATOR, MAIN_FUNCTION_NAME,
-    MAIN_MODULE_NAME, MARK_THREADED_NAME, MAX_UNION_VARIANTS, STD_NAME, STRUCT_ACT_SYMBOL,
-    STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL,
-    STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL,
-    STRUCT_SETTER_SYMBOL, TEST_FUNCTION_NAME, TEST_MODULE_NAME, TUPLE_SIZE_BASE, UNION_AS_SYMBOL,
-    UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
+    C_ENTRY_POINT_NAME, DOT_FIXLANG, INSTANCIATED_NAME_SEPARATOR, MARK_THREADED_NAME,
+    MAX_UNION_VARIANTS, STD_NAME, STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL,
+    STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
+    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_SIZE_BASE, UNION_AS_SYMBOL, UNION_IS_SYMBOL,
+    UNION_MOD_SYMBOL,
 };
 use crate::elaboration::desugar_opaque::{
     remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type,
@@ -1740,25 +1739,16 @@ impl Program {
         errors.to_result()
     }
 
-    /// Instantiates the program's entry point at type `IO ()` and stores it in
-    /// `entry_io_value`.
-    ///
-    /// # Arguments
-    /// * `test_mode` — when true the entry point is `Test::test`, as `fix test`
-    ///   runs it; otherwise it is `Main::main`.
+    /// Instantiates the program's entry point, the value `entry_io_value_name`, at type `IO ()`
+    /// and stores it in `entry_io_value`.
     pub fn instantiate_entry_io_value(
         &mut self,
         tc: &TypeCheckContext,
-        test_mode: bool,
+        entry_io_value_name: &FullName,
     ) -> Result<(), Errors> {
-        let entry_func_name = if test_mode {
-            FullName::from_strs(&[TEST_MODULE_NAME], TEST_FUNCTION_NAME)
-        } else {
-            FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME)
-        };
         let entry_ty = make_io_unit_ty();
         let (expr, _ty) =
-            self.instantiate_exported_value(&entry_func_name, Some(entry_ty), &None, tc)?;
+            self.instantiate_exported_value(entry_io_value_name, Some(entry_ty), &None, tc)?;
         self.entry_io_value = Some(expr);
         Ok(())
     }
@@ -2413,7 +2403,7 @@ impl Program {
                     Some(s) => s,
                     None => continue,
                 };
-                let abs = match to_absolute_path(&span.input.file_path) {
+                let abs = match to_absolute_path(span.input.reported_path()) {
                     Ok(p) => p,
                     Err(_) => continue,
                 };
@@ -3091,6 +3081,64 @@ impl Program {
             }
         }
         Ok(())
+    }
+
+    /// The span each declaration that carries a doc comment of its own is defined at, which is
+    /// where `Span::get_document` reads the comment above: the modules, the global values, the
+    /// types with their fields and variants, the traits with their members and associated types,
+    /// the trait aliases, and the trait implementations. Each span is given once, in order.
+    ///
+    /// Asked of a program as it is loaded from its sources, before the compiler adds declarations
+    /// of its own, these are the declarations written in the sources.
+    pub fn documented_declarations(&self) -> Vec<Span> {
+        let mut spans = vec![];
+        spans.extend(self.modules.iter().map(|mi| mi.source.clone()));
+        spans.extend(
+            self.global_values
+                .values()
+                .filter_map(|gv| gv.decl_src.clone()),
+        );
+        for type_defn in &self.type_defns {
+            spans.extend(type_defn.source.clone());
+            let fields = match &type_defn.value {
+                TypeDeclValue::Struct(s) => s.fields.as_slice(),
+                TypeDeclValue::Union(u) => u.fields.as_slice(),
+                TypeDeclValue::Alias(_) => &[],
+            };
+            spans.extend(fields.iter().filter_map(|field| field.source.clone()));
+        }
+        for trait_defn in self.trait_env.traits.values() {
+            spans.extend(trait_defn.source.clone());
+            spans.extend(
+                trait_defn
+                    .members
+                    .iter()
+                    .filter_map(|member| member.decl_src.clone()),
+            );
+            spans.extend(
+                trait_defn
+                    .assoc_types
+                    .values()
+                    .filter_map(|assoc_type| assoc_type.src.clone()),
+            );
+        }
+        spans.extend(
+            self.trait_env
+                .aliases
+                .data
+                .values()
+                .filter_map(|alias| alias.source.clone()),
+        );
+        spans.extend(
+            self.trait_env
+                .impls
+                .values()
+                .flatten()
+                .filter_map(|impl_| impl_.source.clone()),
+        );
+        spans.sort();
+        spans.dedup();
+        spans
     }
 
     /// The name of every module linked into the program.

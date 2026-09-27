@@ -8,7 +8,7 @@ use crate::ast::program::Program;
 use crate::configuration::{Configuration, OutputFileType, SubCommand};
 use crate::error::Errors;
 use crate::fixstd::stdlib::{make_std_mod, make_tuple_traits_mod};
-use crate::parse::parser::parse_file_path;
+use crate::parse::parser::{parse_file_path, parse_source_file};
 use crate::tool::stopwatch::StopWatch;
 use std::fs::File;
 use std::io::Read;
@@ -135,10 +135,10 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         .deferred_errors
         .append(program.collect_deprecation_diagnostics(config));
 
-    // Instantiate Main::main (or Test::test).
+    // Instantiate the value the entry point runs.
     match config.output_file_type {
         OutputFileType::Executable => {
-            program.instantiate_entry_io_value(&typechecker, config.entry_point_runs_tests())?
+            program.instantiate_entry_io_value(&typechecker, &config.entry_io_value_name())?
         }
         OutputFileType::DynamicLibrary => {}
     };
@@ -202,8 +202,9 @@ where
     dir_path
 }
 
-/// Load all source files specified in the configuration, link them, and return the resulting `Program`.
-fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
+/// Load all source files specified in the configuration, together with the doc test example it
+/// carries, link them, and return the resulting `Program`.
+pub fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     // Create `Std` module.
     let mut program = make_std_mod(config)?;
 
@@ -212,6 +213,12 @@ fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     let mut errors = Errors::empty();
     for file_path in config.source_files() {
         let parse_result = parse_file_path(file_path.clone(), config);
+        errors.eat_err_or(parse_result, |parsed_program| {
+            parsed_programs.push(parsed_program)
+        });
+    }
+    if let Some(example) = &config.doc_test_example {
+        let parse_result = parse_source_file(example.clone(), config);
         errors.eat_err_or(parse_result, |parsed_program| {
             parsed_programs.push(parsed_program)
         });

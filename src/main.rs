@@ -27,6 +27,7 @@ mod commands;
 mod configuration;
 mod constants;
 mod dependency;
+mod doc_test;
 mod edit;
 mod elaboration;
 mod env_vars;
@@ -55,7 +56,12 @@ mod type_size;
 use clap::{
     value_parser, App, AppSettings, Arg, ArgAction, ArgMatches, PossibleValue, ValueSource,
 };
-use commands::{check, clean, deps, docs, lsp::server::launch_language_server, run};
+use commands::{
+    check, clean, deps, docs,
+    lsp::server::launch_language_server,
+    run,
+    test::{self, TestSelection},
+};
 use configuration::{
     BuildConfigType, Configuration, DeprecationMode, FixOptimizationLevel, LinkType,
     OutputFileType, Sanitizer, SubCommand,
@@ -412,7 +418,20 @@ fn run_cli() {
     let test_subc = add_run_and_test_options(
         App::new("test")
             .trailing_var_arg(true)
-            .about("Tests a Fix program. Executes `Test::test : IO ()`."),
+            .about("Tests a Fix program. Executes `Test::test : IO ()`, and then the Fix examples in the doc comments of the files listed in the `build` section of the project file."),
+    )
+    .arg(
+        Arg::new("doc")
+            .long("doc")
+            .takes_value(false)
+            .conflicts_with("no-doc")
+            .help("Run the Fix examples in the doc comments alone."),
+    )
+    .arg(
+        Arg::new("no-doc")
+            .long("no-doc")
+            .takes_value(false)
+            .help("Run `Test::test` alone, leaving the Fix examples in the doc comments out."),
     );
 
     // "fix deps" subcommand
@@ -890,7 +909,14 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             run::run_command(&create_config(SubCommand::Run, args));
         }
         Some(("test", args)) => {
-            run::run_command(&create_config(SubCommand::Test, args));
+            let selection = if args.contains_id("doc") {
+                TestSelection::DocTests
+            } else if args.contains_id("no-doc") {
+                TestSelection::TestFunction
+            } else {
+                TestSelection::All
+            };
+            test::test_command(create_config(SubCommand::Test, args), selection);
         }
         Some(("deps", args)) => match args.subcommand() {
             Some(("install", args)) => {

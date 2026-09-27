@@ -175,7 +175,7 @@ impl Errors {
         for err in &self.errs {
             let path = match err.srcs.first() {
                 None => spanless_fallback.to_path_buf(),
-                Some((_, span)) => span.input.file_path.clone(),
+                Some((_, span)) => span.input.reported_path().clone(),
             };
             insert_to_map_vec(&mut errs_by_path, &path, err.clone());
         }

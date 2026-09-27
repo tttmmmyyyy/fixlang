@@ -4,8 +4,9 @@ use crate::constants::{
     CHECK_C_TYPES_PATH, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME,
     C_LONG_NAME, C_SHORT_NAME, C_SIZE_T_NAME, C_TYPES_JSON_PATH, C_UNSIGNED_CHAR_NAME,
     C_UNSIGNED_INT_NAME, C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
-    DEFAULT_COMPILATION_UNIT_SIZE, MAX_SPLIT_SCALARS, OPTIMIZATION_LEVEL_BASIC,
-    OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX, OPTIMIZATION_LEVEL_NONE,
+    DEFAULT_COMPILATION_UNIT_SIZE, DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME, MAIN_MODULE_NAME,
+    MAX_SPLIT_SCALARS, OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL,
+    OPTIMIZATION_LEVEL_MAX, OPTIMIZATION_LEVEL_NONE, TEST_FUNCTION_NAME, TEST_MODULE_NAME,
 };
 use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
@@ -16,6 +17,7 @@ use crate::misc::{
     path_relative_to, platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg,
     Finally, Map, Set,
 };
+use crate::parse::sourcefile::SourceFile;
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use build_time::build_time_utc;
 use inkwell::OptimizationLevel;
@@ -456,6 +458,9 @@ pub struct Configuration {
     /// them, the root project and every dependency alike. `ProjectFile::set_config` adds them as it
     /// configures each project.
     pub project_sources: Vec<ProjectSources>,
+    /// The Fix example of a doc comment the build compiles beside the sources, assembled into the
+    /// module `DocTest`. Its `DocTest::main` is then the entry point of the program.
+    pub doc_test_example: Option<SourceFile>,
     /// Object files given to the build, linked into the program beside the ones compiled from the
     /// sources.
     pub object_files: Vec<PathBuf>,
@@ -643,6 +648,7 @@ impl Configuration {
             extra_source_files: vec![],
             root_source_files: vec![],
             project_sources: vec![],
+            doc_test_example: None,
             object_files: vec![],
             fix_opt_level: env_vars::get_max_opt_level(),
             linked_libraries: vec![],
@@ -1067,7 +1073,7 @@ impl Configuration {
 
             // Reach the generated code through what they decide, which is pushed in their place:
             // `llvm_passes` is the pipeline `llvm_passes_override` gives where it gives one and the
-            // optimization level implies otherwise, `entry_point_runs_tests` is what the
+            // optimization level implies otherwise, `entry_io_value_name` is what the
             // subcommand decides about the code, and `target_cpu_name` and `target_cpu_features`
             // are the CPU the code is generated for, which the host, the patterns and valgrind
             // decide.
@@ -1083,6 +1089,7 @@ impl Configuration {
             extra_source_files: _,
             root_source_files: _,
             project_sources: _,
+            doc_test_example: _,
             preliminary_commands: _,
             allow_preliminary_commands: _,
 
@@ -1181,10 +1188,9 @@ impl Configuration {
         // measure whichever one compiled first.
         object_generation.push_list(&self.llvm_passes());
 
-        // Which entry point the program is given, the one running the tests or the one running
-        // `Main::main`. This is the whole of what the subcommand decides about the generated code,
-        // so `fix build` and `fix run` share their object files.
-        object_generation.push_text(&self.entry_point_runs_tests().to_string());
+        // Which value the entry point of the program runs. This is the whole of what the subcommand
+        // decides about the generated code, so `fix build` and `fix run` share their object files.
+        object_generation.push_text(&self.entry_io_value_name().to_string());
 
         // Each macro turns on a part of the runtime, and they are passed to the C compiler as they
         // are written.
@@ -1234,10 +1240,17 @@ impl Configuration {
         self.cache_hash_sources().runtime_object.finish()
     }
 
-    /// Whether the entry point of the program runs the tests rather than `Main::main`, which is
-    /// what `elaborate_via_config` instantiates it from.
-    pub fn entry_point_runs_tests(&self) -> bool {
-        matches!(self.subcommand, SubCommand::Test)
+    /// The value of type `IO ()` the entry point of the program runs, which is what
+    /// `elaborate_via_config` instantiates it from: `DocTest::main` for a build of a doc test
+    /// example, `Test::test` for another test build, and `Main::main` otherwise.
+    pub fn entry_io_value_name(&self) -> FullName {
+        if self.doc_test_example.is_some() {
+            FullName::from_strs(&[DOC_TEST_MODULE_NAME], MAIN_FUNCTION_NAME)
+        } else if matches!(self.subcommand, SubCommand::Test) {
+            FullName::from_strs(&[TEST_MODULE_NAME], TEST_FUNCTION_NAME)
+        } else {
+            FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME)
+        }
     }
 
     /// Whether the build writes a dump of the code it generates: the symbols at each step of

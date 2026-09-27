@@ -7,6 +7,7 @@ pub mod commands;
 pub mod configuration;
 pub mod constants;
 pub mod dependency;
+pub mod doc_test;
 pub mod edit;
 pub mod elaboration;
 pub mod env_vars;

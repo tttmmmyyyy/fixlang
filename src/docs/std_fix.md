@@ -3,9 +3,9 @@
 The idiom is `fix $ |loop, arg| -> {loop_body}`. In `{loop_body}`, you can call `loop` to make a recursion.
 
 Example:
-```
-module Main;
-
+```fix
+# module DocTest;
+#
 main : IO ();
 main = (
     let fact = fix $ |loop, n| if n == 0 { 1 } else { n * loop (n-1) };

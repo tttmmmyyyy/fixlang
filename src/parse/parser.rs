@@ -491,9 +491,8 @@ pub fn parse_str_import_statements(
     file_path: PathBuf,
     src: &str,
 ) -> Result<Vec<ImportStatement>, Errors> {
-    parse_str_as_rule(
-        file_path,
-        src,
+    parse_source_as_rule(
+        SourceFile::from_file_path_and_content(file_path, src.to_string()),
         Rule::file_only_import_statements,
         parse_import_statements,
     )
@@ -502,21 +501,30 @@ pub fn parse_str_import_statements(
 /// The module `src` declares, read from its `module` declaration alone so that the rest of the
 /// source is left unparsed. Its span points into `file_path`.
 pub fn parse_str_module_defn(file_path: PathBuf, src: &str) -> Result<ModuleInfo, Errors> {
-    parse_str_as_rule(file_path, src, Rule::file_only_module_defn, |rule, ctx| {
+    parse_source_module_defn(SourceFile::from_file_path_and_content(
+        file_path,
+        src.to_string(),
+    ))
+}
+
+/// The module `source` declares, read from the `module` declaration it begins with so that the rest
+/// of it is left unparsed. An error says that it does not begin with one.
+pub fn parse_source_module_defn(source: SourceFile) -> Result<ModuleInfo, Errors> {
+    parse_source_as_rule(source, Rule::file_only_module_defn, |rule, ctx| {
         let rule = rule.into_inner().next().unwrap();
         Ok(parse_module_defn(rule, ctx))
     })
 }
 
-/// Parses the whole of `src` as `rule` and reads the result with `parser`, giving the spans it
-/// builds `file_path` as the file they point into.
-fn parse_str_as_rule<T>(
-    file_path: PathBuf,
-    src: &str,
+/// Parses the whole of `source` as `rule` and reads the result with `parser`, whose spans point
+/// into `source`.
+fn parse_source_as_rule<T>(
+    source: SourceFile,
     rule: Rule,
     parser: impl Fn(Pair<Rule>, &mut ParseContext) -> Result<T, Errors>,
 ) -> Result<T, Errors> {
-    let mut file = match FixParser::parse(rule, src) {
+    let src = source.string()?;
+    let mut file = match FixParser::parse(rule, &src) {
         Ok(res) => res,
         Err(e) => {
             return Err(Errors::from_msg(format!(
@@ -525,7 +533,6 @@ fn parse_str_as_rule<T>(
             )));
         }
     };
-    let source = SourceFile::from_file_path_and_content(file_path, src.to_string());
     let config = Configuration::diagnostics_mode(DiagnosticsConfig::default())?; // Use any Configuration
     let mut ctx = ParseContext::from_source(source, &config);
     parser(file.next().unwrap(), &mut ctx)

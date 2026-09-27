@@ -25,6 +25,12 @@ pub struct SourceFile {
     /// The value `hash` answers with, once it has been computed.
     #[serde(skip)]
     hash: Arc<Mutex<Option<String>>>,
+    /// Where the lines of an assembled source were taken from, which the positions in it are
+    /// reported against. `None` for a source whose positions are its own.
+    ///
+    /// The path of an assembled source is chosen for its origin, so two sources of one path share
+    /// their origin, as equality by path requires.
+    pub origin: Option<Arc<SourceOrigin>>,
 }
 
 // PROOF: D/A, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
@@ -73,6 +79,7 @@ impl SourceFile {
             string: Arc::new(Mutex::new(None)),
             hash: Arc::new(Mutex::new(None)),
             file_path,
+            origin: None,
         }
     }
 
@@ -84,6 +91,23 @@ impl SourceFile {
             string: Arc::new(Mutex::new(Some(content))),
             hash: Arc::new(Mutex::new(None)),
             file_path,
+            origin: None,
+        }
+    }
+
+    /// This source with `origin` as the place its lines were taken from, so that the positions in
+    /// it are reported where they stand in the origin's file.
+    pub fn with_origin(mut self, origin: SourceOrigin) -> Self {
+        self.origin = Some(Arc::new(origin));
+        self
+    }
+
+    /// The path the positions in this source are reported against: the file its lines were taken
+    /// from, where it was assembled from another file, and its own path otherwise.
+    pub fn reported_path(&self) -> &PathBuf {
+        match &self.origin {
+            Some(origin) => &origin.file_path,
+            None => &self.file_path,
         }
     }
 
@@ -124,9 +148,10 @@ impl SourceFile {
         Ok(self.hash.lock().unwrap().as_ref().unwrap().clone())
     }
 
-    /// The directory the file lies in, as the path spells it.
+    /// The directory of the file the positions in this source are reported against, as the path
+    /// spells it.
     pub fn get_file_dir(&self) -> String {
-        self.file_path
+        self.reported_path()
             .parent()
             .unwrap()
             .to_str()
@@ -134,9 +159,9 @@ impl SourceFile {
             .to_string()
     }
 
-    /// The last component of the path, the name the file carries in its directory.
+    /// The name of the file the positions in this source are reported against, in its directory.
     pub fn get_file_name(&self) -> String {
-        self.file_path
+        self.reported_path()
             .file_name()
             .unwrap()
             .to_str()
@@ -145,12 +170,105 @@ impl SourceFile {
     }
 }
 
+/// Where the lines of a source assembled from parts of another file were taken from.
+///
+/// The Fix example of a doc comment is compiled from such a source: line `k` of it is line
+/// `first_line + k - 1` of the file the doc comment is written in, with the comment's `//` taken off
+/// the front, and the lines the example is wrapped in are written on the lines of its fences.
+///
+/// # Examples
+/// The source `"main : IO () = (\npure()\n);\n"` assembled from lines 7 to 9 of
+/// ~~~text
+/// // ```fix
+/// // pure()
+/// // ```
+/// ~~~
+/// has the origin `{ first_line: 7, lines: [Written { column: 4, width: 6 }, Taken { shift: 3 },
+/// Written { column: 4, width: 3 }] }`, and the `p` of `pure` is reported at line 8, column 4.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
+pub struct SourceOrigin {
+    /// The file the lines were taken from.
+    pub file_path: PathBuf,
+    /// The line of `file_path` the first line of the assembled source was taken from, counted from 1.
+    pub first_line: usize,
+    /// How each line of the assembled source relates to its line of `file_path`, in order. A line
+    /// past the end of this list stands where its line of `file_path` does.
+    pub lines: Vec<LineOrigin>,
+}
+
+/// How a line of an assembled source relates to the line of the origin's file it stands for.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
+pub enum LineOrigin {
+    /// The line holds text of the origin's line with `shift` characters taken off the front of it:
+    /// a character at column `c` of the line stands at column `c + shift` of the origin's line.
+    Taken { shift: usize },
+    /// The line holds text the assembler wrote, which the origin's line does not have. A position
+    /// on it is reported at the `width` characters beginning at `column` of the origin's line,
+    /// which are what the text was written for.
+    Written { column: usize, width: usize },
+}
+
+impl SourceOrigin {
+    /// The line and the column of the origin's file that the position at `line` and `column` of
+    /// the assembled source stands at. All of them count from 1.
+    pub fn position(&self, (line, column): (usize, usize)) -> (usize, usize) {
+        let origin_line = self.first_line + line - 1;
+        match self.lines.get(line - 1) {
+            Some(LineOrigin::Taken { shift }) => (origin_line, column + shift),
+            Some(LineOrigin::Written { column, .. }) => (origin_line, *column),
+            None => (origin_line, column),
+        }
+    }
+
+    /// `quoted`, a line of the assembled source quoted under a diagnostic, as the line of the
+    /// origin's file it stands for: that line's number and text, and the columns the underline
+    /// covers there. `origin_lines` are the lines of the origin's file, or `None` where the file
+    /// cannot be read, in which case the text quoted is the assembled one.
+    fn quote(&self, quoted: QuotedLine, origin_lines: Option<&Vec<&str>>) -> QuotedLine {
+        let (line, column) = self.position((quoted.line, quoted.column));
+        let width = match self.lines.get(quoted.line - 1) {
+            Some(LineOrigin::Written { width, .. }) => *width,
+            _ => quoted.width,
+        };
+        match origin_lines.and_then(|lines| lines.get(line - 1)) {
+            Some(text) => QuotedLine {
+                line,
+                text: text.trim_end().to_string(),
+                column,
+                width,
+            },
+            None => QuotedLine { line, ..quoted },
+        }
+    }
+}
+
+/// A line of a source quoted under a diagnostic, with the part of it the span covers underlined.
+struct QuotedLine {
+    /// The number of the line, counted from 1.
+    line: usize,
+    /// The text of the line, without its line break.
+    text: String,
+    /// The column the underline begins at, counted from 1.
+    column: usize,
+    /// How many characters the underline covers, at least 1.
+    width: usize,
+}
+
 /// A single position in a source file, given as a byte offset into its content.
 pub struct SourcePos {
     /// The file the position points into.
     pub input: SourceFile,
     /// The byte offset of the position from the beginning of the file's content.
     pub pos: usize,
+}
+
+/// A line of a doc comment, as `Span::document_lines` reads it.
+pub struct DocLine {
+    /// The text of the line that follows the comment's `//` and one space after it, without the
+    /// white space it ends with.
+    pub text: String,
+    /// Where `text` stands in the file the comment is written in.
+    pub span: Span,
 }
 
 /// A range of bytes of a source file, together with the file it points into.
@@ -278,7 +396,7 @@ impl Span {
     }
 
     /// The line and column number `of_position` reads off this span, taken over the content of the
-    /// file the span points into.
+    /// file the span points into and reported where the origin of that file puts it.
     ///
     /// Returns `(0, 0)` when that file cannot be read.
     fn line_col(&self, of_position: impl FnOnce(&pest::Span) -> (usize, usize)) -> (usize, usize) {
@@ -288,12 +406,17 @@ impl Span {
         }
         let source_string = source_string.ok().unwrap();
         let span = pest::Span::new(&source_string, self.start, self.end).unwrap();
-        of_position(&span)
+        let line_col = of_position(&span);
+        match &self.input.origin {
+            Some(origin) => origin.position(line_col),
+            None => line_col,
+        }
     }
 
     /// The position and the file name of this span, followed by every source line it reaches, each
-    /// carrying `^^^` markers under the part the span covers. The result is empty where the file
-    /// cannot be read.
+    /// carrying `^^^` markers under the part the span covers. A span of an assembled source is
+    /// shown where its origin puts it, quoting the lines of the origin's file. The result is empty
+    /// where the file cannot be read.
     ///
     /// # Arguments
     ///
@@ -311,35 +434,60 @@ impl Span {
         }
         let span = opt_span.unwrap();
 
-        let mut linenum_str_size = 0;
-        for line_span in span.lines_span() {
-            let linenum = line_span.start_pos().line_col().0;
-            linenum_str_size = linenum_str_size.max(linenum.to_string().len());
+        let mut start = span.start_pos().line_col();
+        let mut end = span.end_pos().line_col();
+        let mut quoted_lines = span
+            .lines_span()
+            .map(|line_span| {
+                let start_pos = span.start_pos().max(line_span.start_pos());
+                let end_pos = span.end_pos().min(line_span.end_pos());
+                QuotedLine {
+                    line: line_span.start_pos().line_col().0,
+                    text: String::from(line_span.as_str()).trim_end().to_string(),
+                    column: start_pos.line_col().1,
+                    width: (end_pos.pos() - start_pos.pos()).max(1),
+                }
+            })
+            .collect::<Vec<_>>();
+        if let Some(origin) = &self.input.origin {
+            start = origin.position(start);
+            end = origin.position(end);
+            let origin_string = SourceFile::from_file_path(origin.file_path.clone()).string();
+            let origin_lines = origin_string
+                .as_ref()
+                .ok()
+                .map(|content| content.lines().collect::<Vec<_>>());
+            quoted_lines = quoted_lines
+                .into_iter()
+                .map(|quoted| origin.quote(quoted, origin_lines.as_ref()))
+                .collect();
         }
+
+        let linenum_str_size = quoted_lines
+            .iter()
+            .map(|quoted| quoted.line.to_string().len())
+            .max()
+            .unwrap_or(0);
 
         let mut ret: String = String::default();
         ret += &format!(
             "{}:{}-{}:{} in \"{}\", \n",
-            span.start_pos().line_col().0,
-            span.start_pos().line_col().1,
-            span.end_pos().line_col().0,
-            span.end_pos().line_col().1,
-            self.input.file_path.to_str().unwrap().to_string()
+            start.0,
+            start.1,
+            end.0,
+            end.1,
+            self.input.reported_path().to_str().unwrap().to_string()
         );
         ret += &(" ".repeat(linenum_str_size) + &" | " + "\n");
-        for line_span in span.lines_span() {
-            let linenum_str = line_span.start_pos().line_col().0.to_string();
+        for quoted in quoted_lines {
+            let linenum_str = quoted.line.to_string();
             ret +=
                 &(linenum_str.clone() + &" ".repeat(linenum_str_size - linenum_str.len()) + &" | ");
-            ret += String::from(line_span.as_str()).trim_end();
+            ret += &quoted.text;
             ret += "\n";
             ret += &(" ".repeat(linenum_str_size) + &" | ");
-            let start_pos = span.start_pos().max(line_span.start_pos());
-            let end_pos = span.end_pos().min(line_span.end_pos());
-            let start_col = start_pos.line_col().1;
-            let span_len = (end_pos.pos() - start_pos.pos()).max(1);
-            ret += &(" ".repeat(start_col - 1)
-                + &"^".repeat(span_len).color(underline_color).to_string());
+            ret += &(" ".repeat(quoted.column - 1)
+                + &"^".repeat(quoted.width).color(underline_color).to_string());
             ret += "\n";
         }
         ret
@@ -362,65 +510,59 @@ impl Span {
     /// lines written just before the span begins, each stripped of its `//` and of one space after
     /// it. The document is empty where anything else stands on the line the definition begins on.
     pub fn get_document(&self) -> Result<String, Errors> {
-        /// One line read backwards from `chars`, in reading order, together with whether the
-        /// beginning of the content was reached while reading it.
-        fn get_line(chars: &mut dyn Iterator<Item = char>) -> (String, bool) {
-            let mut ret = String::default();
-            let at_end = loop {
-                let c = chars.next();
-                if c.is_none() {
-                    break true;
-                }
-                let c = c.unwrap();
-                ret.push(c);
-                if c == '\n' {
-                    break false;
-                }
-            };
-            (ret.chars().rev().collect::<String>(), at_end)
-        }
-
-        let mut lines_rev = vec![];
-        let source_string = self.input.string()?;
-        let mut chars = source_string[0..self.start].chars().rev();
-
-        // Get the string ahead of the definition.
-        let (string_before_defn, _) = get_line(&mut chars);
-
-        // If some non-whitespace characters are found ahead of the definition, there is no document.
-        if string_before_defn.trim().len() > 0 {
-            return Ok(String::default());
-        }
-
-        loop {
-            let (line, reached_start) = get_line(&mut chars);
-            let line = line.trim();
-
-            // Check if `line` is a comment line.
-            if !line.starts_with("//") {
-                break;
-            }
-
-            // If the comment starts with " ", remove it.
-            let comment = if line.starts_with("// ") {
-                line[3..].to_string()
-            } else {
-                line[2..].to_string()
-            };
-
-            lines_rev.push(comment);
-
-            if reached_start {
-                break;
-            }
-        }
-        // Concatenate the lines in reverse order.
         let mut ret = String::default();
-        for line in lines_rev.iter().rev() {
-            ret += line;
+        for line in self.document_lines()? {
+            ret += &line.text;
             ret += "\n";
         }
         Ok(ret)
+    }
+
+    /// The lines of the document `get_document` reads, in order, each with the span its text
+    /// stands at in the file.
+    pub fn document_lines(&self) -> Result<Vec<DocLine>, Errors> {
+        let source_string = self.input.string()?;
+
+        // The line the definition begins on. Anything written ahead of the definition on it means
+        // there is no document.
+        let definition_line_start = source_string[..self.start]
+            .rfind('\n')
+            .map_or(0, |newline| newline + 1);
+        if !source_string[definition_line_start..self.start]
+            .trim()
+            .is_empty()
+        {
+            return Ok(vec![]);
+        }
+
+        // Read the lines above it, from the nearest one up, while they are comment lines.
+        let mut lines = vec![];
+        let mut next_line_start = definition_line_start;
+        while next_line_start > 0 {
+            let line_end = next_line_start - 1;
+            let line_start = source_string[..line_end]
+                .rfind('\n')
+                .map_or(0, |newline| newline + 1);
+            let line = &source_string[line_start..line_end];
+            let comment = line.trim();
+            if !comment.starts_with("//") {
+                break;
+            }
+            let marker_len = if comment.starts_with("// ") { 3 } else { 2 };
+            let text_start = line_start + (line.len() - line.trim_start().len()) + marker_len;
+            let text = &comment[marker_len..];
+            lines.push(DocLine {
+                text: text.to_string(),
+                span: Span {
+                    input: self.input.clone(),
+                    start: text_start,
+                    end: text_start + text.len(),
+                },
+            });
+            next_line_start = line_start;
+        }
+        lines.reverse();
+        Ok(lines)
     }
 
     /// Whether `byte` falls within this span, both ends included.

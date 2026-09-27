@@ -13,6 +13,7 @@ use crate::{
         UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
     },
     dependency::lockfile::LockFileType,
+    doc_test::docstring_for_display,
     elaboration::elaborate_via_config,
     error::Errors,
     metafiles::project_file::ProjectFile,
@@ -291,6 +292,7 @@ fn docgen_for_module(
     let markdown = write_module(program, mod_name, project, config)?;
     let mut markdown_str = String::new();
     markdown.format(0, &mut markdown_str);
+    let markdown_str = docstring_for_display(&markdown_str);
 
     // Write `doc` into `{mod_name}.md` file.
     let doc_file = format!("{}.md", mod_name);

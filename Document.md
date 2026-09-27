@@ -99,6 +99,7 @@
     - [Registry file](#registry-file)
     - [Deprecation](#deprecation)
     - [Tests](#tests)
+        - [Fix examples in documentation comments](#fix-examples-in-documentation-comments)
     - [Generating documentation](#generating-documentation)
     - [Language Server Protocol](#language-server-protocol)
         - [Specifying parameter list in the documentation comment as a hint to the language server](#specifying-parameter-list-in-the-documentation-comment-as-a-hint-to-the-language-server)
@@ -3235,16 +3236,92 @@ In the LSP, deprecation warnings are published with `DiagnosticSeverity.WARNING`
 
 ## Tests
 
-The test feature built into the Fix command is very simple:
-When you run `fix test`, it executes `Test::test : IO ()`.
+When you run `fix test`, it executes `Test::test : IO ()`, and then each Fix example written in the documentation comments (see [Fix examples in documentation comments](#fix-examples-in-documentation-comments)).
 Also, at this time, the source files listed in the `build.test` section of the project file are compiled in addition to the source files listed in the `build` section.
+
+- `fix test --doc` runs the Fix examples alone, and `fix test --no-doc` runs `Test::test` alone.
+- A project that does not define `Test::test` has its Fix examples run alone.
+- The examples after a failing one still run. Once all of them have run, `fix test` lists the failed ones, and it exits with a non-zero status if `Test::test` or an example failed.
+
+### Fix examples in documentation comments
+
+A fenced code block in a [documentation comment](#generating-documentation) whose info string is `fix` is a Fix example, and `fix test` compiles and runs it:
+
+```
+// Doubles a number.
+//
+// ```fix
+// let x = double(21);
+// assert_eq(|_|"", x, 42)
+// ```
+double : I64 -> I64;
+double = |x| 2 * x;
+```
+
+An example is an expression of type `IO ()`. `fix test` compiles it as the following module, where `Lib` stands for the module the documentation comment is written in:
+
+```
+module DocTest;
+import Lib;
+main : IO () = (
+    let x = double(21);
+    assert_eq(|_|"", x, 42)
+);
+```
+
+An example passes when this program exits with status 0; what it writes to the standard output and the standard error is not compared with anything. A failing `assert_eq`, `undefined` or an index out of range therefore makes the example fail. Each example runs in a process of its own, and a compile error in an example is reported at its place in the documentation comment.
+
+An example that begins with a `module` declaration is the source of the module as it stands. It declares the module `DocTest`, imports what it uses, including the module the comment is written in, and defines `main : IO ()`. Write an example in this form to define types or functions, or to import only some of the entities of a module:
+
+```
+// ```fix
+// module DocTest;
+// import Lib;
+//
+// type Pair = (I64, I64);
+//
+// main : IO () = (
+//     let pair : DocTest::Pair = (double(1), double(2));
+//     assert_eq(|_|"", pair, (2, 4))
+// );
+// ```
+```
+
+The module name `DocTest` is reserved: `fix test` reports an error if the project or a dependency has a module of that name.
+
+A line of an example whose text begins with `# ` after its indentation is hidden: it is compiled with the `# ` removed, and it is not shown in the documentation `fix docs` generates or in the hover of the language server. A line of `#` alone is a hidden empty line. The following example is shown as the two lines `type Pair = (I64, I64);` and `let pair : Pair = (1, 2);`:
+
+```
+// ```fix
+// # module DocTest;
+// # import Lib;
+// #
+// type Pair = (I64, I64);
+// # main : IO () = (
+// let pair : Pair = (1, 2);
+// # pure()
+// # );
+// ```
+```
+
+Marks after `fix`, separated by commas, change what `fix test` does with an example:
+
+| Info string | What `fix test` does |
+| --- | --- |
+| `fix` | Compiles the example and runs it. |
+| `fix,no_run` | Compiles the example (including type checking) without running it. Use it for an example that reads the standard input, touches files or the network, or does not terminate. |
+| `fix,ignore` | Does nothing. Use it for a fragment that does not compile on its own. |
+
+`fix test` reports any other mark as an error. A code block with an empty info string, or whose info string does not begin with the item `fix`, is not a Fix example.
+
+`fix test` runs the Fix examples of every documentation comment in the files listed in the `build` section of the project file, private entities included. The examples in the files listed in the `build.test` section alone and those in dependencies are not run. The examples are built with the same settings as `Test::test`, so they can use the test dependencies.
 
 ## Generating documentation
 
 `fix docs` subcommand generates documentations (markdown files) for a Fix project.
 This command requires the project file to be present in the current directory.
 
-Consecutive line comments above declarations are recognized as documentations:
+Consecutive line comments above declarations are recognized as documentations, and they are read as Markdown. A code block whose info string is `fix` is shown without its hidden lines (see [Fix examples in documentation comments](#fix-examples-in-documentation-comments)):
 
 ```
 // This is a documentation comment for the module.
