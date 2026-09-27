@@ -183,7 +183,7 @@ typedef struct ffc_parse_options {
   char decimal_point;
 } ffc_parse_options;
 
-ffc_parse_options ffc_parse_options_default(void);
+static ffc_parse_options ffc_parse_options_default(void);
 
 typedef enum ffc_parse_outcome {
   FFC_PARSE_OUTCOME_NO_ERROR = 0,
@@ -208,8 +208,8 @@ typedef enum ffc_parse_outcome {
  * A simplified API; the result will be 0.0 on error, not uninitialized.
  * If outcome is null, it will not be written to
  */
-double     ffc_parse_double_simple(size_t len, const char *input, ffc_outcome *outcome);
-ffc_result ffc_parse_double(size_t len, const char *input, double *out);
+static double     ffc_parse_double_simple(size_t len, const char *input, ffc_outcome *outcome);
+static ffc_result ffc_parse_double(size_t len, const char *input, double *out);
 /**
  * Implements the fast_float algorithm from https://github.com/fastfloat/fast_float
  * See original for more details
@@ -248,17 +248,17 @@ ffc_result ffc_parse_double(size_t len, const char *input, double *out);
 #  define FFC_IMPL_INLINE
 #endif
 
-FFC_IMPL_INLINE ffc_result ffc_from_chars_double(const char *start, const char *end, double* out);
-FFC_IMPL_INLINE ffc_result ffc_from_chars_double_options(const char *start, const char *end, double* out, ffc_parse_options options);
+static FFC_IMPL_INLINE ffc_result ffc_from_chars_double(const char *start, const char *end, double* out);
+static FFC_IMPL_INLINE ffc_result ffc_from_chars_double_options(const char *start, const char *end, double* out, ffc_parse_options options);
 
 /*
  * A simplified API; the result will be 0.0 on error, not uninitialized.
  * If outcome is null, it will not be written to
  */
-float      ffc_parse_float_simple(size_t len, const char *s, ffc_outcome *outcome);
-ffc_result ffc_parse_float(size_t len, const char *s, float *out);
-ffc_result ffc_from_chars_float(const char *start,  const char *end, float* out);
-ffc_result ffc_from_chars_float_options(const char *start,  const char *end, float* out, ffc_parse_options options);
+static float      ffc_parse_float_simple(size_t len, const char *s, ffc_outcome *outcome);
+static ffc_result ffc_parse_float(size_t len, const char *s, float *out);
+static ffc_result ffc_from_chars_float(const char *start,  const char *end, float* out);
+static ffc_result ffc_from_chars_float_options(const char *start,  const char *end, float* out, ffc_parse_options options);
 
 
 
@@ -266,37 +266,37 @@ ffc_result ffc_from_chars_float_options(const char *start,  const char *end, flo
  * A simplified API; the result will be 0 on error, not uninitialized.
  * If outcome is null, it will not be written to
  */
-int64_t  ffc_parse_i64_simple(size_t len, const char *input, int base, ffc_outcome *outcome);
-ffc_result ffc_parse_i64(size_t len, const char *input, int base, int64_t  *out);
-ffc_result ffc_from_chars_i64(char const* first, char const* last, int base, int64_t* out);
-ffc_result ffc_from_chars_i64_options(const char *start, const char *end, int base, int64_t* out, ffc_parse_options options);
+static int64_t  ffc_parse_i64_simple(size_t len, const char *input, int base, ffc_outcome *outcome);
+static ffc_result ffc_parse_i64(size_t len, const char *input, int base, int64_t  *out);
+static ffc_result ffc_from_chars_i64(char const* first, char const* last, int base, int64_t* out);
+static ffc_result ffc_from_chars_i64_options(const char *start, const char *end, int base, int64_t* out, ffc_parse_options options);
 
 /*
  * A simplified API; the result will be 0 on error, not uninitialized.
  * If outcome is null, it will not be written to
  */
-uint64_t ffc_parse_u64_simple(size_t len, const char *input, int base, ffc_outcome *outcome);
-ffc_result ffc_parse_u64(size_t len, const char *input, int base, uint64_t *out);
-ffc_result ffc_from_chars_u64(char const* first, char const* last, int base, uint64_t* out);
-ffc_result ffc_from_chars_u64_options(const char *start, const char *end, int base, uint64_t* out, ffc_parse_options options);
+static uint64_t ffc_parse_u64_simple(size_t len, const char *input, int base, ffc_outcome *outcome);
+static ffc_result ffc_parse_u64(size_t len, const char *input, int base, uint64_t *out);
+static ffc_result ffc_from_chars_u64(char const* first, char const* last, int base, uint64_t* out);
+static ffc_result ffc_from_chars_u64_options(const char *start, const char *end, int base, uint64_t* out, ffc_parse_options options);
 
 /*
  * A simplified API; the result will be 0 on error, not uninitialized.
  * If outcome is null, it will not be written to
  */
-int32_t  ffc_parse_i32_simple(size_t len, const char *input, int base, ffc_outcome *outcome);
-ffc_result ffc_parse_i32(size_t len, const char *input, int base, int32_t  *out);
-ffc_result ffc_from_chars_i32(char const* first, char const* last, int base, int32_t* out);
-ffc_result ffc_from_chars_i32_options(const char *start, const char *end, int base, int32_t* out, ffc_parse_options options);
+static int32_t  ffc_parse_i32_simple(size_t len, const char *input, int base, ffc_outcome *outcome);
+static ffc_result ffc_parse_i32(size_t len, const char *input, int base, int32_t  *out);
+static ffc_result ffc_from_chars_i32(char const* first, char const* last, int base, int32_t* out);
+static ffc_result ffc_from_chars_i32_options(const char *start, const char *end, int base, int32_t* out, ffc_parse_options options);
 
 /*
  * A simplified API; the result will be 0 on error, not uninitialized.
  * If outcome is null, it will not be written to
  */
-uint32_t ffc_parse_u32_simple(size_t len, const char *input, int base, ffc_outcome *outcome);
-ffc_result ffc_parse_u32(size_t len, const char *input, int base, uint32_t *out);
-ffc_result ffc_from_chars_u32(char const* first, char const* last, int base, uint32_t* out);
-ffc_result ffc_from_chars_u32_options(const char *start, const char *end, int base, uint32_t* out, ffc_parse_options options);
+static uint32_t ffc_parse_u32_simple(size_t len, const char *input, int base, ffc_outcome *outcome);
+static ffc_result ffc_parse_u32(size_t len, const char *input, int base, uint32_t *out);
+static ffc_result ffc_from_chars_u32(char const* first, char const* last, int base, uint32_t* out);
+static ffc_result ffc_from_chars_u32_options(const char *start, const char *end, int base, uint32_t* out, ffc_parse_options options);
 
 /**
  * Parse a JSON number from the range [start, end) and return an int64_t or a double
@@ -322,7 +322,7 @@ typedef struct ffc_json_number {
   } value;
 } ffc_json_number;
 
-ffc_result ffc_parse_json_number(const char *start, const char *end, ffc_json_number *out);
+static ffc_result ffc_parse_json_number(const char *start, const char *end, ffc_json_number *out);
 
 /**
  * Exact fixed-notation formatting, equivalent to printf("%.*f", places, value)
@@ -341,7 +341,7 @@ ffc_result ffc_parse_json_number(const char *start, const char *end, ffc_json_nu
  * A float is exactly representable as a double, so pass (double)f to get the
  * same output as printf("%.*f", places, f).
  */
-size_t ffc_format_double_fixed(char *buf, size_t cap, double value, int places);
+static size_t ffc_format_double_fixed(char *buf, size_t cap, double value, int places);
 
 #endif // FFC_API
 

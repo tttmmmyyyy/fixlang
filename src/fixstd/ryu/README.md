@@ -18,11 +18,17 @@ program `fix` builds links these objects.
 
 ## The files
 
-The files hold the content upstream gives them. To take a newer Ryu, replace them with the
-upstream files of the same names and record the revision they came from. The build carries this
-directory to the C compiler through `RUNTIME_HEADERS` and `RUNTIME_SOURCES` in
-`src/build/build.rs`, which `test_vendored_headers_are_all_carried` and
-`test_vendored_sources_are_all_compiled` hold to the files that are here.
+The files hold the content upstream gives them, except that `ryu.h` declares each of its twelve
+functions `static`. To take a newer Ryu, replace the files with the upstream files of the same
+names, put `static` before each function `ryu.h` declares, and record the revision they came from.
+The build carries this directory to the C compiler through `RUNTIME_INCLUDED_FILES` in
+`src/build/build.rs`, which `test_vendored_files_are_all_carried` holds to the files that are here.
+
+`float_text.c` includes the three sources, so Ryu is compiled into that translation unit. The
+definitions take internal linkage from the `static` declarations in `ryu.h`, so none of Ryu's names
+reaches the link of a program, which may carry Ryu on its own.
+`test_runtime_defines_only_fixruntime_names` fails on a function a newer `ryu.h` declares without
+`static`, and `test_vendored_sources_are_all_included` on a source `float_text.c` leaves out.
 
 | File | Role |
 | --- | --- |
@@ -35,8 +41,8 @@ directory to the C compiler through `RUNTIME_HEADERS` and `RUNTIME_SOURCES` in
 | `d2s_full_table.h`, `f2s_full_table.h`, `d2fixed_full_table.h` | The powers of ten the algorithm looks up. |
 | `d2s_small_table.h` | The powers of ten computed rather than tabulated, which `RYU_OPTIMIZE_SIZE` selects. |
 
-`d2s.c` and `f2s.c` each define a `to_chars` of their own, so each source is compiled as a
-translation unit of its own.
+`d2s.c` and `f2s.c` each define a `static` function named `to_chars`. `float_text.c` renames the
+second with a macro around its `#include`, so the two fit one translation unit.
 
 ## The text these produce
 

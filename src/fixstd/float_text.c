@@ -14,20 +14,20 @@ number of the type, and takes `.` for the point whatever locale the program runs
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include "ryu/ryu.h"
 
-// fast_float's implementation, compiled into this translation unit alone. Its functions declared
-// `extern inline` call `static` ones, which clang reports under `-Wstatic-in-inline`: the
-// definitions are in this one unit, so every call reaches the definition it names.
+// Ryu and fast_float are compiled into this translation unit, and every function they define is
+// `static`: `ryu/ryu.h` and `ffc/ffc.h` declare each one so, and the definitions take their
+// linkage from those declarations. So none of their names reaches the link of a program, which
+// may carry either library on its own and define the same names.
+#include "ryu/d2s.c"
+// `d2s.c` and `f2s.c` each define a `static` function named `to_chars`, which one translation unit
+// holds only under two names.
+#define to_chars f2s_to_chars
+#include "ryu/f2s.c"
+#undef to_chars
+#include "ryu/d2fixed.c"
 #define FFC_IMPL
-#if defined(__clang__)
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wstatic-in-inline"
-#endif
 #include "ffc/ffc.h"
-#if defined(__clang__)
-#pragma clang diagnostic pop
-#endif
 
 // Defined by the compiler, and declared in `runtime.c` as well; the two translation units carry
 // the declaration because the runtime has no header of its own.
