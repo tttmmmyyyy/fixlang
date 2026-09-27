@@ -1,12 +1,12 @@
 ---
 name: code-review
-description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, design-fit, refactor-scope, test-sufficiency, code-quality, naming, shorten-qualifiers, comment-style, no-personal-info), all defined in this same file. `test-sufficiency` proposes a test for every coverage gap it finds, and the orchestrator commits the ones that pin a specification onto the branch under review. Each editing aspect runs twice — once inside the diff, once over the rest of the touched files for behavior-preserving cleanups — the orchestrator then settles the findings the whole suite can judge, and commits every pass on its own, then applies `cargo fmt` as a final standalone commit, and records in memory how far this branch has now been reviewed. Use when: reviewing code just written by AI (uncommitted changes), reviewing whatever has accumulated since the last review ('review the unreviewed code' — resumes from the recorded checkpoint), or doing a pre-merge review of an entire branch."
+description: "Run review aspects sequentially against a chosen scope of code via subagents. Each subagent applies one aspect's conventions (fix-test-main-reference, design-fit, refactor-scope, test-sufficiency, code-quality, naming, shorten-qualifiers, comment-style, no-personal-info), all defined in this same file. `test-sufficiency` proposes a test for every coverage gap it finds, and the orchestrator commits the ones that pin a specification onto the branch under review. The editing aspects edit inside the diff and report what they find elsewhere; the orchestrator then fixes the findings the change is responsible for, commits every pass on its own, applies `cargo fmt` as a final standalone commit, and records in memory how far this branch has now been reviewed. Use when: reviewing code just written by AI (uncommitted changes), reviewing whatever has accumulated since the last review ('review the unreviewed code' — resumes from the recorded checkpoint), or doing a pre-merge review of an entire branch."
 argument-hint: "Scope: 'unreviewed' for everything since this branch's last recorded review, 'uncommitted' for staged+unstaged changes, 'last N' for the last N commits, 'branch' for everything since the branch forked from main, or any git ref. If omitted, the skill asks."
 ---
 
 # Code Review
 
-Run a fixed sequence of review aspects against a chosen scope, **one after another** in subagents. The orchestrator section below resolves scope and dispatches subagents. The aspects (`## Aspect: ...` sections, further down) define the conventions each subagent applies — they are not separate skills, they are sections of this file that subagents read directly. Tests are the one thing a flag-only aspect produces that the review itself lands: `test-sufficiency` writes the tests the change is missing, and the orchestrator judges each one and commits those that pin a specification onto the branch under review. As the editing aspects run, the orchestrator commits each one's changes as its own commit — the fixes inside the diff and the cleanup that aspect made around it as two — and finishes with `cargo fmt` in a standalone commit, so every pass is a separate, reviewable commit and formatting churn never mixes with the substantive changes.
+Run a fixed sequence of review aspects against a chosen scope, **one after another** in subagents. The orchestrator section below resolves scope and dispatches subagents. The aspects (`## Aspect: ...` sections, further down) define the conventions each subagent applies — they are not separate skills, they are sections of this file that subagents read directly. Tests are the one thing a flag-only aspect produces that the review itself lands: `test-sufficiency` writes the tests the change is missing, and the orchestrator judges each one and commits those that pin a specification onto the branch under review. As the editing aspects run, the orchestrator commits each one's changes as its own commit, and finishes with `cargo fmt` in a standalone commit, so every pass is a separate, reviewable commit and formatting churn never mixes with the substantive changes.
 
 ## Scope
 
@@ -31,65 +31,27 @@ A completed review records how far it got, so the next one can pick up from ther
 - <branch>: reviewed through <short hash> (<subject>) — <YYYY-MM-DD>; cleanup PR #<n>
 ```
 
-The recorded hash is `HEAD` on the branch under review **after** the review's own commits land, so the next review starts past them. The cleanup pull request is named because its commits sit on another branch and the hash alone would not lead anyone to them. Branch is the key: worktrees of this repository share one file, and a branch's line is updated in place rather than appended to.
+The recorded hash is `HEAD` on the branch under review **after** the review's own commits land, so the next review starts past them. The cleanup pull request, when the review opened one, is named because its commits sit on another branch and the hash alone would not lead anyone to them. Branch is the key: worktrees of this repository share one file, and a branch's line is updated in place rather than appended to.
 
 The checkpoint is a record of work done, so it is written only by a review that ran to completion. A review halted by the PII gate or by a subagent failure leaves the previous checkpoint standing.
 
 ## Review Radius
 
-A review reaches past the hunks it was handed, because code improves only where someone is already working: the stretches between hunks are the stretches nobody ever cleans. Three rings, and the ring decides what an aspect may do:
+An aspect **edits inside the diff hunks** and **reads anywhere**:
 
-- **Ring 1 — the diff hunks.** Every convention of the aspect applies in full, editing and flagging alike.
-- **Ring 2 — the rest of each touched file.** Behavior-preserving cleanups apply; whatever else the aspect notices here becomes a finding.
-- **Ring 3 — the rest of the project.** Findings only. Aspects read ring 3 freely — `code-quality`'s search for an existing helper and `refactor-scope`'s hunt for near-duplicates both need it — and they edit nothing there.
+- **The diff hunks.** Every convention of the aspect applies in full, editing and flagging alike.
+- **Everything else** — the rest of each touched file, and the rest of the project. Findings only. Aspects read it freely — `code-quality`'s search for an existing helper and `refactor-scope`'s hunt for near-duplicates both need it — and they edit nothing there.
 
-### What may be edited in ring 2
-
-Only edits that **preserve behavior by construction**, so that untouched code stays correct without leaning on tests the change under review never exercised:
-
-- Comments and doc comments, including one added to a pre-existing undocumented item.
-- Imports and qualified paths.
-- Renames of local bindings — `let`, loop and `match` binders, closure and function parameters.
-- Deletion of commented-out code.
-- Extraction of a block duplicated within the file into one function, with both call sites moved onto it.
-
-Everything else stays a finding in ring 2: item renames, moves, signature changes, splitting a function, narrowing mutable state, rewriting an algorithm, dropping a defensive branch. Each changes an interface or a behavior, which an aspect applying one convention cannot weigh on its own. The orchestrator settles them afterwards, against the whole suite — see *Act on the findings the suite settles*.
-
-An unused private item outside the hunks is a finding as well, even though deleting it would compile: CLAUDE.md keeps such an item — and the `dead_code` warning it carries — as the reminder that a staged rollout still has a step to go, so the author decides whether it has served its purpose.
-
-### How far to carry it
-
-An aspect applies its conventions to the whole of each touched file, working nearest-first outward from the hunks, each edit justifiable on its own. A file left half-converted reads worse than one at either end state, and the stretch a review declines to clean is the stretch that stays uncleaned.
-
-`no-personal-info` is the exception: it works ring 1 alone, gating what this diff would add to the history.
-
-### Modes
-
-Each editing aspect runs twice: once in **`in-diff` mode** (ring 1; ring-2 candidates are listed and left alone), then once in **`neighborhood` mode** (ring 2).
-
-**The two modes land in two different pull requests.** Ring-1 edits belong to the change and stay on the branch under review. Ring-2 edits are improvements to code that was already there, and they go on a branch of their own with a pull request of its own. Otherwise the diff the author has to read for the change carries every rename and comment fix the review found nearby, which is what makes a reviewed pull request unreadable.
-
-The cleanup branch is cut from **the branch under review**, at its tip once the `in-diff` commits have landed, and its pull request targets that branch. Each pull request then reads as one thing: the change against `main`, and the cleanup against the change.
-
-The one requirement is that **the cleanup stay out of the change's diff until the change has been read**. Once it has, the two land whichever way suits:
-
-- Merge the cleanup into the branch under review, then that branch into `main`. One merge into `main`, carrying both.
-- Merge the branch into `main`, and delete it. Deleting a merged head branch makes GitHub retarget every open pull request based on it to that branch's own base, so the cleanup's pull request becomes a pull request into `main` by itself. The deletion is what triggers this, at any point after the merge — it does not have to happen at merge time.
-
-That is the author's call, and it is worth saying in the summary so the choice is in front of them.
-
-Cutting the cleanup branch from the change rather than from `main` also means the two never conflict: the cleanup is a descendant of what it cleans up around.
-
-When the branch under review **is** `main`, there is no split: both modes commit where they are.
+What an aspect notices outside the hunks reaches the orchestrator as a finding, and the orchestrator decides what becomes of it — see *Act on the findings*. Existing code the change made stale is reshaped with the change, on the branch under review. A refactoring of other existing code goes on a cleanup branch of its own, so the diff the author reads for the change carries the change and its consequences alone.
 
 ## Aspect Sequence
 
-Run these aspects in this order, each in its own subagent. The **flag-only** aspects (they never edit; they report findings, and `test-sufficiency` hands back test bodies with them) run first; then the **editing** aspects (they modify files, and each is committed on its own — see the Procedure):
+Run these aspects in this order, each in its own subagent. The **flag-only** aspects (they leave the tree as they found it; they report findings, and `test-sufficiency` hands back test bodies and their runs with them) run first; then the **editing** aspects (they modify files, and each is committed on its own — see the Procedure):
 
 1. **no-personal-info** — scan every changed file for the user's personal data (real name, personal email, phone, address, secrets) embedded in checked-in files, and flag it. Runs first as a gate: a finding stops the review before anything is committed.
 2. **design-fit** — with the implementation now visible, re-evaluate whether the chosen design is the best fit for the change's goal; flag mismatches (this aspect never redesigns).
 3. **refactor-scope** — check whether the change bent itself out of shape to leave existing code untouched; flag the scars a declined refactor left behind (this aspect never refactors).
-4. **test-sufficiency** — check whether the tests cover what the implementation actually does, including cases only visible once the code exists; write the test each gap wants and hand it back for the orchestrator to judge (this aspect edits nothing itself).
+4. **test-sufficiency** — check whether the tests cover what the implementation actually does, including cases only visible once the code exists; write the test each gap wants, run it green and red, and hand it back for the orchestrator to judge (this aspect leaves the tree as it found it).
 5. **fix-test-main-reference** — for changed Fix-source compile tests, ensure every top-level declaration introduced by the test is referenced from `main` (directly, transitively, or via `eval`); otherwise the Fix compiler can silently skip a broken definition.
 6. **code-quality** — apply general programming-maxim review (DRY, single responsibility, dead-code removal, defensive-code trimming, invariant assertions, shotgun-surgery annotation, root-cause vs symptom check, etc.).
 7. **naming** — judge the names the diff introduces; rename local bindings inline, flag item names (modules, types, functions, fields) for the author.
@@ -100,11 +62,11 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 
 1. **Avoid conflicting edits.** The editing aspects modify files. Parallel runs would fight each other.
 2. **Each aspect should see prior changes.** E.g., `shorten-qualifiers` should see imports added by `code-quality`; `comment-style` shouldn't waste effort polishing comments that `code-quality` just deleted.
-3. **Per-aspect commits need it.** Each editing aspect is committed on its own, on the branch its mode belongs to (see the Procedure), which means running and committing them one at a time.
+3. **Per-aspect commits need it.** Each editing aspect is committed on its own (see the Procedure), which means running and committing them one at a time.
 
 ## Procedure
 
-**Running an aspect** (used in the steps below): extract its section from this file — everything from `## Aspect: <aspect-name>` up to (but not including) the next `## Aspect:` heading or end of file, all `### ...` sub-sections included — then launch one subagent via `Agent` (subagent_type: `general-purpose`), brief it with the prompt template below (substitute the aspect name, the mode, the base ref, the *Review Radius* section, and the extracted aspect text inline; do **not** tell it to open `SKILL.md`), and **wait** for it to finish before starting the next. Never use `run_in_background`. The flag-only aspects run in `in-diff` mode, where the mode makes no difference to a pass that edits nothing.
+**Running an aspect** (used in the steps below): extract its section from this file — everything from `## Aspect: <aspect-name>` up to (but not including) the next `## Aspect:` heading or end of file, all `### ...` sub-sections included — then launch one subagent via `Agent` (subagent_type: `general-purpose`), brief it with the prompt template below (substitute the aspect name, the base ref, the *Review Radius* section, and the extracted aspect text inline; do **not** tell it to open `SKILL.md`), and **wait** for it to finish before starting the next. Never use `run_in_background`.
 
 1. **Resolve the base ref** from the argument:
    - empty → ask the user which scope they want using `AskUserQuestion`. Offer four options; the free-text option the tool adds covers any git ref the user wants to name:
@@ -123,43 +85,41 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
    - `last N` (where N is a positive integer) → `HEAD~N`. Verify it resolves with `git rev-parse --verify HEAD~N`.
    - `branch` → `$(git merge-base HEAD main)`. Verify `main` exists; if the project uses a different default branch, abort and ask.
    - anything else → treat as a git ref. Verify it resolves with `git rev-parse --verify <ref>`.
-2. **Run the flag-only reviews first**, in order: `no-personal-info`, `design-fit`, `refactor-scope`, `test-sufficiency`. None of them edits the tree; `test-sufficiency` hands back the bodies of the tests it proposes along with its findings, and *Add the tests worth keeping* below decides what becomes of them.
-   - **PII gate.** If `no-personal-info` flagged any finding, **stop the review here**: commit nothing, and surface that finding together with any `design-fit` / `refactor-scope` / `test-sufficiency` findings so the user can remove the personal data before re-running. Because these aspects make no edits, the working tree is untouched.
-3. **Commit the code under review.** If `git status --porcelain` reports pending changes, they are part of what was just reviewed: commit them now as their own commit, with a message describing the change (you have the context of what was written; if it is genuinely unclear, use a concise placeholder and say so in the summary). This keeps the reviewed code separate from the cleanup commits that follow. On a clean tree, skip this step.
+2. **Run the flag-only reviews first**, in order: `no-personal-info`, `design-fit`, `refactor-scope`, `test-sufficiency`. Each leaves the tree as it found it; `test-sufficiency` hands back the bodies of the tests it proposes and their runs along with its findings, and *Add the tests worth keeping* below decides what becomes of them.
+   - **PII gate.** If `no-personal-info` flagged any finding, **stop the review here**: commit nothing, and surface that finding together with any `design-fit` / `refactor-scope` / `test-sufficiency` findings so the user can remove the personal data before re-running. Because these aspects leave the tree as they found it, the working tree is untouched.
+3. **Commit the code under review.** If `git status --porcelain` reports pending changes, they are part of what was just reviewed: commit them now as their own commit, with a message describing the change (you have the context of what was written; if it is genuinely unclear, use a concise placeholder and say so in the summary). This keeps the reviewed code separate from the review's own commits that follow. On a clean tree, skip this step.
 4. **Add the tests worth keeping.** `test-sufficiency` returned a test per gap it found; deciding which of them the project takes on is this orchestrator's call, because a test is a promise the project then has to keep.
 
    Judge each proposal against *Judging a proposed test* in that aspect's section, and keep the ones that pin a specification. A proposal whose behavior the project has not decided on stays a finding, phrased as the question it is — a test there would settle a language or API question that belongs to the author. Keep the surviving set small: **at most five per review**, taken in severity order — an unreached branch or error path first, then a boundary, then a variation of a case already covered — and report what you left out so the author can ask for more.
 
    For each kept test: write it into the file the proposal names, then build and run it.
    - **A proposal that does not compile is a draft.** Fix the mechanical breakage — a helper named wrong, a missing import, an argument in the wrong order. When it needs more than that, drop it and report it as a gap with the draft attached.
-   - **Confirm it can fail.** Break the behavior the test pins in the implementation, re-run, watch it go red, then restore the implementation with `git checkout -- <file>`. The code under review is committed by now, so the mutation is safe to revert. One mutation serves every kept test that pins the same behavior. A test that stays green under it is aimed at something else or is passing vacuously — drop it and say so.
+   - **Confirm it can fail, from the report.** `test-sufficiency` runs each proposal green on the code as it stands and red under the mutation that breaks what it pins, and quotes both runs. Read them: the mutation has to break the behavior the test claims to pin, and the red run has to fail on the test's own assertion. A test with no red run in the report, or one you changed beyond the mechanical fixes above, is confirmed here instead — break the behavior in the implementation, re-run, watch it go red, then restore the implementation with `git checkout -- <file>`. The code under review is committed by now, so the mutation is safe to revert. A test that stays green under its mutation is aimed at something else or is passing vacuously — drop it and say so.
    - **A test that fails on the unmutated code is the review's most important finding.** Either the change is wrong or the test's idea of the specification is, and only the author can say which. Leave that test out of the commit and report it in full — the body, how to run it, and what it printed — at the head of the summary.
 
    Commit what survives on the branch under review as one commit — `code-review: add tests for <behavior>` — whose message says what each test pins. Running this before the editing aspects puts the new tests in the diff those aspects read, so they get the same treatment as the rest of the change, `fix-test-main-reference`'s reachability check above all.
-5. **Run the editing aspects in `in-diff` mode**, in order: `fix-test-main-reference`, `code-quality`, `naming`, `shorten-qualifiers`, `comment-style`. Run each one, and if it changed any files, commit exactly those changes on the branch under review — `git add -A && git commit -m "code-review: <what this aspect did>"` (e.g. `code-review: shorten qualified paths`). Collect the ring-2 candidates each aspect reports, keyed by aspect.
+5. **Run the editing aspects**, in order: `fix-test-main-reference`, `code-quality`, `naming`, `shorten-qualifiers`, `comment-style`. Run each one, and if it changed any files, commit exactly those changes on the branch under review — `git add -A && git commit -m "code-review: <what this aspect did>"` (e.g. `code-review: shorten qualified paths`). Collect the findings each aspect reports, keyed by aspect.
 
    An aspect that changed nothing produces no commit. **Per-aspect, fine-grained commits are the goal — never bundle several into one commit.**
 6. **Apply `cargo fmt` to the branch under review as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
-7. **Run the neighborhood pass on its own branch.** Skip this step when no aspect reported a ring-2 candidate and no finding falls to be fixed under *Act on the findings the suite settles* below, or when the branch under review is `main` — in the latter case run the neighborhood passes here, committing each aspect on `main` as `code-review: <what this aspect did> — cleanup near the change`, act on the findings the suite settles in a commit of its own, and go on to the checkpoint step.
-
-   Otherwise:
+7. **Act on the findings** — see the section of that name below. The fixes the change is responsible for go on the branch under review, each in a commit of its own, and the whole suite then runs once over all of them. When refactorings of other existing code remain:
    - Cut the cleanup branch from the branch under review at its current tip: `git switch -c cleanup/<branch-under-review>`. No new worktree is needed; the tree is the one already checked out.
-   - For each aspect that reported candidates, in the same order, run it in **`neighborhood` mode**, handing it that list as its starting point.
-   - Commit each aspect's edits on their own — `code-review: <what this aspect did> — cleanup near the change` — then `cargo fmt` as a standalone commit, and run the build (and the test suite where the edits could reach behavior).
-   - **Act on the findings the suite settles** — see the section of that name below — and commit those on the cleanup branch too.
-   - Push the branch and open a pull request **into the branch under review**, whose body follows the `devdoc` skill: what the cleanups are, which convention or finding each comes from, and what each does to the program — behavior-preserving for most of them, and for a fail-loud conversion, the invalid state it now stops at. A pull request whose base is a working branch rather than `main` carries the number of that branch's own pull request in its title (e.g. `レビュー清掃 (#228): ...`), so the pull-request list shows which change it belongs to.
+   - Commit each refactoring on its own — `code-review: <what it does> — cleanup near the change` — then `cargo fmt` as a standalone commit, and run the whole suite once over all of them.
+   - Push the branch and open a pull request **into the branch under review**, whose body follows the `devdoc` skill: what each refactoring is, which finding it comes from, and why it preserves behavior. A pull request whose base is a working branch rather than `main` carries the number of that branch's own pull request in its title (e.g. `レビュー清掃 (#228): ...`), so the pull-request list shows which change it belongs to.
    - `git switch -` back to the branch under review, so the working tree is where the summary describes it.
-8. **Record the checkpoint.** Take `git rev-parse --short HEAD` on the branch under review and write it to the `code-review-checkpoints` memory under that branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. Record the cleanup pull request's number on the same line. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
-9. **Summarize.** For each editing aspect, give a one-line description of what it changed in the diff and what it changed in the neighborhood (or note it changed nothing); say what each test you committed pins, and name each proposal you dropped with the reason; say which findings you fixed on the cleanup branch and what each now does; surface the findings you left, each with the reason it needs the author rather than the suite; list every commit created, with its short hash and which branch it is on; and state the base ref the review covered, the cleanup pull request opened, and the checkpoint now recorded.
+
+   When the branch under review **is** `main`, there is no split: the refactorings commit there too.
+8. **Record the checkpoint.** Take `git rev-parse --short HEAD` on the branch under review and write it to the `code-review-checkpoints` memory under that branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. Record the cleanup pull request's number on the same line when there is one. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
+9. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); say what each test you committed pins, and name each proposal you dropped with the reason; say which findings you fixed, on which branch, and what each now does; surface the findings you left, each with the reason it is the author's; list every commit created, with its short hash and which branch it is on; and state the base ref the review covered, the cleanup pull request opened, and the checkpoint now recorded.
 10. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue, and leave the checkpoint at its previous value. If `cargo fmt` itself fails, surface that and skip the formatting commit.
 
-## Act on the findings the suite settles
+## Act on the findings
 
-An aspect reports rather than edits outside its ring because a subagent applying one convention cannot weigh a change to an interface or a behavior. The orchestrator can: it holds every aspect's findings at once, and it has the project's whole test suite — which is what actually protects code the change under review never touched.
+An aspect reports rather than edits outside the hunks, and reports rather than edits a change to an interface or a behavior, because a subagent applying one convention cannot weigh either. The orchestrator can: it holds every aspect's findings at once, and it has the project's whole test suite.
 
-So a finding is not the end of the road. Read every one the review produced — from the flag-only aspects and from the editing aspects' report-only items, in both modes — and sort each into one of two piles.
+Read every finding the review produced — from the flag-only aspects and from the editing aspects' report-only items — and sort each into one of four piles.
 
-**Fix it, on the cleanup branch**, where a full-suite run tells you whether the fix is right. The whole question in these is "did I break something", and the suite answers it:
+**Fix it, on the branch under review**, when the change is responsible for it and the suite answers whether the fix is right. The change is responsible for the code the diff writes, and for existing code the change bent around or made stale — the code someone who knew the change would now write differently: the callers of a helper the change superseded, a comment the change made untrue, a sibling that now disagrees with it. Reshaping that code is part of the change even where it reaches outside the hunks, and the diff grows for a reason its reader can follow. The question in these is "did I break something", and the suite answers it:
 
 - a signature every caller reaches from inside this repository;
 - a fallback over a case the code cannot produce, turned into a hard failure;
@@ -176,20 +136,15 @@ So a finding is not the end of the road. Read every one the review produced — 
 - a property the suite does not measure — performance, memory, concurrency, a platform this machine is not;
 - a redesign, where what the author settles is the direction rather than the risk: a rewritten pipeline, a different data structure carrying the same information, a rule imposed on the language.
 
-**What the cleanup branch carries** is two kinds of change, and the pull request body says which each fix is:
+**Refactor it, on the cleanup branch**, when it is about existing code the change did not write, did not bend around, and did not make stale — code that would want the same edit had the change never happened — and the edit preserves behavior: a rename, a move, a split, a signature every caller reaches from inside this repository, a duplicate folded into one function, a comment or doc comment. It is improvement to code that was already there, so it goes in a pull request of its own, based on the branch under review, and the diff the author reads for the change stays the change.
 
-- one that **preserves behavior** — a signature, a split, a move, a rename;
-- one that **fails loud where the code used to continue** — a fallback over a case that cannot arise, an assertion the release build compiled away. What a valid program computes is unchanged; what changes is that a violated invariant now stops the compiler instead of flowing on.
+**Report it, and edit nothing,** when it is about such existing code and the edit would change behavior — a fallback turned into a hard failure, an assertion turned on, a changed answer. That is past a refactoring, and it wants a change of its own. A defect there that a user can reach — a program compiled into the wrong code, a diagnostic reported at the wrong place or missing, a `fix` command answering wrongly — is filed as an issue, since that change owes a changelog entry and a regression test.
 
-**A fix that changes what a valid program does leaves the cleanup branch.** Where the review finds a defect a user can reach — a program compiled into the wrong code, a diagnostic reported at the wrong place or missing, a `fix` command answering wrongly — that is not cleanup, whatever its size. File it as an issue and fix it in a change of its own, with the changelog entry and the regression test such a change owes. A pull request titled cleanup is where nobody looks for a user-visible change, and the changelog entry is keyed to the issue and the pull request that carry one.
+**Verify the fixes together.** Commit each fix on its own, then run the **whole** suite once over all of them — once on the branch under review, and once more on the cleanup branch when it carries any. A filtered run answers a smaller question, and it answers it wrongly here more often than anywhere else: a finding sits by definition outside what the change's own tests exercise, so the tests that would catch a mistake in it are the ones you would not think to filter for. When the run goes red, the commits say which fix to look at first.
 
-**A finding on text the diff adds is fixed on the branch under review.** A comment, a doc paragraph or a changelog entry the change writes is part of the change, so its fix lands with the change, the same as the `in-diff` edits: commit it there before the cleanup branch is cut.
+**Add a test where the fix wants one**, and judge it the way *Add the tests worth keeping* judges a proposal: break what it pins, and keep it only when it goes red. Most fixes here want none — a moved item is covered by whatever already reached it, and a signature change is covered by its callers.
 
-For each finding you fix, run the **whole** suite. A filtered run answers a smaller question, and it answers it wrongly here more often than anywhere else: a finding sits by definition outside what the change's own tests exercise, so the tests that would catch a mistake in it are the ones you would not think to filter for.
-
-**Add a test where the fix wants one**, and judge it the way *Add the tests worth keeping* judges a proposal: break what it pins, run the whole suite, and keep it only when nothing else goes red. Most fixes here want none — a moved item is covered by whatever already reached it, and a signature change is covered by its callers.
-
-**An assertion the review turns on is not done until it has been shown to fire.** Break the invariant it states and confirm it aborts on an input that reaches it; then run the suite to see which tests reach it. An assertion no test reaches has been moved, not enabled, and the summary says so — that is a coverage gap the review found, and it may be what a test is for.
+**An assertion the review turns on is not done until it has been shown to fire.** Break the invariant it states and confirm it aborts on an input that reaches it; the whole-suite run then shows which tests reach it. An assertion no test reaches has been moved, not enabled, and the summary says so — that is a coverage gap the review found, and it may be what a test is for.
 
 Commit these separately from the aspects' own commits, with a message naming what the review found and what the code now does.
 
@@ -199,31 +154,18 @@ Commit these separately from the aspects' own commits, with a message naming wha
 You are running one aspect of a code review.
 
 Aspect: <aspect-name>
-Mode: <in-diff | neighborhood>
 Base ref: <base>
 
 The base ref is the comparison point: review the diff between <base>
 and the current working tree, i.e. run your own `git diff <base>` to
 find the files and hunks to operate on.
 
-How far your edits may reach is set by the mode and by the radius rules
-below.
-
-In `in-diff` mode, edit inside the diff hunks (ring 1). Wherever the
-aspect would also fix something in the rest of a touched file, collect
-it as a **ring-2 candidate** — file, location, the one-line fix, and
-which convention it comes from — and leave that code alone.
-
-In `neighborhood` mode, work ring 2 of the touched files: start from
-the candidate list below, add anything it missed, keep the edits the
-radius rules allow, and turn the rest into findings.
-
-Ring-2 candidates carried over from the in-diff pass:
-<the list the in-diff run reported, or "none — this is the in-diff pass">
+Edit inside the diff hunks only. Read the rest of the touched files and
+of the project wherever the aspect needs to, and report what you notice
+there as findings.
 
 ----- BEGIN RADIUS RULES -----
-<paste the full text of the `## Review Radius` section here, including
-all its `### ...` sub-sections>
+<paste the full text of the `## Review Radius` section here>
 ----- END RADIUS RULES -----
 
 The full instructions for this aspect follow between the BEGIN/END
@@ -236,25 +178,25 @@ its `### ...` sub-sections, up to but not including the next
 `## Aspect:` heading or the end of file>
 ----- END ASPECT INSTRUCTIONS -----
 
-Apply the edits the aspect prescribes within your mode's ring. If you
-modified code, run `cargo check` afterwards to confirm the project
-still builds.
+Apply the edits the aspect prescribes inside the hunks. If you modified
+code, run `cargo check` afterwards to confirm the project still builds.
 
 Report back in under 100 words: which files you touched and a one-line
 summary of the change in each. Report separately, and in full, every
-finding the aspect asks you to flag, every test it asks you to propose
-— body included, verbatim — and, in the in-diff pass, the ring-2
-candidate list. The word limit governs the summary of your edits;
-findings, proposed tests, and candidates are added on top of it.
+finding the aspect asks you to flag, and every test it asks you to
+propose — body and runs included, verbatim. The word limit governs the
+summary of your edits; findings and proposed tests are added on top of
+it.
 ```
 
 ## What NOT to do
 
 - Don't run aspects in parallel.
-- Don't let subagents decide their own scope — always pass the resolved base and the mode.
-- Don't let an aspect edit past the radius rules: for an aspect, an interface change or a behavior change outside the hunks is a finding, whatever the mode. Acting on those findings is the orchestrator's own step, and it runs the whole suite for each one.
-- Don't hand the author a finding the suite could have settled. A finding whose only question is "does this break something" is work the review is holding rather than work the author asked for.
-- Don't commit neighborhood edits on the branch under review — they belong to the cleanup branch and its own pull request, so that the change stays readable as a diff.
+- Don't let subagents decide their own scope — always pass the resolved base.
+- Don't let an aspect edit outside the hunks: what it notices there is a finding. Acting on findings is the orchestrator's own step, verified by one whole-suite run over the fixes.
+- Don't hand the author a finding the change is responsible for and the suite could have settled. A finding whose only question is "does this break something" is work the review is holding rather than work the author asked for.
+- Don't put a refactoring of code the change neither wrote nor made stale on the branch under review — it belongs to the cleanup branch and its own pull request, so that the diff the author reads carries the change and its consequences alone.
+- Don't put a behavior change on the cleanup branch. A pull request titled cleanup is where nobody looks for one; it is a finding, or an issue when a user can reach it.
 - Don't merge the cleanup pull request yourself. Merging it before the change has been read puts the cleanup back into the diff the split exists to keep clear, and either way the merge is the author's.
 - Don't commit a proposed test that pins behavior the project has never decided on. The test would make the current output the required one, which is the author's decision about the language and its API — raise it as a question instead.
 - Don't commit a proposed test you have not watched go red. A test that cannot fail is a green light wired to nothing, and it costs every future run.
@@ -346,7 +288,7 @@ For trait members, "outside its own declaration lines" means: outside both the `
 
 ### Scope Discipline
 
-- **Touch only test files the diff changed.** Within those files, the mode decides which tests you may edit: the ones the diff introduced or modified in `in-diff` mode, the file's other tests in `neighborhood` mode. A test file the diff leaves alone is out of scope in both.
+- **Touch only the tests the diff introduced or modified.** Report an unreferenced declaration in any other test of a changed file as a finding.
 - **Do not change what the test verifies.** If the obvious fix would alter the property under test (e.g., switching from "does this declaration type-check" to "does this expression evaluate"), flag rather than apply.
 - **One unreferenced symbol at a time.** Multiple unreferenced declarations in one hunk may each have a different right answer.
 
@@ -392,11 +334,11 @@ Look for concrete evidence, in the code as written, that the chosen design fight
 
 ## Aspect: refactor-scope
 
-A change is judged by the codebase it leaves behind, so reshaping existing code is part of a change's legitimate scope — the project's standing instruction is to prefer the cleanliness of the end state over the smallness of the diff. This aspect reads the seam between the new code and the code it was grafted onto, and asks: **did the change bend itself out of shape so that the existing code could stay untouched?**
+A change is judged by the codebase it leaves behind, so reshaping existing code is part of a change's legitimate scope — the project's standing instruction is to prefer the cleanliness of the end state over the smallness of the diff. This aspect reads the seam between the new code and the code it was grafted onto, and asks two questions: **did the change bend itself out of shape so that the existing code could stay untouched?** And **did the change leave existing code stale — code that someone who knew the change would now write differently?**
 
-Every other editing aspect confines itself to the diff hunks by design. That discipline keeps them safe, and it also makes them blind to this: a duplicate created to avoid editing an existing function looks perfectly clean from inside its own hunk, because the defect lives in the relationship between the new item and the old one.
+Every other editing aspect confines itself to the diff hunks by design. That discipline keeps them safe, and it also makes them blind to this: a duplicate created to avoid editing an existing function looks perfectly clean from inside its own hunk, and so does a new helper whose older, weaker twin keeps its callers, because the defect lives in the relationship between the new item and the old one.
 
-This aspect **only flags**; it never refactors. Widening a change to reshape existing code is the author's call, and the ripple through call sites, tests, and downstream Fix programs needs judgment this review does not have.
+This aspect **only flags**; it never refactors. Its findings go to the orchestrator, which reshapes the existing code on the branch under review where the suite can judge the result, and leaves to the author what reaches past this repository.
 
 ### Distinguish from design-fit
 
@@ -416,10 +358,20 @@ Each of these is concrete evidence in the diff that existing code was routed aro
 
 The litmus test: **explain the resulting code to someone who never saw the diff.** If the explanation of why there are two of something, why a flag exists, or why a conversion happens is "so that the change would touch fewer files", then the reason describes the diff — and the diff is gone the moment it lands, leaving behind only the thing it justified.
 
+### Consequences to look for
+
+The second question looks outward from the change, at existing code the change did not touch and has made stale. The predicate: **would someone who knows the change write this existing code differently now?** When the answer is yes because of the change, the stale code is part of the change's work. When the code would want the same edit had the change never happened, it is not this aspect's — that is ordinary old code, and it waits for a change of its own.
+
+- **An existing item the new one subsumes.** The change added a helper, a type, or a pass that does what an older one does and more. The older one's callers belong on the new one, and the older one is deleted once it has none.
+- **Existing code re-deriving what the change now provides.** A new type carries an invariant, a new helper computes a value, a new field stores a fact — and code elsewhere still works it out by hand.
+- **Text the change made untrue.** A comment, a doc comment, a test's description, or a document elsewhere that states the behavior the change replaced.
+- **A sibling that now disagrees.** The change fixed or extended how one function treats a case, and a sibling that handles the same case — another arm of the same dispatch, the other half of a read/write pair, the same check in another handler — still treats it the old way.
+- **A workaround for what the change removed.** Existing code routes around a limitation — an extra argument, a special case, a retry — that the change lifted.
+
 ### Discipline
 
 - **Flag only, never refactor.** No edits.
-- **Anchor every finding on a scar in the new code** — the duplicate, the flag, the adapter, the wrapper, the stranded path. Pre-existing mess that the change neither created nor bent around belongs to the editing aspects' neighborhood pass; raising it here buries the findings that the diff is actually responsible for.
+- **Anchor every finding on the change** — a scar in the new code (the duplicate, the flag, the adapter, the wrapper, the stranded path), or existing code the change made stale, named together with what in the change made it so. Pre-existing mess that the change neither created, bent around, nor made stale is outside this aspect; raising it here buries the findings that the diff is actually responsible for.
 - **Price the ripple.** A finding must say what the refactor would touch: which files, roughly how many call sites, which tests. "Generalize this" with no estimate leaves the author no basis to decide.
 - **Name the compatibility cost.** Some existing items have consumers outside this repository — Fix standard-library signatures, the LSP protocol surface, APIs that external Fix projects call. Reshaping those is a compatibility decision; flag it all the same, and state that cost as part of the finding.
 - **An author who priced it already has answered.** When a commit message or a comment states why the existing code was left as it is, treat that as the decision and skip the finding.
@@ -430,11 +382,12 @@ The litmus test: **explain the resulting code to someone who never saw the diff.
 2. List the items the diff adds — functions, types, traits, passes, constants. For each, search `src/` for an existing counterpart it resembles in name, signature, or shape, and read any candidate in full before judging.
 3. For each existing item the diff **modifies**, read its pre-diff version (`git show <base>:<file>`) and ask whether the modification is a graft — a flag, an extra case, a widened type — where reshaping would have served the old and new callers together.
 4. For each existing item the diff **calls but leaves alone**, ask whether the new code bends around it: a conversion at every call site, a re-stated constant, a value threaded through only to satisfy its signature.
-5. Confirm each candidate against the code, check it against *Discipline*, and collect the survivors. Make no edits.
+5. For each thing the change adds or alters — an item, an invariant, a behavior — search `src/` for existing code it makes stale, per *Consequences to look for*: the callers of an item it subsumes, a hand derivation of what it now provides, text describing what it replaced, a sibling handling the same case.
+6. Confirm each candidate against the code, check it against *Discipline*, and collect the survivors. Make no edits.
 
 ### Report
 
-- **Flagged for review**: per finding — the scar in the new code (file, and what it is), the existing code that would have to change, the end state you would aim for, and the cost of getting there.
+- **Flagged for review**: per finding — the scar in the new code or the stale existing code (file, and what it is), what in the change it comes from, the existing code that would have to change, the end state you would aim for, and the cost of getting there.
 - If the change reshaped existing code wherever it needed to, say so in one line and flag nothing.
 
 ---
@@ -443,7 +396,7 @@ The litmus test: **explain the resulting code to someone who never saw the diff.
 
 Tests written alongside a design tend to cover what the author *expected* to matter. Once the implementation exists, it exposes cases the author could not have known to test up front — the branch that turned out reachable, the boundary the algorithm actually has, the invariant the code now leans on. This aspect reads the finished implementation and asks: **do the tests cover what this code actually does, or only what the author first imagined?**
 
-For each gap it finds, it **writes the test that closes it** — the body, in the project's idiom, together with the specification that test pins — and hands it back in the report. It edits nothing: the orchestrator judges each proposal and commits the ones worth keeping onto the branch under review. It is distinct from `fix-test-main-reference`, which checks that a test's declarations are reachable from `main`; this one checks whether *enough* of the right tests exist at all.
+For each gap it finds, it **writes the test that closes it** — the body, in the project's idiom, together with the specification that test pins — runs it green and red, and hands it back in the report. It leaves the tree as it found it: the orchestrator judges each proposal and commits the ones worth keeping onto the branch under review. It is distinct from `fix-test-main-reference`, which checks that a test's declarations are reachable from `main`; this one checks whether *enough* of the right tests exist at all.
 
 ### First, reconstruct the goal and the behavior
 
@@ -487,7 +440,8 @@ Where it is not written down anywhere, the honest answer is usually that **the p
 
 ### Discipline
 
-- **Write the test, edit nothing.** The body belongs in the report, so that one place decides what the project takes on, and so that a proposal cannot slip into the commit that captures the change under review.
+- **Write the test, and leave the tree as you found it.** The body belongs in the report, so that one place decides what the project takes on, and so that a proposal cannot slip into the commit that captures the change under review.
+- **Run each proposal both ways.** Add it to its file for the run: it has to pass on the code as it stands, and fail under the narrowest mutation of the implementation that breaks what it pins — a mutation whose blast radius is the whole program says nothing about this test. Quote both runs in the report, with the mutation as a diff. Then restore every file you touched, and check `git status --porcelain` is what it was when you started. The orchestrator reads these runs instead of repeating them.
 - **Propose no test you cannot trace to a specification.** See *Judging a proposed test*; a proposal must name what it pins and where that requirement comes from.
 - **Tie each gap to a concrete case.** Name the specific input / branch / boundary left uncovered and where in the diff it lives — not "add more tests."
 - **Weigh against what's already there.** Read the tests the diff adds or touches first; a case an existing test already covers is not a gap.
@@ -495,7 +449,7 @@ Where it is not written down anywhere, the honest answer is usually that **the p
 
 ### Report
 
-- **Proposed tests**: per gap — the untested case (a concrete input or branch), where the behavior lives in the diff, the kind of test the project convention calls for (a Fix compile-and-run test, a `fix` integration test, or a Rust unit test), the **test body** and the file it belongs in, the specification it pins and where that requirement is stated, and what would have to break in the implementation for it to go red.
+- **Proposed tests**: per gap — the untested case (a concrete input or branch), where the behavior lives in the diff, the kind of test the project convention calls for (a Fix compile-and-run test, a `fix` integration test, or a Rust unit test), the **test body** and the file it belongs in, the specification it pins and where that requirement is stated, the mutation that breaks it, and the two runs: green on the code as it stands, red under the mutation.
 - **Flagged for review**: the gaps where the correct behavior is undecided — the input, the answer the code gives today, and the decision that would have to be made first.
 - If coverage is adequate, say so in one line.
 
@@ -577,7 +531,7 @@ The default in the **conservative / safe direction** is the one that slips throu
 
 **Catch the refactor regression.** When a hunk *rewrites* an existing function, compare it against the version it replaced — not only against the review base. A refactor that relaxes a prior `assert!` / `unreachable!` / `panic!` into a silent default (a representation change that "simplifies" a fail-loud arm back into a `map_or(default)`) reintroduces a swallowed case, and that is as much a defect as writing one fresh. Read the pre-refactor body (`git show <base>:<file>` for the symbol) whenever a rewritten function now returns a default where it used to abort.
 
-**Scope for this convention: the whole touched file, not just the diff hunks.** Fallbacks accrete over time and refactors relocate them, so a hunk-only view routinely hides them (a swallowed case three functions away from the change is still the bug that bites). This is the one code-quality convention that reaches past the mode's ring: scan every function of each file the diff touches, in either mode. For a correctness-critical subsystem (an analysis feeding codegen, a type checker, an optimizer), a periodic dedicated sweep of the whole subsystem — every `_ => …`, `unwrap_or`, `map_or`, `.get(…).unwrap_or…` — catches still more than any diff-triggered pass.
+**Scope for this convention: the whole touched file, not just the diff hunks.** Fallbacks accrete over time and refactors relocate them, so a hunk-only view routinely hides them (a swallowed case three functions away from the change is still the bug that bites). This is the one code-quality convention whose search reaches past the hunks: scan every function of each file the diff touches, apply the fix inside the hunks, and report what you find outside them as findings. For a correctness-critical subsystem (an analysis feeding codegen, a type checker, an optimizer), a periodic dedicated sweep of the whole subsystem — every `_ => …`, `unwrap_or`, `map_or`, `.get(…).unwrap_or…` — catches still more than any diff-triggered pass.
 
 #### State the invariants the code leans on with an assertion
 
@@ -807,8 +761,7 @@ The litmus test: *would this still be correct if the thing it silently assumes c
 
 ### Scope Discipline
 
-- **Let the mode set the reach.** In `in-diff` mode, edit inside the diff hunks and collect what the rest of each touched file needs as ring-2 candidates; in `neighborhood` mode, work those candidates under the radius rules. One convention stands apart: *Don't let a fallback silently handle a case the author calls impossible* covers the whole of each touched file in `in-diff` mode already, per its own scope note — a swallowed case is a bug rather than opportunistic cleanup.
-- **The conventions that travel to ring 2** are the ones whose edit preserves behavior by construction: *DRY* and *Extract a function on the second copy* within a single file, and *Remove dead and half-finished code* for commented-out code. The rest become findings in ring 2, for the orchestrator to settle against the whole suite — splitting a function, narrowing mutable state, rewriting a quadratic pattern, dropping a defensive branch, adding an assertion to code the change never touched, relocating an item, and also *Use the project's canonical types*, because `Set` / `Map` are `fxhash` maps whose iteration order differs from the standard library's and a compiler can let that order reach its output.
+- **Edit inside the hunks; report the rest.** A convention the rest of a touched file violates is a finding, not an edit. One convention reads further on purpose: *Don't let a fallback silently handle a case the author calls impossible* scans the whole of each touched file, per its own scope note — a swallowed case is a bug wherever it sits.
 - **Do not redesign.** If the right fix is "extract a new module" or "rewrite this pipeline," report it; don't do it. The orchestrator settles what the suite can judge, the module split among it.
 - **One convention at a time per hunk.** If a hunk hits multiple conventions, apply the smallest fix that satisfies one, then re-check before moving on.
 
@@ -839,8 +792,8 @@ The rest is calibration that question alone does not supply:
 
 ### Discipline
 
-- **Item names stay report-only in every mode.** A rename there is a project-vocabulary decision that ripples across the repository, so it belongs to the author whether the item sits in a hunk or elsewhere in the file.
-- **Local names follow the mode.** `in-diff` mode renames the local bindings the diff introduces or gives new meaning, and collects the rest of the touched file's misleading locals as ring-2 candidates; `neighborhood` mode renames those, under the radius rules. A local rename is contained in one function body, which is what makes it safe to carry into untouched code.
+- **Item names stay report-only.** A rename there is a project-vocabulary decision that ripples across the repository, so it belongs to the author whether the item sits in a hunk or elsewhere in the file.
+- **Local names in the hunks are renamed in place.** Rename the local bindings the diff introduces or gives new meaning. A misleading local elsewhere in the file is left as it is.
 - **A synonym is not an improvement.** Rename when the current name misleads, hides the meaning, or breaks the project's vocabulary. Renaming for taste costs review attention and muddies `git blame`.
 - **Check a proposed term against the codebase.** `grep` the candidate and the concept first — the right name is usually the one the project already uses.
 - **Parameter renames carry two obligations**: a parameter of a trait `impl` method keeps the name its trait declaration uses, and any `# Arguments` entry or doc-comment mention of the parameter is updated with it.
@@ -874,7 +827,7 @@ The project convention is *explicit imports, no wildcards, no section breaks*. A
 
 1. **Collect changed files**: Run `git diff --name-only <base>` to find affected files.
 
-2. **Identify cleanup targets**: For each affected file, search the **entire file**. The diff is used only to determine *which files* to process. In `in-diff` mode, fix the violations that sit in the diff hunks and list the file's remaining ones as ring-2 candidates; in `neighborhood` mode, fix those. Look for:
+2. **Identify the targets**: For each affected file, look at the diff hunks, plus the file's top-of-file `use` block, which the hunks' imports join. Look for:
    - **Wildcard imports**: `use module::*;` (and grouped variants like `use module::{*}`).
    - **Qualified paths**: `crate::module::Ident`, `crate::module::{A, B}`, `module::submodule::Ident`. Paths used as types, function calls, trait bounds, or in expressions.
    - **Blank lines inside the top-of-file `use` block**: any empty line between two `use` statements at the start of the file. These are typically `rust-analyzer`-inserted section breaks (std / external crates / `crate` / `super`) that the project does not want.
@@ -1009,7 +962,7 @@ Function comment shape. Aim the comment so that the name, the signature and the 
 Test comment shape (for `#[test]` functions): the comment must state *what perspective the test exercises* — which behavior, edge case, or invariant it validates — not just "tests `foo`." Example: `/// Verifies that rename across an import boundary updates both the definition and the qualified callsite.`
 
 **Excluded:**
-- Pre-existing undocumented items in the same file, in `in-diff` mode — that mode covers the items the diff introduces or whose signature it modifies, and collects the file's other undocumented items as ring-2 candidates for the `neighborhood` pass to document.
+- Pre-existing undocumented items in the same file — this aspect covers the items the diff introduces or whose signature it modifies.
 - Fix sample programs under `src/tests/test_*/cases/` (these are `.fix` files; this aspect only walks `.rs` anyway).
 - Items generated by `derive` macros or build scripts.
 
@@ -1089,10 +1042,8 @@ An entry states the change in a sentence or two; the numbers are what take a rea
 2. For each changed `.rs` file, examine:
    - (a) comments that appear in the diff hunks (added or modified lines), for the rewriting conventions;
    - (b) Rust items defined or whose signature was modified in the diff hunks, for the *Every Rust item must have a doc comment* convention.
-
-   In `neighborhood` mode, apply (a) and (b) to the rest of the file instead — its other comments and its undocumented items — under the radius rules. Every convention here edits prose alone, so all of them travel to ring 2.
-3. For each changed hand-written `.md` file, examine the prose added or modified in the diff hunks for the **[Rust + Markdown]** conventions; in `neighborhood` mode, the document's other prose.
-   In `CHANGELOG.md`, read the entries the diff adds against the **[Changelog]** conventions as well; in `neighborhood` mode, the rest of the `## [Unreleased]` section.
+3. For each changed hand-written `.md` file, examine the prose added or modified in the diff hunks for the **[Rust + Markdown]** conventions.
+   In `CHANGELOG.md`, read the entries the diff adds against the **[Changelog]** conventions as well.
 4. For each violation:
    - Identify which convention it is.
    - For a rewriting convention: write a rewrite that preserves the intent but removes the anti-pattern, and apply it with `Edit`.
