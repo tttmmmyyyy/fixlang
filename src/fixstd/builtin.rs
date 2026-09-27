@@ -8919,10 +8919,7 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
         let ptr = get_lent_ptr(gc, &x);
         let ptr = make_ptr_obj(gc, ptr, "lent_ptr");
         let ios_res = apply_with_env(gc, f, env, vec![ptr, ios]);
-        let ios_res_fields =
-            ObjectFieldType::get_struct_fields(gc, &ios_res, &[0, 1], RcState::Unknown);
-        let ios = ios_res_fields[0].clone();
-        let f_res = ios_res_fields[1].clone();
+        let (ios, f_res) = split_ios_result(gc, &ios_res);
 
         // Construct the return value `(ios, (value, function result))`.
         let x_and_res = create_obj(
@@ -9282,7 +9279,7 @@ pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<
         "a value run here is an `IO` or the runner one holds, and `{}` is neither",
         io.ty.to_string()
     );
-    run_ios_runner(gc, io, None).1
+    run_ios_runner(gc, io)
 }
 
 /// Runs the action held by a value of type `IO a` and returns its result.
@@ -9294,27 +9291,23 @@ pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object
         make_tuple_ty(vec![make_iostate_ty(), res_ty.clone()]),
     );
     let runner_obj = Object::new(runner, runner_ty, gc);
-    run_ios_runner(gc, &runner_obj, None).1
+    run_ios_runner(gc, &runner_obj)
 }
 
-/// Given a value of type `IOState -> (IOState, a)`, runs it on `ios`, or on a fresh `IOState` when
-/// `ios` is `None`, and returns the resulting `IOState` and `a`.
-pub fn run_ios_runner<'b, 'm, 'c>(
+/// Runs a value of type `IOState -> (IOState, a)` on a fresh `IOState`, and returns the `a`.
+pub fn run_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, runner: &Object<'c>) -> Object<'c> {
+    let ios = create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"));
+    let ios_res = gc.apply_lambda(runner.clone(), vec![ios], false).unwrap();
+    split_ios_result(gc, &ios_res).1
+}
+
+/// The two fields of a value of type `(IOState, a)`.
+fn split_ios_result<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
-    runner: &Object<'c>,
-    ios: Option<&Object<'c>>,
+    ios_res: &Object<'c>,
 ) -> (Object<'c>, Object<'c>) {
-    let ios = if let Some(ios) = ios {
-        ios.clone()
-    } else {
-        create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"))
-    };
-    let ios_res_pair = gc.apply_lambda(runner.clone(), vec![ios], false).unwrap();
-    let iostate_res =
-        ObjectFieldType::get_struct_fields(gc, &ios_res_pair, &[0, 1], RcState::Unknown);
-    let ios = iostate_res[0].clone();
-    let res = iostate_res[1].clone();
-    (ios, res)
+    let fields = ObjectFieldType::get_struct_fields(gc, ios_res, &[0, 1], RcState::Unknown);
+    (fields[0].clone(), fields[1].clone())
 }
 
 /// Inline-LLVM body of `Std::mark_threaded`, which puts the reference counters of all values
