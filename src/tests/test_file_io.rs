@@ -146,6 +146,72 @@ pub fn test_write_read_bytes_report_failure() {
     fs::remove_file(tmp_file).unwrap();
 }
 
+/// `read_line` returns an empty line as `"\n"` and the empty string only at the end of the file, and
+/// `loop_lines` and `loop_lines_io` pass `worker` the parts of a file between newlines: after a last
+/// newline they pass the empty string once more, and on an empty file they pass it once.
+#[test]
+pub fn test_lines_read_from_a_file() {
+    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
+    let tmp_file = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
+
+    let source = format!(
+        r#"
+        module Main;
+
+        lines_of : String -> IOFail (Array String);
+        lines_of = |content| (
+            let file_path = "{}";
+            write_file_string(file_path, content);;
+            with_file(file_path, "r", |h| loop_lines(h, [], |lines, line| continue $ lines.push_back(line)))
+        );
+
+        lines_of_io : String -> IOFail (Array String);
+        lines_of_io = |content| (
+            let file_path = "{}";
+            write_file_string(file_path, content);;
+            with_file(file_path, "r", |h| loop_lines_io(h, [], |lines, line| pure $ continue $ lines.push_back(line)))
+        );
+
+        main : IO ();
+        main = (
+            let file_path = "{}";
+            let res = *write_file_string(file_path, "x\n\ny\n").to_result;
+            assert(|_|"setup", res.is_ok);;
+            let res = *with_file(file_path, "r", |h| (
+                let l0 = *read_line(h);
+                let l1 = *read_line(h);
+                let l2 = *read_line(h);
+                let l3 = *read_line(h);
+                let l4 = *read_line(h);
+                pure $ [l0, l1, l2, l3, l4]
+            )).to_result;
+            assert_eq(|_|"read_line", res.as_ok, ["x\n", "\n", "y\n", "", ""]);;
+
+            let res = *lines_of("x\ny\n").to_result;
+            assert_eq(|_|"loop_lines, last newline", res.as_ok, ["x\n", "y\n", ""]);;
+            let res = *lines_of("x\ny").to_result;
+            assert_eq(|_|"loop_lines, no last newline", res.as_ok, ["x\n", "y"]);;
+            let res = *lines_of("").to_result;
+            assert_eq(|_|"loop_lines, empty file", res.as_ok, [""]);;
+            let res = *lines_of("x\n\ny\n").to_result;
+            assert_eq(|_|"loop_lines, empty line", res.as_ok, ["x\n", "\n", "y\n", ""]);;
+
+            let res = *lines_of_io("x\ny\n").to_result;
+            assert_eq(|_|"loop_lines_io, last newline", res.as_ok, ["x\n", "y\n", ""]);;
+            let res = *lines_of_io("x\n\ny").to_result;
+            assert_eq(|_|"loop_lines_io, empty line and no last newline", res.as_ok, ["x\n", "\n", "y"]);;
+            let res = *lines_of_io("").to_result;
+            assert_eq(|_|"loop_lines_io, empty file", res.as_ok, [""]);;
+
+            pure()
+        );
+    "#,
+        tmp_file, tmp_file, tmp_file
+    );
+    test_source(&source, Configuration::develop_mode());
+    fs::remove_file(tmp_file).unwrap();
+}
+
 /// `read_line` returns a line that spans several of `fgets`'s buffers whole, a last line without a
 /// newline, and the empty string once the file is exhausted, after which `is_eof` holds;
 /// `read_n_bytes` returns nothing for a count of zero, the rest of the file for a count past it, and

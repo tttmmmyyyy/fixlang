@@ -2915,11 +2915,17 @@ When the `handle` reaches to the EOF or `worker` returns a `break` value, `loop_
 
 Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
 
+The file is divided into lines at each newline, as a text editor numbers them. After a last line
+that ends in a newline, `worker` is called once more with the empty string, and on an empty file
+it is called once with the empty string. These are the only cases in which `worker` receives the
+empty string: an empty line elsewhere comes as `"\n"`. To skip that empty string, `break` when
+`worker` receives it.
+
 ##### Parameters
 
 * `handle` - The IOHandle to be read.
-* `s0` - The initial state.
-* `work` - The function to be called on the pair of current state and a line string read from `handle`.
+* `state` - The initial state.
+* `worker` - The function to be called on the pair of current state and a line string read from `handle`.
 
 #### loop_lines_io
 
@@ -2927,13 +2933,14 @@ Type: `Std::IO::IOHandle -> s -> (s -> Std::String -> Std::IO::IOFail (Std::Loop
 
 Loop on lines read from an `IOHandle`.
 
-Similar to `loop_lines`, but the worker function can perform an IO action.
+Similar to `loop_lines`, but the worker function can perform an IO action. It passes `worker` the
+same lines as `loop_lines`, the empty string after a last newline included.
 
 ##### Parameters
 
 * `handle` - The IOHandle to be read.
-* `s0` - The initial state.
-* `work` - The function to be called on the pair of current state and a line string read from `handle`.
+* `state` - The initial state.
+* `worker` - The function to be called on the pair of current state and a line string read from `handle`.
 
 #### open_file
 
@@ -3000,8 +3007,12 @@ Reads all characters from a file.
 
 Type: `Std::IO::IOHandle -> Std::IO::IOFail Std::String`
 
-Reads characters from a IOHandle upto newline or EOF.
-The returned string may include newline at its end.
+Reads one line from an IOHandle: the characters up to and including the next newline, or up to
+the end of the file where the last line has no newline.
+
+A line keeps its newline, so an empty line is returned as `"\n"`. Once every line has been read,
+this function returns the empty string, and it is the only case in which it does. To read every
+line, call this function until it returns the empty string.
 
 ##### Parameters
 
