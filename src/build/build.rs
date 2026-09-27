@@ -292,14 +292,7 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
 pub fn build(config: &Configuration) -> Result<(), Errors> {
     assert!(config.subcommand.build_binary());
 
-    let mut config = config.clone();
-
     let out_path = config.get_output_file_path();
-
-    // Run preliminary commands.
-    if config.subcommand.run_preliminary_commands() {
-        config.run_preliminary_commands()?;
-    }
 
     let mut program = elaborate_via_config(&config)?;
     program.flush_warnings_to_stderr();

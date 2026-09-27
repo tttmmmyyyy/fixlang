@@ -858,8 +858,10 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         Ok(())
     }
 
-    /// Create configuration from the command line arguments and the project file. The project
-    /// file's settings are laid down first, so an option on the command line overrides them.
+    /// Create configuration from the command line arguments and the project file, and run the
+    /// preliminary commands the project files list, so that every build the subcommand makes reads
+    /// what they write. The project file's settings are laid down first, so an option on the
+    /// command line overrides them.
     fn create_config(subcommand: SubCommand, args: &ArgMatches) -> Configuration {
         let mode = subcommand.build_mode();
         let mut config = panic_if_err(Configuration::release_mode(subcommand));
@@ -873,6 +875,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
 
         // Set up configuration from the command line arguments, to overwrite the configuration described in the project file.
         panic_if_err(set_config_from_args(&mut config, args));
+
+        panic_if_err(config.run_preliminary_commands());
         config
     }
 

@@ -257,17 +257,6 @@ impl Default for BuildConfigType {
 }
 
 impl SubCommand {
-    /// Whether the `preliminary_commands` the project files list are run before the build.
-    pub fn run_preliminary_commands(&self) -> bool {
-        match self {
-            SubCommand::Build => true,
-            SubCommand::Run => true,
-            SubCommand::Test => true,
-            SubCommand::Diagnostics(_) => false,
-            SubCommand::Docs(_) => false,
-        }
-    }
-
     /// Whether the build goes on to generate code and link a binary. Reporting diagnostics and
     /// generating documentation stop with the elaborated program in hand.
     pub fn build_binary(&self) -> bool {

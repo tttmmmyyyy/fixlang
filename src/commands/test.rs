@@ -37,10 +37,6 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
         run_command(&config);
     }
 
-    // Every build below reads what the preliminary commands write, so they run once, here.
-    panic_if_err(config.run_preliminary_commands());
-    config.preliminary_commands.clear();
-
     let program = panic_if_err(load_source_files(&config));
     panic_if_err(check_doc_test_module_name_is_free(&program));
     let examples = panic_if_err(collect_examples(&program, &panic_if_err(doc_test_files())));
