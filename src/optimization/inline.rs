@@ -18,7 +18,7 @@ use crate::{
         expr::ExprNode,
         name::FullName,
         program::{Program, Symbol},
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+        traverse::{EndVisitResult, ExprVisitor, VisitState},
     },
     misc::{Map, Set},
     optimization::{
@@ -422,18 +422,9 @@ impl InlineCostCalculator {
 }
 
 impl ExprVisitor for InlineCostCalculator {
-    // `ExprVisitor` declares every method without a default. Each `start_visit_*` here visits the
-    // children and leaves the expression as it is; the measuring is done as the walk ends a node.
-    // Each `end_visit_*` also records in `is_lambda` whether the node it ends is a lambda, which
-    // answers for the whole expression once the walk has ended its top-level node.
-
-    fn start_visit_var(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
+    // The measuring is done as the walk ends a node. Each `end_visit_*` also records in `is_lambda`
+    // whether the node it ends is a lambda, which answers for the whole expression once the walk
+    // has ended its top-level node.
 
     /// Counts a global name as one unit of `complexity` and as one use of the symbol it names. A
     /// local name counts nothing: it generates no code, and the uses counted are uses of globals.
@@ -446,14 +437,6 @@ impl ExprVisitor for InlineCostCalculator {
         }
         self.is_lambda = false;
         EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_llvm(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// Counts the inline-LLVM operation as one unit of `complexity`, and each global name free in
@@ -469,14 +452,6 @@ impl ExprVisitor for InlineCostCalculator {
         EndVisitResult::unchanged(expr)
     }
 
-    fn start_visit_app(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     /// Counts the application as one unit of `complexity`.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         self.complexity += 1;
@@ -484,27 +459,11 @@ impl ExprVisitor for InlineCostCalculator {
         EndVisitResult::unchanged(expr)
     }
 
-    fn start_visit_lam(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     /// Counts the lambda as one unit of `complexity`.
     fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         self.complexity += 1;
         self.is_lambda = true;
         EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_let(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// Counts the `let` as one unit of `complexity`, except where its pattern is one local name:
@@ -520,27 +479,11 @@ impl ExprVisitor for InlineCostCalculator {
         EndVisitResult::unchanged(expr)
     }
 
-    fn start_visit_if(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     /// Counts the `if` as one unit of `complexity`.
     fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         self.complexity += 1;
         self.is_lambda = false;
         EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_match(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// Counts the `match` as one unit of `complexity`, except where it only renames a local, which
@@ -564,14 +507,6 @@ impl ExprVisitor for InlineCostCalculator {
         EndVisitResult::unchanged(expr)
     }
 
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     /// A type annotation generates no code, so it counts nothing.
     fn end_visit_tyanno(
         &mut self,
@@ -582,14 +517,6 @@ impl ExprVisitor for InlineCostCalculator {
 
         // A type annotation counts nothing.
         EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_make_struct(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// Counts the struct construction as one unit of `complexity`.
@@ -603,14 +530,6 @@ impl ExprVisitor for InlineCostCalculator {
         EndVisitResult::unchanged(expr)
     }
 
-    fn start_visit_array_lit(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     /// Counts the array literal as one unit of `complexity`.
     fn end_visit_array_lit(
         &mut self,
@@ -622,14 +541,6 @@ impl ExprVisitor for InlineCostCalculator {
         EndVisitResult::unchanged(expr)
     }
 
-    fn start_visit_ffi_call(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     /// Counts the FFI call as one unit of `complexity`.
     fn end_visit_ffi_call(
         &mut self,
@@ -639,14 +550,6 @@ impl ExprVisitor for InlineCostCalculator {
         self.is_lambda = false;
         self.complexity += 1;
         EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_eval(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// An `eval` generates no code of its own, so it counts nothing. What it holds is counted as
@@ -701,18 +604,6 @@ impl<'c> Inliner<'c> {
 }
 
 impl<'c> ExprVisitor for Inliner<'c> {
-    // `ExprVisitor` declares every method without a default. The substituting is done in
-    // `end_visit_var` and `end_visit_app`; every other method here is passed through, visiting the
-    // children and leaving the expression as it is.
-
-    fn start_visit_var(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     /// Replaces a global name with the expression of the symbol it names, where that symbol may be
     /// inlined wherever it is named and the round's budget covers a copy of it.
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
@@ -732,26 +623,6 @@ impl<'c> ExprVisitor for Inliner<'c> {
         let sym = self.symbols.get(var_name).unwrap();
         let expr = sym.expr.as_ref().unwrap();
         EndVisitResult::changed(expr.clone())
-    }
-
-    fn start_visit_llvm(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_app(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// Replaces the function a call names with the expression of that global, where it may be
@@ -775,129 +646,5 @@ impl<'c> ExprVisitor for Inliner<'c> {
         let func_expr = self.symbols.get(func_name).unwrap().expr.as_ref().unwrap();
         let expr = expr.set_app_func(func_expr.clone());
         EndVisitResult::changed(expr)
-    }
-
-    fn start_visit_lam(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_let(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_if(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_match(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_tyanno(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_make_struct(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_make_struct(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_array_lit(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_array_lit(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_ffi_call(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_ffi_call(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_eval(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 }

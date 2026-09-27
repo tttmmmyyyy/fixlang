@@ -32,7 +32,7 @@ use crate::{
         },
         name::FullName,
         program::{Program, Symbol},
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+        traverse::{ExprVisitor, StartVisitResult, VisitState},
         types::{type_fun, TyCon, TyConInfo},
     },
     misc::{Map, Set},
@@ -355,27 +355,6 @@ impl ExprVisitor for FixDefunctionalizer {
         StartVisitResult::ReplaceAndRevisit(new_expr)
     }
 
-    fn start_visit_var(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_var(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_llvm(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_llvm(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn end_visit_app(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_lam(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_lam(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
     fn start_visit_let(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
         // Record `let name = |..| ..` so a later `fix(name)` in this let's body resolves to the
         // lambda. The `let` is an ancestor of any such use, so recording on the way down suffices;
@@ -389,63 +368,6 @@ impl ExprVisitor for FixDefunctionalizer {
             }
         }
         StartVisitResult::VisitChildren
-    }
-    fn end_visit_let(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_if(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_if(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_match(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_match(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_tyanno(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_tyanno(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_make_struct(
-        &mut self,
-        _e: &Arc<ExprNode>,
-        _s: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_make_struct(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_array_lit(
-        &mut self,
-        _e: &Arc<ExprNode>,
-        _s: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_array_lit(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_ffi_call(
-        &mut self,
-        _e: &Arc<ExprNode>,
-        _s: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_ffi_call(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_eval(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_eval(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
     }
 }
 
