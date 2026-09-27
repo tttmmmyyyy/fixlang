@@ -3,7 +3,6 @@ use std::mem::take;
 use crate::{ast::program::Program, misc::Set};
 
 /// Drop every symbol the program cannot reach from the values the C world enters it through.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run(prg: &mut Program) {
     let mut seeds = prg.root_value_names();
 

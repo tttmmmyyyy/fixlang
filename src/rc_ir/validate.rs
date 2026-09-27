@@ -32,7 +32,6 @@ use std::sync::Arc;
 /// compilation unit may not define, since separated compilation splits the program across units — and
 /// code generation materializes it, so it is always in scope. Local names are globally-unique fresh
 /// names, so admitting the symbol names never masks a dangling local.
-// PROOF: P1, P2, P2a, P15, P16, P17, P18, P31, A19, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeEnv, stage: &str) {
     // The globally-referenceable names: every program symbol, plus this program's own functions and
     // globals — which include the clones borrow-ification and specialization mint (not program
@@ -120,7 +119,6 @@ fn capture_layouts(prog: &RcProgram, stage: &str) -> Map<FuncRef, Vec<Arc<TypeNo
 /// has, and agree on the layout with the function's other projections — they are copies of one list,
 /// so a rewrite that retyped or reordered the captures of one projection alone would leave the rest
 /// reading the old layout.
-// PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
 fn check_capture_projection(
     func: &RcFunc,
     proj: &InlineLLVMCaptureProjectBody,
@@ -228,7 +226,6 @@ impl<'a> Validator<'a> {
     }
 
     /// Introduce a binding: it must be unique within the function, and it enters scope.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn bind(&mut self, name: &FullName) {
         if !self.seen.insert(name.clone()) {
             panic!(
@@ -261,7 +258,6 @@ impl<'a> Validator<'a> {
     }
 
     /// A variable use must resolve to a binding in scope or to a global (a function or global value).
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn use_var(&self, name: &FullName) {
         self.use_callee(name);
         self.borrows_nothing(name, "is used as a value");
@@ -269,7 +265,6 @@ impl<'a> Validator<'a> {
 
     /// A use of a name as the callee of a direct call, where naming a borrowing function is what
     /// borrow-ification's routing does.
-    // PROOF: D/A, P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn use_callee(&self, name: &FullName) {
         if !self.scope.contains(name) && !self.globals.contains(name) {
             panic!(
@@ -287,7 +282,6 @@ impl<'a> Validator<'a> {
     /// A borrowing version does not dispose the argument at a borrowed position, so a release of the
     /// caller's would be cancelled against a consume that never happens and the reference would leak.
     /// Borrow-ification reaches its versions by routing direct calls, and by nothing else.
-    // PROOF: D/A, P30, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_nothing(&self, name: &FullName, how: &str) {
         let target = self.prog.funcs.get(&FuncRef { name: name.clone() });
         let Some(target) = target else {
@@ -312,7 +306,6 @@ impl<'a> Validator<'a> {
     }
 
     /// One node of the walk: the uses it makes, the bindings it introduces, and its continuation.
-    // PROOF: D/A, P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn check_expr_inner(&mut self, node: &RcExprNode) {
         match node.expr.as_ref() {
             RcExpr::Let(x, rhs, k) => {
@@ -366,7 +359,6 @@ impl<'a> Validator<'a> {
     /// Check a right-hand side: the variables it uses, and the invariants its own form carries — a
     /// closure's target function and stored capture layout, an `Llvm` operation's operand names, and
     /// a match's arms.
-    // PROOF: D/A, P1, P2, P2a, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn check_rhs(&mut self, x: &RcVar, rhs: &RcRhs) {
         match rhs {
             RcRhs::Var(y) => self.use_var(&y.name),
