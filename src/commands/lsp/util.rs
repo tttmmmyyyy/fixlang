@@ -742,6 +742,11 @@ pub(super) fn parameters_of_global_value(
 
 /// The parameter names listed in the "Parameters" section of a documentation comment (a markdown
 /// string). `None` says the document has no such section.
+///
+/// # Examples
+/// A document with the list items `` * `prefix` - the text `` and `` - `value : a` - the value ``
+/// under a `# Parameters` heading gives `Some(["prefix", "value"])`. A document with no such
+/// heading gives `None`.
 pub(super) fn parameters_in_document(docs: &str) -> Option<Vec<String>> {
     let sections = MarkdownSection::parse_many(docs.lines().collect());
 
