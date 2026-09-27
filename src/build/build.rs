@@ -95,13 +95,14 @@ struct RuntimeHeader {
     text: &'static str,
 }
 
-/// The headers of `src/fixstd/ryu/`, written beside the sources that include them.
+/// The headers of the libraries under `src/fixstd/` that the runtime carries — Ryu in `ryu/` and
+/// fast_float in `ffc/` — written beside the sources that include them.
 ///
-/// Every header the directory holds is carried, whatever one configuration of Ryu reaches: `d2s.c`
-/// and `f2s_intrinsics.h` choose between a tabulated and a computed table by a macro, so which
-/// headers a build reads depends on the macros it is given.
-/// `test_vendored_ryu_headers_are_all_carried` holds this list to the directory.
-const RUNTIME_HEADERS: [RuntimeHeader; 9] = [
+/// Every header those directories hold is carried, whatever one configuration of the libraries
+/// reaches: `d2s.c` and `f2s_intrinsics.h` choose between a tabulated and a computed table by a
+/// macro, so which headers a build reads depends on the macros it is given.
+/// `test_vendored_headers_are_all_carried` holds this list to the directories.
+const RUNTIME_HEADERS: [RuntimeHeader; 10] = [
     RuntimeHeader {
         path: "ryu/ryu.h",
         text: include_str!("../fixstd/ryu/ryu.h"),
@@ -137,6 +138,10 @@ const RUNTIME_HEADERS: [RuntimeHeader; 9] = [
     RuntimeHeader {
         path: "ryu/d2fixed_full_table.h",
         text: include_str!("../fixstd/ryu/d2fixed_full_table.h"),
+    },
+    RuntimeHeader {
+        path: "ffc/ffc.h",
+        text: include_str!("../fixstd/ffc/ffc.h"),
     },
 ];
 
@@ -368,54 +373,142 @@ mod tests {
     use crate::misc::Set;
     use std::fs;
     use std::path::Path;
+    use std::process::Command;
 
-    /// The names of the files in `src/fixstd/ryu/` whose name ends in `extension`.
-    fn vendored_ryu_files(extension: &str) -> Set<String> {
-        let vendored_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/fixstd/ryu");
-        fs::read_dir(&vendored_dir)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", vendored_dir.display(), e))
-            .map(|entry| {
-                entry
+    /// The directories under `src/fixstd/` that hold a library the runtime carries.
+    const VENDORED_DIRS: [&str; 2] = ["ryu", "ffc"];
+
+    /// The files in the directories of `VENDORED_DIRS` whose name ends in `extension`, each named
+    /// by its path under `src/fixstd/`, such as `ryu/d2s.c`.
+    fn vendored_files(extension: &str) -> Set<String> {
+        let mut files = Set::default();
+        for dir in VENDORED_DIRS {
+            let vendored_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/fixstd")
+                .join(dir);
+            for entry in fs::read_dir(&vendored_dir)
+                .unwrap_or_else(|e| panic!("failed to read {}: {}", vendored_dir.display(), e))
+            {
+                let name = entry
                     .expect("failed to read a directory entry")
                     .file_name()
                     .to_string_lossy()
-                    .to_string()
-            })
-            .filter(|name| name.ends_with(extension))
-            .collect()
+                    .to_string();
+                if name.ends_with(extension) {
+                    files.insert(format!("{}/{}", dir, name));
+                }
+            }
+        }
+        files
     }
 
-    /// Every header of `src/fixstd/ryu/` is carried into the directory a build compiles the runtime
-    /// in. Taking a newer Ryu is a matter of replacing that directory's files, and a header it
-    /// gained that nothing carried would leave the C compiler with nothing to include — at the
-    /// user's build rather than at ours.
+    /// Whether `path`, a path under `src/fixstd/`, lies in one of `VENDORED_DIRS`.
+    fn is_vendored(path: &str) -> bool {
+        VENDORED_DIRS
+            .iter()
+            .any(|dir| path.starts_with(&format!("{}/", dir)))
+    }
+
+    /// Every header of the vendored libraries is carried into the directory a build compiles the
+    /// runtime in. Taking a newer version of one is a matter of replacing its directory's files,
+    /// and a header it gained that nothing carried would leave the C compiler with nothing to
+    /// include — at the user's build rather than at ours.
     #[test]
-    fn test_vendored_ryu_headers_are_all_carried() {
+    fn test_vendored_headers_are_all_carried() {
         let carried: Set<String> = RUNTIME_HEADERS
             .iter()
-            .map(|header| header.path.trim_start_matches("ryu/").to_string())
+            .map(|header| header.path.to_string())
+            .filter(|path| is_vendored(path))
             .collect();
         assert_eq!(
-            vendored_ryu_files(".h"),
+            vendored_files(".h"),
             carried,
-            "the headers of src/fixstd/ryu/ and the ones RUNTIME_HEADERS carries"
+            "the headers of the vendored libraries and the ones RUNTIME_HEADERS carries"
         );
     }
 
-    /// Every source of `src/fixstd/ryu/` is compiled into the runtime. Taking a newer Ryu is a
-    /// matter of replacing that directory's files, and a source it gained that nothing compiled
-    /// would be missing from the link.
+    /// Every source of the vendored libraries is compiled into the runtime. Taking a newer version
+    /// of one is a matter of replacing its directory's files, and a source it gained that nothing
+    /// compiled would be missing from the link.
     #[test]
-    fn test_vendored_ryu_sources_are_all_compiled() {
+    fn test_vendored_sources_are_all_compiled() {
         let compiled: Set<String> = RUNTIME_SOURCES
             .iter()
-            .filter(|source| source.path.starts_with("ryu/"))
-            .map(|source| source.path.trim_start_matches("ryu/").to_string())
+            .map(|source| source.path.to_string())
+            .filter(|path| is_vendored(path))
             .collect();
         assert_eq!(
-            vendored_ryu_files(".c"),
+            vendored_files(".c"),
             compiled,
-            "the sources of src/fixstd/ryu/ and the ones RUNTIME_SOURCES compiles"
+            "the sources of the vendored libraries and the ones RUNTIME_SOURCES compiles"
         );
+    }
+
+    /// Every name the runtime's objects define for the linker begins with `fixruntime_`, a prefix
+    /// `FFI_EXPORT` rejects. So the runtime's names never meet a name a program or a library it
+    /// links defines, although a program may carry Ryu or fast_float on its own: the runtime's
+    /// copy of Ryu renames its functions, and its copy of fast_float defines them as `static`.
+    #[test]
+    fn test_runtime_defines_only_fixruntime_names() {
+        let build_dir = tempfile::tempdir().expect("failed to create a temporary directory");
+        for header in RUNTIME_HEADERS.iter() {
+            let path = build_dir.path().join(header.path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, header.text).unwrap();
+        }
+        for source in RUNTIME_SOURCES.iter() {
+            let path = build_dir.path().join(source.path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, source.text).unwrap();
+        }
+        for source in RUNTIME_SOURCES.iter() {
+            let object = format!("{}.o", source.object_name);
+            let output = Command::new("gcc")
+                .current_dir(build_dir.path())
+                .args(["-I.", "-O2", "-c", "-o", &object, source.path])
+                .output()
+                .expect("failed to run gcc");
+            assert!(
+                output.status.success(),
+                "gcc failed on {}: {}",
+                source.path,
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let output = Command::new("nm")
+                .current_dir(build_dir.path())
+                .args(["-g", &object])
+                .output()
+                .expect("failed to run nm");
+            assert!(output.status.success(), "nm failed on {}", object);
+            // Each line of `nm -g` is an address, a letter for the kind of the symbol and its name;
+            // an undefined symbol has no address and the letter `U`. Mach-O puts `_` before a C name.
+            let defined: Vec<String> = String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .filter_map(
+                    |line| match line.split_whitespace().collect::<Vec<_>>()[..] {
+                        [_, kind, name] if kind != "U" => Some(name.to_string()),
+                        _ => None,
+                    },
+                )
+                .collect();
+            assert!(!defined.is_empty(), "nm found no name {} defines", object);
+            let foreign: Vec<&String> = defined
+                .iter()
+                .filter(|name| {
+                    let name = if cfg!(target_os = "macos") {
+                        name.strip_prefix('_').unwrap_or(name)
+                    } else {
+                        name
+                    };
+                    !name.starts_with("fixruntime_")
+                })
+                .collect();
+            assert!(
+                foreign.is_empty(),
+                "{} defines names without the `fixruntime_` prefix: {:?}",
+                object,
+                foreign
+            );
+        }
     }
 }

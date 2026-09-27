@@ -7,7 +7,6 @@ The C functions and values the Fix standard library is implemented with.
 // glibc declares `fputs_unlocked` for a source that asks for the GNU extensions.
 #define _GNU_SOURCE
 
-#include <ctype.h>
 #include <errno.h>
 #include <inttypes.h>
 #include <math.h>
@@ -211,43 +210,6 @@ int64_t fixruntime_i64_to_str(char *buf, int64_t v)
     return fixruntime_write_i64(buf, v);
 }
 
-// Each of the two below reads a decimal number from the whole of `str`. The text names the number
-// and nothing else: a leading space, or anything left over after the number, sets `errno` to
-// `EINVAL`, and a number too large for the type sets it to `ERANGE`.
-int64_t fixruntime_strtoll_10(const char *str)
-{
-    char *endptr;
-    errno = 0;
-    if (isspace(*str))
-    {
-        errno = EINVAL;
-        return (int64_t)0;
-    }
-    int64_t v = (int64_t)strtoll(str, &endptr, 10);
-    if (endptr == str || *endptr != '\0')
-    {
-        errno = EINVAL;
-    }
-    return v;
-}
-
-uint64_t fixruntime_strtoull_10(const char *str)
-{
-    char *endptr;
-    errno = 0;
-    if (isspace(*str))
-    {
-        errno = EINVAL;
-        return (int64_t)0;
-    }
-    uint64_t v = (uint64_t)strtoull(str, &endptr, 10);
-    if (endptr == str || *endptr != '\0')
-    {
-        errno = EINVAL;
-    }
-    return v;
-}
-
 // The processor time the program has used so far, in the ticks C counts it in.
 int64_t fixruntime_clock()
 {
@@ -258,18 +220,6 @@ int64_t fixruntime_clock()
 double fixruntime_clocks_to_sec(int64_t clocks)
 {
     return (double)(clock_t)clocks / CLOCKS_PER_SEC;
-}
-
-// Whether `errno` holds `EINVAL`, the error a text that does not name a number leaves.
-uint8_t fixruntime_is_einval()
-{
-    return errno == EINVAL;
-}
-
-// Whether `errno` holds `ERANGE`, the error a number too large to hold leaves.
-uint8_t fixruntime_is_erange()
-{
-    return errno == ERANGE;
 }
 
 // File handle resistant to being closed multiple times.

@@ -833,6 +833,16 @@ pub fn test_files_in_directory(dir: &Path) {
 /// runs it, failing the test unless it exits with code 0. `test_name` names the intermediate C and
 /// object files, so each test that calls this needs a name of its own.
 pub fn test_source_with_c(fix_src: &str, c_src: &str, test_name: &str) {
+    test_source_with_c_under(fix_src, c_src, test_name, Configuration::develop_mode());
+}
+
+/// Does what `test_source_with_c` does, building the Fix program under `config`.
+pub fn test_source_with_c_under(
+    fix_src: &str,
+    c_src: &str,
+    test_name: &str,
+    mut config: Configuration,
+) {
     // Create a working directory.
     let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
 
@@ -864,7 +874,6 @@ pub fn test_source_with_c(fix_src: &str, c_src: &str, test_name: &str) {
     }
 
     // Link the object file to the Fix program.
-    let mut config = Configuration::develop_mode();
     config.object_files.push(PathBuf::from(&o_file_path));
 
     // Run the Fix program.
