@@ -1033,7 +1033,7 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
 
 #[cfg(test)]
 mod tests {
-    use super::uri_to_path;
+    use super::{parameters_in_document, uri_to_path};
     use lsp_types::Uri;
     use std::path::PathBuf;
     use std::str::FromStr;
@@ -1078,5 +1078,32 @@ mod tests {
                 uri
             );
         }
+    }
+
+    /// The names a document lists in its "Parameters" section are the first identifier inside the
+    /// first backquotes of each list item, in order. A document with no such section has no
+    /// parameter list (`None`), which differs from a section that lists nothing (`Some` of an
+    /// empty list).
+    #[test]
+    fn test_parameters_in_document() {
+        let owned = |v: &[&str]| Some(v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+
+        assert_eq!(
+            parameters_in_document(
+                "Show it.\n\n# Parameters\n* `prefix` - the text\n- `value : a` - the value\n"
+            ),
+            owned(&["prefix", "value"]),
+            "names come from `*` and `-` items, cut at the first character an identifier cannot hold"
+        );
+        assert_eq!(
+            parameters_in_document("Show it.\n\n# Returns\nthe text\n"),
+            None,
+            "a document with no Parameters section has no parameter list"
+        );
+        assert_eq!(
+            parameters_in_document("Show it.\n\n# Parameters\nnone\n"),
+            owned(&[]),
+            "a Parameters section that lists nothing yields an empty list"
+        );
     }
 }
