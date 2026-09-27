@@ -22,8 +22,8 @@ program `fix` builds links the object it is compiled into.
 that each of the 27 functions its public section declares is declared `static`. To take a newer
 ffc.h, replace it with the upstream file of the same name, put `static` before each function its
 public section declares, and record the revision it came from. The build carries this directory to
-the C compiler through `RUNTIME_INCLUDED_FILES` in `src/build/build.rs`, which
-`test_vendored_files_are_all_carried` holds to the files that are here.
+the C compiler through `RUNTIME_HEADERS` in `src/build/build.rs`, which
+`test_vendored_headers_are_all_carried` holds to the files that are here.
 
 `float_text.c` includes it with `FFC_IMPL` defined, which compiles its implementation into that
 translation unit. The definitions take internal linkage from the `static` declarations, so none of

@@ -23,21 +23,38 @@ extern "C" {
 
 #include <inttypes.h>
 
-static int d2s_buffered_n(double f, char* result);
-static void d2s_buffered(double f, char* result);
-static char* d2s(double f);
+// Modified from upstream Ryu by the Fix project: the `#define` lines below were added, and the file
+// is otherwise as upstream gives it. The Fix runtime links Ryu into every program it builds, and a
+// program may carry Ryu on its own, so the runtime's copy gives each function a name that begins
+// with `fixruntime_`, which no name of such a program does.
+#define d2s_buffered_n fixruntime_ryu_d2s_buffered_n
+#define d2s_buffered fixruntime_ryu_d2s_buffered
+#define d2s fixruntime_ryu_d2s
+#define f2s_buffered_n fixruntime_ryu_f2s_buffered_n
+#define f2s_buffered fixruntime_ryu_f2s_buffered
+#define f2s fixruntime_ryu_f2s
+#define d2fixed_buffered_n fixruntime_ryu_d2fixed_buffered_n
+#define d2fixed_buffered fixruntime_ryu_d2fixed_buffered
+#define d2fixed fixruntime_ryu_d2fixed
+#define d2exp_buffered_n fixruntime_ryu_d2exp_buffered_n
+#define d2exp_buffered fixruntime_ryu_d2exp_buffered
+#define d2exp fixruntime_ryu_d2exp
 
-static int f2s_buffered_n(float f, char* result);
-static void f2s_buffered(float f, char* result);
-static char* f2s(float f);
+int d2s_buffered_n(double f, char* result);
+void d2s_buffered(double f, char* result);
+char* d2s(double f);
 
-static int d2fixed_buffered_n(double d, uint32_t precision, char* result);
-static void d2fixed_buffered(double d, uint32_t precision, char* result);
-static char* d2fixed(double d, uint32_t precision);
+int f2s_buffered_n(float f, char* result);
+void f2s_buffered(float f, char* result);
+char* f2s(float f);
 
-static int d2exp_buffered_n(double d, uint32_t precision, char* result);
-static void d2exp_buffered(double d, uint32_t precision, char* result);
-static char* d2exp(double d, uint32_t precision);
+int d2fixed_buffered_n(double d, uint32_t precision, char* result);
+void d2fixed_buffered(double d, uint32_t precision, char* result);
+char* d2fixed(double d, uint32_t precision);
+
+int d2exp_buffered_n(double d, uint32_t precision, char* result);
+void d2exp_buffered(double d, uint32_t precision, char* result);
+char* d2exp(double d, uint32_t precision);
 
 #ifdef __cplusplus
 }

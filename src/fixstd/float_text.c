@@ -14,18 +14,12 @@ number of the type, and takes `.` for the point whatever locale the program runs
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include "ryu/ryu.h"
 
-// Ryu and fast_float are compiled into this translation unit, and every function they define is
-// `static`: `ryu/ryu.h` and `ffc/ffc.h` declare each one so, and the definitions take their
-// linkage from those declarations. So none of their names reaches the link of a program, which
-// may carry either library on its own and define the same names.
-#include "ryu/d2s.c"
-// `d2s.c` and `f2s.c` each define a `static` function named `to_chars`, which one translation unit
-// holds only under two names.
-#define to_chars f2s_to_chars
-#include "ryu/f2s.c"
-#undef to_chars
-#include "ryu/d2fixed.c"
+// fast_float's implementation, compiled into this translation unit alone. `ffc/ffc.h` declares
+// every function it defines `static`, and the definitions take their linkage from those
+// declarations, so none of its names reaches the link of a program, which may carry fast_float
+// on its own.
 #define FFC_IMPL
 #include "ffc/ffc.h"
 
