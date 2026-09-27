@@ -2,15 +2,16 @@
 //! newest full release as the default, whatever order the GitHub API returns them in.
 //!
 //! The script runs under POSIX `sh` against a stand-in `curl` that serves a fixed release list and
-//! a stand-in `uname` that names a platform with a pre-built binary. It runs in a session of its
-//! own, so it has no `/dev/tty`, takes the non-interactive path, and installs its default.
+//! a stand-in `uname` that names a platform with a pre-built binary. Most tests run it in a session
+//! of its own, so it has no `/dev/tty`, takes the non-interactive path, and installs its default;
+//! the tests that answer its prompts run it on a pseudo-terminal.
 
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::path_env_with_dir_in_front;
     use std::fs::{self, Permissions};
     use std::os::unix::fs::PermissionsExt;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::process::{Command, Output, Stdio};
     use tempfile::TempDir;
 
@@ -21,10 +22,24 @@ mod integration_tests {
             .expect("Failed to make a stand-in command executable");
     }
 
+    /// A stand-in `curl` download that writes a placeholder binary to `$out`.
+    const DOWNLOAD_SUCCEEDS: &str = "echo placeholder > \"$out\"";
+
+    /// A stand-in `curl` download that writes part of a body to `$out` and fails the way a dropped
+    /// connection does (curl's exit 18).
+    const DOWNLOAD_DROPS: &str = "echo partial > \"$out\"; exit 18";
+
+    /// A stand-in `curl` download that writes part of a body to `$out` and is then interrupted by
+    /// `signal`, sent to the whole process group the way a terminal sends Ctrl-C.
+    fn download_interrupted_by(signal: &str) -> String {
+        format!("echo partial > \"$out\"; kill -s {} 0", signal)
+    }
+
     /// Runs `install.sh` against a GitHub API that lists `tags` in the given order, and returns
     /// its stdout.
     fn run_install_script(tags: &[&str]) -> String {
-        let (output, _temp_dir) = run_install_script_downloading(tags, true);
+        let temp_dir = install_script_fixture(tags, DOWNLOAD_SUCCEEDS);
+        let output = run_install_script_without_terminal(&temp_dir);
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         assert!(
             output.status.success(),
@@ -35,11 +50,10 @@ mod integration_tests {
         stdout
     }
 
-    /// Runs `install.sh` against a GitHub API that lists `tags` in the given order, with `HOME`
-    /// at `home` inside the returned directory. The download of the binary succeeds when
-    /// `download_succeeds`, and otherwise writes part of a body and fails the way a dropped
-    /// connection does (curl's exit 18).
-    fn run_install_script_downloading(tags: &[&str], download_succeeds: bool) -> (Output, TempDir) {
+    /// Makes a directory in which `install.sh` runs against a GitHub API that lists `tags` in the
+    /// given order and downloads the binary by the stand-in `curl` body `download`, which writes to
+    /// `$out`. `HOME` is `home` inside the directory; stand-in commands are in `bin`.
+    fn install_script_fixture(tags: &[&str], download: &str) -> TempDir {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let bin_dir = temp_dir.path().join("bin");
         let home_dir = temp_dir.path().join("home");
@@ -59,12 +73,7 @@ mod integration_tests {
         let releases_path = temp_dir.path().join("releases.json");
         fs::write(&releases_path, format!("[\n{}\n]\n", releases_json)).unwrap();
 
-        // Serves the release list for the API URL, and a placeholder binary for `-o <dest>`.
-        let download = if download_succeeds {
-            "echo placeholder > \"$out\""
-        } else {
-            "echo partial > \"$out\"; exit 18"
-        };
+        // Serves the release list for the API URL, and runs `download` for `-o <dest>`.
         write_executable(
             &bin_dir.join("curl"),
             &format!(
@@ -84,17 +93,64 @@ if [ -n "$out" ]; then {}; else cat '{}'; fi
             &bin_dir.join("uname"),
             "#!/bin/sh\ncase \"$1\" in -s) echo Linux ;; -m) echo x86_64 ;; esac\n",
         );
+        temp_dir
+    }
 
-        let script = Path::new(env!("CARGO_MANIFEST_DIR")).join("install.sh");
-        let output = Command::new("perl")
+    /// A command running `program` with `temp_dir`'s `PATH` and `HOME`.
+    fn install_script_command(program: &str, temp_dir: &TempDir) -> Command {
+        let mut command = Command::new(program);
+        command
+            .env(
+                "PATH",
+                path_env_with_dir_in_front(temp_dir.path().join("bin")),
+            )
+            .env("HOME", temp_dir.path().join("home"));
+        command
+    }
+
+    /// The path of `install.sh`.
+    fn install_script_path() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("install.sh")
+    }
+
+    /// Runs `install.sh` in `temp_dir` in a session of its own, so it has no `/dev/tty` and takes
+    /// the non-interactive path.
+    fn run_install_script_without_terminal(temp_dir: &TempDir) -> Output {
+        install_script_command("perl", temp_dir)
             .args(["-MPOSIX", "-e", "POSIX::setsid(); exec @ARGV or die", "sh"])
-            .arg(&script)
-            .env("PATH", path_env_with_dir_in_front(bin_dir))
-            .env("HOME", &home_dir)
+            .arg(install_script_path())
             .stdin(Stdio::null())
             .output()
-            .expect("Failed to run install.sh");
-        (output, temp_dir)
+            .expect("Failed to run install.sh")
+    }
+
+    /// Runs `install.sh` in `temp_dir` on a pseudo-terminal, typing `input` at it, so it takes
+    /// the interactive path and reads its answers from `/dev/tty`. The output holds what the
+    /// terminal showed, the typed input echoed.
+    fn run_install_script_on_terminal(temp_dir: &TempDir, input: &str) -> Output {
+        const RUN_ON_PTY: &str = r#"
+import os, pty, sys
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp("sh", ["sh", sys.argv[2]])
+os.write(fd, sys.argv[1].encode())
+while True:
+    try:
+        data = os.read(fd, 4096)
+    except OSError:
+        break
+    if not data:
+        break
+    sys.stdout.buffer.write(data)
+_, status = os.waitpid(pid, 0)
+sys.exit(os.waitstatus_to_exitcode(status) & 0xff)
+"#;
+        install_script_command("python3", temp_dir)
+            .args(["-c", RUN_ON_PTY, input])
+            .arg(install_script_path())
+            .stdin(Stdio::null())
+            .output()
+            .expect("Failed to run install.sh on a pseudo-terminal")
     }
 
     /// The file names in the install directory, `~/.local/bin`, of a run's home.
@@ -218,7 +274,8 @@ if [ -n "$out" ]; then {}; else cat '{}'; fi
     /// directory, the temporary file it downloaded into included.
     #[test]
     fn test_install_script_moves_the_download_into_place() {
-        let (output, temp_dir) = run_install_script_downloading(&["v1.5.0"], true);
+        let temp_dir = install_script_fixture(&["v1.5.0"], DOWNLOAD_SUCCEEDS);
+        let output = run_install_script_without_terminal(&temp_dir);
         assert!(output.status.success(), "{:?}", output);
         assert_eq!(installed_files(&temp_dir), vec!["fix"]);
         assert_eq!(
@@ -231,8 +288,83 @@ if [ -n "$out" ]; then {}; else cat '{}'; fi
     /// a later run would take for an installed one, and no temporary file.
     #[test]
     fn test_install_script_leaves_nothing_after_a_failed_download() {
-        let (output, temp_dir) = run_install_script_downloading(&["v1.5.0"], false);
+        let temp_dir = install_script_fixture(&["v1.5.0"], DOWNLOAD_DROPS);
+        let output = run_install_script_without_terminal(&temp_dir);
         assert!(!output.status.success(), "{:?}", output);
         assert_eq!(installed_files(&temp_dir), Vec::<String>::new());
+    }
+
+    /// Writes `content` to `~/.local/bin/fix` of `temp_dir`, as an installed binary.
+    fn install_existing_fix(temp_dir: &TempDir, content: &[u8]) -> PathBuf {
+        let install_dir = temp_dir.path().join("home/.local/bin");
+        fs::create_dir_all(&install_dir).unwrap();
+        let path = install_dir.join("fix");
+        fs::write(&path, content).unwrap();
+        fs::set_permissions(&path, Permissions::from_mode(0o755)).unwrap();
+        path
+    }
+
+    /// When the user agrees to overwrite an installed `fix` and the download then fails part-way,
+    /// the installed `fix` is left as it was.
+    #[test]
+    fn test_install_script_keeps_the_installed_binary_after_a_failed_download() {
+        let temp_dir = install_script_fixture(&["v1.5.0"], DOWNLOAD_DROPS);
+        let installed = install_existing_fix(&temp_dir, b"installed\n");
+        let output = run_install_script_on_terminal(&temp_dir, "\ny\n");
+        let terminal = String::from_utf8_lossy(&output.stdout);
+        assert!(terminal.contains("Overwrite? [y/N]"), "{}", terminal);
+        assert!(!terminal.contains("non-interactive"), "{}", terminal);
+        assert!(!output.status.success(), "{}", terminal);
+        assert_eq!(installed_files(&temp_dir), vec!["fix"], "{}", terminal);
+        assert_eq!(fs::read_to_string(&installed).unwrap(), "installed\n");
+    }
+
+    /// A download interrupted by Ctrl-C (`SIGINT`) or `SIGTERM` leaves nothing in
+    /// `~/.local/bin`: no truncated `fix` and no temporary file.
+    #[test]
+    fn test_install_script_leaves_nothing_after_an_interrupted_download() {
+        for signal in ["INT", "TERM"] {
+            let temp_dir = install_script_fixture(&["v1.5.0"], &download_interrupted_by(signal));
+            let output = run_install_script_without_terminal(&temp_dir);
+            assert!(!output.status.success(), "SIG{}: {:?}", signal, output);
+            assert_eq!(
+                installed_files(&temp_dir),
+                Vec::<String>::new(),
+                "SIG{}: {:?}",
+                signal,
+                output
+            );
+        }
+    }
+
+    /// `install.sh` replaces an installed `fix` while it is running, for example as an editor's
+    /// language server. Linux refuses to write into a running executable (`ETXTBSY`), so the new
+    /// binary has to take the old one's name without writing into it.
+    #[test]
+    fn test_install_script_replaces_a_running_binary() {
+        let temp_dir = install_script_fixture(&["v1.5.0"], DOWNLOAD_SUCCEEDS);
+        let installed = temp_dir.path().join("home/.local/bin/fix");
+        fs::create_dir_all(installed.parent().unwrap()).unwrap();
+        // Copied by `cp`, so that this process holds no descriptor writing the file, which a
+        // child forked meanwhile by another test would carry into the `exec` below (`ETXTBSY`).
+        let copied = Command::new("cp")
+            .arg("/bin/sleep")
+            .arg(&installed)
+            .status()
+            .expect("Failed to run cp");
+        assert!(copied.success());
+        let mut running = Command::new(&installed)
+            .arg("60")
+            .spawn()
+            .expect("Failed to run the installed binary");
+        let output = run_install_script_on_terminal(&temp_dir, "\ny\n");
+        running.kill().unwrap();
+        running.wait().unwrap();
+        let terminal = String::from_utf8_lossy(&output.stdout);
+        assert!(terminal.contains("Overwrite? [y/N]"), "{}", terminal);
+        assert!(!terminal.contains("non-interactive"), "{}", terminal);
+        assert!(output.status.success(), "{}", terminal);
+        assert_eq!(installed_files(&temp_dir), vec!["fix"], "{}", terminal);
+        assert_eq!(fs::read_to_string(&installed).unwrap(), "placeholder\n");
     }
 }
