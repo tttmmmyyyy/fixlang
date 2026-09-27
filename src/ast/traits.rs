@@ -314,12 +314,7 @@ impl TraitMember {
     /// and the `document` field where the declaration is not from a source. A document with no
     /// text in it is answered as `None`.
     pub fn get_document(&self) -> Option<String> {
-        self.decl_src
-            .as_ref()
-            .and_then(|src| src.get_document().ok())
-            .filter(|docs| !docs.is_empty())
-            .or_else(|| self.document.clone())
-            .filter(|docs| !docs.is_empty())
+        Span::document_of_declaration(&self.decl_src, &self.document)
     }
 
     /// Find the minimum node which includes the specified source code position.

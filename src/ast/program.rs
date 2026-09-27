@@ -367,12 +367,7 @@ impl GlobalValue {
     /// where the declaration was written in one, and the `document` field otherwise. Documentation
     /// with no text in it is answered as `None`.
     pub fn get_document(&self) -> Option<String> {
-        self.decl_src
-            .as_ref()
-            .and_then(|src| src.get_document().ok())
-            .filter(|docs| !docs.is_empty())
-            .or_else(|| self.document.clone())
-            .filter(|docs| !docs.is_empty())
+        Span::document_of_declaration(&self.decl_src, &self.document)
     }
 
     /// The smallest node of this value covering `pos`: a node of the defining expression, a node of
