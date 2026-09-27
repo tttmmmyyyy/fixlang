@@ -119,3 +119,73 @@ main = (
     "##;
     test_source(&source, Configuration::develop_mode());
 }
+
+/// A `let` whose value is an `if` with no `else` is reported at that `if` wherever the enclosing
+/// expression ends: at a `}`, at a `,`, and at a `]`, as well as at a `)`.
+#[test]
+pub fn test_an_if_missing_else_in_a_let_is_reported_before_each_closing_token() {
+    let message = "HINT: add `else { ... }` to this `if`.\n\n6:13-6:28";
+    let before_brace = r##"
+module Main;
+
+f : I64 -> I64;
+f = |n| if n > 0 {
+    let x = if n > 1 { n };
+    x + 1
+} else { 0 };
+
+main : IO ();
+main = println $ f(3).to_string;
+    "##;
+    test_source_fail(&before_brace, Configuration::develop_mode(), message);
+    let before_comma = r##"
+module Main;
+
+f : I64 -> (I64, I64);
+f = |n| (
+    let x = if n > 0 { n };
+    x + 1, 0
+);
+
+main : IO ();
+main = println $ f(3).@0.to_string;
+    "##;
+    test_source_fail(&before_comma, Configuration::develop_mode(), message);
+    let before_bracket = r##"
+module Main;
+
+f : I64 -> Array I64;
+f = |n| [
+    let x = if n > 0 { n };
+    x + 1
+];
+
+main : IO ();
+main = println $ f(3).@(0).to_string;
+    "##;
+    test_source_fail(&before_bracket, Configuration::develop_mode(), message);
+}
+
+/// Of two `if`s missing their `else` in a row, the error points at the first: its `;` took the rest
+/// of the enclosing expression, the second `if` included.
+#[test]
+pub fn test_the_first_of_two_ifs_missing_else_is_reported() {
+    let source = r##"
+module Main;
+
+f : I64 -> I64;
+f = |n| (
+    let x = if n > 0 { n };
+    let y = if n < 0 { n };
+    x + y
+);
+
+main : IO ();
+main = println $ f(3).to_string;
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "HINT: add `else { ... }` to this `if`.\n\n6:13-6:28",
+    );
+}
