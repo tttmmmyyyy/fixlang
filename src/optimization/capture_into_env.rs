@@ -397,6 +397,20 @@ impl CaptureMover<'_> {
             ),
         );
 
+        // The walk revisits the binding it rewrote, and ends there because the new lambda captures
+        // nothing.
+        assert!(
+            new_lam.lambda_cap_names().is_empty(),
+            "the lambda bound to `{}` still captures {:?} once its captures are moved into the \
+             environment",
+            name.to_string(),
+            new_lam
+                .lambda_cap_names()
+                .iter()
+                .map(|name| name.to_string())
+                .collect::<Vec<_>>()
+        );
+
         // `let v = |q| ..; let cap = Cap { .. }; body`
         let body = expr_let_typed(var_pattern(&cap_name, &cap.ty), cap.struct_expr(), body);
         let new_lam_ty = new_lam.type_.as_ref().unwrap().clone();
