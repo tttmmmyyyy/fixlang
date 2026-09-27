@@ -3345,6 +3345,8 @@ This comment indicates that `foo` is a function with two arguments `x` and `y` i
 Then, when you complete the function name `foo`, the language server will insert a text `foo(x, y)`.
 If `foo` is completed after a dot, e.g., `y.foo`, it will be inserted as `y.foo(x)`.
 
+The same section on a trait member's declaration is used by the quick fix "Insert stub implementations" for a missing trait member: it writes the stub as `foo : I64 -> I64 -> I64 = |x, y| ?;`. A member without the section is stubbed as `foo : I64 -> I64 -> I64 = ?;`.
+
 Here, we explain the specification of the documentation comment in more detail.
 
 - The language server interprets the documentation comment as a Markdown, and searches the "Parameters" section of level 1 or 2.
