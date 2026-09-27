@@ -1405,9 +1405,10 @@ namespace IO {
     // 
     // Note that the line string passed to `worker` may contain a newline code at the end. To remove it, use `String::strip_last_spaces`.
     //
-    // The lines are the parts of the file between newlines, as a text editor numbers them. After a
-    // last line that ends in a newline, `worker` is called once more with the empty string, and on an
-    // empty file it is called once with the empty string. To skip that empty string, `break` when
+    // The file is divided into lines at each newline, as a text editor numbers them. After a last line
+    // that ends in a newline, `worker` is called once more with the empty string, and on an empty file
+    // it is called once with the empty string. These are the only cases in which `worker` receives the
+    // empty string: an empty line elsewhere comes as `"\n"`. To skip that empty string, `break` when
     // `worker` receives it.
     // 
     // # Parameters
