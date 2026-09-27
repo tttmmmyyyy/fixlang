@@ -7578,23 +7578,17 @@ pub struct InlineLLVMWithRetainedFunctionBody {
     x_name: FullName,
 }
 
-/// The operand position of the function `InlineLLVMWithRetainedFunctionBody` applies.
-const WITH_RETAINED_FUNCTION_ARG: usize = 0;
-/// The operand position of the environment `InlineLLVMWithRetainedFunctionBody` hands the function.
-const WITH_RETAINED_ENV_ARG: usize = 1;
+/// The function operand of `InlineLLVMWithRetainedFunctionBody`, and the environment operand it
+/// hands it.
+const WITH_RETAINED_ENV_OPERAND: EnvOperand = EnvOperand {
+    function: 0,
+    env: 1,
+};
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
-    /// This op applies an operand: `f` is applied to `x` while `x` is held retained.
-    fn applies_a_function_operand(&self) -> bool {
-        true
-    }
-
     fn env_operand(&self) -> Option<EnvOperand> {
-        Some(EnvOperand {
-            function: WITH_RETAINED_FUNCTION_ARG,
-            env: WITH_RETAINED_ENV_ARG,
-        })
+        Some(WITH_RETAINED_ENV_OPERAND)
     }
 
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
@@ -8763,11 +8757,6 @@ pub struct InlineLLVMBorrowPtrBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMBorrowPtrBody {
-    /// This op applies an operand: the function is applied to the pointer.
-    fn applies_a_function_operand(&self) -> bool {
-        true
-    }
-
     fn env_operand(&self) -> Option<EnvOperand> {
         Some(LENT_PTR_ENV_OPERAND)
     }
@@ -8897,11 +8886,6 @@ pub struct InlineLLVMMutatePtrBody {
 
 #[typetag::serde]
 impl LLVMGen for InlineLLVMMutatePtrBody {
-    /// This op applies an operand: the function is applied to the pointer and the `IOState`.
-    fn applies_a_function_operand(&self) -> bool {
-        true
-    }
-
     fn env_operand(&self) -> Option<EnvOperand> {
         Some(LENT_PTR_ENV_OPERAND)
     }

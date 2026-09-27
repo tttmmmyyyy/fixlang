@@ -85,8 +85,8 @@ pub trait LLVMGen: DynClone + Send + Sync {
         false
     }
 
-    /// Whether the code this op generates applies one of its operands as a function. Default: it
-    /// does not.
+    /// Whether the code this op generates applies one of its operands as a function. Default: the
+    /// op applies one exactly when it declares `env_operand`.
     ///
     /// An op that answers `true` reaches whatever function the operand holds, and which one that is
     /// is decided at run time. A pass asking what a body can reach — `funcs_observing_uniqueness` —
@@ -97,7 +97,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// `Generator::apply_lambda` checks this in develop mode, so an op that starts applying an
     /// operand and does not say so here fails the test suite rather than quietly losing an edge.
     fn applies_a_function_operand(&self) -> bool {
-        false
+        self.env_operand().is_some()
     }
 
     /// The operand this op applies as a function, and the operand it hands that function as the
