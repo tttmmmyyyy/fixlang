@@ -736,17 +736,18 @@ pub(super) fn parameters_of_global_value(
     full_name: &FullName,
     program: &Program,
 ) -> Option<Vec<String>> {
-    // Get the document of the global value, which is a markdown string.
-    let opt_gv = program.global_values.get(full_name);
-    if opt_gv.is_none() {
-        return None;
-    }
-    let gv = opt_gv.unwrap();
-    let opt_docs = gv.get_document();
-    if opt_docs.is_none() {
-        return None;
-    }
-    let docs = opt_docs.unwrap();
+    let docs = program.global_values.get(full_name)?.get_document()?;
+    parameters_in_document(&docs)
+}
+
+/// The parameter names listed in the "Parameters" section of a documentation comment (a markdown
+/// string). `None` says the document has no such section.
+///
+/// # Examples
+/// A document with the list items `` * `prefix` - the text `` and `` - `value : a` - the value ``
+/// under a `# Parameters` heading gives `Some(["prefix", "value"])`. A document with no such
+/// heading gives `None`.
+pub(super) fn parameters_in_document(docs: &str) -> Option<Vec<String>> {
     let sections = MarkdownSection::parse_many(docs.lines().collect());
 
     // Find the first top-level or second-level section named "Parameters".
@@ -1037,7 +1038,7 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
 
 #[cfg(test)]
 mod tests {
-    use super::uri_to_path;
+    use super::{parameters_in_document, uri_to_path};
     use lsp_types::Uri;
     use std::path::PathBuf;
     use std::str::FromStr;
@@ -1082,5 +1083,32 @@ mod tests {
                 uri
             );
         }
+    }
+
+    /// The names a document lists in its "Parameters" section are the first identifier inside the
+    /// first backquotes of each list item, in order. A document with no such section has no
+    /// parameter list (`None`), which differs from a section that lists nothing (`Some` of an
+    /// empty list).
+    #[test]
+    fn test_parameters_in_document() {
+        let some_names = |v: &[&str]| Some(v.iter().map(|s| s.to_string()).collect::<Vec<_>>());
+
+        assert_eq!(
+            parameters_in_document(
+                "Show it.\n\n# Parameters\n* `prefix` - the text\n- `value : a` - the value\n"
+            ),
+            some_names(&["prefix", "value"]),
+            "names come from `*` and `-` items, cut at the first character an identifier cannot hold"
+        );
+        assert_eq!(
+            parameters_in_document("Show it.\n\n# Returns\nthe text\n"),
+            None,
+            "a document with no Parameters section has no parameter list"
+        );
+        assert_eq!(
+            parameters_in_document("Show it.\n\n# Parameters\nnone\n"),
+            some_names(&[]),
+            "a Parameters section that lists nothing yields an empty list"
+        );
     }
 }

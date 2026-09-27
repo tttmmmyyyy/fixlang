@@ -345,6 +345,19 @@ impl Span {
         ret
     }
 
+    /// The document of a declaration: the comment written above `src` where the declaration comes
+    /// from a source, and `fallback` otherwise. A document with no text in it is answered as `None`.
+    pub fn document_of_declaration(
+        src: &Option<Span>,
+        fallback: &Option<String>,
+    ) -> Option<String> {
+        src.as_ref()
+            .and_then(|src| src.get_document().ok())
+            .filter(|docs| !docs.is_empty())
+            .or_else(|| fallback.clone())
+            .filter(|docs| !docs.is_empty())
+    }
+
     /// The document of the entity defined at this span: the content of the consecutive comment
     /// lines written just before the span begins, each stripped of its `//` and of one space after
     /// it. The document is empty where anything else stands on the line the definition begins on.

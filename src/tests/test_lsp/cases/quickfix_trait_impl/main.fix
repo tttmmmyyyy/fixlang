@@ -3,7 +3,12 @@ module Main;
 trait a : MyTrait {
     type Elem a;
     get_elem : a -> MyTrait::Elem a;
-    show_it : a -> String;
+    // Show the value with a prefix.
+    //
+    // # Parameters
+    // * `prefix` - the text put before the value
+    // * `value : a` - the value to show
+    show_it : String -> a -> String;
 }
 
 type MyData = unbox struct { value: I64 };

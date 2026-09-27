@@ -1,5 +1,6 @@
 use super::edit_import;
 use super::server::{send_response, LatestContent};
+use super::util::parameters_in_document;
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::Program;
 use crate::ast::traits::{MissingTraitImplInfo, MissingTraitImplItem};
@@ -433,11 +434,23 @@ fn quickfix_stub_text(info: &MissingTraitImplInfo, impl_indent: usize) -> String
     for item in &info.items {
         match item {
             MissingTraitImplItem::Member(m) => {
+                // Write the parameters the member's document lists as `|x, y| ?`.
+                let params = m
+                    .document
+                    .as_deref()
+                    .and_then(parameters_in_document)
+                    .unwrap_or_default();
+                let lambda_head = if params.is_empty() {
+                    String::new()
+                } else {
+                    format!("|{}| ", params.join(", "))
+                };
                 stub_lines.push(format!(
-                    "{}{} : {} = ?;",
+                    "{}{} : {} = {}?;",
                     member_indent,
                     m.name.name,
-                    m.ty.to_string()
+                    m.ty.to_string(),
+                    lambda_head
                 ));
             }
             MissingTraitImplItem::AssocType(_) => {}

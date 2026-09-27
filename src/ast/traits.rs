@@ -48,6 +48,9 @@ pub struct MissingMember {
     pub name: FullName,
     /// The type of the member with the trait type variable substituted by the impl type.
     pub ty: Arc<TypeNode>,
+    /// The document of the member in the trait's declaration. Its "Parameters" section names the
+    /// member's parameters.
+    pub document: Option<String>,
 }
 
 /// An associated type the implementation leaves out.
@@ -307,6 +310,13 @@ pub struct TraitMember {
 }
 
 impl TraitMember {
+    /// The document of this member: the comment written above its declaration in the source,
+    /// and the `document` field where the declaration is not from a source. A document with no
+    /// text in it is answered as `None`.
+    pub fn get_document(&self) -> Option<String> {
+        Span::document_of_declaration(&self.decl_src, &self.document)
+    }
+
     /// Find the minimum node which includes the specified source code position.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
         self.qual_ty.find_node_at(pos)
@@ -1119,6 +1129,7 @@ impl TraitEnv {
                 missing_items.push(MissingTraitImplItem::Member(MissingMember {
                     name: FullName::new(&trait_ns, &trait_member.name),
                     ty: scheme.ty.clone(),
+                    document: trait_member.get_document(),
                 }));
             }
         }
