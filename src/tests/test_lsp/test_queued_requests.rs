@@ -274,10 +274,10 @@ mod tests {
         id
     }
 
-    /// A request the server holds unanswered, waiting for a program to answer from, is answered
-    /// `RequestCancelled` when the client cancels it.
+    /// A documentSymbol request the server holds unanswered, waiting for a program to answer
+    /// from, is answered `RequestCancelled` when the client cancels it.
     #[test]
-    fn test_a_cancellation_reaches_a_request_waiting_for_the_program() {
+    fn test_a_cancellation_reaches_a_document_symbol_request_waiting_for_the_program() {
         let (_temp_dir, _project_dir, mut client) = open_session_without_a_program();
 
         let params = json!({ "textDocument": { "uri": client.file_uri(Path::new("main.fix")) } });
