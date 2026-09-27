@@ -177,8 +177,8 @@ mod tests {
         client
             .send_notification("$/cancelRequest", json!({ "id": tokens_id }))
             .expect("Failed to send cancelRequest");
-        // A cancellation that finds its request answered queues nothing. The pause lets the server
-        // take it in alone, with nothing queued behind it, before the next request arrives.
+        // The pause lets the server take the cancellation in alone, with nothing queued behind it,
+        // before the next request arrives.
         thread::sleep(Duration::from_millis(500));
         assert_answered_once(&mut client, tokens_id);
 
@@ -228,12 +228,10 @@ mod tests {
             .expect("Reader thread should not have errors");
     }
 
-    /// A request the server holds unanswered, waiting for a program to answer from, is answered
-    /// `RequestCancelled` when the client cancels it.
-    #[test]
-    fn test_a_cancellation_reaches_a_request_waiting_for_the_program() {
-        // The project file does not parse, so no analysis yields a program.
-        let (_temp_dir, project_dir) = setup_test_env("unreadable_project_file");
+    /// A session over the case project `unreadable_project_file`, with `main.fix` opened. The
+    /// project file does not parse, so no analysis yields a program until it is repaired.
+    fn open_session_without_a_program() -> (TempDir, PathBuf, LspClient) {
+        let (temp_dir, project_dir) = setup_test_env("unreadable_project_file");
         let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
         client
             .initialize(&project_dir, Duration::from_secs(10))
@@ -241,32 +239,115 @@ mod tests {
         client
             .open_document(Path::new("main.fix"))
             .expect("Failed to open main.fix");
+        (temp_dir, project_dir, client)
+    }
 
-        let symbols_id = client
-            .send_request(
-                "textDocument/documentSymbol",
-                json!({ "textDocument": { "uri": client.file_uri(Path::new("main.fix")) } }),
-            )
-            .expect("Failed to send documentSymbol");
-        // Once the request after it is answered, the server has taken the documentSymbol request
-        // in and holds it.
-        let probe_id = request_tokens(&mut client);
+    /// Send the request `method` with `params` to a server that has no program, see the server
+    /// hold it, and cancel it. Asserts that the server answers it `RequestCancelled`, and returns
+    /// its id.
+    fn cancel_a_request_waiting_for_the_program(
+        client: &mut LspClient,
+        method: &str,
+        params: Value,
+    ) -> u32 {
+        let id = client
+            .send_request(method, params)
+            .unwrap_or_else(|e| panic!("Failed to send {}: {}", method, e));
+        // Once the request after it is answered, the server has taken the request in and holds it.
+        let probe_id = request_tokens(client);
         client.expect_response(probe_id);
         assert!(
-            client.take_response(symbols_id).is_none(),
-            "the documentSymbol request is expected to wait for a program"
+            client.take_response(id).is_none(),
+            "the {} request is expected to wait for a program",
+            method
         );
         client
-            .send_notification("$/cancelRequest", json!({ "id": symbols_id }))
+            .send_notification("$/cancelRequest", json!({ "id": id }))
             .expect("Failed to send cancelRequest");
-
         assert_eq!(
-            error_code(&client.expect_response(symbols_id)),
+            error_code(&client.expect_response(id)),
             Some(REQUEST_CANCELLED),
-            "the client cancelled the documentSymbol request the server was holding, so it is \
-             expected to be answered RequestCancelled"
+            "the client cancelled the {} request the server was holding, so it is expected to be \
+             answered RequestCancelled",
+            method
+        );
+        id
+    }
+
+    /// A documentSymbol request the server holds unanswered, waiting for a program to answer
+    /// from, is answered `RequestCancelled` when the client cancels it.
+    #[test]
+    fn test_a_cancellation_reaches_a_document_symbol_request_waiting_for_the_program() {
+        let (_temp_dir, _project_dir, mut client) = open_session_without_a_program();
+
+        let params = json!({ "textDocument": { "uri": client.file_uri(Path::new("main.fix")) } });
+        let symbols_id = cancel_a_request_waiting_for_the_program(
+            &mut client,
+            "textDocument/documentSymbol",
+            params,
         );
         assert_answered_once(&mut client, symbols_id);
+
+        client.shutdown().expect("Failed to shutdown LSP");
+        client
+            .verify_no_protocol_error()
+            .expect("Reader thread should not have errors");
+    }
+
+    /// A workspace/symbol request the server holds unanswered, waiting for a program to answer
+    /// from, is answered `RequestCancelled` when the client cancels it.
+    #[test]
+    fn test_a_cancellation_reaches_a_workspace_symbol_request_waiting_for_the_program() {
+        let (_temp_dir, _project_dir, mut client) = open_session_without_a_program();
+
+        let symbols_id = cancel_a_request_waiting_for_the_program(
+            &mut client,
+            "workspace/symbol",
+            json!({ "query": "main" }),
+        );
+        assert_answered_once(&mut client, symbols_id);
+
+        client.shutdown().expect("Failed to shutdown LSP");
+        client
+            .verify_no_protocol_error()
+            .expect("Reader thread should not have errors");
+    }
+
+    /// A request the server held for a program and answered `RequestCancelled` is not answered a
+    /// second time when a program arrives.
+    #[test]
+    fn test_a_cancelled_waiting_request_is_not_answered_when_the_program_arrives() {
+        let (_temp_dir, project_dir, mut client) = open_session_without_a_program();
+        let main_fix = Path::new("main.fix");
+        let symbols_params = json!({ "textDocument": { "uri": client.file_uri(main_fix) } });
+
+        let symbols_id = cancel_a_request_waiting_for_the_program(
+            &mut client,
+            "textDocument/documentSymbol",
+            symbols_params.clone(),
+        );
+
+        let project_file = project_dir.join("fixproj.toml");
+        let repaired =
+            fs::read_to_string(&project_file)
+                .unwrap()
+                .replacen("[general\n", "[general]\n", 1);
+        fs::write(&project_file, repaired).unwrap();
+        client.save_and_wait_for_the_program(main_fix);
+        // A documentSymbol request is answered with a result only out of a program, so this one
+        // shows that the program has arrived and the server has answered what it held.
+        let after_id = client
+            .send_request("textDocument/documentSymbol", symbols_params)
+            .expect("Failed to send documentSymbol");
+        assert_eq!(
+            error_code(&client.expect_response(after_id)),
+            None,
+            "the repaired project yields a program, which answers a documentSymbol request"
+        );
+        assert!(
+            client.take_response(symbols_id).is_none(),
+            "the cancelled documentSymbol request is expected to be answered once"
+        );
 
         client.shutdown().expect("Failed to shutdown LSP");
         client
