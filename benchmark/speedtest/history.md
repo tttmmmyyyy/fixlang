@@ -2,6 +2,45 @@
 
 Newer is above.
 
+**LangArena rows measured before the pinned revision rose from `53067d5` to `3d8a862` are
+comparable with rows after it on thirty-four of the fifty programs, and on sixteen they are not.**
+The sixteen were measured with one compiler on both sides -- `main` at `732460b` -- so nothing but
+the benchmark sources and the releases they build on differs between the two columns. The first row
+on `3d8a862` is the first one recorded once this change is on `main`.
+
+| program | instructions | |
+| --- | --- | --- |
+| `Template::Regex` | **-90.40%** | `regexp` 1.2.0 reads a match's groups with one thread |
+| `Etc::LogParser` | **-55.74%** | `regexp` 1.2.0 looks for the bytes a pattern has to hold first |
+| `Json::Generate` | **-16.89%** | `json` 0.6.0 writes with no string made for each number |
+| `Maze::BFS` | -0.74% | `next_int` divides in `I64` |
+| `Maze::AStar` | -0.41% | the same |
+| `Graph::DFS` | -0.31% | the same |
+| `Maze::Generator` | -0.27% | the same |
+| `Graph::BFS` | -0.25% | the same |
+| `Json::ParseMapping` | -0.22% | writes its input with `json` 0.6.0, and draws with `next_int` |
+| `Graph::AStar` | -0.22% | `next_int` divides in `I64` |
+| `Etc::CacheSimulation` | +0.15% | the same |
+| `Json::ParseDom` | -0.09% | as `Json::ParseMapping` |
+| `Hash::CRC32` | -0.09% | `next_int` divides in `I64` |
+| `Sort::Self` | -0.03% | the same |
+| `Sort::Quick` | -0.02% | the same |
+| `Sort::Merge` | -0.01% | the same |
+| `Distance::NGram` | -0.01% | the same |
+
+The three large moves are the dependencies. `regexp` 1.2.0 reads the groups of a match by carrying
+one thread where the automaton offers one way on, where 1.1.6 walked the match again with a thread
+set, and it looks for the bytes a pattern has to contain before walking. `json` 0.6.0 writes a
+document through `Std.Experimental`'s `format`, which puts each number's digits straight into the
+text where 0.5.0 made a string of them and copied it byte by byte.
+
+The small ones are `7f4f5df`, which draws a random integer as `state * max / modulus` in `I64`
+where it went through `F64`. The numbers drawn are the same -- every program still meets its
+checksum -- and each program moves by what it pays per draw times how often it draws. The two
+parse rows also build their input with the faster writer, outside the timed run.
+
+The other thirty-four moved by less than 0.01%.
+
 **LangArena rows measured before the pinned revision rose from `69a97c9` to `53067d5` are
 comparable with rows after it on forty-six of the fifty programs, and on four they are not.** The
 pin names the revision of the benchmark sources every run measures, so raising it changes what the
