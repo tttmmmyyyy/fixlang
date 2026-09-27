@@ -732,6 +732,60 @@ mod integration_tests {
         );
     }
 
+    /// Verifies both halves of what a write through the pointer to a boxed value's payload
+    /// declares: that its own check is dropped on a value proven unique, and that the value it
+    /// returns is `fresh`.
+    #[test]
+    fn test_unique_check_elim_mutate_boxed() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim_mutate_boxed");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // The value each write hands back is uniquely owned, which is what lets the write that
+        // follows drop its check. A wrong result position would leave these of unknown sharing.
+        assert_binding_prov(&dump, "mutated", "[fresh]");
+        assert_binding_prov(&dump, "mutated_io", "[fresh]");
+
+        // Both writes go to a value nothing else holds, so both drop their check. The case's own
+        // writes are the only ones in the dump, so the checked form appearing at all is a failure.
+        assert_eq!(
+            dump.matches("mutate_ptr[unique]").count(),
+            2,
+            "both writes to a boxed value proven unique should render `mutate_ptr[unique]`:\n{}",
+            dump
+        );
+        assert!(
+            !dump.contains("mutate_ptr("),
+            "no write should keep its check:\n{}",
+            dump
+        );
+    }
+
+    /// Verifies that `borrow_boxed` borrows the value it lends a pointer into: nothing retains the
+    /// value to pay for the borrow, so a value still read afterwards is retained nowhere.
+    #[test]
+    fn test_borrow_boxed_retains_nothing() {
+        let (_temp_dir, project_dir) = setup_test_env("borrow_boxed");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let rec = var_bound_as(&dump, "rec");
+        assert!(
+            dump.lines()
+                .any(|l| l.contains("borrow_ptr(") && l.contains(&rec)),
+            "the case should lend a pointer into `{}`:\n{}",
+            rec,
+            dump
+        );
+        assert!(
+            !dump.lines().any(|l| l
+                .trim_start()
+                .strip_prefix("retain ")
+                .is_some_and(|rest| rest.split_whitespace().next() == Some(rec.as_str()))),
+            "`borrow_boxed` should not retain the value it borrows, but `retain {}` stands in:\n{}",
+            rec,
+            dump
+        );
+    }
+
     /// Verifies that a write into an array read out of a global keeps its uniqueness check.
     ///
     /// A global object is shared whatever its reference count says, and the count is not raised to

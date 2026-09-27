@@ -1,0 +1,12 @@
+module Main;
+
+// `borrow_boxed` borrows the value it lends a pointer into. The value is read again after the
+// borrow, so a borrow that consumed the value would have to retain it to reach that read.
+type Rec = box struct { x : I64, y : I64 };
+
+main : IO ();
+main = (
+    let rec = Rec { x : 3, y : 4 };
+    let offset = rec.borrow_boxed(|p| p.add_offset(8).offset_from(p));
+    println $ (offset + rec.@x).to_string
+);
