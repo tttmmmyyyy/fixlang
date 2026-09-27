@@ -1,7 +1,7 @@
-Internal implementation of the `mutate_elements_io` function.
+Internal implementation of the `mutate_elements` and `mutate_elements_io` functions.
 
 # Parameters
 
-* `act` - The action to perform on the pointer to the first element.
-* `array` - The array to mutate.
+* `f` - The function that takes the pointer to the first element and returns the action to run.
+* `x` - The array to mutate.
 * `ios` - The `IOState` to thread through the action.

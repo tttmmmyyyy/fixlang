@@ -1,7 +1,7 @@
-Internal implementation of the `mutate_boxed_ios` function.
+Internal implementation of the `mutate_boxed` and `mutate_boxed_io` functions.
 
 # Parameters
 
-* `act` - The action to perform on the pointer to the boxed value.
-* `value` - The boxed value to mutate.
-* `ios` - The `IOState` to use for the action.
+* `f` - The function that takes the pointer to the boxed value's data and returns the action to run.
+* `x` - The boxed value to mutate.
+* `ios` - The `IOState` to thread through the action.

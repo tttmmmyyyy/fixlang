@@ -8918,8 +8918,8 @@ fn assert_array_storage_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, array: &Objec
     gc.build_assert_unique(storage_ptr);
 }
 
-/// The pointer a scope op lends its function operand: the first element of an array's element
-/// buffer, or the payload of a boxed value (see `get_data_pointer_from_boxed_value`).
+/// The pointer that `InlineLLVMBorrowPtrBody` and `InlineLLVMMutatePtrBody` pass to their function
+/// operand: the first element of an array's element buffer, or the payload of a boxed value.
 fn get_lent_ptr<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) -> PointerValue<'c> {
     if val.ty.is_array() {
         return get_array_storage_buf(gc, val);
@@ -8932,14 +8932,17 @@ fn get_lent_ptr<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) -> Pointer
     get_data_pointer_from_boxed_value(gc, val)
 }
 
-/// Evaluates `Std::Array::borrow_elements` and `Std::FFI::borrow_boxed`: applies the function to
-/// the pointer `get_lent_ptr` computes for the value, and evaluates to what it returns.
+/// Applies a function to a pointer into a value, and evaluates to what the function returns. The
+/// pointer points to the first element of an array's element buffer, or to the payload of a boxed
+/// value.
 ///
 /// The value is borrowed, so its reference count is left alone and the pointer is valid while the
 /// function runs.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMBorrowPtrBody {
+    /// The value the pointer points into.
     x_name: FullName,
+    /// The function applied to the pointer.
     f_name: FullName,
 }
 
@@ -8988,8 +8991,10 @@ impl LLVMGen for InlineLLVMBorrowPtrBody {
     }
 }
 
-/// The type variable `b` a scope op's function operand returns, which the type `x_ty` of the value
-/// the op lends a pointer into leaves free.
+/// The type variable `b` that the function operand of `InlineLLVMBorrowPtrBody` or
+/// `InlineLLVMMutatePtrBody` returns.
+///
+/// Panics if `x_ty`, the type of the value the pointer points into, mentions `b`.
 fn scope_result_tyvar(x_ty: &Arc<TypeNode>) -> Arc<TypeNode> {
     const B_TYPE_NAME: &str = "b";
     assert!(
@@ -9002,7 +9007,7 @@ fn scope_result_tyvar(x_ty: &Arc<TypeNode>) -> Arc<TypeNode> {
 }
 
 /// The definition of a function `(Ptr -> b) -> x_ty -> b` evaluated by `InlineLLVMBorrowPtrBody`,
-/// where `x_ty` has type variable `a` and satisfies `preds`.
+/// whose type scheme has the predicates `preds`. `x_ty` must not mention `b`.
 fn borrow_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const F_NAME: &str = "f";
     const X_NAME: &str = "x";
@@ -9042,13 +9047,16 @@ pub fn borrow_boxed_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     borrow_ptr_function(a_ty, preds)
 }
 
-/// Evaluates `Std::Array::_mutate_elements_ios_internal` and `Std::FFI::_mutate_boxed_ios_internal`:
-/// makes the value unique, runs the action the function gives for the pointer `get_lent_ptr`
-/// computes for it, and evaluates to `(ios, (value, action result))`.
+/// Makes a value unique, applies a function to a pointer into it, runs the IO action the function
+/// returns, and evaluates to `(ios, (value, action result))`. The pointer points to the first
+/// element of an array's element buffer, or to the payload of a boxed value.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct InlineLLVMMutatePtrBody {
+    /// The value the pointer points into.
     x_name: FullName,
+    /// The function applied to the pointer.
     f_name: FullName,
+    /// The `IOState` the action runs under.
     ios_name: FullName,
     /// When true, clone the value first if it is shared, so the action writes into a uniquely owned
     /// one. Set false only where the value is statically known to be unique.
@@ -9176,7 +9184,8 @@ const MUTATE_PTR_VALUE_PATH: [usize; 2] = [1, 0];
 
 /// The definition of a function
 /// `(Ptr -> IOState -> (IOState, b)) -> x_ty -> IOState -> (IOState, (x_ty, b))` evaluated by
-/// `InlineLLVMMutatePtrBody`, where `x_ty` has type variable `a` and satisfies `preds`.
+/// `InlineLLVMMutatePtrBody`, whose type scheme has the predicates `preds`. `x_ty` must not
+/// mention `b`.
 fn mutate_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const F_NAME: &str = "f";
     const X_NAME: &str = "x";

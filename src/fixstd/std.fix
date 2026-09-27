@@ -277,7 +277,7 @@ namespace Array {
     mutate_elements_io : (Ptr -> IO b) -> Array a -> IO (Array a, b);
     mutate_elements_io = |act, arr| IO::from_runner $ |ios| mutate_elements_ios(act, arr, ios);
 
-    // Internal implementation of the `mutate_elements_io` function.
+    // Internal implementation of the `mutate_elements` and `mutate_elements_io` functions.
     //
     // # Parameters
     // * `act` - The action to perform on the pointer to the first element.
@@ -994,7 +994,7 @@ namespace FFI {
     mutate_boxed_io : [a : Boxed] (Ptr -> IO b) -> a -> IO (a, b);
     mutate_boxed_io = |act, val| IO::from_runner $ |ios| mutate_boxed_ios(act, val, ios);
 
-    // Internal implementation of the `mutate_boxed_io` function.
+    // Internal implementation of the `mutate_boxed` and `mutate_boxed_io` functions.
     // 
     // # Parameters
     // 
