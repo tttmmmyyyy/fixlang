@@ -2954,11 +2954,7 @@ namespace String {
     _read_signed_decimal_integer : I64 -> String -> Result ErrMsg I64;
     _read_signed_decimal_integer = |max, str| (
         str._read_decimal_integer(max.u64, max.u64 + 1_U64).map(|(negative, magnitude)| (
-            if !negative { magnitude.i64 };
-            if magnitude == 0_U64 { 0 };
-            // The magnitude of `I64::minimum` exceeds `I64::maximum`, so this negates one less than
-            // the magnitude and subtracts 1.
-            -(magnitude - 1_U64).i64 - 1
+            I64::_from_sign_and_magnitude(negative, magnitude)
         ))
     );
 
@@ -2997,6 +2993,139 @@ namespace String {
         if bytes.@(i) - '0' < 10_U8 { continue $ i + 1 };
         break $ i
     ));
+
+    // Counts the bytes `_write_decimal_integer` writes for the integer whose sign is
+    // `negative` and whose magnitude is `magnitude`: the digits, and the `-` where `negative` is
+    // true.
+    //
+    // # Parameters
+    // * `negative` - Whether the integer is below zero.
+    // * `magnitude` - The absolute value of the integer.
+    _decimal_integer_length : Bool -> U64 -> I64;
+    _decimal_integer_length = |negative, magnitude| (
+        let sign_length = if negative { 1 } else { 0 };
+        // Four digits are counted at each step, so that most integers take one step.
+        let digit_count = loop((1, magnitude), |(count, rest)| (
+            if rest < 10_U64 { break $ count };
+            if rest < 100_U64 { break $ count + 1 };
+            if rest < 1000_U64 { break $ count + 2 };
+            if rest < 10000_U64 { break $ count + 3 };
+            continue $ (count + 4, rest / 10000_U64)
+        ));
+        sign_length + digit_count
+    );
+
+    // Writes the integer whose sign is `negative` and whose magnitude is `magnitude` into `bytes` in
+    // decimal, so that its text ends just before `end`: `-` where `negative` is true, then the
+    // digits. The text starts at `end - _decimal_integer_length(negative, magnitude)`.
+    //
+    // `bytes` must be unshared and hold at least `end` bytes, and `end` must leave room for the whole
+    // text before it. This function checks neither, and violating them causes undefined behavior.
+    //
+    // # Parameters
+    // * `end` - The index just after the last digit.
+    // * `negative` - Whether the integer is below zero.
+    // * `magnitude` - The absolute value of the integer.
+    // * `bytes` - The array to write into.
+    _write_decimal_integer : I64 -> Bool -> U64 -> Array U8 -> Array U8;
+    _write_decimal_integer = |end, negative, magnitude, bytes| (
+        // The digits are written from the last one backward, two at each step.
+        let (end, rest, bytes) = loop((end, magnitude, bytes), |(end, rest, bytes)| (
+            if rest < 100_U64 { break $ (end, rest, bytes) };
+            let higher = rest / 100_U64;
+            let bytes = bytes._write_decimal_digit_pair(end - 2, rest - higher * 100_U64);
+            continue $ (end - 2, higher, bytes)
+        ));
+        let (start, bytes) = if rest < 10_U64 {
+            (end - 1, bytes.unsafe_set_bounds_unchecked(end - 1, '0' + rest.u8))
+        } else {
+            (end - 2, bytes._write_decimal_digit_pair(end - 2, rest))
+        };
+        if negative { bytes.unsafe_set_bounds_unchecked(start - 1, '-') };
+        bytes
+    );
+
+    // Writes the two decimal digits of `pair` into `bytes` at `at` and `at + 1`, with a leading
+    // zero where `pair` is below 10.
+    //
+    // `bytes` must be unshared and hold at least `at + 2` bytes, and `pair` must be below 100. This
+    // function checks neither, and violating them causes undefined behavior.
+    //
+    // # Parameters
+    // * `at` - The index of the first digit.
+    // * `pair` - The number to write.
+    // * `bytes` - The array to write into.
+    _write_decimal_digit_pair : I64 -> U64 -> Array U8 -> Array U8;
+    _write_decimal_digit_pair = |at, pair, bytes| (
+        let from = pair.i64 * 2;
+        let bytes = bytes.unsafe_set_bounds_unchecked(at, _decimal_digit_pairs._unsafe_get_bounds_unchecked(from));
+        bytes.unsafe_set_bounds_unchecked(at + 1, _decimal_digit_pairs._unsafe_get_bounds_unchecked(from + 1))
+    );
+
+    // The two decimal digits of each number from 0 to 99, in order: `0` is `00` at index 0, and `n`
+    // is at index `2 * n`.
+    _decimal_digit_pairs : Array U8;
+    _decimal_digit_pairs = "00010203040506070809101112131415161718192021222324252627282930313233343536373839404142434445464748495051525354555657585960616263646566676869707172737475767778798081828384858687888990919293949596979899".@_data;
+
+    // Creates the decimal text of the integer whose sign is `negative` and whose magnitude is
+    // `magnitude`: `-` where `negative` is true, then the digits.
+    //
+    // # Parameters
+    // * `negative` - Whether the integer is below zero.
+    // * `magnitude` - The absolute value of the integer.
+    _from_decimal_integer : Bool -> U64 -> String;
+    _from_decimal_integer = |negative, magnitude| (
+        let length = _decimal_integer_length(negative, magnitude);
+        let bytes = Array::empty(length + 1)._unsafe_grow_size(length + 1);
+        let bytes = bytes._write_decimal_integer(length, negative, magnitude);
+        String { _data : bytes.unsafe_set_bounds_unchecked(length, 0_U8) }
+    );
+
+    // Creates the decimal text of `v`, with `-` before the digits where `v` is below zero.
+    //
+    // # Parameters
+    // * `v` - The integer to write.
+    _from_signed_decimal_integer : I64 -> String;
+    _from_signed_decimal_integer = |v| (
+        let (negative, magnitude) = v._sign_and_magnitude;
+        _from_decimal_integer(negative, magnitude)
+    );
+
+    // How many hexadecimal digits `_write_address` writes: every digit a 64-bit address holds.
+    _address_length : I64;
+    _address_length = 16;
+
+    // Writes the address `ptr` holds into `bytes` from `at`, as `_address_length` hexadecimal digits
+    // in lowercase, leading zeros among them.
+    //
+    // `bytes` must be unshared and hold at least `at + _address_length` bytes. This function does not
+    // check it, and violating it causes undefined behavior.
+    //
+    // # Parameters
+    // * `at` - The index of the first digit.
+    // * `ptr` - The pointer whose address is written.
+    // * `bytes` - The array to write into.
+    _write_address : I64 -> Ptr -> Array U8 -> Array U8;
+    _write_address = |at, ptr, bytes| (
+        // The digits are written from the last one backward, four bits at each step.
+        loop((at + _address_length, ptr.offset_from(nullptr).u64, bytes), |(end, rest, bytes)| (
+            if end == at { break $ bytes };
+            let digit = rest.bit_and(15_U64).u8;
+            let text = if digit < 10_U8 { '0' + digit } else { 'a' + (digit - 10_U8) };
+            continue $ (end - 1, rest.shift_right(4_U64), bytes.unsafe_set_bounds_unchecked(end - 1, text))
+        ))
+    );
+
+    // Creates the text of the address `ptr` holds, as `_write_address` writes it.
+    //
+    // # Parameters
+    // * `ptr` - The pointer whose address is written.
+    _from_address : Ptr -> String;
+    _from_address = |ptr| (
+        let bytes = Array::empty(_address_length + 1)._unsafe_grow_size(_address_length + 1);
+        let bytes = bytes._write_address(0, ptr);
+        String { _data : bytes.unsafe_set_bounds_unchecked(_address_length, 0_U8) }
+    );
 
     // Create a `String` from a pointer to a null-terminated C string, via an IO action.
     // 
@@ -3905,6 +4034,36 @@ namespace I32 {
 namespace I64 {
     abs : I64 -> I64;
     abs = |v| if v < 0 { -v } else { v };
+
+    // Returns whether `v` is below zero, and its absolute value. The absolute value is a `U64`, so it
+    // holds that of `I64::minimum`, which is one more than `I64::maximum`.
+    //
+    // # Parameters
+    // * `v` - The integer to split.
+    _sign_and_magnitude : I64 -> (Bool, U64);
+    _sign_and_magnitude = |v| (
+        // Negating in `U64` gives the magnitude of every negative `v`. Negating in `I64` overflows
+        // at `I64::minimum`.
+        if v < 0 { (true, -(v.u64)) };
+        (false, v.u64)
+    );
+
+    // Returns the integer whose sign is `negative` and whose absolute value is `magnitude`: the
+    // inverse of `_sign_and_magnitude`.
+    //
+    // `magnitude` must be at most `I64::maximum`, or one more than it where `negative` is true.
+    // A larger one gives an integer of the wrong value.
+    //
+    // # Parameters
+    // * `negative` - Whether the integer is below zero.
+    // * `magnitude` - The absolute value of the integer.
+    _from_sign_and_magnitude : Bool -> U64 -> I64;
+    _from_sign_and_magnitude = |negative, magnitude| (
+        // Negating in `U64` and then converting gives `I64::minimum` for its magnitude, which
+        // `I64` cannot negate.
+        if negative { (-magnitude).i64 };
+        magnitude.i64
+    );
 }
 
 namespace F32 {
@@ -3924,12 +4083,7 @@ namespace Ptr {
 }
 
 impl Ptr : ToString {
-    to_string = |v| (
-        // Holds the `FIXRUNTIME_PTR_DIGITS` digits `fixruntime_ptr_to_str` in runtime.c writes, and the null after them.
-        let data = Array::empty(17);
-        let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_ptr_to_str(Ptr, Ptr), ptr, v]);
-        data._unsafe_from_c_str_with_len(length)
-    );
+    to_string = |v| String::_from_address(v);
 }
 impl U8 : ToBytes {
     to_bytes = |v| (
@@ -3947,11 +4101,7 @@ impl U8 : FromBytes {
     );
 }
 impl U8 : ToString {
-    to_string = |v| (
-        let data = Array::empty(4); // len(255) + 1
-        let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_u8_to_str(Ptr, U8), ptr, v]);
-        data._unsafe_from_c_str_with_len(length)
-    );
+    to_string = |v| String::_from_decimal_integer(false, v.u64);
 }
 impl U8 : FromString {
     // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
@@ -3975,11 +4125,7 @@ impl U16 : FromBytes {
     );
 }
 impl U16 : ToString {
-    to_string = |v| (
-        let data = Array::empty(6); // len(65535) + 1
-        let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_u16_to_str(Ptr, U16), ptr, v]);
-        data._unsafe_from_c_str_with_len(length)
-    );
+    to_string = |v| String::_from_decimal_integer(false, v.u64);
 }
 impl U16 : FromString {
     // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
@@ -4003,11 +4149,7 @@ impl U32 : FromBytes {
     );
 }
 impl U32 : ToString {
-    to_string = |v| (
-        let data = Array::empty(11); // len(4294967295) + 1
-        let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_u32_to_str(Ptr, U32), ptr, v]);
-        data._unsafe_from_c_str_with_len(length)
-    );
+    to_string = |v| String::_from_decimal_integer(false, v.u64);
 }
 impl U32 : FromString {
     // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
@@ -4031,11 +4173,7 @@ impl U64 : FromBytes {
     );
 }
 impl U64 : ToString {
-    to_string = |v| (
-        let data = Array::empty(21); // len(18446744073709551615) + 1
-        let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_u64_to_str(Ptr, U64), ptr, v]);
-        data._unsafe_from_c_str_with_len(length)
-    );
+    to_string = |v| String::_from_decimal_integer(false, v);
 }
 impl U64 : FromString {
     // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
@@ -4059,11 +4197,7 @@ impl I8 : FromBytes {
     );
 }
 impl I8 : ToString {
-    to_string = |v| (
-        let data = Array::empty(5); // len(-128) + 1
-        let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_i8_to_str(Ptr, I8), ptr, v]);
-        data._unsafe_from_c_str_with_len(length)
-    );
+    to_string = |v| String::_from_signed_decimal_integer(v.i64);
 }
 impl I8 : FromString {
     // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
@@ -4087,11 +4221,7 @@ impl I16 : FromBytes {
     );
 }
 impl I16 : ToString {
-    to_string = |v| (
-        let data = Array::empty(7); // len(-32768) + 1
-        let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_i16_to_str(Ptr, I16), ptr, v]);
-        data._unsafe_from_c_str_with_len(length)
-    );
+    to_string = |v| String::_from_signed_decimal_integer(v.i64);
 }
 impl I16 : FromString {
     // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
@@ -4115,11 +4245,7 @@ impl I32 : FromBytes {
     );
 }
 impl I32 : ToString {
-    to_string = |v| (
-        let data = Array::empty(12); // len(-2147483648) + 1
-        let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_i32_to_str(Ptr, I32), ptr, v]);
-        data._unsafe_from_c_str_with_len(length)
-    );
+    to_string = |v| String::_from_signed_decimal_integer(v.i64);
 }
 impl I32 : FromString {
     // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as
@@ -4143,11 +4269,7 @@ impl I64 : FromBytes {
     );
 }
 impl I64 : ToString {
-    to_string = |v| (
-        let data = Array::empty(21); // len(-9223372036854775808) + 1
-        let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_i64_to_str(Ptr, I64), ptr, v]);
-        data._unsafe_from_c_str_with_len(length)
-    );
+    to_string = |v| String::_from_signed_decimal_integer(v);
 }
 impl I64 : FromString {
     // Reads a decimal integer: an optional `+` or `-` followed by one or more digits, such as

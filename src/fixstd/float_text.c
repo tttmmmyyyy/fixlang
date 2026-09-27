@@ -15,6 +15,7 @@ number of the type, and takes `.` for the point whatever locale the program runs
 #include <stdint.h>
 #include <string.h>
 #include "ryu/ryu.h"
+#include "ryu/digit_table.h"
 
 // fast_float's implementation, compiled into this translation unit alone. `ffc/ffc.h` declares
 // every function it defines `static`, and the definitions take their linkage from those
@@ -27,9 +28,30 @@ number of the type, and takes `.` for the point whatever locale the program runs
 // the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
 
-// Writes `v` at `buf` in decimal, null-terminated, and reports how many digits it took. Defined
-// in `runtime.c`, and declared here because the runtime has no header of its own.
-int64_t fixruntime_write_u64(char *buf, uint64_t v);
+// Writes the exponent of a number written with a power of ten, such as the `300` of `1e300`, at
+// `buf` in decimal, and reports how many digits it took. No null follows them.
+//
+// `exponent` is from 0 to 999. The caller writes the `-` of a negative exponent before calling.
+//
+// # Examples
+// `fixruntime_write_exponent(buf, 300)` writes `300` and returns 3, and
+// `fixruntime_write_exponent(buf, 7)` writes `7` and returns 1.
+static int fixruntime_write_exponent(char *buf, int exponent)
+{
+    if (exponent >= 100)
+    {
+        memcpy(buf, DIGIT_TABLE + 2 * (exponent / 10), 2);
+        buf[2] = (char)('0' + exponent % 10);
+        return 3;
+    }
+    if (exponent >= 10)
+    {
+        memcpy(buf, DIGIT_TABLE + 2 * exponent, 2);
+        return 2;
+    }
+    buf[0] = (char)('0' + exponent);
+    return 1;
+}
 
 // The bytes `fixruntime_write_float_text` builds a text in. The static assertions at the two
 // entry points hold each window to what fits here, since a wider one would write past it.
@@ -264,7 +286,7 @@ static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t s
             text[written++] = '-';
             exponent = -exponent;
         }
-        written += (int)fixruntime_write_u64(text + written, (uint64_t)exponent);
+        written += fixruntime_write_exponent(text + written, exponent);
     }
 
     return fixruntime_copy_float_text(text, written, buf, size);
