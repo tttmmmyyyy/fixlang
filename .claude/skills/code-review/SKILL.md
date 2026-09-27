@@ -28,10 +28,10 @@ Every scope reviews the working tree as it stands, so uncommitted changes are al
 A completed review records how far it got, so the next one can pick up from there. The record lives in the session memory directory (the path is in the memory instructions the orchestrator already carries), as a single memory file named `code-review-checkpoints`, type `project`, holding one line per branch:
 
 ```
-- <branch>: reviewed through <short hash> (<subject>) — <YYYY-MM-DD>
+- <branch>: reviewed through <short hash> (<subject>) — <YYYY-MM-DD>; cleanup PR #<n>
 ```
 
-The recorded hash is `HEAD` on the branch under review **after** the review's own commits land, so the next review starts past them. Branch is the key: worktrees of this repository share one file, and a branch's line is updated in place rather than appended to.
+The recorded hash is `HEAD` on the branch under review **after** the review's own commits land, so the next review starts past them. The cleanup pull request, when the review opened one, is named because its commits sit on another branch and the hash alone would not lead anyone to them. Branch is the key: worktrees of this repository share one file, and a branch's line is updated in place rather than appended to.
 
 The checkpoint is a record of work done, so it is written only by a review that ran to completion. A review halted by the PII gate or by a subagent failure leaves the previous checkpoint standing.
 
@@ -42,7 +42,7 @@ An aspect **edits inside the diff hunks** and **reads anywhere**:
 - **The diff hunks.** Every convention of the aspect applies in full, editing and flagging alike.
 - **Everything else** — the rest of each touched file, and the rest of the project. Findings only. Aspects read it freely — `code-quality`'s search for an existing helper and `refactor-scope`'s hunt for near-duplicates both need it — and they edit nothing there.
 
-What an aspect notices outside the hunks reaches the orchestrator as a finding, and the orchestrator decides what becomes of it — see *Act on the findings the change is responsible for*. Existing code the change made stale is reshaped there, on the branch under review; the rest stays as it is, so the diff the author reads carries the change and its consequences alone.
+What an aspect notices outside the hunks reaches the orchestrator as a finding, and the orchestrator decides what becomes of it — see *Act on the findings*. Existing code the change made stale is reshaped with the change, on the branch under review. A refactoring of other existing code goes on a cleanup branch of its own, so the diff the author reads for the change carries the change and its consequences alone.
 
 ## Aspect Sequence
 
@@ -102,16 +102,22 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 
    An aspect that changed nothing produces no commit. **Per-aspect, fine-grained commits are the goal — never bundle several into one commit.**
 6. **Apply `cargo fmt` to the branch under review as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
-7. **Act on the findings the change is responsible for** — see the section of that name below — each in a commit of its own on the branch under review. Then run the **whole** suite once, over all of those commits together.
-8. **Record the checkpoint.** Take `git rev-parse --short HEAD` on the branch under review and write it to the `code-review-checkpoints` memory under that branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
-9. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); say what each test you committed pins, and name each proposal you dropped with the reason; say which findings you fixed and what each now does; surface the findings you left, each with the reason it is the author's — the findings about code the change neither wrote nor made stale among them; list every commit created, with its short hash; and state the base ref the review covered and the checkpoint now recorded.
+7. **Act on the findings** — see the section of that name below. The fixes the change is responsible for go on the branch under review, each in a commit of its own, and the whole suite then runs once over all of them. When refactorings of other existing code remain:
+   - Cut the cleanup branch from the branch under review at its current tip: `git switch -c cleanup/<branch-under-review>`. No new worktree is needed; the tree is the one already checked out.
+   - Commit each refactoring on its own — `code-review: <what it does> — cleanup near the change` — then `cargo fmt` as a standalone commit, and run the whole suite once over all of them.
+   - Push the branch and open a pull request **into the branch under review**, whose body follows the `devdoc` skill: what each refactoring is, which finding it comes from, and why it preserves behavior. A pull request whose base is a working branch rather than `main` carries the number of that branch's own pull request in its title (e.g. `レビュー清掃 (#228): ...`), so the pull-request list shows which change it belongs to.
+   - `git switch -` back to the branch under review, so the working tree is where the summary describes it.
+
+   When the branch under review **is** `main`, there is no split: the refactorings commit there too.
+8. **Record the checkpoint.** Take `git rev-parse --short HEAD` on the branch under review and write it to the `code-review-checkpoints` memory under that branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. Record the cleanup pull request's number on the same line when there is one. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
+9. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); say what each test you committed pins, and name each proposal you dropped with the reason; say which findings you fixed, on which branch, and what each now does; surface the findings you left, each with the reason it is the author's; list every commit created, with its short hash and which branch it is on; and state the base ref the review covered, the cleanup pull request opened, and the checkpoint now recorded.
 10. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue, and leave the checkpoint at its previous value. If `cargo fmt` itself fails, surface that and skip the formatting commit.
 
-## Act on the findings the change is responsible for
+## Act on the findings
 
 An aspect reports rather than edits outside the hunks, and reports rather than edits a change to an interface or a behavior, because a subagent applying one convention cannot weigh either. The orchestrator can: it holds every aspect's findings at once, and it has the project's whole test suite.
 
-Read every finding the review produced — from the flag-only aspects and from the editing aspects' report-only items — and sort each into one of three piles.
+Read every finding the review produced — from the flag-only aspects and from the editing aspects' report-only items — and sort each into one of four piles.
 
 **Fix it, on the branch under review**, when the change is responsible for it and the suite answers whether the fix is right. The change is responsible for the code the diff writes, and for existing code the change bent around or made stale — the code someone who knew the change would now write differently: the callers of a helper the change superseded, a comment the change made untrue, a sibling that now disagrees with it. Reshaping that code is part of the change even where it reaches outside the hunks, and the diff grows for a reason its reader can follow. The question in these is "did I break something", and the suite answers it:
 
@@ -130,9 +136,11 @@ Read every finding the review produced — from the flag-only aspects and from t
 - a property the suite does not measure — performance, memory, concurrency, a platform this machine is not;
 - a redesign, where what the author settles is the direction rather than the risk: a rewritten pipeline, a different data structure carrying the same information, a rule imposed on the language.
 
-**Report it, and edit nothing**, when it is about code the change did not write, did not bend around, and did not make stale — code that would want the same edit had the change never happened. The summary names it with its place, so the author can take it up in a change of its own. A defect there that a user can reach — a program compiled into the wrong code, a diagnostic reported at the wrong place or missing, a `fix` command answering wrongly — is filed as an issue, since it wants a change of its own with the changelog entry and the regression test such a change owes.
+**Refactor it, on the cleanup branch**, when it is about existing code the change did not write, did not bend around, and did not make stale — code that would want the same edit had the change never happened — and the edit preserves behavior: a rename, a move, a split, a signature every caller reaches from inside this repository, a duplicate folded into one function, a comment or doc comment. It is improvement to code that was already there, so it goes in a pull request of its own, based on the branch under review, and the diff the author reads for the change stays the change.
 
-**Verify the fixes together.** Commit each fix on its own, then run the **whole** suite once over all of them. A filtered run answers a smaller question, and it answers it wrongly here more often than anywhere else: a finding sits by definition outside what the change's own tests exercise, so the tests that would catch a mistake in it are the ones you would not think to filter for. When the run goes red, the commits say which fix to look at first.
+**Report it, and edit nothing,** when it is about such existing code and the edit would change behavior — a fallback turned into a hard failure, an assertion turned on, a changed answer. That is past a refactoring, and it wants a change of its own. A defect there that a user can reach — a program compiled into the wrong code, a diagnostic reported at the wrong place or missing, a `fix` command answering wrongly — is filed as an issue, since that change owes a changelog entry and a regression test.
+
+**Verify the fixes together.** Commit each fix on its own, then run the **whole** suite once over all of them — once on the branch under review, and once more on the cleanup branch when it carries any. A filtered run answers a smaller question, and it answers it wrongly here more often than anywhere else: a finding sits by definition outside what the change's own tests exercise, so the tests that would catch a mistake in it are the ones you would not think to filter for. When the run goes red, the commits say which fix to look at first.
 
 **Add a test where the fix wants one**, and judge it the way *Add the tests worth keeping* judges a proposal: break what it pins, and keep it only when it goes red. Most fixes here want none — a moved item is covered by whatever already reached it, and a signature change is covered by its callers.
 
@@ -187,7 +195,9 @@ it.
 - Don't let subagents decide their own scope — always pass the resolved base.
 - Don't let an aspect edit outside the hunks: what it notices there is a finding. Acting on findings is the orchestrator's own step, verified by one whole-suite run over the fixes.
 - Don't hand the author a finding the change is responsible for and the suite could have settled. A finding whose only question is "does this break something" is work the review is holding rather than work the author asked for.
-- Don't edit code that would want the same edit had the change never happened. Report what you found there; the diff the author reads for the change carries the change and its consequences alone.
+- Don't put a refactoring of code the change neither wrote nor made stale on the branch under review — it belongs to the cleanup branch and its own pull request, so that the diff the author reads carries the change and its consequences alone.
+- Don't put a behavior change on the cleanup branch. A pull request titled cleanup is where nobody looks for one; it is a finding, or an issue when a user can reach it.
+- Don't merge the cleanup pull request yourself. Merging it before the change has been read puts the cleanup back into the diff the split exists to keep clear, and either way the merge is the author's.
 - Don't commit a proposed test that pins behavior the project has never decided on. The test would make the current output the required one, which is the author's decision about the language and its API — raise it as a question instead.
 - Don't commit a proposed test you have not watched go red. A test that cannot fail is a green light wired to nothing, and it costs every future run.
 - Don't continue the chain if a step fails.
