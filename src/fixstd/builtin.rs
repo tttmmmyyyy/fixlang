@@ -4834,89 +4834,6 @@ pub fn array_check_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_get_ptr`, which yields a pointer to the first element of an
-/// array's buffer, leaving the array borrowed.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayGetPtrBody {
-    arr_name: FullName,
-}
-
-#[typetag::serde]
-impl LLVMGen for InlineLLVMArrayGetPtrBody {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get argment
-        let array = gc.get_scoped_obj_noretain(&self.arr_name);
-
-        // Get pointer
-        let ptr = get_array_storage_buf(gc, &array);
-
-        // Make returned object
-        let obj = create_obj(
-            make_ptr_ty(),
-            &vec![],
-            None,
-            gc,
-            Some("alloca@get_ptr_array"),
-        );
-        obj.insert_field(gc, 0, ptr)
-    }
-
-    fn name(&self) -> String {
-        format!("array_data_ptr({})", self.arr_name.to_string())
-    }
-
-    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.arr_name]
-    }
-
-    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
-        i == 0
-    }
-
-    fn result_locality(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> ExtShape {
-        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-/// A pointer to the first element of an array's buffer. The array is borrowed, so the pointer is
-/// valid only while the array is alive.
-/// Type: Array a -> Ptr
-pub fn get_ptr_array() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const ARR_NAME: &str = "arr";
-    const ELEM_TYPE: &str = "a";
-
-    let elem_tyvar = type_tyvar_star(ELEM_TYPE);
-    let array_ty = type_tyapp(make_array_ty(), elem_tyvar.clone());
-
-    let expr = expr_abs(
-        vec![var_local(ARR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMArrayGetPtrBody {
-                arr_name: FullName::local(ARR_NAME),
-            }),
-            make_ptr_ty(),
-            None,
-        ),
-        None,
-    );
-    let scm = Scheme::generalize(
-        &[],
-        vec![],
-        vec![],
-        type_fun(array_ty.clone(), make_ptr_ty()),
-    );
-    (expr, scm)
-}
-
 /// The code generator for `Array::@size`, which reads an array's length out of the array value,
 /// leaving the array borrowed.
 #[derive(Clone, Serialize, Deserialize)]
@@ -8514,14 +8431,7 @@ fn rc_function_of_boxed_value<'c, 'm>(
     };
     let func_ptr = func.as_global_value().as_pointer_value();
 
-    let ret = create_obj(
-        make_ptr_ty(),
-        &vec![],
-        None,
-        gc,
-        Some(&format!("ret_val@get_funptr_{}", operation)),
-    );
-    ret.insert_field(gc, 0, func_ptr)
+    make_ptr_obj(gc, func_ptr, &format!("ret_val@get_funptr_{}", operation))
 }
 
 // PROOF: D/A, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
@@ -8660,67 +8570,24 @@ pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMGetBoxedDataPtrFunctionBody {
-    var_name: FullName,
-}
-
-#[typetag::serde]
-impl LLVMGen for InlineLLVMGetBoxedDataPtrFunctionBody {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get argument.
-        let obj = gc.get_scoped_obj_noretain(&self.var_name);
-        assert!(obj.ty.is_box(gc.type_env()));
-
-        // Get data pointer.
-        let data_ptr = get_data_pointer_from_boxed_value(gc, &obj);
-
-        // Make returned object.
-        let ret = create_obj(
-            make_ptr_ty(),
-            &vec![],
-            None,
-            gc,
-            Some("ret_val@_get_boxed_ptr"),
-        );
-        ret.insert_field(gc, 0, data_ptr)
-    }
-
-    fn name(&self) -> String {
-        format!("boxed_data_ptr({})", self.var_name.to_string())
-    }
-
-    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.var_name]
-    }
-
-    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
-        i == 0
-    }
-
-    fn result_locality(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> ExtShape {
-        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
 /// Applies the function `f` to `ptr` wrapped as a Fix `Ptr` value, and returns what it returns.
 fn apply_to_ptr<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     f: Object<'c>,
     ptr: PointerValue<'c>,
 ) -> Object<'c> {
-    let ptr_obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some("lent_ptr"));
-    let ptr_obj = ptr_obj.insert_field(gc, 0, ptr);
+    let ptr_obj = make_ptr_obj(gc, ptr, "lent_ptr");
     gc.apply_lambda(f, vec![ptr_obj], false).unwrap()
+}
+
+/// Wraps `ptr` as a Fix `Ptr` value.
+fn make_ptr_obj<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    ptr: PointerValue<'c>,
+    name: &str,
+) -> Object<'c> {
+    let obj = create_obj(make_ptr_ty(), &vec![], None, gc, Some(name));
+    obj.insert_field(gc, 0, ptr)
 }
 
 /// The pointer to the payload of a boxed value: the fields of a boxed struct, or the payload buffer
@@ -8737,68 +8604,7 @@ fn get_data_pointer_from_boxed_value<'c, 'm>(
         ObjectFieldType::get_union_buf_idx(gc, val)
     };
 
-    // Get pointer
-    let ptr = val.gep_boxed(gc, data_field_idx);
-    ptr
-}
-
-pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
-    const TYPE_NAME: &str = "a";
-    const VAR_NAME: &str = "x";
-    let obj_type = type_tyvar(TYPE_NAME, &kind_star());
-    let ret_type = make_ptr_ty();
-    let scm = Scheme::generalize(
-        &[],
-        vec![Predicate::make(make_boxed_trait(), obj_type.clone())],
-        vec![],
-        type_fun(obj_type.clone(), ret_type.clone()),
-    );
-    let expr = expr_abs(
-        vec![var_local(VAR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMGetBoxedDataPtrFunctionBody {
-                var_name: FullName::local(VAR_NAME),
-            }),
-            ret_type,
-            None,
-        ),
-        None,
-    );
-    (expr, scm)
-}
-
-/// The locality of the result of an op that hands a callback a raw pointer into a container's
-/// payload and returns that container at `value_path` of its result, alongside the callback's own
-/// result.
-///
-/// The container comes back force-uniqued (or unique by the caller's promise, where the check is
-/// dropped), so its root is local. What it reaches is another matter: the callback may write a
-/// reference to any object through the pointer it was given, so a payload that can hold one loses
-/// the deep fact. A payload of scalars reaches nothing at all, which is the bottom. The callback's
-/// result comes out of an indirect call.
-fn mutated_in_place_locality(
-    result_ty: &Arc<TypeNode>,
-    arg_tys: &[Arc<TypeNode>],
-    type_env: &TypeEnv,
-    value_arg: usize,
-    value_path: &[usize],
-) -> ExtShape {
-    let payload_holds_boxed = arg_tys[value_arg]
-        .unpunched_field_types(type_env)
-        .iter()
-        .any(|(_, fty)| !boxed_leaf_paths(fty, type_env).is_empty());
-    let value_leaf = if payload_holds_boxed {
-        LeafCond::new(ExtCond::bottom(), ExtCond::Always)
-    } else {
-        LeafCond::bottom()
-    };
-    ExtShape::build_shape(result_ty, type_env, &|path| {
-        if path.starts_with(value_path) {
-            value_leaf.clone()
-        } else {
-            LeafCond::always()
-        }
-    })
+    val.gep_boxed(gc, data_field_idx)
 }
 
 /// The operand position of the array an `Array::set` writes into.
@@ -8930,6 +8736,84 @@ fn get_lent_ptr<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) -> Pointer
         val.ty.to_string()
     );
     get_data_pointer_from_boxed_value(gc, val)
+}
+
+/// Evaluates to the pointer `get_lent_ptr` computes for a value: the first element of an array's
+/// element buffer, or the payload of a boxed value.
+///
+/// The value is borrowed, so the pointer is valid only while the value is alive.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct InlineLLVMGetLentPtrBody {
+    /// The value the pointer points into.
+    x_name: FullName,
+}
+
+#[typetag::serde]
+impl LLVMGen for InlineLLVMGetLentPtrBody {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
+        let x = gc.get_scoped_obj_noretain(&self.x_name);
+        let ptr = get_lent_ptr(gc, &x);
+        make_ptr_obj(gc, ptr, "lent_ptr")
+    }
+
+    fn name(&self) -> String {
+        format!("lent_ptr({})", self.x_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.x_name]
+    }
+
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
+        i == LENT_VALUE_ARG
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// The definition of a function `x_ty -> Ptr` evaluated by `InlineLLVMGetLentPtrBody`, whose type
+/// scheme has the predicates `preds`.
+fn get_lent_ptr_function(
+    x_ty: Arc<TypeNode>,
+    preds: Vec<Predicate>,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const X_NAME: &str = "x";
+    let scm = Scheme::generalize(&[], preds, vec![], type_fun(x_ty, make_ptr_ty()));
+    let expr = expr_abs(
+        vec![var_local(X_NAME)],
+        expr_llvm(
+            Box::new(InlineLLVMGetLentPtrBody {
+                x_name: FullName::local(X_NAME),
+            }),
+            make_ptr_ty(),
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+/// `Std::Array::_get_ptr : Array a -> Ptr`
+pub fn get_ptr_array() -> (Arc<ExprNode>, Arc<Scheme>) {
+    get_lent_ptr_function(type_tyapp(make_array_ty(), type_tyvar_star("a")), vec![])
+}
+
+/// `Std::FFI::_get_boxed_ptr : [a : Boxed] a -> Ptr`
+pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
+    let a_ty = type_tyvar_star("a");
+    let preds = vec![Predicate::make(make_boxed_trait(), a_ty.clone())];
+    get_lent_ptr_function(a_ty, preds)
 }
 
 /// Applies a function to a pointer into a value, and evaluates to what the function returns. The
@@ -9162,13 +9046,27 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
         arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        mutated_in_place_locality(
-            result_ty,
-            arg_tys,
-            type_env,
-            LENT_VALUE_ARG,
-            &MUTATE_PTR_VALUE_PATH,
-        )
+        // The value comes back force-uniqued (or unique by the caller's promise, where the check is
+        // dropped), so its root is local. What it reaches is another matter: the function may write a
+        // reference to any object through the pointer it was given, so a payload that can hold one
+        // loses the deep fact. A payload of scalars reaches nothing at all, which is the bottom. The
+        // action's result comes out of an indirect call.
+        let payload_holds_boxed = arg_tys[LENT_VALUE_ARG]
+            .unpunched_field_types(type_env)
+            .iter()
+            .any(|(_, fty)| !boxed_leaf_paths(fty, type_env).is_empty());
+        let value_leaf = if payload_holds_boxed {
+            LeafCond::new(ExtCond::bottom(), ExtCond::Always)
+        } else {
+            LeafCond::bottom()
+        };
+        ExtShape::build_shape(result_ty, type_env, &|path| {
+            if path.starts_with(&MUTATE_PTR_VALUE_PATH) {
+                value_leaf.clone()
+            } else {
+                LeafCond::always()
+            }
+        })
     }
 
     fn as_any(&self) -> &dyn Any {

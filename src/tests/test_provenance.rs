@@ -174,6 +174,18 @@ mod integration_tests {
         var_bound_on(binding_by_rhs(dump, rhs_prefix))
     }
 
+    /// Whether an RC IR line retains the variable `var` or one of its fields.
+    ///
+    /// # Examples
+    /// `is_retain_of("  retain v1.0 @local", "v1")` is `true`, and
+    /// `is_retain_of("  retain v12 @local", "v1")` is `false`.
+    fn is_retain_of(line: &str, var: &str) -> bool {
+        line.trim_start()
+            .strip_prefix("retain ")
+            .and_then(|rest| rest.split_whitespace().next())
+            .is_some_and(|target| target.split('.').next() == Some(var))
+    }
+
     /// The variable the binding named `source_name` (its `(as ...)` annotation) binds.
     fn var_bound_as(dump: &str, source_name: &str) -> String {
         var_bound_on(binding_by_source_name(dump, source_name))
@@ -211,14 +223,11 @@ mod integration_tests {
         let dump = emit_main_rc_ir(&project_dir);
 
         let container = var_bound_as(&dump, "h");
-        let retain_line = format!("retain {}", container);
         assert!(
-            !dump
-                .lines()
-                .any(|l| l.trim_start().starts_with(&retain_line)),
-            "a field read out of a boxed container should not retain the container, but `{}` \
+            !dump.lines().any(|l| is_retain_of(l, &container)),
+            "a field read out of a boxed container should not retain the container, but `retain {}` \
              stands in:\n{}",
-            retain_line,
+            container,
             dump
         );
     }
@@ -763,10 +772,7 @@ mod integration_tests {
             dump
         );
         assert!(
-            !dump.lines().any(|l| l
-                .trim_start()
-                .strip_prefix("retain ")
-                .is_some_and(|rest| rest.split_whitespace().next() == Some(rec.as_str()))),
+            !dump.lines().any(|l| is_retain_of(l, &rec)),
             "`borrow_boxed` should not retain the value it borrows, but `retain {}` stands in:\n{}",
             rec,
             dump

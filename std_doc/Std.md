@@ -1428,7 +1428,7 @@ See also: `borrow_boxed`, `mutate_boxed`, `mutate_boxed_io`.
 
 ##### Parameters
 
-* `action` - The IO action to be performed on the pointer.
+* `act` - The IO action to be performed on the pointer.
 * `value` - The boxed value to be borrowed.
 
 #### boxed_from_retained_ptr
@@ -1549,7 +1549,7 @@ See also: `borrow_boxed`, `borrow_boxed_io`, `mutate_boxed`.
 
 ##### Parameters
 
-* `action` - The IO action to be performed on the pointer.
+* `act` - The IO action to be performed on the pointer.
 * `value` - The boxed value to be mutated.
 
 #### mutate_boxed_ios
