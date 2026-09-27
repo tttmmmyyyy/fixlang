@@ -493,6 +493,23 @@ mod tests {
         );
     }
 
+    /// `let y = arr.<cursor>` right before the `)` closing its
+    /// expression — A0 makes it `(let y = arr.?)`, which the grammar
+    /// accepts only to report the `let` missing its `;`. The loop
+    /// should splice in that `;`, so the `let` gets its body.
+    #[test]
+    fn outer_repair_handles_let_before_closing_bracket() {
+        let src = "module Main;\nmain : ();\nmain = (let y = arr.);";
+        let cursor = "module Main;\nmain : ();\nmain = (let y = arr.".len();
+        let out = repair_for_completion(src, cursor).expect("outer repair should succeed");
+        assert!(
+            out.source.contains("let y = arr.?;"),
+            "the `let` should get its `;`; got: {:?}",
+            out.source
+        );
+        assert_eq!(out.source.as_bytes()[out.cursor_byte - 1], b'?');
+    }
+
     /// Trailing comma right before `)` — A0 makes `f(arr.<cursor>, )`
     /// into `f(arr.?, )`. The parser needs an expression after the
     /// comma; the loop should splice in a `?`.

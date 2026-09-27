@@ -61,6 +61,7 @@ mod test_mark_object_graph;
 mod test_match_result_alias;
 mod test_match_return_outer;
 mod test_memcheck;
+mod test_missing_else;
 mod test_memory_regions;
 mod test_no_runtime_check_setting;
 mod test_object_cache;

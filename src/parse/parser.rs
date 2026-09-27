@@ -36,7 +36,7 @@ use crate::constants::{
     IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME,
     PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX,
 };
-use crate::error::Errors;
+use crate::error::{Error, Errors};
 use crate::fixstd::builtin::{
     expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, floating_literal_value,
     integral_literal_value, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty,
@@ -50,7 +50,7 @@ use crate::fixstd::builtin::{
 use crate::misc::{make_map, save_temporary_source, to_absolute_path, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
 use either::Either;
-use pest::error::{Error, ErrorVariant, InputLocation};
+use pest::error::{Error as PestError, ErrorVariant, InputLocation};
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
 use std::path::PathBuf;
@@ -349,7 +349,7 @@ pub fn validate_token_str(s: &str, category: TokenCategory) -> Result<(), String
 /// `Program`-build validation. Test-only — for acceptance / rejection
 /// assertions that should not depend on later semantic checks.
 #[cfg(test)]
-pub fn check_grammar_accepts(source: &str) -> Result<(), Error<Rule>> {
+pub fn check_grammar_accepts(source: &str) -> Result<(), PestError<Rule>> {
     FixParser::parse(Rule::file, source).map(|_| ())
 }
 
@@ -379,17 +379,26 @@ pub struct RepairHint {
 
 /// Probe-parse `source` as a full Fix file. On parse failure return a
 /// `RepairHint` derived from the pest error so the caller can splice
-/// in a character and try again.
+/// in a character and try again. A `let` missing its `in` or `;` is a
+/// parse failure too, although the grammar accepts it (see
+/// `parse_expr_let_without_in`): its hint is a `;` after the value.
 pub fn probe_parse_for_completion_repair(source: &str) -> Result<(), RepairHint> {
-    match FixParser::parse(Rule::file, source) {
-        Ok(_) => Ok(()),
-        Err(e) => Err(repair_hint_from_pest_error(&e)),
+    let file = FixParser::parse(Rule::file, source).map_err(|e| repair_hint_from_pest_error(&e))?;
+    match file
+        .flatten()
+        .find(|pair| pair.as_rule() == Rule::expr_let_without_in)
+    {
+        Some(let_without_in) => Err(RepairHint {
+            insert_at: let_without_in.as_span().end(),
+            kind: RepairHintKind::Semicolon,
+        }),
+        None => Ok(()),
     }
 }
 
 /// Build a `RepairHint` from a pest parse error: pull out the failure
 /// location and classify the expected-rule set.
-fn repair_hint_from_pest_error(e: &Error<Rule>) -> RepairHint {
+fn repair_hint_from_pest_error(e: &PestError<Rule>) -> RepairHint {
     let insert_at = match e.location {
         InputLocation::Pos(p) => p,
         InputLocation::Span((s, _)) => s,
@@ -442,6 +451,7 @@ fn classify_repair_hint(positives: &[Rule]) -> RepairHintKind {
                 | Rule::expr_var
                 | Rule::expr_hole
                 | Rule::expr_let
+                | Rule::expr_let_without_in
                 | Rule::expr_eval
                 | Rule::expr_if
                 | Rule::expr_match
@@ -2246,6 +2256,7 @@ fn parse_expr_nlr(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
         Rule::expr_hole => parse_expr_hole(pair, ctx),
         Rule::expr_var => parse_expr_var(pair, ctx),
         Rule::expr_let => parse_expr_let(pair, ctx)?,
+        Rule::expr_let_without_in => parse_expr_let_without_in(pair, ctx)?,
         Rule::expr_eval => parse_expr_eval(pair, ctx)?,
         Rule::expr_if => parse_expr_if(pair, ctx)?,
         Rule::expr_match => parse_expr_match(pair, ctx)?,
@@ -2417,6 +2428,69 @@ fn parse_expr_let_recursively(
         let expr = expr_let(pat, bound, value, span);
         // Set the source of the expression.
         Ok(expr)
+    }
+}
+
+/// Reports a `let` whose value runs up to the end of the enclosing expression with no `in` or `;`
+/// after it, which is always an error.
+///
+/// When the value ends with an `if` in the form `if c { a }; b`, the error points at that `if`: its
+/// `;` took the rest of the enclosing expression as the else branch `b`, which is what a forgotten
+/// `else` does to `let x = if c { a }; rest`.
+fn parse_expr_let_without_in(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> Result<Arc<ExprNode>, Errors> {
+    assert_eq!(pair.as_rule(), Rule::expr_let_without_in);
+    let mut pairs = pair.into_inner();
+    let keyword = pairs.next().unwrap();
+    let _pat = pairs.next().unwrap();
+    let eq = pairs.next().unwrap();
+    assert_eq!(eq.as_rule(), Rule::eq_of_let);
+    let value = pairs.next().unwrap();
+    let let_head = Span::from_pair(&ctx.source, &keyword).unite(&Span::from_pair(&ctx.source, &eq));
+
+    let Some((if_pair, else_marker)) = if_taking_the_rest_after_semicolon(value) else {
+        return Err(Errors::from_msg_srcs(
+            "This `let` has no `in` or `;` after its value.".to_string(),
+            &[&Some(let_head)],
+        ));
+    };
+    let if_span = Span::from_pair(&ctx.source, &if_pair);
+    let if_head = if_span.part(0, else_marker.as_span().end() - if_span.start);
+    let mut error = Error::from_msg_srcs(
+        "This `if` has no `else`, so everything after its `;` up to the end of the enclosing \
+         expression is its else branch, and the `let` whose value it is has no `in` or `;` after \
+         that value.\n\
+         HINT: add `else { ... }` to this `if`."
+            .to_string(),
+        &[&Some(if_head)],
+    );
+    error.add_src("The `let`:".to_string(), let_head);
+    Err(Errors::from_err(error))
+}
+
+/// The `if` in the form `if c { a }; b` that the expression `pair` ends with, where the else branch
+/// `b` runs to the end of `pair`, together with its `;`. The outermost such `if` is the one returned.
+fn if_taking_the_rest_after_semicolon(pair: Pair<Rule>) -> Option<(Pair<Rule>, Pair<Rule>)> {
+    let mut node = pair;
+    loop {
+        if node.as_rule() == Rule::expr_if {
+            let mut parts = node.clone().into_inner();
+            let else_marker = parts.nth(2).unwrap(); // `else_of_if` or `else_of_if_with_space`.
+            let else_val = parts.next().unwrap();
+            let marker_token = else_marker.clone().into_inner().next().unwrap();
+            if marker_token.as_rule() == Rule::semicolon
+                && else_val.as_span().end() == node.as_span().end()
+            {
+                return Some((node, else_marker));
+            }
+        }
+        let last = node.clone().into_inner().last()?;
+        if last.as_span().end() != node.as_span().end() {
+            return None;
+        }
+        node = last;
     }
 }
 
@@ -3231,6 +3305,8 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::expr_unary => "expression".to_string(),
         Rule::name => "name".to_string(),
         Rule::in_of_let => "`in` or `;`".to_string(),
+        Rule::keyword_else => "`else`".to_string(),
+        Rule::else_of_if | Rule::else_of_if_with_space => "`else` or `;`".to_string(),
         Rule::eq_of_let => "`=`".to_string(),
         Rule::type_expr => "type".to_string(),
         Rule::arg_list => "list of arguments".to_string(),
@@ -3258,7 +3334,7 @@ fn rule_to_string(r: &Rule) -> String {
     }
 }
 
-fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
+fn message_parse_error(e: PestError<Rule>, src: &SourceFile) -> Errors {
     let mut msg: String = Default::default();
 
     #[allow(unused)]
@@ -3283,7 +3359,12 @@ fn message_parse_error(e: Error<Rule>, src: &SourceFile) -> Errors {
                 msg
             }
             if positives.len() > 0 {
-                let words: Vec<String> = positives.iter().map(rule_to_string).collect();
+                let mut words: Vec<String> = vec![];
+                for word in positives.iter().map(rule_to_string) {
+                    if !words.contains(&word) {
+                        words.push(word);
+                    }
+                }
                 msg += &concat_words(words, "or");
                 if negatives.len() > 0 {
                     msg += " and ";
