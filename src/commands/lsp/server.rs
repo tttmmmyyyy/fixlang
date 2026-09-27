@@ -195,12 +195,7 @@ impl LatestContent {
     /// content does not parse.
     pub(super) fn get_import_stmts(&mut self) -> &Option<Vec<ImportStatement>> {
         if self.import_stmts.is_none() {
-            let import_stmts = parse_str_import_statements(self.path.clone(), &self.content);
-            if let Ok(import_stmts) = import_stmts {
-                self.import_stmts = Some(import_stmts);
-            } else {
-                self.import_stmts = None;
-            }
+            self.import_stmts = parse_str_import_statements(self.path.clone(), &self.content).ok();
         }
         &self.import_stmts
     }
@@ -209,12 +204,7 @@ impl LatestContent {
     /// not parse.
     pub(super) fn get_module_info(&mut self) -> &Option<ModuleInfo> {
         if self.module_info.is_none() {
-            let module_info = parse_str_module_defn(self.path.clone(), &self.content);
-            if let Ok(module_info) = module_info {
-                self.module_info = Some(module_info);
-            } else {
-                self.module_info = None;
-            }
+            self.module_info = parse_str_module_defn(self.path.clone(), &self.content).ok();
         }
         &self.module_info
     }
@@ -1125,11 +1115,9 @@ fn error_to_diagnostics(err: &Error, cdir: &PathBuf) -> Diagnostic {
     let mut related_information = vec![];
     for (msg, span) in err.srcs.iter().skip(1) {
         // Convert span to location.
-        let location = span_to_location(span, cdir);
-        if location.is_none() {
+        let Some(location) = span_to_location(span, cdir) else {
             continue;
-        }
-        let location = location.unwrap();
+        };
 
         // Create the related information.
         let related = DiagnosticRelatedInformation {
@@ -1181,36 +1169,27 @@ pub(super) fn get_file_content_at_previous_diagnostics(
     program: &Program,
     queried_path: &Path,
 ) -> Result<String, String> {
+    let queried_path_abs = to_absolute_path(queried_path).map_err(|_| {
+        format!(
+            "Failed to get the absolute path of the file: \"{}\"",
+            queried_path.to_string_lossy()
+        )
+    })?;
     for mi in &program.modules {
         let src = &mi.source.input;
-        let path_abs = to_absolute_path(&queried_path);
-        if path_abs.is_err() {
-            let msg = format!(
-                "Failed to get the absolute path of the file: \"{}\"",
-                queried_path.to_string_lossy().to_string()
-            );
-            return Err(msg);
-        }
-        let queried_path_abs = path_abs.ok().unwrap();
-        let src_file_path_abs = to_absolute_path(&src.file_path);
-        if src_file_path_abs.is_err() {
-            let msg = format!(
+        let src_file_path = to_absolute_path(&src.file_path).map_err(|_| {
+            format!(
                 "Failed to get the absolute path of the source file: \"{}\"",
-                src.file_path.to_string_lossy().to_string()
-            );
-            return Err(msg);
-        }
-        let src_file_path = src_file_path_abs.ok().unwrap();
+                src.file_path.to_string_lossy()
+            )
+        })?;
         if src_file_path == queried_path_abs {
-            let content = src.string();
-            if let Err(_e) = content {
-                let msg = format!(
+            return src.string().map_err(|_| {
+                format!(
                     "Failed to get the content of the file: \"{}\"",
-                    src.file_path.to_string_lossy().to_string()
-                );
-                return Err(msg);
-            }
-            return Ok(content.ok().unwrap());
+                    src.file_path.to_string_lossy()
+                )
+            });
         }
     }
     let msg = format!(
