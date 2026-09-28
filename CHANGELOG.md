@@ -6,7 +6,7 @@
 
 #### Tool
 
-- #785: `fix test` now runs the Fix examples in comments, the code blocks whose info string is `fix`. An example passes when it exits with status 0. `fix test --doc` runs the examples alone, and `fix test --no-doc` runs `Test::test` alone. The name `DocTest` is now reserved for the examples: `fix test` rejects a module, a namespace, a type or a trait of that name when it has an example to compile. See "Fix examples in comments" in `Document.md` for how to write an example.
+- #785: `fix test` now runs the Fix examples in comments, the code blocks whose info string is `fix`. An example passes when it exits with status 0. `fix test --doc` runs the examples alone, and `fix test --no-doc` runs `Test::test` alone. The module name `DocTest` is now reserved for the examples: `fix test` rejects a module of that name when it has an example to compile. See "Fix examples in comments" in `Document.md` for how to write an example.
 
 ## [1.5.0] - 2026-09-27
 

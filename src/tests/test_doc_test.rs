@@ -414,88 +414,71 @@ value = 1;
     );
 }
 
-/// `fix test` rejects a name with a component `DocTest`, the name each Fix example is compiled as,
-/// and reports it at the declaration that takes it: a module of that name, a declaration in a
-/// namespace of that name at any depth, and a type or a trait of that name, which opens a
-/// namespace of its name. Where no example is compiled, and for a trait alias, the name is free.
+/// `fix test` rejects a module named `DocTest`, the name each Fix example is compiled as, at its
+/// declaration. A namespace, a type or a trait of that name is accepted, and so is the module where
+/// no example is compiled: under `--no-doc`, and in a project without an example.
 #[test]
-fn test_the_name_doc_test_is_reserved() {
-    for (source, line) in [
-        ("module DocTest;\nvalue : I64;\nvalue = 1;\n", 1),
-        (
-            "module Other;\nnamespace DocTest {\n    value : I64;\n    value = 1;\n}\n",
-            3,
-        ),
-        (
-            "module Other;\nnamespace Outer::DocTest {\n    value : I64;\n    value = 1;\n}\n",
-            3,
-        ),
-        ("module Other;\ntype DocTest = struct { x : I64 };\n", 2),
-        (
-            "module Other;\ntrait a : DocTest {\n    describe : a -> String;\n}\n",
-            2,
-        ),
-        (
-            "module Other;\nnamespace DocTest {\n    trait Shows = Eq;\n}\n",
-            3,
-        ),
-    ] {
-        let dir = project_dir(
-            &[
-                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
-                ("other.fix", source),
-            ],
-            &[],
-        );
-        let output = fix_test(&dir, &[]);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        assert!(
-            !output.status.success()
-                && stderr.contains("The name `DocTest` is reserved")
-                && stderr.contains("in \"other.fix\"")
-                && stderr.contains(&format!(
-                    "{} | {}",
-                    line,
-                    source.lines().nth(line - 1).unwrap()
-                )),
-            "the name `DocTest` in\n{}\nis rejected at line {}\n{}",
-            source,
-            line,
-            streams(&output)
-        );
-        assert!(
-            !stderr.contains("doc test"),
-            "no example runs\n{}",
-            streams(&output)
-        );
-    }
+fn test_the_module_name_doc_test_is_reserved() {
+    let module = "module DocTest;\nvalue : I64;\nvalue = 1;\n";
+    let dir = project_dir(
+        &[
+            ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
+            ("doc_test.fix", module),
+        ],
+        &[],
+    );
+    let output = fix_test(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success()
+            && stderr.contains("The module name `DocTest` is reserved")
+            && stderr.contains("1 | module DocTest;")
+            && !stderr.contains("doc test"),
+        "the module `DocTest` is rejected at its declaration before any example runs\n{}",
+        streams(&output)
+    );
 
-    // The name is free where no example is compiled: under `--no-doc`, and in a project without an
-    // example. A trait alias opens no namespace, so its name is free as well.
-    let namespace = "module Other;\nnamespace DocTest {\n    value : I64;\n    value = 1;\n}\n";
+    let lib_without_examples = "module Lib;\ndouble : I64 -> I64;\ndouble = |x| 2 * x;\n";
     for (build_files, args) in [
         (
             vec![
                 ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
-                ("other.fix", namespace),
-            ],
-            vec!["--no-doc"],
-        ),
-        (
-            vec![
                 (
-                    "lib.fix",
-                    "module Lib;\ndouble : I64 -> I64;\ndouble = |x| 2 * x;\n",
+                    "other.fix",
+                    "module Other;\nnamespace DocTest {\n    value : I64;\n    value = 1;\n}\n",
                 ),
-                ("other.fix", namespace),
             ],
             vec![],
         ),
         (
             vec![
                 ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
-                ("other.fix", "module Other;\ntrait DocTest = Eq;\n"),
+                (
+                    "other.fix",
+                    "module Other;\ntype DocTest = struct { x : I64 };\n",
+                ),
             ],
+            vec![],
+        ),
+        (
+            vec![
+                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
+                (
+                    "other.fix",
+                    "module Other;\ntrait a : DocTest {\n    describe : a -> String;\n}\n",
+                ),
+            ],
+            vec![],
+        ),
+        (
+            vec![
+                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
+                ("doc_test.fix", module),
+            ],
+            vec!["--no-doc"],
+        ),
+        (
+            vec![("lib.fix", lib_without_examples), ("doc_test.fix", module)],
             vec![],
         ),
     ] {
@@ -503,7 +486,7 @@ fn test_the_name_doc_test_is_reserved() {
         let output = fix_test(&dir, &args);
         assert!(
             output.status.success(),
-            "`fix test {}` accepts the name `DocTest` in\n{:?}\n{}",
+            "`fix test {}` accepts\n{:?}\n{}",
             args.join(" "),
             build_files,
             streams(&output)

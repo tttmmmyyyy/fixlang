@@ -166,56 +166,23 @@ impl FixExample {
     }
 }
 
-/// Reports the first declaration of `program` whose name has a component `DocTest`, the name each
-/// Fix example is compiled as: a module of that name, a type or a trait of that name, or a
-/// declaration inside a namespace of that name. A type or a trait opens a namespace of its name,
-/// which holds its field accessors and its members; a trait alias opens none, so the name of a
-/// trait alias is free, and the namespace it is declared in is checked like any other.
-///
-/// A name refers to every declaration whose full name ends with it, so with no such declaration a
-/// name beginning with `DocTest` in an example refers to the example itself.
-pub fn check_doc_test_name_is_free(program: &Program) -> Result<(), Errors> {
-    let modules = program
+/// Reports a module of `program` named `DocTest`, the name each Fix example is compiled as. A
+/// namespace, a type or a trait of that name stays free; an example that refers to one of them by a
+/// name beginning with `DocTest` is reported as ambiguous, with the absolute path that tells them
+/// apart.
+pub fn check_doc_test_module_name_is_free(program: &Program) -> Result<(), Errors> {
+    match program
         .modules
         .iter()
-        .map(|module| (vec![module.name.clone()], Some(module.source.clone())));
-    let values = program.global_values.iter().map(|(name, value)| {
-        (
-            name.namespace.names.clone(),
-            value.decl_src.clone().or(value.defn_src.clone()),
-        )
-    });
-    let types = program.type_defns.iter().map(|type_defn| {
-        (
-            type_defn.name.to_namespace().names,
-            type_defn.source.clone(),
-        )
-    });
-    let traits = program
-        .trait_env
-        .traits
-        .iter()
-        .map(|(id, trait_defn)| (id.name.to_namespace().names, trait_defn.source.clone()));
-    let trait_aliases = program
-        .trait_env
-        .aliases
-        .data
-        .iter()
-        .map(|(id, alias)| (id.name.namespace.names.clone(), alias.source.clone()));
-    let taken = modules
-        .chain(values)
-        .chain(types)
-        .chain(traits)
-        .chain(trait_aliases)
-        .find(|(path, _)| path.iter().any(|name| name == DOC_TEST_MODULE_NAME));
-    match taken {
-        Some((_, source)) => Err(Errors::from_msg_srcs(
+        .find(|module| module.name == DOC_TEST_MODULE_NAME)
+    {
+        Some(module) => Err(Errors::from_msg_srcs(
             format!(
-                "The name `{}` is reserved for the Fix examples of comments, which `fix test` \
-                 compiles as the module `{}`. Give this module, namespace, type or trait another name.",
+                "The module name `{}` is reserved for the Fix examples of comments, which \
+                 `fix test` compiles as the module `{}`. Give this module another name.",
                 DOC_TEST_MODULE_NAME, DOC_TEST_MODULE_NAME
             ),
-            &[&source],
+            &[&Some(module.source.clone())],
         )),
         None => Ok(()),
     }
