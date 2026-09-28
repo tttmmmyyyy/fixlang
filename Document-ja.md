@@ -671,7 +671,7 @@ type Product = struct { price: I64, sold: Bool };
 let product = Product { price: 100, sold: false };
 ```
 
-フィールドの値がそのフィールドと同じ名前の値であるときは、フィールド名だけを書けます。`Product { price, sold: false }`は`Product { price: price, sold: false }`と同じ意味です。2つ目の`price`は`price`という名前のローカル変数で、その名前のローカル変数がなければ`price`という名前のグローバル値です。
+フィールドの値がそのフィールドと同じ名前の値であるときは、フィールド名だけを書けます。`Product { price, sold: false }`は`Product { price: price, sold: false }`と同じ意味です。
 
 ユニオンの場合と同様に、構造体にも自動的に定義されるメソッドがあります。上記の`Product`の場合、次のメソッドが名前空間`Product`に定義されます。
 
