@@ -201,11 +201,15 @@ impl PatternNode {
     /// the order they are written.
     pub fn var_infos(&self) -> Vec<(FullName, PatternInfo)> {
         let mut out = vec![];
-        self.collect_var_infos(&mut out);
+        self.walk_nodes(&mut |node| {
+            if let Pattern::Var(v, _) = &node.pattern {
+                out.push((v.name.clone(), node.info.clone()));
+            }
+        });
         out
     }
 
-    /// Visit every node of this pattern tree, this one included.
+    /// Visit every node of this pattern tree, this one included, in the order they are written.
     pub fn walk_nodes<F: FnMut(&PatternNode)>(&self, f: &mut F) {
         f(self);
         match &self.pattern {
@@ -216,19 +220,6 @@ impl PatternNode {
                 }
             }
             Pattern::Union(_, _, sub) => sub.walk_nodes(f),
-        }
-    }
-
-    /// Append this pattern tree's binders to `out`, in the order they are written.
-    fn collect_var_infos(&self, out: &mut Vec<(FullName, PatternInfo)>) {
-        match &self.pattern {
-            Pattern::Var(v, _) => out.push((v.name.clone(), self.info.clone())),
-            Pattern::Struct(_, fields) => {
-                for (_, _, sub) in fields {
-                    sub.collect_var_infos(out);
-                }
-            }
-            Pattern::Union(_, _, sub) => sub.collect_var_infos(out),
         }
     }
 

@@ -29,7 +29,7 @@ use crate::ast::expr::{Expr, ExprNode, FieldSrc};
 use crate::ast::name::FullName;
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::predicate::Predicate;
-use crate::ast::program::{Program, SymbolExpr};
+use crate::ast::program::Program;
 use crate::ast::typedecl::TypeDeclValue;
 use crate::ast::types::{Scheme, TyCon, TyConVariant, Type, TypeNode};
 use crate::misc::{to_absolute_path, Map, Set};
@@ -318,11 +318,7 @@ impl<'a> Overlay<'a> {
                     self.push_value(&defn, T_FUNCTION);
                 }
             }
-            let roots: Vec<Arc<ExprNode>> = match &gv.expr {
-                SymbolExpr::Simple(te) => vec![te.expr.clone()],
-                SymbolExpr::Method(impls) => impls.iter().map(|m| m.expr.expr.clone()).collect(),
-            };
-            for root in &roots {
+            for root in gv.expr.exprs() {
                 if let Some(src) = &root.source {
                     if self.is_in_file(src) {
                         self.collect_expr(root);

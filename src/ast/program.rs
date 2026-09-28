@@ -441,42 +441,33 @@ impl SymbolExpr {
         }
     }
 
-    /// Visit every `Expr::Var` occurrence inside this symbol's expression(s).
-    /// For `Method`, walks every per-impl expression in turn.
+    /// The expressions that define this symbol: the one expression of a value, or the expression
+    /// of each implementation of a trait member.
+    pub fn exprs(&self) -> Vec<&Arc<ExprNode>> {
+        match self {
+            SymbolExpr::Simple(te) => vec![&te.expr],
+            SymbolExpr::Method(impls) => impls.iter().map(|m| &m.expr.expr).collect(),
+        }
+    }
+
+    /// Visit every `Expr::Var` occurrence inside this symbol's expressions.
     pub fn walk_var_uses<F: FnMut(&Var, &Option<Span>)>(&self, f: &mut F) {
-        match self {
-            SymbolExpr::Simple(te) => te.expr.walk_var_uses(f),
-            SymbolExpr::Method(impls) => {
-                for impl_ in impls {
-                    impl_.expr.expr.walk_var_uses(f);
-                }
-            }
+        for expr in self.exprs() {
+            expr.walk_var_uses(f);
         }
     }
 
-    /// Visit every node inside this symbol's expression(s).
-    /// For `Method`, walks every per-impl expression in turn.
+    /// Visit every node inside this symbol's expressions.
     pub fn walk_nodes<F: FnMut(&ExprNode)>(&self, f: &mut F) {
-        match self {
-            SymbolExpr::Simple(te) => te.expr.walk_nodes(f),
-            SymbolExpr::Method(impls) => {
-                for impl_ in impls {
-                    impl_.expr.expr.walk_nodes(f);
-                }
-            }
+        for expr in self.exprs() {
+            expr.walk_nodes(f);
         }
     }
 
-    /// Visit every pattern (in `Let` / `Match` arms) inside this symbol's
-    /// expression(s).
+    /// Visit every pattern (in `Let` / `Match` arms) inside this symbol's expressions.
     pub fn walk_patterns<F: FnMut(&Arc<PatternNode>)>(&self, f: &mut F) {
-        match self {
-            SymbolExpr::Simple(te) => te.expr.walk_patterns(f),
-            SymbolExpr::Method(impls) => {
-                for impl_ in impls {
-                    impl_.expr.expr.walk_patterns(f);
-                }
-            }
+        for expr in self.exprs() {
+            expr.walk_patterns(f);
         }
     }
 }

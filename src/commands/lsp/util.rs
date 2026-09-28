@@ -4,7 +4,7 @@ use super::server::{get_file_content_at_previous_diagnostics, LatestContent};
 use crate::ast::expr::{Expr, ExprNode};
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::PatternNode;
-use crate::ast::program::{EndNode, Program, SymbolExpr};
+use crate::ast::program::{EndNode, Program};
 use crate::ast::traits::TraitId;
 use crate::ast::typedecl::TypeDeclValue;
 use crate::ast::types::TyCon;
@@ -294,11 +294,7 @@ pub(super) fn find_local_occurrences(
         if gv.find_node_at(name, pos).is_none() {
             continue;
         }
-        let roots: Vec<&Arc<ExprNode>> = match &gv.expr {
-            SymbolExpr::Simple(te) => vec![&te.expr],
-            SymbolExpr::Method(impls) => impls.iter().map(|m| &m.expr.expr).collect(),
-        };
-        for root in roots {
+        for root in gv.expr.exprs() {
             let mut stack: Vec<(FullName, Span)> = vec![];
             let Some(def_span) = find_enclosing_binder(root, pos, target, &mut stack) else {
                 continue;
