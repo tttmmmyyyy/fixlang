@@ -414,22 +414,72 @@ value = 1;
     );
 }
 
-/// `fix test` rejects a module named `DocTest`, the name each Fix example is compiled as.
+/// `fix test` rejects a name with a component `DocTest`, the name each Fix example is compiled as,
+/// and reports it at the declaration that takes it: a module of that name, a declaration in a
+/// namespace of that name at any depth, and a type or a trait of that name, which opens a
+/// namespace of its name. `fix test --no-doc` runs no example, and it accepts the name.
 #[test]
-fn test_the_module_name_doc_test_is_reserved() {
+fn test_the_name_doc_test_is_reserved() {
+    for (source, line) in [
+        ("module DocTest;\nvalue : I64;\nvalue = 1;\n", 1),
+        (
+            "module Other;\nnamespace DocTest {\n    value : I64;\n    value = 1;\n}\n",
+            3,
+        ),
+        (
+            "module Other;\nnamespace Outer::DocTest {\n    value : I64;\n    value = 1;\n}\n",
+            3,
+        ),
+        ("module Other;\ntype DocTest = struct { x : I64 };\n", 2),
+        (
+            "module Other;\ntrait a : DocTest {\n    describe : a -> String;\n}\n",
+            2,
+        ),
+    ] {
+        let dir = project_dir(
+            &[
+                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
+                ("other.fix", source),
+            ],
+            &[],
+        );
+        let output = fix_test(&dir, &[]);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success()
+                && stderr.contains("The name `DocTest` is reserved")
+                && stderr.contains("in \"other.fix\"")
+                && stderr.contains(&format!(
+                    "{} | {}",
+                    line,
+                    source.lines().nth(line - 1).unwrap()
+                )),
+            "the name `DocTest` in\n{}\nis rejected at line {}\n{}",
+            source,
+            line,
+            streams(&output)
+        );
+        assert!(
+            !stderr.contains("doc test"),
+            "no example runs\n{}",
+            streams(&output)
+        );
+    }
+
     let dir = project_dir(
         &[
             ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
-            ("doc_test.fix", "module DocTest;\n"),
+            (
+                "other.fix",
+                "module Other;\nnamespace DocTest {\n    value : I64;\n    value = 1;\n}\n",
+            ),
         ],
-        &[],
+        &[("test.fix", TEST_ANNOUNCING_ITSELF)],
     );
-    let output = fix_test(&dir, &[]);
+    let output = fix_test(&dir, &["--no-doc"]);
     assert!(
-        !output.status.success()
-            && String::from_utf8_lossy(&output.stderr)
-                .contains("The module name `DocTest` is reserved"),
-        "a module named `DocTest` is rejected\n{}",
+        output.status.success(),
+        "`fix test --no-doc` accepts the name `DocTest`\n{}",
         streams(&output)
     );
 }

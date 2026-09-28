@@ -2,9 +2,7 @@ use crate::ast::name::FullName;
 use crate::commands::run::{build_executable, run, run_command};
 use crate::configuration::{BuildConfigType, Configuration};
 use crate::constants::{PROJECT_FILE_PATH, TEST_FUNCTION_NAME, TEST_MODULE_NAME};
-use crate::doc_test::{
-    check_doc_test_module_name_is_free, collect_examples, ExampleTask, FixExample,
-};
+use crate::doc_test::{check_doc_test_name_is_free, collect_examples, ExampleTask, FixExample};
 use crate::elaboration::load_source_files;
 use crate::error::{panic_if_err, Errors};
 use crate::metafiles::project_file::ProjectFile;
@@ -40,7 +38,7 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
     }
 
     let program = panic_if_err(load_source_files(&config));
-    panic_if_err(check_doc_test_module_name_is_free(&program));
+    panic_if_err(check_doc_test_name_is_free(&program));
     let examples = panic_if_err(collect_examples(&program, &panic_if_err(doc_test_files())));
     if selection == TestSelection::All && examples.is_empty() {
         run_command(&config);

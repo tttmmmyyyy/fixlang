@@ -86,24 +86,65 @@ impl FixExample {
     }
 }
 
-/// Reports a module of `program` named `DocTest`, the name each Fix example is compiled as. With
-/// no such module, a name beginning with `DocTest` in an example refers to the example itself.
-pub fn check_doc_test_module_name_is_free(program: &Program) -> Result<(), Errors> {
-    match program
+/// Reports the first declaration of `program` whose name has a component `DocTest`, the name each
+/// Fix example is compiled as: a module of that name, a type or a trait of that name, or a
+/// declaration inside a namespace of that name. A type or a trait opens a namespace of its name,
+/// which holds its field accessors and its members.
+///
+/// A name refers to every declaration whose full name ends with it, so with no such declaration a
+/// name beginning with `DocTest` in an example refers to the example itself.
+pub fn check_doc_test_name_is_free(program: &Program) -> Result<(), Errors> {
+    let modules = program
         .modules
         .iter()
-        .find(|module| module.name == DOC_TEST_MODULE_NAME)
-    {
-        Some(module) => Err(Errors::from_msg_srcs(
+        .map(|module| (vec![module.name.clone()], Some(module.source.clone())));
+    let values = program.global_values.iter().map(|(name, value)| {
+        (
+            name.namespace.names.clone(),
+            value.decl_src.clone().or(value.defn_src.clone()),
+        )
+    });
+    let types = program.type_defns.iter().map(|type_defn| {
+        (
+            path_of(&type_defn.name.namespace.names, &type_defn.name.name),
+            type_defn.source.clone(),
+        )
+    });
+    let traits = program.trait_env.traits.iter().map(|(id, trait_defn)| {
+        (
+            path_of(&id.name.namespace.names, &id.name.name),
+            trait_defn.source.clone(),
+        )
+    });
+    let trait_aliases = program.trait_env.aliases.data.iter().map(|(id, alias)| {
+        (
+            path_of(&id.name.namespace.names, &id.name.name),
+            alias.source.clone(),
+        )
+    });
+    let taken = modules
+        .chain(values)
+        .chain(types)
+        .chain(traits)
+        .chain(trait_aliases)
+        .find(|(path, _)| path.iter().any(|name| name == DOC_TEST_MODULE_NAME));
+    match taken {
+        Some((_, source)) => Err(Errors::from_msg_srcs(
             format!(
-                "The module name `{}` is reserved for the Fix examples of doc comments, which \
-                 `fix test` compiles as the module `{}`.",
+                "The name `{}` is reserved for the Fix examples of doc comments, which `fix test` \
+                 compiles as the module `{}`. Give this module, namespace, type or trait another name.",
                 DOC_TEST_MODULE_NAME, DOC_TEST_MODULE_NAME
             ),
-            &[&Some(module.source.clone())],
+            &[&source],
         )),
         None => Ok(()),
     }
+}
+
+/// The names of the namespace `namespace` followed by `name`: the path a type or a trait named
+/// `name` opens as a namespace of its own.
+fn path_of(namespace: &[Name], name: &Name) -> Vec<Name> {
+    namespace.iter().chain([name]).cloned().collect()
 }
 
 /// The Fix examples of the doc comments written in `files`, ordered by the file and then by where
