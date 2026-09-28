@@ -1,9 +1,9 @@
-//! The Fix examples written in doc comments.
+//! The Fix examples written in comments.
 //!
-//! A fenced code block of a doc comment whose info string begins with `fix` is a Fix example. A
-//! line of it whose text begins with `# ` after its indentation is hidden: it is compiled with the
-//! `# ` taken off, and left out when the doc comment is shown to a reader. `fix test` compiles each
-//! example as the module `DocTest` and runs its `DocTest::main`.
+//! A comment is read as Markdown, and a fenced code block of it whose info string begins with `fix`
+//! is a Fix example. A line of an example whose text begins with `# ` after its indentation is
+//! hidden: it is compiled with the `# ` taken off, and left out when a doc comment is shown to a
+//! reader. `fix test` compiles each example as the module `DocTest` and runs its `DocTest::main`.
 
 use crate::{
     ast::{name::Name, program::Program},
@@ -110,7 +110,7 @@ impl<'a> CodeFence<'a> {
     }
 }
 
-/// A Fix example of a doc comment.
+/// A Fix example of a comment or of a Markdown document.
 pub struct FixExample {
     /// Where the line opening the example stands, which names the example in what `fix test`
     /// reports.
@@ -130,8 +130,8 @@ pub enum ExampleTask {
 }
 
 impl FixExample {
-    /// The place the example is reported at: the file its doc comment is written in and the line
-    /// that opens it.
+    /// The place the example is reported at: the file its comment is written in and the line that
+    /// opens it.
     ///
     /// # Examples
     /// `src/geometry.fix:12`
@@ -286,7 +286,7 @@ fn comments_of(source: &SourceFile) -> Result<Vec<Vec<TextLine>>, Errors> {
 ///
 /// An error reports each info string carrying a mark other than `ignore` and `no_run` or carrying
 /// both of them, each example written as a module named other than `DocTest`, and each example the
-/// doc comment ends inside.
+/// text ends inside.
 pub fn examples_in_text(lines: &[TextLine], module: &Name) -> Result<Vec<FixExample>, Errors> {
     let texts = lines
         .iter()
@@ -303,7 +303,7 @@ pub fn examples_in_text(lines: &[TextLine], module: &Name) -> Result<Vec<FixExam
     Ok(examples)
 }
 
-/// The Fix example `block` of the doc comment whose lines are `lines`.
+/// The Fix example `block` of the comment or the document whose lines are `lines`.
 fn example_of_block(
     lines: &[TextLine],
     block: &FencedBlock,
@@ -341,7 +341,10 @@ fn example_of_block(
     }
     let Some(close) = block.close else {
         return Err(Errors::from_msg_srcs(
-            "The doc comment ends inside this Fix example. Close it by a line of ```.".to_string(),
+            format!(
+                "The comment ends inside this Fix example. Close it by a line of {}.",
+                block.fence.prefix.trim_start()
+            ),
             &[&fence],
         ));
     };
@@ -369,12 +372,12 @@ fn example_of_block(
 /// and it has to declare the module `DocTest`. Any other example is an expression of type `IO ()`,
 /// which is wrapped into the module as the value `DocTest::main`, with `module` imported.
 ///
-/// Each line of the example stays on the line of the doc comment it is written on, and the lines
-/// the example is wrapped in are written on the lines of its fences, so the positions in the
-/// source are reported where they stand in the doc comment (see `SourceOrigin`).
+/// Each line of the example stays on the line of the comment it is written on, and the lines the
+/// example is wrapped in are written on the lines of its fences, so the positions in the source
+/// are reported where they stand in the comment (see `SourceOrigin`).
 ///
 /// # Examples
-/// The example `let x = 1;` / `assert_eq(|_|"", x, 1)` of a doc comment in the module
+/// The example `let x = 1;` / `assert_eq(|_|"", x, 1)` of a comment in the module
 /// `Geometry` is compiled as
 /// ~~~text
 /// module DocTest; import Geometry; main : IO () = (
@@ -454,17 +457,17 @@ fn fence_origin(line: &TextLine) -> (usize, LineOrigin) {
     (line_number, origin)
 }
 
-/// A fenced code block of a docstring, by the indices of its lines.
+/// A fenced code block of a Markdown text, by the indices of its lines.
 struct FencedBlock<'a> {
     /// The index of the line opening the block.
     open: usize,
     /// The fence that line opens the block with.
     fence: CodeFence<'a>,
-    /// The index of the line closing the block, or `None` for a block the docstring ends inside.
+    /// The index of the line closing the block, or `None` for a block the text ends inside.
     close: Option<usize>,
 }
 
-/// The fenced code blocks of the docstring whose lines are `lines`, in order.
+/// The fenced code blocks of the Markdown text whose lines are `lines`, in order.
 fn fenced_blocks<'a>(lines: &[&'a str]) -> Vec<FencedBlock<'a>> {
     let mut blocks = vec![];
     let mut open: Option<(usize, CodeFence)> = None;
@@ -489,7 +492,8 @@ fn fenced_blocks<'a>(lines: &[&'a str]) -> Vec<FencedBlock<'a>> {
     blocks
 }
 
-/// The fenced code blocks of the docstring whose lines are `lines` that are Fix examples, in order.
+/// The fenced code blocks of the Markdown text whose lines are `lines` that are Fix examples, in
+/// order.
 fn fix_example_blocks<'a>(lines: &[&'a str]) -> Vec<FencedBlock<'a>> {
     fenced_blocks(lines)
         .into_iter()

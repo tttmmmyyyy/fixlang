@@ -447,7 +447,7 @@ pub struct Configuration {
     /// them, the root project and every dependency alike. `ProjectFile::set_config` adds them as it
     /// configures each project.
     pub project_sources: Vec<ProjectSources>,
-    /// The Fix example of a doc comment the build compiles beside the sources, assembled into the
+    /// The Fix example of a comment the build compiles beside the sources, assembled into the
     /// module `DocTest`. Its `DocTest::main` is then the entry point of the program.
     pub doc_test_example: Option<SourceFile>,
     /// Object files given to the build, linked into the program beside the ones compiled from the

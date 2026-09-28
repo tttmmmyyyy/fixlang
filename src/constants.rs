@@ -74,7 +74,7 @@ pub const C_ENTRY_POINT_NAME: &str = "main";
 pub const TEST_FUNCTION_NAME: &str = "test";
 /// The name of the module whose namespace holds the test entry point `Test::test`.
 pub const TEST_MODULE_NAME: &str = "Test";
-/// The name of the module a Fix example of a doc comment is written as. Its `main : IO ()` is what
+/// The name of the module a Fix example of a comment is written as. Its `main : IO ()` is what
 /// `fix test` starts the example from.
 pub const DOC_TEST_MODULE_NAME: &str = "DocTest";
 pub const BOXED_TRAIT_NAME: &str = "Boxed";

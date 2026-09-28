@@ -15,11 +15,11 @@ use std::process::{self, Output};
 /// Which tests `fix test` runs, as its options select.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum TestSelection {
-    /// `Test::test`, and then the Fix examples of the doc comments.
+    /// `Test::test`, and then the Fix examples of the comments.
     All,
     /// `Test::test` alone, which `--no-doc` selects.
     TestFunction,
-    /// The Fix examples of the doc comments alone, which `--doc` selects.
+    /// The Fix examples of the comments alone, which `--doc` selects.
     DocTests,
 }
 

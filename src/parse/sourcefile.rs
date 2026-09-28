@@ -172,9 +172,10 @@ impl SourceFile {
 
 /// Where the lines of a source assembled from parts of another file were taken from.
 ///
-/// The Fix example of a doc comment is compiled from such a source: line `k` of it is line
-/// `first_line + k - 1` of the file the doc comment is written in, with the comment's `//` taken off
-/// the front, and the lines the example is wrapped in are written on the lines of its fences.
+/// The Fix example of a comment is compiled from such a source: line `k` of it is line
+/// `first_line + k - 1` of the file the comment is written in, with what precedes the comment's text
+/// taken off the front, and the lines the example is wrapped in are written on the lines of its
+/// fences.
 ///
 /// # Examples
 /// The source `"main : IO () = (\npure()\n);\n"` assembled from lines 7 to 9 of

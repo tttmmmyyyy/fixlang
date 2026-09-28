@@ -1,4 +1,4 @@
-//! Tests of the Fix examples written in doc comments: the examples of `Std` itself, and what
+//! Tests of the Fix examples written in comments: the examples of `Std` itself, and what
 //! `fix test` does with the examples of a project.
 
 use crate::commands::test::{test_example, ExampleOutcome};
@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 use std::process::Output;
 use tempfile::TempDir;
 
-/// The Fix examples of `Std` pass: those of the doc comments in `std.fix`, and those of the
+/// The Fix examples of `Std` pass: those of the comments in `std.fix`, and those of the
 /// documents under `src/docs/`, which `Std` carries for the values the compiler defines.
 #[test]
 fn test_std_doc_examples() {
@@ -127,7 +127,7 @@ fn streams(output: &Output) -> String {
     )
 }
 
-/// A module `Lib` whose doc comments hold a Fix example of each kind: one written as statements,
+/// A module `Lib` whose comments hold a Fix example of each kind: one written as statements,
 /// one written as a module, one marked `no_run` whose run would fail, and one marked `ignore` that
 /// does not compile.
 const LIB_WITH_PASSING_EXAMPLES: &str = r#"
@@ -173,7 +173,7 @@ test = (
 );
 "#;
 
-/// `fix test` runs `Test::test` and then each Fix example of the doc comments: an example written
+/// `fix test` runs `Test::test` and then each Fix example of the comments: an example written
 /// as statements and one written as a module run and pass, one marked `no_run` is compiled alone,
 /// and one marked `ignore` is left out.
 #[test]
@@ -289,7 +289,7 @@ fn test_fix_test_without_the_test_function() {
 
 /// A Fix example that fails is reported with what it wrote to the standard error, the examples
 /// after it still run, and `fix test` fails. A compile error of an example is reported at its
-/// place in the doc comment.
+/// place in the comment.
 #[test]
 fn test_fix_test_reports_a_failing_example_and_runs_the_rest() {
     let lib = r#"module Lib;
@@ -326,7 +326,7 @@ value = 1;
     assert!(
         stderr.contains("8:24-8:34 in \"lib.fix\"")
             && stderr.contains("8 | //     # let x : I64 = \"a string\";"),
-        "the compile error of a hidden line is reported at its place in the doc comment\n{}",
+        "the compile error of a hidden line is reported at its place in the comment\n{}",
         streams(&output)
     );
     assert!(
@@ -357,7 +357,7 @@ fn test_error_on_the_wrapper_is_reported_at_the_fence() {
     );
 }
 
-/// The info string of a Fix example carries `ignore`, `no_run` or neither, and a doc comment closes
+/// The info string of a Fix example carries `ignore`, `no_run` or neither, and a comment closes
 /// each example it opens. `fix test` rejects any other before it runs a test.
 #[test]
 fn test_malformed_examples_are_rejected() {
@@ -395,7 +395,7 @@ value = 1;
         ),
         ("declares the module `Other`", "12 | // module Other;"),
         (
-            "The doc comment ends inside this Fix example",
+            "The comment ends inside this Fix example. Close it by a line of ```.",
             "15 | // ```fix",
         ),
     ] {
@@ -608,7 +608,7 @@ double = |x| (
 
 /*
 ```fix
-let y = double(6);
+let y = triple(4);
 assert_eq(|_|"", y, 12)
 ```
 */
