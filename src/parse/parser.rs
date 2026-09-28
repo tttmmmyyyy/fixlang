@@ -3115,10 +3115,16 @@ fn parse_pattern_struct(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Pattern
     let tycon_pair = pairs.next().unwrap();
     let tycon_span = Span::from_pair(&ctx.source, &tycon_pair);
     let tycon = parse_tycon(tycon_pair, ctx);
-    let field_to_pats = pairs
-        .map(|pair| parse_pattern_struct_field(pair, ctx))
-        .collect();
-    PatternNode::make_struct_with_srcs(tycon, field_to_pats)
+    let mut field_to_pats = vec![];
+    let mut rest = None;
+    for pair in pairs {
+        if pair.as_rule() == Rule::pattern_struct_rest {
+            rest = Some(Span::from_pair(&ctx.source, &pair));
+        } else {
+            field_to_pats.push(parse_pattern_struct_field(pair, ctx));
+        }
+    }
+    PatternNode::make_struct_with_srcs(tycon, field_to_pats, rest)
         .set_source(span)
         .set_aux_src(tycon_span)
 }
@@ -3277,6 +3283,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::expr_nlr => "expression".to_string(),
         Rule::expr_unary => "expression".to_string(),
         Rule::name => "name".to_string(),
+        Rule::type_field_name => "field or variant name".to_string(),
         Rule::in_of_let => "`in` or `;`".to_string(),
         Rule::eq_of_let => "`=`".to_string(),
         Rule::type_expr => "type".to_string(),

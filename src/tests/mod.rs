@@ -87,6 +87,7 @@ mod test_struct_destructure;
 mod test_struct_field_shorthand;
 mod test_struct_get_borrow;
 mod test_struct_literal;
+mod test_struct_pattern_rest;
 mod test_struct_rmw;
 mod test_thread_safety;
 mod test_threaded_rc;

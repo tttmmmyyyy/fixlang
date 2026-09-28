@@ -464,7 +464,7 @@ fn collect_pattern_var_refs(pat: &Arc<PatternNode>, target: &FullName, refs: &mu
                 }
             }
         }
-        Pattern::Struct(_, field_pats) => {
+        Pattern::Struct(_, field_pats, _) => {
             for (_, _, sub_pat) in field_pats {
                 collect_pattern_var_refs(sub_pat, target, refs);
             }
@@ -558,7 +558,7 @@ fn collect_pattern_type_refs(pat: &Arc<PatternNode>, target: &TyCon, refs: &mut 
                 collect_typenode_type_refs(ty, target, refs);
             }
         }
-        Pattern::Struct(tc, field_pats) => {
+        Pattern::Struct(tc, field_pats, _) => {
             if tc.as_ref() == target {
                 if let Some(span) = &pat.info.aux_src {
                     refs.push(span.clone());
@@ -908,7 +908,7 @@ fn collect_pattern_bare_field_occs(
 ) {
     match &pat.pattern {
         Pattern::Var(_, _) => {}
-        Pattern::Struct(pat_tc, fields) => {
+        Pattern::Struct(pat_tc, fields, _) => {
             if pat_tc.as_ref() == tc {
                 for (fname, field_src, _) in fields {
                     if fname == name {

@@ -26,7 +26,7 @@ impl Collector {
             Pattern::Var(_, Some(ty)) => {
                 ty.free_vars_to_vec_with_span(&mut self.tyvars);
             }
-            Pattern::Struct(_, fields) => {
+            Pattern::Struct(_, fields, _) => {
                 for (_, _, field_pat) in fields {
                     self.collect_from_pattern(field_pat);
                 }

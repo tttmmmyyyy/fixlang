@@ -167,7 +167,7 @@ impl<'a> Collapser<'a> {
                     == Some(variant)
             }
             Pattern::Var(_, _) => true,
-            Pattern::Struct(_, _) => false,
+            Pattern::Struct(_, _, _) => false,
         })
     }
 
@@ -217,7 +217,7 @@ impl<'a> Collapser<'a> {
                 )
             }
             Pattern::Var(_, _) => expr_let_typed(pat.clone(), built.clone(), body.clone()),
-            Pattern::Struct(_, _) => {
+            Pattern::Struct(_, _, _) => {
                 unreachable!("`arm_for_variant` never selects an arm whose pattern is a struct")
             }
         }
@@ -317,7 +317,7 @@ impl<'a> ExprVisitor for Collapser<'a> {
             return StartVisitResult::VisitChildren;
         }
 
-        let Pattern::Struct(pat_tycon, field_to_pat) = &pat.pattern else {
+        let Pattern::Struct(pat_tycon, field_to_pat, _) = &pat.pattern else {
             return StartVisitResult::VisitChildren;
         };
         let Some(Construction::Struct(tycon, fields)) = self.construction_of(&bound) else {

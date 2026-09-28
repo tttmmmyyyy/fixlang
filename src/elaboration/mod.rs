@@ -112,6 +112,9 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         program
             .deferred_errors
             .append(program.collect_deprecation_diagnostics(config));
+        program
+            .deferred_errors
+            .append(program.collect_missing_pattern_field_diagnostics(config));
         return Ok(program);
     }
 
@@ -133,6 +136,9 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     program
         .deferred_errors
         .append(program.collect_deprecation_diagnostics(config));
+    program
+        .deferred_errors
+        .append(program.collect_missing_pattern_field_diagnostics(config));
 
     // Instantiate Main::main (or Test::test).
     match config.output_file_type {

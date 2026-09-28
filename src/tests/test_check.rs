@@ -305,6 +305,40 @@ mod integration_tests {
         );
     }
 
+    /// A struct pattern of the user's own code that leaves out fields without `_` is warned about,
+    /// naming the fields and pointing at the pattern, and the check still succeeds. A pattern that
+    /// ends with `_`, a pattern that names every field, and a pattern inside a dependency, which
+    /// its user cannot edit, are not reported.
+    #[test]
+    fn test_check_warns_on_struct_pattern_leaving_out_fields() {
+        let (_temp_dir, project_dir) = setup_test_env("pattern_field_warning_project");
+
+        let output = fix_command()
+            .arg("check")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix check");
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "fix check should succeed (warning-only): stderr={}",
+            stderr
+        );
+        assert!(
+            stderr.contains("This pattern leaves out the fields `y`, `z` of struct `Main::S`.")
+                && stderr.contains("leaves_out = |S { x }| x;"),
+            "Expected a warning on the pattern of `leaves_out`, got: {}",
+            stderr
+        );
+        assert_eq!(
+            stderr.matches("This pattern leaves out").count(),
+            1,
+            "Expected the pattern of `leaves_out` alone to be reported, got: {}",
+            stderr
+        );
+    }
+
     /// "Deprecated context" rule: a deprecated helper calling another
     /// deprecated helper should not produce a warning for that internal
     /// call. Only the use from non-deprecated code (here, `main`) warns.

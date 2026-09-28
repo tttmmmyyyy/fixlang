@@ -657,6 +657,15 @@ get_price : Product -> I64;
 get_price = |Product { price, sold }| price;
 ```
 
+A struct pattern names every field of the struct. To leave some fields out, write `_` after the fields you name:
+
+```
+get_price : Product -> I64;
+get_price = |Product { price, _ }| price;
+```
+
+A pattern that leaves out fields without writing `_` is accepted with a warning. Since a pattern names every field, adding a field to a struct points out each pattern that takes the struct apart, as it does for each struct literal. For the same reason, a field of a struct or a variant of a union cannot be named `_`.
+
 ## Iterators
 
 Now I explain about the expression `fib.to_iter.map(to_string).join(", ")`, where `fib : Array I64` is the array of Fibonacci sequence. This expression 

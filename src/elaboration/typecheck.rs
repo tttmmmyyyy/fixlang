@@ -1655,7 +1655,7 @@ impl TypeCheckContext {
                     }
                 }
             }
-            Pattern::Struct(tc, pats) => {
+            Pattern::Struct(tc, pats, _) => {
                 // The head has to name a struct: the sub-patterns are matched against that
                 // struct's fields, and the value is destructured in its field order.
                 let tycon_info = self.resolve_struct_tycon(tc, &pat.info.source, !tolerate)?;
@@ -2507,7 +2507,7 @@ impl TypeCheckContext {
                 let subpat = self.map_types_for_pattern(subpat, pat_ty)?;
                 pat.set_union_pat(subpat)
             }
-            Pattern::Struct(_, field_to_pat) => {
+            Pattern::Struct(_, field_to_pat, _) => {
                 let mut field_to_pat = field_to_pat.clone();
                 for (_field_name, _, subpat) in field_to_pat.iter_mut() {
                     *subpat = self.map_types_for_pattern(subpat, pat_ty)?;
@@ -2743,7 +2743,7 @@ impl TypeCheckContext {
         match &pat.pattern {
             Pattern::Var(_, _) => {}
             Pattern::Union(_, _, subpat) => self.check_pattern_types_are_fixed(subpat)?,
-            Pattern::Struct(_, fields) => {
+            Pattern::Struct(_, fields, _) => {
                 for (_, _, subpat) in fields {
                     self.check_pattern_types_are_fixed(subpat)?;
                 }
@@ -2836,7 +2836,7 @@ impl TypeCheckContext {
         match &pat.pattern {
             Pattern::Var(_, _) => {}
             Pattern::Union(_, _, subpat) => self.check_all_pattern_typed(subpat)?,
-            Pattern::Struct(_, fields) => {
+            Pattern::Struct(_, fields, _) => {
                 for (_, _, subpat) in fields {
                     self.check_all_pattern_typed(subpat)?;
                 }
