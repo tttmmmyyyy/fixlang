@@ -322,7 +322,7 @@ mod tests {
     /// are the lambdas the program writes.
     ///
     /// The capture struct the environment carries is what names the closures under test: its type
-    /// constructor is named with `#EnvCap`.
+    /// constructor is named with `#ScopeCap`.
     #[test]
     fn test_a_lambda_given_to_a_scope_builtin_stores_nothing() {
         for opt_level in ["basic", "max"] {
@@ -334,7 +334,7 @@ mod tests {
             );
             let built = dump
                 .lines()
-                .filter(|line| line.contains("= closure ") && line.contains("#EnvCap"))
+                .filter(|line| line.contains("= closure ") && line.contains("#ScopeCap"))
                 .collect::<Vec<_>>();
             // At least one for each of `borrow_elements`, `mutate_elements` and `Destructor::borrow`.
             assert!(

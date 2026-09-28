@@ -1,8 +1,10 @@
 /*
-# Moving captures into an environment operand
+# Decapturing the lambdas given to scope builtins
 
-An inline-LLVM op that declares `LLVMGen::env_operand` applies one of its operands, a function, to a
-tuple whose first field is another of its operands, the environment. A lambda given to such an op
+The scope builtins — `Std::with_retained`, `Std::Array::borrow_elements`, `Std::FFI::borrow_boxed`
+and the mutating ones behind `mutate_elements` and `mutate_boxed` — are inline-LLVM ops that declare
+`LLVMGen::env_operand`. Such an op applies one of its operands, a function, to a tuple whose first
+field is another of its operands, the environment. A lambda given to such an op
 needs no closure object for what it captures: the captured values can travel in the environment
 instead. This pass moves them there, so that the lambda captures nothing and building it allocates
 nothing.
@@ -63,7 +65,7 @@ use crate::{
         traverse::{ExprVisitor, StartVisitResult, VisitState},
         types::{tycon, TyCon, TyConInfo, TypeNode},
     },
-    constants::CAPTURE_INTO_ENV_PREFIX,
+    constants::SCOPE_CAP_PREFIX,
     fixstd::builtin::{make_tuple_name_abs, make_tuple_ty},
     misc::{Map, Set},
 };
@@ -169,10 +171,10 @@ impl CaptureMover<'_> {
 
         let id = self.counter;
         let local =
-            |suffix: &str| FullName::local(&format!("{}{}{}", CAPTURE_INTO_ENV_PREFIX, id, suffix));
+            |suffix: &str| FullName::local(&format!("{}{}{}", SCOPE_CAP_PREFIX, id, suffix));
 
         let cap = CaptureStruct::new(
-            &format!("{}{}", CAPTURE_INTO_ENV_PREFIX, id),
+            &format!("{}{}", SCOPE_CAP_PREFIX, id),
             &self.symbol,
             &fields,
         );

@@ -940,7 +940,7 @@ impl Configuration {
     /// environment, so that the lambda needs no closure object. Runs at `Basic` and above: the
     /// functions the standard library defines around such an op give it a lambda capturing the
     /// function they take, which costs a closure object on each call where this does not run.
-    pub fn enable_capture_into_env(&self) -> bool {
+    pub fn enable_decapture_scope_lambdas(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Basic)
     }
 
