@@ -722,15 +722,6 @@ impl FieldOccurrence {
     }
 }
 
-/// The text of a struct field written with its value or binder. A rename writes a field that was
-/// written as its name alone this way, so that the field and the value keep their own names.
-///
-/// # Examples
-/// `field_written_with_value("x", "a")` is `x: a`.
-pub(super) fn field_written_with_value(field: &Name, value: &Name) -> String {
-    format!("{}: {}", field, value)
-}
-
 // Generate the (prefix, fullname) pairs for each user-callable auto-method
 // of a struct field or union variant. Internal helpers like
 // `_act_x_identity` and `#punch_x` are intentionally excluded (they are

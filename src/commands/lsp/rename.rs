@@ -8,8 +8,8 @@
 //! auto-generated accessors clicked directly.
 
 use super::references::{
-    field_written_with_value, find_assoc_type_references, find_field_occurrences,
-    find_global_value_references, find_trait_references, find_type_references,
+    find_assoc_type_references, find_field_occurrences, find_global_value_references,
+    find_trait_references, find_type_references,
 };
 use super::server::{send_response, DiagnosticsResult, LatestContent, ResponseError};
 use super::util::{
@@ -236,6 +236,15 @@ fn value_edit(shorthand_fields: &Map<Span, Name>, span: Span, text: String) -> (
         None => text,
     };
     (span, text)
+}
+
+/// The text of a struct field written with its value or binder. A rename writes a field that was
+/// written as its name alone this way, so that the field and the value keep their own names.
+///
+/// # Examples
+/// `field_written_with_value("x", "a")` is `x: a`.
+fn field_written_with_value(field: &Name, value: &Name) -> String {
+    format!("{}: {}", field, value)
 }
 
 /// The name of every field of a struct construction or a struct pattern written as its name alone,
