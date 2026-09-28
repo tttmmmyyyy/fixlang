@@ -211,16 +211,13 @@ fn comments_of(source: &SourceFile) -> Result<Vec<Vec<DocLine>>, Errors> {
         }
         let text = &content[token.start..token.end];
         match text.strip_prefix("//") {
-            Some(body) => {
-                let (marker_len, body) = match body.strip_prefix(' ') {
-                    Some(body) => (3, body),
-                    None => (2, body),
-                };
+            Some(after_slashes) => {
+                let body = after_slashes.strip_prefix(' ').unwrap_or(after_slashes);
                 let line = line_of(token.start);
                 let alone = content[line_starts[line]..token.start].trim().is_empty();
-                let line_comment = doc_line(token.start + marker_len, body);
+                let line_comment = doc_line(token.end - body.len(), body);
                 match comments.last_mut() {
-                    Some(comment) if alone && open_line_comment == Some(line - 1) => {
+                    Some(comment) if alone && open_line_comment.map(|l| l + 1) == Some(line) => {
                         comment.push(line_comment)
                     }
                     _ => comments.push(vec![line_comment]),

@@ -228,6 +228,13 @@ impl SourceOrigin {
             "an assembled source taken from \"{}\" has a line",
             self.file_path.to_string_lossy()
         );
+        assert!(
+            line <= self.lines.len() + 1,
+            "line {} of an assembled source of {} lines taken from \"{}\"",
+            line,
+            self.lines.len(),
+            self.file_path.to_string_lossy()
+        );
         let index = (line - 1).min(self.lines.len() - 1);
         (self.first_line + index, &self.lines[index])
     }
