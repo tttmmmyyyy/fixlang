@@ -33,6 +33,8 @@ Fix 1.5.0 makes programs faster, and builds them faster, than Fix 1.4.0.
 | Union-find | 1.06x |
 | Convolution modulo a prime | 1.05x |
 
+NOTE: The bipartite matching speedup needs care in reading. The benchmark's code keeps a reference to an array while it updates that array, instead of using the array linearly as Fix code should, and under 1.4.0 this copied the whole array on every augmenting path. The 1.5.0 compiler avoids that copy, but code written properly avoided it under 1.4.0 as well.
+
 **Builds take less time and memory.** Building cp-library's test suite from scratch takes 29% less time (53.3 s -> 37.7 s) and 38% less memory (1.46 GB -> 0.90 GB). Rebuilding it after a one-line edit takes 9% less time (39.1 s -> 35.6 s) and 48% less memory.
 
 ### Added
