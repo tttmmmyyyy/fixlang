@@ -698,7 +698,7 @@ fn collect_qualtype_trait_refs(qt: &QualType, target: &TraitId, refs: &mut Vec<S
 
 /// A reference to a struct field or union variant.
 pub(super) struct FieldOccurrence {
-    /// The span of the field or variant name, its prefix left outside.
+    /// The span of the field or variant name, together with `prefix` where the occurrence has one.
     pub span: Span,
     /// The literal text that precedes the name at the occurrence: "" for a bare-name occurrence
     /// (declaration, `MakeStruct` field, `Pattern::Struct` / `Pattern::Union`), the auto-method's
@@ -718,25 +718,6 @@ impl FieldOccurrence {
             span,
             prefix: "",
             is_shorthand,
-        }
-    }
-
-    /// The text that replaces the occurrence when the field or variant `old_name` is renamed to
-    /// `new_name`. A field written as its name alone becomes `new_name: old_name`, so that the
-    /// value or binder its name also writes keeps its name.
-    ///
-    /// # Examples
-    /// Renaming `x` to `h` turns `@x` into `@h`, and the `x` of `S { x }` into `h: x`.
-    pub(super) fn renamed_text(&self, old_name: &Name, new_name: &Name) -> String {
-        if self.is_shorthand {
-            assert_eq!(
-                self.prefix, "",
-                "a field written as its name alone carries no prefix: {}",
-                old_name
-            );
-            field_written_with_value(new_name, old_name)
-        } else {
-            format!("{}{}", self.prefix, new_name)
         }
     }
 }

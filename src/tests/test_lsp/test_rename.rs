@@ -1295,4 +1295,54 @@ mod tests {
         );
         ctx.shutdown();
     }
+
+    // =======================================================================
+    // rename_field_via_shorthand_accessor fixture, main.fix (0-indexed):
+    //
+    //   2: type S = struct { a : I64 };             `a` col 18
+    //   6: type U = union { v : I64, w : Bool };     `v` col 17
+    //  11: t = T { set_a };                          `set_a` col 8, the setter of `S`'s field `a`
+    //  14: k = K { v };                              `v` col 8, the constructor of `U`'s variant `v`
+    //  18:     let s = (t.@set_a)(7, S { a : 1 });   `a` col 30
+    //  20:     println(s.@a.to_string + " " + u.as_v.to_string)   `@a` col 14, `as_v` col 37
+    // =======================================================================
+
+    /// Renaming a field writes a field of another struct given the field's setter by its name
+    /// alone (`T { set_a }`) as `set_a: set_b`, so that the other struct's field keeps its name.
+    #[test]
+    fn test_rename_field_whose_accessor_is_a_shorthand_value() {
+        let mut ctx = LspTestCtx::setup("rename_field_via_shorthand_accessor", &["main.fix"]);
+        let we = ctx.rename("main.fix", 2, 18, "b");
+        assert_eq!(
+            edits_by_position(&we),
+            vec![
+                ((2, 18), "b".to_string()),
+                ((11, 8), "set_a: set_b".to_string()),
+                ((18, 30), "b".to_string()),
+                ((20, 14), "@b".to_string()),
+            ],
+            "WorkspaceEdit: {:?}",
+            we
+        );
+        ctx.shutdown();
+    }
+
+    /// Renaming a union variant writes a field of a struct given the variant's constructor by its
+    /// name alone (`K { v }`) as `v: x`, so that the struct's field keeps its name.
+    #[test]
+    fn test_rename_variant_whose_constructor_is_a_shorthand_value() {
+        let mut ctx = LspTestCtx::setup("rename_field_via_shorthand_accessor", &["main.fix"]);
+        let we = ctx.rename("main.fix", 6, 17, "x");
+        assert_eq!(
+            edits_by_position(&we),
+            vec![
+                ((6, 17), "x".to_string()),
+                ((14, 8), "v: x".to_string()),
+                ((20, 37), "as_x".to_string()),
+            ],
+            "WorkspaceEdit: {:?}",
+            we
+        );
+        ctx.shutdown();
+    }
 }

@@ -182,11 +182,18 @@ pub(super) fn handle_rename(
             new_name,
         ),
         EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
+            let shorthand_fields = shorthand_fields(program);
             find_field_occurrences(program, tc, name, true)
                 .into_iter()
                 .map(|occ| {
-                    let text = occ.renamed_text(name, new_name);
-                    (occ.span, text)
+                    if occ.is_shorthand {
+                        // The renamed field itself, written as its name alone: the name keeps
+                        // naming the value or the binder.
+                        (occ.span, field_written_with_value(new_name, name))
+                    } else {
+                        let text = format!("{}{}", occ.prefix, new_name);
+                        value_edit(&shorthand_fields, occ.span, text)
+                    }
                 })
                 .collect()
         }
@@ -207,21 +214,28 @@ fn rename_edits(spans: Vec<Span>, new_text: &Name) -> Vec<(Span, String)> {
     spans.into_iter().map(|s| (s, new_text.clone())).collect()
 }
 
-/// One edit per span, each renaming the value named there to `new_name`. A span where a struct
-/// field is written as its name alone (`S { x }`), which names the field too, becomes
-/// `x: new_name`, so that the field keeps its name.
+/// One edit per span, each renaming the value named there to `new_name`.
 fn rename_value_edits(program: &Program, spans: Vec<Span>, new_name: &Name) -> Vec<(Span, String)> {
     let shorthand_fields = shorthand_fields(program);
     spans
         .into_iter()
-        .map(|span| {
-            let text = match shorthand_fields.get(&span) {
-                Some(field) => field_written_with_value(field, new_name),
-                None => new_name.clone(),
-            };
-            (span, text)
-        })
+        .map(|span| value_edit(&shorthand_fields, span, new_name.clone()))
         .collect()
+}
+
+/// The edit that writes `text` over the name of a value at `span`. Where a struct field is written
+/// as its name alone at `span` (`S { x }`), that name also names the field, so the field is written
+/// out with `text` as its value (`x: text`) and keeps its name.
+///
+/// # Arguments
+/// * `shorthand_fields` — the field written as its name alone at each span, as `shorthand_fields`
+///   collects them.
+fn value_edit(shorthand_fields: &Map<Span, Name>, span: Span, text: String) -> (Span, String) {
+    let text = match shorthand_fields.get(&span) {
+        Some(field) => field_written_with_value(field, &text),
+        None => text,
+    };
+    (span, text)
 }
 
 /// The name of every field of a struct construction or a struct pattern written as its name alone,

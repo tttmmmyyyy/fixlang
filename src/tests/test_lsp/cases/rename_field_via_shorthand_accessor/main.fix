@@ -1,0 +1,22 @@
+module Main;
+
+type S = struct { a : I64 };
+
+type T = struct { set_a : I64 -> S -> S };
+
+type U = union { v : I64, w : Bool };
+
+type K = struct { v : I64 -> U };
+
+t : T;
+t = T { set_a };
+
+k : K;
+k = K { v };
+
+main : IO ();
+main = (
+    let s = (t.@set_a)(7, S { a : 1 });
+    let u = (k.@v)(3);
+    println(s.@a.to_string + " " + u.as_v.to_string)
+);
