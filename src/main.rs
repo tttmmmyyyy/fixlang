@@ -418,20 +418,20 @@ fn run_cli() {
     let test_subc = add_run_and_test_options(
         App::new("test")
             .trailing_var_arg(true)
-            .about("Tests a Fix program. Executes `Test::test : IO ()`, and then the Fix examples in the doc comments of the files listed in the `build` and `build.test` sections of the project file."),
+            .about("Tests a Fix program. Executes `Test::test : IO ()`, and then the Fix examples in the comments of the files listed in the `build` and `build.test` sections of the project file."),
     )
     .arg(
         Arg::new("doc")
             .long("doc")
             .takes_value(false)
             .conflicts_with("no-doc")
-            .help("Run the Fix examples in the doc comments alone."),
+            .help("Run the Fix examples in the comments alone."),
     )
     .arg(
         Arg::new("no-doc")
             .long("no-doc")
             .takes_value(false)
-            .help("Run `Test::test` alone, leaving the Fix examples in the doc comments out."),
+            .help("Run `Test::test` alone, leaving the Fix examples in the comments out."),
     );
 
     // "fix deps" subcommand

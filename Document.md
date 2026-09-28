@@ -99,7 +99,7 @@
     - [Registry file](#registry-file)
     - [Deprecation](#deprecation)
     - [Tests](#tests)
-        - [Fix examples in documentation comments](#fix-examples-in-documentation-comments)
+        - [Fix examples in comments](#fix-examples-in-comments)
     - [Generating documentation](#generating-documentation)
     - [Language Server Protocol](#language-server-protocol)
         - [Specifying parameter list in the documentation comment as a hint to the language server](#specifying-parameter-list-in-the-documentation-comment-as-a-hint-to-the-language-server)
@@ -3236,16 +3236,16 @@ In the LSP, deprecation warnings are published with `DiagnosticSeverity.WARNING`
 
 ## Tests
 
-When you run `fix test`, it executes `Test::test : IO ()`, and then each Fix example written in the documentation comments (see [Fix examples in documentation comments](#fix-examples-in-documentation-comments)).
+When you run `fix test`, it executes `Test::test : IO ()`, and then each Fix example written in the comments (see [Fix examples in comments](#fix-examples-in-comments)).
 Also, at this time, the source files listed in the `build.test` section of the project file are compiled in addition to the source files listed in the `build` section.
 
 - `fix test --doc` runs the Fix examples alone, and `fix test --no-doc` runs `Test::test` alone.
 - A project that does not define `Test::test` has its Fix examples run alone.
 - The examples after a failing one still run. Once all of them have run, `fix test` lists the failed ones, and it exits with a non-zero status if `Test::test` or an example failed.
 
-### Fix examples in documentation comments
+### Fix examples in comments
 
-A fenced code block in a [documentation comment](#generating-documentation) whose info string is `fix` is a Fix example, and `fix test` compiles and runs it:
+A comment is read as Markdown, and a fenced code block in it whose info string is `fix` is a Fix example. `fix test` compiles and runs it. A comment is a `/* */` comment, or a run of `//` comments standing alone on consecutive lines; a `//` comment written after code on its line is a comment of its own. The text of a `//` comment starts after the `//` and one space after it, and the text of a `/* */` comment is read as it is written. An example is usually written in the [documentation comment](#generating-documentation) of what it shows, where `fix docs` shows it too:
 
 ```
 // Doubles a number.
@@ -3258,7 +3258,7 @@ double : I64 -> I64;
 double = |x| 2 * x;
 ```
 
-An example is an expression of type `IO ()`. `fix test` compiles it as the following module, where `Lib` stands for the module the documentation comment is written in:
+An example is an expression of type `IO ()`. `fix test` compiles it as the following module, where `Lib` stands for the module the comment is written in:
 
 ```
 module DocTest;
@@ -3269,7 +3269,7 @@ main : IO () = (
 );
 ```
 
-An example passes when this program exits with status 0, whatever it writes to the standard output and the standard error. A failing `assert_eq`, `undefined` or an index out of range therefore makes the example fail. Each example runs in a process of its own, and a compile error in an example is reported at its place in the documentation comment.
+An example passes when this program exits with status 0, whatever it writes to the standard output and the standard error. A failing `assert_eq`, `undefined` or an index out of range therefore makes the example fail. Each example runs in a process of its own, and a compile error in an example is reported at its place in the comment.
 
 An example that begins with a `module` declaration is the source of the module as it stands. It declares the module `DocTest`, imports what it uses, including the module the comment is written in, and defines `main : IO ()`. Write an example in this form to define types or functions, or to import only some of the entities of a module:
 
@@ -3314,14 +3314,14 @@ Marks after `fix`, separated by commas, change what `fix test` does with an exam
 
 `fix test` reports any other mark as an error. A code block whose info string is empty or begins with another word, such as `fixme`, is not a Fix example.
 
-`fix test` runs the Fix examples of every documentation comment in the files listed in the `build` and `build.test` sections of the project file, private entities included, so the helpers a project writes for its tests can carry tested examples too. The examples in dependencies are not run. The examples are built with the same settings as `Test::test`, so they can use the test dependencies.
+`fix test` runs the Fix examples of every comment in the files listed in the `build` and `build.test` sections of the project file, so the helpers a project writes for its tests can carry tested examples too. The examples in dependencies are not run. The examples are built with the same settings as `Test::test`, so they can use the test dependencies.
 
 ## Generating documentation
 
 `fix docs` subcommand generates documentations (markdown files) for a Fix project.
 This command requires the project file to be present in the current directory.
 
-Consecutive line comments above declarations are recognized as documentations, and they are read as Markdown. A code block whose info string is `fix` is shown without its hidden lines (see [Fix examples in documentation comments](#fix-examples-in-documentation-comments)):
+Consecutive line comments above declarations are recognized as documentations, and they are read as Markdown. A code block whose info string is `fix` is shown without its hidden lines (see [Fix examples in comments](#fix-examples-in-comments)):
 
 ```
 // This is a documentation comment for the module.

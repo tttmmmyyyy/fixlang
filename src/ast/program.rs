@@ -3083,64 +3083,6 @@ impl Program {
         Ok(())
     }
 
-    /// The spans of the declarations that can carry a doc comment of their own, each the span
-    /// `Span::get_document` reads the comment above: the modules, the global values, the types
-    /// with their fields and variants, the traits with their members and associated types, the
-    /// trait aliases, and the trait implementations. Each span is given once, in order.
-    ///
-    /// Asked of a program as it is loaded from its sources, before the compiler adds declarations
-    /// of its own, these are the declarations written in the sources.
-    pub fn documentable_declaration_spans(&self) -> Vec<Span> {
-        let mut spans = vec![];
-        spans.extend(self.modules.iter().map(|mi| mi.source.clone()));
-        spans.extend(
-            self.global_values
-                .values()
-                .filter_map(|gv| gv.decl_src.clone()),
-        );
-        for type_defn in &self.type_defns {
-            spans.extend(type_defn.source.clone());
-            let fields = match &type_defn.value {
-                TypeDeclValue::Struct(s) => s.fields.as_slice(),
-                TypeDeclValue::Union(u) => u.fields.as_slice(),
-                TypeDeclValue::Alias(_) => &[],
-            };
-            spans.extend(fields.iter().filter_map(|field| field.source.clone()));
-        }
-        for trait_defn in self.trait_env.traits.values() {
-            spans.extend(trait_defn.source.clone());
-            spans.extend(
-                trait_defn
-                    .members
-                    .iter()
-                    .filter_map(|member| member.decl_src.clone()),
-            );
-            spans.extend(
-                trait_defn
-                    .assoc_types
-                    .values()
-                    .filter_map(|assoc_type| assoc_type.src.clone()),
-            );
-        }
-        spans.extend(
-            self.trait_env
-                .aliases
-                .data
-                .values()
-                .filter_map(|alias| alias.source.clone()),
-        );
-        spans.extend(
-            self.trait_env
-                .impls
-                .values()
-                .flatten()
-                .filter_map(|impl_| impl_.source.clone()),
-        );
-        spans.sort();
-        spans.dedup();
-        spans
-    }
-
     /// The name of every module linked into the program.
     pub fn linked_mods(&self) -> Set<Name> {
         self.mod_to_import_stmts.keys().cloned().collect()

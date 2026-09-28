@@ -11,12 +11,14 @@ use crate::{
     constants::{DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME},
     error::Errors,
     hash::md5_hex,
-    misc::{save_temporary_source, to_absolute_path, Map, Set},
+    misc::{save_temporary_source, to_absolute_path, Set},
     parse::{
+        lexer::{lex_tokens, LexTokenKind},
         parser::parse_source_module_defn,
         sourcefile::{DocLine, LineOrigin, SourceFile, SourceOrigin, Span},
     },
 };
+use std::iter;
 use std::path::PathBuf;
 
 /// The mark of an info string that leaves a Fix example out of the tests.
@@ -147,43 +149,103 @@ fn path_of(namespace: &[Name], name: &Name) -> Vec<Name> {
     namespace.iter().chain([name]).cloned().collect()
 }
 
-/// The Fix examples of the doc comments written in `files`, ordered by the file and then by where
-/// they stand in it. `program` is a program loaded from sources that `files` are among.
+/// The Fix examples of the comments written in `files`, ordered by the file and then by where they
+/// stand in it. `program` is a program loaded from sources that `files` are among, and each file is
+/// read as the source of the module it declares.
 pub fn collect_examples(program: &Program, files: &[PathBuf]) -> Result<Vec<FixExample>, Errors> {
     let files = files
         .iter()
         .map(|file| to_absolute_path(file))
         .collect::<Result<Set<_>, _>>()?;
-    let mut module_of_file: Map<PathBuf, Name> = Map::default();
-    for module in &program.modules {
-        module_of_file.insert(module.absolute_source_path()?, module.name.clone());
-    }
-
     let mut examples = vec![];
     let mut errors = Errors::empty();
-    for span in program.documentable_declaration_spans() {
-        let path = to_absolute_path(&span.input.file_path)?;
-        if !files.contains(&path) {
+    for module in &program.modules {
+        if !files.contains(&module.absolute_source_path()?) {
             continue;
         }
-        let module = module_of_file.get(&path).unwrap_or_else(|| {
-            panic!(
-                "the declaration in \"{}\" belongs to the module the file declares",
-                path.to_string_lossy()
-            )
-        });
-        errors.eat_err_or(
-            examples_in_document(&span.document_lines()?, module),
-            |found| examples.extend(found),
-        );
+        for comment in comments_of(&module.source.input)? {
+            errors.eat_err_or(examples_in_document(&comment, &module.name), |found| {
+                examples.extend(found)
+            });
+        }
     }
     errors.to_result()?;
     examples.sort_by(|lhs, rhs| lhs.fence.cmp(&rhs.fence));
     Ok(examples)
 }
 
-/// The Fix examples of the doc comment whose lines are `doc_lines`, in order. `module` is the
-/// module the doc comment is written in, which an example written as statements imports.
+/// The comments of `source`, each as its lines: every `/* */` comment, and every run of `//`
+/// comments that stand alone on consecutive lines. A `//` comment written after code on its line is
+/// a comment of its own. A line of a `//` comment is the text after the `//` and one space after it;
+/// a line of a `/* */` comment is the text as it is written. The white space a line ends with is
+/// left out.
+///
+/// # Examples
+/// The source `"// a\n//  b\nx = 1; // c\n/* d\n e */"` has the three comments `["a", " b"]`,
+/// `["c"]` and `[" d", " e"]`.
+fn comments_of(source: &SourceFile) -> Result<Vec<Vec<DocLine>>, Errors> {
+    let content = source.string()?;
+    let line_starts = iter::once(0)
+        .chain(content.match_indices('\n').map(|(newline, _)| newline + 1))
+        .collect::<Vec<_>>();
+    let line_of = |byte: usize| line_starts.partition_point(|start| *start <= byte) - 1;
+    let doc_line = |start: usize, text: &str| {
+        let text = text.trim_end();
+        DocLine {
+            text: text.to_string(),
+            span: Span {
+                input: source.clone(),
+                start,
+                end: start + text.len(),
+            },
+        }
+    };
+
+    let mut comments: Vec<Vec<DocLine>> = vec![];
+    // The line of the last `//` comment that stands alone on its line, which the next one on the
+    // line below continues.
+    let mut open_line_comment: Option<usize> = None;
+    for token in lex_tokens(&content) {
+        if token.kind != LexTokenKind::Comment {
+            continue;
+        }
+        let text = &content[token.start..token.end];
+        match text.strip_prefix("//") {
+            Some(body) => {
+                let (marker_len, body) = match body.strip_prefix(' ') {
+                    Some(body) => (3, body),
+                    None => (2, body),
+                };
+                let line = line_of(token.start);
+                let alone = content[line_starts[line]..token.start].trim().is_empty();
+                let line_comment = doc_line(token.start + marker_len, body);
+                match comments.last_mut() {
+                    Some(comment) if alone && open_line_comment == Some(line - 1) => {
+                        comment.push(line_comment)
+                    }
+                    _ => comments.push(vec![line_comment]),
+                }
+                open_line_comment = if alone { Some(line) } else { None };
+            }
+            None => {
+                let body = &text[2..];
+                let body = body.strip_suffix("*/").unwrap_or(body);
+                let mut start = token.start + 2;
+                let mut lines = vec![];
+                for text in body.split('\n') {
+                    lines.push(doc_line(start, text));
+                    start += text.len() + 1;
+                }
+                comments.push(lines);
+                open_line_comment = None;
+            }
+        }
+    }
+    Ok(comments)
+}
+
+/// The Fix examples of the comment or the document whose lines are `doc_lines`, in order. `module`
+/// is the module it is written in, which an example written as statements imports.
 ///
 /// An error reports each info string carrying a mark other than `ignore` and `no_run` or carrying
 /// both of them, each example written as a module named other than `DocTest`, and each example the
@@ -463,7 +525,42 @@ impl<'a> ExampleLine<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::docstring_for_display;
+    use super::{comments_of, docstring_for_display};
+    use crate::error::panic_if_err;
+    use crate::parse::sourcefile::SourceFile;
+    use std::path::PathBuf;
+
+    /// Each `/* */` comment is one comment, and so is each run of `//` comments standing alone on
+    /// consecutive lines. A `//` comment after code on its line stands on its own, and a line that
+    /// holds no comment ends a run.
+    #[test]
+    fn test_comments_of() {
+        let source = SourceFile::from_file_path_and_content(
+            PathBuf::from("lib.fix"),
+            "// a\n//  b\nx = 1; // c\n// d\n\n// e\ns = \"// f\";\n/* g\n h */".to_string(),
+        );
+        let comments = panic_if_err(comments_of(&source))
+            .into_iter()
+            .map(|comment| {
+                comment
+                    .into_iter()
+                    .map(|line| line.text)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            comments,
+            vec![
+                vec!["a", " b"],
+                vec!["c"],
+                vec!["d"],
+                vec!["e"],
+                vec![" g", " h"],
+            ],
+            "the comments are split as their lines and their kinds say, and a `//` in a string \
+             literal is no comment"
+        );
+    }
 
     /// A reader is shown a Fix example without its hidden lines and with `fix` as its info string.
     /// A line beginning with `#` outside a Fix example, such as a heading or a line of a block in

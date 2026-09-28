@@ -547,24 +547,14 @@ fn test_fix_docs_hides_the_hidden_lines() {
     );
 }
 
-/// A module `Lib` that documents a declaration of each kind with a Fix example: the module, a union
-/// and its variant, a struct and its field, a trait with its associated type and its member, a
-/// trait implementation, a trait alias and a global value.
-const LIB_DOCUMENTING_EVERY_KIND: &str = r#"// ```fix
-// assert_eq(|_|"", Shape::circle(1).is_circle, true)
+/// A module `Lib` that writes a Fix example in a comment of each kind and place: the doc comment
+/// of the module, of a type, of a field and of a value, a comment inside the body of a value, a
+/// comment a blank line keeps apart from the declaration below it, a comment standing between two
+/// declarations, and a `/* */` comment.
+const LIB_WITH_EXAMPLES_IN_EVERY_COMMENT: &str = r#"// ```fix
+// assert_eq(|_|"", double(1), 2)
 // ```
 module Lib;
-
-// ```fix
-// assert_eq(|_|"", Shape::square(2).as_square, 2)
-// ```
-type Shape = union {
-    // ```fix
-    // assert_eq(|_|"", Shape::circle(3).as_circle, 3)
-    // ```
-    circle : I64,
-    square : I64
-};
 
 // ```fix
 // assert_eq(|_|"", Point { x : 1 }.@x, 1)
@@ -577,47 +567,40 @@ type Point = struct {
 };
 
 // ```fix
-// assert_eq(|_|"", 3.describe, "a number")
+// assert_eq(|_|"", double(3), 6)
 // ```
-trait a : Describe {
-    // ```fix
-    // assert_eq(|_|"", 4.describe, "a number")
-    // ```
-    type Kind a;
-    // ```fix
-    // assert_eq(|_|"", 5.describe, "a number")
-    // ```
-    describe : a -> String;
-}
 
-// ```fix
-// assert_eq(|_|"", 6.describe, "a number")
-// ```
-impl I64 : Describe {
-    type Kind I64 = Bool;
-    describe = |_| "a number";
-}
-
-// ```fix
-// assert_eq(|_|"", 7.describe, "a number")
-// ```
-trait Numeric = Describe + Add;
-
-// ```fix
-// assert_eq(|_|"", double(4), 8)
-// ```
+// A comment a blank line keeps apart from `double`.
 double : I64 -> I64;
-double = |x| 2 * x;
-"#;
-
-/// A module `Util` whose doc comment holds a Fix example that uses `Util` by the short names.
-const UTIL_DOCUMENTING_A_VALUE: &str = r#"module Util;
+double = |x| (
+    // ```fix
+    // assert_eq(|_|"", double(4), 8)
+    // ```
+    2 * x
+);
 
 // ```fix
-// assert_eq(|_|"", triple(1), 3)
+// assert_eq(|_|"", double(5), 10)
 // ```
+
+/*
+```fix
+let y = double(6);
+assert_eq(|_|"", y, 12)
+```
+*/
 triple : I64 -> I64;
 triple = |x| 3 * x;
+"#;
+
+/// A module `Util` whose comment holds a Fix example that uses `Util` by the short names.
+const UTIL_WITH_AN_EXAMPLE: &str = r#"module Util;
+
+// ```fix
+// assert_eq(|_|"", quadruple(1), 4)
+// ```
+quadruple : I64 -> I64;
+quadruple = |x| 4 * x;
 "#;
 
 /// The line numbers of the lines of `source` that open a Fix example.
@@ -625,19 +608,23 @@ fn fix_fence_lines(source: &str) -> Vec<usize> {
     source
         .lines()
         .enumerate()
-        .filter(|(_, line)| line.trim_start().starts_with("// ```fix"))
+        .filter(|(_, line)| {
+            let text = line.trim_start();
+            text.starts_with("// ```fix") || text.starts_with("```fix")
+        })
         .map(|(index, _)| index + 1)
         .collect()
 }
 
-/// `fix test` runs the Fix example of every declaration that carries a doc comment, each once, and
-/// an example written as statements imports the module of the file its doc comment is written in.
+/// `fix test` runs the Fix example of every comment, each once, wherever the comment stands and
+/// whatever its kind, and an example written as statements imports the module of the file its
+/// comment is written in.
 #[test]
-fn test_examples_of_every_kind_of_declaration_run_once() {
+fn test_examples_of_every_comment_run_once() {
     let dir = project_dir(
         &[
-            ("lib.fix", LIB_DOCUMENTING_EVERY_KIND),
-            ("util.fix", UTIL_DOCUMENTING_A_VALUE),
+            ("lib.fix", LIB_WITH_EXAMPLES_IN_EVERY_COMMENT),
+            ("util.fix", UTIL_WITH_AN_EXAMPLE),
         ],
         &[],
     );
@@ -650,8 +637,8 @@ fn test_examples_of_every_kind_of_declaration_run_once() {
     );
     let mut example_count = 0;
     for (file, source) in [
-        ("lib.fix", LIB_DOCUMENTING_EVERY_KIND),
-        ("util.fix", UTIL_DOCUMENTING_A_VALUE),
+        ("lib.fix", LIB_WITH_EXAMPLES_IN_EVERY_COMMENT),
+        ("util.fix", UTIL_WITH_AN_EXAMPLE),
     ] {
         for line in fix_fence_lines(source) {
             let report = format!("doc test {}:{} ... ok", file, line);
