@@ -280,7 +280,7 @@ impl PatternNode {
                         return node;
                     }
                     if let Some(field_src) = field_src {
-                        if field_src.name.includes_pos_lsp(pos) {
+                        if field_src.name_src.includes_pos_lsp(pos) {
                             return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
                         }
                     }

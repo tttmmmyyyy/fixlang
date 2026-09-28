@@ -890,7 +890,7 @@ fn collect_exprnode_bare_field_occs(
                     if fname == name {
                         if let Some(field_src) = field_src {
                             occs.push(FieldOccurrence::bare(
-                                field_src.name.clone(),
+                                field_src.name_src.clone(),
                                 field_src.is_shorthand,
                             ));
                         }
@@ -933,7 +933,7 @@ fn collect_pattern_bare_field_occs(
                     if fname == name {
                         if let Some(field_src) = field_src {
                             occs.push(FieldOccurrence::bare(
-                                field_src.name.clone(),
+                                field_src.name_src.clone(),
                                 field_src.is_shorthand,
                             ));
                         }

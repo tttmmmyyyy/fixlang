@@ -232,7 +232,7 @@ fn shorthand_fields(program: &Program) -> Map<Span, Name> {
         for (name, field_src, _) in fields {
             if let Some(field_src) = field_src {
                 if field_src.is_shorthand {
-                    out.insert(field_src.name.clone(), name.clone());
+                    out.insert(field_src.name_src.clone(), name.clone());
                 }
             }
         }

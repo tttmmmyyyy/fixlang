@@ -2581,7 +2581,7 @@ fn parse_expr_make_struct_field(
         ),
     };
     let field_src = FieldSrc {
-        name: name_span,
+        name_src: name_span,
         is_shorthand,
     };
     Ok((name, Some(field_src), value))
@@ -3140,7 +3140,7 @@ fn parse_pattern_struct_field(
         None => (make_pattern_var(&name, None, name_span.clone(), ctx), true),
     };
     let field_src = FieldSrc {
-        name: name_span,
+        name_src: name_span,
         is_shorthand,
     };
     (name, Some(field_src), pat)

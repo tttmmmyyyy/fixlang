@@ -2862,7 +2862,7 @@ fn duplicate_field_error(
     if let Some(first_src) = first_src {
         err.add_src(
             "The field is given here first.".to_string(),
-            first_src.name.clone(),
+            first_src.name_src.clone(),
         );
     }
     err
@@ -2879,7 +2879,7 @@ fn unknown_field_error(tc: &Arc<TyCon>, name: &Name, field_src: &Option<FieldSrc
 /// The span of the field name a struct literal or a struct pattern writes, which is where a report
 /// about that field is located.
 fn field_name_span(field_src: &Option<FieldSrc>) -> Option<Span> {
-    field_src.as_ref().map(|src| src.name.clone())
+    field_src.as_ref().map(|src| src.name_src.clone())
 }
 
 /// The report for declared fields a struct literal leaves out, located at the

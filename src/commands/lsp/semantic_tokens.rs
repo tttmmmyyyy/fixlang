@@ -576,7 +576,7 @@ impl<'a> Overlay<'a> {
     fn push_field_name(&mut self, field_src: &Option<FieldSrc>) {
         if let Some(field_src) = field_src {
             if !field_src.is_shorthand {
-                self.push_value(&field_src.name, T_PROPERTY);
+                self.push_value(&field_src.name_src, T_PROPERTY);
             }
         }
     }
