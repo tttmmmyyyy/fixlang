@@ -4,6 +4,7 @@ use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
+    hash::{Hash, Hasher},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -48,6 +49,13 @@ impl Ord for SourceFile {
     /// Orders source files by their paths.
     fn cmp(&self, other: &Self) -> Ordering {
         self.file_path.cmp(&other.file_path)
+    }
+}
+
+impl Hash for SourceFile {
+    /// Hashes a source file by its path, which is what names it.
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.file_path.hash(state);
     }
 }
 
@@ -151,7 +159,7 @@ pub struct SourcePos {
 ///
 /// It owns the file it points into, so it can be stored in the syntax tree and written into the
 /// compiler's caches, where a `pest::Span` lives only as long as the content it borrows.
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Span {
     /// The file the range lies in.
     pub input: SourceFile,

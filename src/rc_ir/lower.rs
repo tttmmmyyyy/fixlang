@@ -7,7 +7,7 @@
 //! insertion is a separate backward pass. The one reference-counting effect already present is the
 //! retain baked into the boxed capture getter, per the retain-getter model.
 
-use crate::ast::expr::{Expr, ExprNode, Var};
+use crate::ast::expr::{Expr, ExprNode, FieldSrc, Var};
 use crate::ast::inline_llvm::InlineLLVM;
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::{Pattern, PatternNode};
@@ -788,7 +788,7 @@ impl<'a> Lowerer<'a> {
     /// them.
     fn lower_make_struct(
         &mut self,
-        fields: &[(Name, Option<Span>, Arc<ExprNode>)],
+        fields: &[(Name, Option<FieldSrc>, Arc<ExprNode>)],
         ty: Arc<TypeNode>,
         source: Option<Span>,
         bindings: &mut Vec<PendingBinding>,

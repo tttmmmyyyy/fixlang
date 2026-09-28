@@ -1,0 +1,29 @@
+module Main;
+
+type S = struct { x : I64, y : I64 };
+
+y : I64;
+y = 10;
+
+make : I64 -> S;
+make = |x| S { x, y };
+
+sum : S -> I64;
+sum = |S { x, y }| x + y;
+
+main : IO ();
+main = println(sum(make(1)).to_string);
+
+type Q = struct { u : I64 };
+type R = struct { q : Q };
+
+first : R -> I64;
+first = |R { q : Q { u } }| u;
+
+trait a : ToQ {
+    to_q : a -> Q;
+}
+
+impl I64 : ToQ {
+    to_q = |u| Q { u };
+}

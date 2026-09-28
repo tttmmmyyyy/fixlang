@@ -131,6 +131,19 @@ mod tests {
             positions
         }
 
+        /// Request semantic tokens and return the type of each token that starts at `(line,
+        /// column)`, 0-based.
+        fn token_types_at(&mut self, file: &str, line: u64, column: u64) -> Vec<u64> {
+            let positions = self.token_positions(file);
+            let types = self.token_types(file);
+            positions
+                .into_iter()
+                .zip(types)
+                .filter(|((l, c, _), _)| (*l, *c) == (line, column))
+                .map(|(_, t)| t)
+                .collect()
+        }
+
         /// Like `token_types`, but waits for the AST overlay to be applied: the
         /// diagnostics result can be picked up by the server's main loop slightly
         /// after the progress-end notification, so retry until a typechecked
@@ -227,6 +240,28 @@ mod tests {
             );
         }
 
+        ctx.shutdown();
+    }
+
+    /// Verifies that a field a struct literal writes as its name alone (`Point { x, y: 0 }`,
+    /// line 36) is colored once, as the local variable that name also writes.
+    #[test]
+    fn test_semantic_tokens_field_shorthand_colored_as_its_value() {
+        let mut ctx = LspSemanticTokensCtx::setup();
+        ctx.token_types_with_overlay("main.fix");
+        assert_eq!(ctx.token_types_at("main.fix", 36, 24), vec![T_VARIABLE]);
+        assert_eq!(ctx.token_types_at("main.fix", 36, 27), vec![T_PROPERTY]);
+        ctx.shutdown();
+    }
+
+    /// Verifies that a field a struct pattern writes as its name alone (`Point { x, y: _ }`,
+    /// line 39) is colored once, as the variable that name also binds.
+    #[test]
+    fn test_semantic_tokens_pattern_field_shorthand_colored_as_its_binder() {
+        let mut ctx = LspSemanticTokensCtx::setup();
+        ctx.token_types_with_overlay("main.fix");
+        assert_eq!(ctx.token_types_at("main.fix", 39, 29), vec![T_VARIABLE]);
+        assert_eq!(ctx.token_types_at("main.fix", 39, 32), vec![T_PROPERTY]);
         ctx.shutdown();
     }
 
