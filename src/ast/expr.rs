@@ -1004,7 +1004,6 @@ impl ExprNode {
         }
     }
 
-    // Find the minimum AST node which includes the specified source code position.
     /// What the source position `pos` points at inside this expression: the name a variable
     /// expression writes, a field name of a struct construction, or the type a type annotation or a
     /// struct construction writes. A field written as its name alone (`S { x }`) answers the

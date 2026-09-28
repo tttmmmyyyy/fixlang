@@ -10,12 +10,10 @@ use crate::ast::expr::{Expr, ExprNode};
 use crate::ast::import::ImportTreeNode;
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::{Pattern, PatternNode};
-use crate::ast::program::EndNode;
-use crate::ast::program::{Program, SymbolExpr};
+use crate::ast::program::{EndNode, Program, SymbolExpr};
 use crate::ast::qual_pred::QualPred;
 use crate::ast::qual_type::QualType;
-use crate::ast::traits::AssocTypeImpl;
-use crate::ast::traits::TraitId;
+use crate::ast::traits::{AssocTypeImpl, TraitId};
 use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
 use crate::ast::types::{AssocType, Scheme, TyCon, Type, TypeNode};
 use crate::constants::{
