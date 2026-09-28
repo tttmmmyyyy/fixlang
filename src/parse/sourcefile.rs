@@ -213,7 +213,7 @@ impl SourceOrigin {
     /// The line and the column of the origin's file that the position at `line` and `column` of
     /// the assembled source stands at. All of them count from 1.
     pub fn position(&self, (line, column): (usize, usize)) -> (usize, usize) {
-        let (origin_line, line_origin) = self.line(line);
+        let (origin_line, line_origin) = self.origin_of_line(line);
         match line_origin {
             LineOrigin::Taken { shift } => (origin_line, column + shift),
             LineOrigin::Written { column, .. } => (origin_line, *column),
@@ -222,7 +222,7 @@ impl SourceOrigin {
 
     /// The line of the origin's file that line `line` of the assembled source stands for, counted
     /// from 1, and how the two relate.
-    fn line(&self, line: usize) -> (usize, &LineOrigin) {
+    fn origin_of_line(&self, line: usize) -> (usize, &LineOrigin) {
         assert!(
             !self.lines.is_empty(),
             "an assembled source taken from \"{}\" has a line",
@@ -245,7 +245,7 @@ impl SourceOrigin {
     /// cannot be read, in which case the text quoted is the assembled one.
     fn quote(&self, quoted: QuotedLine, origin_lines: Option<&Vec<&str>>) -> QuotedLine {
         let (line, column) = self.position((quoted.line, quoted.column));
-        let width = match self.line(quoted.line).1 {
+        let width = match self.origin_of_line(quoted.line).1 {
             LineOrigin::Written { width, .. } => *width,
             LineOrigin::Taken { .. } => quoted.width,
         };
@@ -281,13 +281,14 @@ pub struct SourcePos {
     pub pos: usize,
 }
 
-/// A line of a doc comment, as `Span::document_lines` reads it.
-pub struct DocLine {
-    /// The text of the line that follows the comment's `//` and one space after it, without the
-    /// white space it ends with.
-    pub text: String,
-    /// Where `text` stands in the file the comment is written in.
-    pub span: Span,
+/// The text of the `//` comment `comment`, which begins with its `//`: what follows the `//` and
+/// one space after it.
+///
+/// # Examples
+/// `line_comment_text("// a b")` is `"a b"`, and `line_comment_text("//  a")` is `" a"`.
+pub fn line_comment_text(comment: &str) -> &str {
+    let after_slashes = &comment[2..];
+    after_slashes.strip_prefix(' ').unwrap_or(after_slashes)
 }
 
 /// A range of bytes of a source file, together with the file it points into.
@@ -539,17 +540,6 @@ impl Span {
     /// lines written just before the span begins, each stripped of its `//` and of one space after
     /// it. The document is empty where anything else stands on the line the definition begins on.
     pub fn get_document(&self) -> Result<String, Errors> {
-        let mut ret = String::default();
-        for line in self.document_lines()? {
-            ret += &line.text;
-            ret += "\n";
-        }
-        Ok(ret)
-    }
-
-    /// The lines of the document `get_document` reads, in order, each with the span its text
-    /// stands at in the file.
-    pub fn document_lines(&self) -> Result<Vec<DocLine>, Errors> {
         let source_string = self.input.string()?;
 
         // The line the definition begins on. Anything written ahead of the definition on it means
@@ -561,7 +551,7 @@ impl Span {
             .trim()
             .is_empty()
         {
-            return Ok(vec![]);
+            return Ok(String::default());
         }
 
         // Read the lines above it, from the nearest one up, while they are comment lines.
@@ -572,26 +562,19 @@ impl Span {
             let line_start = source_string[..line_end]
                 .rfind('\n')
                 .map_or(0, |newline| newline + 1);
-            let line = &source_string[line_start..line_end];
-            let comment = line.trim();
+            let comment = source_string[line_start..line_end].trim();
             if !comment.starts_with("//") {
                 break;
             }
-            let marker_len = if comment.starts_with("// ") { 3 } else { 2 };
-            let text_start = line_start + (line.len() - line.trim_start().len()) + marker_len;
-            let text = &comment[marker_len..];
-            lines.push(DocLine {
-                text: text.to_string(),
-                span: Span {
-                    input: self.input.clone(),
-                    start: text_start,
-                    end: text_start + text.len(),
-                },
-            });
+            lines.push(line_comment_text(comment));
             next_line_start = line_start;
         }
-        lines.reverse();
-        Ok(lines)
+        let mut ret = String::default();
+        for line in lines.iter().rev() {
+            ret += line;
+            ret += "\n";
+        }
+        Ok(ret)
     }
 
     /// Whether `byte` falls within this span, both ends included.

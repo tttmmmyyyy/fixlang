@@ -3,10 +3,10 @@
 
 use crate::commands::test::{test_example, ExampleOutcome};
 use crate::configuration::Configuration;
-use crate::doc_test::{collect_examples, examples_in_document};
+use crate::doc_test::{collect_examples, examples_in_text, TextLine};
 use crate::error::panic_if_err;
 use crate::parse::parser::parse_file_path;
-use crate::parse::sourcefile::{DocLine, SourceFile, Span};
+use crate::parse::sourcefile::{SourceFile, Span};
 use crate::tests::test_util::fix_command;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -31,7 +31,7 @@ fn test_std_doc_examples() {
     documents.sort();
     for document in documents {
         let doc_lines = markdown_file_lines(&document);
-        examples.extend(panic_if_err(examples_in_document(
+        examples.extend(panic_if_err(examples_in_text(
             &doc_lines,
             &"Std".to_string(),
         )));
@@ -62,14 +62,14 @@ fn test_std_doc_examples() {
 
 /// The lines of the Markdown file at `path`, each with the span it stands at, as the document of a
 /// declaration whose comment is that file.
-fn markdown_file_lines(path: &Path) -> Vec<DocLine> {
+fn markdown_file_lines(path: &Path) -> Vec<TextLine> {
     let source = SourceFile::from_file_path(path.to_path_buf());
     let content = panic_if_err(source.string());
     let mut lines = vec![];
     let mut line_start = 0;
     for line in content.split('\n') {
         let text = line.trim_end();
-        lines.push(DocLine {
+        lines.push(TextLine {
             text: text.to_string(),
             span: Span {
                 input: source.clone(),

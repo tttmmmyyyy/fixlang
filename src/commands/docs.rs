@@ -13,7 +13,7 @@ use crate::{
         UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
     },
     dependency::lockfile::LockFileType,
-    doc_test::docstring_for_display,
+    doc_test::{docstring_for_display, CodeFence},
     elaboration::elaborate_via_config,
     error::Errors,
     metafiles::project_file::ProjectFile,
@@ -78,54 +78,6 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
         docgen_for_module(&program, &mod_name, &proj_file, docs_config)?;
     }
     Ok(())
-}
-
-/// The line that opens a fenced code block of Markdown: a run of three or more backticks, or of
-/// three or more tildes, after the indentation, followed by the info string. A backtick fence has
-/// no backtick in its info string, which is what tells it from a line of inline code.
-///
-/// # Examples
-/// ```` ```fix,no_run ```` opens a block with the info string `fix,no_run`, which the line
-/// ```` ``` ```` closes and the line ```` ```fix ```` does not.
-pub struct CodeFence<'a> {
-    /// The character the fence is made of, a backtick or a tilde.
-    marker: char,
-    /// How many times `marker` is repeated.
-    length: usize,
-    /// The indentation and the run of `marker`, as the line writes them.
-    pub prefix: &'a str,
-    /// The info string, trimmed.
-    pub info: &'a str,
-}
-
-impl<'a> CodeFence<'a> {
-    /// The fence the line `line` opens a code block with, or `None` for a line that opens none.
-    pub fn opening(line: &'a str) -> Option<Self> {
-        let after_indent = line.trim_start();
-        let marker = after_indent
-            .chars()
-            .next()
-            .filter(|c| *c == '`' || *c == '~')?;
-        let length = after_indent.len() - after_indent.trim_start_matches(marker).len();
-        let info = after_indent[length..].trim();
-        if length < 3 || (marker == '`' && info.contains('`')) {
-            return None;
-        }
-        Some(CodeFence {
-            marker,
-            length,
-            prefix: &line[..line.len() - after_indent.len() + length],
-            info,
-        })
-    }
-
-    /// Whether the line `line` closes the block this fence opens: a run of the same character,
-    /// at least as long, with nothing else on the line.
-    pub fn is_closed_by(&self, line: &str) -> bool {
-        let text = line.trim();
-        let length = text.len() - text.trim_start_matches(self.marker).len();
-        length >= self.length && length == text.len()
-    }
 }
 
 /*
