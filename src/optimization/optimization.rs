@@ -1,6 +1,6 @@
 use super::{
-    application_inlining, capture_into_env, closure_specialization, collapse_constructions,
-    dead_symbol_elimination, defunctionalize_fix, inline, inline_local, optimize_act,
+    application_inlining, closure_specialization, collapse_constructions, dead_symbol_elimination,
+    decapture_scope_lambdas, defunctionalize_fix, inline, inline_local, optimize_act,
     remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args, uncurry, unwrap_newtype,
 };
 use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
@@ -116,9 +116,9 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     run_pass(
         prg,
         config,
-        config.enable_capture_into_env(),
-        "capture_into_env",
-        capture_into_env::run,
+        config.enable_decapture_scope_lambdas(),
+        "decapture_scope_lambdas",
+        decapture_scope_lambdas::run,
     );
 
     // Read every construction the code taking it apart can see. That is what turns the two lines a

@@ -7698,7 +7698,7 @@ fn apply_with_env<'c, 'm>(
 /// ```
 ///
 /// where `op`, built by `make_op` from the names of `g` and `env`, applies `g` to `(env, a_1, ...,
-/// a_n)`. `capture_into_env` later moves `f`, which `g` captures, into `env`.
+/// a_n)`. `decapture_scope_lambdas` later moves `f`, which `g` captures, into `env`.
 fn with_empty_env(
     f_name: &str,
     arity: usize,

@@ -1,9 +1,9 @@
 mod application_inlining;
-mod capture_into_env;
 mod capture_struct;
 mod closure_specialization;
 mod collapse_constructions;
 mod dead_symbol_elimination;
+mod decapture_scope_lambdas;
 mod defunctionalize_fix;
 #[allow(dead_code)]
 mod eta_expansion;
