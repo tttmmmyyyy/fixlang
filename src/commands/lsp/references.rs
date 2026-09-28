@@ -696,14 +696,14 @@ fn collect_qualtype_trait_refs(qt: &QualType, target: &TraitId, refs: &mut Vec<S
     }
 }
 
-// A reference to a struct field or union variant. `prefix` records the
-// literal text that precedes the field/variant name at the source-level
-// occurrence: "" for a bare-name occurrence (declaration, MakeStruct
-// field, Pattern::Struct/Union), the auto-method's literal prefix
-// (`@`/`set_`/`mod_`/`act_`/`as_`/`is_`) for an auto-method call site, or
-// `^` for an `act_` Var desugared from `[^field]` index syntax.
+/// A reference to a struct field or union variant.
 pub(super) struct FieldOccurrence {
+    /// The span of the field or variant name, its prefix left outside.
     pub span: Span,
+    /// The literal text that precedes the name at the occurrence: "" for a bare-name occurrence
+    /// (declaration, `MakeStruct` field, `Pattern::Struct` / `Pattern::Union`), the auto-method's
+    /// literal prefix (`@` / `set_` / `mod_` / `act_` / `as_` / `is_`) for an auto-method call
+    /// site, or `^` for an `act_` Var desugared from `[^field]` index syntax.
     pub prefix: &'static str,
     /// Whether this is a field of a `MakeStruct` or a `Pattern::Struct` written as its name alone
     /// (`S { x }`). Its span then also covers the field's value or binder.
@@ -734,11 +734,20 @@ impl FieldOccurrence {
                 "a field written as its name alone carries no prefix: {}",
                 old_name
             );
-            format!("{}: {}", new_name, old_name)
+            field_written_with_value(new_name, old_name)
         } else {
             format!("{}{}", self.prefix, new_name)
         }
     }
+}
+
+/// The text of a struct field written with its value or binder. A rename writes a field that was
+/// written as its name alone this way, so that the field and the value keep their own names.
+///
+/// # Examples
+/// `field_written_with_value("x", "a")` is `x: a`.
+pub(super) fn field_written_with_value(field: &Name, value: &Name) -> String {
+    format!("{}: {}", field, value)
 }
 
 // Generate the (prefix, fullname) pairs for each user-callable auto-method

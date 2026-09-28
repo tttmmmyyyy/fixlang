@@ -8,8 +8,8 @@
 //! auto-generated accessors clicked directly.
 
 use super::references::{
-    find_assoc_type_references, find_field_occurrences, find_global_value_references,
-    find_trait_references, find_type_references,
+    field_written_with_value, find_assoc_type_references, find_field_occurrences,
+    find_global_value_references, find_trait_references, find_type_references,
 };
 use super::server::{send_response, DiagnosticsResult, LatestContent, ResponseError};
 use super::util::{
@@ -216,7 +216,7 @@ fn rename_value_edits(program: &Program, spans: Vec<Span>, new_name: &Name) -> V
         .into_iter()
         .map(|span| {
             let text = match shorthand_fields.get(&span) {
-                Some(field) => format!("{}: {}", field, new_name),
+                Some(field) => field_written_with_value(field, new_name),
                 None => new_name.clone(),
             };
             (span, text)
