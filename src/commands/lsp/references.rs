@@ -726,6 +726,11 @@ impl FieldOccurrence {
     // value or binder its name also writes keeps its name.
     pub(super) fn renamed_text(&self, old_name: &Name, new_name: &Name) -> String {
         if self.is_shorthand {
+            assert_eq!(
+                self.prefix, "",
+                "a field written as its name alone carries no prefix: {}",
+                old_name
+            );
             format!("{}: {}", new_name, old_name)
         } else {
             format!("{}{}", self.prefix, new_name)
