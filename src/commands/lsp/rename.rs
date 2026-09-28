@@ -872,15 +872,8 @@ fn walk_symbol_expr_for_inline_qualified(
     new_name: &Name,
     edits: &mut Vec<(Span, String)>,
 ) {
-    match expr {
-        SymbolExpr::Simple(typed_expr) => {
-            walk_expr_for_inline_qualified(&typed_expr.expr, pick, old_name, new_name, edits);
-        }
-        SymbolExpr::Method(impls) => {
-            for impl_ in impls {
-                walk_expr_for_inline_qualified(&impl_.expr.expr, pick, old_name, new_name, edits);
-            }
-        }
+    for e in expr.exprs() {
+        walk_expr_for_inline_qualified(e, pick, old_name, new_name, edits);
     }
 }
 
