@@ -53,6 +53,7 @@ use either::Either;
 use pest::error::{Error, ErrorVariant, InputLocation};
 use pest::iterators::{Pair, Pairs};
 use pest::Parser;
+use std::ops::Range;
 use std::path::PathBuf;
 use std::{
     cmp::min,
@@ -496,6 +497,27 @@ pub fn parse_str_import_statements(
         Rule::file_only_import_statements,
         parse_import_statements,
     )
+}
+
+/// The byte ranges of the comments of `source`, in order, as the parser reads the source: a string
+/// or a character literal holds no comment, and the range of a `//` comment ends before the line
+/// break that ends it.
+///
+/// # Examples
+/// `comment_ranges("x = \"//\"; // a\n/* b */")` is `[10..14, 15..22]`.
+pub fn comment_ranges(source: &str) -> Vec<Range<usize>> {
+    let pairs = FixParser::parse(Rule::source_comments, source)
+        .expect("the scan of the comments accepts every source");
+    pairs
+        .flatten()
+        .filter(|pair| {
+            matches!(
+                pair.as_rule(),
+                Rule::source_line_comment | Rule::source_block_comment
+            )
+        })
+        .map(|pair| pair.as_span().start()..pair.as_span().end())
+        .collect()
 }
 
 /// The module `src` declares, read from its `module` declaration alone so that the rest of the

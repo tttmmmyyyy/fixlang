@@ -435,6 +435,10 @@ fn test_the_name_doc_test_is_reserved() {
             "module Other;\ntrait a : DocTest {\n    describe : a -> String;\n}\n",
             2,
         ),
+        (
+            "module Other;\nnamespace DocTest {\n    trait Shows = Eq;\n}\n",
+            3,
+        ),
     ] {
         let dir = project_dir(
             &[
@@ -917,4 +921,19 @@ second = 2;
             document
         );
     }
+}
+
+/// An example with no line between its fences is compiled as the empty expression it is, and the
+/// error is reported once, at the closing fence.
+#[test]
+fn test_error_in_an_empty_example_is_reported_at_the_closing_fence() {
+    let lib = "module Lib;\n\n// ```fix\n// ```\nvalue : I64;\nvalue = 1;\n";
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success() && stderr.matches("4 | // ```").count() == 1,
+        "the error of the empty example quotes its closing fence once\n{}",
+        streams(&output)
+    );
 }

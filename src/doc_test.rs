@@ -12,8 +12,7 @@ use crate::{
     hash::md5_hex,
     misc::{save_temporary_source, to_absolute_path, Set},
     parse::{
-        lexer::{lex_tokens, LexTokenKind},
-        parser::parse_source_module_defn,
+        parser::{comment_ranges, parse_source_module_defn},
         sourcefile::{line_comment_text, LineOrigin, SourceFile, SourceOrigin, Span},
     },
 };
@@ -83,7 +82,10 @@ pub struct CodeFence<'a> {
 impl<'a> CodeFence<'a> {
     /// The fence the line `line` opens a code block with, or `None` for a line that opens none.
     pub fn opening(line: &'a str) -> Option<Self> {
-        let after_indent = line.trim_start();
+        let (indent, after_indent) = split_indent(line);
+        if indent_width(indent) >= CODE_INDENT {
+            return None;
+        }
         let marker = after_indent
             .chars()
             .next()
@@ -96,7 +98,7 @@ impl<'a> CodeFence<'a> {
         Some(CodeFence {
             marker,
             length,
-            prefix: &line[..line.len() - after_indent.len() + length],
+            prefix: &line[..indent.len() + length],
             info,
         })
     }
@@ -104,10 +106,30 @@ impl<'a> CodeFence<'a> {
     /// Whether the line `line` closes the block this fence opens: a run of the same character,
     /// at least as long, with nothing else on the line.
     pub fn is_closed_by(&self, line: &str) -> bool {
-        let text = line.trim();
+        let (indent, after_indent) = split_indent(line);
+        if indent_width(indent) >= CODE_INDENT {
+            return false;
+        }
+        let text = after_indent.trim_end();
         let length = text.len() - text.trim_start_matches(self.marker).len();
         length >= self.length && length == text.len()
     }
+}
+
+/// The width of indentation that makes a line of Markdown a line of an indented code block, so that
+/// a fence indented this far is text of that block.
+const CODE_INDENT: usize = 4;
+
+/// The width of the indentation `indent`, where a tab reaches the next multiple of four as it does
+/// in Markdown.
+///
+/// # Examples
+/// `indent_width("  ")` is 2, and `indent_width(" \t")` is 4.
+fn indent_width(indent: &str) -> usize {
+    indent.chars().fold(0, |width, c| match c {
+        '\t' => width + 4 - width % 4,
+        _ => width + 1,
+    })
 }
 
 /// A Fix example of a comment or of a Markdown document.
@@ -147,8 +169,8 @@ impl FixExample {
 /// Reports the first declaration of `program` whose name has a component `DocTest`, the name each
 /// Fix example is compiled as: a module of that name, a type or a trait of that name, or a
 /// declaration inside a namespace of that name. A type or a trait opens a namespace of its name,
-/// which holds its field accessors and its members; a trait alias opens none, and its name is
-/// free.
+/// which holds its field accessors and its members; a trait alias opens none, so the name of a
+/// trait alias is free, and the namespace it is declared in is checked like any other.
 ///
 /// A name refers to every declaration whose full name ends with it, so with no such declaration a
 /// name beginning with `DocTest` in an example refers to the example itself.
@@ -174,10 +196,17 @@ pub fn check_doc_test_name_is_free(program: &Program) -> Result<(), Errors> {
         .traits
         .iter()
         .map(|(id, trait_defn)| (id.name.to_namespace().names, trait_defn.source.clone()));
+    let trait_aliases = program
+        .trait_env
+        .aliases
+        .data
+        .iter()
+        .map(|(id, alias)| (id.name.namespace.names.clone(), alias.source.clone()));
     let taken = modules
         .chain(values)
         .chain(types)
         .chain(traits)
+        .chain(trait_aliases)
         .find(|(path, _)| path.iter().any(|name| name == DOC_TEST_MODULE_NAME));
     match taken {
         Some((_, source)) => Err(Errors::from_msg_srcs(
@@ -248,16 +277,13 @@ fn comments_of(source: &SourceFile) -> Result<Vec<Vec<TextLine>>, Errors> {
     // The line of the last `//` comment that stands alone on its line, which the next one on the
     // line below continues.
     let mut run_last_line: Option<usize> = None;
-    for token in lex_tokens(&content) {
-        if token.kind != LexTokenKind::Comment {
-            continue;
-        }
-        let text = &content[token.start..token.end];
+    for range in comment_ranges(&content) {
+        let text = &content[range.clone()];
         if text.starts_with("//") {
             let body = line_comment_text(text);
-            let line = line_of(token.start);
-            let alone = content[line_starts[line]..token.start].trim().is_empty();
-            let line_comment = text_line(token.end - body.len(), body);
+            let line = line_of(range.start);
+            let alone = content[line_starts[line]..range.start].trim().is_empty();
+            let line_comment = text_line(range.end - body.len(), body);
             match comments.last_mut() {
                 Some(comment) if alone && run_last_line.map(|l| l + 1) == Some(line) => {
                     comment.push(line_comment)
@@ -266,9 +292,10 @@ fn comments_of(source: &SourceFile) -> Result<Vec<Vec<TextLine>>, Errors> {
             }
             run_last_line = if alone { Some(line) } else { None };
         } else {
-            let body = &text[2..];
-            let body = body.strip_suffix("*/").unwrap_or(body);
-            let mut start = token.start + 2;
+            let body = text[2..]
+                .strip_suffix("*/")
+                .expect("a `/* */` comment the scan finds is closed");
+            let mut start = range.start + 2;
             let mut lines = vec![];
             for line_text in body.split('\n') {
                 lines.push(text_line(start, line_text));
@@ -408,8 +435,18 @@ fn assemble_example(
         first_line,
         lines: [vec![open_origin], code_origins, vec![close_origin]].concat(),
     };
-    let assemble =
-        |header: &str, footer: &str| format!("{}\n{}\n{}\n", header, code.join("\n"), footer);
+    let assemble = |header: &str, footer: &str| {
+        let lines = iter::once(header.to_string())
+            .chain(code.iter().cloned())
+            .chain(iter::once(footer.to_string()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            lines.len(),
+            origin.lines.len(),
+            "an assembled example has a line for each line its origin records"
+        );
+        format!("{}\n", lines.join("\n"))
+    };
 
     // The source is saved under a name the origin decides, so that a source read back from a
     // cache, which carries its path, finds this content and this origin at that path.
@@ -598,6 +635,25 @@ mod tests {
             "the comments are split as their lines and their kinds say, and a `//` in a string \
              literal is no comment"
         );
+
+        let source = SourceFile::from_file_path_and_content(
+            PathBuf::from("lib.fix"),
+            "s = \"a\n// b\n/* c\";\n// d\nx = 1;".to_string(),
+        );
+        let comments = panic_if_err(comments_of(&source))
+            .into_iter()
+            .map(|comment| {
+                comment
+                    .into_iter()
+                    .map(|line| line.text)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            comments,
+            vec![vec!["d"]],
+            "a string literal that spans lines holds no comment, and the comment after it is found"
+        );
     }
 
     /// A reader is shown a Fix example without its hidden lines and with `fix` as its info string.
@@ -654,6 +710,16 @@ mod tests {
             docstring_for_display("~~~fix,no_run\n# hidden\nshown\n~~~\n"),
             "~~~fix\nshown\n~~~\n",
             "a block of tildes whose info string is `fix` is a Fix example"
+        );
+        assert_eq!(
+            docstring_for_display("    ```fix\n    # shown\n    ```\n\t```fix\n\t# shown\n\t```\n"),
+            "    ```fix\n    # shown\n    ```\n\t```fix\n\t# shown\n\t```\n",
+            "a fence indented four columns or more is text of an indented code block"
+        );
+        assert_eq!(
+            docstring_for_display("```fix\n# hidden\n    ```\n# hidden after the line\n```\n"),
+            "```fix\n    ```\n```\n",
+            "a fence indented four columns or more closes no block"
         );
     }
 }
