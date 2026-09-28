@@ -1063,6 +1063,27 @@ impl ObjectFieldType {
         struct_obj.insert_field_object(gc, field_offset + field_idx, field)
     }
 
+    /// A new struct of type `ty` holding `fields[i]` at field `i`, taking over the caller's
+    /// reference to each of `fields`. `fields` holds one object for every field of `ty`.
+    pub fn make_struct<'c, 'm>(
+        gc: &mut Generator<'c, 'm>,
+        ty: Arc<TypeNode>,
+        fields: &[Object<'c>],
+        name: Option<&str>,
+    ) -> Object<'c> {
+        assert_eq!(
+            ty.field_types(gc.type_env()).len(),
+            fields.len(),
+            "`{}` has a field count other than the number of objects given for its fields",
+            ty.to_string(),
+        );
+        let mut struct_obj = create_obj(ty, &vec![], None, gc, name);
+        for (i, field) in fields.iter().enumerate() {
+            struct_obj = ObjectFieldType::move_into_struct_field(gc, struct_obj, i as u32, field);
+        }
+        struct_obj
+    }
+
     /// Take the fields of `struct_obj` listed in `field_indices` out as owned objects, consuming
     /// the struct: each returned field owns its reference and so outlives the struct it came from,
     /// and the fields left behind are dropped.

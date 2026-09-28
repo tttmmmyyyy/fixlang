@@ -1664,10 +1664,6 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
-    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
     /// Give an inline-LLVM expression the closures it is written against: each free variable holding
     /// a bare capture list is bound, ahead of the expression, to the lifted lambda applied to that
     /// capture list, and the expression reads the binding under the name `CLOSURE_CALL_LAM_SUFFIX`
@@ -1725,10 +1721,6 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         }
 
         StartVisitResult::ReplaceAndRevisit(expr)
-    }
-
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 
     /// Lift a lambda written among the arguments, name the copy of a lambda a call through a known
@@ -1853,10 +1845,6 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         StartVisitResult::ReplaceAndRevisit(apply(head, new_args))
     }
 
-    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
     /// Retype the domain of a lambda whose parameter holds a bare capture list, so that the body is
     /// walked against the type that parameter now has.
     fn start_visit_lam(
@@ -1975,110 +1963,6 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             .set_var_tyanno(None) // Discard type annotation since it may become incorrect
             .set_type(value_ty);
         StartVisitResult::ReplaceAndRevisit(expr_let_typed(pat, value_expr, value))
-    }
-
-    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_if(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_match(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_tyanno(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_make_struct(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_make_struct(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_array_lit(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_array_lit(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_ffi_call(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_ffi_call(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_eval(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 }
 
