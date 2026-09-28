@@ -204,7 +204,7 @@ fn comments_of(source: &SourceFile) -> Result<Vec<Vec<DocLine>>, Errors> {
     let mut comments: Vec<Vec<DocLine>> = vec![];
     // The line of the last `//` comment that stands alone on its line, which the next one on the
     // line below continues.
-    let mut open_line_comment: Option<usize> = None;
+    let mut run_last_line: Option<usize> = None;
     for token in lex_tokens(&content) {
         if token.kind != LexTokenKind::Comment {
             continue;
@@ -217,24 +217,24 @@ fn comments_of(source: &SourceFile) -> Result<Vec<Vec<DocLine>>, Errors> {
                 let alone = content[line_starts[line]..token.start].trim().is_empty();
                 let line_comment = doc_line(token.end - body.len(), body);
                 match comments.last_mut() {
-                    Some(comment) if alone && open_line_comment.map(|l| l + 1) == Some(line) => {
+                    Some(comment) if alone && run_last_line.map(|l| l + 1) == Some(line) => {
                         comment.push(line_comment)
                     }
                     _ => comments.push(vec![line_comment]),
                 }
-                open_line_comment = if alone { Some(line) } else { None };
+                run_last_line = if alone { Some(line) } else { None };
             }
             None => {
                 let body = &text[2..];
                 let body = body.strip_suffix("*/").unwrap_or(body);
                 let mut start = token.start + 2;
                 let mut lines = vec![];
-                for text in body.split('\n') {
-                    lines.push(doc_line(start, text));
-                    start += text.len() + 1;
+                for line_text in body.split('\n') {
+                    lines.push(doc_line(start, line_text));
+                    start += line_text.len() + 1;
                 }
                 comments.push(lines);
-                open_line_comment = None;
+                run_last_line = None;
             }
         }
     }
