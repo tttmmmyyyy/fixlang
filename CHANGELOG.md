@@ -33,6 +33,8 @@ Fix 1.5.0 makes programs faster, and builds them faster, than Fix 1.4.0.
 | Union-find | 1.06x |
 | Convolution modulo a prime | 1.05x |
 
+NOTE: The bipartite matching speedup needs care in reading. The benchmark's code keeps a reference to an array while it updates that array, instead of using the array linearly as Fix code should, and under 1.4.0 this copied the whole array on every augmenting path. The 1.5.0 compiler avoids that copy, but code written properly avoided it under 1.4.0 as well.
+
 **Builds take less time and memory.** Building cp-library's test suite from scratch takes 29% less time (53.3 s -> 37.7 s) and 38% less memory (1.46 GB -> 0.90 GB). Rebuilding it after a one-line edit takes 9% less time (39.1 s -> 35.6 s) and 48% less memory.
 
 ### Added
@@ -46,7 +48,7 @@ Fix 1.5.0 makes programs faster, and builds them faster, than Fix 1.4.0.
 
 - #767: LSP: The quick fix "Insert stub implementations" for a missing trait member now writes the parameters the member's documentation lists in its "Parameters" section, e.g. `compare : a -> a -> Ordering = |lhs, rhs| ?;`. A member with no "Parameters" section is stubbed as `= ?;`.
 - LSP: Hovering a `_` in a type annotation shows the type it was inferred to. This works in expression annotations and in let-binding annotations.
-- #214: LSP: Completion inside an `import` statement now offers what belongs there instead of expression symbols. You get module names where the module goes, the module's namespaces and entities where the items go (including inside `::{...}` and after `hiding`), and the `hiding` keyword after a complete module path.
+- #214: LSP: Completion in an `import` statement now suggests things you can import there, not the names used in expressions. It suggests module names for the module, the module's namespaces, types, traits and values for the items (also inside `::{...}` and after `hiding`), and the `hiding` keyword after the module name.
 - #638, #689, #705, #709, #729: Added the `--check-integer-operations` compiler option and the `check_integer_operations` field of the project file. They stop the program on a signed integer overflow, on a shift by an amount outside the width of its type, or on a conversion of a floating-point value to an integer type that does not hold it, and the report names the operation and the values: `Signed integer overflow: I64 addition, with 9223372036854775807 and 1`, `Shift amount outside the width of the type: I64 shift_left, with 64`, `Floating-point value outside the range of the integer type: F64 to I64, with nan`. The overflow check covers `+`, `-`, `*`, unary `-`, `/` and `%` on `I8`, `I16`, `I32` and `I64`; unsigned arithmetic wraps instead of overflowing, so it is never checked. The shift check covers every integer type, signed and unsigned. The conversion check covers every conversion from `F32` and `F64` to an integer type.
 - #723: Added the `--develop-mode` compiler option. It builds your program with the consistency checks the compiler's own test suite builds under: they cost run time, and they stop the program where one of them fails.
 - #188: Added the `--skip-eval` compiler option and the `skip_eval` field of the project file. They compile `eval {expr0}; {expr1}` as `{expr1}`, so you can leave a debugging `eval debug_println(...)` out of a build without editing the source.
