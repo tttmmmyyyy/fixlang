@@ -15,9 +15,10 @@ use super::server::{send_response, DiagnosticsResult, LatestContent, ResponseErr
 use super::util::{
     find_local_occurrences, get_current_dir, path_to_uri, resolve_source_pos, span_to_range,
 };
-use crate::ast::expr::{Expr, ExprNode};
+use crate::ast::expr::{Expr, ExprNode, FieldSrc};
 use crate::ast::import::{ImportStatement, ImportTreeNode};
 use crate::ast::name::{FullName, Name, NameSpace};
+use crate::ast::pattern::Pattern;
 use crate::ast::program::{EndNode, Program, SymbolExpr};
 use crate::ast::traits::TraitId;
 use crate::ast::typedecl::TypeDeclValue;
@@ -147,14 +148,20 @@ pub(super) fn handle_rename(
                 };
                 let mut spans = vec![occ.definition];
                 spans.extend(occ.uses);
-                rename_edits(spans, new_name)
+                rename_value_edits(program, spans, new_name)
             } else {
-                rename_edits(find_global_value_references(program, name, true), new_name)
+                rename_value_edits(
+                    program,
+                    find_global_value_references(program, name, true),
+                    new_name,
+                )
             }
         }
-        EndNode::ValueDecl(name) => {
-            rename_edits(find_global_value_references(program, name, true), new_name)
-        }
+        EndNode::ValueDecl(name) => rename_value_edits(
+            program,
+            find_global_value_references(program, name, true),
+            new_name,
+        ),
         EndNode::Type(tycon) => collect_type_rename_edits(program, tycon, new_name),
         EndNode::TypeOrTrait(name) => {
             // Resolve to either a type or a trait. Type takes precedence
@@ -177,7 +184,10 @@ pub(super) fn handle_rename(
         EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
             find_field_occurrences(program, tc, name, true)
                 .into_iter()
-                .map(|occ| (occ.span, format!("{}{}", occ.prefix, new_name)))
+                .map(|occ| {
+                    let text = occ.renamed_text(name, new_name);
+                    (occ.span, text)
+                })
                 .collect()
         }
         EndNode::Module(_) => unreachable!("Module rename is filtered out earlier"),
@@ -195,6 +205,53 @@ pub(super) fn handle_rename(
 /// One edit per span, each replacing the span with `new_text`.
 fn rename_edits(spans: Vec<Span>, new_text: &Name) -> Vec<(Span, String)> {
     spans.into_iter().map(|s| (s, new_text.clone())).collect()
+}
+
+/// One edit per span, each renaming the value named there to `new_name`. A span where a struct
+/// field is written as its name alone (`S { x }`), which names the field too, becomes
+/// `x: new_name`, so that the field keeps its name.
+fn rename_value_edits(program: &Program, spans: Vec<Span>, new_name: &Name) -> Vec<(Span, String)> {
+    let shorthand_fields = shorthand_fields(program);
+    spans
+        .into_iter()
+        .map(|span| {
+            let text = match shorthand_fields.get(&span) {
+                Some(field) => format!("{}: {}", field, new_name),
+                None => new_name.clone(),
+            };
+            (span, text)
+        })
+        .collect()
+}
+
+/// The name of every field of a struct construction or a struct pattern written as its name alone,
+/// keyed by the span of that name.
+fn shorthand_fields(program: &Program) -> Map<Span, Name> {
+    fn record<T>(fields: &[(Name, Option<FieldSrc>, T)], out: &mut Map<Span, Name>) {
+        for (name, field_src, _) in fields {
+            if let Some(field_src) = field_src {
+                if field_src.is_shorthand {
+                    out.insert(field_src.name.clone(), name.clone());
+                }
+            }
+        }
+    }
+    let mut out = Map::default();
+    for gv in program.global_values.values() {
+        gv.expr.walk_nodes(&mut |node| {
+            if let Expr::MakeStruct(_, fields) = &*node.expr {
+                record(fields, &mut out);
+            }
+        });
+        gv.expr.walk_patterns(&mut |pat| {
+            pat.walk_nodes(&mut |node| {
+                if let Pattern::Struct(_, fields) = &node.pattern {
+                    record(fields, &mut out);
+                }
+            });
+        });
+    }
+    out
 }
 
 /// Refuses a rename starting on an auto-generated accessor, or on a symbol

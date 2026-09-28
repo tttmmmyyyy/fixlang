@@ -242,7 +242,7 @@ impl ExprNode {
     /// The type constructor a struct construction names, and the fields it gives values to.
     pub fn destructure_make_struct(
         &self,
-    ) -> Option<(Arc<TyCon>, &Vec<(Name, Option<Span>, Arc<ExprNode>)>)> {
+    ) -> Option<(Arc<TyCon>, &Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)>)> {
         match &*self.expr {
             Expr::MakeStruct(tc, fields) => Some((tc.clone(), fields)),
             _ => None,
@@ -431,7 +431,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn get_make_struct_fields(&self) -> Vec<(Name, Option<Span>, Arc<ExprNode>)> {
+    pub fn get_make_struct_fields(&self) -> Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)> {
         match &*self.expr {
             Expr::MakeStruct(_, fields) => fields.clone(),
             _ => {
@@ -717,7 +717,7 @@ impl ExprNode {
 
     pub fn set_make_struct_fields(
         &self,
-        fields: Vec<(Name, Option<Span>, Arc<ExprNode>)>,
+        fields: Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)>,
     ) -> Arc<Self> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
@@ -1003,8 +1003,9 @@ impl ExprNode {
     // Find the minimum AST node which includes the specified source code position.
     /// What the source position `pos` points at inside this expression: the name a variable
     /// expression writes, a field name of a struct construction, or the type a type annotation or a
-    /// struct construction writes. The walk takes the innermost expression whose span covers `pos`,
-    /// so an expression written with no span answers nothing.
+    /// struct construction writes. A field written as its name alone (`S { x }`) answers the
+    /// variable its name also writes. The walk takes the innermost expression whose span covers
+    /// `pos`, so an expression written with no span answers nothing.
     pub fn find_node_at(self: &Arc<ExprNode>, pos: &SourcePos) -> Option<EndNode> {
         if self.source.is_none() {
             return None;
@@ -1086,15 +1087,17 @@ impl ExprNode {
                 ty.find_node_at(pos)
             }
             Expr::MakeStruct(tc, fields) => {
-                for (name, name_src, field_expr) in fields {
-                    if let Some(ns) = name_src {
-                        if ns.includes_pos_lsp(pos) {
-                            return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
-                        }
-                    }
+                for (name, field_src, field_expr) in fields {
+                    // The value comes first: a field written as its name alone gives its value the
+                    // span of its name.
                     let node = field_expr.find_node_at(pos);
                     if node.is_some() {
                         return node;
+                    }
+                    if let Some(field_src) = field_src {
+                        if field_src.name.includes_pos_lsp(pos) {
+                            return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
+                        }
                     }
                 }
                 Some(EndNode::Type(tc.as_ref().clone()))
@@ -1419,6 +1422,17 @@ impl ExprNode {
     }
 }
 
+/// Where a field of a struct construction or of a struct pattern is written.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct FieldSrc {
+    /// The span of the field name.
+    pub name: Span,
+    /// Whether the field is written as its name alone: `S { x }` stands for `S { x : x }`. The span
+    /// `name` then also covers the expression `x` that a construction gives the field as its value,
+    /// or the variable `x` that a pattern binds the field to.
+    pub is_shorthand: bool,
+}
+
 /// The kinds of expression a program is built out of.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Expr {
@@ -1445,9 +1459,9 @@ pub enum Expr {
     TyAnno(Arc<ExprNode>, Arc<TypeNode>),
     /// An array built out of the elements written in it.
     ArrayLit(Vec<Arc<ExprNode>>),
-    /// A struct construction: the type constructor, and each entry as the field name, the span of
-    /// just that field name, and the value the field is given.
-    MakeStruct(Arc<TyCon>, Vec<(Name, Option<Span>, Arc<ExprNode>)>),
+    /// A struct construction: the type constructor, and each entry as the field name, where the
+    /// field is written, and the value the field is given.
+    MakeStruct(Arc<TyCon>, Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)>),
     /// A call of a C function. `is_ios` says the call is written `FFI_CALL_IOS`, which takes an
     /// `IOState` alongside the arguments.
     FFICall(
@@ -1798,11 +1812,11 @@ pub fn expr_make_struct(tc: Arc<TyCon>, fields: Vec<(Name, Arc<ExprNode>)>) -> A
     Arc::new(Expr::MakeStruct(tc, fields)).into_expr_node(None)
 }
 
-// Construct a MakeStruct from `(field name, optional field-name source
-// span, field value)` triples.
-pub fn expr_make_struct_with_spans(
+// Construct a MakeStruct from `(field name, where the field is written,
+// field value)` triples.
+pub fn expr_make_struct_with_srcs(
     tc: Arc<TyCon>,
-    fields: Vec<(Name, Option<Span>, Arc<ExprNode>)>,
+    fields: Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)>,
 ) -> Arc<ExprNode> {
     Arc::new(Expr::MakeStruct(tc, fields)).into_expr_node(None)
 }

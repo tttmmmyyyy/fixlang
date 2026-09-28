@@ -1,4 +1,4 @@
-use crate::ast::expr::Var;
+use crate::ast::expr::{FieldSrc, Var};
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::typedecl::Field;
@@ -205,6 +205,20 @@ impl PatternNode {
         out
     }
 
+    /// Visit every node of this pattern tree, this one included.
+    pub fn walk_nodes<F: FnMut(&PatternNode)>(&self, f: &mut F) {
+        f(self);
+        match &self.pattern {
+            Pattern::Var(_, _) => {}
+            Pattern::Struct(_, fields) => {
+                for (_, _, sub) in fields {
+                    sub.walk_nodes(f);
+                }
+            }
+            Pattern::Union(_, _, sub) => sub.walk_nodes(f),
+        }
+    }
+
     /// Append this pattern tree's binders to `out`, in the order they are written.
     fn collect_var_infos(&self, out: &mut Vec<(FullName, PatternInfo)>) {
         match &self.pattern {
@@ -220,7 +234,8 @@ impl PatternNode {
 
     /// The element of this pattern the cursor at `pos` is on — the variable a `Var` binds, a field
     /// name or the head type constructor of a `Struct`, the variant name of a `Union`, or a type
-    /// written in an annotation — for an editor to answer hover and goto-definition there.
+    /// written in an annotation — for an editor to answer hover and goto-definition there. A field
+    /// written as its name alone (`S { x }`) answers the variable its name also binds.
     ///
     /// # Arguments
     /// * `pos` — a position as an editor sends it, so the position just past the last character of
@@ -257,16 +272,17 @@ impl PatternNode {
                 ))
             }
             Pattern::Struct(tc, field_to_pat) => {
-                // Check if cursor is on any field-name span first.
-                for (name, name_src, pat) in field_to_pat {
-                    if let Some(field_name_span) = name_src {
-                        if field_name_span.includes_pos_lsp(pos) {
-                            return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
-                        }
-                    }
+                for (name, field_src, pat) in field_to_pat {
+                    // The sub-pattern comes first: a field written as its name alone gives its
+                    // sub-pattern the span of its name.
                     let node = pat.find_node_at_pos(pos);
                     if node.is_some() {
                         return node;
+                    }
+                    if let Some(field_src) = field_src {
+                        if field_src.name.includes_pos_lsp(pos) {
+                            return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
+                        }
                     }
                 }
                 Some(EndNode::Type(tc.as_ref().clone()))
@@ -423,7 +439,7 @@ impl PatternNode {
     /// Panics unless this is a struct pattern.
     pub fn set_struct_field_to_pat(
         self: &PatternNode,
-        field_to_pat: Vec<(Name, Option<Span>, Arc<PatternNode>)>,
+        field_to_pat: Vec<(Name, Option<FieldSrc>, Arc<PatternNode>)>,
     ) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
@@ -514,14 +530,14 @@ impl PatternNode {
         fields: Vec<(Name, Arc<PatternNode>)>,
     ) -> Arc<PatternNode> {
         let fields = fields.into_iter().map(|(n, p)| (n, None, p)).collect();
-        PatternNode::make_struct_with_spans(tycon, fields)
+        PatternNode::make_struct_with_srcs(tycon, fields)
     }
 
-    /// A struct destructuring pattern matching each `(field name, span of that name in the source,
+    /// A struct destructuring pattern matching each `(field name, where the field is written,
     /// sub-pattern)` triple of `fields`.
-    pub fn make_struct_with_spans(
+    pub fn make_struct_with_srcs(
         tycon: Arc<TyCon>,
-        fields: Vec<(Name, Option<Span>, Arc<PatternNode>)>,
+        fields: Vec<(Name, Option<FieldSrc>, Arc<PatternNode>)>,
     ) -> Arc<PatternNode> {
         Arc::new(PatternNode {
             pattern: Pattern::Struct(tycon, fields),
@@ -639,9 +655,9 @@ pub struct PatternInfo {
 pub enum Pattern {
     /// Binds the matched value to a variable, under the type annotation written for it.
     Var(Arc<Var>, Option<Arc<TypeNode>>),
-    /// Destructures a struct or tuple. Each entry is a field name, the span of just that name in
-    /// the source, and the sub-pattern its value is matched against.
-    Struct(Arc<TyCon>, Vec<(Name, Option<Span>, Arc<PatternNode>)>),
+    /// Destructures a struct or tuple. Each entry is a field name, where the field is written, and
+    /// the sub-pattern its value is matched against.
+    Struct(Arc<TyCon>, Vec<(Name, Option<FieldSrc>, Arc<PatternNode>)>),
     /// Matches one variant of a union and its payload against the sub-pattern. The span covers the
     /// bare variant name, without any namespace prefix written before it.
     Union(FullName, Option<Span>, Arc<PatternNode>),

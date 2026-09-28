@@ -10,8 +10,8 @@ use crate::ast::{
     export_statement::ExportStatement,
     expr::{
         expr_abs, expr_abs_param_src, expr_app, expr_array_lit, expr_eval, expr_ffi_call,
-        expr_hole, expr_if, expr_let, expr_make_struct, expr_make_struct_with_spans, expr_match,
-        expr_tyanno, expr_var, var_local, var_var, AppSourceCodeOrderType, ExprNode, Var,
+        expr_hole, expr_if, expr_let, expr_make_struct, expr_make_struct_with_srcs, expr_match,
+        expr_tyanno, expr_var, var_local, var_var, AppSourceCodeOrderType, ExprNode, FieldSrc, Var,
     },
     import::{ImportStatement, ImportTreeNode},
     name::{FullName, Name, NameSpace},
@@ -2554,17 +2554,37 @@ fn parse_expr_make_struct(
     let tycon_pair = pairs.next().unwrap();
     let tycon_span = Span::from_pair(&ctx.source, &tycon_pair);
     let tycon = parse_tycon(tycon_pair, ctx);
-    let mut fields = vec![];
-    while pairs.peek().is_some() {
-        let name_pair = pairs.next().unwrap();
-        let field_name_span = Span::from_pair(&ctx.source, &name_pair);
-        let field_name = name_pair.as_str().to_string();
-        let field_expr = parse_expr(pairs.next().unwrap(), ctx)?;
-        fields.push((field_name, Some(field_name_span), field_expr));
-    }
-    Ok(expr_make_struct_with_spans(tycon, fields)
+    let fields = pairs
+        .map(|pair| parse_expr_make_struct_field(pair, ctx))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(expr_make_struct_with_srcs(tycon, fields)
         .set_source(Some(span))
         .set_aux_src(Some(tycon_span)))
+}
+
+/// Parses a field of a struct construction into its name, where it is written, and its value. A
+/// field written as its name alone, `x`, is given the expression `x` as its value.
+fn parse_expr_make_struct_field(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> Result<(Name, Option<FieldSrc>, Arc<ExprNode>), Errors> {
+    assert_eq!(pair.as_rule(), Rule::expr_make_struct_field);
+    let mut pairs = pair.into_inner();
+    let name_pair = pairs.next().unwrap();
+    let name_span = Span::from_pair(&ctx.source, &name_pair);
+    let name = name_pair.as_str().to_string();
+    let (value, is_shorthand) = match pairs.next() {
+        Some(value_pair) => (parse_expr(value_pair, ctx)?, false),
+        None => (
+            expr_var(FullName::local(&name), Some(name_span.clone())),
+            true,
+        ),
+    };
+    let field_src = FieldSrc {
+        name: name_span,
+        is_shorthand,
+    };
+    Ok((name, Some(field_src), value))
 }
 
 // Parses an `FFI_CALL`, `FFI_CALL_IO` or `FFI_CALL_IOS` expression, i.e. a call to a C function
@@ -3048,6 +3068,16 @@ fn parse_pattern_var(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternNod
     let mut pairs = pair.into_inner();
     let var_name = pairs.next().unwrap().as_str();
     let ty = pairs.next().map(|ty| parse_type(ty, ctx));
+    make_pattern_var(var_name, ty, span, ctx)
+}
+
+/// The pattern that binds the variable `var_name`, annotated with the type `ty`, written at `span`.
+fn make_pattern_var(
+    var_name: &str,
+    ty: Option<Arc<TypeNode>>,
+    span: Span,
+    ctx: &mut ParseContext,
+) -> Arc<PatternNode> {
     // `_` is a wildcard: it binds a fresh, unreferenceable name so that a
     // pattern such as `(x, _, _)` has no duplicate binders and the matched
     // value is discarded.
@@ -3085,17 +3115,35 @@ fn parse_pattern_struct(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Pattern
     let tycon_pair = pairs.next().unwrap();
     let tycon_span = Span::from_pair(&ctx.source, &tycon_pair);
     let tycon = parse_tycon(tycon_pair, ctx);
-    let mut field_to_pats = Vec::default();
-    while pairs.peek().is_some() {
-        let name_pair = pairs.next().unwrap();
-        let field_name_span = Span::from_pair(&ctx.source, &name_pair);
-        let field_name = name_pair.as_str().to_string();
-        let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
-        field_to_pats.push((field_name, Some(field_name_span), pat));
-    }
-    PatternNode::make_struct_with_spans(tycon, field_to_pats)
+    let field_to_pats = pairs
+        .map(|pair| parse_pattern_struct_field(pair, ctx))
+        .collect();
+    PatternNode::make_struct_with_srcs(tycon, field_to_pats)
         .set_source(span)
         .set_aux_src(tycon_span)
+}
+
+/// Parses a field of a struct pattern into its name, where it is written, and its sub-pattern. A
+/// field written as its name alone, `x`, is given the sub-pattern `x`, which binds the variable its
+/// name writes.
+fn parse_pattern_struct_field(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> (Name, Option<FieldSrc>, Arc<PatternNode>) {
+    assert_eq!(pair.as_rule(), Rule::pattern_struct_field);
+    let mut pairs = pair.into_inner();
+    let name_pair = pairs.next().unwrap();
+    let name_span = Span::from_pair(&ctx.source, &name_pair);
+    let name = name_pair.as_str().to_string();
+    let (pat, is_shorthand) = match pairs.next() {
+        Some(pat_pair) => (parse_pattern_nounion(pat_pair, ctx), false),
+        None => (make_pattern_var(&name, None, name_span.clone(), ctx), true),
+    };
+    let field_src = FieldSrc {
+        name: name_span,
+        is_shorthand,
+    };
+    (name, Some(field_src), pat)
 }
 
 fn parse_pattern_union(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<PatternNode> {

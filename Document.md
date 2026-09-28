@@ -622,6 +622,8 @@ You can construct a struct value by the syntax `{struct_name} { {field_name}: {f
 let product = Product { price: 100, sold: false };
 ```
 
+A field whose value is the value of the same name can be written by its name alone. `Product { price, sold: false }` means `Product { price: price, sold: false }`, where the second `price` is an expression: a local variable named `price`, or a global value named `price` if no local variable has that name.
+
 As in the case of unions, there are methods that are automatically defined for structs. For `Product` as above, the following methods are defined in the namespace `Product`.
 
 - `@price : Product -> I64` and `@sold : Product -> Bool`
@@ -646,6 +648,13 @@ or
 ```
 get_price : Product -> I64;
 get_price = |Product { price: price, sold: sold }| price;
+```
+
+A field in a struct pattern can also be written by its name alone, which binds a variable of the same name: `Product { price, sold }` means `Product { price: price, sold: sold }`. So `get_price` can also be written as follows:
+
+```
+get_price : Product -> I64;
+get_price = |Product { price, sold }| price;
 ```
 
 ## Iterators

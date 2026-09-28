@@ -702,9 +702,35 @@ fn collect_qualtype_trait_refs(qt: &QualType, target: &TraitId, refs: &mut Vec<S
 // field, Pattern::Struct/Union), the auto-method's literal prefix
 // (`@`/`set_`/`mod_`/`act_`/`as_`/`is_`) for an auto-method call site, or
 // `^` for an `act_` Var desugared from `[^field]` index syntax.
+// `is_shorthand` is true for a field of a MakeStruct or a Pattern::Struct
+// written as its name alone, whose span also writes the field's value or
+// binder.
 pub(super) struct FieldOccurrence {
     pub span: Span,
     pub prefix: &'static str,
+    pub is_shorthand: bool,
+}
+
+impl FieldOccurrence {
+    // The occurrence's bare-name form, as a declaration, a MakeStruct field or a pattern writes it.
+    fn bare(span: Span, is_shorthand: bool) -> Self {
+        FieldOccurrence {
+            span,
+            prefix: "",
+            is_shorthand,
+        }
+    }
+
+    // The text that replaces the occurrence when the field or variant `old_name` is renamed to
+    // `new_name`. A field written as its name alone becomes `new_name: old_name`, so that the
+    // value or binder its name also writes keeps its name.
+    pub(super) fn renamed_text(&self, old_name: &Name, new_name: &Name) -> String {
+        if self.is_shorthand {
+            format!("{}: {}", new_name, old_name)
+        } else {
+            format!("{}{}", self.prefix, new_name)
+        }
+    }
 }
 
 // Generate the (prefix, fullname) pairs for each user-callable auto-method
@@ -764,10 +790,7 @@ pub(super) fn find_field_occurrences(
             if let Some(fields) = fields {
                 if let Some(f) = fields.iter().find(|f| &f.name == name) {
                     if let Some(span) = &f.name_src {
-                        occs.push(FieldOccurrence {
-                            span: span.clone(),
-                            prefix: "",
-                        });
+                        occs.push(FieldOccurrence::bare(span.clone(), false));
                     }
                 }
             }
@@ -855,13 +878,13 @@ fn collect_exprnode_bare_field_occs(
         }
         Expr::MakeStruct(expr_tc, fields) => {
             if expr_tc.as_ref() == tc {
-                for (fname, fname_src, _) in fields {
+                for (fname, field_src, _) in fields {
                     if fname == name {
-                        if let Some(span) = fname_src {
-                            occs.push(FieldOccurrence {
-                                span: span.clone(),
-                                prefix: "",
-                            });
+                        if let Some(field_src) = field_src {
+                            occs.push(FieldOccurrence::bare(
+                                field_src.name.clone(),
+                                field_src.is_shorthand,
+                            ));
                         }
                     }
                 }
@@ -898,13 +921,13 @@ fn collect_pattern_bare_field_occs(
         Pattern::Var(_, _) => {}
         Pattern::Struct(pat_tc, fields) => {
             if pat_tc.as_ref() == tc {
-                for (fname, fname_src, _) in fields {
+                for (fname, field_src, _) in fields {
                     if fname == name {
-                        if let Some(span) = fname_src {
-                            occs.push(FieldOccurrence {
-                                span: span.clone(),
-                                prefix: "",
-                            });
+                        if let Some(field_src) = field_src {
+                            occs.push(FieldOccurrence::bare(
+                                field_src.name.clone(),
+                                field_src.is_shorthand,
+                            ));
                         }
                     }
                 }
@@ -918,10 +941,7 @@ fn collect_pattern_bare_field_occs(
             // has yet to accept leaves unresolved.
             if Pattern::variant_union_tycon(variant).as_ref() == Some(tc) && &variant.name == name {
                 if let Some(span) = variant_src {
-                    occs.push(FieldOccurrence {
-                        span: span.clone(),
-                        prefix: "",
-                    });
+                    occs.push(FieldOccurrence::bare(span.clone(), false));
                 }
             }
             collect_pattern_bare_field_occs(sub, tc, name, occs);
@@ -972,6 +992,7 @@ fn collect_exprnode_field_occs(
                     occs.push(FieldOccurrence {
                         span: span.clone(),
                         prefix: effective_prefix,
+                        is_shorthand: false,
                     });
                 }
             }
@@ -1095,6 +1116,7 @@ fn walk_import_node_for_field(
                     occs.push(FieldOccurrence {
                         span: span.clone(),
                         prefix,
+                        is_shorthand: false,
                     });
                 }
             }

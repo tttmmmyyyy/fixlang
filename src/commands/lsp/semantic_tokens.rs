@@ -25,7 +25,7 @@
 
 use super::server::{send_response, DiagnosticsResult, LatestContent};
 use super::util::corresponding_line_map;
-use crate::ast::expr::{Expr, ExprNode};
+use crate::ast::expr::{Expr, ExprNode, FieldSrc};
 use crate::ast::name::FullName;
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::predicate::Predicate;
@@ -515,10 +515,8 @@ impl<'a> Overlay<'a> {
                     let token_type = self.classify_tycon(tc);
                     self.push_type(aux, token_type);
                 }
-                for (_name, name_span, e) in fields {
-                    if let Some(s) = name_span {
-                        self.push_value(s, T_PROPERTY);
-                    }
+                for (_name, field_src, e) in fields {
+                    self.push_field_name(field_src);
                     self.collect_expr(e);
                 }
             }
@@ -559,10 +557,8 @@ impl<'a> Overlay<'a> {
                     let token_type = self.classify_tycon(tc);
                     self.push_type(aux, token_type);
                 }
-                for (_name, name_span, sub) in fields {
-                    if let Some(s) = name_span {
-                        self.push_value(s, T_PROPERTY);
-                    }
+                for (_name, field_src, sub) in fields {
+                    self.push_field_name(field_src);
                     self.collect_pattern(sub);
                 }
             }
@@ -571,6 +567,16 @@ impl<'a> Overlay<'a> {
                     self.push_value(s, T_ENUM_MEMBER);
                 }
                 self.collect_pattern(sub);
+            }
+        }
+    }
+
+    /// Emit a token for the field name a struct literal or a struct pattern writes. A field written
+    /// as its name alone is left to its value or its binder, which colors the same name.
+    fn push_field_name(&mut self, field_src: &Option<FieldSrc>) {
+        if let Some(field_src) = field_src {
+            if !field_src.is_shorthand {
+                self.push_value(&field_src.name, T_PROPERTY);
             }
         }
     }

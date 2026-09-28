@@ -454,6 +454,19 @@ impl SymbolExpr {
         }
     }
 
+    /// Visit every node inside this symbol's expression(s).
+    /// For `Method`, walks every per-impl expression in turn.
+    pub fn walk_nodes<F: FnMut(&ExprNode)>(&self, f: &mut F) {
+        match self {
+            SymbolExpr::Simple(te) => te.expr.walk_nodes(f),
+            SymbolExpr::Method(impls) => {
+                for impl_ in impls {
+                    impl_.expr.expr.walk_nodes(f);
+                }
+            }
+        }
+    }
+
     /// Visit every pattern (in `Let` / `Match` arms) inside this symbol's
     /// expression(s).
     pub fn walk_patterns<F: FnMut(&Arc<PatternNode>)>(&self, f: &mut F) {

@@ -5,7 +5,7 @@ use crate::misc::{collect_results, grow_stack, insert_to_map_vec, shorten_for_re
 use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
-        expr::{AppSourceCodeOrderType, Expr, ExprNode},
+        expr::{AppSourceCodeOrderType, Expr, ExprNode, FieldSrc},
         import::ImportStatement,
         kind_scope::KindEnv,
         name::{FullName, Name, NameSpace},
@@ -1666,9 +1666,9 @@ impl TypeCheckContext {
                     if let Some(ti) = tycon_info {
                         let struct_field_names =
                             ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
-                        for (name, name_src, _) in pats {
+                        for (name, field_src, _) in pats {
                             if !struct_field_names.contains(name) {
-                                errors.append(unknown_field_error(tc, name, name_src));
+                                errors.append(unknown_field_error(tc, name, field_src));
                             }
                         }
                     }
@@ -2852,28 +2852,34 @@ impl TypeCheckContext {
 fn duplicate_field_error(
     tc: &Arc<TyCon>,
     name: &Name,
-    name_src: &Option<Span>,
-    first_src: &Option<Span>,
+    field_src: &Option<FieldSrc>,
+    first_src: &Option<FieldSrc>,
 ) -> Error {
     let mut err = Error::from_msg_srcs(
         format!("Duplicate field `{}` of struct `{}`.", name, tc.to_string()),
-        &[name_src],
+        &[&field_name_span(field_src)],
     );
     if let Some(first_src) = first_src {
         err.add_src(
             "The field is given here first.".to_string(),
-            first_src.clone(),
+            first_src.name.clone(),
         );
     }
     err
 }
 
 /// The report for a name the struct `tc` does not declare, located at the name.
-fn unknown_field_error(tc: &Arc<TyCon>, name: &Name, name_src: &Option<Span>) -> Errors {
+fn unknown_field_error(tc: &Arc<TyCon>, name: &Name, field_src: &Option<FieldSrc>) -> Errors {
     Errors::from_msg_srcs(
         format!("Unknown field `{}` for struct `{}`.", name, tc.to_string()),
-        &[name_src],
+        &[&field_name_span(field_src)],
     )
+}
+
+/// The span of the field name a struct literal or a struct pattern writes, which is where a report
+/// about that field is located.
+fn field_name_span(field_src: &Option<FieldSrc>) -> Option<Span> {
+    field_src.as_ref().map(|src| src.name.clone())
 }
 
 /// The report for declared fields a struct literal leaves out, located at the
@@ -2907,17 +2913,17 @@ fn missing_fields_error(tc: &Arc<TyCon>, missing: &[Name], source: &Option<Span>
 /// at the second `a`; for `S { a : x, b : y }` it returns none.
 fn duplicate_field_errors(
     tc: &Arc<TyCon>,
-    fields: &[(Name, Option<Span>, Arc<PatternNode>)],
+    fields: &[(Name, Option<FieldSrc>, Arc<PatternNode>)],
 ) -> Errors {
     let mut errors = Errors::empty();
-    let mut first_srcs: Map<Name, Option<Span>> = Map::default();
-    for (name, name_src, _) in fields {
+    let mut first_srcs: Map<Name, Option<FieldSrc>> = Map::default();
+    for (name, field_src, _) in fields {
         let Some(first_src) = first_srcs.get(name).cloned() else {
-            first_srcs.insert(name.clone(), name_src.clone());
+            first_srcs.insert(name.clone(), field_src.clone());
             continue;
         };
         errors.append(Errors::from_err(duplicate_field_error(
-            tc, name, name_src, &first_src,
+            tc, name, field_src, &first_src,
         )));
     }
     errors
@@ -2943,9 +2949,9 @@ fn duplicate_field_errors(
 fn make_struct_fields_in_declaration_order(
     ti: &TyConInfo,
     tc: &Arc<TyCon>,
-    fields: &[(Name, Option<Span>, Arc<ExprNode>)],
+    fields: &[(Name, Option<FieldSrc>, Arc<ExprNode>)],
     source: &Option<Span>,
-) -> Result<Vec<(Name, Option<Span>, Arc<ExprNode>)>, Errors> {
+) -> Result<Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)>, Errors> {
     let mut errors = Errors::empty();
     let name_to_idx: Map<&Name, usize> = ti
         .fields
@@ -2953,17 +2959,17 @@ fn make_struct_fields_in_declaration_order(
         .enumerate()
         .map(|(idx, f)| (&f.name, idx))
         .collect();
-    let mut slots: Vec<Option<(Name, Option<Span>, Arc<ExprNode>)>> =
+    let mut slots: Vec<Option<(Name, Option<FieldSrc>, Arc<ExprNode>)>> =
         (0..ti.fields.len()).map(|_| None).collect();
     for field in fields {
-        let (name, name_src, _) = field;
+        let (name, field_src, _) = field;
         let Some(&idx) = name_to_idx.get(name) else {
-            errors.append(unknown_field_error(tc, name, name_src));
+            errors.append(unknown_field_error(tc, name, field_src));
             continue;
         };
         match &slots[idx] {
             Some((_, first_src, _)) => errors.append(Errors::from_err(duplicate_field_error(
-                tc, name, name_src, first_src,
+                tc, name, field_src, first_src,
             ))),
             None => slots[idx] = Some(field.clone()),
         }

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+#### Language
+
+- A field of a struct literal or of a struct pattern can be written by its name alone. `S { x, y: 2 }` means `S { x: x, y: 2 }`, where the second `x` is the value named `x`, a local variable or a global value. `let S { x, y: y2 } = s;` binds `x` to the field `x` of `s`, as `let S { x: x, y: y2 } = s;` does.
+
 ### Changed
 
 #### Tool

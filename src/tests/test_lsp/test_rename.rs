@@ -170,6 +170,29 @@ mod tests {
         }
     }
 
+    /// Every `TextEdit` of `workspace_edit` as its start `(line, character)` and the text it
+    /// writes, sorted by position.
+    fn edits_by_position(workspace_edit: &Value) -> Vec<((u64, u64), String)> {
+        let changes = workspace_edit
+            .get("changes")
+            .and_then(|c| c.as_object())
+            .expect("workspace_edit should have changes");
+        let mut edits: Vec<((u64, u64), String)> = changes
+            .values()
+            .flat_map(|edits| edits.as_array().cloned().unwrap_or_default())
+            .map(|edit| {
+                let start = &edit["range"]["start"];
+                let pos = (
+                    start["line"].as_u64().unwrap(),
+                    start["character"].as_u64().unwrap(),
+                );
+                (pos, edit["newText"].as_str().unwrap().to_string())
+            })
+            .collect();
+        edits.sort();
+        edits
+    }
+
     // =======================================================================
     // rename_basic fixture lines (0-indexed):
     //
@@ -1140,6 +1163,104 @@ mod tests {
         // = 5 edits.
         assert_eq!(count_edits(&we), 5, "WorkspaceEdit: {:?}", we);
         assert_all_edits_have_new_text(&we, "NumberProvider");
+        ctx.shutdown();
+    }
+
+    // =======================================================================
+    // rename_struct_field_shorthand fixture, main.fix (0-indexed):
+    //
+    //   2: type S = struct { x : I64, y : I64 };   `x` col 18
+    //   4: y : I64;
+    //   5: y = 10;
+    //   8: make = |x| S { x, y };                   binder `x` col 8, `x` col 15, `y` col 18
+    //  11: sum = |S { x, y }| x + y;                `x` col 11, `y` col 14, uses col 19, 23
+    //
+    // A field written as its name alone names both the field and a value (line 8) or a binder
+    // (line 11). A rename of either one writes the field out as `field: value`, so that the other
+    // keeps its name.
+    // =======================================================================
+
+    /// Renaming a local variable a literal gives a field by the field's name alone writes that
+    /// field out with the new name as its value. The rename starts from the binder.
+    #[test]
+    fn test_rename_local_used_by_field_shorthand() {
+        let mut ctx = LspTestCtx::setup("rename_struct_field_shorthand", &["main.fix"]);
+        let we = ctx.rename("main.fix", 8, 8, "a");
+        assert_eq!(
+            edits_by_position(&we),
+            vec![((8, 8), "a".to_string()), ((8, 15), "x: a".to_string())],
+            "WorkspaceEdit: {:?}",
+            we
+        );
+        ctx.shutdown();
+    }
+
+    /// The cursor on a field a literal writes as its name alone is on the variable that name
+    /// writes, so a rename there renames the variable.
+    #[test]
+    fn test_rename_from_field_shorthand_in_literal_renames_the_variable() {
+        let mut ctx = LspTestCtx::setup("rename_struct_field_shorthand", &["main.fix"]);
+        let we = ctx.rename("main.fix", 8, 15, "a");
+        assert_eq!(
+            edits_by_position(&we),
+            vec![((8, 8), "a".to_string()), ((8, 15), "x: a".to_string())],
+            "WorkspaceEdit: {:?}",
+            we
+        );
+        ctx.shutdown();
+    }
+
+    /// Renaming a local variable a pattern binds by a field's name alone writes that field out with
+    /// the new name as its binder. The cursor on that field is on the variable it binds.
+    #[test]
+    fn test_rename_local_bound_by_field_shorthand() {
+        let mut ctx = LspTestCtx::setup("rename_struct_field_shorthand", &["main.fix"]);
+        let we = ctx.rename("main.fix", 11, 11, "a");
+        assert_eq!(
+            edits_by_position(&we),
+            vec![((11, 11), "x: a".to_string()), ((11, 19), "a".to_string())],
+            "WorkspaceEdit: {:?}",
+            we
+        );
+        ctx.shutdown();
+    }
+
+    /// Renaming a global value a literal gives a field by the field's name alone writes that field
+    /// out with the new name as its value. The local `y` that a pattern binds by the same name is
+    /// another value and stays.
+    #[test]
+    fn test_rename_global_used_by_field_shorthand() {
+        let mut ctx = LspTestCtx::setup("rename_struct_field_shorthand", &["main.fix"]);
+        let we = ctx.rename("main.fix", 4, 0, "base");
+        assert_eq!(
+            edits_by_position(&we),
+            vec![
+                ((4, 0), "base".to_string()),
+                ((5, 0), "base".to_string()),
+                ((8, 18), "y: base".to_string()),
+            ],
+            "WorkspaceEdit: {:?}",
+            we
+        );
+        ctx.shutdown();
+    }
+
+    /// Renaming a field writes each place a literal or a pattern gives it by its name alone as
+    /// `new_name: old_name`, so the value or the binder there keeps its name.
+    #[test]
+    fn test_rename_field_written_as_shorthand() {
+        let mut ctx = LspTestCtx::setup("rename_struct_field_shorthand", &["main.fix"]);
+        let we = ctx.rename("main.fix", 2, 18, "horiz");
+        assert_eq!(
+            edits_by_position(&we),
+            vec![
+                ((2, 18), "horiz".to_string()),
+                ((8, 15), "horiz: x".to_string()),
+                ((11, 11), "horiz: x".to_string()),
+            ],
+            "WorkspaceEdit: {:?}",
+            we
+        );
         ctx.shutdown();
     }
 }
