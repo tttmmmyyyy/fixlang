@@ -622,7 +622,7 @@ You can construct a struct value by the syntax `{struct_name} { {field_name}: {f
 let product = Product { price: 100, sold: false };
 ```
 
-A field whose value is the value of the same name can be written by its name alone. `Product { price, sold: false }` means `Product { price: price, sold: false }`, where the second `price` is an expression: a local variable named `price`, or a global value named `price` if no local variable has that name.
+A field can be written by its name alone when its value is the value of that name. `Product { price, sold: false }` means `Product { price: price, sold: false }`, where the second `price` is a local variable named `price`, or a global value named `price` if no local variable has that name.
 
 As in the case of unions, there are methods that are automatically defined for structs. For `Product` as above, the following methods are defined in the namespace `Product`.
 

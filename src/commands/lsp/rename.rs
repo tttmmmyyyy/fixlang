@@ -227,6 +227,7 @@ fn rename_value_edits(program: &Program, spans: Vec<Span>, new_name: &Name) -> V
 /// The name of every field of a struct construction or a struct pattern written as its name alone,
 /// keyed by the span of that name.
 fn shorthand_fields(program: &Program) -> Map<Span, Name> {
+    /// Records each field of `fields` written as its name alone into `out`.
     fn record<T>(fields: &[(Name, Option<FieldSrc>, T)], out: &mut Map<Span, Name>) {
         for (name, field_src, _) in fields {
             if let Some(field_src) = field_src {

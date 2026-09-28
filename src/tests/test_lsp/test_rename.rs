@@ -1182,8 +1182,8 @@ mod tests {
     // keeps its name.
     // =======================================================================
 
-    /// Renaming a local variable a literal gives a field by the field's name alone writes that
-    /// field out with the new name as its value. The rename starts from the binder.
+    /// Renaming a local variable that is the value of a field written by its name alone (`S { x }`)
+    /// rewrites that field as `x: a`. The rename starts at the variable's binder.
     #[test]
     fn test_rename_local_used_by_field_shorthand() {
         let mut ctx = LspTestCtx::setup("rename_struct_field_shorthand", &["main.fix"]);
@@ -1197,8 +1197,8 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// The cursor on a field a literal writes as its name alone is on the variable that name
-    /// writes, so a rename there renames the variable.
+    /// A rename that starts on a field written by its name alone in a literal renames the variable
+    /// that the name refers to.
     #[test]
     fn test_rename_from_field_shorthand_in_literal_renames_the_variable() {
         let mut ctx = LspTestCtx::setup("rename_struct_field_shorthand", &["main.fix"]);
@@ -1212,8 +1212,8 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Renaming a local variable a pattern binds by a field's name alone writes that field out with
-    /// the new name as its binder. The cursor on that field is on the variable it binds.
+    /// Renaming a variable that a pattern binds through a field written by its name alone rewrites
+    /// that field as `x: a`. The rename starts on that field, which is on the variable it binds.
     #[test]
     fn test_rename_local_bound_by_field_shorthand() {
         let mut ctx = LspTestCtx::setup("rename_struct_field_shorthand", &["main.fix"]);
@@ -1227,9 +1227,9 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Renaming a global value a literal gives a field by the field's name alone writes that field
-    /// out with the new name as its value. The local `y` that a pattern binds by the same name is
-    /// another value and stays.
+    /// Renaming a global value that is the value of a field written by its name alone rewrites that
+    /// field as `y: base`. The local `y` that a pattern binds elsewhere is another value and keeps
+    /// its name.
     #[test]
     fn test_rename_global_used_by_field_shorthand() {
         let mut ctx = LspTestCtx::setup("rename_struct_field_shorthand", &["main.fix"]);
@@ -1266,8 +1266,8 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Renaming a local variable bound by a field written as its name alone inside another struct
-    /// pattern writes that field out with the new name as its binder.
+    /// Renaming a variable bound by a field written by its name alone, inside another struct
+    /// pattern, rewrites that field as `u: a`.
     #[test]
     fn test_rename_local_bound_by_field_shorthand_in_nested_pattern() {
         let mut ctx = LspTestCtx::setup("rename_struct_field_shorthand", &["main.fix"]);
@@ -1281,8 +1281,8 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Renaming a local variable a literal inside a trait implementation gives a field by the
-    /// field's name alone writes that field out with the new name as its value.
+    /// Inside a trait implementation, renaming a local variable that is the value of a field
+    /// written by its name alone rewrites that field as `u: a`.
     #[test]
     fn test_rename_local_used_by_field_shorthand_in_trait_impl() {
         let mut ctx = LspTestCtx::setup("rename_struct_field_shorthand", &["main.fix"]);

@@ -431,6 +431,8 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    /// The fields of this struct construction, each as its name, where it is written, and its
+    /// value. Panics unless this is a struct construction.
     pub fn get_make_struct_fields(&self) -> Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)> {
         match &*self.expr {
             Expr::MakeStruct(_, fields) => fields.clone(),
@@ -715,6 +717,8 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    /// This struct construction with its fields replaced by `fields`. Panics unless this is a
+    /// struct construction.
     pub fn set_make_struct_fields(
         &self,
         fields: Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)>,
@@ -1812,8 +1816,8 @@ pub fn expr_make_struct(tc: Arc<TyCon>, fields: Vec<(Name, Arc<ExprNode>)>) -> A
     Arc::new(Expr::MakeStruct(tc, fields)).into_expr_node(None)
 }
 
-// Construct a MakeStruct from `(field name, where the field is written,
-// field value)` triples.
+/// A struct construction of `tc` from `(field name, where the field is written, field value)`
+/// triples.
 pub fn expr_make_struct_with_srcs(
     tc: Arc<TyCon>,
     fields: Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)>,

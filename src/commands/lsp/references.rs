@@ -702,17 +702,17 @@ fn collect_qualtype_trait_refs(qt: &QualType, target: &TraitId, refs: &mut Vec<S
 // field, Pattern::Struct/Union), the auto-method's literal prefix
 // (`@`/`set_`/`mod_`/`act_`/`as_`/`is_`) for an auto-method call site, or
 // `^` for an `act_` Var desugared from `[^field]` index syntax.
-// `is_shorthand` is true for a field of a MakeStruct or a Pattern::Struct
-// written as its name alone, whose span also writes the field's value or
-// binder.
 pub(super) struct FieldOccurrence {
     pub span: Span,
     pub prefix: &'static str,
+    /// Whether this is a field of a `MakeStruct` or a `Pattern::Struct` written as its name alone
+    /// (`S { x }`). Its span then also covers the field's value or binder.
     pub is_shorthand: bool,
 }
 
 impl FieldOccurrence {
-    // The occurrence's bare-name form, as a declaration, a MakeStruct field or a pattern writes it.
+    /// An occurrence of the name with no prefix, as a declaration, a `MakeStruct` field or a
+    /// pattern writes it.
     fn bare(span: Span, is_shorthand: bool) -> Self {
         FieldOccurrence {
             span,
@@ -721,9 +721,12 @@ impl FieldOccurrence {
         }
     }
 
-    // The text that replaces the occurrence when the field or variant `old_name` is renamed to
-    // `new_name`. A field written as its name alone becomes `new_name: old_name`, so that the
-    // value or binder its name also writes keeps its name.
+    /// The text that replaces the occurrence when the field or variant `old_name` is renamed to
+    /// `new_name`. A field written as its name alone becomes `new_name: old_name`, so that the
+    /// value or binder its name also writes keeps its name.
+    ///
+    /// # Examples
+    /// Renaming `x` to `h` turns `@x` into `@h`, and the `x` of `S { x }` into `h: x`.
     pub(super) fn renamed_text(&self, old_name: &Name, new_name: &Name) -> String {
         if self.is_shorthand {
             assert_eq!(
