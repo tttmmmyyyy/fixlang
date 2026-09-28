@@ -773,7 +773,7 @@ second = 2;
     );
 }
 
-/// A compile error at the end of a Fix example's source is reported inside the doc comment, at the
+/// A compile error at the end of a Fix example's source is reported inside the comment, at the
 /// closing fence: an unterminated string swallows the end of an example written as statements, and
 /// an unclosed call ends an example written as a module.
 #[test]

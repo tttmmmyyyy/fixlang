@@ -133,7 +133,7 @@ pub fn check_doc_test_name_is_free(program: &Program) -> Result<(), Errors> {
     match taken {
         Some((_, source)) => Err(Errors::from_msg_srcs(
             format!(
-                "The name `{}` is reserved for the Fix examples of doc comments, which `fix test` \
+                "The name `{}` is reserved for the Fix examples of comments, which `fix test` \
                  compiles as the module `{}`. Give this module, namespace, type or trait another name.",
                 DOC_TEST_MODULE_NAME, DOC_TEST_MODULE_NAME
             ),

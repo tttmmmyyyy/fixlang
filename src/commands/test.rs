@@ -131,7 +131,7 @@ pub fn test_example(config: &Configuration, example: &FixExample) -> ExampleOutc
     }
 }
 
-/// The files whose doc comments `fix test` takes the Fix examples of: those the `build` and the
+/// The files whose comments `fix test` takes the Fix examples of: those the `build` and the
 /// `build.test` sections of the project file in the working directory list. A directory without a
 /// project file has none.
 fn doc_test_files() -> Result<Vec<PathBuf>, Errors> {
