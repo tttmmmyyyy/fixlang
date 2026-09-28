@@ -3,7 +3,7 @@
 use crate::ast::{
     expr::ExprNode,
     name::FullName,
-    traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+    traverse::{ExprVisitor, StartVisitResult, VisitState},
 };
 use std::sync::Arc;
 
@@ -19,10 +19,13 @@ pub enum UsageType {
     // constructor of that struct, and the second the position of the field among the fields the
     // type constructor declares.
     CapturedInto(FullName, usize),
+    // The name is the operand an inline-LLVM operation declaring `LLVMGen::env_operand` applies as
+    // a function.
+    EnvFunctionOperand,
     // The name stands where none of the above receives it: the bound value of a `let`, a branch of
     // an `if` or a `match`, an element of an array literal, under a type annotation, either side of
-    // an `eval`, or an operand of an inline-LLVM operation. What holds it there passes it on whole,
-    // so the position says nothing about the name beyond its being there.
+    // an `eval`, or another operand of an inline-LLVM operation. What holds it there passes it on
+    // whole, so the position says nothing about the name beyond its being there.
     Elsewhere,
 }
 
@@ -78,10 +81,6 @@ impl ExprVisitor for UsageFinder<'_> {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
     // An inline-LLVM operation names the values it operates on rather than holding them as
     // subexpressions, so the walk reaches them here instead of at a `Var` of its own.
     fn start_visit_llvm(
@@ -90,20 +89,20 @@ impl ExprVisitor for UsageFinder<'_> {
         state: &mut VisitState,
     ) -> StartVisitResult {
         if !self.shadowed(state) {
-            let operands = expr.get_llvm().generator.free_vars();
-            let written = operands
-                .iter()
-                .filter(|operand| *operand == self.name)
-                .count();
-            for _ in 0..written {
-                self.add_usage(UsageType::Elsewhere);
+            let generator = &expr.get_llvm().generator;
+            let function = generator.env_operand().map(|env| env.function);
+            for (i, operand) in generator.free_vars().iter().enumerate() {
+                if operand != self.name {
+                    continue;
+                }
+                self.add_usage(if Some(i) == function {
+                    UsageType::EnvFunctionOperand
+                } else {
+                    UsageType::Elsewhere
+                });
             }
         }
         StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 
     // A call records the name once for standing as the callee, and once for each argument position
@@ -144,74 +143,6 @@ impl ExprVisitor for UsageFinder<'_> {
         StartVisitResult::Return
     }
 
-    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_lam(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_let(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_if(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_match(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_tyanno(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
     // A struct being built records the name once for each field it is stored into, by the position
     // that field holds among the fields the type constructor declares.
     fn start_visit_make_struct(
@@ -231,58 +162,6 @@ impl ExprVisitor for UsageFinder<'_> {
             }
         }
         StartVisitResult::Return
-    }
-
-    fn end_visit_make_struct(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_array_lit(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_array_lit(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_ffi_call(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_ffi_call(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_eval(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 }
 

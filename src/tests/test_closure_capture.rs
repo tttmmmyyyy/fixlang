@@ -5,8 +5,11 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_util::{
-        build_run_and_read_rc_ir, build_within_and_run, rc_ir_function_bodies,
+    use crate::{
+        configuration::{Configuration, FixOptimizationLevel, ValgrindTool},
+        tests::test_util::{
+            build_run_and_read_rc_ir, build_within_and_run, rc_ir_function_bodies, test_source,
+        },
     };
     use std::time::Duration;
 
@@ -87,28 +90,30 @@ mod tests {
             NO_FREE_VARIABLE_OUTPUT,
             "a lambda with no free variable handed to a built-in taking a closure",
         );
-        assert_closures_at_type_store_nothing(&dump, "Std::Ptr -> Std::I64");
+        // `borrow_elements` hands its function the environment the standard library gives it, `()`,
+        // beside the pointer.
+        assert_closures_at_type_store_nothing(&dump, "((), Std::Ptr) -> Std::I64");
     }
 
     /// A lambda that captures a unit and reads it: the pair it answers with carries the unit it
-    /// captured, so the body reaches the captured name.
+    /// captured, so the body reaches the captured name. `Destructor::make` stores the lambda as a
+    /// closure, where a built-in that applies its function takes what the lambda captures through
+    /// an environment instead.
     const CAPTURES_A_UNIT_SOURCE: &str = r#"
         module Main;
 
-        _length_keeping_unit : () -> Array U8 -> ((), I64);
-        _length_keeping_unit = |unit, bytes| bytes.borrow_elements(
-            |ptr| (unit, FFI_CALL[I64 strlen(Ptr), ptr])
-        );
+        _keeping_unit : () -> I64 -> IO (Destructor ((), I64));
+        _keeping_unit = |unit, n| Destructor::make(((), n), |(_, m)| pure $ (unit, m + 1));
 
         main : IO ();
         main = (
-            let (_, length) = _length_keeping_unit((), "0123456789".get_bytes);
-            println $ length.to_string
+            let dtor = *_keeping_unit((), 9);
+            println $ dtor.borrow(|(_, n)| n).to_string
         );
     "#;
 
-    /// What `CAPTURES_A_UNIT_SOURCE` prints: the length of the string it measures.
-    const CAPTURES_A_UNIT_OUTPUT: &str = "10";
+    /// What `CAPTURES_A_UNIT_SOURCE` prints: the number the destructor holds.
+    const CAPTURES_A_UNIT_OUTPUT: &str = "9";
 
     /// A captured value that occupies no storage is read by the body that captured it, and the
     /// closure still stores nothing: the value the body reads is made inside the function the lambda
@@ -121,7 +126,10 @@ mod tests {
             CAPTURES_A_UNIT_OUTPUT,
             "a lambda capturing a unit and reading it",
         );
-        assert_closures_at_type_store_nothing(&dump, "Std::Ptr -> ((), Std::I64)");
+        assert_closures_at_type_store_nothing(
+            &dump,
+            "((), Std::I64) -> Std::IO::IOState -> (Std::IO::IOState, ((), Std::I64))",
+        );
 
         // The capture list `Main` declares for the lambda is made where it is read, rather than
         // projected out of a capture object the closure would have had to carry it in.
@@ -280,6 +288,113 @@ mod tests {
                 "the field should be plugged back at -O {}",
                 opt_level
             );
+        }
+    }
+    /// Lambdas capturing values that occupy storage, given to the three kinds of built-in that
+    /// apply a function in a scope: `borrow_elements` lends a pointer, `mutate_elements` lends one
+    /// into a uniquely owned array, and `Destructor::borrow` holds its value retained.
+    const SCOPE_BUILTINS_SOURCE: &str = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let offset = 3;
+            let bytes = "0123456789".get_bytes;
+            let length = bytes.borrow_elements(|ptr| FFI_CALL[I64 strlen(Ptr), ptr] + offset);
+            let (bytes, _) = bytes.mutate_elements(|ptr|
+                FFI_CALL_IO[() memset(Ptr, CInt, CSizeT), ptr, 65.to_CInt, offset.to_CSizeT]
+            );
+            let dtor = *Destructor::make("n=", |s| pure(s));
+            println $ dtor.borrow(|s| s + length.to_string + "," + offset.to_string)
+                + "," + bytes.borrow_elements(String::unsafe_from_c_str_ptr)
+        );
+    "#;
+
+    /// What `SCOPE_BUILTINS_SOURCE` prints.
+    const SCOPE_BUILTINS_OUTPUT: &str = "n=13,3,AAA3456789";
+
+    /// A lambda given to a built-in that applies it in a scope takes what it captures through the
+    /// environment the built-in hands it, so the closure built from it stores nothing and allocates
+    /// no capture object.
+    ///
+    /// At `-O basic` nothing is inlined, and the lambdas under test are the ones the standard
+    /// library's functions build around the function they are given, capturing it. At `-O max` they
+    /// are the lambdas the program writes.
+    ///
+    /// The capture struct the environment carries is what names the closures under test: its type
+    /// constructor is named with `#ScopeCap`.
+    #[test]
+    fn test_a_lambda_given_to_a_scope_builtin_stores_nothing() {
+        for opt_level in ["basic", "max"] {
+            let dump = build_run_and_read_rc_ir(
+                SCOPE_BUILTINS_SOURCE,
+                opt_level,
+                SCOPE_BUILTINS_OUTPUT,
+                "lambdas capturing values, given to built-ins applying a function in a scope",
+            );
+            let built = dump
+                .lines()
+                .filter(|line| line.contains("= closure ") && line.contains("#ScopeCap"))
+                .collect::<Vec<_>>();
+            // At least one for each of `borrow_elements`, `mutate_elements` and `Destructor::borrow`.
+            assert!(
+                built.len() >= 3,
+                "at -O {}, a closure taking a capture struct should be built for each built-in:\n{}",
+                opt_level,
+                dump
+            );
+            for line in built {
+                assert!(
+                    line.trim_end().ends_with("[]"),
+                    "at -O {}, a closure taking its captures through the environment should store \
+                     nothing:\n{}",
+                    opt_level,
+                    line
+                );
+            }
+        }
+    }
+
+    /// Values captured by lambdas given to built-ins that apply a function in a scope: a lambda
+    /// nested in another, whose captures include the pointer the outer one is lent, and a lambda
+    /// that captures the array it writes through, so that the write lands on a copy.
+    const MOVED_CAPTURES_SOURCE: &str = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let offset = 3;
+            let bytes = "0123456789".get_bytes;
+            let other = "abcdef".get_bytes;
+            let nested = bytes.borrow_elements(|p| other.borrow_elements(|q|
+                FFI_CALL[I64 strlen(Ptr), p] * 100 + FFI_CALL[I64 strlen(Ptr), q] + offset
+            ));
+            assert_eq(|_|"nested", nested, 1009);;
+            let (written, _) = bytes.mutate_elements(|ptr|
+                FFI_CALL_IO[() memset(Ptr, CInt, CSizeT), ptr, bytes.@(1).to_CInt, offset.to_CSizeT]
+            );
+            assert_eq(|_|"original", bytes.borrow_elements(String::unsafe_from_c_str_ptr), "0123456789");;
+            assert_eq(|_|"written", written.borrow_elements(String::unsafe_from_c_str_ptr), "1113456789");;
+            let dtor = *Destructor::make("n=", |s| pure(s));
+            assert_eq(|_|"retained", dtor.borrow(|s| s + nested.to_string), "n=1009");;
+            pure()
+        );
+    "#;
+
+    /// The captures moved into the environment reach the lambdas with the values they had where the
+    /// lambdas were written, at every optimization level, and memcheck finds no leak or double free
+    /// in the reference counting of the environment.
+    #[test]
+    fn test_captures_moved_into_the_environment_keep_their_values() {
+        for opt_level in [
+            FixOptimizationLevel::None,
+            FixOptimizationLevel::Basic,
+            FixOptimizationLevel::Max,
+        ] {
+            let mut config = Configuration::develop_mode();
+            config.set_fix_opt_level(opt_level);
+            config.set_valgrind(ValgrindTool::MemCheck);
+            test_source(MOVED_CAPTURES_SOURCE, config);
         }
     }
 }

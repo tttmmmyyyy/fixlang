@@ -26,7 +26,7 @@ use crate::{
         name::FullName,
         pattern::{Pattern, PatternInfo, PatternNode},
         program::{Program, Symbol, TypeEnv},
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+        traverse::{EndVisitResult, ExprVisitor, VisitState},
         types::{tycon, TyCon, TyConInfo, TyConVariant},
     },
     fixstd::builtin::{
@@ -189,14 +189,6 @@ impl<'a> ExprUnwrapper<'a> {
 }
 
 impl<'a> ExprVisitor for ExprUnwrapper<'a> {
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_tyanno(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -206,25 +198,9 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         EndVisitResult::changed(expr)
     }
 
-    fn start_visit_var(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let expr = unwrap_inferred_type(expr, self.type_env);
         EndVisitResult::changed(expr)
-    }
-
-    fn start_visit_llvm(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// Unwraps the type recorded for an inline LLVM expression, and replaces the read, the write,
@@ -300,38 +276,14 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         EndVisitResult::changed(expr)
     }
 
-    fn start_visit_app(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let expr = unwrap_inferred_type(expr, self.type_env);
         EndVisitResult::changed(expr)
     }
 
-    fn start_visit_lam(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let expr = unwrap_inferred_type(expr, self.type_env);
         EndVisitResult::changed(expr)
-    }
-
-    fn start_visit_let(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// Unwraps the type recorded for a `let`, and rewrites the pattern it binds with, so that a
@@ -347,25 +299,9 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         EndVisitResult::changed(expr)
     }
 
-    fn start_visit_if(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let expr = unwrap_inferred_type(expr, self.type_env);
         EndVisitResult::changed(expr)
-    }
-
-    fn start_visit_match(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// Unwraps the type recorded for a `match`, and rewrites the pattern of each arm, so that a
@@ -382,14 +318,6 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
             unreachable!()
         }
         EndVisitResult::changed(expr)
-    }
-
-    fn start_visit_make_struct(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// Unwraps the type recorded for a struct literal, and replaces a literal of an unwrapped
@@ -410,14 +338,6 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         EndVisitResult::changed(expr)
     }
 
-    fn start_visit_array_lit(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_array_lit(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -427,14 +347,6 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         EndVisitResult::changed(expr)
     }
 
-    fn start_visit_ffi_call(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_ffi_call(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -442,14 +354,6 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
     ) -> EndVisitResult {
         let expr = unwrap_inferred_type(expr, self.type_env);
         EndVisitResult::changed(expr)
-    }
-
-    fn start_visit_eval(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {

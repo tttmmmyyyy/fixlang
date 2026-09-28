@@ -936,6 +936,14 @@ impl Configuration {
         self.runs_from(FixOptimizationLevel::Max)
     }
 
+    /// Move what a lambda given to an op applying it with an environment captures into that
+    /// environment, so that the lambda needs no closure object. Runs at `Basic` and above: the
+    /// functions the standard library defines around such an op give it a lambda capturing the
+    /// function they take, which costs a closure object on each call where this does not run.
+    pub fn enable_decapture_scope_lambdas(&self) -> bool {
+        self.runs_from(FixOptimizationLevel::Basic)
+    }
+
     /// Replace a destructuring that meets the construction it reads by what the construction put
     /// there. Runs at `Max` and above: it is what carries a value through the `Option` an iterator's
     /// `advance` builds, and closure specialization, which reads what it leaves, runs there.
