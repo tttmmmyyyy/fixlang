@@ -10,12 +10,10 @@ use crate::ast::expr::{Expr, ExprNode};
 use crate::ast::import::ImportTreeNode;
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::{Pattern, PatternNode};
-use crate::ast::program::EndNode;
-use crate::ast::program::{Program, SymbolExpr};
+use crate::ast::program::{EndNode, Program, SymbolExpr};
 use crate::ast::qual_pred::QualPred;
 use crate::ast::qual_type::QualType;
-use crate::ast::traits::AssocTypeImpl;
-use crate::ast::traits::TraitId;
+use crate::ast::traits::{AssocTypeImpl, TraitId};
 use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
 use crate::ast::types::{AssocType, Scheme, TyCon, Type, TypeNode};
 use crate::constants::{
@@ -456,36 +454,21 @@ fn collect_symbol_expr_var_refs(expr: &SymbolExpr, target: &FullName, refs: &mut
 
 // Collect variable references in a pattern.
 fn collect_pattern_var_refs(pat: &Arc<PatternNode>, target: &FullName, refs: &mut Vec<Span>) {
-    match &pat.pattern {
-        Pattern::Var(v, _) => {
+    pat.walk_nodes(&mut |node| {
+        if let Pattern::Var(v, _) = &node.pattern {
             if &v.name == target {
-                if let Some(span) = &pat.info.source {
+                if let Some(span) = &node.info.source {
                     refs.push(span.clone());
                 }
             }
         }
-        Pattern::Struct(_, field_pats, _) => {
-            for (_, _, sub_pat) in field_pats {
-                collect_pattern_var_refs(sub_pat, target, refs);
-            }
-        }
-        Pattern::Union(_, _, sub_pat) => {
-            collect_pattern_var_refs(sub_pat, target, refs);
-        }
-    }
+    });
 }
 
 // Collect type references in a SymbolExpr.
 fn collect_symbol_expr_type_refs(expr: &SymbolExpr, target: &TyCon, refs: &mut Vec<Span>) {
-    match expr {
-        SymbolExpr::Simple(typed_expr) => {
-            collect_exprnode_type_refs(&typed_expr.expr, target, refs);
-        }
-        SymbolExpr::Method(impls) => {
-            for impl_ in impls {
-                collect_exprnode_type_refs(&impl_.expr.expr, target, refs);
-            }
-        }
+    for e in expr.exprs() {
+        collect_exprnode_type_refs(e, target, refs);
     }
 }
 
@@ -552,26 +535,21 @@ fn collect_exprnode_type_refs(expr: &Arc<ExprNode>, target: &TyCon, refs: &mut V
 
 // Collect type references in a pattern.
 fn collect_pattern_type_refs(pat: &Arc<PatternNode>, target: &TyCon, refs: &mut Vec<Span>) {
-    match &pat.pattern {
+    pat.walk_nodes(&mut |node| match &node.pattern {
         Pattern::Var(_, opt_ty) => {
             if let Some(ty) = opt_ty {
                 collect_typenode_type_refs(ty, target, refs);
             }
         }
-        Pattern::Struct(tc, field_pats, _) => {
+        Pattern::Struct(tc, _, _) => {
             if tc.as_ref() == target {
-                if let Some(span) = &pat.info.aux_src {
+                if let Some(span) = &node.info.aux_src {
                     refs.push(span.clone());
                 }
             }
-            for (_, _, sub_pat) in field_pats {
-                collect_pattern_type_refs(sub_pat, target, refs);
-            }
         }
-        Pattern::Union(_, _, sub_pat) => {
-            collect_pattern_type_refs(sub_pat, target, refs);
-        }
-    }
+        Pattern::Union(_, _, _) => {}
+    });
 }
 
 // Collect type constructor references in a TypeNode tree.
@@ -815,15 +793,8 @@ fn collect_field_bare_occs(
     name: &Name,
     occs: &mut Vec<FieldOccurrence>,
 ) {
-    match expr {
-        SymbolExpr::Simple(typed_expr) => {
-            collect_exprnode_bare_field_occs(&typed_expr.expr, tc, name, occs);
-        }
-        SymbolExpr::Method(impls) => {
-            for impl_ in impls {
-                collect_exprnode_bare_field_occs(&impl_.expr.expr, tc, name, occs);
-            }
-        }
+    for e in expr.exprs() {
+        collect_exprnode_bare_field_occs(e, tc, name, occs);
     }
 }
 
@@ -906,7 +877,7 @@ fn collect_pattern_bare_field_occs(
     name: &Name,
     occs: &mut Vec<FieldOccurrence>,
 ) {
-    match &pat.pattern {
+    pat.walk_nodes(&mut |node| match &node.pattern {
         Pattern::Var(_, _) => {}
         Pattern::Struct(pat_tc, fields, _) => {
             if pat_tc.as_ref() == tc {
@@ -921,11 +892,8 @@ fn collect_pattern_bare_field_occs(
                     }
                 }
             }
-            for (_, _, sub) in fields {
-                collect_pattern_bare_field_occs(sub, tc, name, occs);
-            }
         }
-        Pattern::Union(variant, variant_src, sub) => {
+        Pattern::Union(variant, variant_src, _) => {
             // The variant name carries the union it belongs to, which a pattern the type checker
             // has yet to accept leaves unresolved.
             if Pattern::variant_union_tycon(variant).as_ref() == Some(tc) && &variant.name == name {
@@ -933,9 +901,8 @@ fn collect_pattern_bare_field_occs(
                     occs.push(FieldOccurrence::bare(span.clone(), false));
                 }
             }
-            collect_pattern_bare_field_occs(sub, tc, name, occs);
         }
-    }
+    });
 }
 
 // Walk a SymbolExpr's expression trees and emit a `FieldOccurrence` for
@@ -946,15 +913,8 @@ fn collect_field_var_occs(
     target: &FullName,
     occs: &mut Vec<FieldOccurrence>,
 ) {
-    match expr {
-        SymbolExpr::Simple(typed_expr) => {
-            collect_exprnode_field_occs(&typed_expr.expr, prefix, target, occs);
-        }
-        SymbolExpr::Method(impls) => {
-            for impl_ in impls {
-                collect_exprnode_field_occs(&impl_.expr.expr, prefix, target, occs);
-            }
-        }
+    for e in expr.exprs() {
+        collect_exprnode_field_occs(e, prefix, target, occs);
     }
 }
 
