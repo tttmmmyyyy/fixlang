@@ -3287,7 +3287,7 @@ An example that begins with a `module` declaration is the source of the module a
 // ```
 ```
 
-The name `DocTest` is reserved: `fix test` reports an error if the project or a dependency has a module, a namespace, a type or a trait of that name. `fix test --no-doc` runs no example, and it accepts the name.
+The name `DocTest` is reserved for the examples: when `fix test` compiles an example, it reports an error if the project or a dependency has a module, a namespace, a type or a trait of that name.
 
 A line of an example whose text begins with `# ` after its indentation is hidden: it is compiled with the `# ` removed, and it is not shown in the documentation `fix docs` generates or in the hover of the language server. A line of `#` alone is a hidden empty line. The following example is shown as the two lines `type Pair = (I64, I64);` and `let pair : Pair = (1, 2);`:
 

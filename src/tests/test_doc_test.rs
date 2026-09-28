@@ -417,7 +417,7 @@ value = 1;
 /// `fix test` rejects a name with a component `DocTest`, the name each Fix example is compiled as,
 /// and reports it at the declaration that takes it: a module of that name, a declaration in a
 /// namespace of that name at any depth, and a type or a trait of that name, which opens a
-/// namespace of its name. `fix test --no-doc` runs no example, and it accepts the name.
+/// namespace of its name. Where no example is compiled, and for a trait alias, the name is free.
 #[test]
 fn test_the_name_doc_test_is_reserved() {
     for (source, line) in [
@@ -466,22 +466,45 @@ fn test_the_name_doc_test_is_reserved() {
         );
     }
 
-    let dir = project_dir(
-        &[
-            ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
-            (
-                "other.fix",
-                "module Other;\nnamespace DocTest {\n    value : I64;\n    value = 1;\n}\n",
-            ),
-        ],
-        &[("test.fix", TEST_ANNOUNCING_ITSELF)],
-    );
-    let output = fix_test(&dir, &["--no-doc"]);
-    assert!(
-        output.status.success(),
-        "`fix test --no-doc` accepts the name `DocTest`\n{}",
-        streams(&output)
-    );
+    // The name is free where no example is compiled: under `--no-doc`, and in a project without an
+    // example. A trait alias opens no namespace, so its name is free as well.
+    let namespace = "module Other;\nnamespace DocTest {\n    value : I64;\n    value = 1;\n}\n";
+    for (build_files, args) in [
+        (
+            vec![
+                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
+                ("other.fix", namespace),
+            ],
+            vec!["--no-doc"],
+        ),
+        (
+            vec![
+                (
+                    "lib.fix",
+                    "module Lib;\ndouble : I64 -> I64;\ndouble = |x| 2 * x;\n",
+                ),
+                ("other.fix", namespace),
+            ],
+            vec![],
+        ),
+        (
+            vec![
+                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
+                ("other.fix", "module Other;\ntrait DocTest = Eq;\n"),
+            ],
+            vec![],
+        ),
+    ] {
+        let dir = project_dir(&build_files, &[("test.fix", TEST_ANNOUNCING_ITSELF)]);
+        let output = fix_test(&dir, &args);
+        assert!(
+            output.status.success(),
+            "`fix test {}` accepts the name `DocTest` in\n{:?}\n{}",
+            args.join(" "),
+            build_files,
+            streams(&output)
+        );
+    }
 }
 
 /// The Fix examples of the files the `build.test` section alone lists are tested as well: a helper

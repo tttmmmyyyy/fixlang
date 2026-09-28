@@ -38,8 +38,15 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
     }
 
     let program = panic_if_err(load_source_files(&config));
-    panic_if_err(check_doc_test_name_is_free(&program));
     let examples = panic_if_err(collect_examples(&program, &panic_if_err(doc_test_files())));
+    // The name `DocTest` is the one each example is compiled as, so it is free where an example is
+    // compiled.
+    if examples
+        .iter()
+        .any(|example| !matches!(example.task, ExampleTask::Ignore))
+    {
+        panic_if_err(check_doc_test_name_is_free(&program));
+    }
     if selection == TestSelection::All && examples.is_empty() {
         run_command(&config);
     }

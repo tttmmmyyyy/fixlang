@@ -147,7 +147,8 @@ impl FixExample {
 /// Reports the first declaration of `program` whose name has a component `DocTest`, the name each
 /// Fix example is compiled as: a module of that name, a type or a trait of that name, or a
 /// declaration inside a namespace of that name. A type or a trait opens a namespace of its name,
-/// which holds its field accessors and its members.
+/// which holds its field accessors and its members; a trait alias opens none, and its name is
+/// free.
 ///
 /// A name refers to every declaration whose full name ends with it, so with no such declaration a
 /// name beginning with `DocTest` in an example refers to the example itself.
@@ -164,27 +165,19 @@ pub fn check_doc_test_name_is_free(program: &Program) -> Result<(), Errors> {
     });
     let types = program.type_defns.iter().map(|type_defn| {
         (
-            path_of(&type_defn.name.namespace.names, &type_defn.name.name),
+            type_defn.name.to_namespace().names,
             type_defn.source.clone(),
         )
     });
-    let traits = program.trait_env.traits.iter().map(|(id, trait_defn)| {
-        (
-            path_of(&id.name.namespace.names, &id.name.name),
-            trait_defn.source.clone(),
-        )
-    });
-    let trait_aliases = program.trait_env.aliases.data.iter().map(|(id, alias)| {
-        (
-            path_of(&id.name.namespace.names, &id.name.name),
-            alias.source.clone(),
-        )
-    });
+    let traits = program
+        .trait_env
+        .traits
+        .iter()
+        .map(|(id, trait_defn)| (id.name.to_namespace().names, trait_defn.source.clone()));
     let taken = modules
         .chain(values)
         .chain(types)
         .chain(traits)
-        .chain(trait_aliases)
         .find(|(path, _)| path.iter().any(|name| name == DOC_TEST_MODULE_NAME));
     match taken {
         Some((_, source)) => Err(Errors::from_msg_srcs(
@@ -197,12 +190,6 @@ pub fn check_doc_test_name_is_free(program: &Program) -> Result<(), Errors> {
         )),
         None => Ok(()),
     }
-}
-
-/// The names of the namespace `namespace` followed by `name`: the path a type or a trait named
-/// `name` opens as a namespace of its own.
-fn path_of(namespace: &[Name], name: &Name) -> Vec<Name> {
-    namespace.iter().chain([name]).cloned().collect()
 }
 
 /// The Fix examples of the comments written in `files`, ordered by the file and then by where they
