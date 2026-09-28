@@ -805,3 +805,93 @@ other = 1;
         );
     }
 }
+
+/// A compile error of a Fix example is reported at its place in the comment, whatever the kind of
+/// the comment: a `/* */` comment, whose text is read as it is written, and a `//` comment written
+/// without a space after the `//`.
+#[test]
+fn test_error_in_an_example_is_reported_at_its_place_in_each_kind_of_comment() {
+    let lib = r#"module Lib;
+
+/*
+```fix
+  let x : I64 = "a string";
+pure()
+```
+*/
+value : I64;
+value = 1;
+
+//```fix
+//let y : I64 = "another string";
+//pure()
+//```
+other : I64;
+other = 1;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for (kind, position, line) in [
+        ("`/* */`", "5:17-5:27", "5 |   let x : I64 = \"a string\";"),
+        (
+            "`//` without a space",
+            "13:17-13:33",
+            "13 | //let y : I64 = \"another string\";",
+        ),
+    ] {
+        assert!(
+            stderr.contains(&format!("{} in \"lib.fix\"", position)) && stderr.contains(line),
+            "the error in the example of the {} comment is reported at {} on \"{}\"\n{}",
+            kind,
+            position,
+            line,
+            streams(&output)
+        );
+    }
+}
+
+/// `fix docs` reads a line beginning with `#` inside a fenced code block as a line of the block, as
+/// CommonMark does: in a block of tildes, and in a block of backticks after a shorter fence it holds.
+#[test]
+fn test_fix_docs_keeps_a_hash_line_of_a_code_block_in_the_block() {
+    let lib = r#"module Lib;
+
+// ~~~sh
+// # a shell comment
+// ~~~
+first : I64;
+first = 1;
+
+// ````text
+// ```
+// # a line after a shorter fence
+// ````
+second : I64;
+second = 2;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_command()
+        .arg("docs")
+        .current_dir(dir.path())
+        .output()
+        .expect("Failed to execute fix docs");
+    assert!(
+        output.status.success(),
+        "fix docs passes\n{}",
+        streams(&output)
+    );
+    let document =
+        fs::read_to_string(dir.path().join("docs/Lib.md")).expect("fix docs writes Lib.md");
+    for block in [
+        "~~~sh\n# a shell comment\n~~~",
+        "````text\n```\n# a line after a shorter fence\n````",
+    ] {
+        assert!(
+            document.contains(block),
+            "the block\n{}\nis shown as it is written:\n{}",
+            block,
+            document
+        );
+    }
+}

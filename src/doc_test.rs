@@ -607,5 +607,15 @@ mod tests {
             "```x```\n```fix\n```\n",
             "a line of inline code opens no block"
         );
+        assert_eq!(
+            docstring_for_display("```fix\n# hidden\n``` text\n# hidden after the line\n```\n"),
+            "```fix\n``` text\n```\n",
+            "a fence followed by text on its line closes no block"
+        );
+        assert_eq!(
+            docstring_for_display("~~~fix,no_run\n# hidden\nshown\n~~~\n"),
+            "~~~fix\nshown\n~~~\n",
+            "a block of tildes whose info string is `fix` is a Fix example"
+        );
     }
 }
