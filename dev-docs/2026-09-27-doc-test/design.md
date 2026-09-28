@@ -154,10 +154,9 @@ assert_eq(|_|"", arr.@(0), 1)
 
 ### 対象の範囲
 
-root プロジェクト（カレントディレクトリの `fixproj.toml` のプロジェクト）の `[build]` のファイルにある、すべての entity の docstring の中の Fix の例を対象にする。`fix docs --with-private` が出力する範囲と同じである。
+root プロジェクト（カレントディレクトリの `fixproj.toml` のプロジェクト）の `[build]` と `[build.test]` のファイルにある、すべての entity の docstring の中の Fix の例を対象にする。`fix docs --test --with-private` が出力する範囲と同じである。例は `[build.test]` のファイルも含めてビルドするので、テストのための補助関数に書いた例も、追加の費用なしに実行できる。
 
 - `_` で始まる名前の entity の例も対象にする。
-- `[build.test]` にだけあるファイルの例は対象にしない。
 - 依存しているプロジェクトの例は対象にしない。
 - entity に付いていないコメント（関数の本体の中のコメント、宣言との間に空行があるコメント）は docstring にならないので、その中のブロックは対象にならない。
 - コンパイラが定義するメソッドの docstring は、Std の docstring なので対象にしない。std 自身の例（`src/fixstd/std.fix` と `src/docs/std_*.md`）は、コンパイラのリポジトリのテストから実行する。

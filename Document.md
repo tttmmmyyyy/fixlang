@@ -3314,7 +3314,7 @@ Marks after `fix`, separated by commas, change what `fix test` does with an exam
 
 `fix test` reports any other mark as an error. A code block whose info string is empty or begins with another word, such as `fixme`, is not a Fix example.
 
-`fix test` runs the Fix examples of every documentation comment in the files listed in the `build` section of the project file, private entities included. The examples in dependencies, and in files listed only in the `build.test` section, are not run. The examples are built with the same settings as `Test::test`, so they can use the test dependencies.
+`fix test` runs the Fix examples of every documentation comment in the files listed in the `build` and `build.test` sections of the project file, private entities included, so the helpers a project writes for its tests can carry tested examples too. The examples in dependencies are not run. The examples are built with the same settings as `Test::test`, so they can use the test dependencies.
 
 ## Generating documentation
 

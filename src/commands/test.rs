@@ -131,13 +131,14 @@ pub fn test_example(config: &Configuration, example: &FixExample) -> ExampleOutc
     }
 }
 
-/// The files whose doc comments `fix test` takes the Fix examples of: those the `build` section of
-/// the project file in the working directory lists. A directory without a project file has none.
+/// The files whose doc comments `fix test` takes the Fix examples of: those the `build` and the
+/// `build.test` sections of the project file in the working directory list. A directory without a
+/// project file has none.
 fn doc_test_files() -> Result<Vec<PathBuf>, Errors> {
     if !Path::new(PROJECT_FILE_PATH).exists() {
         return Ok(vec![]);
     }
-    Ok(ProjectFile::read_root_file()?.get_files(BuildConfigType::Build))
+    Ok(ProjectFile::read_root_file()?.get_files(BuildConfigType::Test))
 }
 
 /// What went wrong with the run of a built program whose result is `output`, including what it

@@ -484,26 +484,31 @@ fn test_the_name_doc_test_is_reserved() {
     );
 }
 
-/// The Fix examples of the files the `build.test` section alone lists are not tested.
+/// The Fix examples of the files the `build.test` section alone lists are tested as well: a helper
+/// module a project writes for its tests carries examples that run, and one written as statements
+/// imports that module.
 #[test]
-fn test_examples_of_test_files_are_not_tested() {
-    let test = r#"
-module Test;
+fn test_examples_of_test_files_are_tested() {
+    let test_util = r#"module TestUtil;
 
 // ```fix
-// assert_eq(|_|"an example of a test file runs", 1, 2)
+// assert_eq(|_|"", doubled_all([1, 2]), [2, 4])
 // ```
-test : IO ();
-test = pure();
+doubled_all : Array I64 -> Array I64;
+doubled_all = |xs| xs.map(|x| 2 * x);
 "#;
     let dir = project_dir(
         &[("lib.fix", "module Lib;\nvalue : I64;\nvalue = 1;\n")],
-        &[("test.fix", test)],
+        &[
+            ("test_util.fix", test_util),
+            ("test.fix", "module Test;\ntest : IO ();\ntest = pure();\n"),
+        ],
     );
     let output = fix_test(&dir, &[]);
     assert!(
-        output.status.success(),
-        "the example of the test file is left out\n{}",
+        output.status.success()
+            && String::from_utf8_lossy(&output.stderr).contains("doc test test_util.fix:3 ... ok"),
+        "the example of the test helper module runs and passes\n{}",
         streams(&output)
     );
 }
