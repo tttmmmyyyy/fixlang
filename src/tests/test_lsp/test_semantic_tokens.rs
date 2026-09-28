@@ -254,6 +254,17 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// Verifies that a field a struct pattern writes as its name alone (`Point { x, y: _ }`,
+    /// line 39) is colored once, as the variable that name also binds.
+    #[test]
+    fn test_semantic_tokens_pattern_field_shorthand_colored_as_its_binder() {
+        let mut ctx = LspSemanticTokensCtx::setup();
+        ctx.token_types_with_overlay("main.fix");
+        assert_eq!(ctx.token_types_at("main.fix", 39, 29), vec![T_VARIABLE]);
+        assert_eq!(ctx.token_types_at("main.fix", 39, 32), vec![T_PROPERTY]);
+        ctx.shutdown();
+    }
+
     /// Verifies that on a broken / drifted buffer the server still responds with
     /// the base lexical layer, and withholds the AST overlay, which would be
     /// misaligned there: the answer carries base-layer token types alone.

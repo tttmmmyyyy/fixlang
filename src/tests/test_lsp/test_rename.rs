@@ -1174,6 +1174,8 @@ mod tests {
     //   5: y = 10;
     //   8: make = |x| S { x, y };                   binder `x` col 8, `x` col 15, `y` col 18
     //  11: sum = |S { x, y }| x + y;                `x` col 11, `y` col 14, uses col 19, 23
+    //  20: first = |R { q : Q { u } }| u;           `u` col 21, use col 28
+    //  27:     to_q = |u| Q { u };                  binder `u` col 12, `u` col 19
     //
     // A field written as its name alone names both the field and a value (line 8) or a binder
     // (line 11). A rename of either one writes the field out as `field: value`, so that the other
@@ -1258,6 +1260,36 @@ mod tests {
                 ((8, 15), "horiz: x".to_string()),
                 ((11, 11), "horiz: x".to_string()),
             ],
+            "WorkspaceEdit: {:?}",
+            we
+        );
+        ctx.shutdown();
+    }
+
+    /// Renaming a local variable bound by a field written as its name alone inside another struct
+    /// pattern writes that field out with the new name as its binder.
+    #[test]
+    fn test_rename_local_bound_by_field_shorthand_in_nested_pattern() {
+        let mut ctx = LspTestCtx::setup("rename_struct_field_shorthand", &["main.fix"]);
+        let we = ctx.rename("main.fix", 20, 21, "a");
+        assert_eq!(
+            edits_by_position(&we),
+            vec![((20, 21), "u: a".to_string()), ((20, 28), "a".to_string())],
+            "WorkspaceEdit: {:?}",
+            we
+        );
+        ctx.shutdown();
+    }
+
+    /// Renaming a local variable a literal inside a trait implementation gives a field by the
+    /// field's name alone writes that field out with the new name as its value.
+    #[test]
+    fn test_rename_local_used_by_field_shorthand_in_trait_impl() {
+        let mut ctx = LspTestCtx::setup("rename_struct_field_shorthand", &["main.fix"]);
+        let we = ctx.rename("main.fix", 27, 12, "a");
+        assert_eq!(
+            edits_by_position(&we),
+            vec![((27, 12), "a".to_string()), ((27, 19), "u: a".to_string())],
             "WorkspaceEdit: {:?}",
             we
         );
