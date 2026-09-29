@@ -7696,8 +7696,8 @@ fn apply_with_env<'c, 'm>(
 /// ```
 ///
 /// where `op`, built by `make_op` from the names of `g` and `env`, applies `g` to `(env, a_1, ...,
-/// a_n)`. `decapture_scope_functions` later moves the capture list of `g`, which holds
-/// `f`, into `env`.
+/// a_n)`. At `-O max`, `decapture_scope_functions` later moves the capture list of `g`, which
+/// holds `f`, into `env`.
 fn with_empty_env(
     f_name: &str,
     arity: usize,
