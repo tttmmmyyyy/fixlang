@@ -63,14 +63,11 @@ pub fn move_bodies_into_callers(
         // up in one place and the function itself falls to dead-symbol elimination. Where the
         // function is named anywhere else, or called more than once, placing the body would
         // duplicate it, and how much duplication is worth its gain is the judgement `inline` makes.
-        // A function naming itself keeps its body whatever else names it, so its body goes into no
-        // call of itself.
         let caller_expr = symbols[caller].expr.as_ref().unwrap().clone();
         let moved_bodies = callees
             .iter()
             .filter(|callee| {
-                *callee != caller
-                    && is_moved_by_placing(callee, &caller_expr, &naming_symbol_counts, &arity_map)
+                is_moved_by_placing(callee, &caller_expr, &naming_symbol_counts, &arity_map)
             })
             .map(|callee| (callee.clone(), bodies[callee].clone()))
             .collect::<Map<FullName, Arc<ExprNode>>>();
