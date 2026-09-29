@@ -453,9 +453,9 @@ mod tests {
         );
     "#;
 
-    /// The captures moved into the environment reach the lambdas with the values they had where the
-    /// lambdas were written, at every optimization level, and memcheck finds no leak or double free
-    /// in the reference counting of the environment.
+    /// What the lambdas capture reaches them with the values it had where the lambdas were written,
+    /// at every optimization level: through the environment at `-O max`, and through the closure
+    /// below it. Memcheck finds no leak or double free in the reference counting of either.
     #[test]
     fn test_captures_moved_into_the_environment_keep_their_values() {
         for opt_level in [
