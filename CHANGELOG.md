@@ -17,7 +17,7 @@
 
 #### Language
 
-- #790: A struct pattern that leaves out fields of its struct without writing `_` is now warned about. When you add a field to a struct, the warning points out each pattern that takes the struct apart. Add the missing fields to the pattern, or write `_` after its fields.
+- #790: A struct pattern that leaves out fields of its struct without writing `_` is now warned about. When you add a field to a struct, the warning points out each pattern that takes the struct apart. Add the missing fields to the pattern, or write `_` after its fields. A future version of Fix will report such a pattern as an error.
 - #790: `_` can no longer be the name of a struct field or a union variant. Names that start with `_`, such as `_x`, are still allowed.
 
 #### Tool

@@ -2483,8 +2483,7 @@ impl Program {
                     "This pattern leaves out the {} of struct `{}`.\n\
                      HINT: add {} to the pattern, or write `_` after the fields to leave out the \
                      rest.\n\
-                     NOTE: a pattern names every field of its struct, so when a field is added to \
-                     the struct, each pattern that takes the struct apart is reported.",
+                     NOTE: a future version of Fix will report this as an error.",
                     describe_field_names(&missing),
                     tc.to_string(),
                     pronoun,
