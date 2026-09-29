@@ -1,80 +1,85 @@
 /*
-# Decapturing the lambdas given to scope builtins
+# Decapturing the functions given to scope builtins
 
 The scope builtins — `Std::with_retained`, `Std::Array::borrow_elements`, `Std::FFI::borrow_boxed`
 and the mutating ones behind `mutate_elements` and `mutate_boxed` — are inline-LLVM ops that declare
 `LLVMGen::env_operand`. Such an op applies one of its operands, a function, to a tuple whose first
-field is another of its operands, the environment. A lambda given to such an op
-needs no closure object for what it captures: the captured values can travel in the environment
-instead. This pass moves them there, so that the lambda captures nothing and building it allocates
-nothing.
+field is another of its operands, the environment.
+
+`closure_specialization` lifts every lambda to a global function taking its capture list as the
+first argument, so the function such an op is given is that global function applied to a capture
+list: a closure holding the capture list, built on the heap on every call. This pass moves the
+capture list into the environment instead, so that the function the op is given captures nothing.
 
 ```
-let f = |p| e;              // `e` reads the locals `x_1`, ..., `x_n`
+let h = F(cap);
 ...
-op(f, env, ...)
+op(h, env, ...)
 ```
 
 becomes
 
 ```
-let f = |q| (
-    let ((env0, Cap { x_1 : x_1, ..., x_n : x_n }), r_1, ..., r_k) = q;
-    let p = (env0, r_1, ..., r_k);
-    e
+let c = cap;
+let h = |q| (
+    let ((env0, c0), r_1, ..., r_k) = q;
+    F(c0, (env0, r_1, ..., r_k))
 );
-let cap = Cap { x_1 : x_1, ..., x_n : x_n };
 ...
-let env1 = (env, cap);
-op(f, env1, ...)
+let env1 = (env, c);
+op(h, env1, ...)
 ```
 
-where `p` is the tuple `(env, r_1, ..., r_k)` the op applies `f` to, and `Cap` is an unboxed struct
-of the captured values. The captured values are read where `f` is bound, which is where the lambda
-read them.
+where `(env, r_1, ..., r_k)` is the tuple the op applies `h` to, and `F` is a global function.
 
-A lambda is rewritten when it is bound to a name by `let` and every use of the name is the function
-operand of such an op. Rewriting the lambda changes its type, which a use anywhere else would not
-accept.
+A binding is rewritten when every use of the name it binds is the function operand of such an op.
+Rewriting the binding changes the type of the name, which a use anywhere else would not accept.
 
-The bindings are rewritten outermost first. Rewriting one gives the ops using its name the name of
-its capture struct, and a lambda nested in its scope that holds such an op captures that name; it is
-rewritten afterwards, with that capture among the others.
+Where the symbol holding the op is the only one naming `F`, and it names `F` in this call alone, the
+body of `F` is put in place of the call (`move_bodies_into_callers`). That is the common case, since
+`F` is the lambda the op was given, lifted: the body then takes apart the tuple it is applied to right
+where it is built, and `collapse_constructions`, run after this pass, reads the one into the other.
 
 ## Relations to other optimizations
 
-* Inlining puts the lambda a caller writes and the op of the function it calls into one expression,
-  which is what this pass needs to see them together.
-* It runs above `collapse_constructions`, which reads the tuple `p` built here into the pattern that
-  takes it apart in `e`.
-* `closure_specialization` lifts the lambda this pass leaves to a global function, and the empty
-  capture list the lambda now has costs no allocation.
+* It runs after `closure_specialization`, which is what turns the function every such op is given
+  into a global function applied to its capture list. Running after it also leaves a lambda given to
+  such an op capturing what it captures while specialization reads it, so a function whose parameter
+  the lambda calls is specialized on the closure that parameter receives, as it would be for any
+  other lambda calling it.
+* It runs above `collapse_constructions`, which reads the tuple built for `F` into the pattern that
+  takes it apart in `F`'s body.
 */
 
 use super::{
-    capture_struct::{captured_fields, CaptureStruct},
     find_usage_of_name::{self, UsageType},
+    move_bodies::move_bodies_into_callers,
 };
 use crate::{
     ast::{
-        expr::{expr_abs_typed, expr_let_typed, expr_make_struct, expr_var, var_local, ExprNode},
+        expr::{
+            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_local,
+            ExprNode,
+        },
         inline_llvm::InlineLLVM,
         name::FullName,
         pattern::PatternNode,
         program::{Program, TypeEnv},
         traverse::{ExprVisitor, StartVisitResult, VisitState},
-        types::{tycon, TyCon, TyConInfo, TypeNode},
+        types::{tycon, TypeNode},
     },
-    constants::SCOPE_CAP_PREFIX,
+    constants::SCOPE_ENV_PREFIX,
     fixstd::builtin::{make_tuple_name_abs, make_tuple_ty},
     misc::{Map, Set},
 };
 use std::sync::Arc;
 
-/// Moves the captures of every lambda given to an op declaring `LLVMGen::env_operand` into the op's
-/// environment operand, where the lambda is bound by `let` and used nowhere else.
+/// Moves the capture list of every function given to an op declaring `LLVMGen::env_operand` into the
+/// op's environment operand, where the function is a global function applied to its capture list,
+/// bound by `let` and used nowhere else.
 pub fn run(prg: &mut Program) {
-    let mut new_tycons: Map<TyCon, TyConInfo> = Map::default();
+    // For each symbol, the global functions the functions it gives to ops now call.
+    let mut callees: Map<FullName, Vec<FullName>> = Map::default();
     for (name, sym) in &mut prg.symbols {
         let expr = sym.expr.as_ref().unwrap();
         let mut collector = EnvFunctionCollector {
@@ -84,19 +89,19 @@ pub fn run(prg: &mut Program) {
         if collector.names.is_empty() {
             continue;
         }
-        let mut mover = CaptureMover {
-            symbol: name.clone(),
+        let mut mover = CaptureListMover {
             env_functions: collector.names,
             type_env: &prg.type_env,
             counter: 0,
-            new_tycons: &mut new_tycons,
+            callees: Vec::new(),
         };
         let res = mover.traverse(expr);
         if res.changed {
             sym.expr = Some(res.expr);
+            callees.insert(name.clone(), mover.callees);
         }
     }
-    prg.type_env.add_tycons(new_tycons);
+    move_bodies_into_callers(&mut prg.symbols, &callees);
 }
 
 /// The name an op declaring `LLVMGen::env_operand` applies as a function, if `llvm` is such an op.
@@ -106,8 +111,8 @@ fn env_function_operand(llvm: &InlineLLVM) -> Option<FullName> {
 }
 
 /// Collects the names an expression passes as the function operand of an op declaring
-/// `LLVMGen::env_operand`, wherever they are bound. Only a lambda bound to one of these names can be
-/// rewritten, so `CaptureMover` checks the uses of these names alone.
+/// `LLVMGen::env_operand`, wherever they are bound. Only a binding of one of these names can be
+/// rewritten, so `CaptureListMover` checks the uses of these names alone.
 struct EnvFunctionCollector {
     /// The names collected so far.
     names: Set<FullName>,
@@ -127,26 +132,24 @@ impl ExprVisitor for EnvFunctionCollector {
     }
 }
 
-/// Rewrites the lambdas of one symbol, as the module comment describes.
-struct CaptureMover<'a> {
-    /// The symbol being rewritten, which, with the counter, names the capture structs built for it.
-    symbol: FullName,
+/// Rewrites the bindings of one symbol, as the module comment describes.
+struct CaptureListMover<'a> {
     /// The names the symbol passes as the function operand of an op declaring
     /// `LLVMGen::env_operand`.
     env_functions: Set<FullName>,
     /// The type environment, which knows the fields of the tuples the ops apply their functions to.
     type_env: &'a TypeEnv,
-    /// The number of lambdas rewritten so far, which tells apart the names each rewrite introduces.
+    /// The number of bindings rewritten so far, which tells apart the names each rewrite introduces.
     counter: u32,
-    /// The capture structs built so far, to be registered in the type environment.
-    new_tycons: &'a mut Map<TyCon, TyConInfo>,
+    /// The global functions the rewritten bindings call, in the order they were rewritten.
+    callees: Vec<FullName>,
 }
 
-impl CaptureMover<'_> {
-    /// `expr` rewritten as the module comment describes, where it is `let v = lambda; body`, the
-    /// lambda captures something, and every use of `v` in `body` is the function operand of an op
-    /// declaring `LLVMGen::env_operand`.
-    fn rewrite(&mut self, expr: &Arc<ExprNode>, state: &VisitState) -> Option<Arc<ExprNode>> {
+impl CaptureListMover<'_> {
+    /// `expr` rewritten as the module comment describes, where it is `let h = F(cap); body`, `F` is
+    /// a global function, and every use of `h` in `body` is the function operand of an op declaring
+    /// `LLVMGen::env_operand`.
+    fn rewrite(&mut self, expr: &Arc<ExprNode>) -> Option<Arc<ExprNode>> {
         let pat = expr.get_let_pat();
         if !pat.is_var() {
             return None;
@@ -155,13 +158,12 @@ impl CaptureMover<'_> {
         if !self.env_functions.contains(&name) {
             return None;
         }
-        let lam = expr.get_let_bound();
-        if !lam.is_lam() {
+        let bound = expr.get_let_bound();
+        if !bound.is_app() {
             return None;
         }
-        // The captured variables, with the types they have where the lambda is bound.
-        let fields = captured_fields(&lam, state);
-        if fields.is_empty() {
+        let (func, args) = bound.destructure_app();
+        if !func.is_var() || !func.get_var().name.is_global() || args.len() != 1 {
             return None;
         }
         let body = expr.get_let_value();
@@ -170,46 +172,41 @@ impl CaptureMover<'_> {
         }
 
         let id = self.counter;
+        self.counter += 1;
         let local =
-            |suffix: &str| FullName::local(&format!("{}{}{}", SCOPE_CAP_PREFIX, id, suffix));
+            |suffix: &str| FullName::local(&format!("{}{}{}", SCOPE_ENV_PREFIX, id, suffix));
+        self.callees.push(func.get_var().name.clone());
 
-        let cap = CaptureStruct::new(
-            &format!("{}{}", SCOPE_CAP_PREFIX, id),
-            &self.symbol,
-            &fields,
-        );
-        let cap_name = local("");
-
-        // The lambda is applied to the tuple `(env, r_1, ..., r_k)`, as the ops it is given to
-        // declare, where `r_1`, ..., `r_k` are the arguments besides the environment. The ops are
-        // given `(env, cap)` in place of `env`.
-        let param_ty = lam.type_.as_ref().unwrap().get_lambda_srcs()[0].clone();
+        // The ops apply `h` to the tuple `(env, r_1, ..., r_k)`, where `r_1`, ..., `r_k` are the
+        // arguments besides the environment. They are given `(env, cap)` in place of `env`.
+        let cap = args[0].clone();
+        let cap_ty = cap.type_.as_ref().unwrap().clone();
+        let cap_name = local("_cap");
+        let param_ty = bound.type_.as_ref().unwrap().get_lambda_srcs()[0].clone();
         let param_field_tys = param_ty.field_types(self.type_env);
         let env_ty = param_field_tys[0].clone();
-        let new_env_ty = make_tuple_ty(vec![env_ty.clone(), cap.ty.clone()]);
+        let new_env_ty = make_tuple_ty(vec![env_ty.clone(), cap_ty.clone()]);
         let mut op_rewriter = OpRewriter {
             function: &name,
-            cap: var_expr(&cap_name, &cap.ty),
+            cap: var_expr(&cap_name, &cap_ty),
             new_env: local("_op_env"),
             new_env_ty: new_env_ty.clone(),
             env_ty: env_ty.clone(),
         };
         let body = op_rewriter.traverse(&body).expr;
-        self.counter += 1;
-        self.new_tycons
-            .insert(cap.tycon.as_ref().clone(), cap.tycon_info.clone());
 
-        // `|q| (let ((env0, Cap { .. }), r_1, ..., r_k) = q; let p = (env0, r_1, ..., r_k); e)`
+        // `|q| (let ((env0, c0), r_1, ..., r_k) = q; F(c0, (env0, r_1, ..., r_k)))`
         let mut new_param_field_tys = param_field_tys.clone();
         new_param_field_tys[0] = new_env_ty.clone();
         let new_param_ty = make_tuple_ty(new_param_field_tys);
         let param_tycon = tycon(make_tuple_name_abs(param_field_tys.len() as u32));
         let env0 = local("_env");
+        let cap0 = local("_cap0");
         let env_pat = PatternNode::make_struct(
             tycon(make_tuple_name_abs(2)),
             vec![
                 ("0".to_string(), var_pattern(&env0, &env_ty)),
-                ("1".to_string(), cap.pattern()),
+                ("1".to_string(), var_pattern(&cap0, &cap_ty)),
             ],
         )
         .set_type(new_env_ty);
@@ -221,47 +218,39 @@ impl CaptureMover<'_> {
             param_field_exprs.push((i.to_string(), var_expr(&field_name, ty)));
         }
         let new_param = local("_arg");
-        let old_params = lam.get_lam_params();
-        assert_eq!(
-            old_params.len(),
-            1,
-            "a function given to an op declaring `env_operand` takes one tuple: {}",
-            name.to_string()
+        let call = expr_app_typed(
+            expr_app_typed(func, vec![var_expr(&cap0, &cap_ty)]),
+            vec![expr_make_struct(param_tycon.clone(), param_field_exprs).set_type(param_ty)],
         );
-        let old_param = old_params[0].name.clone();
-        let new_lam = expr_abs_typed(
+        let new_func = expr_abs_typed(
             var_local(&new_param.name),
             new_param_ty.clone(),
             expr_let_typed(
-                PatternNode::make_struct(param_tycon.clone(), param_field_pats)
+                PatternNode::make_struct(param_tycon, param_field_pats)
                     .set_type(new_param_ty.clone()),
                 var_expr(&new_param, &new_param_ty),
-                expr_let_typed(
-                    var_pattern(&old_param, &param_ty),
-                    expr_make_struct(param_tycon, param_field_exprs).set_type(param_ty.clone()),
-                    lam.get_lam_body(),
-                ),
+                call,
             ),
         );
-
-        // The walk revisits the binding it rewrote, and ends there because the new lambda captures
-        // nothing.
         assert!(
-            new_lam.lambda_cap_names().is_empty(),
-            "the lambda bound to `{}` still captures {:?} once its captures are moved into the \
-             environment",
+            new_func.lambda_cap_names().is_empty(),
+            "the function bound to `{}` still captures {:?} once its capture list is moved into \
+             the environment",
             name.to_string(),
-            new_lam
+            new_func
                 .lambda_cap_names()
                 .iter()
                 .map(|name| name.to_string())
                 .collect::<Vec<_>>()
         );
 
-        // `let v = |q| ..; let cap = Cap { .. }; body`
-        let body = expr_let_typed(var_pattern(&cap_name, &cap.ty), cap.struct_expr(), body);
-        let new_lam_ty = new_lam.type_.as_ref().unwrap().clone();
-        Some(expr_let_typed(pat.set_type(new_lam_ty), new_lam, body))
+        // `let c = cap; let h = |q| ..; body`, where `cap` is read where `F(cap)` read it.
+        let new_func_ty = new_func.type_.as_ref().unwrap().clone();
+        Some(expr_let_typed(
+            var_pattern(&cap_name, &cap_ty),
+            cap,
+            expr_let_typed(pat.set_type(new_func_ty), new_func, body),
+        ))
     }
 }
 
@@ -275,15 +264,14 @@ fn var_expr(name: &FullName, ty: &Arc<TypeNode>) -> Arc<ExprNode> {
     expr_var(name.clone(), None).set_type(ty.clone())
 }
 
-impl ExprVisitor for CaptureMover<'_> {
-    /// Rewrites a `let` binding a lambda, and revisits the result so that the lambdas nested in it
-    /// are rewritten with the name of the new capture struct among their captures.
+impl ExprVisitor for CaptureListMover<'_> {
+    /// Rewrites a `let` binding a function given to ops, and visits what the rewrite left.
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
-        state: &mut VisitState,
+        _state: &mut VisitState,
     ) -> StartVisitResult {
-        match self.rewrite(expr, state) {
+        match self.rewrite(expr) {
             Some(expr) => StartVisitResult::ReplaceAndRevisit(expr),
             None => StartVisitResult::VisitChildren,
         }
@@ -306,12 +294,11 @@ fn shadowed(name: &FullName, state: &VisitState) -> bool {
     state.scope.has_value(&name.name)
 }
 
-/// Gives each op that applies one lambda as its function the environment `(env, cap)` in place of
-/// `env`.
+/// Gives each op that applies one function the environment `(env, cap)` in place of `env`.
 struct OpRewriter<'a> {
-    /// The name the lambda is bound to.
+    /// The name the function is bound to.
     function: &'a FullName,
-    /// The capture struct of the lambda, read by name.
+    /// The capture list of the function, read by name.
     cap: Arc<ExprNode>,
     /// The name the new environment is bound to ahead of an op.
     new_env: FullName,
@@ -322,7 +309,7 @@ struct OpRewriter<'a> {
 }
 
 impl ExprVisitor for OpRewriter<'_> {
-    /// Binds `(env, cap)` ahead of an op applying the lambda, and gives the op that name as its
+    /// Binds `(env, cap)` ahead of an op applying the function, and gives the op that name as its
     /// environment.
     fn start_visit_llvm(
         &mut self,
