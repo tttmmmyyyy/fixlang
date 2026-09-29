@@ -3284,6 +3284,7 @@ fn rule_to_string(r: &Rule) -> String {
         Rule::expr_unary => "expression".to_string(),
         Rule::name => "name".to_string(),
         Rule::type_field_name => "field or variant name".to_string(),
+        Rule::pattern_struct_rest => "`_`".to_string(),
         Rule::in_of_let => "`in` or `;`".to_string(),
         Rule::eq_of_let => "`=`".to_string(),
         Rule::type_expr => "type".to_string(),
