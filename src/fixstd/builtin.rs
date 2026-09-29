@@ -884,7 +884,7 @@ impl BuiltinOp for IntLitOp {
             &vec![],
             None,
             gc,
-            Some(&format!("LLVM<int_lit_{}>", self.val)),
+            Some(&format!("int_lit_{}", self.val)),
         );
         let int_ty = ty
             .get_struct_type(gc)
@@ -1140,7 +1140,7 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
 /// `fix(f)` from the function being generated and that function's own capture, passes it to `f` as
 /// the recursive `self`, and applies the result to `x`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct FixOp {
+pub struct FixCombinatorOp {
     /// The variable holding the argument the recursion is applied to.
     x_name: FullName,
     /// The variable holding the recursion functional, which takes `self` and returns the recursive
@@ -1152,7 +1152,7 @@ pub struct FixOp {
 }
 
 #[typetag::serde]
-impl BuiltinOp for FixOp {
+impl BuiltinOp for FixCombinatorOp {
     /// This op applies an operand: `f` is applied to build the fixed point, and the result of that is applied to `x`.
     fn applies_a_function_operand(&self) -> bool {
         true
@@ -1219,7 +1219,7 @@ fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let x_name = FullName::local(x);
     let cap_name = FullName::local(CAP_NAME);
     expr_builtin(
-        Box::new(FixOp {
+        Box::new(FixCombinatorOp {
             x_name,
             f_name,
             cap_name,
@@ -2036,7 +2036,7 @@ impl BitOperationType {
 /// Evaluates `Std::I64::bit_and`, `Std::I64::bit_or` and `Std::I64::bit_xor`, and the same values
 /// of the other integer types: the two operands combined bit by bit.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct BitwiseOperationOp {
+pub struct BitwiseOp {
     /// The local binding holding the left operand.
     lhs_name: FullName,
     /// The local binding holding the right operand.
@@ -2046,7 +2046,7 @@ pub struct BitwiseOperationOp {
 }
 
 #[typetag::serde]
-impl BuiltinOp for BitwiseOperationOp {
+impl BuiltinOp for BitwiseOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let lhs = gc.get_scoped_obj_field(&self.lhs_name, 0).into_int_value();
@@ -2126,7 +2126,7 @@ pub fn bitwise_operation_function(
         expr_abs(
             vec![var_local(RHS_NAME)],
             expr_builtin(
-                Box::new(BitwiseOperationOp {
+                Box::new(BitwiseOp {
                     lhs_name: FullName::local(LHS_NAME),
                     rhs_name: FullName::local(RHS_NAME),
                     op_type,
@@ -2506,7 +2506,7 @@ pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_unsafe_get_bounds_unchecked`, which reads the element at an
+/// The builtin operation of `Array::_unsafe_get_bounds_unchecked`, which reads the element at an
 /// index out of an array and retains it, leaving the array borrowed.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArrayUnsafeGetBoundsUncheckedOp {
@@ -2630,7 +2630,7 @@ pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_unsafe_truncate_bounds_unchecked`, which lowers an array's
+/// The builtin operation of `Array::_unsafe_truncate_bounds_unchecked`, which lowers an array's
 /// length, releasing the elements it drops.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArrayTruncateBoundsUncheckedOp {
@@ -2785,7 +2785,7 @@ pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_unsafe_append_value_capacity_unchecked`, which fills the slots
+/// The builtin operation of `Array::_unsafe_append_value_capacity_unchecked`, which fills the slots
 /// past the array's length with copies of one value.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArrayAppendValueCapacityUncheckedOp {
@@ -3283,8 +3283,8 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_unsafe_append_capacity_unchecked`, which consumes `src` into the
-/// slots past `dst`'s length.
+/// The builtin operation of `Array::_unsafe_append_capacity_unchecked`, which consumes `src` into
+/// the slots past `dst`'s length.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArrayAppendCapacityUncheckedOp {
     dst_name: FullName,
@@ -3465,7 +3465,7 @@ pub fn array_append_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_unsafe_copy_capacity_bounds_unchecked`, which fills the slots
+/// The builtin operation of `Array::_unsafe_copy_capacity_bounds_unchecked`, which fills the slots
 /// past `dst`'s length from a borrowed `src`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArrayCopyCapacityBoundsUncheckedOp {
@@ -3650,7 +3650,7 @@ pub fn array_copy_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_unsafe_grow_size`, which moves the array's length out over
+/// The builtin operation of `Array::_unsafe_grow_size`, which moves the array's length out over
 /// uninitialized slots the caller then fills.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArrayGrowSizeOp {
@@ -3923,7 +3923,7 @@ fn make_array_unique_with_hole<'c, 'm>(
     )
 }
 
-/// The code generator for `Array::set` and `Array::unsafe_set_bounds_unchecked`, which store a
+/// The builtin operation of `Array::set` and `Array::unsafe_set_bounds_unchecked`, which store a
 /// value into one slot of an array, releasing the element that slot held.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArraySetOp {
@@ -4112,7 +4112,7 @@ pub fn unsafe_set_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     set_array_common(false)
 }
 
-/// The code generator for `Array::swap` and `Array::unsafe_swap_bounds_unchecked`, which exchange
+/// The builtin operation of `Array::swap` and `Array::unsafe_swap_bounds_unchecked`, which exchange
 /// the elements at two slots of an array. The elements only change places, so their reference
 /// counts are unchanged.
 #[derive(Clone, Serialize, Deserialize)]
@@ -4634,7 +4634,7 @@ pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_check_range`, which passes an index through after panicking
+/// The builtin operation of `Array::_check_range`, which passes an index through after panicking
 /// where it falls outside `[0, size)`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArrayCheckRangeOp {
@@ -4706,7 +4706,7 @@ pub fn array_check_range() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_check_size`, which passes a size through after panicking where
+/// The builtin operation of `Array::_check_size`, which passes a size through after panicking where
 /// it is negative.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArrayCheckSizeOp {
@@ -4765,7 +4765,7 @@ pub fn array_check_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::@size`, which reads an array's length out of the array value,
+/// The builtin operation of `Array::@size`, which reads an array's length out of the array value,
 /// leaving the array borrowed.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArrayGetSizeOp {
@@ -4830,7 +4830,7 @@ pub fn array_get_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::@capacity`, which reads an array's capacity out of the array
+/// The builtin operation of `Array::@capacity`, which reads an array's capacity out of the array
 /// value, leaving the array borrowed.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArrayGetCapacityOp {

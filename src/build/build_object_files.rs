@@ -74,8 +74,9 @@ pub struct BuildObjFilesResult {
 ///
 /// # Arguments
 /// * `symbols` — the set to lower and generate code for: one compilation unit, or the whole program.
-/// * `global_types` — the type of a global that a lowered function references as an LLVM operand.
-///   Such a global may be defined in another unit, so this covers the whole program.
+/// * `global_types` — the type of a global that a lowered function references as an operand of a
+///   builtin operation. Such a global may be defined in another unit, so this covers the whole
+///   program.
 /// * `roots` — the names code generation reaches the lowered program through from outside it.
 fn lower_and_insert_rc(
     type_env: &TypeEnv,

@@ -167,7 +167,7 @@ impl ExprVisitor for Substitutor {
 
         // The names the node reads on entry. Both rewrites answer from this list, so that the
         // substitution is simultaneous. Sorted, so that the result does not depend on the order the
-        // generator holds them in.
+        // op holds them in.
         let mut op_fvs = op.free_vars();
         op_fvs.sort();
         op_fvs.dedup();
@@ -571,7 +571,7 @@ mod tests {
     /// Verifies that a builtin node reports a change once any of its free names is renamed, even
     /// when a name mapped to itself is substituted afterwards.
     #[test]
-    fn renaming_one_llvm_free_name_reports_a_change() {
+    fn renaming_one_builtin_free_name_reports_a_change() {
         let res = x_to_a_and_y_to_y().traverse(&builtin_with_free_names(&["x", "y"]));
         assert_eq!(builtin_free_names(&res.expr), vec![local("a"), local("y")]);
         assert!(res.changed);
@@ -590,7 +590,7 @@ mod tests {
     /// applied inside its bound expression.
     #[test]
     fn let_keeps_the_rename_of_its_bound_expression() {
-        // `let (x, y) = BUILTIN(x, y) in z`. The pattern binds every name being substituted, so the
+        // `let (x, y) = op(x, y) in z`. The pattern binds every name being substituted, so the
         // substitution stops at the binder and the let is rebuilt from its bound expression alone.
         let expr = expr_let(
             binds_x_and_y(),
@@ -609,7 +609,7 @@ mod tests {
     /// renaming applied inside its condition.
     #[test]
     fn match_keeps_the_rename_of_its_condition() {
-        // `match BUILTIN(x, y) { (x, y) => z }`, the condition's counterpart of
+        // `match op(x, y) { (x, y) => z }`, the condition's counterpart of
         // `let_keeps_the_rename_of_its_bound_expression`.
         let expr = expr_match(
             builtin_with_free_names(&["x", "y"]),
@@ -626,7 +626,7 @@ mod tests {
     /// Verifies that a name mapped to a general expression is bound around the node and read from
     /// there, leaving the node's other names alone.
     #[test]
-    fn a_llvm_replacement_expression_is_bound_around_the_node() {
+    fn a_builtin_replacement_expression_is_bound_around_the_node() {
         let mut map = Map::default();
         map.insert(local("x"), null_ptr());
         let res = Substitutor::new(map).traverse(&builtin_with_free_names(&["x", "w"]));
@@ -642,7 +642,7 @@ mod tests {
 
     /// Verifies that a name read twice is bound once, and both occurrences read that one binding.
     #[test]
-    fn a_llvm_name_read_twice_is_bound_once() {
+    fn a_builtin_name_read_twice_is_bound_once() {
         let mut map = Map::default();
         map.insert(local("x"), null_ptr());
         let res = Substitutor::new(map).traverse(&builtin_with_free_names(&["x", "x"]));
@@ -656,7 +656,7 @@ mod tests {
 
     /// Verifies that the name a replacement is bound to avoids what the node already reads.
     #[test]
-    fn a_llvm_binder_avoids_a_name_the_node_already_reads() {
+    fn a_builtin_binder_avoids_a_name_the_node_already_reads() {
         // The node reads `#v0`, the first name the generator hands out.
         let mut map = Map::default();
         map.insert(local("x"), null_ptr());
@@ -670,8 +670,8 @@ mod tests {
     /// Verifies that the `let`s a builtin node's substitution introduces leave the names its
     /// replacements read denoting what they denoted outside.
     #[test]
-    fn a_llvm_let_does_not_capture_a_name_another_replacement_reads() {
-        // `BUILTIN(x, z)` under `x := BUILTIN(z)`, `z := null`. Both replacements are bound around
+    fn a_builtin_let_does_not_capture_a_name_another_replacement_reads() {
+        // `op(x, z)` under `x := op(z)`, `z := null`. Both replacements are bound around
         // the node, and the one for `x` reads the `z` of the enclosing scope, so `z` stays free.
         let mut map = Map::default();
         map.insert(local("x"), builtin_with_free_names(&["z"]));
@@ -686,8 +686,8 @@ mod tests {
     /// Verifies that a `let` the substitution introduces leaves the names it renamed the node onto
     /// denoting what they denoted outside.
     #[test]
-    fn a_llvm_let_does_not_capture_a_name_the_node_was_renamed_onto() {
-        // `BUILTIN(x, z)` under `x := z`, `z := null`. The occurrence renamed from `x` to `z` reads
+    fn a_builtin_let_does_not_capture_a_name_the_node_was_renamed_onto() {
+        // `op(x, z)` under `x := z`, `z := null`. The occurrence renamed from `x` to `z` reads
         // the `z` of the enclosing scope, while the occurrence of `z` reads the null pointer.
         let mut map = Map::default();
         map.insert(local("x"), expr_var(local("z"), None));
@@ -702,7 +702,7 @@ mod tests {
     /// Verifies that the substitution of a builtin node's free names is simultaneous: it applies to
     /// the names the node read on entry, so a name a rename introduced is left alone.
     #[test]
-    fn substituting_llvm_free_names_is_simultaneous() {
+    fn substituting_builtin_free_names_is_simultaneous() {
         let mut map = Map::default();
         map.insert(local("x"), expr_var(local("a"), None));
         map.insert(local("a"), null_ptr());

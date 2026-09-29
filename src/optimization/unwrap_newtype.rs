@@ -219,8 +219,8 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         // `builtin.generic_ty` stays as it is: type checking is the last pass that reads it.
 
         // Replace StructGetOp, StructSetOp, StructPunchOp, and StructPlugInOp for structures defined by the newtype pattern.
-        let gen = builtin.op.as_ref();
-        if let Some(get) = gen.as_any().downcast_ref::<StructGetOp>() {
+        let op = builtin.op.as_ref();
+        if let Some(get) = op.as_any().downcast_ref::<StructGetOp>() {
             // @ : S -> F = |s| StructGetOp(s)
             // =>
             // @ : F -> F = |s| s
@@ -229,7 +229,7 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
             if self.is_local_of_unwrapped_newtype(&struct_name, state) {
                 expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
             }
-        } else if let Some(set) = gen.as_any().downcast_ref::<StructSetOp>() {
+        } else if let Some(set) = op.as_any().downcast_ref::<StructSetOp>() {
             // set : F -> S -> S = |f, s| StructSetOp(f)
             // =>
             // set : F -> F -> F = |f, s| f
@@ -240,8 +240,8 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
                 let field_name = set.value_name.clone();
                 expr = expr_var(field_name, expr.source.clone()).set_type(field_ty);
             }
-        } else if let Some(punch) = gen.as_any().downcast_ref::<StructPunchOp>() {
-            // punch : S -> (F, S*) = |s| Punch(s)
+        } else if let Some(punch) = op.as_any().downcast_ref::<StructPunchOp>() {
+            // punch : S -> (F, S*) = |s| StructPunchOp(s)
             // =>
             // punch : F -> (F, ()) = |s| (s, ())
             let field_unit_ty = new_ty;
@@ -258,8 +258,8 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
                 )
                 .set_type(field_unit_ty);
             }
-        } else if let Some(plug_in) = gen.as_any().downcast_ref::<StructPlugInOp>() {
-            // plug_in : S* -> F -> S = |s, f| PlugIn(s, f)
+        } else if let Some(plug_in) = op.as_any().downcast_ref::<StructPlugInOp>() {
+            // plug_in : S* -> F -> S = |s, f| StructPlugInOp(s, f)
             // =>
             // plug_in : () -> F -> F = |_, f| f
             let struct_ty = old_ty;

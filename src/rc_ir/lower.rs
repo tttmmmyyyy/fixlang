@@ -346,8 +346,9 @@ impl<'a> Lowerer<'a> {
             // capture is the null pointer. Recording this lets the capture's release skip the null
             // check. Set it before any clone so it propagates.
             capture_var.skip_null_check = !captures.is_empty();
-            // Bind the capture object under the implicit name `#CAP` too, so a built-in that reads the
-            // raw capture object by that name (the `fix` combinator's `FixOp`) resolves to it.
+            // Bind the capture object under the implicit name `#CAP` too, so a builtin op that
+            // reads the raw capture object by that name (the `fix` combinator's `FixCombinatorOp`)
+            // resolves to it.
             self.bind(&FullName::local(CAP_NAME), capture_var.clone());
             let capture_tys: Vec<Arc<TypeNode>> =
                 captures.iter().map(|(_, v)| v.ty.clone()).collect();
@@ -425,7 +426,7 @@ impl<'a> Lowerer<'a> {
         let source = expr.source.clone();
         match expr.expr.as_ref() {
             Expr::Var(v) => self.lower_var(v, &ty, &source),
-            Expr::Builtin(inline) => self.lower_llvm(inline, ty, source, bindings),
+            Expr::Builtin(builtin) => self.lower_builtin(builtin, ty, source, bindings),
             Expr::App(fun, args) => self.lower_app(fun, args, ty, source, bindings),
             Expr::Lam(_, _) => self.lower_lam(expr, ty, source, bindings),
             Expr::Let(pat, bound, val) => self.lower_let(pat, bound, val, bindings),
@@ -470,14 +471,14 @@ impl<'a> Lowerer<'a> {
 
     /// Lower a builtin operation: its free variables become its operands, in the fixed order the op
     /// reads them, and the appended binding holds the value the operation produces.
-    fn lower_llvm(
+    fn lower_builtin(
         &mut self,
-        inline: &Arc<BuiltinOpExpr>,
+        builtin: &Arc<BuiltinOpExpr>,
         ty: Arc<TypeNode>,
         source: Option<Span>,
         bindings: &mut Vec<PendingBinding>,
     ) -> RcVar {
-        let mut op = inline.op.clone();
+        let mut op = builtin.op.clone();
         // The op's free variables are its operands, in a fixed order. A local operand reuses the
         // variable already bound to it; an operand that is not a local is a reference to a global
         // value or function, materialized by code generation from its (unchanged) name.
@@ -489,7 +490,7 @@ impl<'a> Lowerer<'a> {
                 None => {
                     let ty = self.global_types.get(name).cloned().unwrap_or_else(|| {
                         panic!(
-                            "LLVM operand `{}` is not bound in scope during RC IR lowering",
+                            "the builtin operand `{}` is not bound in scope during RC IR lowering",
                             name.to_string()
                         )
                     });

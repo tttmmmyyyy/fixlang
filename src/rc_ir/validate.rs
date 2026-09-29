@@ -429,7 +429,7 @@ impl<'a> Validator<'a> {
                 let arg_names: Vec<FullName> = args.iter().map(|a| a.name.clone()).collect();
                 if embedded_names != arg_names {
                     panic!(
-                        "[RC IR validate] {}: LLVM operand names {:?} disagree with argument names {:?} in `{}`",
+                        "[RC IR validate] {}: builtin operand names {:?} disagree with argument names {:?} in `{}`",
                         self.stage,
                         embedded_names.iter().map(|n| n.to_string()).collect::<Vec<_>>(),
                         arg_names.iter().map(|n| n.to_string()).collect::<Vec<_>>(),
@@ -744,7 +744,7 @@ mod tests {
     /// code generation reads and what the reference-counting analyses track stay the same names.
     #[test]
     #[should_panic(expected = "disagree with argument names")]
-    fn rejects_llvm_operand_name_mismatch() {
+    fn rejects_builtin_operand_name_mismatch() {
         // let r = <nullptr op with no embedded operands>(x); ret r
         // The op's embedded operand names () disagree with the argument list (x).
         let body = node(RcExpr::Let(

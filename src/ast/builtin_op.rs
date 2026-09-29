@@ -264,8 +264,8 @@ pub struct BuiltinOpExpr {
     pub op: Box<dyn BuiltinOp>,
     /// The type of this expression.
     ///
-    /// For example, in `@ : I64 -> Array a -> a = |i, arr| BUILTIN<Array::@(i, arr)>;`, the
-    /// `generic_ty` of the BuiltinOpExpr `BUILTIN<arr.Array::@(i, arr)>` is `a`.
+    /// For example, in `@ : I64 -> Array a -> a = |i, arr| array_get(i, arr);`, the
+    /// `generic_ty` of the `BuiltinOpExpr` `array_get(i, arr)` is `a`.
     ///
     /// `generic_ty` may contain type variables, and type instantiation leaves it as it is.
     pub generic_ty: Arc<TypeNode>,

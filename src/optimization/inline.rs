@@ -237,7 +237,7 @@ struct InlineCost {
     is_self_recursive: bool,
     /// Is the top-level construct a lambda expression?
     is_lambda: bool,
-    /// Is the expression of the form `|x, y, ...| {llvm}`?
+    /// Is the expression of the form `|x, y, ...| {builtin}`?
     is_builtin_lam: bool,
     /// Does a copy of the expression cost no more than the expression itself?
     is_free_to_duplicate: bool,

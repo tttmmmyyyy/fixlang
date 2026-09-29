@@ -312,7 +312,7 @@ mod tests {
     /// The only occurrence of `x` is an argument to a builtin expression, which an array read
     /// compiles to.
     #[test]
-    fn test_name_used_only_as_an_llvm_argument_keeps_its_binding() {
+    fn test_name_used_only_as_a_builtin_argument_keeps_its_binding() {
         let source = r#"
         module Main;
 

@@ -31,16 +31,16 @@ Consider the following example which contains BuiltinOpExpr nodes:
 
 ```
 let x = arr; // Retain `arr` here, because it will be used later.
-let n = BUILTIN<x.Array::@(i)>; // Release `x` here, because it will not be used later.
+let n = array_get(i, x); // Release `x` here, because it will not be used later.
 let y = arr;
-let m = BUILTIN<y.Array::@(j)>;
+let m = array_get(j, y);
 ```
 
 After removing renaming, the code will look like this:
 
 ```
-let n = BUILTIN<arr.Array::@(i)>; // By the implementation of `BUILTIN<arr.@(i)>`, the array will not be retained nor released since `arr` will be used later.
-let m = BUILTIN<arr.Array::@(j)>;
+let n = array_get(i, arr); // By the implementation of `array_get`, the array will not be retained nor released since `arr` will be used later.
+let m = array_get(j, arr);
 ```
 
 and the cost for retaining and releasing an array is saved.

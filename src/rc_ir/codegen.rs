@@ -271,9 +271,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                         }
                     }
                 }
-                // A builtin op may build the tail return itself (`FixOp`), in which case it yields
-                // no value. A diverging op (`undefined`) does not: it emits `unreachable` and
-                // yields a poison value, so the continuation is generated as dead code.
+                // A builtin op may build the tail return itself (`FixCombinatorOp`), in which case
+                // it yields no value. A diverging op (`undefined`) does not: it emits `unreachable`
+                // and yields a poison value, so the continuation is generated as dead code.
                 let op_tail = self.binding_fuses_into_return(x, k, tail);
                 // What the op says about applying its operands, for `apply_lambda` to check it by.
                 let outer_op = self.config.develop_mode.then(|| {
