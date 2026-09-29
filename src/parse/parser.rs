@@ -3116,15 +3116,15 @@ fn parse_pattern_struct(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Pattern
     let tycon_span = Span::from_pair(&ctx.source, &tycon_pair);
     let tycon = parse_tycon(tycon_pair, ctx);
     let mut field_to_pats = vec![];
-    let mut rest = None;
+    let mut has_rest = false;
     for pair in pairs {
         if pair.as_rule() == Rule::pattern_struct_rest {
-            rest = Some(Span::from_pair(&ctx.source, &pair));
+            has_rest = true;
         } else {
             field_to_pats.push(parse_pattern_struct_field(pair, ctx));
         }
     }
-    PatternNode::make_struct_with_srcs(tycon, field_to_pats, rest)
+    PatternNode::make_struct_with_srcs(tycon, field_to_pats, has_rest)
         .set_source(span)
         .set_aux_src(tycon_span)
 }

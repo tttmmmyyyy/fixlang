@@ -15,6 +15,7 @@ use crate::{
         qual_pred::{QualPred, QualPredScheme},
         qual_type::QualType,
         traits::{TraitEnv, TraitId},
+        typedecl::describe_field_names,
         types::{
             is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar,
             type_fun, type_tyapp, type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme,
@@ -2885,20 +2886,11 @@ fn field_name_span(field_src: &Option<FieldSrc>) -> Option<Span> {
 /// The report for declared fields a struct literal leaves out, located at the
 /// whole literal, which is where the editor's quick fix inserts them.
 fn missing_fields_error(tc: &Arc<TyCon>, missing: &[Name], source: &Option<Span>) -> Error {
-    let msg = if missing.len() == 1 {
-        format!(
-            "Missing field `{}` of struct `{}`.",
-            missing[0],
-            tc.to_string()
-        )
-    } else {
-        let list = missing
-            .iter()
-            .map(|n| format!("`{}`", n))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("Missing fields {} of struct `{}`.", list, tc.to_string())
-    };
+    let msg = format!(
+        "Missing {} of struct `{}`.",
+        describe_field_names(missing),
+        tc.to_string()
+    );
     let mut err = Error::from_msg_srcs(msg, &[source]);
     err.code = Some(ERR_MISSING_STRUCT_FIELD);
     err.data = Some(json!(missing));

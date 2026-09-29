@@ -8,6 +8,7 @@ use crate::ast::types::{type_assocty, type_tyvar_star, AssocType};
 use crate::constants::{
     ERR_MISSING_STRUCT_FIELD, ERR_MISSING_TRAIT_IMPL, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME,
 };
+use crate::error::WARN_MISSING_PATTERN_FIELD;
 use crate::misc::{generate_fresh_varnames, Map, Set};
 use lsp_types::{
     CodeAction, CodeActionKind, CodeActionParams, NumberOrString, Position, Range, TextEdit, Uri,
@@ -34,6 +35,12 @@ pub(super) fn handle_code_action(
             handle_missing_trait_impl(diag, params, uri_to_content, &mut actions);
         } else if diag.code == Some(NumberOrString::String(ERR_MISSING_STRUCT_FIELD.to_string())) {
             handle_missing_struct_field(diag, params, uri_to_content, &mut actions);
+        } else if diag.code
+            == Some(NumberOrString::String(
+                WARN_MISSING_PATTERN_FIELD.to_string(),
+            ))
+        {
+            handle_missing_pattern_field(diag, params, uri_to_content, &mut actions);
         }
     }
     send_response(id, Ok::<_, ()>(actions));
@@ -206,46 +213,157 @@ fn handle_missing_trait_impl(
 /// field of a struct literal (e.g. `Vector3 { x: 1.0, y: 2.0 }` missing `z`).
 ///
 /// The diagnostic's `data` carries a JSON array of missing field names, and
-/// its `range` covers the whole MakeStruct expression — so `range.end` sits
-/// just past the closing `}`. Field/expression names in Fix are ASCII, so
-/// LSP UTF-16 columns coincide with char/byte columns at the positions we
-/// care about.
+/// its `range` covers the whole MakeStruct expression.
 fn handle_missing_struct_field(
     diag: &lsp_types::Diagnostic,
     params: &CodeActionParams,
     uri_to_content: &mut Map<Uri, LatestContent>,
     actions: &mut Vec<CodeAction>,
 ) {
-    if diag.data.is_none() {
+    let Some(missing) = missing_fields_of(diag) else {
         return;
-    }
-    let missing: Vec<String> = match serde_json::from_value(diag.data.as_ref().unwrap().clone()) {
-        Ok(v) => v,
-        Err(_) => return,
     };
-    if missing.is_empty() {
-        return;
-    }
-
     let uri = &params.text_document.uri;
-    let latest_content = uri_to_content.get(uri);
-    if latest_content.is_none() {
+    let Some(latest_content) = uri_to_content.get(uri) else {
         return;
+    };
+    let items = missing
+        .iter()
+        .map(|name| format!("{}: ?", name))
+        .collect::<Vec<_>>();
+    let Some(edits) = insert_fields_edits(&latest_content.content, &diag.range, &items) else {
+        return;
+    };
+    actions.push(quick_fix(
+        add_missing_fields_title(&missing),
+        diag,
+        uri,
+        edits,
+        true,
+    ));
+}
+
+/// Offer two quick fixes for a struct pattern that leaves out fields without `_`: one writes each
+/// missing field as `name: _`, which matches it and binds nothing, and the other writes `_` after
+/// the fields to leave out the rest.
+///
+/// A missing field is written with `_` rather than by its name alone, since `name` would bind a
+/// variable that can hide one of the same name the pattern's scope uses.
+///
+/// The diagnostic's `data` carries a JSON array of missing field names, and
+/// its `range` covers the whole struct pattern.
+fn handle_missing_pattern_field(
+    diag: &lsp_types::Diagnostic,
+    params: &CodeActionParams,
+    uri_to_content: &mut Map<Uri, LatestContent>,
+    actions: &mut Vec<CodeAction>,
+) {
+    let Some(missing) = missing_fields_of(diag) else {
+        return;
+    };
+    let uri = &params.text_document.uri;
+    let Some(latest_content) = uri_to_content.get(uri) else {
+        return;
+    };
+    let content = &latest_content.content;
+
+    let items = missing
+        .iter()
+        .map(|name| format!("{}: _", name))
+        .collect::<Vec<_>>();
+    if let Some(edits) = insert_fields_edits(content, &diag.range, &items) {
+        actions.push(quick_fix(
+            add_missing_fields_title(&missing),
+            diag,
+            uri,
+            edits,
+            true,
+        ));
     }
-    let content = &latest_content.unwrap().content;
+    if let Some(edits) = insert_fields_edits(content, &diag.range, &["_".to_string()]) {
+        let title = "Leave out the other fields with `_`".to_string();
+        actions.push(quick_fix(title, diag, uri, edits, false));
+    }
+}
+
+/// The names of the missing fields a diagnostic carries in its `data`, when it carries any.
+fn missing_fields_of(diag: &lsp_types::Diagnostic) -> Option<Vec<String>> {
+    let missing: Vec<String> = serde_json::from_value(diag.data.clone()?).ok()?;
+    if missing.is_empty() {
+        None
+    } else {
+        Some(missing)
+    }
+}
+
+/// The title of a quick fix that adds the fields `missing`.
+fn add_missing_fields_title(missing: &[String]) -> String {
+    if missing.len() == 1 {
+        format!("Add missing field `{}`", missing[0])
+    } else {
+        let list = missing
+            .iter()
+            .map(|n| format!("`{}`", n))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("Add missing fields {}", list)
+    }
+}
+
+/// A quick fix titled `title` for `diag` that applies `edits` to the document at `uri`.
+fn quick_fix(
+    title: String,
+    diag: &lsp_types::Diagnostic,
+    uri: &Uri,
+    edits: Vec<TextEdit>,
+    is_preferred: bool,
+) -> CodeAction {
+    CodeAction {
+        title,
+        kind: Some(CodeActionKind::QUICKFIX),
+        diagnostics: Some(vec![diag.clone()]),
+        edit: Some(WorkspaceEdit {
+            changes: Some({
+                let mut map = HashMap::new();
+                map.insert(uri.clone(), edits);
+                map
+            }),
+            document_changes: None,
+            change_annotations: None,
+        }),
+        command: None,
+        is_preferred: Some(is_preferred),
+        disabled: None,
+        data: None,
+    }
+}
+
+/// The edits that append `items` to the fields of the struct literal or struct pattern that
+/// `range` covers, from its head to its closing `}`.
+///
+/// On one line, the items go after the last field, joined by `, `. When the `}` stands on a line
+/// of its own, each item goes on its own line, indented like the fields and ending in a comma, and
+/// a comma is added after the last field when it has none.
+///
+/// Field names in Fix are ASCII, so LSP UTF-16 columns coincide with char
+/// columns at the positions we care about.
+///
+/// # Examples
+/// For `S { x }` and the items `["y: _"]`, the edit inserts `, y: _` after `x`.
+fn insert_fields_edits(content: &str, range: &Range, items: &[String]) -> Option<Vec<TextEdit>> {
     let lines: Vec<&str> = content.lines().collect();
 
-    let start_line = diag.range.start.line as usize;
-    let end_line = diag.range.end.line as usize;
-    let end_char = diag.range.end.character as usize;
+    let start_line = range.start.line as usize;
+    let end_line = range.end.line as usize;
+    let end_char = range.end.character as usize;
     if end_line >= lines.len() || end_char == 0 {
-        return;
+        return None;
     }
 
     let end_line_chars: Vec<char> = lines[end_line].chars().collect();
     let brace_col = end_char - 1;
     if brace_col > end_line_chars.len() {
-        return;
+        return None;
     }
     let before_brace: String = end_line_chars[..brace_col].iter().collect();
     let is_multiline = before_brace.trim().is_empty() && start_line != end_line;
@@ -265,12 +383,7 @@ fn handle_missing_struct_field(
             Some((line, col_after, _)) => (line, col_after, ", "),
             None => (end_line, brace_col, ""),
         };
-        let fields_str = missing
-            .iter()
-            .map(|n| format!("{}: ?", n))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let new_text = format!("{}{}", prefix, fields_str);
+        let new_text = format!("{}{}", prefix, items.join(", "));
         let pos = Position {
             line: insert_line as u32,
             character: insert_col as u32,
@@ -288,9 +401,9 @@ fn handle_missing_struct_field(
         // one as a separate, non-overlapping edit.
         let field_indent = compute_field_indent(&lines, start_line, end_line);
         let mut body = String::new();
-        for name in &missing {
+        for item in items {
             body.push_str(&field_indent);
-            body.push_str(&format!("{}: ?,\n", name));
+            body.push_str(&format!("{},\n", item));
         }
 
         let need_trailing_comma = matches!(last_nonws, Some((_, _, c)) if c != '{' && c != ',');
@@ -324,37 +437,7 @@ fn handle_missing_struct_field(
             new_text: body,
         });
     }
-
-    let title = if missing.len() == 1 {
-        format!("Add missing field `{}`", missing[0])
-    } else {
-        let list = missing
-            .iter()
-            .map(|n| format!("`{}`", n))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("Add missing fields {}", list)
-    };
-
-    let action = CodeAction {
-        title,
-        kind: Some(CodeActionKind::QUICKFIX),
-        diagnostics: Some(vec![diag.clone()]),
-        edit: Some(WorkspaceEdit {
-            changes: Some({
-                let mut map = HashMap::new();
-                map.insert(uri.clone(), edits);
-                map
-            }),
-            document_changes: None,
-            change_annotations: None,
-        }),
-        command: None,
-        is_preferred: Some(true),
-        disabled: None,
-        data: None,
-    };
-    actions.push(action);
+    Some(edits)
 }
 
 /// Find the last non-whitespace char in `lines` that sits strictly before

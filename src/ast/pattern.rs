@@ -374,13 +374,13 @@ impl PatternNode {
                 let new_ty = ty.as_ref().map(|t| t.global_to_absolute());
                 node.pattern = Pattern::Var(new_v, new_ty);
             }
-            Pattern::Struct(tc, field_to_pat, rest) => {
+            Pattern::Struct(tc, field_to_pat, has_rest) => {
                 let new_tc = tc.global_to_absolute();
                 let mut field_to_pat = field_to_pat.clone();
                 for (_, _, pat) in &mut field_to_pat {
                     *pat = pat.global_to_absolute();
                 }
-                node.pattern = Pattern::Struct(new_tc, field_to_pat, rest.clone());
+                node.pattern = Pattern::Struct(new_tc, field_to_pat, *has_rest);
             }
             Pattern::Union(variant_name, variant_src, subpat) => {
                 let mut new_variant_name = variant_name.clone();
@@ -413,8 +413,8 @@ impl PatternNode {
     pub fn set_struct_tycon(self: &PatternNode, tc: Arc<TyCon>) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
-            Pattern::Struct(_, field_to_pat, rest) => {
-                node.pattern = Pattern::Struct(tc, field_to_pat.clone(), rest.clone());
+            Pattern::Struct(_, field_to_pat, has_rest) => {
+                node.pattern = Pattern::Struct(tc, field_to_pat.clone(), *has_rest);
             }
             _ => panic!(
                 "`set_struct_tycon` requires a struct pattern, but got `{}`.",
@@ -434,8 +434,8 @@ impl PatternNode {
     ) -> Arc<PatternNode> {
         let mut node = self.clone();
         match &self.pattern {
-            Pattern::Struct(tc, _, rest) => {
-                node.pattern = Pattern::Struct(tc.clone(), field_to_pat, rest.clone());
+            Pattern::Struct(tc, _, has_rest) => {
+                node.pattern = Pattern::Struct(tc.clone(), field_to_pat, *has_rest);
             }
             _ => panic!(
                 "`set_struct_field_to_pat` requires a struct pattern, but got `{}`.",
@@ -521,22 +521,22 @@ impl PatternNode {
         fields: Vec<(Name, Arc<PatternNode>)>,
     ) -> Arc<PatternNode> {
         let fields = fields.into_iter().map(|(n, p)| (n, None, p)).collect();
-        PatternNode::make_struct_with_srcs(tycon, fields, None)
+        PatternNode::make_struct_with_srcs(tycon, fields, false)
     }
 
     /// A struct destructuring pattern matching each `(field name, where the field is written,
     /// sub-pattern)` triple of `fields`.
     ///
     /// # Arguments
-    /// * `rest` — the span of the `_` written last in the pattern, which leaves out the fields
+    /// * `has_rest` — whether the pattern writes `_` after its fields, which leaves out the fields
     ///   `fields` does not name.
     pub fn make_struct_with_srcs(
         tycon: Arc<TyCon>,
         fields: Vec<(Name, Option<FieldSrc>, Arc<PatternNode>)>,
-        rest: Option<Span>,
+        has_rest: bool,
     ) -> Arc<PatternNode> {
         Arc::new(PatternNode {
-            pattern: Pattern::Struct(tycon, fields, rest),
+            pattern: Pattern::Struct(tycon, fields, has_rest),
             info: PatternInfo::default(),
         })
     }
@@ -652,13 +652,13 @@ pub enum Pattern {
     /// Binds the matched value to a variable, under the type annotation written for it.
     Var(Arc<Var>, Option<Arc<TypeNode>>),
     /// Destructures a struct or tuple. Each entry is a field name, where the field is written, and
-    /// the sub-pattern its value is matched against. The last element is the span of the `_` written
-    /// last in the pattern (`S { x, _ }`), which leaves out the fields the entries do not name; a
-    /// pattern without it names every field of the struct, or is warned about.
+    /// the sub-pattern its value is matched against. The last element says whether the pattern
+    /// writes `_` after its fields (`S { x, _ }`), which leaves out the fields the entries do not
+    /// name; a pattern without it names every field of the struct, or is warned about.
     Struct(
         Arc<TyCon>,
         Vec<(Name, Option<FieldSrc>, Arc<PatternNode>)>,
-        Option<Span>,
+        bool,
     ),
     /// Matches one variant of a union and its payload against the sub-pattern. The span covers the
     /// bare variant name, without any namespace prefix written before it.
@@ -706,7 +706,7 @@ impl Pattern {
 
     /// This pattern as it is written in the source, its variant and field names carrying the
     /// namespaces they have been resolved to. A tuple type at the head prints as `(a, b)`, and any
-    /// other struct as `S {f: p}`.
+    /// other struct as `S {f: p}`, or `S {f: p, _}` where the pattern leaves out the other fields.
     pub fn to_string(&self) -> String {
         let mut ret = "".to_string();
         match self {
@@ -721,7 +721,7 @@ impl Pattern {
                 }
                 ret
             }
-            Pattern::Struct(tc, fields, _) => {
+            Pattern::Struct(tc, fields, has_rest) => {
                 if let Some(n) = get_tuple_n(&tc.name) {
                     let pats = fields
                         .iter()
@@ -733,10 +733,13 @@ impl Pattern {
                         format!("({})", pats.join(", "))
                     }
                 } else {
-                    let pats = fields
+                    let mut pats = fields
                         .iter()
                         .map(|(name, _, pat)| format!("{}: {}", name, pat.to_string()))
                         .collect::<Vec<_>>();
+                    if *has_rest {
+                        pats.push("_".to_string());
+                    }
                     format!("{} {{{}}}", tc.to_string(), pats.join(", "))
                 }
             }

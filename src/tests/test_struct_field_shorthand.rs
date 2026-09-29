@@ -123,7 +123,7 @@ main = (
     let matched = match t.@s { S { y, x : _ } => y };
     assert_eq(|_|"match", matched, 2);;
 
-    let T { s : S { x }, name } = t;
+    let T { s : S { x, _ }, name } = t;
     assert_eq(|_|"nested x", x, 1);;
     assert_eq(|_|"nested name", name, "t");;
     pure()

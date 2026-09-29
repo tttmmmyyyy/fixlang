@@ -7,7 +7,7 @@ use crate::ast::kind_scope::KindEnv;
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
-use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
+use crate::ast::typedecl::{describe_field_names, Field, TypeDeclValue, TypeDefn};
 use crate::ast::types::{
     is_opaque_tyvar, AssocType, Kind, OpaqueTyConResolution, Scheme, TyAliasInfo, TyCon, TyConInfo,
     TyConVariant, TypeNode,
@@ -50,6 +50,7 @@ use crate::printer::Text;
 use crate::type_size::{no_size_reason, LayoutWalk};
 use build_time::build_time_utc;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::Write;
@@ -2345,13 +2346,22 @@ impl Program {
         ))
     }
 
+    /// The diagnostics read off the type-checked expressions of the user's own code, which are
+    /// reported alongside the program rather than stopping its elaboration: the uses of deprecated
+    /// items, and the struct patterns that leave out fields without `_`.
+    pub fn collect_diagnostics_of_typed_program(&self, config: &Configuration) -> Errors {
+        let mut diagnostics = self.collect_deprecation_diagnostics(config);
+        diagnostics.append(self.collect_missing_pattern_field_diagnostics(config));
+        diagnostics
+    }
+
     /// The uses of items marked `DEPRECATED[...]` that this program makes, as warnings, or as
     /// errors where `Configuration.deprecation_mode` is `Deny`.
     ///
     /// The diagnostics are scoped to the user's own code by `Configuration.root_source_files`: a
     /// use is reported where its source span lies in one of those files, so that what is reported
     /// is what the user can edit.
-    pub fn collect_deprecation_diagnostics(&self, config: &Configuration) -> Errors {
+    fn collect_deprecation_diagnostics(&self, config: &Configuration) -> Errors {
         let mut diagnostics = Errors::empty();
         // Exhaustive match: a new `DeprecationMode` variant must be handled here.
         let promote_to_error = match config.deprecation_mode {
@@ -2360,7 +2370,7 @@ impl Program {
             DeprecationMode::Deny => true,
         };
 
-        let user_files = user_source_files(config);
+        let user_files = UserSourceFiles::of(config);
 
         for (_gv_name, gv) in &self.global_values {
             // Skip uses inside an item that is itself deprecated. This is the
@@ -2394,11 +2404,7 @@ impl Program {
                     Some(s) => s,
                     None => continue,
                 };
-                let abs = match to_absolute_path(&span.input.file_path) {
-                    Ok(p) => p,
-                    Err(_) => continue,
-                };
-                if !user_files.contains(&abs) {
+                if !user_files.contains_span(span) {
                     continue;
                 }
                 let msg = format!(
@@ -2427,22 +2433,19 @@ impl Program {
     ///
     /// The diagnostics are scoped to the user's own code by `Configuration.root_source_files`, as
     /// `collect_deprecation_diagnostics` scopes its own.
-    pub fn collect_missing_pattern_field_diagnostics(&self, config: &Configuration) -> Errors {
-        let user_files = user_source_files(config);
+    fn collect_missing_pattern_field_diagnostics(&self, config: &Configuration) -> Errors {
+        let user_files = UserSourceFiles::of(config);
         let mut reports: Vec<(Span, Arc<TyCon>, Vec<Name>)> = vec![];
         for gv in self.global_values.values() {
             gv.expr.walk_patterns(&mut |pat| {
                 pat.walk_nodes(&mut |node| {
-                    let Pattern::Struct(tc, fields, None) = &node.pattern else {
+                    let Pattern::Struct(tc, fields, false) = &node.pattern else {
                         return;
                     };
                     let Some(span) = &node.info.source else {
                         return;
                     };
-                    let in_user_file = to_absolute_path(&span.input.file_path)
-                        .map(|p| user_files.contains(&p))
-                        .unwrap_or(false);
-                    if !in_user_file {
+                    if !user_files.contains_span(span) {
                         return;
                     }
                     // A head the type checker could not resolve, which the language server's
@@ -2469,30 +2472,21 @@ impl Program {
 
         let mut diagnostics = Errors::empty();
         for (span, tc, missing) in reports {
-            let fields = missing
-                .iter()
-                .map(|name| format!("`{}`", name))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let (noun, pronoun) = if missing.len() == 1 {
-                ("field", "it")
-            } else {
-                ("fields", "them")
-            };
+            let pronoun = if missing.len() == 1 { "it" } else { "them" };
             let mut err = Error::warning_from_msg_srcs(
                 format!(
-                    "This pattern leaves out the {} {} of struct `{}`.\n\
+                    "This pattern leaves out the {} of struct `{}`.\n\
                      HINT: write {}, or write `_` after the fields to leave out the rest.\n\
                      NOTE: since a pattern names every field, adding a field to the struct points \
                      out each pattern that takes the struct apart.",
-                    noun,
-                    fields,
+                    describe_field_names(&missing),
                     tc.to_string(),
                     pronoun,
                 ),
                 &[&Some(span)],
             );
             err.code = Some(WARN_MISSING_PATTERN_FIELD);
+            err.data = Some(json!(missing));
             diagnostics.append(Errors::from_err(err));
         }
         diagnostics
@@ -2543,11 +2537,7 @@ impl Program {
         }
 
         // The files the user writes, which are the ones an import is reported in.
-        let user_files: Set<PathBuf> = config
-            .root_source_files
-            .iter()
-            .filter_map(|path| to_absolute_path(path).ok())
-            .collect();
+        let user_files = UserSourceFiles::of(config);
 
         // The earliest import reaching each undeclared project, by the project that makes it: the
         // two projects, the module named, and where it is named.
@@ -2564,7 +2554,7 @@ impl Program {
             let Ok(path) = to_absolute_path(&span.input.file_path) else {
                 continue;
             };
-            if !user_files.contains(&path) {
+            if !user_files.contains_path(&path) {
                 continue;
             }
             let Some(importing_project) = file_to_project.get(&path) else {
@@ -3557,13 +3547,32 @@ pub enum EndNode {
     InferredType(Arc<TypeNode>),
 }
 
-/// The files of the user's own code, `Configuration.root_source_files`, as absolute paths, so that
-/// the file of a span can be looked up in it. A path that fails to canonicalize (a file that no
-/// longer exists) is dropped: no span can lie in it.
-fn user_source_files(config: &Configuration) -> Set<PathBuf> {
-    config
-        .root_source_files
-        .iter()
-        .filter_map(|p| to_absolute_path(p).ok())
-        .collect()
+/// The files of the user's own code, `Configuration.root_source_files`, as absolute paths. The
+/// diagnostics about what the user writes are scoped to these files.
+struct UserSourceFiles(Set<PathBuf>);
+
+impl UserSourceFiles {
+    /// The user's files of `config`. A path that fails to canonicalize (a file that no longer
+    /// exists) is dropped: no span can lie in it.
+    fn of(config: &Configuration) -> Self {
+        UserSourceFiles(
+            config
+                .root_source_files
+                .iter()
+                .filter_map(|p| to_absolute_path(p).ok())
+                .collect(),
+        )
+    }
+
+    /// Whether the absolute path `path` is one of the user's files.
+    fn contains_path(&self, path: &PathBuf) -> bool {
+        self.0.contains(path)
+    }
+
+    /// Whether `span` lies in one of the user's files.
+    fn contains_span(&self, span: &Span) -> bool {
+        to_absolute_path(&span.input.file_path)
+            .map(|path| self.contains_path(&path))
+            .unwrap_or(false)
+    }
 }

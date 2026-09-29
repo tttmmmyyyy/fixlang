@@ -425,6 +425,68 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// A `missing-pattern-field` warning draws two quick fixes: one writes each field the pattern
+    /// leaves out as `name: _`, and the other writes `_` after the fields. Applying either one
+    /// clears the warning.
+    #[test]
+    fn test_quickfix_missing_pattern_field() {
+        let mut ctx = LspQuickFixCtx::setup("quickfix_missing_pattern_field", &["main.fix"]);
+        let main_path = ctx.project_dir.join("main.fix");
+        let original = fs::read_to_string(&main_path).expect("Failed to read main.fix");
+
+        let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
+        let warning = diagnostic_with_code(&diagnostics, "missing-pattern-field").clone();
+        let (start_line, start_col, end_line, end_col) = range_of(&warning);
+        let actions = ctx.code_actions(
+            "main.fix",
+            vec![warning],
+            start_line,
+            start_col,
+            end_line,
+            end_col,
+        );
+        assert_eq!(
+            action_titles(&actions),
+            vec![
+                "Add missing fields `y`, `z`".to_string(),
+                "Leave out the other fields with `_`".to_string(),
+            ]
+        );
+
+        let uri = ctx.file_uri("main.fix");
+        for (action, patched) in actions
+            .iter()
+            .zip(["|S { x, y: _, z: _ }|", "|S { x, _ }|"])
+        {
+            let file_edits = action["edit"]["changes"][&uri]
+                .as_array()
+                .expect("the action should edit main.fix");
+            let updated = apply_text_edits(&original, &parse_text_edits(file_edits));
+            assert!(
+                updated.contains(patched),
+                "applying `{}` should write `{}`. Got: {}",
+                action["title"],
+                patched,
+                updated
+            );
+            fs::write(&main_path, &updated).expect("Failed to write main.fix");
+            ctx.client
+                .change_document(Path::new("main.fix"))
+                .expect("Failed to send didChange");
+            ctx.client
+                .save_and_wait_for_the_program(Path::new("main.fix"));
+            let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
+            assert!(
+                diagnostics.is_empty(),
+                "applying `{}` should leave nothing reported. Got: {:?}",
+                action["title"],
+                diagnostics
+            );
+        }
+
+        ctx.shutdown();
+    }
+
     /// Test that the quick fix for a missing struct field is offered when the same literal also
     /// gives one field twice: beside the report of the repeat, the missing-field diagnostic keeps
     /// the code and the data the quick fix reads.

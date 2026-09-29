@@ -111,10 +111,7 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         program.deferred_errors.append(errors);
         program
             .deferred_errors
-            .append(program.collect_deprecation_diagnostics(config));
-        program
-            .deferred_errors
-            .append(program.collect_missing_pattern_field_diagnostics(config));
+            .append(program.collect_diagnostics_of_typed_program(config));
         return Ok(program);
     }
 
@@ -131,14 +128,9 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         )?;
     }
 
-    // Collect deprecation diagnostics from all type-checked expressions and
-    // surface them according to `Configuration.deprecation_mode`.
     program
         .deferred_errors
-        .append(program.collect_deprecation_diagnostics(config));
-    program
-        .deferred_errors
-        .append(program.collect_missing_pattern_field_diagnostics(config));
+        .append(program.collect_diagnostics_of_typed_program(config));
 
     // Instantiate Main::main (or Test::test).
     match config.output_file_type {

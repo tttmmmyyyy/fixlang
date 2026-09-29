@@ -95,7 +95,7 @@ fn unwrap_pattern(pat: &Arc<PatternNode>, type_env: &TypeEnv) -> Arc<PatternNode
                 info,
             })
         }
-        Pattern::Struct(tc, field_to_pat, rest) => {
+        Pattern::Struct(tc, field_to_pat, has_rest) => {
             if type_env.is_unwrapped_newtype(tc) {
                 assert_eq!(field_to_pat.len(), 1);
                 let (_, _, pat) = &field_to_pat[0];
@@ -108,7 +108,7 @@ fn unwrap_pattern(pat: &Arc<PatternNode>, type_env: &TypeEnv) -> Arc<PatternNode
                 let mut info = pat.info.clone();
                 unwrap_pattern_info(&mut info, type_env);
                 Arc::new(PatternNode {
-                    pattern: Pattern::Struct(tc.clone(), field_to_pat, rest.clone()),
+                    pattern: Pattern::Struct(tc.clone(), field_to_pat, *has_rest),
                     info,
                 })
             }
