@@ -9,6 +9,10 @@
 - #787: A field of a struct literal or of a struct pattern can be written by its name alone. `S { x, y: 2 }` means `S { x: x, y: 2 }`, where the second `x` is the value named `x`. `let S { x, y: y2 } = s;` binds `x` to the field `x` of `s`, as `let S { x: x, y: y2 } = s;` does.
 - A struct pattern can write `_` after its fields to leave out the other fields of the struct: `let S { x, _ } = s;`.
 
+#### Tool
+
+- The language server offers two quick fixes for a struct pattern that leaves out fields without `_`: write each missing field as `name: _`, or write `_` after the fields.
+
 ### Changed
 
 #### Language
