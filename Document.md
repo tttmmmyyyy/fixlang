@@ -664,7 +664,7 @@ get_price : Product -> I64;
 get_price = |Product { price, _ }| price;
 ```
 
-A pattern that leaves out fields without writing `_` is accepted with a warning. Because a pattern names every field, when you add a field to a struct, the compiler points out each pattern that takes the struct apart, as it does for each struct literal. Since `_` in a pattern stands for the other fields, a field of a struct or a variant of a union cannot be named `_`.
+A pattern that leaves out fields without writing `_` is accepted with a warning. A future version of Fix will report such a pattern as an error.
 
 ## Iterators
 
