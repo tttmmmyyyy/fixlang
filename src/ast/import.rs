@@ -171,11 +171,16 @@ impl ImportStatement {
 
     /// The statement as it is written in source, such as `import Lib::{f, g};`.
     pub fn stringify(&self) -> String {
-        self.stringify_internal().to_string()
+        self.stringify_internal(FORMAT_LINE_LIMIT).to_string()
     }
 
-    /// The text of the statement, broken across lines where a long list of items needs it.
-    fn stringify_internal(&self) -> Text {
+    /// The statement as `stringify` writes it, on a single line however long its list of items.
+    pub fn stringify_on_one_line(&self) -> String {
+        self.stringify_internal(usize::MAX).to_string()
+    }
+
+    /// The text of the statement, broken across lines where a list of items runs past `line_limit`.
+    fn stringify_internal(&self, line_limit: usize) -> Text {
         let text = Text::from_str("import ");
         let text = text.append_to_last_line(&self.module_name);
         let text = if self.items.len() == 0 {
@@ -192,10 +197,10 @@ impl ImportStatement {
                 let items_text = Text::join(
                     self.items
                         .iter()
-                        .map(|item| item.stringify())
+                        .map(|item| item.stringify(line_limit))
                         .collect::<Vec<_>>(),
                     ", ",
-                    FORMAT_LINE_LIMIT,
+                    line_limit,
                 );
                 let needs_brace = self.items.len() >= 2;
                 let items_text = if needs_brace {
@@ -214,10 +219,10 @@ impl ImportStatement {
             let hiding_text = Text::join(
                 self.hiding
                     .iter()
-                    .map(|item| item.stringify())
+                    .map(|item| item.stringify(line_limit))
                     .collect::<Vec<_>>(),
                 ", ",
-                FORMAT_LINE_LIMIT,
+                line_limit,
             );
             let needs_brace = self.hiding.len() >= 2;
             let hiding_text = if needs_brace {
@@ -515,8 +520,8 @@ impl ImportTreeNode {
     }
 
     /// The node as it is written in an import path, such as `Ns::{f, g}`, broken across lines where
-    /// a long list of items needs it.
-    fn stringify(&self) -> Text {
+    /// a list of items runs past `line_limit`.
+    fn stringify(&self, line_limit: usize) -> Text {
         match self {
             ImportTreeNode::Any(_) => Text::from_str("*"),
             ImportTreeNode::Symbol(name, _) => Text::from_str(name),
@@ -528,10 +533,10 @@ impl ImportTreeNode {
                     let items_text = Text::join(
                         items
                             .iter()
-                            .map(|item| item.stringify())
+                            .map(|item| item.stringify(line_limit))
                             .collect::<Vec<_>>(),
                         ", ",
-                        FORMAT_LINE_LIMIT,
+                        line_limit,
                     );
                     let needs_brace = items.len() >= 2;
                     let items_text = if needs_brace {

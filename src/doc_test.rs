@@ -6,7 +6,7 @@
 //! reader. `fix test` compiles each example as the module `DocTest` and runs its `DocTest::main`.
 
 use crate::{
-    ast::{name::Name, program::Program},
+    ast::{import::ImportStatement, name::Name, program::Program},
     constants::{DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME},
     error::Errors,
     hash::md5_hex,
@@ -132,6 +132,53 @@ fn indent_width(indent: &str) -> usize {
     })
 }
 
+/// The module a comment is written in, as the Fix examples of the comment see it. An example
+/// written as statements is wrapped into the module `DocTest` importing `module` and each of
+/// `imports`, so its names are found as they are in the body of `module`.
+pub struct ExampleScope {
+    /// The name of the module.
+    pub module: Name,
+    /// The import statements the module's source writes.
+    pub imports: Vec<ImportStatement>,
+}
+
+impl ExampleScope {
+    /// The scope of the comments of the module `module` of `program`, with the import statements
+    /// its source writes.
+    pub fn of_module(program: &Program, module: &Name) -> Self {
+        let imports = program
+            .mod_to_import_stmts
+            .get(module)
+            .into_iter()
+            .flatten()
+            .filter(|stmt| !stmt.implicit)
+            .cloned()
+            .collect();
+        ExampleScope {
+            module: module.clone(),
+            imports,
+        }
+    }
+
+    /// The line an example written as statements begins with: the declaration of the module
+    /// `DocTest`, its imports and the head of `DocTest::main`, all on one line.
+    ///
+    /// # Examples
+    /// For the module `Geometry` that writes `import Math::{sqrt};`, the line is
+    /// `module DocTest; import Geometry; import Math::sqrt; main : IO () = (`.
+    fn statement_header(&self) -> String {
+        let imports = self
+            .imports
+            .iter()
+            .map(|stmt| format!(" {}", stmt.stringify_on_one_line()))
+            .collect::<String>();
+        format!(
+            "module {}; import {};{} {} : IO () = (",
+            DOC_TEST_MODULE_NAME, self.module, imports, MAIN_FUNCTION_NAME
+        )
+    }
+}
+
 /// A Fix example of a comment or of a Markdown document.
 pub struct FixExample {
     /// Where the line opening the example stands, which names the example in what `fix test`
@@ -202,8 +249,9 @@ pub fn collect_examples(program: &Program, files: &[PathBuf]) -> Result<Vec<FixE
         if !files.contains(&module.absolute_source_path()?) {
             continue;
         }
+        let scope = ExampleScope::of_module(program, &module.name);
         for comment in comments_of(&module.source.input)? {
-            errors.eat_err_or(examples_in_text(&comment, &module.name), |found| {
+            errors.eat_err_or(examples_in_text(&comment, &scope), |found| {
                 examples.extend(found)
             });
         }
@@ -281,7 +329,10 @@ fn comments_of(source: &SourceFile) -> Result<Vec<Vec<TextLine>>, Errors> {
 /// An error reports each info string carrying a mark other than `ignore` and `no_run` or carrying
 /// both of them, each example written as a module named other than `DocTest`, and each example the
 /// text ends inside.
-pub fn examples_in_text(lines: &[TextLine], module: &Name) -> Result<Vec<FixExample>, Errors> {
+pub fn examples_in_text(
+    lines: &[TextLine],
+    scope: &ExampleScope,
+) -> Result<Vec<FixExample>, Errors> {
     let texts = lines
         .iter()
         .map(|line| line.text.as_str())
@@ -289,7 +340,7 @@ pub fn examples_in_text(lines: &[TextLine], module: &Name) -> Result<Vec<FixExam
     let mut examples = vec![];
     let mut errors = Errors::empty();
     for block in fix_example_blocks(&texts) {
-        errors.eat_err_or(example_of_block(lines, &block, module), |example| {
+        errors.eat_err_or(example_of_block(lines, &block, scope), |example| {
             examples.push(example)
         });
     }
@@ -301,7 +352,7 @@ pub fn examples_in_text(lines: &[TextLine], module: &Name) -> Result<Vec<FixExam
 fn example_of_block(
     lines: &[TextLine],
     block: &FencedBlock,
-    module: &Name,
+    scope: &ExampleScope,
 ) -> Result<FixExample, Errors> {
     let opening = &lines[block.open];
     let fence = Some(opening.span.clone());
@@ -346,7 +397,7 @@ fn example_of_block(
     let task = if ignore {
         ExampleTask::Ignore
     } else {
-        let source = assemble_example(lines, block.open, close, module)?;
+        let source = assemble_example(lines, block.open, close, scope)?;
         if no_run {
             ExampleTask::Compile(source)
         } else {
@@ -364,7 +415,8 @@ fn example_of_block(
 ///
 /// An example that begins with a `module` declaration is the source of the module as it stands,
 /// and it has to declare the module `DocTest`. Any other example is an expression of type `IO ()`,
-/// which is wrapped into the module as the value `DocTest::main`, with `module` imported.
+/// which is wrapped into the module as the value `DocTest::main`, importing what `scope` gives: the
+/// module the comment is written in, and each module that module imports.
 ///
 /// Each line of the example stays on the line of the comment it is written on, and the lines the
 /// example is wrapped in are written on the lines of its fences, so the positions in the source
@@ -383,7 +435,7 @@ fn assemble_example(
     lines: &[TextLine],
     open: usize,
     close: usize,
-    module: &Name,
+    scope: &ExampleScope,
 ) -> Result<SourceFile, Errors> {
     let (first_line, open_origin) = fence_origin(&lines[open]);
     let (_, close_origin) = fence_origin(&lines[close]);
@@ -439,13 +491,7 @@ fn assemble_example(
             }
             Ok(module_source)
         }
-        Err(_) => save(assemble(
-            &format!(
-                "module {}; import {}; {} : IO () = (",
-                DOC_TEST_MODULE_NAME, module, MAIN_FUNCTION_NAME
-            ),
-            ");",
-        )),
+        Err(_) => save(assemble(&scope.statement_header(), ");")),
     }
 }
 

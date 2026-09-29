@@ -3,7 +3,7 @@
 
 use crate::commands::test::{test_example, ExampleOutcome};
 use crate::configuration::Configuration;
-use crate::doc_test::{collect_examples, examples_in_text, TextLine};
+use crate::doc_test::{collect_examples, examples_in_text, ExampleScope, TextLine};
 use crate::error::panic_if_err;
 use crate::parse::parser::parse_file_path;
 use crate::parse::sourcefile::{SourceFile, Span};
@@ -31,10 +31,11 @@ fn test_std_doc_examples() {
     documents.sort();
     for document in documents {
         let doc_lines = markdown_file_lines(&document);
-        examples.extend(panic_if_err(examples_in_text(
-            &doc_lines,
-            &"Std".to_string(),
-        )));
+        let scope = ExampleScope {
+            module: "Std".to_string(),
+            imports: vec![],
+        };
+        examples.extend(panic_if_err(examples_in_text(&doc_lines, &scope)));
     }
 
     let mut failures = vec![];
@@ -917,6 +918,40 @@ fn test_error_in_an_empty_example_is_reported_at_the_closing_fence() {
     assert!(
         !output.status.success() && stderr.matches("4 | // ```").count() == 1,
         "the error of the empty example quotes its closing fence once\n{}",
+        streams(&output)
+    );
+}
+
+/// An example written as statements sees the names its module sees: the module's own, and those of
+/// the modules it imports, by the same short names, with the items an import statement lists and
+/// no others.
+#[test]
+fn test_example_sees_the_imports_of_its_module() {
+    let util = "module Util;\ntriple : I64 -> I64;\ntriple = |x| 3 * x;\nquadruple : I64 -> I64;\nquadruple = |x| 4 * x;\n";
+    let lib = r#"module Lib;
+import Util::{triple};
+
+// ```fix
+// assert_eq(|_|"", sextuple(1), triple(2))
+// ```
+//
+// ```fix,no_run
+// assert_eq(|_|"", sextuple(1), quadruple(1))
+// ```
+sextuple : I64 -> I64;
+sextuple = |x| 2 * triple(x);
+"#;
+    let dir = project_dir(&[("lib.fix", lib), ("util.fix", util)], &[]);
+    let output = fix_test(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("doc test lib.fix:4 ... ok"),
+        "the example uses `triple`, which its module imports, by the short name\n{}",
+        streams(&output)
+    );
+    assert!(
+        stderr.contains("doc test lib.fix:8 ... FAILED") && stderr.contains("quadruple"),
+        "the example cannot use `quadruple`, which its module's import leaves out\n{}",
         streams(&output)
     );
 }
