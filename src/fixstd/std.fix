@@ -4274,7 +4274,8 @@ impl F32 : ToString {
     // Writes this number in its shortest round-trip decimal form.
     //
     // A number of ordinary size is written with a point: `1.0`, `0.1`, `3.14159`. A very large or
-    // very small one is written with a power of ten: `1e13`, `1e-10`.
+    // very small one is written with a power of ten: `1.0e13`, `1.0e-10`.
+    // The text of a finite number is a floating point literal of Fix.
     to_string = |v| (
         // The widest text this writes takes 16 bytes, and the null makes 17. Two shapes reach it:
         // a sign, a point and the five zeros the window's lower edge allows before the eight digits
@@ -4362,7 +4363,8 @@ impl F64 : ToString {
     // Writes this number in its shortest round-trip decimal form.
     //
     // A number of ordinary size is written with a point: `1.0`, `0.1`, `123456.789`. A very large
-    // or very small one is written with a power of ten: `1e300`, `1e-10`.
+    // or very small one is written with a power of ten: `1.0e300`, `1.0e-10`.
+    // The text of a finite number is a floating point literal of Fix.
     to_string = |v| (
         // The widest text this writes takes 24 bytes, and the null makes 25. Two shapes reach it:
         // a sign, a point and the four zeros the window's lower edge allows before the 17 digits an

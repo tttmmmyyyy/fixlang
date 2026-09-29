@@ -28,7 +28,7 @@ number of the type, and takes `.` for the point whatever locale the program runs
 // the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
 
-// Writes the exponent of a number written with a power of ten, such as the `300` of `1e300`, at
+// Writes the exponent of a number written with a power of ten, such as the `300` of `1.0e300`, at
 // `buf` in decimal, and reports how many digits it took. No null follows them.
 //
 // `exponent` is from 0 to 999. The caller writes the `-` of a negative exponent before calling.
@@ -62,7 +62,7 @@ static int fixruntime_write_exponent(char *buf, int exponent)
 // bytes, and a null. A text written positionally spends the two bytes on a point and the `0` beside
 // it, and leaves the four unused. A text written with a power of ten spends the two bytes on a point
 // and the `e`, and the four on the rest of the power, `-324` at its widest; it leaves the zeros
-// unused.
+// unused, and a single digit takes the `0` after its point within the digits.
 #define WIDEST_FLOAT_TEXT_SIZE(low, high, digits) \
     (1 + 2 + ((-(low)) > (high) ? (-(low)) : (high)) + (digits) + 4 + 1)
 
@@ -169,7 +169,8 @@ int64_t fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8
 // shortest digits that read back as the number with a point after the first of them, `E`, and the
 // power of ten those digits are multiplied by. Fix writes those digits positionally where the
 // point falls inside or near them, and as a power of ten otherwise, so that the text stays about
-// as wide as the digits it carries: `1e300` rather than a 1 followed by 300 zeros.
+// as wide as the digits it carries: `1.0e300` rather than a 1 followed by 300 zeros. Either way the
+// text has a point, as a floating point literal of Fix does.
 //
 // # Arguments
 // * `sci` - The scientific text, null-terminated.
@@ -271,13 +272,17 @@ static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t s
     }
     else
     {
-        // 1234e30 -> 1.234e33
+        // 1234e30 -> 1.234e33, and 1e30 -> 1.0e30
         text[written++] = digits[0];
+        text[written++] = '.';
         if (digit_count > 1)
         {
-            text[written++] = '.';
             memcpy(text + written, digits + 1, (size_t)(digit_count - 1));
             written += digit_count - 1;
+        }
+        else
+        {
+            text[written++] = '0';
         }
         text[written++] = 'e';
         // `point - 1` is the power of ten the first digit carries, which is what `sci` held.
