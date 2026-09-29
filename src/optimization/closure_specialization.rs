@@ -2,6 +2,8 @@ use super::{
     capture_struct::{fresh_global_name, CaptureStruct},
     find_usage_of_name::{self, UsageType},
     move_bodies::move_bodies_into_callers,
+    pull_let,
+    rename::rename_free_names,
     uncurry::internalize_let_to_var_at_head,
     unique_local_names,
 };
@@ -23,7 +25,6 @@ use crate::{
     },
     graph::Graph,
     misc::{Map, Set},
-    optimization::{pull_let, rename::rename_free_names},
     tool::stopwatch::StopWatch,
 };
 use std::{
