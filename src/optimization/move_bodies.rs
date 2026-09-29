@@ -13,8 +13,9 @@ use crate::{
 };
 use std::sync::Arc;
 
-/// Put the body of each function `callees` lists for a symbol where that symbol calls it, where that
-/// moves the body (`is_moved_by_placing`), and reduce the application the body is left in.
+/// Put the body of each function `callees_by_caller` lists for a symbol where that symbol calls it,
+/// where that moves the body (`is_moved_by_placing`), and reduce the application the body is left
+/// in.
 ///
 /// A body goes in one level deep: every body is read as it stands before any of them is put
 /// anywhere, and the calls a placed body makes are left as calls. What the program grows by is
@@ -22,12 +23,13 @@ use std::sync::Arc;
 /// receives is placed once.
 ///
 /// # Arguments
-/// * `callees` - for each symbol, the functions whose bodies are to be put where it calls them.
+/// * `callees_by_caller` - for each symbol, the functions whose bodies are to be put where it calls
+///   them.
 pub fn move_bodies_into_callers(
     symbols: &mut Map<FullName, Symbol>,
-    callees: &Map<FullName, Vec<FullName>>,
+    callees_by_caller: &Map<FullName, Vec<FullName>>,
 ) {
-    let bodies = callees
+    let bodies = callees_by_caller
         .iter()
         .flat_map(|(caller, callees)| callees.iter().map(move |callee| (caller, callee)))
         .map(|(caller, callee)| {
@@ -55,7 +57,7 @@ pub fn move_bodies_into_callers(
     // argument for all of them.
     let arity_map = create_global_lambda_to_arity_map(symbols);
 
-    for (caller, callees) in callees {
+    for (caller, callees) in callees_by_caller {
         // The body goes in where that is a move rather than a copy: the caller is the only symbol
         // naming the function, and it names it as the callee of one saturated call, so the body ends
         // up in one place and the function itself falls to dead-symbol elimination. Where the
@@ -90,9 +92,9 @@ pub fn move_bodies_into_callers(
     }
 }
 
-/// Whether putting `callee`'s body where `caller` writes its name moves the body rather than copying
-/// it: `caller` is the only symbol naming `callee`, it writes the name once, and that one place is
-/// the callee of a call supplying every argument.
+/// Whether putting `callee`'s body where `caller_expr` writes its name moves the body rather than
+/// copying it: the caller whose body is `caller_expr` is the only symbol naming `callee`, it writes
+/// the name once, and that one place is the callee of a call supplying every argument.
 ///
 /// The body goes into every place the name is written, so one place is what makes putting it there a
 /// move. What that one place is decides the rest: a name passed as an argument, captured, held as a
@@ -100,12 +102,12 @@ pub fn move_bodies_into_callers(
 /// which is a body that has to stay.
 ///
 /// # Arguments
-/// * `caller` - the body of the caller, in which the uses of `callee` are counted.
+/// * `caller_expr` - the body of the caller, in which the uses of `callee` are counted.
 /// * `naming_symbol_counts` - how many symbols of the program name each global.
 /// * `arity_map` - how many parameters each global lambda takes.
 fn is_moved_by_placing(
     callee: &FullName,
-    caller: &Arc<ExprNode>,
+    caller_expr: &Arc<ExprNode>,
     naming_symbol_counts: &Map<FullName, usize>,
     arity_map: &Map<FullName, usize>,
 ) -> bool {
@@ -126,7 +128,7 @@ fn is_moved_by_placing(
     // name once, and writes it as the callee of a call supplying every parameter, exactly when this
     // is the whole of what it says about the name.
     matches!(
-        find_usage_of_name::run(caller, callee).as_slice(),
+        find_usage_of_name::run(caller_expr, callee).as_slice(),
         [UsageType::CalledAsFunction { arg_count }] if *arg_count == arity
     )
 }
@@ -238,15 +240,15 @@ mod tests {
     fn two_calls_keep_the_body() {
         let lambda = lifted(0);
         let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
-        let callee = FullName::from_strs(&["Main"], "g#0123abcd");
-        let caller = expr_app(
-            expr_app(expr_var(callee, None), vec![call(&lambda, 1)], None),
+        let other_callee = FullName::from_strs(&["Main"], "g#0123abcd");
+        let caller_expr = expr_app(
+            expr_app(expr_var(other_callee, None), vec![call(&lambda, 1)], None),
             vec![call(&lambda, 1)],
             None,
         );
         assert!(!is_moved_by_placing(
             &lambda,
-            &caller,
+            &caller_expr,
             &naming_symbol_counts,
             &arity_map
         ));
@@ -257,10 +259,10 @@ mod tests {
     fn a_lambda_passed_as_an_argument_keeps_its_body() {
         let lambda = lifted(0);
         let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
-        let callee = FullName::from_strs(&["Main"], "g#0123abcd");
-        let caller = expr_app(
+        let other_callee = FullName::from_strs(&["Main"], "g#0123abcd");
+        let caller_expr = expr_app(
             expr_app(
-                expr_var(callee, None),
+                expr_var(other_callee, None),
                 vec![expr_var(lambda.clone(), None)],
                 None,
             ),
@@ -269,7 +271,7 @@ mod tests {
         );
         assert!(!is_moved_by_placing(
             &lambda,
-            &caller,
+            &caller_expr,
             &naming_symbol_counts,
             &arity_map
         ));
@@ -282,7 +284,7 @@ mod tests {
     fn a_lambda_a_let_also_binds_keeps_its_body() {
         let lambda = lifted(0);
         let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
-        let caller = expr_let(
+        let caller_expr = expr_let(
             PatternNode::make_var(var_var(FullName::local("v")), None),
             expr_var(lambda.clone(), None),
             call(&lambda, 2),
@@ -290,7 +292,7 @@ mod tests {
         );
         assert!(!is_moved_by_placing(
             &lambda,
-            &caller,
+            &caller_expr,
             &naming_symbol_counts,
             &arity_map
         ));

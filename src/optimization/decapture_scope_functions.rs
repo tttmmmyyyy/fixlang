@@ -79,7 +79,7 @@ use std::sync::Arc;
 /// bound by `let` and used nowhere else.
 pub fn run(prg: &mut Program) {
     // For each symbol, the global functions the functions it gives to ops now call.
-    let mut callees: Map<FullName, Vec<FullName>> = Map::default();
+    let mut callees_by_caller: Map<FullName, Vec<FullName>> = Map::default();
     for (name, sym) in &mut prg.symbols {
         let expr = sym.expr.as_ref().unwrap();
         let mut collector = EnvFunctionCollector {
@@ -98,10 +98,10 @@ pub fn run(prg: &mut Program) {
         let res = mover.traverse(expr);
         if res.changed {
             sym.expr = Some(res.expr);
-            callees.insert(name.clone(), mover.callees);
+            callees_by_caller.insert(name.clone(), mover.callees);
         }
     }
-    move_bodies_into_callers(&mut prg.symbols, &callees);
+    move_bodies_into_callers(&mut prg.symbols, &callees_by_caller);
 }
 
 /// The name an op declaring `LLVMGen::env_operand` applies as a function, if `llvm` is such an op.
