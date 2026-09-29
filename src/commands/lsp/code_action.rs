@@ -236,7 +236,7 @@ fn handle_missing_struct_field(
         return;
     };
     actions.push(quick_fix(
-        add_missing_fields_title(&missing),
+        missing_fields_fix_title(&missing),
         diag,
         uri,
         edits,
@@ -274,7 +274,7 @@ fn handle_missing_pattern_field(
         .collect::<Vec<_>>();
     if let Some(edits) = insert_fields_edits(content, &diag.range, &items) {
         actions.push(quick_fix(
-            add_missing_fields_title(&missing),
+            missing_fields_fix_title(&missing),
             diag,
             uri,
             edits,
@@ -298,7 +298,7 @@ fn missing_fields_of(diag: &lsp_types::Diagnostic) -> Option<Vec<String>> {
 }
 
 /// The title of a quick fix that adds the fields `missing`.
-fn add_missing_fields_title(missing: &[Name]) -> String {
+fn missing_fields_fix_title(missing: &[Name]) -> String {
     format!("Add missing {}", describe_field_names(missing))
 }
 
