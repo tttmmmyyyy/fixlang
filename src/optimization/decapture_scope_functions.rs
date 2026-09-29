@@ -70,7 +70,7 @@ use crate::{
         traverse::{ExprVisitor, StartVisitResult, VisitState},
         types::{tycon, TypeNode},
     },
-    constants::SCOPE_ENV_PREFIX,
+    constants::DECAPTURE_PREFIX,
     fixstd::builtin::{make_tuple_name_abs, make_tuple_ty},
     misc::{Map, Set},
 };
@@ -176,7 +176,7 @@ impl CaptureListMover<'_> {
         let id = self.counter;
         self.counter += 1;
         let local =
-            |suffix: &str| FullName::local(&format!("{}{}{}", SCOPE_ENV_PREFIX, id, suffix));
+            |suffix: &str| FullName::local(&format!("{}{}{}", DECAPTURE_PREFIX, id, suffix));
         self.callees.push(func.get_var().name.clone());
 
         // The ops apply `h` to the tuple `(env, r_1, ..., r_k)`, where `r_1`, ..., `r_k` are the

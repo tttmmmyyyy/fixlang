@@ -135,7 +135,7 @@ pub const CLOSURE_CALL_LAM_SUFFIX: &str = "#closure_call_lam";
 /// parameter of this type is a function whose identity the receiving body knows.
 pub const CAP_LIST_PREFIX: &str = "#CapList";
 /// The prefix, followed by a counter, of the local names `decapture_scope_functions` binds.
-pub const SCOPE_ENV_PREFIX: &str = "#scope_env";
+pub const DECAPTURE_PREFIX: &str = "#decapture";
 /// The prefix of the name `collapse_constructions` binds a field value to, so that a reader of the
 /// struct is given a name rather than the expression that produced the value.
 pub const BOUND_FIELD_PREFIX: &str = "#field";
