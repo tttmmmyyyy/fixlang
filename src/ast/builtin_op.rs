@@ -11,9 +11,9 @@ use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::sync::Arc;
 
-/// One builtin operation. Each builtin is a struct that implements this trait; a
-/// `BuiltinOpExpr` holds a `Box<dyn BuiltinOp>`. `typetag` serializes the trait object (tagged by
-/// op) so the typecheck cache round-trips it.
+/// One builtin operation. Each builtin is a struct that implements this trait; a `BuiltinOpExpr`
+/// holds a `Box<dyn BuiltinOp>`. `typetag` serializes the trait object (tagged by op) so the
+/// typecheck cache round-trips it.
 #[typetag::serde(tag = "op")]
 pub trait BuiltinOp: DynClone + Send + Sync {
     /// Emit the op's code and return its value.
@@ -156,9 +156,9 @@ pub trait BuiltinOp: DynClone + Send + Sync {
     /// argument `i`'s leaf, which also declares that argument leaf unconsumed. It may therefore only
     /// name a leaf the op passes through without producing a new reference to it — an op that hands
     /// back a value whose reference count or sharing it also reports on, or that publishes the value,
-    /// must not (see `IsUniqueOp` and `MarkThreadedOp`, which
-    /// say why). A leaf that joins an argument with another source says only where the result's
-    /// sharing comes from: the op consumes that argument like any other.
+    /// must not (see `IsUniqueOp` and `MarkThreadedOp`, which say why). A leaf that joins an
+    /// argument with another source says only where the result's sharing comes from: the op
+    /// consumes that argument like any other.
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -256,8 +256,8 @@ pub fn clone_path_rc_targets(check: Option<UniqueCheckOperand>) -> Vec<RcTarget>
     }
 }
 
-/// A builtin operation as it stands in an expression: the operation to emit, and the
-/// type the expression was declared at.
+/// A builtin operation as it stands in an expression: the operation to emit, and the type the
+/// expression was declared at.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BuiltinOpExpr {
     /// The operation this expression emits.

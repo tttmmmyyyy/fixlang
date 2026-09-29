@@ -188,11 +188,11 @@ struct Validator<'a> {
     location: String,
     /// Every name bound anywhere in this body; a second binding of one is a duplicate.
     seen: Set<FullName>,
-    /// The names bound to a value made by `NoStorageValueOp`. A value of a type that
-    /// occupies no storage holds no boxed value, since a pointer takes storage, so no reference
-    /// count acts on one. `lower_lam` leaves such a capture out of the closure on that ground, and
-    /// this is where the ground is checked: the passes that run between the stages this validator
-    /// is called at — reference-count insertion, `borrow_ify`, `cancel` — must place no node on one.
+    /// The names bound to a value made by `NoStorageValueOp`. A value of a type that occupies no
+    /// storage holds no boxed value, since a pointer takes storage, so no reference count acts on
+    /// one. `lower_lam` leaves such a capture out of the closure on that ground, and this is where
+    /// the ground is checked: the passes that run between the stages this validator is called at —
+    /// reference-count insertion, `borrow_ify`, `cancel` — must place no node on one.
     made_without_storage: Set<FullName>,
     /// The names currently in scope, which a use must resolve to.
     scope: Set<FullName>,

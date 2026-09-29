@@ -271,8 +271,8 @@ impl<'c, 'm> Generator<'c, 'm> {
                         }
                     }
                 }
-                // A builtin op may build the tail return itself (`FixOp`), in which case it
-                // yields no value. A diverging op (`undefined`) does not: it emits `unreachable` and
+                // A builtin op may build the tail return itself (`FixOp`), in which case it yields
+                // no value. A diverging op (`undefined`) does not: it emits `unreachable` and
                 // yields a poison value, so the continuation is generated as dead code.
                 let op_tail = self.binding_fuses_into_return(x, k, tail);
                 // What the op says about applying its operands, for `apply_lambda` to check it by.
@@ -343,8 +343,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    /// Abort, in compiler development mode, where a builtin op that declared its result to be
-    /// one of its operands answered with another object.
+    /// Abort, in compiler development mode, where a builtin op that declared its result to be one
+    /// of its operands answered with another object.
     ///
     /// `result_prov` lets an op declare its result to be argument `i` itself, the same object.
     /// Reference counting reads that as identity: the argument goes unconsumed, and a retain of the

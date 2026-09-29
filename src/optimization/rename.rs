@@ -144,9 +144,9 @@ impl ExprVisitor for Substitutor {
         EndVisitResult::changed(new_expr)
     }
 
-    /// Substitutes the free names a builtin node reads: a name mapped to another name is
-    /// renamed in place, and a name mapped to a general expression is renamed to a fresh name,
-    /// which a `let` wrapped around the node binds to that expression.
+    /// Substitutes the free names a builtin node reads: a name mapped to another name is renamed in
+    /// place, and a name mapped to a general expression is renamed to a fresh name, which a `let`
+    /// wrapped around the node binds to that expression.
     fn end_visit_builtin(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -509,8 +509,8 @@ mod tests {
         FullName::local(name)
     }
 
-    /// A builtin expression building a tuple out of the local names `names`, in that order, so
-    /// that it reads exactly those names.
+    /// A builtin expression building a tuple out of the local names `names`, in that order, so that
+    /// it reads exactly those names.
     fn builtin_with_free_names(names: &[&str]) -> Arc<ExprNode> {
         let op = MakeStructOp {
             field_names: names.iter().map(|name| local(name)).collect(),
@@ -530,8 +530,8 @@ mod tests {
         expr.get_builtin().op.free_vars()
     }
 
-    /// The names bound by the `let`s wrapped around a builtin expression, outermost first,
-    /// together with the expression itself.
+    /// The names bound by the `let`s wrapped around a builtin expression, outermost first, together
+    /// with the expression itself.
     fn peel_lets(expr: &Arc<ExprNode>) -> (Vec<FullName>, Arc<ExprNode>) {
         let mut binders = vec![];
         let mut expr = expr.clone();
@@ -559,8 +559,8 @@ mod tests {
         )
     }
 
-    /// A substitutor renaming `x` to `a` and leaving `y` where it is. A builtin node reading
-    /// both applies the identity mapping second, after it has already renamed a name.
+    /// A substitutor renaming `x` to `a` and leaving `y` where it is. A builtin node reading both
+    /// applies the identity mapping second, after it has already renamed a name.
     fn x_to_a_and_y_to_y() -> Substitutor {
         let mut map = Map::default();
         map.insert(local("x"), expr_var(local("a"), None));
@@ -568,8 +568,8 @@ mod tests {
         Substitutor::new(map)
     }
 
-    /// Verifies that a builtin node reports a change once any of its free names is renamed,
-    /// even when a name mapped to itself is substituted afterwards.
+    /// Verifies that a builtin node reports a change once any of its free names is renamed, even
+    /// when a name mapped to itself is substituted afterwards.
     #[test]
     fn renaming_one_llvm_free_name_reports_a_change() {
         let res = x_to_a_and_y_to_y().traverse(&builtin_with_free_names(&["x", "y"]));
@@ -577,8 +577,8 @@ mod tests {
         assert!(res.changed);
     }
 
-    /// Verifies that a builtin node whose only substituted name maps to itself reports no
-    /// change, which is what lets a caller take the flag as an answer about the node.
+    /// Verifies that a builtin node whose only substituted name maps to itself reports no change,
+    /// which is what lets a caller take the flag as an answer about the node.
     #[test]
     fn an_identity_mapping_alone_reports_no_change() {
         let res = x_to_a_and_y_to_y().traverse(&builtin_with_free_names(&["y", "w"]));
@@ -699,8 +699,8 @@ mod tests {
         );
     }
 
-    /// Verifies that the substitution of a builtin node's free names is simultaneous: it
-    /// applies to the names the node read on entry, so a name a rename introduced is left alone.
+    /// Verifies that the substitution of a builtin node's free names is simultaneous: it applies to
+    /// the names the node read on entry, so a name a rename introduced is left alone.
     #[test]
     fn substituting_llvm_free_names_is_simultaneous() {
         let mut map = Map::default();

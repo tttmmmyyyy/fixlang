@@ -468,8 +468,8 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    /// Lower a builtin operation: its free variables become its operands, in the fixed order
-    /// the op reads them, and the appended binding holds the value the operation produces.
+    /// Lower a builtin operation: its free variables become its operands, in the fixed order the op
+    /// reads them, and the appended binding holds the value the operation produces.
     fn lower_llvm(
         &mut self,
         inline: &Arc<BuiltinOpExpr>,
@@ -478,8 +478,8 @@ impl<'a> Lowerer<'a> {
         bindings: &mut Vec<PendingBinding>,
     ) -> RcVar {
         let mut op = inline.op.clone();
-        // The op's free variables are its operands, in a fixed order. A local operand reuses
-        // the variable already bound to it; an operand that is not a local is a reference to a global
+        // The op's free variables are its operands, in a fixed order. A local operand reuses the
+        // variable already bound to it; an operand that is not a local is a reference to a global
         // value or function, materialized by code generation from its (unchanged) name.
         let operand_vars: Vec<RcVar> = op
             .free_vars()
@@ -503,8 +503,8 @@ impl<'a> Lowerer<'a> {
                 }
             })
             .collect();
-        // Rewrite the op's embedded operand names to the fresh local names, so code
-        // generation resolves them from scope.
+        // Rewrite the op's embedded operand names to the fresh local names, so code generation
+        // resolves them from scope.
         let slots = op.free_vars_mut();
         // The operands were built from this op's free variables, so the two correspond. Were they to
         // differ, `zip` would leave the operands past the shorter one naming variables that lowering

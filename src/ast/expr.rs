@@ -805,6 +805,8 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    /// This `Expr::Builtin` node with its `BuiltinOpExpr` replaced by `builtin`. Panics on any other
+    /// node.
     pub fn set_builtin(&self, builtin: BuiltinOpExpr) -> Arc<ExprNode> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
@@ -818,6 +820,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    /// The `BuiltinOpExpr` of this `Expr::Builtin` node. Panics on any other node.
     pub fn get_builtin(&self) -> Arc<BuiltinOpExpr> {
         match &*self.expr {
             Expr::Builtin(builtin) => builtin.clone(),
@@ -1660,6 +1663,7 @@ pub fn var_local(var_name: &str) -> Arc<Var> {
     var_var(FullName::local(var_name))
 }
 
+/// An expression applying `op`, declared at `ty` (its `generic_ty`).
 pub fn expr_builtin(op: Box<dyn BuiltinOp>, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::Builtin(Arc::new(BuiltinOpExpr {
         op,

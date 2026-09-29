@@ -502,11 +502,11 @@ fn binds_a_destructor(node: &RcExprNode) -> bool {
 /// function.
 ///
 /// Reaching one is over-approximated where the callee is not named: a body that can apply a function
-/// value without naming it — a call through a local holding a closure, or a builtin op that
-/// applies one of its operands (`BuiltinOp::applies_a_function_operand`) — is given an edge to
-/// every function a closure can carry, since which one it holds is decided at run time. A release
-/// runs a destructor function the same way, and sits in every body, so every function is given an
-/// edge to the closures a `Destructor` of a type this program mentions can carry.
+/// value without naming it — a call through a local holding a closure, or a builtin op that applies
+/// one of its operands (`BuiltinOp::applies_a_function_operand`) — is given an edge to every
+/// function a closure can carry, since which one it holds is decided at run time. A release runs a
+/// destructor function the same way, and sits in every body, so every function is given an edge to
+/// the closures a `Destructor` of a type this program mentions can carry.
 ///
 /// Borrowing changes what such an op reports. A borrowed parameter's reference is disposed of by the
 /// caller after the call rather than by this function before the op runs, so the count the op reads

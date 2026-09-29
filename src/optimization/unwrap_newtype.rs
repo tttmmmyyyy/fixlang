@@ -202,9 +202,9 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         EndVisitResult::changed(expr)
     }
 
-    /// Unwraps the type recorded for a builtin expression, and replaces the read, the write,
-    /// the punch and the plug-in of an unwrapped newtype's field by the field value itself, which
-    /// is what a value of that type has become.
+    /// Unwraps the type recorded for a builtin expression, and replaces the read, the write, the
+    /// punch and the plug-in of an unwrapped newtype's field by the field value itself, which is
+    /// what a value of that type has become.
     fn end_visit_builtin(
         &mut self,
         expr: &Arc<ExprNode>,

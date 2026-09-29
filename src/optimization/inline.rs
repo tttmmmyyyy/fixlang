@@ -267,8 +267,8 @@ impl InlineCost {
     /// only where it is called.
     ///
     /// What qualifies is what costs nothing to hold in several places: an operation a copy of
-    /// which costs no more than itself, a lambda whose body is one builtin operation, and a
-    /// name that stands for another name.
+    /// which costs no more than itself, a lambda whose body is one builtin operation, and a name
+    /// that stands for another name.
     fn may_be_inlined_at_non_call_site(&self) -> bool {
         if self.is_std_fix {
             return false;
@@ -439,8 +439,8 @@ impl ExprVisitor for InlineCostCalculator {
         EndVisitResult::unchanged(expr)
     }
 
-    /// Counts the builtin operation as one unit of `complexity`, and each global name free in
-    /// it as one use of the symbol it names.
+    /// Counts the builtin operation as one unit of `complexity`, and each global name free in it as
+    /// one use of the symbol it names.
     fn end_visit_builtin(
         &mut self,
         expr: &Arc<ExprNode>,

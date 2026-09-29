@@ -229,8 +229,9 @@ pub enum RcRhs {
     /// unboxed `{funptr, capture-object pointer}` pair; only the capture object is boxed (a null
     /// pointer for an empty capture).
     Closure(FuncRef, Vec<RcVar>),
-    /// A built-in operation (arithmetic, projection getters, set/mod, construction, fill, literals,
-    /// FFI, and so on), reusing the existing builtin operations.
+    /// A builtin operation (arithmetic, projection getters, set/mod, construction, fill, literals,
+    /// FFI, and so on): the `BuiltinOp` of the expression it was lowered from, with the operand
+    /// names it embeds rewritten to the variables of the argument list.
     Builtin(Box<dyn BuiltinOp>, Vec<RcVar>),
     /// The sole branching construct (booleans included). It always appears as the right-hand side
     /// of a `Let`.

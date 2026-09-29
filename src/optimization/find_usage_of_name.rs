@@ -19,13 +19,13 @@ pub enum UsageType {
     // constructor of that struct, and the second the position of the field among the fields the
     // type constructor declares.
     CapturedInto(FullName, usize),
-    // The name is the operand a builtin operation declaring `BuiltinOp::env_operand` applies as
-    // a function.
+    // The name is the operand a builtin operation declaring `BuiltinOp::env_operand` applies as a
+    // function.
     EnvFunctionOperand,
     // The name stands where none of the above receives it: the bound value of a `let`, a branch of
     // an `if` or a `match`, an element of an array literal, under a type annotation, either side of
-    // an `eval`, or another operand of a builtin operation. What holds it there passes it on
-    // whole, so the position says nothing about the name beyond its being there.
+    // an `eval`, or another operand of a builtin operation. What holds it there passes it on whole,
+    // so the position says nothing about the name beyond its being there.
     Elsewhere,
 }
 

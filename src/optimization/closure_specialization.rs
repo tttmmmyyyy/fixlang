@@ -1026,8 +1026,8 @@ fn reaches_a_direct_call(
                     )
                 })
             }
-            // A builtin operation applies the function it is given through a pointer, which
-            // is an indirect call.
+            // A builtin operation applies the function it is given through a pointer, which is an
+            // indirect call.
             UsageType::EnvFunctionOperand => false,
             // A value held where nothing takes it apart is passed on whole, so a way in is reached
             // through whatever holds it rather than here.
@@ -1664,8 +1664,8 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
-    /// Give a builtin expression the closures it is written against: each free variable holding
-    /// a bare capture list is bound, ahead of the expression, to the lifted lambda applied to that
+    /// Give a builtin expression the closures it is written against: each free variable holding a
+    /// bare capture list is bound, ahead of the expression, to the lifted lambda applied to that
     /// capture list, and the expression reads the binding under the name `CLOSURE_CALL_LAM_SUFFIX`
     /// gives it.
     fn start_visit_builtin(

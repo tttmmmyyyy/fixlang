@@ -870,6 +870,7 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
     }
 }
 
+/// An integer literal of the expression's type, whose value is `val` truncated to the type's width.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IntLitOp {
     val: u64,
@@ -926,6 +927,7 @@ pub fn expr_int_lit(val: u64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<Ex
     expr_builtin(Box::new(IntLitOp { val }), ty, source).global_to_absolute()
 }
 
+/// A floating-point literal of the expression's type.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FloatLitOp {
     val: f64,
@@ -982,6 +984,7 @@ pub fn expr_float_lit(val: f64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<
     expr_builtin(Box::new(FloatLitOp { val }), ty, source)
 }
 
+/// The null `Ptr`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NullPtrLitOp {}
 
@@ -4892,6 +4895,8 @@ pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Reads the field at `field_idx` out of the struct `var_name` names: the body of a struct's field
+/// getter `@f`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StructGetOp {
     pub var_name: FullName,
@@ -5098,9 +5103,9 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
     (expr, scm)
 }
 
-// Allocate a struct/tuple and fill it with the operand values, in field-declaration order. The
-// struct type is the value type of the enclosing expression. This is the RC IR counterpart of the
-// `Expr::MakeStruct` AST node, reading its operands as pre-evaluated atoms.
+/// Allocate a struct/tuple and fill it with the operand values, in field-declaration order. The
+/// struct type is the value type of the enclosing expression. This is the RC IR counterpart of the
+/// `Expr::MakeStruct` AST node, reading its operands as pre-evaluated atoms.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct MakeStructOp {
     pub field_names: Vec<FullName>,
@@ -5243,9 +5248,9 @@ impl BuiltinOp for ArrayLitOp {
     }
 }
 
-// Call a C function. This is the RC IR counterpart of the `Expr::FFICall` AST node. `arg_names` are
-// the operands; when `is_io`, the last one is the input `IOState` token, which establishes the
-// ordering dependency but is not passed to C.
+/// Call a C function. This is the RC IR counterpart of the `Expr::FFICall` AST node. `arg_names`
+/// are the operands; when `is_io`, the last one is the input `IOState` token, which establishes the
+/// ordering dependency but is not passed to C.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FFICallOp {
     pub fun_name: Name,
@@ -5315,9 +5320,10 @@ impl BuiltinOp for FFICallOp {
     }
 }
 
-// Project a captured value out of a lifted closure's capture object, retaining it (a retain-getter).
-// Lowering emits this at the entry of a lifted closure function to bind each captured variable.
-// `cap_tys` are the types of all captured values, needed to reconstruct the capture object's layout.
+/// Project a captured value out of a lifted closure's capture object, retaining it (a
+/// retain-getter). Lowering emits this at the entry of a lifted closure function to bind each
+/// captured variable. `cap_tys` are the types of all captured values, needed to reconstruct the
+/// capture object's layout.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct CaptureProjectOp {
     pub cap_name: FullName,
@@ -5553,8 +5559,8 @@ impl BuiltinOp for StructPunchOp {
         // The result is `(field, punched struct)`.
         //
         // A punched boxed struct is uniquely owned either way, for the reason
-        // `ArrayPunchOp::result_prov` gives, and that is what lets the `plug_in` completing
-        // the update drop its own check. The field is moved out without a retain, so another holder of
+        // `ArrayPunchOp::result_prov` gives, and that is what lets the `plug_in` completing the
+        // update drop its own check. The field is moved out without a retain, so another holder of
         // it may still be live and its leaves stay `Unknown`.
         //
         // Punching an unboxed struct only takes it apart in registers: the field and the remaining
@@ -7398,9 +7404,9 @@ pub fn union_mod_function(
     (expr, scm)
 }
 
-/// The builtin operation of `_undefined_internal`: with runtime checks on it prints the
-/// message and aborts, and with them off it emits an `unreachable` instruction. Either way the
-/// expression stands for a value of the result type that is never produced.
+/// The builtin operation of `_undefined_internal`: with runtime checks on it prints the message and
+/// aborts, and with them off it emits an `unreachable` instruction. Either way the expression
+/// stands for a value of the result type that is never produced.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct UndefinedInternalOp {
     /// The variable holding the message printed before aborting.
@@ -7574,8 +7580,7 @@ pub struct WithRetainedOp {
     x_name: FullName,
 }
 
-/// The function operand of `WithRetainedOp`, and the environment operand it
-/// hands it.
+/// The function operand of `WithRetainedOp`, and the environment operand it hands it.
 const WITH_RETAINED_ENV_OPERAND: EnvOperand = EnvOperand {
     function: 0,
     env: 1,
@@ -7964,16 +7969,15 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// Tests whether a flipped `Array`'s storage is uniquely referenced, reading the storage's reference
 /// count in place without retaining it, and hands the array back unchanged. This is the array
-/// counterpart of `IsUniqueOp`: the generic op cannot serve, because an unboxed
-/// `Array` value would take its "unboxed is always unique" branch and report a shared array as
-/// unique. The attributes mirror the generic op so the borrow pass treats the array as consumed and
-/// reports sharing correctly. Provenance recognizes this op alongside the generic one (see
-/// `provenance.rs`).
+/// counterpart of `IsUniqueOp`: the generic op cannot serve, because an unboxed `Array` value would
+/// take its "unboxed is always unique" branch and report a shared array as unique. The attributes
+/// mirror the generic op so the borrow pass treats the array as consumed and reports sharing
+/// correctly. Provenance recognizes this op alongside the generic one (see `provenance.rs`).
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArrayIsStorageUniqueOp {
     var_name: FullName,
-    /// As in `IsUniqueOp`: set where the caller proved the array statically
-    /// unique, so the runtime check is dropped and the flag is the constant `true`.
+    /// As in `IsUniqueOp`: set where the caller proved the array statically unique, so the runtime
+    /// check is dropped and the flag is the constant `true`.
     pub(crate) assume_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -8069,8 +8073,8 @@ impl BuiltinOp for ArrayIsStorageUniqueOp {
         _arg_tys: &[Arc<TypeNode>],
         _type_env: &TypeEnv,
     ) -> Vec<RcTarget> {
-        // As in `IsUniqueOp`: reading the count counts no reference, so the
-        // clone path's targets the default would supply are not this op's.
+        // As in `IsUniqueOp`: reading the count counts no reference, so the clone path's targets
+        // the default would supply are not this op's.
         vec![]
     }
 
@@ -8096,9 +8100,9 @@ impl BuiltinOp for ArrayIsStorageUniqueOp {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // As in `IsUniqueOp`: the array comes back unchanged as the second
-        // component, yet the result stays the conservative `Unknown` so the borrow pass treats the
-        // argument as consumed. That consuming treatment is what makes the op detect sharing.
+        // As in `IsUniqueOp`: the array comes back unchanged as the second component, yet the
+        // result stays the conservative `Unknown` so the borrow pass treats the argument as
+        // consumed. That consuming treatment is what makes the op detect sharing.
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
@@ -8139,6 +8143,7 @@ pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The builtin operation of `Std::FFI::_boxed_to_retained_ptr_ios`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BoxedToRetainedPtrIOSOp {
     val_name: FullName,
@@ -8237,6 +8242,7 @@ pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The builtin operation of `Std::FFI::_boxed_from_retained_ptr_ios`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BoxedFromRetainedPtrIOSOp {
     ptr_name: FullName,
@@ -8370,6 +8376,7 @@ fn rc_function_of_boxed_value<'c, 'm>(
     make_ptr_obj(gc, func_ptr, &format!("ret_val@get_funptr_{}", operation))
 }
 
+/// The builtin operation of `Std::FFI::get_funptr_release`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GetReleaseFunctionOfBoxedValueOp {
     var_name: FullName,
@@ -8436,6 +8443,7 @@ pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The builtin operation of `Std::FFI::get_funptr_retain`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GetRetainFunctionOfBoxedValueOp {
     var_name: FullName,
@@ -8641,8 +8649,8 @@ fn assert_array_storage_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, array: &Objec
     gc.build_assert_unique(storage_ptr);
 }
 
-/// The pointer that `BorrowPtrOp` and `MutatePtrOp` pass to their function
-/// operand: the first element of an array's element buffer, or the payload of a boxed value.
+/// The pointer that `BorrowPtrOp` and `MutatePtrOp` pass to their function operand: the first
+/// element of an array's element buffer, or the payload of a boxed value.
 fn get_lent_ptr<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) -> PointerValue<'c> {
     if val.ty.is_array() {
         return get_array_storage_buf(gc, val);
@@ -8699,8 +8707,8 @@ impl BuiltinOp for GetLentPtrOp {
     }
 }
 
-/// The definition of a function `x_ty -> Ptr` evaluated by `GetLentPtrOp`, whose type
-/// scheme has the predicates `preds`.
+/// The definition of a function `x_ty -> Ptr` evaluated by `GetLentPtrOp`, whose type scheme has
+/// the predicates `preds`.
 fn get_lent_ptr_function(
     x_ty: Arc<TypeNode>,
     preds: Vec<Predicate>,
@@ -8796,8 +8804,7 @@ impl BuiltinOp for BorrowPtrOp {
     }
 }
 
-/// The type variable `b` that the function operand of `BorrowPtrOp` or
-/// `MutatePtrOp` returns.
+/// The type variable `b` that the function operand of `BorrowPtrOp` or `MutatePtrOp` returns.
 ///
 /// Panics if `x_ty`, the type of the value the pointer points into, mentions `b`.
 fn lent_ptr_result_tyvar(x_ty: &Arc<TypeNode>) -> Arc<TypeNode> {
@@ -8811,9 +8818,8 @@ fn lent_ptr_result_tyvar(x_ty: &Arc<TypeNode>) -> Arc<TypeNode> {
     type_tyvar_star(B_TYPE_NAME)
 }
 
-/// The definition of a function `(Ptr -> b) -> x_ty -> b` evaluated by `BorrowPtrOp`
-/// with the empty environment, whose type scheme has the predicates `preds`. `x_ty` must not mention
-/// `b`.
+/// The definition of a function `(Ptr -> b) -> x_ty -> b` evaluated by `BorrowPtrOp` with the empty
+/// environment, whose type scheme has the predicates `preds`. `x_ty` must not mention `b`.
 fn borrow_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const F_NAME: &str = "f";
     const X_NAME: &str = "x";
@@ -9003,11 +9009,10 @@ impl BuiltinOp for MutatePtrOp {
     }
 }
 
-/// The operand position of the value `BorrowPtrOp` and `MutatePtrOp` lend a
-/// pointer into.
+/// The operand position of the value `BorrowPtrOp` and `MutatePtrOp` lend a pointer into.
 const LENT_VALUE_ARG: usize = 0;
-/// The function operand of `BorrowPtrOp` and `MutatePtrOp`, and the
-/// environment operand they hand it.
+/// The function operand of `BorrowPtrOp` and `MutatePtrOp`, and the environment operand they hand
+/// it.
 const LENT_PTR_ENV_OPERAND: EnvOperand = EnvOperand {
     function: 1,
     env: 2,
@@ -9017,8 +9022,8 @@ const MUTATE_PTR_VALUE_PATH: [usize; 2] = [1, 0];
 
 /// The definition of a function
 /// `(Ptr -> IOState -> (IOState, b)) -> x_ty -> IOState -> (IOState, (x_ty, b))` evaluated by
-/// `MutatePtrOp` with the empty environment, whose type scheme has the predicates
-/// `preds`. `x_ty` must not mention `b`.
+/// `MutatePtrOp` with the empty environment, whose type scheme has the predicates `preds`. `x_ty`
+/// must not mention `b`.
 fn mutate_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const F_NAME: &str = "f";
     const X_NAME: &str = "x";
@@ -9069,6 +9074,7 @@ pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
     mutate_ptr_function(a_ty, preds)
 }
 
+/// The builtin operation of `Std::IO::IOState::_unsafe_create`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IOStateUnsafeCreateOp {}
 
@@ -9113,6 +9119,7 @@ pub fn make_iostate_unsafe_create() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The builtin operation of `Std::FFI::Destructor::_make`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct DestructorMakeOp {
     value: FullName,
@@ -9466,6 +9473,7 @@ pub fn eq_trait_id() -> TraitId {
     }
 }
 
+/// Integer equality: the `Std::Eq` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IntEqOp {
     lhs_name: FullName,
@@ -9617,6 +9625,7 @@ pub fn eq_trait_instance_ptr(ty: Arc<TypeNode>) -> TraitImpl {
     )
 }
 
+/// Floating-point equality: the `Std::Eq` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FloatEqOp {
     lhs_name: FullName,
@@ -9700,6 +9709,7 @@ pub fn less_than_trait_id() -> TraitId {
     }
 }
 
+/// Integer comparison: the `Std::LessThan` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IntLessThanOp {
     lhs_name: FullName,
@@ -9786,6 +9796,7 @@ pub fn less_than_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     )
 }
 
+/// Floating-point comparison: the `Std::LessThan` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FloatLessThanOp {
     lhs_name: FullName,
@@ -9874,6 +9885,7 @@ pub fn less_than_or_equal_to_trait_id() -> TraitId {
     }
 }
 
+/// Integer comparison: the `Std::LessThanOrEq` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IntLessThanOrEqOp {
     lhs_name: FullName,
@@ -9958,6 +9970,7 @@ pub fn less_than_or_equal_to_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl 
     )
 }
 
+/// Floating-point comparison: the `Std::LessThanOrEq` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FloatLessThanOrEqOp {
     lhs_name: FullName,
@@ -10316,6 +10329,7 @@ fn build_report_signed_overflow<'c, 'm>(
     );
 }
 
+/// Integer addition: the `Std::Add` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IntAddOp {
     lhs_name: FullName,
@@ -10386,6 +10400,7 @@ pub fn add_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     )
 }
 
+/// Floating-point addition: the `Std::Add` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FloatAddOp {
     lhs_name: FullName,
@@ -10461,6 +10476,7 @@ pub fn subtract_trait_id() -> TraitId {
     }
 }
 
+/// Integer subtraction: the `Std::Sub` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IntSubOp {
     lhs_name: FullName,
@@ -10531,6 +10547,7 @@ pub fn subtract_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     )
 }
 
+/// Floating-point subtraction: the `Std::Sub` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FloatSubOp {
     lhs_name: FullName,
@@ -10606,6 +10623,7 @@ pub fn multiply_trait_id() -> TraitId {
     }
 }
 
+/// Integer multiplication: the `Std::Mul` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IntMulOp {
     lhs_name: FullName,
@@ -10676,6 +10694,7 @@ pub fn multiply_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     )
 }
 
+/// Floating-point multiplication: the `Std::Mul` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FloatMulOp {
     lhs_name: FullName,
@@ -10751,6 +10770,7 @@ pub fn divide_trait_id() -> TraitId {
     }
 }
 
+/// Integer division: the `Std::Div` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IntDivOp {
     lhs_name: FullName,
@@ -10822,6 +10842,7 @@ pub fn divide_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     )
 }
 
+/// Floating-point division: the `Std::Div` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FloatDivOp {
     lhs_name: FullName,
@@ -10897,6 +10918,7 @@ pub fn remainder_trait_id() -> TraitId {
     }
 }
 
+/// Integer remainder: the `Std::Rem` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IntRemOp {
     lhs_name: FullName,
@@ -10977,6 +10999,7 @@ pub fn negate_trait_id() -> TraitId {
     }
 }
 
+/// Integer negation: the `Std::Neg` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IntNegOp {
     rhs_name: FullName,
@@ -11040,6 +11063,7 @@ pub fn negate_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
     )
 }
 
+/// Floating-point negation: the `Std::Neg` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct FloatNegOp {
     rhs_name: FullName,

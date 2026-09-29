@@ -1713,9 +1713,9 @@ impl<'c, 'm> Generator<'c, 'm> {
         args: Vec<Object<'c>>,
         tail: bool,
     ) -> Option<Object<'c>> {
-        // A builtin op that applies a function has to declare it, so that a pass asking what a
-        // body can reach gives that body the edges an indirect call gets. Losing one edge is what
-        // lets `borrow_ify` borrow a parameter across an observation of a reference count.
+        // A builtin op that applies a function has to declare it, so that a pass asking what a body
+        // can reach gives that body the edges an indirect call gets. Losing one edge is what lets
+        // `borrow_ify` borrow a parameter across an observation of a reference count.
         if let Some((name, declares)) = &self.generating_builtin_op {
             assert!(
                 declares,

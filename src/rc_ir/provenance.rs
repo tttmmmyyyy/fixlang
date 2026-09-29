@@ -730,8 +730,8 @@ fn is_is_unique_op(op: &dyn BuiltinOp) -> bool {
 /// there says two things at once. An `Arg` leaf states both "the result leaf has the operand leaf's
 /// sharing" and "the op leaves that operand leaf unconsumed", and `is_unique` may only say the first:
 /// being treated as consuming is what forces a retain on a later use of the operand, which is what
-/// makes the count it reads honest (`IsUniqueOp::result_prov` spells this out).
-/// With no way to declare the sharing alone, the sharing half is applied here.
+/// makes the count it reads honest (`IsUniqueOp::result_prov` spells this out). With no way to
+/// declare the sharing alone, the sharing half is applied here.
 ///
 /// What it buys: `Debug::assert_unique` is an `is_unique` whose false arm aborts, so without this
 /// every value passed through it would come out of unknown sharing — reaching for it to find out
