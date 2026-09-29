@@ -64,6 +64,7 @@ pub fn run(prg: &mut Program) {
                 type_env: &type_env,
                 constructions: Map::default(),
                 bound_fields: &mut bound_field_count,
+                bound_names: names_bound_in(&expr),
             };
             let res = collapser.traverse(&expr);
             if !res.changed {
@@ -96,6 +97,56 @@ fn with_lets_pulled_out(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     unique_local_names::run_on_expr(&expr, Set::default())
 }
 
+/// Every local name `expr` binds: the parameters of its lambdas and the names its patterns bind.
+fn names_bound_in(expr: &Arc<ExprNode>) -> Set<FullName> {
+    let mut collector = BoundNameCollector {
+        names: Set::default(),
+    };
+    collector.traverse(expr);
+    collector.names
+}
+
+/// The walk of `names_bound_in`, carrying the names met so far.
+struct BoundNameCollector {
+    /// The names bound by the binders walked so far.
+    names: Set<FullName>,
+}
+
+impl ExprVisitor for BoundNameCollector {
+    /// Collects the parameters of a lambda.
+    fn start_visit_lam(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        self.names
+            .extend(expr.get_lam_params().iter().map(|param| param.name.clone()));
+        StartVisitResult::VisitChildren
+    }
+
+    /// Collects the names the pattern of a `let` binds.
+    fn start_visit_let(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        self.names.extend(expr.get_let_pat().pattern.vars());
+        StartVisitResult::VisitChildren
+    }
+
+    /// Collects the names the patterns of a `match` bind.
+    fn start_visit_match(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        for (pat, _) in expr.get_match_pat_vals() {
+            self.names.extend(pat.pattern.vars());
+        }
+        StartVisitResult::VisitChildren
+    }
+}
+
 /// A value whose construction this walk has seen.
 #[derive(Clone)]
 enum Construction {
@@ -115,6 +166,10 @@ struct Collapser<'a> {
     /// such name is numbered from. Counting across the rounds keeps the names one run binds
     /// distinct from each other.
     bound_fields: &'a mut usize,
+    /// Every local name the global binds, the ones this walk binds included. `constructions` is
+    /// keyed by name, so a name bound twice would let the second construction stand for the first
+    /// where the first is read.
+    bound_names: Set<FullName>,
 }
 
 impl<'a> Collapser<'a> {
@@ -136,15 +191,15 @@ impl<'a> Collapser<'a> {
             .unwrap_or(false)
     }
 
-    /// A name for a field value, absent from `occupied`.
+    /// A name for a field value, which nothing else in the global binds.
     ///
     /// The global can already hold names of this shape, bound by an earlier run of this pass, so
     /// the count alone does not make a name fresh.
-    fn fresh_field_name(&mut self, occupied: &Set<FullName>) -> FullName {
+    fn fresh_field_name(&mut self) -> FullName {
         loop {
             let name = FullName::local(&format!("{}{}", BOUND_FIELD_PREFIX, self.bound_fields));
             *self.bound_fields += 1;
-            if !occupied.contains(&name) {
+            if self.bound_names.insert(name.clone()) {
                 return name;
             }
         }
@@ -407,17 +462,14 @@ impl<'a> ExprVisitor for Collapser<'a> {
         }
 
         // Each field holding an expression is bound to a name first, in the order the construction
-        // evaluates the fields, so that a reader of this struct is given names throughout. The
-        // bindings stand over the fields evaluated after them and over the construction, so a name
-        // they bind has to be one none of the fields reads.
-        let occupied = expr.free_vars();
+        // evaluates the fields, so that a reader of this struct is given names throughout.
         let mut bindings = vec![];
         let mut named = expr.clone();
         for (field, _, value) in &fields {
             if value.is_var() {
                 continue;
             }
-            let name = self.fresh_field_name(&occupied);
+            let name = self.fresh_field_name();
             let ty = value.type_.as_ref().unwrap().clone();
             bindings.push((
                 PatternNode::make_var(var_var(name.clone()), None).set_type(ty.clone()),
