@@ -2448,9 +2448,14 @@ impl Program {
                     if !user_files.contains_span(span) {
                         return;
                     }
-                    // A head the type checker could not resolve, which the language server's
-                    // error-tolerant check leaves in place, has no fields to compare against.
-                    let Some(ti) = self.type_env.tycons().get(tc) else {
+                    // A head that names no struct, which the language server's error-tolerant
+                    // check leaves in place, has no fields to compare against.
+                    let Some(ti) = self
+                        .type_env
+                        .tycons()
+                        .get(tc)
+                        .filter(|ti| ti.variant == TyConVariant::Struct)
+                    else {
                         return;
                     };
                     let written: Set<&Name> = fields.iter().map(|(name, _, _)| name).collect();

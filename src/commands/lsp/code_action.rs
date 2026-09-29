@@ -4,6 +4,7 @@ use super::util::parameters_in_document;
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::Program;
 use crate::ast::traits::{MissingTraitImplInfo, MissingTraitImplItem};
+use crate::ast::typedecl::describe_field_names;
 use crate::ast::types::{type_assocty, type_tyvar_star, AssocType};
 use crate::constants::{
     ERR_MISSING_STRUCT_FIELD, ERR_MISSING_TRAIT_IMPL, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME,
@@ -297,17 +298,8 @@ fn missing_fields_of(diag: &lsp_types::Diagnostic) -> Option<Vec<String>> {
 }
 
 /// The title of a quick fix that adds the fields `missing`.
-fn add_missing_fields_title(missing: &[String]) -> String {
-    if missing.len() == 1 {
-        format!("Add missing field `{}`", missing[0])
-    } else {
-        let list = missing
-            .iter()
-            .map(|n| format!("`{}`", n))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("Add missing fields {}", list)
-    }
+fn add_missing_fields_title(missing: &[Name]) -> String {
+    format!("Add missing {}", describe_field_names(missing))
 }
 
 /// A quick fix titled `title` for `diag` that applies `edits` to the document at `uri`.
