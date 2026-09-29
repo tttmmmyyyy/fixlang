@@ -6014,7 +6014,7 @@ pub fn test_float_to_string() {
             assert_eq(|_|"the greatest F32", 3.4028235e38_F32.to_string, "3.4028235e38");;
             assert_eq(|_|"the least positive F32", 1.4e-45_F32.to_string, "1.0e-45");;
 
-            // The widest text an `F32` reaches: a sign, a point, the five zeros the window's
+            // The widest text an `F32` reaches: a sign, `0.`, the five zeros the window's
             // lower edge allows and the eight digits that follow them.
             let widest = -1.0000001e-6_F32;
             assert_eq(|_|"the widest F32 text", widest.to_string, "-0.0000010000001");;
@@ -6092,9 +6092,9 @@ pub fn test_float_to_string_precision() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Every text `to_string` writes for a normal number reads back as the number it was written
-/// from, and is spelled as a floating point literal of Fix. The walk crosses both edges of the
-/// window the point is written positionally in, at every scale either type reaches.
+/// Every text `to_string` writes for a number other than zero reads back as the number it was
+/// written from, and is spelled as a floating point literal of Fix. The walk crosses both edges of
+/// the window the point is written positionally in, at every scale either type reaches.
 #[test]
 pub fn test_float_to_string_reads_back_as_a_literal_across_every_decade() {
     let source = r#"

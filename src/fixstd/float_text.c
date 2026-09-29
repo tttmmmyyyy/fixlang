@@ -178,9 +178,9 @@ int64_t fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8
 // * `buf` - Where the text is written, null-terminated.
 // * `size` - The bytes `buf` holds.
 // * `positional_low`, `positional_high` - The window the point is written positionally in:
-//   `positional_low < point <= positional_high`, where `10^(point-1) <= |v| < 10^point`. A wider
-//   window costs zeros, so it is drawn around the digits the type carries, and the widest text it
-//   allows is what sizes the buffer `to_string` passes in — must stay in sync with the `size` the
+//   `positional_low < point <= positional_high`, where `point - 1` is the power of ten the first
+//   of the shortest digits carries. A wider window costs zeros, so it is drawn around the digits
+//   the type carries, and the widest text it allows is what sizes the buffer `to_string` passes in — must stay in sync with the `size` the
 //   `ToString` implementations in `src/fixstd/std.fix` derive.
 static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t size,
                                                 int positional_low, int positional_high)
@@ -223,7 +223,7 @@ static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t s
     {
         exponent = -exponent;
     }
-    // Where the point falls among the digits: `10^(point-1) <= |v| < 10^point`.
+    // Where the point falls among the digits: the first digit carries `10^(point-1)`.
     int point = exponent + 1;
     // The power of ten the digits, read as one whole number, are multiplied by.
     int scale = point - digit_count;
