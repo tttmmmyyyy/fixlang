@@ -65,12 +65,12 @@ mod tests {
     const NO_FREE_VARIABLE_SOURCE: &str = r#"
         module Main;
 
-        _counter : I64 -> IO (Destructor I64);
-        _counter = |n| Destructor::make(n, |m| pure $ m + 1);
+        _holding_its_successor : I64 -> IO (Destructor I64);
+        _holding_its_successor = |n| Destructor::make(n, |m| pure $ m + 1);
 
         main : IO ();
         main = (
-            let dtor = *_counter(9);
+            let dtor = *_holding_its_successor(9);
             println $ dtor.borrow(|n| n).to_string
         );
     "#;
