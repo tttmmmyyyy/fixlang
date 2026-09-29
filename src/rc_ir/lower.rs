@@ -7,16 +7,15 @@
 //! insertion is a separate backward pass. The one reference-counting effect already present is the
 //! retain baked into the boxed capture getter, per the retain-getter model.
 
+use crate::ast::builtin_op::BuiltinOpExpr;
 use crate::ast::expr::{Expr, ExprNode, FieldSrc, Var};
-use crate::ast::inline_llvm::InlineLLVM;
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::program::{Symbol, TypeEnv};
 use crate::ast::types::{TyCon, TypeNode};
 use crate::constants::{BOOL_FALSE_TAG, BOOL_TRUE_TAG, CAP_NAME};
 use crate::fixstd::builtin::{
-    make_dynamic_object_ty, InlineLLVMArrayLitBody, InlineLLVMCaptureProjectBody,
-    InlineLLVMFFICallBody, InlineLLVMMakeStructBody, InlineLLVMNoStorageValueBody,
+    make_dynamic_object_ty, ArrayLitOp, CaptureProjectOp, FFICallOp, MakeStructOp, NoStorageValueOp,
 };
 use crate::hash::md5_hex;
 use crate::misc::{grow_stack, Map, Set};
@@ -347,13 +346,14 @@ impl<'a> Lowerer<'a> {
             // capture is the null pointer. Recording this lets the capture's release skip the null
             // check. Set it before any clone so it propagates.
             capture_var.skip_null_check = !captures.is_empty();
-            // Bind the capture object under the implicit name `#CAP` too, so a built-in that reads the
-            // raw capture object by that name (the `fix` combinator's `FixBody`) resolves to it.
+            // Bind the capture object under the implicit name `#CAP` too, so a builtin op that
+            // reads the raw capture object by that name (the `fix` combinator's `FixCombinatorOp`)
+            // resolves to it.
             self.bind(&FullName::local(CAP_NAME), capture_var.clone());
             let capture_tys: Vec<Arc<TypeNode>> =
                 captures.iter().map(|(_, v)| v.ty.clone()).collect();
             for (i, (ast_name, _)) in captures.iter().enumerate() {
-                let llvm_gen = Box::new(InlineLLVMCaptureProjectBody {
+                let op = Box::new(CaptureProjectOp {
                     assume_local: false,
                     cap_name: capture_var.name.clone(),
                     cap_idx: i,
@@ -363,7 +363,7 @@ impl<'a> Lowerer<'a> {
                 proj.debug_name = Some(ast_name.to_string());
                 bindings.push(PendingBinding::Let(
                     proj.clone(),
-                    RcRhs::Llvm(llvm_gen, vec![capture_var.clone()]),
+                    RcRhs::Builtin(op, vec![capture_var.clone()]),
                     None,
                 ));
                 self.bind(ast_name, proj);
@@ -385,7 +385,7 @@ impl<'a> Lowerer<'a> {
             made.debug_name = Some(ast_name.to_string());
             bindings.push(PendingBinding::Let(
                 made.clone(),
-                RcRhs::Llvm(Box::new(InlineLLVMNoStorageValueBody {}), vec![]),
+                RcRhs::Builtin(Box::new(NoStorageValueOp {}), vec![]),
                 None,
             ));
             self.bind(ast_name, made);
@@ -426,7 +426,7 @@ impl<'a> Lowerer<'a> {
         let source = expr.source.clone();
         match expr.expr.as_ref() {
             Expr::Var(v) => self.lower_var(v, &ty, &source),
-            Expr::LLVM(inline) => self.lower_llvm(inline, ty, source, bindings),
+            Expr::Builtin(builtin) => self.lower_builtin(builtin, ty, source, bindings),
             Expr::App(fun, args) => self.lower_app(fun, args, ty, source, bindings),
             Expr::Lam(_, _) => self.lower_lam(expr, ty, source, bindings),
             Expr::Let(pat, bound, val) => self.lower_let(pat, bound, val, bindings),
@@ -469,20 +469,20 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    /// Lower an inline-LLVM operation: its free variables become its operands, in the fixed order
-    /// the generator reads them, and the appended binding holds the value the operation produces.
-    fn lower_llvm(
+    /// Lower a builtin operation: its free variables become its operands, in the fixed order the op
+    /// reads them, and the appended binding holds the value the operation produces.
+    fn lower_builtin(
         &mut self,
-        inline: &Arc<InlineLLVM>,
+        builtin: &Arc<BuiltinOpExpr>,
         ty: Arc<TypeNode>,
         source: Option<Span>,
         bindings: &mut Vec<PendingBinding>,
     ) -> RcVar {
-        let mut llvm_gen = inline.generator.clone();
-        // The generator's free variables are its operands, in a fixed order. A local operand reuses
-        // the variable already bound to it; an operand that is not a local is a reference to a global
+        let mut op = builtin.op.clone();
+        // The op's free variables are its operands, in a fixed order. A local operand reuses the
+        // variable already bound to it; an operand that is not a local is a reference to a global
         // value or function, materialized by code generation from its (unchanged) name.
-        let operand_vars: Vec<RcVar> = llvm_gen
+        let operand_vars: Vec<RcVar> = op
             .free_vars()
             .iter()
             .map(|name| match self.resolve(name) {
@@ -490,7 +490,7 @@ impl<'a> Lowerer<'a> {
                 None => {
                     let ty = self.global_types.get(name).cloned().unwrap_or_else(|| {
                         panic!(
-                            "LLVM operand `{}` is not bound in scope during RC IR lowering",
+                            "the builtin operand `{}` is not bound in scope during RC IR lowering",
                             name.to_string()
                         )
                     });
@@ -504,9 +504,9 @@ impl<'a> Lowerer<'a> {
                 }
             })
             .collect();
-        // Rewrite the generator's embedded operand names to the fresh local names, so code
-        // generation resolves them from scope.
-        let slots = llvm_gen.free_vars_mut();
+        // Rewrite the op's embedded operand names to the fresh local names, so code generation
+        // resolves them from scope.
+        let slots = op.free_vars_mut();
         // The operands were built from this op's free variables, so the two correspond. Were they to
         // differ, `zip` would leave the operands past the shorter one naming variables that lowering
         // has replaced.
@@ -521,7 +521,7 @@ impl<'a> Lowerer<'a> {
         let result = self.fresh_var("v", ty, source.clone());
         bindings.push(PendingBinding::Let(
             result.clone(),
-            RcRhs::Llvm(llvm_gen, operand_vars),
+            RcRhs::Builtin(op, operand_vars),
             source,
         ));
         result
@@ -798,13 +798,13 @@ impl<'a> Lowerer<'a> {
             .iter()
             .map(|(_, _, e)| self.lower_to_var(e, bindings))
             .collect();
-        let llvm_gen = Box::new(InlineLLVMMakeStructBody {
+        let op = Box::new(MakeStructOp {
             field_names: field_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("struct", ty, source.clone());
         bindings.push(PendingBinding::Let(
             result.clone(),
-            RcRhs::Llvm(llvm_gen, field_vars),
+            RcRhs::Builtin(op, field_vars),
             source,
         ));
         result
@@ -823,13 +823,13 @@ impl<'a> Lowerer<'a> {
             .iter()
             .map(|e| self.lower_to_var(e, bindings))
             .collect();
-        let llvm_gen = Box::new(InlineLLVMArrayLitBody {
+        let op = Box::new(ArrayLitOp {
             elem_names: elem_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("array", ty, source.clone());
         bindings.push(PendingBinding::Let(
             result.clone(),
-            RcRhs::Llvm(llvm_gen, elem_vars),
+            RcRhs::Builtin(op, elem_vars),
             source,
         ));
         result
@@ -863,7 +863,7 @@ impl<'a> Lowerer<'a> {
             .iter()
             .map(|arg| self.lower_to_var(arg, bindings))
             .collect();
-        let llvm_gen = Box::new(InlineLLVMFFICallBody {
+        let op = Box::new(FFICallOp {
             fun_name: fun_name.clone(),
             ret_tycon: ret_tycon.clone(),
             param_tycons: param_tycons.to_vec(),
@@ -874,7 +874,7 @@ impl<'a> Lowerer<'a> {
         let result = self.fresh_var("ffi", ty, source.clone());
         bindings.push(PendingBinding::Let(
             result.clone(),
-            RcRhs::Llvm(llvm_gen, arg_vars),
+            RcRhs::Builtin(op, arg_vars),
             source,
         ));
         result

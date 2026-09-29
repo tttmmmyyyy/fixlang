@@ -22,7 +22,7 @@
 //! specialization only adds the more specific clones the call sites reach, and
 //! `dead_code_elim::eliminate_unreachable` drops the versions nothing calls.
 
-use crate::ast::inline_llvm::LLVMGen;
+use crate::ast::builtin_op::BuiltinOp;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
@@ -166,11 +166,11 @@ impl<'a> Specializer<'a> {
                     self.rewrite_expr(k, inputs),
                 )
             }
-            RcExpr::Let(x, RcRhs::Llvm(llvm_gen, args), k) => {
-                let llvm_gen = self.elide_unique_check_if_provable(x, llvm_gen, args, inputs);
+            RcExpr::Let(x, RcRhs::Builtin(op, args), k) => {
+                let op = self.elide_unique_check_if_provable(x, op, args, inputs);
                 RcExpr::Let(
                     x.clone(),
-                    RcRhs::Llvm(llvm_gen, args.clone()),
+                    RcRhs::Builtin(op, args.clone()),
                     self.rewrite_expr(k, inputs),
                 )
             }
@@ -264,13 +264,13 @@ impl<'a> Specializer<'a> {
     fn elide_unique_check_if_provable(
         &self,
         result: &RcVar,
-        llvm_gen: &Box<dyn LLVMGen>,
+        op: &Box<dyn BuiltinOp>,
         args: &[RcVar],
         inputs: &[Uniqueness],
-    ) -> Box<dyn LLVMGen> {
+    ) -> Box<dyn BuiltinOp> {
         let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-        let Some(check) = llvm_gen.unique_check_operand(&arg_tys, self.type_env) else {
-            return llvm_gen.clone();
+        let Some(check) = op.unique_check_operand(&arg_tys, self.type_env) else {
+            return op.clone();
         };
         // `interpret_rhs` records `unique_check_operand_provs` for exactly the ops that carry a `unique_check_operand`
         // — the same condition the `let Some(check)` guard above passed — so the entry always exists.
@@ -286,9 +286,9 @@ impl<'a> Specializer<'a> {
             });
         let unique = leaf_is_unique(container_prov, &check.path, inputs);
         if unique {
-            llvm_gen.assuming_unique()
+            op.assuming_unique()
         } else {
-            llvm_gen.clone()
+            op.clone()
         }
     }
 }
@@ -329,9 +329,9 @@ fn collect_callees_and_unique_check(
     grow_stack(|| match node.expr.as_ref() {
         RcExpr::Let(_, rhs, k) => {
             match rhs {
-                RcRhs::Llvm(llvm_gen, args) => {
+                RcRhs::Builtin(op, args) => {
                     let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-                    if llvm_gen.unique_check_operand(&arg_tys, type_env).is_some() {
+                    if op.unique_check_operand(&arg_tys, type_env).is_some() {
                         *has_unique_check = true;
                     }
                 }

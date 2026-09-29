@@ -494,8 +494,8 @@ pub struct TypeNode {
     ///
     /// Left out of the serialized form, so that a node serializes to its type expression — the
     /// same thing `PartialEq` compares and `Hash` hashes. A reader that must not follow an edit
-    /// shifting a position would otherwise have to take the type out of whatever holds it, and an
-    /// inline-LLVM op holds its types behind a trait object no reader can reach into
+    /// shifting a position would otherwise have to take the type out of whatever holds it, and a
+    /// builtin op holds its types behind a trait object no reader can reach into
     /// (`divide_program::generated_code_hash` reads one).
     #[serde(skip)]
     pub info: TypeInfo,
@@ -3035,8 +3035,8 @@ mod tests {
     ///
     /// The digest naming a compilation unit's object file serializes the RC IR
     /// (`divide_program::generated_code_hash`), and a type reaches it inside values that give no
-    /// way to take the type out — an inline-LLVM op holds the types of a closure's captures behind
-    /// a trait object. So a position in the serialized form of a type makes an edit that shifts it
+    /// way to take the type out — a builtin op holds the types of a closure's captures behind a
+    /// trait object. So a position in the serialized form of a type makes an edit that shifts it
     /// regenerate a unit whose code that edit leaves as it was.
     #[test]
     fn test_a_type_serializes_to_its_expression() {

@@ -1857,7 +1857,7 @@ impl Program {
                     expr.set_var_var(v)
                 }
             }
-            Expr::LLVM(_) => expr.clone(),
+            Expr::Builtin(_) => expr.clone(),
             Expr::App(fun, args) => {
                 let fun = self.instantiate_expr(fun)?;
                 let args = collect_results(args.iter().map(|arg| self.instantiate_expr(arg)))?;

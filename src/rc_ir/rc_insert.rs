@@ -11,7 +11,7 @@
 //! the last use of a `Borrow` operand, insert a `Release`; (c) a variable that becomes dead without
 //! being consumed — an unused binding, or one a sibling match arm uses but this arm does not — is
 //! released at the earliest point it is dead. Only the read-getters borrow (see
-//! `LLVMGen::borrows_operand`); everything else owns. `RcState` is `Unknown` (always sound).
+//! `BuiltinOp::borrows_operand`); everything else owns. `RcState` is `Unknown` (always sound).
 //! Reference counting is skipped for fully-unboxed values (they have no boxed leaf, so
 //! `Retain`/`Release` would generate no code).
 
@@ -448,12 +448,12 @@ fn rhs_operands(rhs: &RcRhs, type_env: &TypeEnv) -> Vec<(RcVar, Ownership)> {
             ops
         }
         RcRhs::Closure(_, caps) => caps.iter().map(|c| (c.clone(), Ownership::Own)).collect(),
-        RcRhs::Llvm(llvm_gen, args) => {
+        RcRhs::Builtin(op, args) => {
             let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
             args.iter()
                 .enumerate()
                 .map(|(i, a)| {
-                    let ownership = if llvm_gen.borrows_operand(i, &arg_tys, type_env) {
+                    let ownership = if op.borrows_operand(i, &arg_tys, type_env) {
                         Ownership::Borrow
                     } else {
                         Ownership::Own
@@ -531,7 +531,7 @@ fn collect_referenced_and_bound(
                         insert_if_local(refs, &c.name);
                     }
                 }
-                RcRhs::Llvm(_, args) => {
+                RcRhs::Builtin(_, args) => {
                     for a in args {
                         insert_if_local(refs, &a.name);
                     }
@@ -586,7 +586,7 @@ fn collect_vars(node: &RcExprNode, vars: &mut Map<FullName, RcVar>) {
                         record_if_local(vars, c);
                     }
                 }
-                RcRhs::Llvm(_, args) => {
+                RcRhs::Builtin(_, args) => {
                     for a in args {
                         record_if_local(vars, a);
                     }

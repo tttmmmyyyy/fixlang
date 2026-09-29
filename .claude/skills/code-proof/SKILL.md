@@ -106,7 +106,7 @@ Measured across six proof documents, half of the counted claims sat next to the 
 counted, so the figure carried nothing the list did not already carry.
 
 **Write what the figure was derived from.** Name the members, or give the predicate that selects
-them -- "every `impl LLVMGen` whose `result_prov` returns a `Fresh` leaf" resolves forever, while
+them -- "every `impl BuiltinOp` whose `result_prov` returns a `Fresh` leaf" resolves forever, while
 "the 29 such implementations" resolves until someone adds one. Where a count is the claim itself --
 zero occurrences, or exactly one call site when uniqueness is the point -- it stays, because there
 the figure is the property rather than a description of it.

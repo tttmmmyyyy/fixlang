@@ -1,9 +1,9 @@
 use crate::ast::{
+    builtin_op::{clone_path_rc_targets, unique_check_on_boxed_leaf, BuiltinOp, EnvOperand},
     expr::{
-        expr_abs, expr_abs_many, expr_app, expr_if, expr_let, expr_llvm, expr_make_struct,
+        expr_abs, expr_abs_many, expr_app, expr_builtin, expr_if, expr_let, expr_make_struct,
         expr_var, var_local, AppSourceCodeOrderType, ExprNode,
     },
-    inline_llvm::{clone_path_rc_targets, unique_check_on_boxed_leaf, EnvOperand, LLVMGen},
     name::{FullName, Name, NameSpace},
     pattern::PatternNode,
     predicate::Predicate,
@@ -870,20 +870,21 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
     }
 }
 
+/// An integer literal of the expression's type, whose value is `val` truncated to the type's width.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntLit {
+pub struct IntLitOp {
     val: u64,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMIntLit {
+impl BuiltinOp for IntLitOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let obj = create_obj(
             ty.clone(),
             &vec![],
             None,
             gc,
-            Some(&format!("LLVM<int_lit_{}>", self.val)),
+            Some(&format!("int_lit_{}", self.val)),
         );
         let int_ty = ty
             .get_struct_type(gc)
@@ -923,16 +924,17 @@ impl LLVMGen for InlineLLVMIntLit {
 }
 
 pub fn expr_int_lit(val: u64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
-    expr_llvm(Box::new(InlineLLVMIntLit { val }), ty, source).global_to_absolute()
+    expr_builtin(Box::new(IntLitOp { val }), ty, source).global_to_absolute()
 }
 
+/// A floating-point literal of the expression's type.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatLit {
+pub struct FloatLitOp {
     val: f64,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMFloatLit {
+impl BuiltinOp for FloatLitOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let obj = create_obj(
             ty.clone(),
@@ -979,14 +981,15 @@ impl LLVMGen for InlineLLVMFloatLit {
 }
 
 pub fn expr_float_lit(val: f64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
-    expr_llvm(Box::new(InlineLLVMFloatLit { val }), ty, source)
+    expr_builtin(Box::new(FloatLitOp { val }), ty, source)
 }
 
+/// The null `Ptr`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMNullPtrLit {}
+pub struct NullPtrLitOp {}
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMNullPtrLit {
+impl BuiltinOp for NullPtrLitOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let obj = create_obj(ty.clone(), &vec![], None, gc, Some("nullptr"));
         let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
@@ -1023,8 +1026,8 @@ impl LLVMGen for InlineLLVMNullPtrLit {
 }
 
 pub fn expr_nullptr_lit(source: Option<Span>) -> Arc<ExprNode> {
-    expr_llvm(
-        Box::new(InlineLLVMNullPtrLit {}),
+    expr_builtin(
+        Box::new(NullPtrLitOp {}),
         make_ptr_ty().set_source(source.clone()),
         source,
     )
@@ -1065,13 +1068,13 @@ pub fn make_byte_array_of_global_storage<'c, 'm>(
 /// Evaluates a string literal to the `Array U8` backing a `String`: the literal's bytes plus the
 /// null terminator, read out of a constant in the program's data.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMStringBuf {
+pub struct StringBufOp {
     /// The literal's bytes, without the null terminator.
     string: String,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMStringBuf {
+impl BuiltinOp for StringBufOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let mut bytes = self.string.as_bytes().to_vec();
         bytes.push(0);
@@ -1120,8 +1123,8 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
         make_string_tycon(),
         vec![(
             "_data".to_string(),
-            expr_llvm(
-                Box::new(InlineLLVMStringBuf { string }),
+            expr_builtin(
+                Box::new(StringBufOp { string }),
                 byte_array_ty,
                 source.clone(),
             ),
@@ -1133,11 +1136,11 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
     expr
 }
 
-/// Inline-LLVM body of `Std::fix`, which computes `fix(f, x)`. It rebuilds the closure `fix(f)` from
-/// the function being generated and that function's own capture, passes it to `f` as the recursive
-/// `self`, and applies the result to `x`.
+/// The builtin operation of `Std::fix`, which computes `fix(f, x)`. It rebuilds the closure
+/// `fix(f)` from the function being generated and that function's own capture, passes it to `f` as
+/// the recursive `self`, and applies the result to `x`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFixBody {
+pub struct FixCombinatorOp {
     /// The variable holding the argument the recursion is applied to.
     x_name: FullName,
     /// The variable holding the recursion functional, which takes `self` and returns the recursive
@@ -1149,7 +1152,7 @@ pub struct InlineLLVMFixBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMFixBody {
+impl BuiltinOp for FixCombinatorOp {
     /// This op applies an operand: `f` is applied to build the fixed point, and the result of that is applied to `x`.
     fn applies_a_function_operand(&self) -> bool {
         true
@@ -1215,8 +1218,8 @@ fn fix_body(b: &str, f: &str, x: &str) -> Arc<ExprNode> {
     let f_name = FullName::local(f);
     let x_name = FullName::local(x);
     let cap_name = FullName::local(CAP_NAME);
-    expr_llvm(
-        Box::new(InlineLLVMFixBody {
+    expr_builtin(
+        Box::new(FixCombinatorOp {
             x_name,
             f_name,
             cap_name,
@@ -1246,7 +1249,7 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// Converts an integer to another integer type, truncating it to the target width or widening it by
 /// sign- or zero-extension. The target type is the one the operation is generated at.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMCastIntegralBody {
+pub struct CastIntegralOp {
     /// The local binding holding the value to convert.
     from_name: FullName,
     /// Whether the source type is a signed integer, which decides whether widening sign-extends or
@@ -1257,7 +1260,7 @@ pub struct InlineLLVMCastIntegralBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMCastIntegralBody {
+impl BuiltinOp for CastIntegralOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, to_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let from_val = gc.get_scoped_obj_field(&self.from_name, 0).into_int_value();
@@ -1343,8 +1346,8 @@ pub fn cast_between_integral_function(
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMCastIntegralBody {
+        expr_builtin(
+            Box::new(CastIntegralOp {
                 from_name,
                 is_target_signed,
                 is_source_signed,
@@ -1360,13 +1363,13 @@ pub fn cast_between_integral_function(
 /// Converts a floating point number to another floating point type, which is the one the operation
 /// is generated at.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMCastFloatBody {
+pub struct CastFloatOp {
     /// The local binding holding the value to convert.
     from_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMCastFloatBody {
+impl BuiltinOp for CastFloatOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, to_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let from_val = gc
@@ -1444,8 +1447,8 @@ pub fn cast_between_float_function(
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMCastFloatBody {
+        expr_builtin(
+            Box::new(CastFloatOp {
                 from_name: FullName::local(FROM_NAME),
             }),
             to,
@@ -1458,7 +1461,7 @@ pub fn cast_between_float_function(
 
 /// Converts an integer to a floating point number of the type the operation is generated at.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMCastIntToFloatBody {
+pub struct CastIntToFloatOp {
     /// The local binding holding the value to convert.
     from_name: FullName,
     /// Whether the source type is a signed integer, which decides how the bits are read.
@@ -1466,7 +1469,7 @@ pub struct InlineLLVMCastIntToFloatBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMCastIntToFloatBody {
+impl BuiltinOp for CastIntToFloatOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, to_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let from_val = gc.get_scoped_obj_field(&self.from_name, 0).into_int_value();
@@ -1549,8 +1552,8 @@ pub fn cast_int_to_float_function(
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMCastIntToFloatBody {
+        expr_builtin(
+            Box::new(CastIntToFloatOp {
                 from_name: FullName::local(FROM_NAME),
                 is_signed,
             }),
@@ -1700,7 +1703,7 @@ fn build_float_to_int_range_check<'c, 'm>(
 /// NaN gives zero, so every input gives one value of the target type;
 /// `--check-integer-operations` stops the program on an input outside the range.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMCastFloatToIntBody {
+pub struct CastFloatToIntOp {
     /// The local binding holding the value to convert.
     from_name: FullName,
     /// Whether the target type is a signed integer, which decides the range the value is brought
@@ -1709,7 +1712,7 @@ pub struct InlineLLVMCastFloatToIntBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMCastFloatToIntBody {
+impl BuiltinOp for CastFloatToIntOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, to_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value. The object carries the Fix type of the source, which the report names.
         let from_obj = gc.get_scoped_obj(&self.from_name);
@@ -1795,8 +1798,8 @@ pub fn cast_float_to_int_function(
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMCastFloatToIntBody {
+        expr_builtin(
+            Box::new(CastFloatToIntOp {
                 from_name: FullName::local(FROM_NAME),
                 is_signed,
             }),
@@ -1898,7 +1901,7 @@ fn build_shift_amount_check<'c, 'm>(
 /// every count gives one value of that type; `--check-integer-operations` stops the program on a
 /// count outside that range.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMShiftBody {
+pub struct ShiftOp {
     /// The local binding holding the value to shift.
     value_name: FullName,
     /// The local binding holding the amount, in bits, to shift by.
@@ -1908,7 +1911,7 @@ pub struct InlineLLVMShiftBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMShiftBody {
+impl BuiltinOp for ShiftOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let val = gc
@@ -1992,8 +1995,8 @@ pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<S
         vec![var_local(AMOUNT_NAME)],
         expr_abs(
             vec![var_local(VALUE_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMShiftBody {
+            expr_builtin(
+                Box::new(ShiftOp {
                     value_name: FullName::local(VALUE_NAME),
                     amount_name: FullName::local(AMOUNT_NAME),
                     is_left,
@@ -2033,7 +2036,7 @@ impl BitOperationType {
 /// Evaluates `Std::I64::bit_and`, `Std::I64::bit_or` and `Std::I64::bit_xor`, and the same values
 /// of the other integer types: the two operands combined bit by bit.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMBitwiseOperationBody {
+pub struct BitwiseOp {
     /// The local binding holding the left operand.
     lhs_name: FullName,
     /// The local binding holding the right operand.
@@ -2043,7 +2046,7 @@ pub struct InlineLLVMBitwiseOperationBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMBitwiseOperationBody {
+impl BuiltinOp for BitwiseOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let lhs = gc.get_scoped_obj_field(&self.lhs_name, 0).into_int_value();
@@ -2122,8 +2125,8 @@ pub fn bitwise_operation_function(
         vec![var_local(LHS_NAME)],
         expr_abs(
             vec![var_local(RHS_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMBitwiseOperationBody {
+            expr_builtin(
+                Box::new(BitwiseOp {
                     lhs_name: FullName::local(LHS_NAME),
                     rhs_name: FullName::local(RHS_NAME),
                     op_type,
@@ -2141,13 +2144,13 @@ pub fn bitwise_operation_function(
 /// Evaluates `Std::I64::bit_not`, and the same value of the other integer types: the operand with
 /// every bit flipped.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMBitNotBody {
+pub struct BitNotOp {
     /// The local binding holding the operand whose bits are flipped.
     operand_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMBitNotBody {
+impl BuiltinOp for BitNotOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get value
         let operand = gc
@@ -2200,8 +2203,8 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
     );
     let expr = expr_abs(
         vec![var_local(OPERAND_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMBitNotBody {
+        expr_builtin(
+            Box::new(BitNotOp {
                 operand_name: FullName::local(OPERAND_NAME),
             }),
             ty,
@@ -2223,7 +2226,7 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
 /// The price of the integer address is the pointer's provenance: LLVM takes a value built by
 /// `inttoptr` to point into any allocation, so an access through the result may reach any object.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMAddOffsetBody {
+pub struct AddOffsetOp {
     /// The local binding holding the offset, in bytes.
     offset_name: FullName,
     /// The local binding holding the pointer the offset is applied to.
@@ -2231,7 +2234,7 @@ pub struct InlineLLVMAddOffsetBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMAddOffsetBody {
+impl BuiltinOp for AddOffsetOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let i64_ty = gc.context.i64_type();
         let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
@@ -2302,8 +2305,8 @@ pub fn add_offset_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(OFFSET_NAME)],
         expr_abs(
             vec![var_local(PTR_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMAddOffsetBody {
+            expr_builtin(
+                Box::new(AddOffsetOp {
                     offset_name: FullName::local(OFFSET_NAME),
                     ptr_name: FullName::local(PTR_NAME),
                 }),
@@ -2324,7 +2327,7 @@ pub fn add_offset_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// may point into different objects, the result may be negative, and the difference wraps at the
 /// width of `I64`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMOffsetFromBody {
+pub struct OffsetFromOp {
     /// The local binding holding the pointer the distance is measured from.
     origin_name: FullName,
     /// The local binding holding the pointer the distance is measured to.
@@ -2332,7 +2335,7 @@ pub struct InlineLLVMOffsetFromBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMOffsetFromBody {
+impl BuiltinOp for OffsetFromOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let i8_ty = gc.context.i8_type();
 
@@ -2395,8 +2398,8 @@ pub fn offset_from_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(ORIGIN_NAME)],
         expr_abs(
             vec![var_local(PTR_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMOffsetFromBody {
+            expr_builtin(
+                Box::new(OffsetFromOp {
                     origin_name: FullName::local(ORIGIN_NAME),
                     ptr_name: FullName::local(PTR_NAME),
                 }),
@@ -2413,14 +2416,14 @@ pub fn offset_from_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// Evaluates `Array::_unsafe_empty_capacity_unchecked`: an array of size 0 whose storage has room
 /// for the given capacity, its elements left uninitialized.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayUnsafeEmpty {
+pub struct ArrayUnsafeEmptyOp {
     /// The local binding holding the capacity, in elements. The caller of the primitive is what
     /// establishes it is non-negative.
     capacity_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayUnsafeEmpty {
+impl BuiltinOp for ArrayUnsafeEmptyOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, arr_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get capacity
         let cap = gc
@@ -2490,8 +2493,8 @@ pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
 
     let expr = expr_abs(
         vec![var_local(CAPACITY_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMArrayUnsafeEmpty {
+        expr_builtin(
+            Box::new(ArrayUnsafeEmptyOp {
                 capacity_name: FullName::local(CAPACITY_NAME),
             }),
             array_ty.clone(),
@@ -2503,10 +2506,10 @@ pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_unsafe_get_bounds_unchecked`, which reads the element at an
+/// The builtin operation of `Array::_unsafe_get_bounds_unchecked`, which reads the element at an
 /// index out of an array and retains it, leaving the array borrowed.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayUnsafeGetBoundsUnchecked {
+pub struct ArrayUnsafeGetBoundsUncheckedOp {
     arr_name: FullName,
     idx_name: FullName,
     /// Whether the objects this op reference-counts inside `generate` are known to be in the local
@@ -2515,7 +2518,7 @@ pub struct InlineLLVMArrayUnsafeGetBoundsUnchecked {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
+impl BuiltinOp for ArrayUnsafeGetBoundsUncheckedOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argments
         let array = gc.get_scoped_obj_noretain(&self.arr_name);
@@ -2565,7 +2568,7 @@ impl LLVMGen for InlineLLVMArrayUnsafeGetBoundsUnchecked {
         ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container))
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -2604,8 +2607,8 @@ pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(IDX_NAME)],
         expr_abs(
             vec![var_local(ARR_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMArrayUnsafeGetBoundsUnchecked {
+            expr_builtin(
+                Box::new(ArrayUnsafeGetBoundsUncheckedOp {
                     assume_local: false,
                     arr_name: FullName::local(ARR_NAME),
                     idx_name: FullName::local(IDX_NAME),
@@ -2627,10 +2630,10 @@ pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_unsafe_truncate_bounds_unchecked`, which lowers an array's
+/// The builtin operation of `Array::_unsafe_truncate_bounds_unchecked`, which lowers an array's
 /// length, releasing the elements it drops.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayTruncateBoundsUnchecked {
+pub struct ArrayTruncateBoundsUncheckedOp {
     arr_name: FullName,
     len_name: FullName,
     /// When true, clone the array first if it is shared, so the shrink lands in a uniquely owned
@@ -2642,7 +2645,7 @@ pub struct InlineLLVMArrayTruncateBoundsUnchecked {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
+impl BuiltinOp for ArrayTruncateBoundsUncheckedOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let array = gc.get_scoped_obj(&self.arr_name);
         let new_len = gc.get_scoped_obj_field(&self.len_name, 0).into_int_value();
@@ -2696,7 +2699,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -2706,7 +2709,7 @@ impl LLVMGen for InlineLLVMArrayTruncateBoundsUnchecked {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -2758,8 +2761,8 @@ pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(LEN_NAME)],
         expr_abs(
             vec![var_local(ARR_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMArrayTruncateBoundsUnchecked {
+            expr_builtin(
+                Box::new(ArrayTruncateBoundsUncheckedOp {
                     assume_local: false,
                     arr_name: FullName::local(ARR_NAME),
                     len_name: FullName::local(LEN_NAME),
@@ -2782,10 +2785,10 @@ pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_unsafe_append_value_capacity_unchecked`, which fills the slots
+/// The builtin operation of `Array::_unsafe_append_value_capacity_unchecked`, which fills the slots
 /// past the array's length with copies of one value.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayAppendValueCapacityUnchecked {
+pub struct ArrayAppendValueCapacityUncheckedOp {
     arr_name: FullName,
     value_name: FullName,
     count_name: FullName,
@@ -2798,7 +2801,7 @@ pub struct InlineLLVMArrayAppendValueCapacityUnchecked {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
+impl BuiltinOp for ArrayAppendValueCapacityUncheckedOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let array = gc.get_scoped_obj(&self.arr_name);
         let value = gc.get_scoped_obj(&self.value_name);
@@ -2859,7 +2862,7 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -2869,7 +2872,7 @@ impl LLVMGen for InlineLLVMArrayAppendValueCapacityUnchecked {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -2924,8 +2927,8 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             vec![var_local(COUNT_NAME)],
             expr_abs(
                 vec![var_local(ARR_NAME)],
-                expr_llvm(
-                    Box::new(InlineLLVMArrayAppendValueCapacityUnchecked {
+                expr_builtin(
+                    Box::new(ArrayAppendValueCapacityUncheckedOp {
                         assume_local: false,
                         arr_name: FullName::local(ARR_NAME),
                         value_name: FullName::local(VALUE_NAME),
@@ -3095,7 +3098,7 @@ fn realloc_array<'c, 'm>(
 /// returns the array with its capacity field updated. The caller must ensure the new capacity holds
 /// the array's current size; a smaller one leaves elements outside the storage.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
+pub struct ArraySetCapacityBoundsUncheckedOp {
     /// The local binding holding the array to resize.
     arr_name: FullName,
     /// The local binding holding the new capacity, in elements.
@@ -3110,7 +3113,7 @@ pub struct InlineLLVMArraySetCapacityBoundsUnchecked {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
+impl BuiltinOp for ArraySetCapacityBoundsUncheckedOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let array = gc.get_scoped_obj(&self.arr_name);
         let new_cap = gc.get_scoped_obj_field(&self.cap_name, 0).into_int_value();
@@ -3201,7 +3204,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -3211,7 +3214,7 @@ impl LLVMGen for InlineLLVMArraySetCapacityBoundsUnchecked {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -3256,8 +3259,8 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(CAP_NAME)],
         expr_abs(
             vec![var_local(ARR_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMArraySetCapacityBoundsUnchecked {
+            expr_builtin(
+                Box::new(ArraySetCapacityBoundsUncheckedOp {
                     assume_local: false,
                     arr_name: FullName::local(ARR_NAME),
                     cap_name: FullName::local(CAP_NAME),
@@ -3280,10 +3283,10 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_unsafe_append_capacity_unchecked`, which consumes `src` into the
-/// slots past `dst`'s length.
+/// The builtin operation of `Array::_unsafe_append_capacity_unchecked`, which consumes `src` into
+/// the slots past `dst`'s length.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayAppendCapacityUnchecked {
+pub struct ArrayAppendCapacityUncheckedOp {
     dst_name: FullName,
     src_name: FullName,
     /// When true, clone `dst` first if it is shared, so the appended slots land in a uniquely owned
@@ -3295,7 +3298,7 @@ pub struct InlineLLVMArrayAppendCapacityUnchecked {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
+impl BuiltinOp for ArrayAppendCapacityUncheckedOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let dst = gc.get_scoped_obj(&self.dst_name);
         let src = gc.get_scoped_obj(&self.src_name);
@@ -3379,7 +3382,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -3389,7 +3392,7 @@ impl LLVMGen for InlineLLVMArrayAppendCapacityUnchecked {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -3441,8 +3444,8 @@ pub fn array_append_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
 
     let expr = expr_abs_many(
         vec![var_local(SRC_NAME), var_local(DST_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMArrayAppendCapacityUnchecked {
+        expr_builtin(
+            Box::new(ArrayAppendCapacityUncheckedOp {
                 assume_local: false,
                 dst_name: FullName::local(DST_NAME),
                 src_name: FullName::local(SRC_NAME),
@@ -3462,10 +3465,10 @@ pub fn array_append_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_unsafe_copy_capacity_bounds_unchecked`, which fills the slots
+/// The builtin operation of `Array::_unsafe_copy_capacity_bounds_unchecked`, which fills the slots
 /// past `dst`'s length from a borrowed `src`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayCopyCapacityBoundsUnchecked {
+pub struct ArrayCopyCapacityBoundsUncheckedOp {
     dst_name: FullName,
     src_name: FullName,
     begin_name: FullName,
@@ -3480,7 +3483,7 @@ pub struct InlineLLVMArrayCopyCapacityBoundsUnchecked {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayCopyCapacityBoundsUnchecked {
+impl BuiltinOp for ArrayCopyCapacityBoundsUncheckedOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let dst = gc.get_scoped_obj(&self.dst_name);
         let src = gc.get_scoped_obj_noretain(&self.src_name);
@@ -3551,7 +3554,7 @@ impl LLVMGen for InlineLLVMArrayCopyCapacityBoundsUnchecked {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -3561,7 +3564,7 @@ impl LLVMGen for InlineLLVMArrayCopyCapacityBoundsUnchecked {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -3618,8 +3621,8 @@ pub fn array_copy_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
             var_local(END_NAME),
             var_local(DST_NAME),
         ],
-        expr_llvm(
-            Box::new(InlineLLVMArrayCopyCapacityBoundsUnchecked {
+        expr_builtin(
+            Box::new(ArrayCopyCapacityBoundsUncheckedOp {
                 assume_local: false,
                 dst_name: FullName::local(DST_NAME),
                 src_name: FullName::local(SRC_NAME),
@@ -3647,10 +3650,10 @@ pub fn array_copy_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_unsafe_grow_size`, which moves the array's length out over
+/// The builtin operation of `Array::_unsafe_grow_size`, which moves the array's length out over
 /// uninitialized slots the caller then fills.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayGrowSizeBody {
+pub struct ArrayGrowSizeOp {
     arr_name: FullName,
     len_name: FullName,
     /// When true, clone the array first if it is shared, so the length grows on a uniquely owned
@@ -3662,7 +3665,7 @@ pub struct InlineLLVMArrayGrowSizeBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayGrowSizeBody {
+impl BuiltinOp for ArrayGrowSizeOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let array = gc.get_scoped_obj(&self.arr_name);
         let length = gc.get_scoped_obj_field(&self.len_name, 0).into_int_value();
@@ -3712,7 +3715,7 @@ impl LLVMGen for InlineLLVMArrayGrowSizeBody {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -3722,7 +3725,7 @@ impl LLVMGen for InlineLLVMArrayGrowSizeBody {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -3771,8 +3774,8 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         vec![var_local(LENGTH_NAME)],
         expr_abs(
             vec![var_local(ARR_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMArrayGrowSizeBody {
+            expr_builtin(
+                Box::new(ArrayGrowSizeOp {
                     assume_local: false,
                     arr_name,
                     len_name,
@@ -3920,10 +3923,10 @@ fn make_array_unique_with_hole<'c, 'm>(
     )
 }
 
-/// The code generator for `Array::set` and `Array::unsafe_set_bounds_unchecked`, which store a
+/// The builtin operation of `Array::set` and `Array::unsafe_set_bounds_unchecked`, which store a
 /// value into one slot of an array, releasing the element that slot held.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArraySetBody {
+pub struct ArraySetOp {
     array_name: FullName,
     idx_name: FullName,
     value_name: FullName,
@@ -3940,7 +3943,7 @@ pub struct InlineLLVMArraySetBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArraySetBody {
+impl BuiltinOp for ArraySetOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argments
         let array = gc.get_scoped_obj(&self.array_name);
@@ -4009,7 +4012,7 @@ impl LLVMGen for InlineLLVMArraySetBody {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -4019,7 +4022,7 @@ impl LLVMGen for InlineLLVMArraySetBody {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -4061,8 +4064,8 @@ impl LLVMGen for InlineLLVMArraySetBody {
 fn set_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     let elem_ty = type_tyvar_star("a");
     let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
-    let body = expr_llvm(
-        Box::new(InlineLLVMArraySetBody {
+    let body = expr_builtin(
+        Box::new(ArraySetOp {
             assume_local: false,
             array_name: FullName::local("array"),
             idx_name: FullName::local("idx"),
@@ -4109,11 +4112,11 @@ pub fn unsafe_set_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
     set_array_common(false)
 }
 
-/// The code generator for `Array::swap` and `Array::unsafe_swap_bounds_unchecked`, which exchange
+/// The builtin operation of `Array::swap` and `Array::unsafe_swap_bounds_unchecked`, which exchange
 /// the elements at two slots of an array. The elements only change places, so their reference
 /// counts are unchanged.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArraySwapBody {
+pub struct ArraySwapOp {
     array_name: FullName,
     i_name: FullName,
     j_name: FullName,
@@ -4130,7 +4133,7 @@ pub struct InlineLLVMArraySwapBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArraySwapBody {
+impl BuiltinOp for ArraySwapOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments.
         let array = gc.get_scoped_obj(&self.array_name);
@@ -4196,7 +4199,7 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -4206,7 +4209,7 @@ impl LLVMGen for InlineLLVMArraySwapBody {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -4238,8 +4241,8 @@ impl LLVMGen for InlineLLVMArraySwapBody {
 /// The body and type scheme of `Array::swap`, shared by the bounds-checked and the unchecked
 /// version. `bounds_checked` selects which of the two is built.
 fn swap_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
-    let body = expr_llvm(
-        Box::new(InlineLLVMArraySwapBody {
+    let body = expr_builtin(
+        Box::new(ArraySwapOp {
             assume_local: false,
             array_name: FullName::local("array"),
             i_name: FullName::local("i"),
@@ -4291,7 +4294,7 @@ pub fn swap_bounds_unchecked_array() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// array bound to `arr_name`, leaving that slot as the hole, and is returned together with the
 /// punched array.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayPunchBody {
+pub struct ArrayPunchOp {
     /// When true, clone the array first if it is shared, so the element is moved out of a uniquely
     /// owned array. Set false only where the array is statically known to be unique.
     pub(crate) force_unique: bool,
@@ -4305,7 +4308,7 @@ pub struct InlineLLVMArrayPunchBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayPunchBody {
+impl BuiltinOp for ArrayPunchOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // ret_ty = (PunchedArray a, a)
         let array = gc.get_scoped_obj(&self.arr_name);
@@ -4368,7 +4371,7 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -4378,7 +4381,7 @@ impl LLVMGen for InlineLLVMArrayPunchBody {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -4468,8 +4471,8 @@ pub fn array_punch(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
 
     let expr = expr_abs_many(
         vec![var_local(IDX_NAME), var_local(ARR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMArrayPunchBody {
+        expr_builtin(
+            Box::new(ArrayPunchOp {
                 assume_local: false,
                 force_unique,
                 idx_name: FullName::local(IDX_NAME),
@@ -4491,7 +4494,7 @@ pub fn array_punch(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
 /// The body of the array plug: the element bound to `elem_name` is written into the hole of the
 /// punched array bound to `punched_name`, giving back the completed array.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMPunchedArrayPlugBody {
+pub struct PunchedArrayPlugOp {
     /// When true, clone the punched array first if it is shared, skipping the hole, so the write
     /// lands in a uniquely owned array. Set false only where the array is statically known to be
     /// unique.
@@ -4506,7 +4509,7 @@ pub struct InlineLLVMPunchedArrayPlugBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
+impl BuiltinOp for PunchedArrayPlugOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let elem = gc.get_scoped_obj(&self.elem_name);
         let punched = gc.get_scoped_obj(&self.punched_name);
@@ -4555,7 +4558,7 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         unique_check_on_boxed_leaf(1, vec![PUNCHED_ARRAY_ARRAY_IDX as usize], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -4565,7 +4568,7 @@ impl LLVMGen for InlineLLVMPunchedArrayPlugBody {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -4611,8 +4614,8 @@ pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
 
     let expr = expr_abs_many(
         vec![var_local(ELEM_NAME), var_local(PUNCHED_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMPunchedArrayPlugBody {
+        expr_builtin(
+            Box::new(PunchedArrayPlugOp {
                 assume_local: false,
                 force_unique,
                 elem_name: FullName::local(ELEM_NAME),
@@ -4631,16 +4634,16 @@ pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_check_range`, which passes an index through after panicking
+/// The builtin operation of `Array::_check_range`, which passes an index through after panicking
 /// where it falls outside `[0, size)`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayCheckRange {
+pub struct ArrayCheckRangeOp {
     idx_name: FullName,
     size_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayCheckRange {
+impl BuiltinOp for ArrayCheckRangeOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         if gc.config.runtime_check() {
             let idx = gc.get_scoped_obj_field(&self.idx_name, 0).into_int_value();
@@ -4685,8 +4688,8 @@ pub fn array_check_range() -> (Arc<ExprNode>, Arc<Scheme>) {
 
     let expr = expr_abs_many(
         vec![var_local(IDX_NAME), var_local(SIZE_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMArrayCheckRange {
+        expr_builtin(
+            Box::new(ArrayCheckRangeOp {
                 idx_name: FullName::local(IDX_NAME),
                 size_name: FullName::local(SIZE_NAME),
             }),
@@ -4703,15 +4706,15 @@ pub fn array_check_range() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::_check_size`, which passes a size through after panicking where
+/// The builtin operation of `Array::_check_size`, which passes a size through after panicking where
 /// it is negative.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayCheckSize {
+pub struct ArrayCheckSizeOp {
     size_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayCheckSize {
+impl BuiltinOp for ArrayCheckSizeOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         if gc.config.runtime_check() {
             let size = gc.get_scoped_obj_field(&self.size_name, 0).into_int_value();
@@ -4750,8 +4753,8 @@ pub fn array_check_size() -> (Arc<ExprNode>, Arc<Scheme>) {
 
     let expr = expr_abs_many(
         vec![var_local(SIZE_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMArrayCheckSize {
+        expr_builtin(
+            Box::new(ArrayCheckSizeOp {
                 size_name: FullName::local(SIZE_NAME),
             }),
             make_i64_ty(),
@@ -4762,15 +4765,15 @@ pub fn array_check_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::@size`, which reads an array's length out of the array value,
+/// The builtin operation of `Array::@size`, which reads an array's length out of the array value,
 /// leaving the array borrowed.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayGetSizeBody {
+pub struct ArrayGetSizeOp {
     arr_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayGetSizeBody {
+impl BuiltinOp for ArrayGetSizeOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array_obj = gc.get_scoped_obj_noretain(&self.arr_name);
@@ -4813,8 +4816,8 @@ pub fn array_get_size() -> (Arc<ExprNode>, Arc<Scheme>) {
 
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMArrayGetSizeBody {
+        expr_builtin(
+            Box::new(ArrayGetSizeOp {
                 arr_name: FullName::local(ARR_NAME),
             }),
             make_i64_ty(),
@@ -4827,15 +4830,15 @@ pub fn array_get_size() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The code generator for `Array::@capacity`, which reads an array's capacity out of the array
+/// The builtin operation of `Array::@capacity`, which reads an array's capacity out of the array
 /// value, leaving the array borrowed.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayGetCapacityBody {
+pub struct ArrayGetCapacityOp {
     arr_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayGetCapacityBody {
+impl BuiltinOp for ArrayGetCapacityOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Array = [ControlBlock, Size, [Capacity, Element0, ...]]
         let array_obj = gc.get_scoped_obj_noretain(&self.arr_name);
@@ -4878,8 +4881,8 @@ pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
 
     let expr = expr_abs(
         vec![var_local(ARR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMArrayGetCapacityBody {
+        expr_builtin(
+            Box::new(ArrayGetCapacityOp {
                 arr_name: FullName::local(ARR_NAME),
             }),
             make_i64_ty(),
@@ -4892,8 +4895,10 @@ pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// Reads the field at `field_idx` out of the struct `var_name` names: the body of a struct's field
+/// getter `@f`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMStructGetBody {
+pub struct StructGetOp {
     pub var_name: FullName,
     field_idx: usize,
     /// Whether the objects this op reference-counts inside `generate` are known to be in the local
@@ -4901,7 +4906,7 @@ pub struct InlineLLVMStructGetBody {
     pub(crate) assume_local: bool,
 }
 
-impl InlineLLVMStructGetBody {
+impl StructGetOp {
     /// The index of the field this operation reads.
     pub fn field_index(&self) -> usize {
         self.field_idx
@@ -4948,7 +4953,7 @@ enum FieldRead {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMStructGetBody {
+impl BuiltinOp for StructGetOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // The value of a field getter is the field, so `ty` is the field's type.
         let container_ty = gc.get_scoped_type(&self.var_name);
@@ -5039,7 +5044,7 @@ impl LLVMGen for InlineLLVMStructGetBody {
         read_component_locality(result_ty, arg_tys, type_env, self.field_index())
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -5070,8 +5075,8 @@ impl LLVMGen for InlineLLVMStructGetBody {
 // `get` built-in function for a given struct.
 pub fn struct_get_body(var_name: &str, field_idx: usize, field_ty: Arc<TypeNode>) -> Arc<ExprNode> {
     let var_name_clone = FullName::local(var_name);
-    expr_llvm(
-        Box::new(InlineLLVMStructGetBody {
+    expr_builtin(
+        Box::new(StructGetOp {
             assume_local: false,
             var_name: var_name_clone,
             field_idx,
@@ -5098,16 +5103,16 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
     (expr, scm)
 }
 
-// Allocate a struct/tuple and fill it with the operand values, in field-declaration order. The
-// struct type is the value type of the enclosing expression. This is the RC IR counterpart of the
-// `Expr::MakeStruct` AST node, reading its operands as pre-evaluated atoms.
+/// Allocate a struct/tuple and fill it with the operand values, in field-declaration order. The
+/// struct type is the value type of the enclosing expression. This is the RC IR counterpart of the
+/// `Expr::MakeStruct` AST node, reading its operands as pre-evaluated atoms.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMMakeStructBody {
+pub struct MakeStructOp {
     pub field_names: Vec<FullName>,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMMakeStructBody {
+impl BuiltinOp for MakeStructOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let mut str_obj = create_obj(ty.clone(), &vec![], None, gc, Some("allocate_MakeStruct"));
         let offset = if ty.is_box(gc.type_env()) { 1 } else { 0 };
@@ -5177,13 +5182,13 @@ impl LLVMGen for InlineLLVMMakeStructBody {
 /// type is the value type of the enclosing expression. This is the RC IR counterpart of the
 /// `Expr::ArrayLit` AST node, reading its operands as pre-evaluated atoms.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayLitBody {
+pub struct ArrayLitOp {
     /// The local bindings holding the elements, in the order they are written into the array.
     pub elem_names: Vec<FullName>,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayLitBody {
+impl BuiltinOp for ArrayLitOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let len = gc
             .context
@@ -5243,11 +5248,11 @@ impl LLVMGen for InlineLLVMArrayLitBody {
     }
 }
 
-// Call a C function. This is the RC IR counterpart of the `Expr::FFICall` AST node. `arg_names` are
-// the operands; when `is_io`, the last one is the input `IOState` token, which establishes the
-// ordering dependency but is not passed to C.
+/// Call a C function. This is the RC IR counterpart of the `Expr::FFICall` AST node. `arg_names`
+/// are the operands; when `is_io`, the last one is the input `IOState` token, which establishes the
+/// ordering dependency but is not passed to C.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFFICallBody {
+pub struct FFICallOp {
     pub fun_name: Name,
     pub ret_tycon: Arc<TyCon>,
     pub param_tycons: Vec<Arc<TyCon>>,
@@ -5257,7 +5262,7 @@ pub struct InlineLLVMFFICallBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMFFICallBody {
+impl BuiltinOp for FFICallOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // The return object's type is the value type of this expression: `(IOState, ret)` when
         // `is_io`, else `ret`.
@@ -5315,11 +5320,12 @@ impl LLVMGen for InlineLLVMFFICallBody {
     }
 }
 
-// Project a captured value out of a lifted closure's capture object, retaining it (a retain-getter).
-// Lowering emits this at the entry of a lifted closure function to bind each captured variable.
-// `cap_tys` are the types of all captured values, needed to reconstruct the capture object's layout.
+/// Project a captured value out of a lifted closure's capture object, retaining it (a
+/// retain-getter). Lowering emits this at the entry of a lifted closure function to bind each
+/// captured variable. `cap_tys` are the types of all captured values, needed to reconstruct the
+/// capture object's layout.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMCaptureProjectBody {
+pub struct CaptureProjectOp {
     pub cap_name: FullName,
     pub cap_idx: usize,
     pub cap_tys: Vec<Arc<TypeNode>>,
@@ -5329,7 +5335,7 @@ pub struct InlineLLVMCaptureProjectBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMCaptureProjectBody {
+impl BuiltinOp for CaptureProjectOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         gc.build_capture_project(
             &self.cap_name,
@@ -5368,7 +5374,7 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
         ExtShape::uniform(result_ty, type_env, LeafCond::take_out_of(&container))
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -5397,10 +5403,10 @@ impl LLVMGen for InlineLLVMCaptureProjectBody {
 /// of the closure and binds the captured name to this instead, which is what lets a closure whose
 /// captures are all of such types carry no capture object at all.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMNoStorageValueBody {}
+pub struct NoStorageValueOp {}
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMNoStorageValueBody {
+impl BuiltinOp for NoStorageValueOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Which captures are left out is decided by `occupies_no_storage`, which reads the object
         // the generator builds, while the storage a value takes is what LLVM makes of that object.
@@ -5440,7 +5446,7 @@ impl LLVMGen for InlineLLVMNoStorageValueBody {
 /// The body of a struct's `punch_x`: field `field_idx` is moved out of the struct bound to
 /// `var_name`, and is returned together with the punched struct, whose type records the hole.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMStructPunchBody {
+pub struct StructPunchOp {
     /// The operand: the struct the field is moved out of.
     pub var_name: FullName,
     /// The index of the field moved out, in the struct's layout — the slot the result's punched
@@ -5454,7 +5460,7 @@ pub struct InlineLLVMStructPunchBody {
     pub(crate) assume_local: bool,
 }
 
-impl InlineLLVMStructPunchBody {
+impl StructPunchOp {
     /// The path of the argument's boxed leaf that the result's boxed leaf at `path` carries, where
     /// the struct is unboxed. A leaf of the punched-struct component sits at the path it had in the
     /// argument; a leaf of the moved-out field sits under the punched field.
@@ -5480,7 +5486,7 @@ impl InlineLLVMStructPunchBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMStructPunchBody {
+impl BuiltinOp for StructPunchOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get the argument object (the struct value).
         let struct_obj = gc.get_scoped_obj(&self.var_name);
@@ -5528,7 +5534,7 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         unique_check_on_boxed_leaf(0, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -5538,7 +5544,7 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -5553,8 +5559,8 @@ impl LLVMGen for InlineLLVMStructPunchBody {
         // The result is `(field, punched struct)`.
         //
         // A punched boxed struct is uniquely owned either way, for the reason
-        // `InlineLLVMArrayPunchBody::result_prov` gives, and that is what lets the `plug_in` completing
-        // the update drop its own check. The field is moved out without a retain, so another holder of
+        // `ArrayPunchOp::result_prov` gives, and that is what lets the `plug_in` completing the
+        // update drop its own check. The field is moved out without a retain, so another holder of
         // it may still be live and its leaves stay `Unknown`.
         //
         // Punching an unboxed struct only takes it apart in registers: the field and the remaining
@@ -5627,8 +5633,8 @@ pub fn struct_punch(
     const VAR_NAME: &str = "struct_value";
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMStructPunchBody {
+        expr_builtin(
+            Box::new(StructPunchOp {
                 assume_local: false,
                 var_name: FullName::local(VAR_NAME),
                 field_idx: field_idx as usize,
@@ -5646,7 +5652,7 @@ pub fn struct_punch(
 /// punched struct bound to `punched_struct_name`, giving back the struct type the hole was punched
 /// out of.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMStructPlugInBody {
+pub struct StructPlugInOp {
     punched_struct_name: FullName,
     pub field_name: FullName,
     field_idx: usize,
@@ -5657,7 +5663,7 @@ pub struct InlineLLVMStructPlugInBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMStructPlugInBody {
+impl BuiltinOp for StructPlugInOp {
     fn generate<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -5711,7 +5717,7 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         unique_check_on_boxed_leaf(PLUG_IN_PUNCHED_ARG, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -5721,7 +5727,7 @@ impl LLVMGen for InlineLLVMStructPlugInBody {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -5883,8 +5889,8 @@ pub fn struct_plug_in(
         vec![var_local(PUNCHED_STRUCT_NAME)],
         expr_abs(
             vec![var_local(FIELD_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMStructPlugInBody {
+            expr_builtin(
+                Box::new(StructPlugInOp {
                     assume_local: false,
                     punched_struct_name: FullName::local(PUNCHED_STRUCT_NAME),
                     field_name: FullName::local(FIELD_NAME),
@@ -6646,7 +6652,7 @@ fn make_struct_union_unique<'c, 'm>(
 /// The body of a struct's `set_x`: the value bound to `value_name` takes the place of field
 /// `field_idx` of the struct bound to `struct_name`, and the value it displaces is released.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMStructSetBody {
+pub struct StructSetOp {
     pub value_name: FullName,
     pub struct_name: FullName,
     field_count: u32,
@@ -6660,7 +6666,7 @@ pub struct InlineLLVMStructSetBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMStructSetBody {
+impl BuiltinOp for StructSetOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments
         let value = gc.get_scoped_obj(&self.value_name);
@@ -6708,7 +6714,7 @@ impl LLVMGen for InlineLLVMStructSetBody {
         unique_check_on_boxed_leaf(STRUCT_SET_STRUCT_ARG, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -6718,7 +6724,7 @@ impl LLVMGen for InlineLLVMStructSetBody {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -6796,8 +6802,8 @@ pub fn struct_set(
         vec![var_local(VALUE_NAME)],
         expr_abs(
             vec![var_local(STRUCT_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMStructSetBody {
+            expr_builtin(
+                Box::new(StructSetOp {
                     assume_local: false,
                     value_name: FullName::local(VALUE_NAME),
                     struct_name: FullName::local(STRUCT_NAME),
@@ -6820,7 +6826,7 @@ pub fn struct_set(
 /// Constructs a union value holding a given variant: the tag names the variant, and the payload
 /// buffer takes the operand.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMMakeUnionBody {
+pub struct MakeUnionOp {
     /// The local binding holding the payload the constructed variant carries.
     field_name: FullName,
     /// The name the generated union value carries in the LLVM module.
@@ -6829,7 +6835,7 @@ pub struct InlineLLVMMakeUnionBody {
     field_idx: usize,
 }
 
-impl InlineLLVMMakeUnionBody {
+impl MakeUnionOp {
     /// The index of the variant this operation constructs.
     pub fn variant_index(&self) -> usize {
         self.field_idx
@@ -6842,7 +6848,7 @@ impl InlineLLVMMakeUnionBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMMakeUnionBody {
+impl BuiltinOp for MakeUnionOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // Get the payload the constructed variant carries.
         let payload = gc.get_scoped_obj(&self.field_name);
@@ -6935,8 +6941,8 @@ pub fn union_new_body(
     let name = format!("new_{}({})", field_name, union_name.to_string());
     let name_cloned = name.clone();
     let field_name_local = FullName::local(field_name);
-    expr_llvm(
-        Box::new(InlineLLVMMakeUnionBody {
+    expr_builtin(
+        Box::new(MakeUnionOp {
             field_name: field_name_local,
             generated_union_name: name_cloned,
             field_idx,
@@ -6996,7 +7002,7 @@ pub fn union_as(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
 /// Reads the payload of a given variant out of a union value, aborting the program where the union
 /// holds another variant and runtime checks are on.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUnionAsBody {
+pub struct UnionAsOp {
     /// The local binding holding the union to read.
     union_arg_name: FullName,
     /// The variant read, as its index among the union's variants.
@@ -7006,7 +7012,7 @@ pub struct InlineLLVMUnionAsBody {
     pub(crate) assume_local: bool,
 }
 
-impl InlineLLVMUnionAsBody {
+impl UnionAsOp {
     /// The index of the variant whose payload this operation reads.
     pub fn variant_index(&self) -> usize {
         self.field_idx
@@ -7024,7 +7030,7 @@ impl InlineLLVMUnionAsBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMUnionAsBody {
+impl BuiltinOp for UnionAsOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         // The value of `as` is the variant payload, so `ty` is the payload's type.
         let borrows = Self::borrows_union(ty, gc.type_env());
@@ -7099,7 +7105,7 @@ impl LLVMGen for InlineLLVMUnionAsBody {
         read_component_locality(result_ty, arg_tys, type_env, self.variant_index())
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -7133,8 +7139,8 @@ pub fn union_as_body(
     field_ty: Arc<TypeNode>,
 ) -> Arc<ExprNode> {
     let union_arg_name = FullName::local(union_arg_name);
-    expr_llvm(
-        Box::new(InlineLLVMUnionAsBody {
+    expr_builtin(
+        Box::new(UnionAsOp {
             assume_local: false,
             union_arg_name,
             field_idx,
@@ -7166,7 +7172,7 @@ pub fn union_is(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
 /// Tests whether a union holds a given variant, by comparing its tag. It reads the union without
 /// taking a reference to it, and the result is a `Std::Bool`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUnionIsBody {
+pub struct UnionIsOp {
     /// The local binding holding the union to test.
     union_arg_name: FullName,
     /// The variant tested for, as its index among the union's variants.
@@ -7174,7 +7180,7 @@ pub struct InlineLLVMUnionIsBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMUnionIsBody {
+impl BuiltinOp for UnionIsOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // Get union object.
         let obj = gc.get_scoped_obj_noretain(&self.union_arg_name);
@@ -7238,8 +7244,8 @@ impl LLVMGen for InlineLLVMUnionIsBody {
 /// The body of `is_{variant}`, which tells whether the union bound to `union_arg_name` holds the
 /// variant at `field_idx`.
 pub fn union_is_body(union_arg_name: &Name, field_idx: usize) -> Arc<ExprNode> {
-    expr_llvm(
-        Box::new(InlineLLVMUnionIsBody {
+    expr_builtin(
+        Box::new(UnionIsOp {
             union_arg_name: FullName::local(union_arg_name),
             field_idx,
         }),
@@ -7251,7 +7257,7 @@ pub fn union_is_body(union_arg_name: &Name, field_idx: usize) -> Arc<ExprNode> {
 /// Applies a function to the payload of a given variant and puts the result back into the union.
 /// A union holding another variant comes back as it was.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUnionModBody {
+pub struct UnionModOp {
     /// The local binding holding the union to modify.
     union_name: FullName,
     /// The local binding holding the function applied to the payload.
@@ -7261,7 +7267,7 @@ pub struct InlineLLVMUnionModBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMUnionModBody {
+impl BuiltinOp for UnionModOp {
     /// This op applies an operand: the modifier is applied to the payload the variant holds.
     fn applies_a_function_operand(&self) -> bool {
         true
@@ -7377,8 +7383,8 @@ pub fn union_mod_function(
         vec![var_local(MODIFIER_NAME)],
         expr_abs(
             vec![var_local(UNION_NAME)],
-            expr_llvm(
-                Box::new(InlineLLVMUnionModBody {
+            expr_builtin(
+                Box::new(UnionModOp {
                     union_name: FullName::local(UNION_NAME),
                     modifier_name: FullName::local(MODIFIER_NAME),
                     field_idx,
@@ -7398,17 +7404,17 @@ pub fn union_mod_function(
     (expr, scm)
 }
 
-/// Inline-LLVM body of the `_undefined_internal` builtin: with runtime checks on it prints the
-/// message and aborts, and with them off it emits an `unreachable` instruction. Either way the
-/// expression stands for a value of the result type that is never produced.
+/// The builtin operation of `_undefined_internal`: with runtime checks on it prints the message and
+/// aborts, and with them off it emits an `unreachable` instruction. Either way the expression
+/// stands for a value of the result type that is never produced.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMUndefinedInternalBody {
+pub struct UndefinedInternalOp {
     /// The variable holding the message printed before aborting.
     msg_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMUndefinedInternalBody {
+impl BuiltinOp for UndefinedInternalOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         if gc.config.runtime_check() {
             // Runtime check is enabled.
@@ -7491,8 +7497,8 @@ pub fn undefined_internal_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 
     let expr = expr_abs(
         vec![var_local(UNDEFINED_ARG_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMUndefinedInternalBody {
+        expr_builtin(
+            Box::new(UndefinedInternalOp {
                 msg_name: FullName::local(UNDEFINED_ARG_NAME),
             }),
             type_tyvar_star(A_NAME),
@@ -7512,16 +7518,16 @@ pub fn undefined_internal_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// Inline-LLVM body for the `Std::#hole` builtin. Code generation
+/// The builtin operation of `Std::#hole`. Code generation
 /// should be unreachable in practice because elaboration rejects any
 /// program containing a hole; the body still emits an `unreachable`
 /// instruction defensively so the LLVM module stays well-formed if
 /// the diagnostic is somehow bypassed.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMHoleBody {}
+pub struct HoleOp {}
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMHoleBody {
+impl BuiltinOp for HoleOp {
     fn generate<'c, 'm>(&self, _gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         // `collect_hole_errors` reports every hole the source carries, and the build stops on a
         // diagnostic, so a hole reaching code generation is one that check let through.
@@ -7557,11 +7563,7 @@ impl LLVMGen for InlineLLVMHoleBody {
 /// references to this name and emits ERR_HOLE.
 pub fn hole_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     const A_NAME: &str = "a";
-    let expr = expr_llvm(
-        Box::new(InlineLLVMHoleBody {}),
-        type_tyvar_star(A_NAME),
-        None,
-    );
+    let expr = expr_builtin(Box::new(HoleOp {}), type_tyvar_star(A_NAME), None);
     let scm = Scheme::generalize(&[], vec![], vec![], type_tyvar_star(A_NAME));
     (expr, scm)
 }
@@ -7569,7 +7571,7 @@ pub fn hole_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// Applies a function to a value while the value is held retained, and evaluates to what the function
 /// returns. The function is given the tuple `(env, x)`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMWithRetainedFunctionBody {
+pub struct WithRetainedOp {
     /// The function applied to the value.
     f_name: FullName,
     /// The environment handed to the function beside the value.
@@ -7578,15 +7580,14 @@ pub struct InlineLLVMWithRetainedFunctionBody {
     x_name: FullName,
 }
 
-/// The function operand of `InlineLLVMWithRetainedFunctionBody`, and the environment operand it
-/// hands it.
+/// The function operand of `WithRetainedOp`, and the environment operand it hands it.
 const WITH_RETAINED_ENV_OPERAND: EnvOperand = EnvOperand {
     function: 0,
     env: 1,
 };
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMWithRetainedFunctionBody {
+impl BuiltinOp for WithRetainedOp {
     fn env_operand(&self) -> Option<EnvOperand> {
         Some(WITH_RETAINED_ENV_OPERAND)
     }
@@ -7642,8 +7643,8 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs_many(
         vec![var_local(F_NAME), var_local(X_NAME)],
         with_empty_env(F_NAME, 1, |g_name, env_name| {
-            expr_llvm(
-                Box::new(InlineLLVMWithRetainedFunctionBody {
+            expr_builtin(
+                Box::new(WithRetainedOp {
                     f_name: g_name,
                     env_name,
                     x_name: FullName::local(X_NAME),
@@ -7665,7 +7666,7 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// Applies the function operand `f` of an op that declares `LLVMGen::env_operand` to the tuple
+/// Applies the function operand `f` of an op that declares `BuiltinOp::env_operand` to the tuple
 /// `(env, args...)`, and returns what it returns.
 fn apply_with_env<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
@@ -7687,7 +7688,7 @@ fn apply_with_env<'c, 'm>(
 }
 
 /// The body of a function that gives the function `f_name` it takes to an op declaring
-/// `LLVMGen::env_operand`, with the empty environment:
+/// `BuiltinOp::env_operand`, with the empty environment:
 ///
 /// ```text
 /// let g = |p| (let ((), a_1, ..., a_n) = p; f(a_1)...(a_n));
@@ -7756,7 +7757,7 @@ fn with_empty_env(
 /// Tests whether a boxed value is the only reference to its object, by reading the object's
 /// reference count in place, and returns that flag paired with the value handed back unchanged.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIsUniqueFunctionBody {
+pub struct IsUniqueOp {
     /// The local binding holding the value to test.
     var_name: FullName,
     /// Set where the caller has proven the argument statically unique: the runtime uniqueness check
@@ -7787,7 +7788,7 @@ fn is_unique_result_locality(result_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> E
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
+impl BuiltinOp for IsUniqueOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
 
@@ -7886,7 +7887,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         vec![]
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -7896,7 +7897,7 @@ impl LLVMGen for InlineLLVMIsUniqueFunctionBody {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_unique = true;
         Box::new(c)
@@ -7952,8 +7953,8 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMIsUniqueFunctionBody {
+        expr_builtin(
+            Box::new(IsUniqueOp {
                 assume_local: false,
                 var_name: FullName::local(VAR_NAME),
                 assume_unique: false,
@@ -7968,16 +7969,15 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 /// Tests whether a flipped `Array`'s storage is uniquely referenced, reading the storage's reference
 /// count in place without retaining it, and hands the array back unchanged. This is the array
-/// counterpart of `InlineLLVMIsUniqueFunctionBody`: the generic op cannot serve, because an unboxed
-/// `Array` value would take its "unboxed is always unique" branch and report a shared array as
-/// unique. The attributes mirror the generic op so the borrow pass treats the array as consumed and
-/// reports sharing correctly. Provenance recognizes this op alongside the generic one (see
-/// `provenance.rs`).
+/// counterpart of `IsUniqueOp`: the generic op cannot serve, because an unboxed `Array` value would
+/// take its "unboxed is always unique" branch and report a shared array as unique. The attributes
+/// mirror the generic op so the borrow pass treats the array as consumed and reports sharing
+/// correctly. Provenance recognizes this op alongside the generic one (see `provenance.rs`).
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMArrayIsStorageUniqueBody {
+pub struct ArrayIsStorageUniqueOp {
     var_name: FullName,
-    /// As in `InlineLLVMIsUniqueFunctionBody`: set where the caller proved the array statically
-    /// unique, so the runtime check is dropped and the flag is the constant `true`.
+    /// As in `IsUniqueOp`: set where the caller proved the array statically unique, so the runtime
+    /// check is dropped and the flag is the constant `true`.
     pub(crate) assume_unique: bool,
     /// Whether the object this op's declared uniqueness check tests is known to be in the local
     /// reference-counting state, so that the check reads the count without reading the state.
@@ -7985,7 +7985,7 @@ pub struct InlineLLVMArrayIsStorageUniqueBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
+impl BuiltinOp for ArrayIsStorageUniqueOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
 
@@ -8073,12 +8073,12 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
         _arg_tys: &[Arc<TypeNode>],
         _type_env: &TypeEnv,
     ) -> Vec<RcTarget> {
-        // As in `InlineLLVMIsUniqueFunctionBody`: reading the count counts no reference, so the
-        // clone path's targets the default would supply are not this op's.
+        // As in `IsUniqueOp`: reading the count counts no reference, so the clone path's targets
+        // the default would supply are not this op's.
         vec![]
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -8088,7 +8088,7 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_unique = true;
         Box::new(c)
@@ -8100,9 +8100,9 @@ impl LLVMGen for InlineLLVMArrayIsStorageUniqueBody {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // As in `InlineLLVMIsUniqueFunctionBody`: the array comes back unchanged as the second
-        // component, yet the result stays the conservative `Unknown` so the borrow pass treats the
-        // argument as consumed. That consuming treatment is what makes the op detect sharing.
+        // As in `IsUniqueOp`: the array comes back unchanged as the second component, yet the
+        // result stays the conservative `Unknown` so the borrow pass treats the argument as
+        // consumed. That consuming treatment is what makes the op detect sharing.
         Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
@@ -8129,8 +8129,8 @@ pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     let scm = Scheme::generalize(&[], vec![], vec![], type_fun(array_ty, ret_type.clone()));
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMArrayIsStorageUniqueBody {
+        expr_builtin(
+            Box::new(ArrayIsStorageUniqueOp {
                 assume_local: false,
                 var_name: FullName::local(VAR_NAME),
                 assume_unique: false,
@@ -8143,14 +8143,15 @@ pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The builtin operation of `Std::FFI::_boxed_to_retained_ptr_ios`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMBoxedToRetainedPtrIOS {
+pub struct BoxedToRetainedPtrIOSOp {
     val_name: FullName,
     ios_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMBoxedToRetainedPtrIOS {
+impl BuiltinOp for BoxedToRetainedPtrIOSOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argument
         let obj = gc.get_scoped_obj(&self.val_name);
@@ -8229,8 +8230,8 @@ pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
     let expr = expr_abs_many(
         vec![var_local(VAL_NAME), var_local(IOS_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMBoxedToRetainedPtrIOS {
+        expr_builtin(
+            Box::new(BoxedToRetainedPtrIOSOp {
                 val_name: FullName::local(VAL_NAME),
                 ios_name: FullName::local(IOS_NAME),
             }),
@@ -8241,14 +8242,15 @@ pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The builtin operation of `Std::FFI::_boxed_from_retained_ptr_ios`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMBoxedFromRetainedPtrIOS {
+pub struct BoxedFromRetainedPtrIOSOp {
     ptr_name: FullName,
     ios_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMBoxedFromRetainedPtrIOS {
+impl BuiltinOp for BoxedFromRetainedPtrIOSOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get argument.
         let ptr = gc.get_scoped_obj(&self.ptr_name);
@@ -8318,8 +8320,8 @@ pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
     let expr = expr_abs_many(
         vec![var_local(PTR_NAME), var_local(IOS_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMBoxedFromRetainedPtrIOS {
+        expr_builtin(
+            Box::new(BoxedFromRetainedPtrIOSOp {
                 ptr_name: FullName::local(PTR_NAME),
                 ios_name: FullName::local(IOS_NAME),
             }),
@@ -8374,13 +8376,14 @@ fn rc_function_of_boxed_value<'c, 'm>(
     make_ptr_obj(gc, func_ptr, &format!("ret_val@get_funptr_{}", operation))
 }
 
+/// The builtin operation of `Std::FFI::get_funptr_release`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
+pub struct GetReleaseFunctionOfBoxedValueOp {
     var_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
+impl BuiltinOp for GetReleaseFunctionOfBoxedValueOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         rc_function_of_boxed_value(gc, &self.var_name, "release", |gc, obj| {
             gc.release(obj, RcState::Unknown);
@@ -8428,8 +8431,8 @@ pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMGetReleaseFunctionOfBoxedValueFunctionBody {
+        expr_builtin(
+            Box::new(GetReleaseFunctionOfBoxedValueOp {
                 var_name: FullName::local(VAR_NAME),
             }),
             ret_type,
@@ -8440,13 +8443,14 @@ pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The builtin operation of `Std::FFI::get_funptr_retain`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
+pub struct GetRetainFunctionOfBoxedValueOp {
     var_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
+impl BuiltinOp for GetRetainFunctionOfBoxedValueOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         rc_function_of_boxed_value(gc, &self.var_name, "retain", |gc, obj| {
             gc.retain(obj, RcState::Unknown);
@@ -8493,8 +8497,8 @@ pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMGetRetainFunctionOfBoxedValueFunctionBody {
+        expr_builtin(
+            Box::new(GetRetainFunctionOfBoxedValueOp {
                 var_name: FullName::local(VAR_NAME),
             }),
             ret_type,
@@ -8645,8 +8649,8 @@ fn assert_array_storage_unique<'c, 'm>(gc: &mut Generator<'c, 'm>, array: &Objec
     gc.build_assert_unique(storage_ptr);
 }
 
-/// The pointer that `InlineLLVMBorrowPtrBody` and `InlineLLVMMutatePtrBody` pass to their function
-/// operand: the first element of an array's element buffer, or the payload of a boxed value.
+/// The pointer that `BorrowPtrOp` and `MutatePtrOp` pass to their function operand: the first
+/// element of an array's element buffer, or the payload of a boxed value.
 fn get_lent_ptr<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) -> PointerValue<'c> {
     if val.ty.is_array() {
         return get_array_storage_buf(gc, val);
@@ -8664,13 +8668,13 @@ fn get_lent_ptr<'c, 'm>(gc: &mut Generator<'c, 'm>, val: &Object<'c>) -> Pointer
 ///
 /// The value is borrowed, so the pointer is valid only while the value is alive.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMGetLentPtrBody {
+pub struct GetLentPtrOp {
     /// The value the pointer points into.
     x_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMGetLentPtrBody {
+impl BuiltinOp for GetLentPtrOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         let x = gc.get_scoped_obj_noretain(&self.x_name);
         let ptr = get_lent_ptr(gc, &x);
@@ -8703,8 +8707,8 @@ impl LLVMGen for InlineLLVMGetLentPtrBody {
     }
 }
 
-/// The definition of a function `x_ty -> Ptr` evaluated by `InlineLLVMGetLentPtrBody`, whose type
-/// scheme has the predicates `preds`.
+/// The definition of a function `x_ty -> Ptr` evaluated by `GetLentPtrOp`, whose type scheme has
+/// the predicates `preds`.
 fn get_lent_ptr_function(
     x_ty: Arc<TypeNode>,
     preds: Vec<Predicate>,
@@ -8713,8 +8717,8 @@ fn get_lent_ptr_function(
     let scm = Scheme::generalize(&[], preds, vec![], type_fun(x_ty, make_ptr_ty()));
     let expr = expr_abs(
         vec![var_local(X_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMGetLentPtrBody {
+        expr_builtin(
+            Box::new(GetLentPtrOp {
                 x_name: FullName::local(X_NAME),
             }),
             make_ptr_ty(),
@@ -8744,7 +8748,7 @@ pub fn get_get_boxed_ptr() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// The value is borrowed, so its reference count is left alone and the pointer is valid while the
 /// function runs.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMBorrowPtrBody {
+pub struct BorrowPtrOp {
     /// The value the pointer points into.
     x_name: FullName,
     /// The function applied to the pointer.
@@ -8754,7 +8758,7 @@ pub struct InlineLLVMBorrowPtrBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMBorrowPtrBody {
+impl BuiltinOp for BorrowPtrOp {
     fn env_operand(&self) -> Option<EnvOperand> {
         Some(LENT_PTR_ENV_OPERAND)
     }
@@ -8800,8 +8804,7 @@ impl LLVMGen for InlineLLVMBorrowPtrBody {
     }
 }
 
-/// The type variable `b` that the function operand of `InlineLLVMBorrowPtrBody` or
-/// `InlineLLVMMutatePtrBody` returns.
+/// The type variable `b` that the function operand of `BorrowPtrOp` or `MutatePtrOp` returns.
 ///
 /// Panics if `x_ty`, the type of the value the pointer points into, mentions `b`.
 fn lent_ptr_result_tyvar(x_ty: &Arc<TypeNode>) -> Arc<TypeNode> {
@@ -8815,9 +8818,8 @@ fn lent_ptr_result_tyvar(x_ty: &Arc<TypeNode>) -> Arc<TypeNode> {
     type_tyvar_star(B_TYPE_NAME)
 }
 
-/// The definition of a function `(Ptr -> b) -> x_ty -> b` evaluated by `InlineLLVMBorrowPtrBody`
-/// with the empty environment, whose type scheme has the predicates `preds`. `x_ty` must not mention
-/// `b`.
+/// The definition of a function `(Ptr -> b) -> x_ty -> b` evaluated by `BorrowPtrOp` with the empty
+/// environment, whose type scheme has the predicates `preds`. `x_ty` must not mention `b`.
 fn borrow_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const F_NAME: &str = "f";
     const X_NAME: &str = "x";
@@ -8834,8 +8836,8 @@ fn borrow_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprN
     let expr = expr_abs_many(
         vec![var_local(F_NAME), var_local(X_NAME)],
         with_empty_env(F_NAME, 1, |g_name, env_name| {
-            expr_llvm(
-                Box::new(InlineLLVMBorrowPtrBody {
+            expr_builtin(
+                Box::new(BorrowPtrOp {
                     x_name: FullName::local(X_NAME),
                     f_name: g_name,
                     env_name,
@@ -8865,7 +8867,7 @@ pub fn borrow_boxed_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// pointer points to the first element of an array's element buffer, or to the payload of a boxed
 /// value, and the function is given the tuple `(env, ptr, ios)`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMMutatePtrBody {
+pub struct MutatePtrOp {
     /// The value the pointer points into.
     x_name: FullName,
     /// The function applied to the pointer and the `IOState`.
@@ -8883,7 +8885,7 @@ pub struct InlineLLVMMutatePtrBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMMutatePtrBody {
+impl BuiltinOp for MutatePtrOp {
     fn env_operand(&self) -> Option<EnvOperand> {
         Some(LENT_PTR_ENV_OPERAND)
     }
@@ -8944,7 +8946,7 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
         unique_check_on_boxed_leaf(LENT_VALUE_ARG, vec![], arg_tys, type_env)
     }
 
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.assume_local = true;
         Box::new(c)
@@ -8954,7 +8956,7 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
         self.assume_local
     }
 
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         let mut c = self.clone();
         c.force_unique = false;
         Box::new(c)
@@ -9007,22 +9009,21 @@ impl LLVMGen for InlineLLVMMutatePtrBody {
     }
 }
 
-/// The operand position of the value `InlineLLVMBorrowPtrBody` and `InlineLLVMMutatePtrBody` lend a
-/// pointer into.
+/// The operand position of the value `BorrowPtrOp` and `MutatePtrOp` lend a pointer into.
 const LENT_VALUE_ARG: usize = 0;
-/// The function operand of `InlineLLVMBorrowPtrBody` and `InlineLLVMMutatePtrBody`, and the
-/// environment operand they hand it.
+/// The function operand of `BorrowPtrOp` and `MutatePtrOp`, and the environment operand they hand
+/// it.
 const LENT_PTR_ENV_OPERAND: EnvOperand = EnvOperand {
     function: 1,
     env: 2,
 };
-/// The path of the value in the result of `InlineLLVMMutatePtrBody`, `(ios, (value, function result))`.
+/// The path of the value in the result of `MutatePtrOp`, `(ios, (value, function result))`.
 const MUTATE_PTR_VALUE_PATH: [usize; 2] = [1, 0];
 
 /// The definition of a function
 /// `(Ptr -> IOState -> (IOState, b)) -> x_ty -> IOState -> (IOState, (x_ty, b))` evaluated by
-/// `InlineLLVMMutatePtrBody` with the empty environment, whose type scheme has the predicates
-/// `preds`. `x_ty` must not mention `b`.
+/// `MutatePtrOp` with the empty environment, whose type scheme has the predicates `preds`. `x_ty`
+/// must not mention `b`.
 fn mutate_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprNode>, Arc<Scheme>) {
     const F_NAME: &str = "f";
     const X_NAME: &str = "x";
@@ -9042,8 +9043,8 @@ fn mutate_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprN
     let expr = expr_abs_many(
         vec![var_local(F_NAME), var_local(X_NAME), var_local(IOS_NAME)],
         with_empty_env(F_NAME, 2, |g_name, env_name| {
-            expr_llvm(
-                Box::new(InlineLLVMMutatePtrBody {
+            expr_builtin(
+                Box::new(MutatePtrOp {
                     x_name: FullName::local(X_NAME),
                     f_name: g_name,
                     env_name,
@@ -9073,11 +9074,12 @@ pub fn get_mutate_boxed_ios_internal() -> (Arc<ExprNode>, Arc<Scheme>) {
     mutate_ptr_function(a_ty, preds)
 }
 
+/// The builtin operation of `Std::IO::IOState::_unsafe_create`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIOStateUnsafeCreate {}
+pub struct IOStateUnsafeCreateOp {}
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMIOStateUnsafeCreate {
+impl BuiltinOp for IOStateUnsafeCreateOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         create_obj(make_iostate_ty(), &vec![], None, gc, Some("iostate"))
     }
@@ -9113,19 +9115,20 @@ impl LLVMGen for InlineLLVMIOStateUnsafeCreate {
 pub fn make_iostate_unsafe_create() -> (Arc<ExprNode>, Arc<Scheme>) {
     let ios_ty = make_iostate_ty();
     let scm = Scheme::generalize(&[], vec![], vec![], ios_ty.clone());
-    let expr = expr_llvm(Box::new(InlineLLVMIOStateUnsafeCreate {}), ios_ty, None);
+    let expr = expr_builtin(Box::new(IOStateUnsafeCreateOp {}), ios_ty, None);
     (expr, scm)
 }
 
+/// The builtin operation of `Std::FFI::Destructor::_make`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMDestructorMake {
+pub struct DestructorMakeOp {
     value: FullName,
     dtor: FullName,
     ios: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMDestructorMake {
+impl BuiltinOp for DestructorMakeOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // Get arguments.
         let value = gc.get_scoped_obj(&self.value); // a
@@ -9224,8 +9227,8 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
             var_local(DTOR_NAME),
             var_local(IOS_NAME),
         ],
-        expr_llvm(
-            Box::new(InlineLLVMDestructorMake {
+        expr_builtin(
+            Box::new(DestructorMakeOp {
                 value: FullName::local(VAR_NAME),
                 dtor: FullName::local(DTOR_NAME),
                 ios: FullName::local(IOS_NAME),
@@ -9282,16 +9285,16 @@ fn split_ios_result<'c, 'm>(
     (fields[0].clone(), fields[1].clone())
 }
 
-/// Inline-LLVM body of `Std::mark_threaded`, which puts the reference counters of all values
+/// The builtin operation of `Std::mark_threaded`, which puts the reference counters of all values
 /// reachable from the given value into multi-threaded mode and hands the value back.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMMarkThreadedFunctionBody {
+pub struct MarkThreadedOp {
     /// The name the value to be marked is bound to in the scope of this body.
     var_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMMarkThreadedFunctionBody {
+impl BuiltinOp for MarkThreadedOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
         // `check_multi_threading_requirement` has already reported a program that reaches here
         // without multi-threading, where the source of the use is still known.
@@ -9355,8 +9358,8 @@ pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     );
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
-        expr_llvm(
-            Box::new(InlineLLVMMarkThreadedFunctionBody {
+        expr_builtin(
+            Box::new(MarkThreadedOp {
                 var_name: FullName::local(VAR_NAME),
             }),
             obj_type,
@@ -9370,8 +9373,8 @@ pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 // `infinity` built-in value
 pub fn infinity_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     let ty = make_floating_ty(type_name).unwrap();
-    let expr = expr_llvm(
-        Box::new(InlineLLVMFloatLit { val: f64::INFINITY }),
+    let expr = expr_builtin(
+        Box::new(FloatLitOp { val: f64::INFINITY }),
         ty.clone(),
         None,
     );
@@ -9385,11 +9388,7 @@ pub fn quiet_nan_value(type_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     let nan_val: f64 = f64::from_bits(quiet_nan_bits);
 
     let ty = make_floating_ty(type_name).unwrap();
-    let expr = expr_llvm(
-        Box::new(InlineLLVMFloatLit { val: nan_val }),
-        ty.clone(),
-        None,
-    );
+    let expr = expr_builtin(Box::new(FloatLitOp { val: nan_val }), ty.clone(), None);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -9401,7 +9400,7 @@ pub fn unary_opeartor_instance(
     method_name: &Name,
     operand_ty: Arc<TypeNode>,
     result_ty: Arc<TypeNode>,
-    generator: Box<dyn LLVMGen>,
+    op: Box<dyn BuiltinOp>,
 ) -> TraitImpl {
     TraitImpl {
         qual_pred: QualPred {
@@ -9414,7 +9413,7 @@ pub fn unary_opeartor_instance(
             method_name.to_string(),
             expr_abs(
                 vec![var_local(UNARY_OPERATOR_RHS_NAME)],
-                expr_llvm(generator, result_ty, None),
+                expr_builtin(op, result_ty, None),
                 None,
             ),
         )]),
@@ -9435,7 +9434,7 @@ pub fn binary_opeartor_instance(
     method_name: &Name,
     operand_ty: Arc<TypeNode>,
     result_ty: Arc<TypeNode>,
-    generator: Box<dyn LLVMGen>,
+    op: Box<dyn BuiltinOp>,
 ) -> TraitImpl {
     TraitImpl {
         qual_pred: QualPred {
@@ -9450,7 +9449,7 @@ pub fn binary_opeartor_instance(
                 vec![var_local(BINARY_OPERATOR_LHS_NAME)],
                 expr_abs(
                     vec![var_local(BINARY_OPERATOR_RHS_NAME)],
-                    expr_llvm(generator, result_ty, None),
+                    expr_builtin(op, result_ty, None),
                     None,
                 ),
                 None,
@@ -9474,14 +9473,15 @@ pub fn eq_trait_id() -> TraitId {
     }
 }
 
+/// Integer equality: the `Std::Eq` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntEqBody {
+pub struct IntEqOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMIntEqBody {
+impl BuiltinOp for IntEqOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
@@ -9541,7 +9541,7 @@ pub fn eq_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
         make_bool_ty(),
-        Box::new(InlineLLVMIntEqBody {
+        Box::new(IntEqOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -9550,7 +9550,7 @@ pub fn eq_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
 
 /// Compares two `Ptr` values for equality of the addresses they hold, and returns a `Bool`.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMPtrEqBody {
+pub struct PtrEqOp {
     /// The local binding holding the left operand.
     lhs_name: FullName,
     /// The local binding holding the right operand.
@@ -9558,7 +9558,7 @@ pub struct InlineLLVMPtrEqBody {
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMPtrEqBody {
+impl BuiltinOp for PtrEqOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
@@ -9618,21 +9618,22 @@ pub fn eq_trait_instance_ptr(ty: Arc<TypeNode>) -> TraitImpl {
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
         make_bool_ty(),
-        Box::new(InlineLLVMPtrEqBody {
+        Box::new(PtrEqOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
     )
 }
 
+/// Floating-point equality: the `Std::Eq` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatEqBody {
+pub struct FloatEqOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMFloatEqBody {
+impl BuiltinOp for FloatEqOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
@@ -9692,7 +9693,7 @@ pub fn eq_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &EQ_TRAIT_EQ_NAME.to_string(),
         ty,
         make_bool_ty(),
-        Box::new(InlineLLVMFloatEqBody {
+        Box::new(FloatEqOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -9708,14 +9709,15 @@ pub fn less_than_trait_id() -> TraitId {
     }
 }
 
+/// Integer comparison: the `Std::LessThan` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntLessThanBody {
+pub struct IntLessThanOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMIntLessThanBody {
+impl BuiltinOp for IntLessThanOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs_obj = gc.get_scoped_obj(&self.lhs_name);
         let rhs_obj = gc.get_scoped_obj(&self.rhs_name);
@@ -9787,21 +9789,22 @@ pub fn less_than_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
         ty,
         make_bool_ty(),
-        Box::new(InlineLLVMIntLessThanBody {
+        Box::new(IntLessThanOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
     )
 }
 
+/// Floating-point comparison: the `Std::LessThan` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatLessThanBody {
+pub struct FloatLessThanOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMFloatLessThanBody {
+impl BuiltinOp for FloatLessThanOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -9866,7 +9869,7 @@ pub fn less_than_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &LESS_THAN_TRAIT_LT_NAME.to_string(),
         ty,
         make_bool_ty(),
-        Box::new(InlineLLVMFloatLessThanBody {
+        Box::new(FloatLessThanOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -9882,14 +9885,15 @@ pub fn less_than_or_equal_to_trait_id() -> TraitId {
     }
 }
 
+/// Integer comparison: the `Std::LessThanOrEq` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntLessThanOrEqBody {
+pub struct IntLessThanOrEqOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMIntLessThanOrEqBody {
+impl BuiltinOp for IntLessThanOrEqOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -9959,21 +9963,22 @@ pub fn less_than_or_equal_to_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl 
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
         ty,
         make_bool_ty(),
-        Box::new(InlineLLVMIntLessThanOrEqBody {
+        Box::new(IntLessThanOrEqOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
     )
 }
 
+/// Floating-point comparison: the `Std::LessThanOrEq` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatLessThanOrEqBody {
+pub struct FloatLessThanOrEqOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMFloatLessThanOrEqBody {
+impl BuiltinOp for FloatLessThanOrEqOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -10038,7 +10043,7 @@ pub fn less_than_or_equal_to_trait_instance_float(ty: Arc<TypeNode>) -> TraitImp
         &LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME.to_string(),
         ty,
         make_bool_ty(),
-        Box::new(InlineLLVMFloatLessThanOrEqBody {
+        Box::new(FloatLessThanOrEqOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -10324,14 +10329,15 @@ fn build_report_signed_overflow<'c, 'm>(
     );
 }
 
+/// Integer addition: the `Std::Add` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntAddBody {
+pub struct IntAddOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMIntAddBody {
+impl BuiltinOp for IntAddOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -10387,21 +10393,22 @@ pub fn add_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &ADD_TRAIT_ADD_NAME.to_string(),
         ty.clone(),
         ty,
-        Box::new(InlineLLVMIntAddBody {
+        Box::new(IntAddOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
     )
 }
 
+/// Floating-point addition: the `Std::Add` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatAddBody {
+pub struct FloatAddOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMFloatAddBody {
+impl BuiltinOp for FloatAddOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -10453,7 +10460,7 @@ pub fn add_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &ADD_TRAIT_ADD_NAME.to_string(),
         ty.clone(),
         ty,
-        Box::new(InlineLLVMFloatAddBody {
+        Box::new(FloatAddOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -10469,14 +10476,15 @@ pub fn subtract_trait_id() -> TraitId {
     }
 }
 
+/// Integer subtraction: the `Std::Sub` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntSubBody {
+pub struct IntSubOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMIntSubBody {
+impl BuiltinOp for IntSubOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -10532,21 +10540,22 @@ pub fn subtract_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
         ty.clone(),
         ty,
-        Box::new(InlineLLVMIntSubBody {
+        Box::new(IntSubOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
     )
 }
 
+/// Floating-point subtraction: the `Std::Sub` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatSubBody {
+pub struct FloatSubOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMFloatSubBody {
+impl BuiltinOp for FloatSubOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -10598,7 +10607,7 @@ pub fn subtract_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &SUBTRACT_TRAIT_SUBTRACT_NAME.to_string(),
         ty.clone(),
         ty,
-        Box::new(InlineLLVMFloatSubBody {
+        Box::new(FloatSubOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -10614,14 +10623,15 @@ pub fn multiply_trait_id() -> TraitId {
     }
 }
 
+/// Integer multiplication: the `Std::Mul` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntMulBody {
+pub struct IntMulOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMIntMulBody {
+impl BuiltinOp for IntMulOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -10677,21 +10687,22 @@ pub fn multiply_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
         ty.clone(),
         ty,
-        Box::new(InlineLLVMIntMulBody {
+        Box::new(IntMulOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
     )
 }
 
+/// Floating-point multiplication: the `Std::Mul` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatMulBody {
+pub struct FloatMulOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMFloatMulBody {
+impl BuiltinOp for FloatMulOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -10743,7 +10754,7 @@ pub fn multiply_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &MULTIPLY_TRAIT_MULTIPLY_NAME.to_string(),
         ty.clone(),
         ty,
-        Box::new(InlineLLVMFloatMulBody {
+        Box::new(FloatMulOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -10759,14 +10770,15 @@ pub fn divide_trait_id() -> TraitId {
     }
 }
 
+/// Integer division: the `Std::Div` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntDivBody {
+pub struct IntDivOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMIntDivBody {
+impl BuiltinOp for IntDivOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -10823,21 +10835,22 @@ pub fn divide_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
         ty.clone(),
         ty,
-        Box::new(InlineLLVMIntDivBody {
+        Box::new(IntDivOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
     )
 }
 
+/// Floating-point division: the `Std::Div` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatDivBody {
+pub struct FloatDivOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMFloatDivBody {
+impl BuiltinOp for FloatDivOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -10889,7 +10902,7 @@ pub fn divide_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &DIVIDE_TRAIT_DIVIDE_NAME.to_string(),
         ty.clone(),
         ty,
-        Box::new(InlineLLVMFloatDivBody {
+        Box::new(FloatDivOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -10905,14 +10918,15 @@ pub fn remainder_trait_id() -> TraitId {
     }
 }
 
+/// Integer remainder: the `Std::Rem` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntRemBody {
+pub struct IntRemOp {
     lhs_name: FullName,
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMIntRemBody {
+impl BuiltinOp for IntRemOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let lhs = gc.get_scoped_obj(&self.lhs_name);
         let rhs = gc.get_scoped_obj(&self.rhs_name);
@@ -10969,7 +10983,7 @@ pub fn remainder_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &REMAINDER_TRAIT_REMAINDER_NAME.to_string(),
         ty.clone(),
         ty,
-        Box::new(InlineLLVMIntRemBody {
+        Box::new(IntRemOp {
             lhs_name: FullName::local(BINARY_OPERATOR_LHS_NAME),
             rhs_name: FullName::local(BINARY_OPERATOR_RHS_NAME),
         }),
@@ -10985,13 +10999,14 @@ pub fn negate_trait_id() -> TraitId {
     }
 }
 
+/// Integer negation: the `Std::Neg` instance of the integer types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMIntNegBody {
+pub struct IntNegOp {
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMIntNegBody {
+impl BuiltinOp for IntNegOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
@@ -11042,19 +11057,20 @@ pub fn negate_trait_instance_int(ty: Arc<TypeNode>) -> TraitImpl {
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
         ty.clone(),
         ty,
-        Box::new(InlineLLVMIntNegBody {
+        Box::new(IntNegOp {
             rhs_name: FullName::local(UNARY_OPERATOR_RHS_NAME),
         }),
     )
 }
 
+/// Floating-point negation: the `Std::Neg` instance of the floating-point types.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMFloatNegBody {
+pub struct FloatNegOp {
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMFloatNegBody {
+impl BuiltinOp for FloatNegOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_float_value();
@@ -11101,7 +11117,7 @@ pub fn negate_trait_instance_float(ty: Arc<TypeNode>) -> TraitImpl {
         &NEGATE_TRAIT_NEGATE_NAME.to_string(),
         ty.clone(),
         ty,
-        Box::new(InlineLLVMFloatNegBody {
+        Box::new(FloatNegOp {
             rhs_name: FullName::local(UNARY_OPERATOR_RHS_NAME),
         }),
     )
@@ -11118,13 +11134,13 @@ pub fn not_trait_id() -> TraitId {
 
 /// Negates a `Std::Bool`, the implementation of `Std::Not::not` for it.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVMBoolNegBody {
+pub struct BoolNegOp {
     /// The local binding holding the value to negate.
     rhs_name: FullName,
 }
 
 #[typetag::serde]
-impl LLVMGen for InlineLLVMBoolNegBody {
+impl BuiltinOp for BoolNegOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
@@ -11177,7 +11193,7 @@ pub fn not_trait_instance_bool() -> TraitImpl {
         &NOT_TRAIT_OP_NAME.to_string(),
         make_bool_ty(),
         make_bool_ty(),
-        Box::new(InlineLLVMBoolNegBody {
+        Box::new(BoolNegOp {
             rhs_name: FullName::local(UNARY_OPERATOR_RHS_NAME),
         }),
     )
