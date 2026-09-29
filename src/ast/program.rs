@@ -5,9 +5,9 @@ use crate::ast::expr::{expr_var, Expr, ExprNode, Var};
 use crate::ast::import::{is_accessible, ImportItem, ImportStatement};
 use crate::ast::kind_scope::KindEnv;
 use crate::ast::name::{FullName, Name, NameSpace};
-use crate::ast::pattern::PatternNode;
+use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
-use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
+use crate::ast::typedecl::{describe_field_names, Field, TypeDeclValue, TypeDefn};
 use crate::ast::types::{
     is_opaque_tyvar, AssocType, Kind, OpaqueTyConResolution, Scheme, TyAliasInfo, TyCon, TyConInfo,
     TyConVariant, TypeNode,
@@ -28,7 +28,9 @@ use crate::elaboration::desugar_opaque::{
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
-use crate::error::{Error, Errors, WARN_DEPRECATED, WARN_UNDECLARED_DEPENDENCY};
+use crate::error::{
+    Error, Errors, WARN_DEPRECATED, WARN_MISSING_PATTERN_FIELD, WARN_UNDECLARED_DEPENDENCY,
+};
 use crate::ffi::{c_entry_point_signature, unpassable_variadic_type_msg, CSignature};
 use crate::fixstd::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
@@ -48,6 +50,7 @@ use crate::printer::Text;
 use crate::type_size::{no_size_reason, LayoutWalk};
 use build_time::build_time_utc;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::Write;
@@ -2343,13 +2346,22 @@ impl Program {
         ))
     }
 
+    /// The diagnostics read off the type-checked expressions of the user's own code: the uses of
+    /// deprecated items, and the struct patterns that leave out fields without `_`. They are
+    /// reported alongside the elaborated program.
+    pub fn collect_diagnostics_of_typed_program(&self, config: &Configuration) -> Errors {
+        let mut diagnostics = self.collect_deprecation_diagnostics(config);
+        diagnostics.append(self.collect_missing_pattern_field_diagnostics(config));
+        diagnostics
+    }
+
     /// The uses of items marked `DEPRECATED[...]` that this program makes, as warnings, or as
     /// errors where `Configuration.deprecation_mode` is `Deny`.
     ///
     /// The diagnostics are scoped to the user's own code by `Configuration.root_source_files`: a
     /// use is reported where its source span lies in one of those files, so that what is reported
     /// is what the user can edit.
-    pub fn collect_deprecation_diagnostics(&self, config: &Configuration) -> Errors {
+    fn collect_deprecation_diagnostics(&self, config: &Configuration) -> Errors {
         let mut diagnostics = Errors::empty();
         // Exhaustive match: a new `DeprecationMode` variant must be handled here.
         let promote_to_error = match config.deprecation_mode {
@@ -2358,15 +2370,7 @@ impl Program {
             DeprecationMode::Deny => true,
         };
 
-        // Canonicalize the user-code file set once so per-use comparisons
-        // are simple `HashSet` lookups. Paths that fail to canonicalize
-        // (e.g. they no longer exist) are dropped; a missing file just
-        // won't match any use site, which is the safe direction.
-        let user_files: Set<PathBuf> = config
-            .root_source_files
-            .iter()
-            .filter_map(|p| to_absolute_path(p).ok())
-            .collect();
+        let user_files = UserSourceFiles::of(config);
 
         for (_gv_name, gv) in &self.global_values {
             // Skip uses inside an item that is itself deprecated. This is the
@@ -2400,11 +2404,7 @@ impl Program {
                     Some(s) => s,
                     None => continue,
                 };
-                let abs = match to_absolute_path(&span.input.file_path) {
-                    Ok(p) => p,
-                    Err(_) => continue,
-                };
-                if !user_files.contains(&abs) {
+                if !user_files.contains_span(span) {
                     continue;
                 }
                 let msg = format!(
@@ -2420,6 +2420,79 @@ impl Program {
                 err.code = Some(WARN_DEPRECATED);
                 diagnostics.append(Errors::from_err(err));
             }
+        }
+        diagnostics
+    }
+
+    /// The struct patterns of the user's own code that leave out fields of their struct without
+    /// writing `_` after the fields they name, as warnings.
+    ///
+    /// A pattern that names every field of its struct is reported once a field is added to the
+    /// struct, so each place that takes the struct apart gets looked at again. A pattern that
+    /// leaves fields out on purpose says so with `_` (`S { x, _ }`).
+    ///
+    /// The diagnostics are scoped to the user's own code by `Configuration.root_source_files`, as
+    /// `collect_deprecation_diagnostics` scopes its own.
+    fn collect_missing_pattern_field_diagnostics(&self, config: &Configuration) -> Errors {
+        let user_files = UserSourceFiles::of(config);
+        let mut reports: Vec<(Span, Arc<TyCon>, Vec<Name>)> = vec![];
+        for gv in self.global_values.values() {
+            gv.expr.walk_patterns(&mut |pat| {
+                pat.walk_nodes(&mut |node| {
+                    let Pattern::Struct(tc, fields, false) = &node.pattern else {
+                        return;
+                    };
+                    let Some(span) = &node.info.source else {
+                        return;
+                    };
+                    if !user_files.contains_span(span) {
+                        return;
+                    }
+                    // A head that names no struct, which the language server's error-tolerant
+                    // check leaves in place, has no fields to compare against.
+                    let Some(ti) = self
+                        .type_env
+                        .tycons()
+                        .get(tc)
+                        .filter(|ti| ti.variant == TyConVariant::Struct)
+                    else {
+                        return;
+                    };
+                    let written: Set<&Name> = fields.iter().map(|(name, _, _)| name).collect();
+                    let missing: Vec<Name> = ti
+                        .fields
+                        .iter()
+                        .filter(|f| !written.contains(&f.name))
+                        .map(|f| f.name.clone())
+                        .collect();
+                    if !missing.is_empty() {
+                        reports.push((span.clone(), tc.clone(), missing));
+                    }
+                });
+            });
+        }
+        // The values are held in a map, so an order is chosen here to keep the report the same
+        // from one build to the next.
+        reports.sort_by(|(lhs, _, _), (rhs, _, _)| lhs.cmp(rhs));
+
+        let mut diagnostics = Errors::empty();
+        for (span, tc, missing) in reports {
+            let pronoun = if missing.len() == 1 { "it" } else { "them" };
+            let mut err = Error::warning_from_msg_srcs(
+                format!(
+                    "This pattern leaves out the {} of struct `{}`.\n\
+                     HINT: add {} to the pattern, or write `_` after the fields to leave out the \
+                     rest.\n\
+                     NOTE: a future version of Fix will report this as an error.",
+                    describe_field_names(&missing),
+                    tc.to_string(),
+                    pronoun,
+                ),
+                &[&Some(span)],
+            );
+            err.code = Some(WARN_MISSING_PATTERN_FIELD);
+            err.data = Some(json!(missing));
+            diagnostics.append(Errors::from_err(err));
         }
         diagnostics
     }
@@ -2469,11 +2542,7 @@ impl Program {
         }
 
         // The files the user writes, which are the ones an import is reported in.
-        let user_files: Set<PathBuf> = config
-            .root_source_files
-            .iter()
-            .filter_map(|path| to_absolute_path(path).ok())
-            .collect();
+        let user_files = UserSourceFiles::of(config);
 
         // The earliest import reaching each undeclared project, by the project that makes it: the
         // two projects, the module named, and where it is named.
@@ -2490,7 +2559,7 @@ impl Program {
             let Ok(path) = to_absolute_path(&span.input.file_path) else {
                 continue;
             };
-            if !user_files.contains(&path) {
+            if !user_files.contains_path(&path) {
                 continue;
             }
             let Some(importing_project) = file_to_project.get(&path) else {
@@ -3481,4 +3550,34 @@ pub enum EndNode {
     /// The type a `_` type wildcard written in a type annotation was inferred to, which hover
     /// displays.
     InferredType(Arc<TypeNode>),
+}
+
+/// The files of the user's own code, `Configuration.root_source_files`, as absolute paths. The
+/// diagnostics about what the user writes are scoped to these files.
+struct UserSourceFiles(Set<PathBuf>);
+
+impl UserSourceFiles {
+    /// The user's files of `config`. A path that fails to canonicalize (a file that no longer
+    /// exists) is dropped: no span can lie in it.
+    fn of(config: &Configuration) -> Self {
+        UserSourceFiles(
+            config
+                .root_source_files
+                .iter()
+                .filter_map(|p| to_absolute_path(p).ok())
+                .collect(),
+        )
+    }
+
+    /// Whether the absolute path `path` is one of the user's files.
+    fn contains_path(&self, path: &PathBuf) -> bool {
+        self.0.contains(path)
+    }
+
+    /// Whether `span` lies in one of the user's files.
+    fn contains_span(&self, span: &Span) -> bool {
+        to_absolute_path(&span.input.file_path)
+            .map(|path| self.contains_path(&path))
+            .unwrap_or(false)
+    }
 }

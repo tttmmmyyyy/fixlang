@@ -1,0 +1,9 @@
+module Main;
+
+type S = struct { x : I64, y : I64 };
+
+get_x : S -> I64;
+get_x = |S { x }| x;
+
+main : IO ();
+main = println(get_x(S { x : 1, y : 2 }).to_string);

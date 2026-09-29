@@ -762,7 +762,7 @@ impl<'a> Lowerer<'a> {
                     body,
                 }
             }
-            Pattern::Struct(_, _) => {
+            Pattern::Struct(_, _, _) => {
                 // A struct/tuple pattern in a `match` is a single non-variant (default) arm that
                 // binds the whole scrutinee and destructures it.
                 let payload =
@@ -937,7 +937,7 @@ impl<'a> Lowerer<'a> {
                 }
                 vec![v.name.clone()]
             }
-            Pattern::Struct(_tc, field_pats) => {
+            Pattern::Struct(_tc, field_pats, _) => {
                 let field_tys = obj.ty.field_types(self.type_env);
                 let mut fields = vec![]; // (field index, field variable) for the whole destructure
                 let mut nested = vec![]; // (field variable, sub-pattern) lowered after the extraction

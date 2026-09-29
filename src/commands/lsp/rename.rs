@@ -269,7 +269,7 @@ fn shorthand_fields(program: &Program) -> Map<Span, Name> {
         });
         gv.expr.walk_patterns(&mut |pat| {
             pat.walk_nodes(&mut |node| {
-                if let Pattern::Struct(_, fields) = &node.pattern {
+                if let Pattern::Struct(_, fields, _) = &node.pattern {
                     record(fields, &mut out);
                 }
             });

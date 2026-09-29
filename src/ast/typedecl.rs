@@ -392,6 +392,23 @@ impl TypeAlias {
     }
 }
 
+/// The fields named `names`, as a diagnostic names them in a sentence.
+///
+/// # Examples
+/// `["b"]` gives ``field `b` ``, and `["a", "b"]` gives ``fields `a`, `b` ``.
+pub fn describe_field_names(names: &[Name]) -> String {
+    let list = names
+        .iter()
+        .map(|name| format!("`{}`", name))
+        .collect::<Vec<_>>()
+        .join(", ");
+    if names.len() == 1 {
+        format!("field {}", list)
+    } else {
+        format!("fields {}", list)
+    }
+}
+
 #[derive(Clone)]
 pub struct Field {
     pub name: Name,

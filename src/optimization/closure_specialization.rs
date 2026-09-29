@@ -1108,7 +1108,7 @@ fn capture_list_destructuring(
     let mut expr = body.clone();
     while expr.is_let() {
         let pat = expr.get_let_pat();
-        if let Pattern::Struct(pat_tycon, field_to_pat) = &pat.pattern {
+        if let Pattern::Struct(pat_tycon, field_to_pat, _) = &pat.pattern {
             if pat_tycon.as_ref() == tycon.as_ref() {
                 assert!(
                     field_to_pat.iter().all(|(_, _, pat)| pat.is_var()),
@@ -1973,7 +1973,7 @@ impl ClosureSpecializationVisitor {
             return false;
         };
         match &pat.pattern {
-            Pattern::Struct(tycon, _) => tycon.as_ref() == narrowed.original.as_ref(),
+            Pattern::Struct(tycon, _, _) => tycon.as_ref() == narrowed.original.as_ref(),
             _ => false,
         }
     }
@@ -1981,7 +1981,7 @@ impl ClosureSpecializationVisitor {
     /// Hand the identity of every field that holds a capture list to the name that field binds, where
     /// `pat` destructures a capture list this pass built.
     fn record_capture_list_fields(&mut self, pat: &Arc<PatternNode>) {
-        let Pattern::Struct(tycon, field_to_pat) = &pat.pattern else {
+        let Pattern::Struct(tycon, field_to_pat, _) = &pat.pattern else {
             return;
         };
         if self
@@ -2012,7 +2012,7 @@ impl ClosureSpecializationVisitor {
         bound: &Arc<ExprNode>,
         value: &Arc<ExprNode>,
     ) -> StartVisitResult {
-        let Pattern::Struct(_, field_to_pat) = &pat.pattern else {
+        let Pattern::Struct(_, field_to_pat, _) = &pat.pattern else {
             unreachable!()
         };
         let cap_fields = narrowed.cap.fields();

@@ -477,7 +477,7 @@ impl ExprVisitor for DestructuringRemover<'_> {
         }
         let pat = expr.get_let_pat();
         let bound = expr.get_let_bound();
-        let Pattern::Struct(pat_tycon, field_to_pat) = &pat.pattern else {
+        let Pattern::Struct(pat_tycon, field_to_pat, _) = &pat.pattern else {
             return StartVisitResult::VisitChildren;
         };
         if pat_tycon != self.tycon

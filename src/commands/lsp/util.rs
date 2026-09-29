@@ -97,6 +97,17 @@ pub(super) fn position_to_bytes(string: &str, position: Position) -> usize {
     bytes
 }
 
+/// The `lsp_types::Position` of the byte offset `bytes` in `string`, its column counted in UTF-16
+/// code units as the protocol counts them. `position_to_bytes` is its inverse.
+pub(super) fn bytes_to_position(string: &str, bytes: usize) -> Position {
+    let before = &string[..bytes];
+    let line_start = before.rfind('\n').map_or(0, |i| i + 1);
+    Position {
+        line: before.matches('\n').count() as u32,
+        character: before[line_start..].encode_utf16().count() as u32,
+    }
+}
+
 /// Returns true when the cursor of `text_position` sits inside a comment
 /// (`//` line comment or `/* */` block comment) in the latest content of
 /// the file. If the content for the uri is unavailable, returns false.

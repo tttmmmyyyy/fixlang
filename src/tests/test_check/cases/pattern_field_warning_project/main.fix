@@ -1,0 +1,23 @@
+module Main;
+
+import Dep;
+
+type S = struct { x : I64, y : I64, z : I64 };
+
+// Leaves out `y` and `z` without `_`.
+leaves_out : S -> I64;
+leaves_out = |S { x }| x;
+
+// Leaves out `y` and `z` with `_`.
+with_rest : S -> I64;
+with_rest = |S { x, _ }| x;
+
+// Names every field.
+every_field : S -> I64;
+every_field = |S { x, y, z }| x + y + z;
+
+main : IO ();
+main = (
+    let s = S { x : 1, y : 2, z : 3 };
+    println((leaves_out(s), with_rest(s), every_field(s), first_of(Pair { first : 4, second : 5 })).to_string)
+);

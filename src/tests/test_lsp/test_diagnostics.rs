@@ -288,6 +288,25 @@ mod tests {
         assert_sole_duplicate_field_report("duplicate_struct_pattern_field", 6, 24, 18);
     }
 
+    /// A struct pattern that leaves out fields without `_` is reported in the editor as a warning,
+    /// on the pattern, naming the fields it leaves out.
+    ///
+    /// The editor runs its own path through the compiler, which collects the warnings of the
+    /// modules it checks separately from a build.
+    #[test]
+    fn test_struct_pattern_leaving_out_fields_is_warned_on_the_pattern() {
+        let (_temp_dir, project_dir) = setup_test_env("struct_pattern_leaving_out_fields");
+        let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
+        let diag = sole_diagnostic_containing(
+            &diagnostics,
+            "This pattern leaves out the field `y` of struct `Main::S`.",
+        );
+        assert_eq!(diag["severity"], 2, "as a warning");
+        // `main.fix` writes `S { x }` on the 6th line, from the 10th column to the 16th.
+        assert_eq!(diag["range"]["start"], json!({ "line": 5, "character": 9 }));
+        assert_eq!(diag["range"]["end"], json!({ "line": 5, "character": 16 }));
+    }
+
     /// A name the struct does not declare is reported in the editor on that name, in a struct
     /// pattern as in a struct literal.
     ///

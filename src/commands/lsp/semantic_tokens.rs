@@ -547,7 +547,7 @@ impl<'a> Overlay<'a> {
                     self.collect_type(ty);
                 }
             }
-            Pattern::Struct(tc, fields) => {
+            Pattern::Struct(tc, fields, _) => {
                 // The struct type-constructor name (`info.aux_src`).
                 if let Some(aux) = &pat.info.aux_src {
                     let token_type = self.classify_tycon(tc);

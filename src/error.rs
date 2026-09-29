@@ -15,6 +15,9 @@ pub const WARN_DEPRECATED: &'static str = "deprecated";
 /// Diagnostic code for "import of a module whose project is not a declared dependency".
 pub const WARN_UNDECLARED_DEPENDENCY: &'static str = "undeclared-dependency";
 
+/// Diagnostic code for "struct pattern that leaves out fields without writing `_`".
+pub const WARN_MISSING_PATTERN_FIELD: &'static str = "missing-pattern-field";
+
 /// Severity of a diagnostic.
 ///
 /// Errors are fatal and cause compilation to fail. Warnings are non-fatal:

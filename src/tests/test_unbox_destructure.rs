@@ -28,7 +28,7 @@ main : IO () = (
 
     // unbox struct last-use, partial pattern names only `a`, omitting boxed field `b` (drop-omitted)
     let p1 = UnboxPair { a: [5, 6], b: [7, 8] };
-    let UnboxPair { a: a1 } = p1;
+    let UnboxPair { a: a1, _ } = p1;
     assert_eq(|_|"struct drop b", a1.@(1), 6);;
 
     // unbox struct last-use, both fields named, `b` never used so it is released as a dead binding
@@ -38,7 +38,7 @@ main : IO () = (
 
     // unbox struct still read after the destructure (shared), one boxed field dropped
     let p3 = UnboxPair { a: [12], b: [13, 14] };
-    let UnboxPair { a: a3 } = p3;
+    let UnboxPair { a: a3, _ } = p3;
     assert_eq(|_|"kept field", a3.@(0), 12);;
     assert_eq(|_|"kept container", p3.@a.@(0) + p3.@b.@(1), 26);;
 

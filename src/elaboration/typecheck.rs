@@ -15,6 +15,7 @@ use crate::{
         qual_pred::{QualPred, QualPredScheme},
         qual_type::QualType,
         traits::{TraitEnv, TraitId},
+        typedecl::describe_field_names,
         types::{
             is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar,
             type_fun, type_tyapp, type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme,
@@ -1655,7 +1656,7 @@ impl TypeCheckContext {
                     }
                 }
             }
-            Pattern::Struct(tc, pats) => {
+            Pattern::Struct(tc, pats, _) => {
                 // The head has to name a struct: the sub-patterns are matched against that
                 // struct's fields, and the value is destructured in its field order.
                 let tycon_info = self.resolve_struct_tycon(tc, &pat.info.source, !tolerate)?;
@@ -2507,7 +2508,7 @@ impl TypeCheckContext {
                 let subpat = self.map_types_for_pattern(subpat, pat_ty)?;
                 pat.set_union_pat(subpat)
             }
-            Pattern::Struct(_, field_to_pat) => {
+            Pattern::Struct(_, field_to_pat, _) => {
                 let mut field_to_pat = field_to_pat.clone();
                 for (_field_name, _, subpat) in field_to_pat.iter_mut() {
                     *subpat = self.map_types_for_pattern(subpat, pat_ty)?;
@@ -2743,7 +2744,7 @@ impl TypeCheckContext {
         match &pat.pattern {
             Pattern::Var(_, _) => {}
             Pattern::Union(_, _, subpat) => self.check_pattern_types_are_fixed(subpat)?,
-            Pattern::Struct(_, fields) => {
+            Pattern::Struct(_, fields, _) => {
                 for (_, _, subpat) in fields {
                     self.check_pattern_types_are_fixed(subpat)?;
                 }
@@ -2836,7 +2837,7 @@ impl TypeCheckContext {
         match &pat.pattern {
             Pattern::Var(_, _) => {}
             Pattern::Union(_, _, subpat) => self.check_all_pattern_typed(subpat)?,
-            Pattern::Struct(_, fields) => {
+            Pattern::Struct(_, fields, _) => {
                 for (_, _, subpat) in fields {
                     self.check_all_pattern_typed(subpat)?;
                 }
@@ -2885,20 +2886,11 @@ fn field_name_span(field_src: &Option<FieldSrc>) -> Option<Span> {
 /// The report for declared fields a struct literal leaves out, located at the
 /// whole literal, which is where the editor's quick fix inserts them.
 fn missing_fields_error(tc: &Arc<TyCon>, missing: &[Name], source: &Option<Span>) -> Error {
-    let msg = if missing.len() == 1 {
-        format!(
-            "Missing field `{}` of struct `{}`.",
-            missing[0],
-            tc.to_string()
-        )
-    } else {
-        let list = missing
-            .iter()
-            .map(|n| format!("`{}`", n))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("Missing fields {} of struct `{}`.", list, tc.to_string())
-    };
+    let msg = format!(
+        "Missing {} of struct `{}`.",
+        describe_field_names(missing),
+        tc.to_string()
+    );
     let mut err = Error::from_msg_srcs(msg, &[source]);
     err.code = Some(ERR_MISSING_STRUCT_FIELD);
     err.data = Some(json!(missing));

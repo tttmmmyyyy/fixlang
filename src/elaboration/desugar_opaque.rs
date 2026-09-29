@@ -1047,13 +1047,13 @@ fn resolve_opaque_tycon_in_pattern(
             pattern: Pattern::Var(v.clone(), anno_ty.clone()),
             info,
         }),
-        Pattern::Struct(tc, field_to_pat) => {
+        Pattern::Struct(tc, field_to_pat, has_rest) => {
             let mut new_field_to_pat = field_to_pat.clone();
             for (_, _, subpat) in new_field_to_pat.iter_mut() {
                 *subpat = resolve_opaque_tycon_in_pattern(subpat, opaque_resolutions);
             }
             Arc::new(PatternNode {
-                pattern: Pattern::Struct(tc.clone(), new_field_to_pat),
+                pattern: Pattern::Struct(tc.clone(), new_field_to_pat, *has_rest),
                 info,
             })
         }

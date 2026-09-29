@@ -541,7 +541,7 @@ fn collect_pattern_type_refs(pat: &Arc<PatternNode>, target: &TyCon, refs: &mut 
                 collect_typenode_type_refs(ty, target, refs);
             }
         }
-        Pattern::Struct(tc, _) => {
+        Pattern::Struct(tc, _, _) => {
             if tc.as_ref() == target {
                 if let Some(span) = &node.info.aux_src {
                     refs.push(span.clone());
@@ -879,7 +879,7 @@ fn collect_pattern_bare_field_occs(
 ) {
     pat.walk_nodes(&mut |node| match &node.pattern {
         Pattern::Var(_, _) => {}
-        Pattern::Struct(pat_tc, fields) => {
+        Pattern::Struct(pat_tc, fields, _) => {
             if pat_tc.as_ref() == tc {
                 for (fname, field_src, _) in fields {
                     if fname == name {

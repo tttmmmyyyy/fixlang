@@ -1,0 +1,6 @@
+[general]
+name = "dep-with-partial-pattern"
+version = "0.1.0"
+
+[build]
+files = ["lib.fix"]

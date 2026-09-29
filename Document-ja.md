@@ -708,6 +708,15 @@ get_price : Product -> I64;
 get_price = |Product { price, sold }| price;
 ```
 
+構造体のパターンには、その構造体のすべてのフィールドを書きます。一部のフィールドを省くときは、書いたフィールドの後に`_`を書きます。
+
+```
+get_price : Product -> I64;
+get_price = |Product { price, _ }| price;
+```
+
+`_`を書かずにフィールドを省いたパターンは、警告を出したうえで受け付けます。将来のバージョンの Fix では、このようなパターンはエラーになります。
+
 ## イテレータ
 
 式`fib.to_iter.map(to_string).join(", ")`について説明します。この式は
