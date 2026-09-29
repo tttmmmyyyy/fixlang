@@ -1151,8 +1151,8 @@ pub fn resolve_opaque_tycon_in_expr(
                 .collect();
             expr.set_ffi_call_args(new_args)
         }
-        // A variable holds no subexpression. An LLVM expression holds `generic_ty`, which stays
+        // A variable holds no subexpression. A builtin expression holds `generic_ty`, which stays
         // written in the type variables of the builtin that carries it, instantiation included.
-        Expr::Var(_) | Expr::LLVM(_) => expr,
+        Expr::Var(_) | Expr::Builtin(_) => expr,
     }
 }

@@ -81,14 +81,18 @@ pub trait ExprVisitor {
         EndVisitResult::unchanged(expr)
     }
 
-    fn start_visit_llvm(
+    fn start_visit_builtin(
         &mut self,
         _expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
         StartVisitResult::VisitChildren
     }
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_builtin(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 
@@ -267,8 +271,8 @@ pub trait ExprVisitor {
                 let res = self.end_visit_var(&expr, state);
                 self.revisit_if_changed(res, state)
             }
-            Expr::LLVM(_lit) => {
-                let res = self.start_visit_llvm(&expr, state);
+            Expr::Builtin(_builtin) => {
+                let res = self.start_visit_builtin(&expr, state);
                 match res {
                     StartVisitResult::VisitChildren => {
                         // Has no children
@@ -283,7 +287,7 @@ pub trait ExprVisitor {
                         return EndVisitResult::unchanged(expr);
                     }
                 }
-                let res = self.end_visit_llvm(&expr, state);
+                let res = self.end_visit_builtin(&expr, state);
                 self.revisit_if_changed(res, state)
             }
             Expr::App(func, args) => {

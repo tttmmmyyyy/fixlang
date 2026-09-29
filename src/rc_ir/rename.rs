@@ -86,7 +86,7 @@ fn assign_fresh_names_to_binders_inner(
                         assign_fresh_names_to_binders(&arm.body, pass_tag, renaming, counter);
                     }
                 }
-                RcRhs::Var(_) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Llvm(..) => {}
+                RcRhs::Var(_) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Builtin(..) => {}
             }
             assign_fresh_names_to_binders(k, pass_tag, renaming, counter);
         }
@@ -114,7 +114,8 @@ fn rename_var(var: &RcVar, renaming: &Map<FullName, FullName>) -> RcVar {
 }
 
 /// A deep clone of an expression with every variable occurrence rewritten through `renaming`. The
-/// operand names embedded in an `Llvm` generator are rewritten too, since they name the same locals.
+/// operand names embedded in a `Builtin` operation are rewritten too, since they name the same
+/// locals.
 fn rename_expr(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> RcExprNode {
     grow_stack(|| rename_expr_inner(node, renaming))
 }
@@ -157,7 +158,7 @@ fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> R
     }
 }
 
-/// A right-hand side with every variable occurrence (including `Llvm` operand names) rewritten
+/// A right-hand side with every variable occurrence (including `Builtin` operand names) rewritten
 /// through `renaming`.
 fn rename_rhs(rhs: &RcRhs, renaming: &Map<FullName, FullName>) -> RcRhs {
     match rhs {
@@ -170,17 +171,14 @@ fn rename_rhs(rhs: &RcRhs, renaming: &Map<FullName, FullName>) -> RcRhs {
             fref.clone(),
             caps.iter().map(|c| rename_var(c, renaming)).collect(),
         ),
-        RcRhs::Llvm(llvm_gen, args) => {
-            let mut llvm_gen = llvm_gen.clone();
-            for slot in llvm_gen.free_vars_mut() {
+        RcRhs::Builtin(op, args) => {
+            let mut op = op.clone();
+            for slot in op.free_vars_mut() {
                 if let Some(n) = renaming.get(slot) {
                     *slot = n.clone();
                 }
             }
-            RcRhs::Llvm(
-                llvm_gen,
-                args.iter().map(|a| rename_var(a, renaming)).collect(),
-            )
+            RcRhs::Builtin(op, args.iter().map(|a| rename_var(a, renaming)).collect())
         }
         RcRhs::Match(scrut, arms) => RcRhs::Match(
             rename_var(scrut, renaming),

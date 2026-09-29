@@ -261,7 +261,7 @@ fn replace_closure_call_to_funptr_call_subexprs(
     let expr = replace_closure_call_to_funptr_call(expr, symbol_names);
     match &*expr.expr {
         Expr::Var(_) => expr.clone(),
-        Expr::LLVM(_) => expr.clone(),
+        Expr::Builtin(_) => expr.clone(),
         Expr::App(fun, args) => {
             let args = args
                 .iter()

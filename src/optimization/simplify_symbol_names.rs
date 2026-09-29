@@ -151,18 +151,22 @@ impl ExprVisitor for SimplifyName {
         EndVisitResult::unchanged(expr)
     }
 
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_builtin(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         let mut changed = false;
-        let mut llvm = expr.get_llvm().as_ref().clone();
-        let generator = &mut llvm.generator;
-        for llvm_fv in generator.free_vars_mut() {
-            if let Some(new_name) = self.old_to_new_names.get(llvm_fv) {
-                *llvm_fv = new_name.clone();
+        let mut builtin = expr.get_builtin().as_ref().clone();
+        let op = &mut builtin.op;
+        for op_fv in op.free_vars_mut() {
+            if let Some(new_name) = self.old_to_new_names.get(op_fv) {
+                *op_fv = new_name.clone();
                 changed = true;
             }
         }
         if changed {
-            let expr = expr.set_llvm(llvm);
+            let expr = expr.set_builtin(builtin);
             return EndVisitResult::changed(expr);
         }
         EndVisitResult::unchanged(expr)

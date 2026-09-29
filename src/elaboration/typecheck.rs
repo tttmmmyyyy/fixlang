@@ -1329,8 +1329,8 @@ impl TypeCheckContext {
                     Ok(ei)
                 }
             }
-            Expr::LLVM(lit) => {
-                self.unify_or_tolerated_mismatch(&ty, &lit.generic_ty, &ei.source)?;
+            Expr::Builtin(builtin) => {
+                self.unify_or_tolerated_mismatch(&ty, &builtin.generic_ty, &ei.source)?;
                 Ok(ei.clone())
             }
             Expr::App(fun, args) => {
@@ -2612,7 +2612,7 @@ impl TypeCheckContext {
         let expr = expr.set_type(ty);
         Ok(match &*expr.expr {
             Expr::Var(_) => expr,
-            Expr::LLVM(_) => expr,
+            Expr::Builtin(_) => expr,
             Expr::App(fun, args) => {
                 let args =
                     collect_results(args.iter().map(|arg| self.map_types(arg, expr_ty, pat_ty)))?;
@@ -2684,7 +2684,7 @@ impl TypeCheckContext {
     /// precedence over the failure at the root).
     pub fn check_types_are_fixed(&self, expr: &Arc<ExprNode>) -> Result<(), Errors> {
         match &*expr.expr {
-            Expr::Var(_) | Expr::LLVM(_) => {}
+            Expr::Var(_) | Expr::Builtin(_) => {}
             Expr::App(fun, args) => {
                 for arg in args {
                     self.check_types_are_fixed(arg)?;
@@ -2775,7 +2775,7 @@ impl TypeCheckContext {
             ));
         }
         match &*expr.expr {
-            Expr::Var(_) | Expr::LLVM(_) => {}
+            Expr::Var(_) | Expr::Builtin(_) => {}
             Expr::App(fun, args) => {
                 for arg in args {
                     self.check_all_typed(arg)?;

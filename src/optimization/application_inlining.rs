@@ -263,7 +263,7 @@ impl ExprVisitor for AppInliner {
                 let expr = pushed.wrap(eval_expr); // let x = {a} in eval {side} in {main}(x)
                 return EndVisitResult::changed(expr).revisit();
             }
-            Expr::App(_, _) | Expr::Var(_) | Expr::LLVM(_) => {
+            Expr::App(_, _) | Expr::Var(_) | Expr::Builtin(_) => {
                 return EndVisitResult::unchanged(expr);
             }
             Expr::TyAnno(_, _) => {

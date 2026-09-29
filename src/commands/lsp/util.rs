@@ -357,7 +357,7 @@ fn find_enclosing_binder(
     };
 
     match &*expr.expr {
-        Expr::Var(_) | Expr::LLVM(_) => lookup(stack),
+        Expr::Var(_) | Expr::Builtin(_) => lookup(stack),
         Expr::App(func, args) => {
             if let Some(s) = find_enclosing_binder(func, pos, target, stack) {
                 return Some(s);
@@ -527,7 +527,7 @@ fn collect_uses_of_binding(
                 }
             }
         }
-        Expr::LLVM(_) => {}
+        Expr::Builtin(_) => {}
         Expr::App(func, args) => {
             collect_uses_of_binding(func, target, def_span, stack, out);
             for a in args {

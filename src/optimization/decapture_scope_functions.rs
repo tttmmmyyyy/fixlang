@@ -2,8 +2,8 @@
 # Decapturing the functions given to scope builtins
 
 The scope builtins — `Std::with_retained`, `Std::Array::borrow_elements`, `Std::FFI::borrow_boxed`
-and the mutating ones behind `mutate_elements` and `mutate_boxed` — are inline-LLVM ops that declare
-`LLVMGen::env_operand`. Such an op applies one of its operands, a function, to a tuple whose first
+and the mutating ones behind `mutate_elements` and `mutate_boxed` — are builtin ops that declare
+`BuiltinOp::env_operand`. Such an op applies one of its operands, a function, to a tuple whose first
 field is another of its operands, the environment.
 
 `closure_specialization` lifts every lambda to a global function taking its capture list as the
@@ -59,11 +59,11 @@ use super::{
 };
 use crate::{
     ast::{
+        builtin_op::BuiltinOpExpr,
         expr::{
             expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_local,
             ExprNode,
         },
-        inline_llvm::InlineLLVM,
         name::FullName,
         pattern::PatternNode,
         program::{Program, TypeEnv},
@@ -76,7 +76,7 @@ use crate::{
 };
 use std::sync::Arc;
 
-/// Moves the capture list of every function given to an op declaring `LLVMGen::env_operand` into the
+/// Moves the capture list of every function given to an op declaring `BuiltinOp::env_operand` into the
 /// op's environment operand, where the function is a global function applied to its capture list,
 /// bound by `let` and used nowhere else.
 pub fn run(prg: &mut Program) {
@@ -106,14 +106,15 @@ pub fn run(prg: &mut Program) {
     move_bodies_into_callers(&mut prg.symbols, &callees_by_caller);
 }
 
-/// The name an op declaring `LLVMGen::env_operand` applies as a function, if `llvm` is such an op.
-fn env_function_operand(llvm: &InlineLLVM) -> Option<FullName> {
-    let env = llvm.generator.env_operand()?;
-    Some(llvm.generator.free_vars()[env.function].clone())
+/// The name an op declaring `BuiltinOp::env_operand` applies as a function, if `builtin` is such an
+/// op.
+fn env_function_operand(builtin: &BuiltinOpExpr) -> Option<FullName> {
+    let env = builtin.op.env_operand()?;
+    Some(builtin.op.free_vars()[env.function].clone())
 }
 
 /// Collects the names an expression passes as the function operand of an op declaring
-/// `LLVMGen::env_operand`, wherever they are bound. Only a binding of one of these names can be
+/// `BuiltinOp::env_operand`, wherever they are bound. Only a binding of one of these names can be
 /// rewritten, so `CaptureListMover` checks the uses of these names alone.
 struct EnvFunctionCollector {
     /// The names collected so far.
@@ -121,13 +122,13 @@ struct EnvFunctionCollector {
 }
 
 impl ExprVisitor for EnvFunctionCollector {
-    /// Collects the function operand of an op declaring `LLVMGen::env_operand`.
-    fn start_visit_llvm(
+    /// Collects the function operand of an op declaring `BuiltinOp::env_operand`.
+    fn start_visit_builtin(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        if let Some(name) = env_function_operand(&expr.get_llvm()) {
+        if let Some(name) = env_function_operand(&expr.get_builtin()) {
             self.names.insert(name);
         }
         StartVisitResult::VisitChildren
@@ -137,7 +138,7 @@ impl ExprVisitor for EnvFunctionCollector {
 /// Rewrites the bindings of one symbol, as the module comment describes.
 struct CaptureListMover<'a> {
     /// The names the symbol passes as the function operand of an op declaring
-    /// `LLVMGen::env_operand`.
+    /// `BuiltinOp::env_operand`.
     env_functions: Set<FullName>,
     /// The type environment, which knows the fields of the tuples the ops apply their functions to.
     type_env: &'a TypeEnv,
@@ -150,7 +151,7 @@ struct CaptureListMover<'a> {
 impl CaptureListMover<'_> {
     /// `expr` rewritten as the module comment describes, where it is `let h = F(cap); body`, `F` is
     /// a global function, and `h` is used once in `body`, as the function operand of an op declaring
-    /// `LLVMGen::env_operand`.
+    /// `BuiltinOp::env_operand`.
     fn rewrite(&mut self, expr: &Arc<ExprNode>) -> Option<Arc<ExprNode>> {
         let pat = expr.get_let_pat();
         if !pat.is_var() {
@@ -288,7 +289,7 @@ impl ExprVisitor for CaptureListMover<'_> {
 }
 
 /// Whether `name` is used once in `expr`, as the function operand of an op declaring
-/// `LLVMGen::env_operand`.
+/// `BuiltinOp::env_operand`.
 fn used_once_as_env_function(expr: &Arc<ExprNode>, name: &FullName) -> bool {
     matches!(
         find_usage_of_name::run(expr, name).as_slice(),
@@ -319,21 +320,21 @@ struct OpRewriter<'a> {
 impl ExprVisitor for OpRewriter<'_> {
     /// Binds `(env, cap)` ahead of an op applying the function, and gives the op that name as its
     /// environment.
-    fn start_visit_llvm(
+    fn start_visit_builtin(
         &mut self,
         expr: &Arc<ExprNode>,
         state: &mut VisitState,
     ) -> StartVisitResult {
-        if env_function_operand(&expr.get_llvm()).as_ref() != Some(self.function)
+        if env_function_operand(&expr.get_builtin()).as_ref() != Some(self.function)
             || shadowed(self.function, state)
         {
             return StartVisitResult::VisitChildren;
         }
 
         // `let env1 = (env, cap); op(.., env1, ..)`
-        let mut llvm = expr.get_llvm().as_ref().clone();
-        let env_index = llvm.generator.env_operand().unwrap().env;
-        let mut operands = llvm.generator.free_vars_mut();
+        let mut builtin = expr.get_builtin().as_ref().clone();
+        let env_index = builtin.op.env_operand().unwrap().env;
+        let mut operands = builtin.op.free_vars_mut();
         let env = &mut *operands[env_index];
         let old_env = env.clone();
         *env = self.new_env.clone();
@@ -348,7 +349,7 @@ impl ExprVisitor for OpRewriter<'_> {
         StartVisitResult::ReplaceAndReturn(expr_let_typed(
             var_pattern(&self.new_env, &self.new_env_ty),
             env_and_cap,
-            expr.set_llvm(llvm),
+            expr.set_builtin(builtin),
         ))
     }
 }
