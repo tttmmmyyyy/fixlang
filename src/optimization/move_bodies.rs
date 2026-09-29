@@ -14,8 +14,8 @@ use crate::{
 use std::sync::Arc;
 
 /// Put the body of each function `callees_by_caller` lists for a symbol where that symbol calls it,
-/// where that moves the body (`is_moved_by_placing`), and reduce the application the body is left
-/// in.
+/// where that moves the body: the symbol is the only one naming the function, and names it once, as
+/// the callee of a call supplying every argument. Then reduce the application the body is left in.
 ///
 /// A body goes in one level deep: every body is read as it stands before any of them is put
 /// anywhere, and the calls a placed body makes are left as calls. What the program grows by is
