@@ -182,7 +182,14 @@ impl CaptureListMover<'_> {
         let cap = args[0].clone();
         let cap_ty = cap.type_.as_ref().unwrap().clone();
         let cap_name = local("_cap");
-        let param_ty = bound.type_.as_ref().unwrap().get_lambda_srcs()[0].clone();
+        let param_tys = bound.type_.as_ref().unwrap().get_lambda_srcs();
+        assert_eq!(
+            param_tys.len(),
+            1,
+            "a function given to an op declaring `env_operand` takes one tuple: {}",
+            name.to_string()
+        );
+        let param_ty = param_tys[0].clone();
         let param_field_tys = param_ty.field_types(self.type_env);
         let env_ty = param_field_tys[0].clone();
         let new_env_ty = make_tuple_ty(vec![env_ty.clone(), cap_ty.clone()]);
