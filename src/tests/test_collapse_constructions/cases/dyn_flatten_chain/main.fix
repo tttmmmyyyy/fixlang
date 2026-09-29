@@ -1,0 +1,10 @@
+module Main;
+
+// `to_dyn` wraps the chain in a function that rebuilds it on every step, so the struct of the chain
+// is built from fields that are named and fields that are expressions, once by each run of
+// `collapse_constructions`.
+main : IO ();
+main = (
+    let it = range(0, 3).map(|i| [i, i]).map(Array::to_iter).flatten.map(|x| x * 10).to_dyn;
+    println $ it.Iterator::map(to_string).join(",")
+);

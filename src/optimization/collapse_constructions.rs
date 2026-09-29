@@ -112,8 +112,8 @@ struct Collapser<'a> {
     /// What each local in scope was built as, keyed by its name.
     constructions: Map<FullName, Construction>,
     /// How many fields this global has had bound to a name of their own, which is what the next
-    /// such name is numbered by. Counting across the rounds is what keeps two rounds from choosing
-    /// one name for two values.
+    /// such name is numbered from. Counting across the rounds keeps the names one run binds
+    /// distinct from each other.
     bound_fields: &'a mut usize,
 }
 
@@ -136,11 +136,18 @@ impl<'a> Collapser<'a> {
             .unwrap_or(false)
     }
 
-    /// A name for a field value, which nothing else in the global carries.
-    fn fresh_field_name(&mut self) -> FullName {
-        let name = FullName::local(&format!("{}{}", BOUND_FIELD_PREFIX, self.bound_fields));
-        *self.bound_fields += 1;
-        name
+    /// A name for a field value, absent from `occupied`.
+    ///
+    /// The global can already hold names of this shape, bound by an earlier run of this pass, so
+    /// the count alone does not make a name fresh.
+    fn fresh_field_name(&mut self, occupied: &Set<FullName>) -> FullName {
+        loop {
+            let name = FullName::local(&format!("{}{}", BOUND_FIELD_PREFIX, self.bound_fields));
+            *self.bound_fields += 1;
+            if !occupied.contains(&name) {
+                return name;
+            }
+        }
     }
 
     /// What `expr` was built as: what it builds itself, or what the name it is holds.
@@ -400,14 +407,17 @@ impl<'a> ExprVisitor for Collapser<'a> {
         }
 
         // Each field holding an expression is bound to a name first, in the order the construction
-        // evaluates the fields, so that a reader of this struct is given names throughout.
+        // evaluates the fields, so that a reader of this struct is given names throughout. The
+        // bindings stand over the fields evaluated after them and over the construction, so a name
+        // they bind has to be one none of the fields reads.
+        let occupied = expr.free_vars();
         let mut bindings = vec![];
         let mut named = expr.clone();
         for (field, _, value) in &fields {
             if value.is_var() {
                 continue;
             }
-            let name = self.fresh_field_name();
+            let name = self.fresh_field_name(&occupied);
             let ty = value.type_.as_ref().unwrap().clone();
             bindings.push((
                 PatternNode::make_var(var_var(name.clone()), None).set_type(ty.clone()),
