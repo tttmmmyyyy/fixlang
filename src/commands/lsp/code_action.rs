@@ -12,8 +12,8 @@ use crate::constants::{
 use crate::error::WARN_MISSING_PATTERN_FIELD;
 use crate::misc::{generate_fresh_varnames, Map, Set};
 use lsp_types::{
-    CodeAction, CodeActionKind, CodeActionParams, NumberOrString, Position, Range, TextEdit, Uri,
-    WorkspaceEdit,
+    CodeAction, CodeActionKind, CodeActionParams, Diagnostic, NumberOrString, Position, Range,
+    TextEdit, Uri, WorkspaceEdit,
 };
 use std::collections::HashMap;
 
@@ -48,7 +48,7 @@ pub(super) fn handle_code_action(
 }
 
 fn handle_unknown_name(
-    diag: &lsp_types::Diagnostic,
+    diag: &Diagnostic,
     params: &CodeActionParams,
     program: &Program,
     uri_to_content: &mut Map<Uri, LatestContent>,
@@ -127,7 +127,7 @@ fn handle_unknown_name(
 }
 
 fn handle_missing_trait_impl(
-    diag: &lsp_types::Diagnostic,
+    diag: &Diagnostic,
     params: &CodeActionParams,
     uri_to_content: &mut Map<Uri, LatestContent>,
     actions: &mut Vec<CodeAction>,
@@ -216,7 +216,7 @@ fn handle_missing_trait_impl(
 /// The diagnostic's `data` carries a JSON array of missing field names, and
 /// its `range` covers the whole MakeStruct expression.
 fn handle_missing_struct_field(
-    diag: &lsp_types::Diagnostic,
+    diag: &Diagnostic,
     params: &CodeActionParams,
     uri_to_content: &mut Map<Uri, LatestContent>,
     actions: &mut Vec<CodeAction>,
@@ -254,7 +254,7 @@ fn handle_missing_struct_field(
 /// The diagnostic's `data` carries a JSON array of missing field names, and
 /// its `range` covers the whole struct pattern.
 fn handle_missing_pattern_field(
-    diag: &lsp_types::Diagnostic,
+    diag: &Diagnostic,
     params: &CodeActionParams,
     uri_to_content: &mut Map<Uri, LatestContent>,
     actions: &mut Vec<CodeAction>,
@@ -288,7 +288,7 @@ fn handle_missing_pattern_field(
 }
 
 /// The names of the missing fields a diagnostic carries in its `data`, when it carries any.
-fn missing_fields_of(diag: &lsp_types::Diagnostic) -> Option<Vec<String>> {
+fn missing_fields_of(diag: &Diagnostic) -> Option<Vec<String>> {
     let missing: Vec<String> = serde_json::from_value(diag.data.clone()?).ok()?;
     if missing.is_empty() {
         None
@@ -305,7 +305,7 @@ fn missing_fields_fix_title(missing: &[Name]) -> String {
 /// A quick fix titled `title` for `diag` that applies `edits` to the document at `uri`.
 fn quick_fix(
     title: String,
-    diag: &lsp_types::Diagnostic,
+    diag: &Diagnostic,
     uri: &Uri,
     edits: Vec<TextEdit>,
     is_preferred: bool,
