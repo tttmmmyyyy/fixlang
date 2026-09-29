@@ -7,18 +7,18 @@
 #### Language
 
 - #787: A field of a struct literal or of a struct pattern can be written by its name alone. `S { x, y: 2 }` means `S { x: x, y: 2 }`, where the second `x` is the value named `x`. `let S { x, y: y2 } = s;` binds `x` to the field `x` of `s`, as `let S { x: x, y: y2 } = s;` does.
-- A struct pattern can write `_` after its fields to leave out the other fields of the struct: `let S { x, _ } = s;`.
+- #790: A struct pattern can write `_` after its fields to leave out the other fields of the struct: `let S { x, _ } = s;`.
 
 #### Tool
 
-- The language server offers two quick fixes for a struct pattern that leaves out fields without `_`: write each missing field as `name: _`, or write `_` after the fields.
+- #790: The language server offers two quick fixes for a struct pattern that leaves out fields without `_`: write each missing field as `name: _`, or write `_` after the fields.
 
 ### Changed
 
 #### Language
 
-- A struct pattern that leaves out fields of its struct without writing `_` is now warned about. When you add a field to a struct, the warning points out each pattern that takes the struct apart. Add the missing fields to the pattern, or write `_` after its fields.
-- `_` can no longer be the name of a struct field or a union variant. Names that start with `_`, such as `_x`, are still allowed.
+- #790: A struct pattern that leaves out fields of its struct without writing `_` is now warned about. When you add a field to a struct, the warning points out each pattern that takes the struct apart. Add the missing fields to the pattern, or write `_` after its fields.
+- #790: `_` can no longer be the name of a struct field or a union variant. Names that start with `_`, such as `_x`, are still allowed.
 
 #### Tool
 
@@ -28,7 +28,7 @@
 
 #### Tool
 
-- The quick fix that adds the missing fields to a struct literal now writes them after the last field when a comment ends the field list, and at the right place on a line with characters such as emoji before the literal. It used to write them into the comment or a few characters off, which could break the code.
+- #790: The quick fix that adds the missing fields to a struct literal now writes them after the last field when a comment ends the field list, and at the right place on a line with characters such as emoji before the literal. It used to write them into the comment or a few characters off, which could break the code.
 - #780: A failed download in `install.sh` now leaves `~/.local/bin/fix` as it was. It used to leave an empty or partly written `fix` there, and later runs then took it for an installed one and installed nothing. `install.sh` can now also upgrade `fix` while it is running, for example as your editor's language server.
 
 ## [1.5.0] - 2026-09-27
