@@ -22,7 +22,7 @@
 
 #### Std
 
-- `F64::to_string` and `F32::to_string` now write a point in a number written with a power of ten when its digits are a single one, so `1.0e300` is `1.0e300` where it was `1e300`. The text they write for a finite number is now always a floating point literal of Fix.
+- `F64::to_string` and `F32::to_string` now write a number with a single significant digit and a power of ten as `1.0e300`, where they wrote `1e300`. The text they write for a finite number is now always a valid floating point literal of Fix.
 
 #### Tool
 

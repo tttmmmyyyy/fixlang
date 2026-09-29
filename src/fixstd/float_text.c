@@ -62,7 +62,8 @@ static int fixruntime_write_exponent(char *buf, int exponent)
 // bytes, and a null. A text written positionally spends the two bytes on a point and the `0` beside
 // it, and leaves the four unused. A text written with a power of ten spends the two bytes on a point
 // and the `e`, and the four on the rest of the power, `-324` at its widest; it leaves the zeros
-// unused, and a single digit takes the `0` after its point within the digits.
+// unused. A single digit is followed by a point and a `0`, and that `0` fits in the bytes counted
+// for the digits.
 #define WIDEST_FLOAT_TEXT_SIZE(low, high, digits) \
     (1 + 2 + ((-(low)) > (high) ? (-(low)) : (high)) + (digits) + 4 + 1)
 

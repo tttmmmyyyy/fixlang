@@ -6093,9 +6093,8 @@ pub fn test_float_to_string_precision() {
 }
 
 /// Every text `to_string` writes for a normal number reads back as the number it was written
-/// from, which is what choosing the shortest digits is for, and is spelled as a floating point
-/// literal of Fix. The walk crosses both edges of the window the point is written positionally in,
-/// at every scale either type reaches.
+/// from, and is spelled as a floating point literal of Fix. The walk crosses both edges of the
+/// window the point is written positionally in, at every scale either type reaches.
 #[test]
 pub fn test_float_to_string_across_every_decade() {
     let source = r#"
@@ -6135,7 +6134,8 @@ pub fn test_float_to_string_across_every_decade() {
             match back { ok(w) => w == v, err(_) => false }
         );
 
-        // The index past the digits from `i` in `bytes`, where there is at least one.
+        // Returns the index just past the run of digits that starts at `i` in `bytes`, or `none()`
+        // when no digit is at `i`.
         //
         // # Parameters
         // * `bytes` - The text, without its null.
@@ -6181,7 +6181,8 @@ pub fn test_float_to_string_across_every_decade() {
 
         main : IO ();
         main = (
-            // `is_float_literal` tells the shapes apart.
+            // `is_float_literal` accepts a literal with or without a power of ten, and rejects a
+            // text with no point or with no digit after it.
             assert_eq(|_|"a literal with a power of ten", "-1.5e-10".is_float_literal, true);;
             assert_eq(|_|"a literal without one", "0.25".is_float_literal, true);;
             assert_eq(|_|"no point before the power of ten", "1e300".is_float_literal, false);;
