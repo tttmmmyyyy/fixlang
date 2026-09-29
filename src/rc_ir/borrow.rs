@@ -1135,9 +1135,8 @@ fn rhs_uses(name: &FullName, rhs: &RcRhs) -> bool {
         RcRhs::Var(v) => v.name == *name,
         RcRhs::App(callee, args) => callee.name == *name || args.iter().any(|a| a.name == *name),
         RcRhs::Closure(_, caps) => caps.iter().any(|c| c.name == *name),
-        RcRhs::Builtin(op, args) => {
-            args.iter().any(|a| a.name == *name) || op.free_vars().iter().any(|v| v == name)
-        }
+        // The op's embedded names are its operand list again (`validate` checks it).
+        RcRhs::Builtin(_, args) => args.iter().any(|a| a.name == *name),
         RcRhs::Match(scrut, arms) => {
             scrut.name == *name || arms.iter().any(|arm| used_later(name, &arm.body))
         }

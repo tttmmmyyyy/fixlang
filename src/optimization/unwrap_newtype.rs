@@ -214,11 +214,7 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         let mut expr = unwrap_inferred_type(expr, self.type_env);
         let new_ty = expr.type_.as_ref().unwrap().clone();
 
-        let builtin = if let Expr::Builtin(builtin) = expr.expr.as_ref() {
-            builtin.as_ref().clone()
-        } else {
-            unreachable!()
-        };
+        let builtin = expr.get_builtin();
 
         // `builtin.generic_ty` stays as it is: type checking is the last pass that reads it.
 
