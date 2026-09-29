@@ -24,6 +24,36 @@ mod tests {
             .collect()
     }
 
+    /// `content` with `edits` applied the way an editor applies them: each position's column is
+    /// counted in UTF-16 code units.
+    fn apply_lsp_edits(content: &str, edits: &[TextEdit]) -> String {
+        let offset_of = |pos: lsp_types::Position| {
+            let line_start: usize = content
+                .split_inclusive('\n')
+                .take(pos.line as usize)
+                .map(str::len)
+                .sum();
+            let mut units = 0;
+            let column = content[line_start..]
+                .char_indices()
+                .find(|&(_, c)| {
+                    let reached = units >= pos.character as usize;
+                    units += c.len_utf16();
+                    reached
+                })
+                .map_or(content.len() - line_start, |(i, _)| i);
+            line_start + column
+        };
+        let mut edits = edits.to_vec();
+        edits.sort_by_key(|edit| std::cmp::Reverse(offset_of(edit.range.start)));
+        let mut result = content.to_string();
+        for edit in edits {
+            let (from, to) = (offset_of(edit.range.start), offset_of(edit.range.end));
+            result.replace_range(from..to, &edit.new_text);
+        }
+        result
+    }
+
     /// Whether the diagnostic's code is `code`.
     fn has_code(diag: &Value, code: &str) -> bool {
         diag.get("code")
@@ -481,6 +511,61 @@ mod tests {
                 "applying `{}` should leave nothing reported. Got: {:?}",
                 action["title"],
                 diagnostics
+            );
+        }
+
+        ctx.shutdown();
+    }
+
+    /// The quick fix that adds the missing fields of a struct pattern writes them after the last
+    /// field, past a comment that ends the field list, and at the right column after characters
+    /// the protocol counts as two UTF-16 code units. The literal's quick fix places its fields the
+    /// same way.
+    #[test]
+    fn test_quickfix_missing_pattern_field_past_comments_and_wide_characters() {
+        let mut ctx = LspQuickFixCtx::setup("quickfix_missing_field_layouts", &["main.fix"]);
+        let original =
+            fs::read_to_string(ctx.project_dir.join("main.fix")).expect("Failed to read main.fix");
+        let uri = ctx.file_uri("main.fix");
+
+        let diagnostics = ctx.client.get_diagnostics(Path::new("main.fix"));
+        let warnings = diagnostics
+            .iter()
+            .filter(|diag| has_code(diag, "missing-pattern-field"))
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(warnings.len(), 3, "diagnostics: {:?}", diagnostics);
+
+        let mut patched_texts = vec![];
+        for warning in warnings {
+            let (start_line, start_col, end_line, end_col) = range_of(&warning);
+            let actions = ctx.code_actions(
+                "main.fix",
+                vec![warning],
+                start_line,
+                start_col,
+                end_line,
+                end_col,
+            );
+            let add_fields = actions
+                .iter()
+                .find(|a| a["title"] == "Add missing fields `y`, `z`")
+                .expect("the quick fix adding the fields should be offered");
+            let file_edits = add_fields["edit"]["changes"][&uri]
+                .as_array()
+                .expect("the action should edit main.fix");
+            patched_texts.push(apply_lsp_edits(&original, &parse_text_edits(file_edits)));
+        }
+        for expected in [
+            "    let S {\n        x, // the first\n        y: _,\n        z: _,\n    } = s;\n",
+            "|S { x, y: _, z: _ /* the first */ }|",
+            "let e = \"😀😀\"; let S { x, y: _, z: _ } = s;",
+        ] {
+            assert!(
+                patched_texts.iter().any(|text| text.contains(expected)),
+                "one of the quick fixes should write {:?}. Got: {:?}",
+                expected,
+                patched_texts
             );
         }
 

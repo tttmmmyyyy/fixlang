@@ -1,6 +1,6 @@
 use super::edit_import;
 use super::server::{send_response, LatestContent};
-use super::util::parameters_in_document;
+use super::util::{bytes_to_position, parameters_in_document, position_to_bytes};
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::Program;
 use crate::ast::traits::{MissingTraitImplInfo, MissingTraitImplItem};
@@ -11,6 +11,7 @@ use crate::constants::{
 };
 use crate::error::WARN_MISSING_PATTERN_FIELD;
 use crate::misc::{generate_fresh_varnames, Map, Set};
+use crate::parse::lexer::{lex_tokens, LexTokenKind};
 use lsp_types::{
     CodeAction, CodeActionKind, CodeActionParams, Diagnostic, NumberOrString, Position, Range,
     TextEdit, Uri, WorkspaceEdit,
@@ -335,143 +336,103 @@ fn quick_fix(
 ///
 /// On one line, the items go after the last field, joined by `, `. When the `}` stands on a line
 /// of its own, each item goes on its own line, indented like the fields and ending in a comma, and
-/// a comma is added after the last field when it has none.
-///
-/// Field names in Fix are ASCII, so LSP UTF-16 columns coincide with char
-/// columns at the positions we care about.
+/// a comma is added after the last field when it has none. Comments between the fields and the
+/// `}` are left where they are.
 ///
 /// # Examples
 /// For `S { x }` and the items `["y: _"]`, the edit inserts `, y: _` after `x`.
 fn insert_fields_edits(content: &str, range: &Range, items: &[String]) -> Option<Vec<TextEdit>> {
-    let lines: Vec<&str> = content.lines().collect();
-
-    let start_line = range.start.line as usize;
-    let end_line = range.end.line as usize;
-    let end_char = range.end.character as usize;
-    if end_line >= lines.len() || end_char == 0 {
+    let start = position_to_bytes(content, range.start);
+    let end = position_to_bytes(content, range.end);
+    if end <= start || !content[..end].ends_with('}') {
         return None;
     }
-
-    let end_line_chars: Vec<char> = lines[end_line].chars().collect();
-    let brace_col = end_char - 1;
-    if brace_col > end_line_chars.len() {
-        return None;
-    }
-    let before_brace: String = end_line_chars[..brace_col].iter().collect();
-    let is_multiline = before_brace.trim().is_empty() && start_line != end_line;
-
-    let last_nonws = find_last_nonws_before(&lines, start_line, end_line, brace_col);
-
-    let mut edits: Vec<TextEdit> = vec![];
-
-    if !is_multiline {
-        // Single line: insert right after the previous non-whitespace
-        // character so any trailing whitespace before `}` (e.g. the space in
-        // `Vector3 { x: 1.0 }`) becomes the natural padding after the new
-        // field. Prefix with a separator that matches what precedes us.
-        let (insert_line, insert_col, prefix) = match last_nonws {
-            Some((line, col_after, '{')) => (line, col_after, ""),
-            Some((line, col_after, ',')) => (line, col_after, " "),
-            Some((line, col_after, _)) => (line, col_after, ", "),
-            None => (end_line, brace_col, ""),
-        };
-        let new_text = format!("{}{}", prefix, items.join(", "));
-        let pos = Position {
-            line: insert_line as u32,
-            character: insert_col as u32,
-        };
-        edits.push(TextEdit {
+    let brace = end - 1;
+    let last_code_char = last_code_char_before(content, start, brace);
+    let insert_at = |offset: usize, new_text: String| {
+        let pos = bytes_to_position(content, offset);
+        TextEdit {
             range: Range {
                 start: pos,
                 end: pos,
             },
             new_text,
-        });
-    } else {
-        // Multi-line: emit each new field on its own indented line ending in
-        // a trailing comma. If the previous field has no trailing comma, add
-        // one as a separate, non-overlapping edit.
-        let field_indent = compute_field_indent(&lines, start_line, end_line);
-        let mut body = String::new();
-        for item in items {
-            body.push_str(&field_indent);
-            body.push_str(&format!("{},\n", item));
         }
+    };
 
-        let need_trailing_comma = matches!(last_nonws, Some((_, _, c)) if c != '{' && c != ',');
-        if need_trailing_comma {
-            if let Some((lline, lcol, _)) = last_nonws {
-                let pos = Position {
-                    line: lline as u32,
-                    character: lcol as u32,
-                };
-                edits.push(TextEdit {
-                    range: Range {
-                        start: pos,
-                        end: pos,
-                    },
-                    new_text: ",".to_string(),
-                });
-            }
-        }
-
-        // Insert at column 0 of the `}` line so that the existing indent of
-        // `}` is preserved after the inserted lines.
-        let pos = Position {
-            line: end_line as u32,
-            character: 0,
+    let brace_line_start = content[..brace].rfind('\n').map_or(0, |i| i + 1);
+    let is_multiline =
+        brace_line_start > start && content[brace_line_start..brace].trim().is_empty();
+    if !is_multiline {
+        // Insert right after the last character of code, so that any whitespace before `}` (the
+        // space in `S { x }`) becomes the padding after the new fields. The separator matches
+        // what precedes the insertion.
+        let (offset, prefix) = match last_code_char {
+            Some((offset, '{')) => (offset, ""),
+            Some((offset, ',')) => (offset, " "),
+            Some((offset, _)) => (offset, ", "),
+            None => (brace, ""),
         };
-        edits.push(TextEdit {
-            range: Range {
-                start: pos,
-                end: pos,
-            },
-            new_text: body,
-        });
+        return Some(vec![insert_at(
+            offset,
+            format!("{}{}", prefix, items.join(", ")),
+        )]);
     }
+
+    // Each new field goes on its own line before the `}` line, so that the indent of `}` stays.
+    // When the last field has no trailing comma, one is added as a separate edit.
+    let mut edits = vec![];
+    if let Some((offset, c)) = last_code_char {
+        if c != '{' && c != ',' {
+            edits.push(insert_at(offset, ",".to_string()));
+        }
+    }
+    let indent = field_indent(content, start, brace_line_start, brace);
+    let body = items
+        .iter()
+        .map(|item| format!("{}{},\n", indent, item))
+        .collect::<String>();
+    edits.push(insert_at(brace_line_start, body));
     Some(edits)
 }
 
-/// Find the last non-whitespace char in `lines` that sits strictly before
-/// `(end_line, end_col)`. Returns `(line, col_after_char, char)` where
-/// `col_after_char` is the column immediately following the character (a
-/// natural insertion point for, e.g., a trailing comma).
-fn find_last_nonws_before(
-    lines: &[&str],
-    start_line: usize,
-    end_line: usize,
-    end_col: usize,
-) -> Option<(usize, usize, char)> {
-    for line_idx in (start_line..=end_line).rev() {
-        let chars: Vec<char> = lines[line_idx].chars().collect();
-        let limit = if line_idx == end_line {
-            end_col.min(chars.len())
-        } else {
-            chars.len()
-        };
-        for col in (0..limit).rev() {
-            let c = chars[col];
-            if !c.is_whitespace() {
-                return Some((line_idx, col + 1, c));
-            }
-        }
-    }
-    None
+/// The last character of code in `content[start..end]` that is neither whitespace nor part of a
+/// comment, with the byte offset just past it.
+fn last_code_char_before(content: &str, start: usize, end: usize) -> Option<(usize, char)> {
+    let text = &content[start..end];
+    let comments: Vec<(usize, usize)> = lex_tokens(text)
+        .into_iter()
+        .filter(|token| token.kind == LexTokenKind::Comment)
+        .map(|token| (token.start, token.end))
+        .collect();
+    text.char_indices()
+        .rev()
+        .find(|&(i, c)| {
+            !c.is_whitespace() && !comments.iter().any(|&(from, to)| from <= i && i < to)
+        })
+        .map(|(i, c)| (start + i + c.len_utf8(), c))
 }
 
-/// Choose the column prefix to use for inserted field lines. Prefer the
-/// indent of an existing field line; if there is none, fall back to the
+/// The indent to give a field inserted on a line of its own: that of the first non-blank line
+/// after the head of the literal or pattern, or, when the fields share the head's line, the
 /// indent of the `}` line plus four spaces.
-fn compute_field_indent(lines: &[&str], start_line: usize, end_line: usize) -> String {
-    for line_idx in (start_line + 1)..end_line {
-        let l = lines[line_idx];
-        if !l.trim().is_empty() {
-            return l[..l.len() - l.trim_start().len()].to_string();
+///
+/// # Arguments
+/// * `start` — the byte offset of the head.
+/// * `brace_line_start` — the byte offset of the start of the line holding the closing `}`.
+/// * `brace` — the byte offset of the closing `}`.
+fn field_indent(content: &str, start: usize, brace_line_start: usize, brace: usize) -> String {
+    let leading_whitespace = |line: &str| line[..line.len() - line.trim_start().len()].to_string();
+    let field_lines = content[start..brace_line_start].lines().skip(1);
+    for line in field_lines {
+        if !line.trim().is_empty() {
+            return leading_whitespace(line);
         }
     }
-    let l = lines[end_line];
-    let base = l.len() - l.trim_start().len();
-    " ".repeat(base + 4)
+    format!(
+        "{}    ",
+        leading_whitespace(&content[brace_line_start..brace])
+    )
 }
 
 // Generate the stub text to insert into the impl block.
