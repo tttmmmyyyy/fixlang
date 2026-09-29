@@ -180,8 +180,9 @@ int64_t fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8
 // * `positional_low`, `positional_high` - The window the point is written positionally in:
 //   `positional_low < point <= positional_high`, where `point - 1` is the power of ten the first
 //   of the shortest digits carries. A wider window costs zeros, so it is drawn around the digits
-//   the type carries, and the widest text it allows is what sizes the buffer `to_string` passes in — must stay in sync with the `size` the
-//   `ToString` implementations in `src/fixstd/std.fix` derive.
+//   the type carries, and the widest text it allows is what sizes the buffer `to_string` passes
+//   in — must stay in sync with the `size` the `ToString` implementations in `src/fixstd/std.fix`
+//   derive.
 static int64_t fixruntime_write_float_text(const char *sci, char *buf, int64_t size,
                                                 int positional_low, int positional_high)
 {
