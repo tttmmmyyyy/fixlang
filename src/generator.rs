@@ -661,10 +661,10 @@ pub struct Generator<'c, 'm> {
     embedded_types: Map<Arc<TypeNode>, BasicTypeEnum<'c>>,
     /// The out-pointer buffer of each Fix type returned through one.
     out_pointer_buffers: Map<Arc<TypeNode>, StructType<'c>>,
-    /// While an inline-LLVM op is being generated in develop mode, that op's name and whether it
-    /// declared that it applies one of its operands (`LLVMGen::applies_a_function_operand`). `None`
-    /// outside such an op, and outside develop mode, where nothing is checked.
-    pub(crate) generating_llvm_op: Option<(String, bool)>,
+    /// While a builtin op is being generated in develop mode, that op's name and whether it
+    /// declared that it applies one of its operands (`BuiltinOp::applies_a_function_operand`).
+    /// `None` outside such an op, and outside develop mode, where nothing is checked.
+    pub(crate) generating_builtin_op: Option<(String, bool)>,
     /// The `!tbaa` tag of each region of memory, put on every load, store and atomic
     /// read-modify-write the code generator emits.
     tbaa: TbaaTags<'c>,
@@ -1115,7 +1115,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             struct_types: Map::default(),
             embedded_types: Map::default(),
             out_pointer_buffers: Map::default(),
-            generating_llvm_op: None,
+            generating_builtin_op: None,
             tbaa: TbaaTags::new(ctx),
         };
         gc
@@ -1557,7 +1557,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     ///
     /// It stands in place of the state dispatch a `RcState::Local` annotation removes, so a wrong
     /// annotation stops at the operation that made it instead of corrupting a reference count
-    /// somewhere else. Locality inference rests on a hand-written declaration per inline-LLVM
+    /// somewhere else. Locality inference rests on a hand-written declaration per builtin
     /// operation, and this is the only check on those: the whole test suite is built in develop
     /// mode, so every annotated site is verified dynamically on every test program.
     ///
@@ -1623,7 +1623,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// mark.
     ///
     /// The object's state is read at run time. An op declares the uniqueness check it emits through
-    /// `LLVMGen::unique_check_operand`, and it withdraws that declaration exactly where the proof
+    /// `BuiltinOp::unique_check_operand`, and it withdraws that declaration exactly where the proof
     /// was accepted, which is where this check stands; a locality annotation resting on the
     /// withdrawn declaration therefore says nothing about the object here.
     ///
@@ -1713,14 +1713,14 @@ impl<'c, 'm> Generator<'c, 'm> {
         args: Vec<Object<'c>>,
         tail: bool,
     ) -> Option<Object<'c>> {
-        // An inline-LLVM op that applies a function has to declare it, so that a pass asking what a
+        // A builtin op that applies a function has to declare it, so that a pass asking what a
         // body can reach gives that body the edges an indirect call gets. Losing one edge is what
         // lets `borrow_ify` borrow a parameter across an observation of a reference count.
-        if let Some((name, declares)) = &self.generating_llvm_op {
+        if let Some((name, declares)) = &self.generating_builtin_op {
             assert!(
                 declares,
-                "the inline-LLVM op `{}` applies a function without declaring \
-                 `LLVMGen::applies_a_function_operand`",
+                "the builtin op `{}` applies a function without declaring \
+                 `BuiltinOp::applies_a_function_operand`",
                 name
             );
         }
@@ -2428,7 +2428,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         // The function applied below comes out of the object's field, not from an operand of
         // whatever operation this release sits inside, so the declaration `apply_lambda` checks
         // says nothing about it. Every release path can reach here.
-        let outer_op = self.generating_llvm_op.take();
+        let outer_op = self.generating_builtin_op.take();
         let value =
             ObjectFieldType::move_out_struct_field(self, obj, DESTRUCTOR_OBJECT_VALUE_FIELD_IDX);
         let dtor =
@@ -2445,7 +2445,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             DESTRUCTOR_OBJECT_VALUE_FIELD_IDX,
             &res,
         );
-        self.generating_llvm_op = outer_op;
+        self.generating_builtin_op = outer_op;
     }
 
     /// Perform `work` — release, mark-global or mark-threaded — on `obj` itself: on its own count
@@ -2643,7 +2643,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// the local state there. That check stays in place for a value made threaded, since
     /// `Std::mark_threaded` hands the value back with an `Unknown` provenance and unique-check
     /// elimination drops a check only on a value it knows to be uniquely owned (see
-    /// `InlineLLVMMarkThreadedFunctionBody::result_prov`).
+    /// `MarkThreadedOp::result_prov`).
     fn build_mark_boxed_with(
         &mut self,
         obj: &Object<'c>,

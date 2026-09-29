@@ -485,7 +485,9 @@ fn binds_a_destructor(node: &RcExprNode) -> bool {
                     RcRhs::Match(_, arms) => arms
                         .iter()
                         .any(|arm| mentions_a_destructor(&arm.payload.ty)),
-                    RcRhs::Var(..) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Llvm(..) => false,
+                    RcRhs::Var(..) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Builtin(..) => {
+                        false
+                    }
                 }
         }
         RcExpr::Destructure(_, fields, _, _) => fields
@@ -496,14 +498,15 @@ fn binds_a_destructor(node: &RcExprNode) -> bool {
 }
 
 /// The functions whose body can reach an op that reports a reference count to the program
-/// (`LLVMGen::observes_uniqueness`) — directly, or through a direct call to another such function.
+/// (`BuiltinOp::observes_uniqueness`) — directly, or through a direct call to another such
+/// function.
 ///
 /// Reaching one is over-approximated where the callee is not named: a body that can apply a function
-/// value without naming it — a call through a local holding a closure, or an inline-LLVM op that
-/// applies one of its operands (`LLVMGen::applies_a_function_operand`) — is given an edge to every
-/// function a closure can carry, since which one it holds is decided at run time. A release runs a
-/// destructor function the same way, and sits in every body, so every function is given an edge to
-/// the closures a `Destructor` of a type this program mentions can carry.
+/// value without naming it — a call through a local holding a closure, or a builtin op that
+/// applies one of its operands (`BuiltinOp::applies_a_function_operand`) — is given an edge to
+/// every function a closure can carry, since which one it holds is decided at run time. A release
+/// runs a destructor function the same way, and sits in every body, so every function is given an
+/// edge to the closures a `Destructor` of a type this program mentions can carry.
 ///
 /// Borrowing changes what such an op reports. A borrowed parameter's reference is disposed of by the
 /// caller after the call rather than by this function before the op runs, so the count the op reads
@@ -530,15 +533,15 @@ fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
                 return;
             };
             match rhs {
-                RcRhs::Llvm(llvm_gen, _) => {
-                    if llvm_gen.observes_uniqueness() {
+                RcRhs::Builtin(op, _) => {
+                    if op.observes_uniqueness() {
                         if let Some(owner) = owner {
                             observing.insert(owner.clone());
                         }
                     }
                     // An op that applies an operand reaches whichever function that operand holds,
                     // exactly as a call through a local does.
-                    if llvm_gen.applies_a_function_operand() {
+                    if op.applies_a_function_operand() {
                         if let Some(owner) = owner {
                             calls_indirectly.insert(owner.clone());
                         }
@@ -725,7 +728,7 @@ fn mark_tail(node: &RcExprNode, in_tail: bool, out: &mut Set<FullName>) {
                 }
                 // A tail-position result is bound by a call or a match, so the remaining shapes —
                 // a call out of tail position included — leave the set alone.
-                RcRhs::App(..) | RcRhs::Var(..) | RcRhs::Closure(..) | RcRhs::Llvm(..) => {}
+                RcRhs::App(..) | RcRhs::Var(..) | RcRhs::Closure(..) | RcRhs::Builtin(..) => {}
             }
             mark_tail(k, in_tail, out);
         }
@@ -1108,10 +1111,11 @@ fn prepend_rc(units: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -
 }
 
 /// Whether the variable named `name` is used again in an expression subtree — any occurrence as a
-/// value: a move, a call callee or argument, an inline-LLVM operand, a closure capture, a match
-/// scrutinee, a destructured container, or the returned variable. A `Retain`/`Release` names its
-/// variable only for reference counting, not as a use, so those are transparent — which lets a call
-/// be recognized as an argument's last use even when the lowering brackets it with reference counts.
+/// value: a move, a call callee or argument, an operand of a builtin operation, a closure capture,
+/// a match scrutinee, a destructured container, or the returned variable. A `Retain`/`Release`
+/// names its variable only for reference counting, not as a use, so those are transparent — which
+/// lets a call be recognized as an argument's last use even when the lowering brackets it with
+/// reference counts.
 fn used_later(name: &FullName, node: &RcExprNode) -> bool {
     grow_stack(|| match node.expr.as_ref() {
         RcExpr::Ret(v) => v.name == *name,
@@ -1131,8 +1135,8 @@ fn rhs_uses(name: &FullName, rhs: &RcRhs) -> bool {
         RcRhs::Var(v) => v.name == *name,
         RcRhs::App(callee, args) => callee.name == *name || args.iter().any(|a| a.name == *name),
         RcRhs::Closure(_, caps) => caps.iter().any(|c| c.name == *name),
-        RcRhs::Llvm(llvm_gen, args) => {
-            args.iter().any(|a| a.name == *name) || llvm_gen.free_vars().iter().any(|v| v == name)
+        RcRhs::Builtin(op, args) => {
+            args.iter().any(|a| a.name == *name) || op.free_vars().iter().any(|v| v == name)
         }
         RcRhs::Match(scrut, arms) => {
             scrut.name == *name || arms.iter().any(|arm| used_later(name, &arm.body))

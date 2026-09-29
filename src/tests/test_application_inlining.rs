@@ -349,7 +349,7 @@ mod tests {
     }
 
     /// The renamed binder is read by an array primitive, so the renaming has to reach the operand
-    /// names an LLVM operation carries.
+    /// names a builtin operation carries.
     #[test]
     fn test_renaming_a_binder_reaches_llvm_operands() {
         let source = r#"

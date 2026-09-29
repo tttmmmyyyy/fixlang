@@ -90,7 +90,7 @@ const MAX_ROUNDS: usize = 10;
 ///
 /// A global whose body is an operation a copy of which costs no more than the operation itself
 /// (`is_free_to_duplicate`), and a global that is one name standing for another, go wherever the
-/// name occurs; a lambda small enough (`INLINE_COST_THRESHOLD`) and one wrapping an inline-LLVM
+/// name occurs; a lambda small enough (`INLINE_COST_THRESHOLD`) and one wrapping a builtin
 /// operation go into the calls of it. A body that calls itself stays where it is.
 pub fn run(prg: &mut Program) {
     let mut stable_symbols = Set::default();
@@ -192,19 +192,19 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
         // An expression that takes no parameter is the operation itself, and a copy of it costs what
         // the operation costs, which `is_free_to_duplicate` answers.
         let (params, body) = expr.destructure_lam_sequence();
-        cost.is_llvm_lam = !params.is_empty() && body.is_llvm();
+        cost.is_builtin_lam = !params.is_empty() && body.is_builtin();
 
-        if expr.is_llvm() {
-            let generator = &expr.get_llvm().generator;
-            let is_free_to_duplicate = generator.is_free_to_duplicate();
+        if expr.is_builtin() {
+            let op = &expr.get_builtin().op;
+            let is_free_to_duplicate = op.is_free_to_duplicate();
             // An operation whose result holds a boxed part allocates that part, so a copy of it
             // allocates once more. The declaration and the operation agree only where the type of
             // what it answers with is unboxed throughout.
             assert!(
                 !is_free_to_duplicate || sym.ty.is_fully_unboxed(&type_env),
-                "the inline-LLVM operation `{}` declares a copy of itself free while it answers \
+                "the builtin operation `{}` declares a copy of itself free while it answers \
                  with `{}`, which holds a boxed part",
-                generator.name(),
+                op.name(),
                 sym.ty.to_string()
             );
             cost.is_free_to_duplicate = is_free_to_duplicate;
@@ -238,7 +238,7 @@ struct InlineCost {
     /// Is the top-level construct a lambda expression?
     is_lambda: bool,
     /// Is the expression of the form `|x, y, ...| {llvm}`?
-    is_llvm_lam: bool,
+    is_builtin_lam: bool,
     /// Does a copy of the expression cost no more than the expression itself?
     is_free_to_duplicate: bool,
     /// Is this expression an alias to another value, as in `x = y;`?
@@ -256,7 +256,7 @@ impl InlineCost {
             node_count: 0,
             is_self_recursive: false,
             is_lambda: false,
-            is_llvm_lam: false,
+            is_builtin_lam: false,
             is_free_to_duplicate: false,
             is_std_fix: false,
             is_alias: false,
@@ -267,7 +267,7 @@ impl InlineCost {
     /// only where it is called.
     ///
     /// What qualifies is what costs nothing to hold in several places: an operation a copy of
-    /// which costs no more than itself, a lambda whose body is one inline-LLVM operation, and a
+    /// which costs no more than itself, a lambda whose body is one builtin operation, and a
     /// name that stands for another name.
     fn may_be_inlined_at_non_call_site(&self) -> bool {
         if self.is_std_fix {
@@ -282,7 +282,7 @@ impl InlineCost {
         if self.is_self_recursive {
             return false;
         }
-        if self.is_llvm_lam {
+        if self.is_builtin_lam {
             return true;
         }
         if self.is_alias {
@@ -303,7 +303,7 @@ impl InlineCost {
         if self.is_self_recursive {
             return false;
         }
-        if self.is_llvm_lam {
+        if self.is_builtin_lam {
             return true;
         }
         if !self.is_lambda {
@@ -439,9 +439,13 @@ impl ExprVisitor for InlineCostCalculator {
         EndVisitResult::unchanged(expr)
     }
 
-    /// Counts the inline-LLVM operation as one unit of `complexity`, and each global name free in
+    /// Counts the builtin operation as one unit of `complexity`, and each global name free in
     /// it as one use of the symbol it names.
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_builtin(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         self.complexity += 1;
         self.is_lambda = false;
         for free_name in expr.free_vars() {

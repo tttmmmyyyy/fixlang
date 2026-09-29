@@ -5,7 +5,7 @@
 
 This optimization transforms `let x = {e0} in {e1}` into `{e1}[x:={e0}]` if one of the following conditions hold:
 1. `e0` is just a name (variable).
-2. `x` is used only once in `e1`, not appear as arguments to LLVM expression, and any of the following sub-conditions hold:
+2. `x` is used only once in `e1`, not appear as arguments to a builtin expression, and any of the following sub-conditions hold:
 2-a. {e0} is a lambda expression and the occurrence of `x` is in an application
 2-b. {e0} is strictly partial application (i.e. # of args < n) of names to a global lambda expression with n-arguments `f = |a1,...,an| ...`,
      and the occurrence of `x` is in an application
@@ -27,20 +27,20 @@ For the definition of "evaluates before any other local names", see the implemen
 ## Effects
 
 This transformation in case 1., i.e., transforming `let x = y in {e1}` into `{e1}[x:=y]` even improves the performance of the program.
-Consider the following example which contains InlineLLVM nodes:
+Consider the following example which contains BuiltinOpExpr nodes:
 
 ```
 let x = arr; // Retain `arr` here, because it will be used later.
-let n = LLVM<x.Array::@(i)>; // Release `x` here, because it will not be used later.
+let n = BUILTIN<x.Array::@(i)>; // Release `x` here, because it will not be used later.
 let y = arr;
-let m = LLVM<y.Array::@(j)>;
+let m = BUILTIN<y.Array::@(j)>;
 ```
 
 After removing renaming, the code will look like this:
 
 ```
-let n = LLVM<arr.Array::@(i)>; // By the implementation of `LLVM<arr.@(i)>`, the array will not be retained nor released since `arr` will be used later.
-let m = LLVM<arr.Array::@(j)>;
+let n = BUILTIN<arr.Array::@(i)>; // By the implementation of `BUILTIN<arr.@(i)>`, the array will not be retained nor released since `arr` will be used later.
+let m = BUILTIN<arr.Array::@(j)>;
 ```
 
 and the cost for retaining and releasing an array is saved.
@@ -127,7 +127,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         let mut probe = FreeOccurrenceProbe::new(x.clone());
         probe.traverse(&e1);
 
-        if probe.count == 1 && !probe.is_argument_to_llvm {
+        if probe.count == 1 && !probe.is_argument_to_builtin {
             // Case 2 of the documentation at the top.
             let mut any_sub_condition_holds = false;
 
@@ -209,8 +209,8 @@ struct FreeOccurrenceProbe {
     used_before_any_other_local_names: bool,
     /// Is any occurrence of `target_name` captured by a lambda expression?
     is_captured_by_lambda: bool,
-    /// Does any occurrence of `target_name` stand as an argument of an LLVM expression?
-    is_argument_to_llvm: bool,
+    /// Does any occurrence of `target_name` stand as an argument of a builtin expression?
+    is_argument_to_builtin: bool,
 }
 
 impl FreeOccurrenceProbe {
@@ -231,7 +231,7 @@ impl FreeOccurrenceProbe {
             is_applied: false,
             used_before_any_other_local_names: true,
             is_captured_by_lambda: false,
-            is_argument_to_llvm: false,
+            is_argument_to_builtin: false,
         }
     }
 
@@ -285,23 +285,27 @@ impl ExprVisitor for FreeOccurrenceProbe {
         EndVisitResult::unchanged(expr)
     }
 
-    /// Counts each argument of the LLVM expression that is the target name, and records that the
-    /// target name stands as an argument of an LLVM expression. Such an expression is reached only
-    /// where it takes the target name, which it may do more than once.
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    /// Counts each argument of the builtin expression that is the target name, and records that the
+    /// target name stands as an argument of a builtin expression. Such an expression is reached
+    /// only where it takes the target name, which it may do more than once.
+    fn end_visit_builtin(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
         let occurrence_count = expr
-            .get_llvm()
-            .generator
+            .get_builtin()
+            .op
             .free_vars()
             .iter()
             .filter(|fv| **fv == self.target_name)
             .count();
         assert!(
             occurrence_count > 0,
-            "visited an LLVM expression taking no `{}` as an argument",
+            "visited a builtin expression taking no `{}` as an argument",
             self.target_name.to_string()
         );
-        self.is_argument_to_llvm = true;
+        self.is_argument_to_builtin = true;
         self.count += occurrence_count;
 
         EndVisitResult::unchanged(expr)

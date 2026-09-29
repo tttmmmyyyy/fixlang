@@ -30,8 +30,7 @@ use crate::{
         types::{tycon, TyCon, TyConInfo, TyConVariant},
     },
     fixstd::builtin::{
-        make_tuple_name_abs, make_unit_ty, InlineLLVMStructGetBody, InlineLLVMStructPlugInBody,
-        InlineLLVMStructPunchBody, InlineLLVMStructSetBody,
+        make_tuple_name_abs, make_unit_ty, StructGetOp, StructPlugInOp, StructPunchOp, StructSetOp,
     },
     misc::{Map, Set},
 };
@@ -203,26 +202,30 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         EndVisitResult::changed(expr)
     }
 
-    /// Unwraps the type recorded for an inline LLVM expression, and replaces the read, the write,
+    /// Unwraps the type recorded for a builtin expression, and replaces the read, the write,
     /// the punch and the plug-in of an unwrapped newtype's field by the field value itself, which
     /// is what a value of that type has become.
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, state: &mut VisitState) -> EndVisitResult {
+    fn end_visit_builtin(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        state: &mut VisitState,
+    ) -> EndVisitResult {
         let old_ty = expr.type_.as_ref().unwrap().clone();
         let mut expr = unwrap_inferred_type(expr, self.type_env);
         let new_ty = expr.type_.as_ref().unwrap().clone();
 
-        let llvm = if let Expr::LLVM(llvm) = expr.expr.as_ref() {
-            llvm.as_ref().clone()
+        let builtin = if let Expr::Builtin(builtin) = expr.expr.as_ref() {
+            builtin.as_ref().clone()
         } else {
             unreachable!()
         };
 
-        // `llvm.generic_ty` stays as it is: type checking is the last pass that reads it.
+        // `builtin.generic_ty` stays as it is: type checking is the last pass that reads it.
 
-        // Replace StructGetBody, StructSetBody, StructPunchBody, and StructPlugInBody for structures defined by the newtype pattern.
-        let gen = llvm.generator.as_ref();
-        if let Some(body) = gen.as_any().downcast_ref::<InlineLLVMStructGetBody>() {
-            // @ : S -> F = |s| GetBody(s)
+        // Replace StructGetOp, StructSetOp, StructPunchOp, and StructPlugInOp for structures defined by the newtype pattern.
+        let gen = builtin.op.as_ref();
+        if let Some(body) = gen.as_any().downcast_ref::<StructGetOp>() {
+            // @ : S -> F = |s| StructGetOp(s)
             // =>
             // @ : F -> F = |s| s
             let field_ty = new_ty;
@@ -230,8 +233,8 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
             if self.is_local_of_unwrapped_newtype(&struct_name, state) {
                 expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
             }
-        } else if let Some(body) = gen.as_any().downcast_ref::<InlineLLVMStructSetBody>() {
-            // set : F -> S -> S = |f, s| SetBody(f)
+        } else if let Some(body) = gen.as_any().downcast_ref::<StructSetOp>() {
+            // set : F -> S -> S = |f, s| StructSetOp(f)
             // =>
             // set : F -> F -> F = |f, s| f
             let field_ty = new_ty;
@@ -241,7 +244,7 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
                 let field_name = body.value_name.clone();
                 expr = expr_var(field_name, expr.source.clone()).set_type(field_ty);
             }
-        } else if let Some(body) = gen.as_any().downcast_ref::<InlineLLVMStructPunchBody>() {
+        } else if let Some(body) = gen.as_any().downcast_ref::<StructPunchOp>() {
             // punch : S -> (F, S*) = |s| Punch(s)
             // =>
             // punch : F -> (F, ()) = |s| (s, ())
@@ -259,7 +262,7 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
                 )
                 .set_type(field_unit_ty);
             }
-        } else if let Some(body) = gen.as_any().downcast_ref::<InlineLLVMStructPlugInBody>() {
+        } else if let Some(body) = gen.as_any().downcast_ref::<StructPlugInOp>() {
             // plug_in : S* -> F -> S = |s, f| PlugIn(s, f)
             // =>
             // plug_in : () -> F -> F = |_, f| f

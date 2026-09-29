@@ -3,9 +3,9 @@
 //! Every retain and release the generated code performs comes from a `Retain` or `Release` node of
 //! the RC IR: a variable read yields the value alone, and a read-getter leaves its container to the
 //! `Release` node that disposes it. The work outside reference counting — closure layout, FFI,
-//! struct and array construction, the inline-LLVM builtins — is done by the `Generator` helpers.
+//! struct and array construction, the builtin operations — is done by the `Generator` helpers.
 
-use crate::ast::inline_llvm::LLVMGen;
+use crate::ast::builtin_op::BuiltinOp;
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
@@ -253,7 +253,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     self.bind_and_continue(x, obj.unwrap(), k, tail, func_vals)
                 }
             }
-            RcExpr::Let(x, RcRhs::Llvm(llvm_gen, args), k) => {
+            RcExpr::Let(x, RcRhs::Builtin(op, args), k) => {
                 // What an op declares about an operand -- whether it borrows it, what it counts on
                 // it, where its result comes from -- is answered from the type the RC IR carries,
                 // while `generate` reads an operand's type out of the scope it reads the value
@@ -271,22 +271,22 @@ impl<'c, 'm> Generator<'c, 'm> {
                         }
                     }
                 }
-                // An inline-LLVM op may build the tail return itself (`FixBody`), in which case it
+                // A builtin op may build the tail return itself (`FixOp`), in which case it
                 // yields no value. A diverging op (`undefined`) does not: it emits `unreachable` and
                 // yields a poison value, so the continuation is generated as dead code.
-                let llvm_tail = self.binding_fuses_into_return(x, k, tail);
+                let op_tail = self.binding_fuses_into_return(x, k, tail);
                 // What the op says about applying its operands, for `apply_lambda` to check it by.
                 let outer_op = self.config.develop_mode.then(|| {
-                    self.generating_llvm_op
-                        .replace((llvm_gen.name(), llvm_gen.applies_a_function_operand()))
+                    self.generating_builtin_op
+                        .replace((op.name(), op.applies_a_function_operand()))
                 });
-                let generated = llvm_gen.generate_tail(self, &x.ty, llvm_tail);
+                let generated = op.generate_tail(self, &x.ty, op_tail);
                 if let Some(outer_op) = outer_op {
-                    self.generating_llvm_op = outer_op;
+                    self.generating_builtin_op = outer_op;
                 }
                 if let Some(obj) = generated.as_ref() {
                     self.build_assert_declared_passthrough_answers_the_operand(
-                        llvm_gen.as_ref(),
+                        op.as_ref(),
                         args,
                         obj,
                     );
@@ -297,9 +297,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                         // tail position; elsewhere the continuation below would be dropped and the
                         // block left without a terminator.
                         assert!(
-                            llvm_tail,
-                            "inline-LLVM op `{}` yielded no value outside tail position",
-                            llvm_gen.name()
+                            op_tail,
+                            "builtin op `{}` yielded no value outside tail position",
+                            op.name()
                         );
                         None
                     }
@@ -343,7 +343,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    /// Abort, in compiler development mode, where an inline-LLVM op that declared its result to be
+    /// Abort, in compiler development mode, where a builtin op that declared its result to be
     /// one of its operands answered with another object.
     ///
     /// `result_prov` lets an op declare its result to be argument `i` itself, the same object.
@@ -360,7 +360,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// one that does.
     fn build_assert_declared_passthrough_answers_the_operand(
         &mut self,
-        llvm_gen: &dyn LLVMGen,
+        op: &dyn BuiltinOp,
         args: &[RcVar],
         result: &Object<'c>,
     ) {
@@ -371,7 +371,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             return;
         }
         let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-        let prov = llvm_gen.result_prov(&result.ty, &arg_tys, self.type_env());
+        let prov = op.result_prov(&result.ty, &arg_tys, self.type_env());
         let Some(origins) = prov.leaf_origins_at(&[]) else {
             return;
         };
@@ -409,8 +409,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             is_different,
             "assert_declared_passthrough",
             &format!(
-                "The inline-LLVM operation `{}` declared its result to be an operand, and answered with another object.\n",
-                llvm_gen.name()
+                "The builtin operation `{}` declared its result to be an operand, and answered with another object.\n",
+                op.name()
             ),
         );
     }
@@ -510,8 +510,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    /// Evaluate a `Var` or `Closure` right-hand side to an object. `App`, `Match`, and `Llvm` are
-    /// handled directly in `eval_rc_expr_inner`.
+    /// Evaluate a `Var` or `Closure` right-hand side to an object. `App`, `Match`, and `Builtin`
+    /// are handled directly in `eval_rc_expr_inner`.
     fn eval_rc_rhs(
         &mut self,
         rhs: &RcRhs,
@@ -523,8 +523,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             RcRhs::Closure(func, captures) => {
                 self.build_rc_closure(func, captures, result_ty, func_vals)
             }
-            RcRhs::App(..) | RcRhs::Match(..) | RcRhs::Llvm(..) => {
-                unreachable!("App, Match, and Llvm are handled in eval_rc_expr_inner")
+            RcRhs::App(..) | RcRhs::Match(..) | RcRhs::Builtin(..) => {
+                unreachable!("App, Match, and Builtin are handled in eval_rc_expr_inner")
             }
         }
     }

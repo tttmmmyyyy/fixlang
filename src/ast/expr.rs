@@ -1,4 +1,4 @@
-use crate::ast::inline_llvm::{InlineLLVM, LLVMGen};
+use crate::ast::builtin_op::{BuiltinOp, BuiltinOpExpr};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::PatternNode;
 use crate::ast::program::{EndNode, TypeEnv};
@@ -805,11 +805,11 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn set_llvm(&self, llvm: InlineLLVM) -> Arc<ExprNode> {
+    pub fn set_builtin(&self, builtin: BuiltinOpExpr) -> Arc<ExprNode> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
-            Expr::LLVM(_) => {
-                ret.expr = Arc::new(Expr::LLVM(Arc::new(llvm)));
+            Expr::Builtin(_) => {
+                ret.expr = Arc::new(Expr::Builtin(Arc::new(builtin)));
             }
             _ => {
                 panic!()
@@ -818,18 +818,18 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn get_llvm(&self) -> Arc<InlineLLVM> {
+    pub fn get_builtin(&self) -> Arc<BuiltinOpExpr> {
         match &*self.expr {
-            Expr::LLVM(llvm) => llvm.clone(),
+            Expr::Builtin(builtin) => builtin.clone(),
             _ => {
                 panic!()
             }
         }
     }
 
-    pub fn is_llvm(&self) -> bool {
+    pub fn is_builtin(&self) -> bool {
         match &*self.expr {
-            Expr::LLVM(_) => true,
+            Expr::Builtin(_) => true,
             _ => false,
         }
     }
@@ -846,10 +846,10 @@ impl ExprNode {
                 // Name resolution for values will be done in type checking phase.
                 Ok(self.clone())
             }
-            Expr::LLVM(llvm) => {
-                let mut llvm = llvm.as_ref().clone();
-                llvm.generic_ty = llvm.generic_ty.resolve_namespace(ctx)?;
-                Ok(self.clone().set_llvm(llvm))
+            Expr::Builtin(builtin) => {
+                let mut builtin = builtin.as_ref().clone();
+                builtin.generic_ty = builtin.generic_ty.resolve_namespace(ctx)?;
+                Ok(self.clone().set_builtin(builtin))
             }
             Expr::App(fun, args) => {
                 let mut args_res: Vec<Arc<ExprNode>> = vec![];
@@ -925,10 +925,10 @@ impl ExprNode {
     ) -> Result<Arc<ExprNode>, Errors> {
         match &*self.expr {
             Expr::Var(_) => Ok(self.clone()),
-            Expr::LLVM(llvm) => {
-                let mut llvm = llvm.as_ref().clone();
-                llvm.generic_ty = llvm.generic_ty.resolve_type_aliases(type_env)?;
-                Ok(self.clone().set_llvm(llvm))
+            Expr::Builtin(builtin) => {
+                let mut builtin = builtin.as_ref().clone();
+                builtin.generic_ty = builtin.generic_ty.resolve_type_aliases(type_env)?;
+                Ok(self.clone().set_builtin(builtin))
             }
             Expr::App(fun, args) => {
                 let args =
@@ -1019,7 +1019,7 @@ impl ExprNode {
         }
         match &*self.expr {
             Expr::Var(v) => Some(EndNode::Expr(v.as_ref().clone(), self.type_.clone())),
-            Expr::LLVM(_) => None,
+            Expr::Builtin(_) => None,
             Expr::App(func, args) => {
                 let node = func.find_node_at(pos);
                 if node.is_some() {
@@ -1157,7 +1157,7 @@ impl ExprNode {
         grow_stack(|| {
             f(self);
             match &*self.expr {
-                Expr::Var(_) | Expr::LLVM(_) => {}
+                Expr::Var(_) | Expr::Builtin(_) => {}
                 Expr::App(func, args) => {
                     func.walk_nodes(f);
                     for a in args {
@@ -1223,7 +1223,7 @@ impl ExprNode {
     fn calc_free_vars(&self) -> Set<FullName> {
         match &*self.expr {
             Expr::Var(var) => vec![var.name.clone()].into_iter().collect(),
-            Expr::LLVM(llvm) => llvm.generator.free_vars().into_iter().collect(),
+            Expr::Builtin(builtin) => builtin.op.free_vars().into_iter().collect(),
             Expr::App(func, args) => {
                 let mut free_vars = func.free_vars();
                 for arg in args {
@@ -1332,9 +1332,9 @@ impl ExprNode {
                 let new_var = var.global_to_absolute();
                 Arc::new(Expr::Var(new_var))
             }
-            Expr::LLVM(llvm) => {
-                let new_llvm = llvm.global_to_absolute();
-                Arc::new(Expr::LLVM(new_llvm))
+            Expr::Builtin(builtin) => {
+                let new_builtin = builtin.global_to_absolute();
+                Arc::new(Expr::Builtin(new_builtin))
             }
             Expr::App(func, args) => {
                 let new_func = func.global_to_absolute();
@@ -1441,8 +1441,8 @@ pub struct FieldSrc {
 pub enum Expr {
     /// A name standing for a value.
     Var(Arc<Var>),
-    /// An operation written in LLVM IR, holding the names it reads.
-    LLVM(Arc<InlineLLVM>),
+    /// A builtin operation, holding the names it reads.
+    Builtin(Arc<BuiltinOpExpr>),
     /// A function applied to arguments. An application of several arguments is generated by
     /// optimization.
     App(Arc<ExprNode>, Vec<Arc<ExprNode>>),
@@ -1508,13 +1508,13 @@ impl Expr {
     pub fn stringify(&self) -> Text {
         match self {
             Expr::Var(v) => Text::from_string(v.name.to_string()),
-            Expr::LLVM(l) => Text::from_string(l.generator.name()),
+            Expr::Builtin(l) => Text::from_string(l.op.name()),
             Expr::App(_, _) => {
                 // Stringify the funciton.
                 let (fun, args) = collect_app(&Arc::new(self.clone()).into_expr_node(None));
                 let brace_fun = match *(fun.expr) {
                     Expr::Var(_) => false,
-                    Expr::LLVM(_) => false,
+                    Expr::Builtin(_) => false,
                     Expr::App(_, _) => false,
                     _ => true,
                 };
@@ -1660,13 +1660,9 @@ pub fn var_local(var_name: &str) -> Arc<Var> {
     var_var(FullName::local(var_name))
 }
 
-pub fn expr_llvm(
-    generator: Box<dyn LLVMGen>,
-    ty: Arc<TypeNode>,
-    src: Option<Span>,
-) -> Arc<ExprNode> {
-    Arc::new(Expr::LLVM(Arc::new(InlineLLVM {
-        generator,
+pub fn expr_builtin(op: Box<dyn BuiltinOp>, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
+    Arc::new(Expr::Builtin(Arc::new(BuiltinOpExpr {
+        op,
         generic_ty: ty,
     })))
     .into_expr_node(src)

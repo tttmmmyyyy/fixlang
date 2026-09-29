@@ -147,7 +147,7 @@ The names carry one `#closure` stem, so that a dump says which pass produced the
 * `<symbol>#closure_lam<n>` — the global function a decaptured lambda becomes.
 * `<symbol>#closure_spec_<hash>` — the copy of a global function specialized on the lambdas passed
   to it, where the hash stands for which way in received which value.
-* `<local>#closure_call_lam` — a local binding. Where an inline-LLVM expression reads a variable
+* `<local>#closure_call_lam` — a local binding. Where a builtin expression reads a variable
   holding a decaptured lambda's capture list, the call of that lambda is bound to a local of this
   name and the expression reads that instead.
 * `CLOSURE_CAP_NAME` — the parameter a decaptured lambda receives its capture list through.
@@ -1026,7 +1026,7 @@ fn reaches_a_direct_call(
                     )
                 })
             }
-            // An inline-LLVM operation applies the function it is given through a pointer, which
+            // A builtin operation applies the function it is given through a pointer, which
             // is an indirect call.
             UsageType::EnvFunctionOperand => false,
             // A value held where nothing takes it apart is passed on whole, so a way in is reached
@@ -1664,18 +1664,18 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
-    /// Give an inline-LLVM expression the closures it is written against: each free variable holding
+    /// Give a builtin expression the closures it is written against: each free variable holding
     /// a bare capture list is bound, ahead of the expression, to the lifted lambda applied to that
     /// capture list, and the expression reads the binding under the name `CLOSURE_CALL_LAM_SUFFIX`
     /// gives it.
-    fn start_visit_llvm(
+    fn start_visit_builtin(
         &mut self,
-        llvm_expr: &Arc<ExprNode>,
+        builtin_expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
         // The expression each free variable holding a capture list is replaced with.
         let mut replacements = Map::default();
-        for free_name in llvm_expr.free_vars() {
+        for free_name in builtin_expr.free_vars() {
             let Some(known) = self.known_bare_value(&free_name) else {
                 continue;
             };
@@ -1689,7 +1689,8 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             replacements.insert(free_name.clone(), expr);
         }
 
-        // If none of the free variables in the LLVM expression refer to a decaptured lambda, do nothing.
+        // If none of the free variables in the builtin expression refer to a decaptured lambda, do
+        // nothing.
         if replacements.is_empty() {
             return StartVisitResult::VisitChildren;
         }
@@ -1700,16 +1701,16 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             new_name
         };
 
-        // Rename free variables in the LLVM expression
-        let mut llvm_expr = llvm_expr.clone();
+        // Rename free variables in the builtin expression
+        let mut builtin_expr = builtin_expr.clone();
         let mut renames: Map<FullName, FullName> = Default::default();
         for (name, _) in replacements.iter() {
             renames.insert(name.clone(), make_new_name(name));
         }
-        llvm_expr = rename_free_names(&llvm_expr, renames);
+        builtin_expr = rename_free_names(&builtin_expr, renames);
 
-        // Insert `let (new name) = (lambda function call);` before the LLVM expression
-        let mut expr = llvm_expr.clone();
+        // Insert `let (new name) = (lambda function call);` before the builtin expression
+        let mut expr = builtin_expr.clone();
         for (name, call_lam_expr) in replacements.iter() {
             let new_name = make_new_name(name);
             expr = expr_let_typed(

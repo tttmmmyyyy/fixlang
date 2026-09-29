@@ -549,7 +549,7 @@ fn recurse_for_hole(
     best: &mut Option<Arc<ExprNode>>,
 ) {
     match &*expr.expr {
-        Expr::Var(_) | Expr::LLVM(_) => {}
+        Expr::Var(_) | Expr::Builtin(_) => {}
         Expr::App(func, args) => {
             walk_for_hole(func, cursor, target, best);
             for a in args {

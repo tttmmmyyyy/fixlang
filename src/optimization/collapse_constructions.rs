@@ -38,7 +38,7 @@ use crate::{
         types::{TyCon, TypeNode},
     },
     constants::BOUND_FIELD_PREFIX,
-    fixstd::builtin::InlineLLVMMakeUnionBody,
+    fixstd::builtin::MakeUnionOp,
     misc::{Map, Set},
     optimization::{
         inline_local, let_elimination::create_global_lambda_to_arity_map, pull_let,
@@ -226,14 +226,10 @@ impl<'a> Collapser<'a> {
 
 /// The variant `expr` constructs and the name holding its payload, where it constructs one.
 fn union_built_by(expr: &Arc<ExprNode>) -> Option<(usize, FullName)> {
-    let Expr::LLVM(llvm) = &*expr.expr else {
+    let Expr::Builtin(builtin) = &*expr.expr else {
         return None;
     };
-    let body = llvm
-        .generator
-        .as_ref()
-        .as_any()
-        .downcast_ref::<InlineLLVMMakeUnionBody>()?;
+    let body = builtin.op.as_ref().as_any().downcast_ref::<MakeUnionOp>()?;
     Some((body.variant_index(), body.payload_name().clone()))
 }
 

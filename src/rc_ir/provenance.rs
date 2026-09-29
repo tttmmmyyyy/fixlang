@@ -28,14 +28,12 @@
 //! provenance, since telling those aliases apart takes the object identity `rc_ir::ownership::origin`
 //! computes, which this pass does not read.
 
-use crate::ast::inline_llvm::LLVMGen;
+use crate::ast::builtin_op::BuiltinOp;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::constants::{BOOL_TRUE_TAG, IS_UNIQUE_FLAG_FIELD, IS_UNIQUE_VALUE_FIELD};
-use crate::fixstd::builtin::{
-    InlineLLVMArrayIsStorageUniqueBody, InlineLLVMIsUniqueFunctionBody, IS_UNIQUE_VALUE_ARG,
-};
+use crate::fixstd::builtin::{ArrayIsStorageUniqueOp, IsUniqueOp, IS_UNIQUE_VALUE_ARG};
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
     FieldPath, FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar,
@@ -509,7 +507,7 @@ impl<'a> Interpreter<'a> {
     ) -> Provenance {
         match rhs {
             RcRhs::Var(y) => self.prov_of(y, env),
-            RcRhs::Llvm(llvm_gen, args) => {
+            RcRhs::Builtin(op, args) => {
                 let arg_provs: Vec<Provenance> =
                     args.iter().map(|a| self.prov_of(a, env)).collect();
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
@@ -518,10 +516,10 @@ impl<'a> Interpreter<'a> {
                 // about a value (`interpret_match` refines the `true` arm with it), and it is also
                 // the one whose own result is that fact rather than a value the operands compose
                 // into. The array-storage variant answers the same question for `Array`.
-                let answers_uniqueness = is_is_unique_op(llvm_gen.as_ref());
+                let answers_uniqueness = is_is_unique_op(op.as_ref());
                 // Snapshot the checked container operand of a uniqueness-branching operation at this
                 // program point, for unique-check elimination to resolve later.
-                if let Some(check) = llvm_gen.unique_check_operand(&arg_tys, self.type_env) {
+                if let Some(check) = op.unique_check_operand(&arg_tys, self.type_env) {
                     self.unique_check_operand_provs.insert(
                         result.name.clone(),
                         arg_provs[check.container_index].clone(),
@@ -538,7 +536,7 @@ impl<'a> Interpreter<'a> {
                         &arg_provs[IS_UNIQUE_VALUE_ARG],
                     );
                 }
-                let decl = llvm_gen.result_prov(&result.ty, &arg_tys, self.type_env);
+                let decl = op.result_prov(&result.ty, &arg_tys, self.type_env);
                 decl.compose(&arg_provs)
             }
             RcRhs::Closure(fref, _) => {
@@ -720,9 +718,9 @@ impl<'a> Interpreter<'a> {
 /// Whether an operation answers a uniqueness question about its operand — the generic
 /// `unsafe_is_unique` or its array-storage counterpart. Both return `(Bool, operand)` and are read
 /// through `is_unique_result` rather than their `result_prov`.
-fn is_is_unique_op(llvm_gen: &dyn LLVMGen) -> bool {
-    let any = llvm_gen.as_any();
-    any.is::<InlineLLVMIsUniqueFunctionBody>() || any.is::<InlineLLVMArrayIsStorageUniqueBody>()
+fn is_is_unique_op(op: &dyn BuiltinOp) -> bool {
+    let any = op.as_any();
+    any.is::<IsUniqueOp>() || any.is::<ArrayIsStorageUniqueOp>()
 }
 
 /// The provenance of an `is_unique` result: the flag, plus the value it was asked about, whose leaves
@@ -732,7 +730,7 @@ fn is_is_unique_op(llvm_gen: &dyn LLVMGen) -> bool {
 /// there says two things at once. An `Arg` leaf states both "the result leaf has the operand leaf's
 /// sharing" and "the op leaves that operand leaf unconsumed", and `is_unique` may only say the first:
 /// being treated as consuming is what forces a retain on a later use of the operand, which is what
-/// makes the count it reads honest (`InlineLLVMIsUniqueFunctionBody::result_prov` spells this out).
+/// makes the count it reads honest (`IsUniqueOp::result_prov` spells this out).
 /// With no way to declare the sharing alone, the sharing half is applied here.
 ///
 /// What it buys: `Debug::assert_unique` is an `is_unique` whose false arm aborts, so without this

@@ -34,7 +34,7 @@
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
-use crate::fixstd::builtin::{InlineLLVMMakeStructBody, InlineLLVMMakeUnionBody};
+use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp};
 use crate::misc::{grow_stack, Map};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
@@ -175,10 +175,10 @@ pub(crate) fn node_count(node: &RcExprNode) -> u64 {
 
 /// The variant number and payload operand of the union construction `rhs` builds.
 fn union_construction(rhs: &RcRhs) -> Option<(usize, &RcVar)> {
-    let RcRhs::Llvm(gen, args) = rhs else {
+    let RcRhs::Builtin(gen, args) = rhs else {
         return None;
     };
-    let construction = gen.as_any().downcast_ref::<InlineLLVMMakeUnionBody>()?;
+    let construction = gen.as_any().downcast_ref::<MakeUnionOp>()?;
     // An operation's operands are its free variables, of which a union construction has the payload
     // alone.
     assert_eq!(
@@ -217,10 +217,10 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
 /// k`, where `x` is consumed only by the destructure, binds each field variable directly to the
 /// operand that built that field, dropping both the construction and the destructure.
 fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
-    let RcExpr::Let(x, RcRhs::Llvm(gen, args), k) = node.expr.as_ref() else {
+    let RcExpr::Let(x, RcRhs::Builtin(gen, args), k) = node.expr.as_ref() else {
         return None;
     };
-    gen.as_any().downcast_ref::<InlineLLVMMakeStructBody>()?;
+    gen.as_any().downcast_ref::<MakeStructOp>()?;
     let RcExpr::Destructure(container, fields, _, k2) = k.expr.as_ref() else {
         return None;
     };
@@ -469,9 +469,9 @@ fn with_continuation(node: &RcExprNode, k: RcExprNode) -> RcExprNode {
 }
 
 /// The number of times `name` occurs as a value in `node`: a move, a call callee or argument, an
-/// inline-LLVM operand, a closure capture, a match scrutinee, a destructured container, an `eval`, or
-/// the returned variable. Binders do not count. `Retain`/`Release` name a variable only for reference
-/// counting, so they are transparent.
+/// operand of a builtin operation, a closure capture, a match scrutinee, a destructured container,
+/// an `eval`, or the returned variable. Binders do not count. `Retain`/`Release` name a variable
+/// only for reference counting, so they are transparent.
 fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
     // A deep continuation chain recurses to its full depth here; grow the stack on demand.
     grow_stack(|| {
@@ -496,7 +496,7 @@ fn rhs_value_uses(name: &FullName, rhs: &RcRhs) -> usize {
         RcRhs::Var(v) => hit(v),
         RcRhs::App(callee, args) => hit(callee) + args.iter().map(hit).sum::<usize>(),
         RcRhs::Closure(_, caps) => caps.iter().map(hit).sum(),
-        RcRhs::Llvm(_, args) => args.iter().map(hit).sum(),
+        RcRhs::Builtin(_, args) => args.iter().map(hit).sum(),
         RcRhs::Match(scrut, arms) => {
             hit(scrut)
                 + arms

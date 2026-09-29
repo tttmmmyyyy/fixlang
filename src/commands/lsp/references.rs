@@ -475,7 +475,7 @@ fn collect_symbol_expr_type_refs(expr: &SymbolExpr, target: &TyCon, refs: &mut V
 // Collect type references in an expression tree (type annotations, patterns, MakeStruct).
 fn collect_exprnode_type_refs(expr: &Arc<ExprNode>, target: &TyCon, refs: &mut Vec<Span>) {
     match &*expr.expr {
-        Expr::Var(_) | Expr::LLVM(_) => {}
+        Expr::Var(_) | Expr::Builtin(_) => {}
         Expr::App(func, args) => {
             collect_exprnode_type_refs(func, target, refs);
             for arg in args {
@@ -806,7 +806,7 @@ fn collect_exprnode_bare_field_occs(
     occs: &mut Vec<FieldOccurrence>,
 ) {
     match &*expr.expr {
-        Expr::Var(_) | Expr::LLVM(_) => {}
+        Expr::Var(_) | Expr::Builtin(_) => {}
         Expr::App(func, args) => {
             collect_exprnode_bare_field_occs(func, tc, name, occs);
             for arg in args {
@@ -946,7 +946,7 @@ fn collect_exprnode_field_occs(
                 }
             }
         }
-        Expr::LLVM(_) => {}
+        Expr::Builtin(_) => {}
         Expr::App(func, args) => {
             collect_exprnode_field_occs(func, prefix, target, occs);
             for arg in args {
@@ -1386,7 +1386,7 @@ fn collect_exprnode_called_globals(expr: &Arc<ExprNode>, result: &mut Map<FullNa
                 }
             }
         }
-        Expr::LLVM(_) => {}
+        Expr::Builtin(_) => {}
         Expr::App(func, args) => {
             collect_exprnode_called_globals(func, result);
             for arg in args {
