@@ -339,6 +339,47 @@ mod integration_tests {
         );
     }
 
+    /// A struct pattern that leaves out fields without `_` is warned about wherever the user's code
+    /// writes it: in an implementation of a trait member, in a `let`, in a `match` arm, inside
+    /// another pattern, and in a value `main` does not use.
+    #[test]
+    fn test_check_warns_on_struct_pattern_leaving_out_fields_wherever_written() {
+        let (_temp_dir, project_dir) = setup_test_env("pattern_field_warning_places_project");
+
+        let output = fix_command()
+            .arg("check")
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix check");
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            output.status.success(),
+            "fix check should succeed (warning-only): stderr={}",
+            stderr
+        );
+        for line in [
+            "get_x = |S { x }| x;",
+            "in_let = |s| let S { y } = s; y;",
+            "in_match = |s| match s { S { x } => x };",
+            "nested = |T { s : S { y }, name }| y;",
+            "unused = |S { x }| x;",
+        ] {
+            assert!(
+                stderr.contains(line),
+                "Expected a warning on the pattern of `{}`, got: {}",
+                line,
+                stderr
+            );
+        }
+        assert_eq!(
+            stderr.matches("This pattern leaves out").count(),
+            5,
+            "Expected the five patterns alone to be reported, got: {}",
+            stderr
+        );
+    }
+
     /// "Deprecated context" rule: a deprecated helper calling another
     /// deprecated helper should not produce a warning for that internal
     /// call. Only the use from non-deprecated code (here, `main`) warns.
