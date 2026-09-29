@@ -6096,7 +6096,7 @@ pub fn test_float_to_string_precision() {
 /// from, and is spelled as a floating point literal of Fix. The walk crosses both edges of the
 /// window the point is written positionally in, at every scale either type reaches.
 #[test]
-pub fn test_float_to_string_across_every_decade() {
+pub fn test_float_to_string_reads_back_as_a_literal_across_every_decade() {
     let source = r#"
         module Main;
 
@@ -6156,26 +6156,17 @@ pub fn test_float_to_string_across_every_decade() {
         // * `text` - The text to look at.
         is_float_literal : String -> Bool;
         is_float_literal = |text| (
-            let bytes = text.get_bytes;
-            let bytes = bytes.get_sub(0, bytes.get_size - 1);
+            let bytes = text.get_bytes.get_sub(0, text.get_size);
             let size = bytes.get_size;
-            let i = if size > 0 && bytes.@(0) == '-' { 1 } else { 0 };
-            match skip_digits(bytes, i) {
+            let is_at = |i, c| i < size && bytes.@(i) == c;
+            let past_minus = |i| if is_at(i, '-') { i + 1 } else { i };
+            // The index past the digits, the point and the digits after it.
+            let past_point = skip_digits(bytes, past_minus(0)).bind(|i|
+                if is_at(i, '.') { skip_digits(bytes, i + 1) } else { none() }
+            );
+            match past_point {
                 none() => false,
-                some(i) => (
-                    if i >= size || bytes.@(i) != '.' { false } else {
-                    match skip_digits(bytes, i + 1) {
-                        none() => false,
-                        some(i) => (
-                            if i == size { true } else {
-                            if bytes.@(i) != 'e' { false } else {
-                            let i = i + 1;
-                            let i = if i < size && bytes.@(i) == '-' { i + 1 } else { i };
-                            match skip_digits(bytes, i) { none() => false, some(j) => j == size }
-                            }}
-                        )
-                    }}
-                )
+                some(i) => i == size || (is_at(i, 'e') && skip_digits(bytes, past_minus(i + 1)) == some(size))
             }
         );
 
