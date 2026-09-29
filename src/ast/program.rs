@@ -2346,9 +2346,9 @@ impl Program {
         ))
     }
 
-    /// The diagnostics read off the type-checked expressions of the user's own code, which are
-    /// reported alongside the program rather than stopping its elaboration: the uses of deprecated
-    /// items, and the struct patterns that leave out fields without `_`.
+    /// The diagnostics read off the type-checked expressions of the user's own code: the uses of
+    /// deprecated items, and the struct patterns that leave out fields without `_`. They are
+    /// reported alongside the elaborated program.
     pub fn collect_diagnostics_of_typed_program(&self, config: &Configuration) -> Errors {
         let mut diagnostics = self.collect_deprecation_diagnostics(config);
         diagnostics.append(self.collect_missing_pattern_field_diagnostics(config));
@@ -2481,9 +2481,10 @@ impl Program {
             let mut err = Error::warning_from_msg_srcs(
                 format!(
                     "This pattern leaves out the {} of struct `{}`.\n\
-                     HINT: write {}, or write `_` after the fields to leave out the rest.\n\
-                     NOTE: since a pattern names every field, adding a field to the struct points \
-                     out each pattern that takes the struct apart.",
+                     HINT: add {} to the pattern, or write `_` after the fields to leave out the \
+                     rest.\n\
+                     NOTE: a pattern names every field of its struct, so when a field is added to \
+                     the struct, each pattern that takes the struct apart is reported.",
                     describe_field_names(&missing),
                     tc.to_string(),
                     pronoun,
