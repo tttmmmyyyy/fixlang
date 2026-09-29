@@ -32,8 +32,10 @@ op(h, env1, ...)
 
 where `(env, r_1, ..., r_k)` is the tuple the op applies `h` to, and `F` is a global function.
 
-A binding is rewritten when every use of the name it binds is the function operand of such an op.
-Rewriting the binding changes the type of the name, which a use anywhere else would not accept.
+A binding is rewritten when the name it binds is used once, as the function operand of such an op.
+Rewriting the binding changes the type of the name, which a use anywhere else would not accept. The
+op applies its function once, so `F(cap)`, which the binding evaluated once, is evaluated once inside
+`h` as well; a second op applying `h` would evaluate it a second time.
 
 Where the symbol holding the op is the only one naming `F`, and it names `F` in this call alone, the
 body of `F` is put in place of the call (`move_bodies_into_callers`). That is the common case, since
@@ -147,7 +149,7 @@ struct CaptureListMover<'a> {
 
 impl CaptureListMover<'_> {
     /// `expr` rewritten as the module comment describes, where it is `let h = F(cap); body`, `F` is
-    /// a global function, and every use of `h` in `body` is the function operand of an op declaring
+    /// a global function, and `h` is used once in `body`, as the function operand of an op declaring
     /// `LLVMGen::env_operand`.
     fn rewrite(&mut self, expr: &Arc<ExprNode>) -> Option<Arc<ExprNode>> {
         let pat = expr.get_let_pat();
@@ -167,7 +169,7 @@ impl CaptureListMover<'_> {
             return None;
         }
         let body = expr.get_let_value();
-        if !used_only_as_env_function(&body, &name) {
+        if !used_once_as_env_function(&body, &name) {
             return None;
         }
 
@@ -285,14 +287,13 @@ impl ExprVisitor for CaptureListMover<'_> {
     }
 }
 
-/// Whether every use of `name` in `expr` is the function operand of an op declaring
-/// `LLVMGen::env_operand`, and there is one.
-fn used_only_as_env_function(expr: &Arc<ExprNode>, name: &FullName) -> bool {
-    let usages = find_usage_of_name::run(expr, name);
-    !usages.is_empty()
-        && usages
-            .iter()
-            .all(|usage| matches!(usage, UsageType::EnvFunctionOperand))
+/// Whether `name` is used once in `expr`, as the function operand of an op declaring
+/// `LLVMGen::env_operand`.
+fn used_once_as_env_function(expr: &Arc<ExprNode>, name: &FullName) -> bool {
+    matches!(
+        find_usage_of_name::run(expr, name).as_slice(),
+        [UsageType::EnvFunctionOperand]
+    )
 }
 
 /// Whether `name` is bound again inside the expression a walk started from, so that an occurrence
