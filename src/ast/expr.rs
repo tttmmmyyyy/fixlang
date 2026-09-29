@@ -1508,7 +1508,7 @@ impl Expr {
     pub fn stringify(&self) -> Text {
         match self {
             Expr::Var(v) => Text::from_string(v.name.to_string()),
-            Expr::Builtin(l) => Text::from_string(l.op.name()),
+            Expr::Builtin(b) => Text::from_string(b.op.name()),
             Expr::App(_, _) => {
                 // Stringify the funciton.
                 let (fun, args) = collect_app(&Arc::new(self.clone()).into_expr_node(None));

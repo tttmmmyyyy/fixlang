@@ -1329,8 +1329,8 @@ impl TypeCheckContext {
                     Ok(ei)
                 }
             }
-            Expr::Builtin(lit) => {
-                self.unify_or_tolerated_mismatch(&ty, &lit.generic_ty, &ei.source)?;
+            Expr::Builtin(builtin) => {
+                self.unify_or_tolerated_mismatch(&ty, &builtin.generic_ty, &ei.source)?;
                 Ok(ei.clone())
             }
             Expr::App(fun, args) => {

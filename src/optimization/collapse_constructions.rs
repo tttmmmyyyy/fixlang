@@ -229,8 +229,8 @@ fn union_built_by(expr: &Arc<ExprNode>) -> Option<(usize, FullName)> {
     let Expr::Builtin(builtin) = &*expr.expr else {
         return None;
     };
-    let body = builtin.op.as_ref().as_any().downcast_ref::<MakeUnionOp>()?;
-    Some((body.variant_index(), body.payload_name().clone()))
+    let op = builtin.op.as_ref().as_any().downcast_ref::<MakeUnionOp>()?;
+    Some((op.variant_index(), op.payload_name().clone()))
 }
 
 /// What `expr` builds, where it builds a struct out of names or a union variant.

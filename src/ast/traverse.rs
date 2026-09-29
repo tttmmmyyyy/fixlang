@@ -271,7 +271,7 @@ pub trait ExprVisitor {
                 let res = self.end_visit_var(&expr, state);
                 self.revisit_if_changed(res, state)
             }
-            Expr::Builtin(_lit) => {
+            Expr::Builtin(_builtin) => {
                 let res = self.start_visit_builtin(&expr, state);
                 match res {
                     StartVisitResult::VisitChildren => {

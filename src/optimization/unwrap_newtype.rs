@@ -220,16 +220,16 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
 
         // Replace StructGetOp, StructSetOp, StructPunchOp, and StructPlugInOp for structures defined by the newtype pattern.
         let gen = builtin.op.as_ref();
-        if let Some(body) = gen.as_any().downcast_ref::<StructGetOp>() {
+        if let Some(get) = gen.as_any().downcast_ref::<StructGetOp>() {
             // @ : S -> F = |s| StructGetOp(s)
             // =>
             // @ : F -> F = |s| s
             let field_ty = new_ty;
-            let struct_name = body.var_name.clone();
+            let struct_name = get.var_name.clone();
             if self.is_local_of_unwrapped_newtype(&struct_name, state) {
                 expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
             }
-        } else if let Some(body) = gen.as_any().downcast_ref::<StructSetOp>() {
+        } else if let Some(set) = gen.as_any().downcast_ref::<StructSetOp>() {
             // set : F -> S -> S = |f, s| StructSetOp(f)
             // =>
             // set : F -> F -> F = |f, s| f
@@ -237,15 +237,15 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
             let struct_ty = old_ty;
             let struct_tc = struct_ty.toplevel_tycon().unwrap();
             if self.type_env.is_unwrapped_newtype(struct_tc.as_ref()) {
-                let field_name = body.value_name.clone();
+                let field_name = set.value_name.clone();
                 expr = expr_var(field_name, expr.source.clone()).set_type(field_ty);
             }
-        } else if let Some(body) = gen.as_any().downcast_ref::<StructPunchOp>() {
+        } else if let Some(punch) = gen.as_any().downcast_ref::<StructPunchOp>() {
             // punch : S -> (F, S*) = |s| Punch(s)
             // =>
             // punch : F -> (F, ()) = |s| (s, ())
             let field_unit_ty = new_ty;
-            let struct_name = body.var_name.clone();
+            let struct_name = punch.var_name.clone();
             if self.is_local_of_unwrapped_newtype(&struct_name, state) {
                 let field_ty = field_unit_ty.collect_type_arguments()[0].clone();
                 let unit_ty = make_unit_ty();
@@ -258,7 +258,7 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
                 )
                 .set_type(field_unit_ty);
             }
-        } else if let Some(body) = gen.as_any().downcast_ref::<StructPlugInOp>() {
+        } else if let Some(plug_in) = gen.as_any().downcast_ref::<StructPlugInOp>() {
             // plug_in : S* -> F -> S = |s, f| PlugIn(s, f)
             // =>
             // plug_in : () -> F -> F = |_, f| f
@@ -266,7 +266,7 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
             let struct_tc = struct_ty.toplevel_tycon().unwrap();
             if self.type_env.is_unwrapped_newtype(struct_tc.as_ref()) {
                 let field_ty = new_ty;
-                let field_name = body.field_name.clone();
+                let field_name = plug_in.field_name.clone();
                 assert!(field_name.is_local());
                 expr = expr_var(field_name, expr.source.clone()).set_type(field_ty);
             }
