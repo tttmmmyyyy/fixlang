@@ -344,13 +344,27 @@ mod tests {
             "lambdas capturing values, given to built-ins applying a function in a scope",
         );
         let built = closures_taking_a_capture_list_through_the_environment(&dump);
-        // At least one for each of `borrow_elements`, `mutate_elements` and `Destructor::borrow`.
-        assert!(
-            built.len() >= 3,
-            "a closure taking a capture list through the environment should be built for each \
-             built-in:\n{}",
-            dump
-        );
+        // The standard library builds closures of this kind for what it prints, so each built-in is
+        // found by the rest of the tuple its lambda is applied to and by what the lambda returns.
+        for (builtin, rest_of_type) in [
+            ("borrow_elements", "), Std::Ptr) -> Std::I64 "),
+            (
+                "mutate_elements",
+                "), Std::Ptr, Std::IO::IOState) -> (Std::IO::IOState, ()) ",
+            ),
+            (
+                "Destructor::borrow",
+                "), Std::FFI::Destructor (Std::Array Std::U8)) -> Std::Array Std::U8 ",
+            ),
+        ] {
+            assert!(
+                built.iter().any(|line| line.contains(rest_of_type)),
+                "the lambda given to `{}` should be built as a closure taking its capture list \
+                 through the environment:\n{}",
+                builtin,
+                dump
+            );
+        }
         for line in built {
             assert!(
                 line.trim_end().ends_with("[]"),
