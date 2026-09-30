@@ -2671,10 +2671,10 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
     Ok(expr)
 }
 
-// Parses one type written in a C function signature into the Fix type constructor that represents
-// it. A C type name such as `CInt` becomes the sized type it has on the target, and `()` becomes
-// the unit type, which stands for `void`. A numeric type that crosses to C as no scalar, such as
-// `I128`, is an error.
+/// Parses one type written in a C function signature into the Fix type constructor that represents
+/// it. A C type name such as `CInt` becomes the sized type it has on the target, and `()` becomes
+/// the unit type, which stands for `void`. A numeric type with no counterpart among the C types,
+/// such as `I128`, is an error.
 fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<TyCon>, Errors> {
     assert_eq!(pair.as_rule(), Rule::ffi_c_fun_ty);
     let span = Span::from_pair(&ctx.source, &pair);

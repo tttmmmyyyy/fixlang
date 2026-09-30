@@ -3128,8 +3128,8 @@ namespace String {
     // * `magnitude` - The absolute value of the integer.
     _from_decimal_integer_128 : Bool -> U128 -> String;
     _from_decimal_integer_128 = |negative, magnitude| (
-        // The digits are cut into chunks of 19 from the last one, the most digits a `U64` holds
-        // every value of, until the leading digits fit in a `U64`.
+        // The digits are cut into chunks of 19 from the last digit until the leading digits fit in
+        // a `U64`. 19 is the largest number of digits whose every value a `U64` holds.
         let chunk_divisor = 10000000000000000000_U128;
         let (chunk_count, leading) = loop((0, magnitude), |(count, rest)| (
             if rest <= U64::maximum.u128 { break $ (count, rest.u64) };

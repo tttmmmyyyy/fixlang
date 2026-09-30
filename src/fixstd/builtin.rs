@@ -732,7 +732,7 @@ pub fn integral_literal_value(name: &str, raw: &str) -> Result<u128, String> {
             raw, reason, name
         ));
     }
-    // The range checked above fits in 128 bits, where a negative value is read as its two's
+    // Every value in the range checked above fits in 128 bits. A negative value becomes its two's
     // complement.
     let (sign, magnitude) = val.into_parts();
     let magnitude = u128::try_from(magnitude).unwrap();
@@ -934,6 +934,7 @@ fn const_int_u128<'c>(int_ty: IntType<'c>, val: u128) -> IntValue<'c> {
 /// An integer literal of the expression's type, whose value is `val` truncated to the type's width.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IntLitOp {
+    /// The bits of the value in two's complement. The bits above the type's width are ignored.
     val: u128,
 }
 
@@ -984,6 +985,10 @@ impl BuiltinOp for IntLitOp {
     }
 }
 
+/// An integer literal of type `ty` whose value is the bits of `val` truncated to the width of `ty`.
+///
+/// # Examples
+/// `expr_int_lit(u128::MAX, make_i8_ty(), None)` is the literal `-1_I8`.
 pub fn expr_int_lit(val: u128, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
     expr_builtin(Box::new(IntLitOp { val }), ty, source).global_to_absolute()
 }
@@ -1670,8 +1675,8 @@ fn build_saturating_float_to_int<'c, 'm>(
 /// and let the value that reaches it past the check. A power of two up to `2^127` is exact in both
 /// floating-point types, and every value the range holds lies below the one the check compares
 /// against. The one bound past that, `2^128` above `U128`, is exact in `F64` and rounds to infinity
-/// in `F32`. Every finite `F32` lies below `2^128`, so there the upper bound stops the infinity
-/// alone, which is the one value above the range.
+/// in `F32`. Every finite `F32` lies below `2^128`, so for `F32` the upper bound stops only the
+/// infinity, the one value above the range.
 fn build_float_to_int_range_check<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     value: FloatValue<'c>,
@@ -2316,7 +2321,8 @@ impl BitCount {
         }
     }
 
-    /// The LLVM intrinsic that counts: the integer in, the count out at the same type.
+    /// The LLVM intrinsic that computes the count. It takes the integer and returns the count as a
+    /// value of the same type.
     fn intrinsic_name(&self) -> &'static str {
         match self {
             BitCount::LeadingZeros => "llvm.ctlz",
@@ -2336,7 +2342,7 @@ impl BitCount {
 }
 
 /// Evaluates `Std::I64::leading_zeros`, `Std::I64::trailing_zeros` and `Std::I64::count_ones`, and
-/// the same values of the other integer types: a count of the operand's bits, as a value of the
+/// the same functions of the other integer types: a count of the operand's bits, as a value of the
 /// operand's type.
 ///
 /// Every operand has an answer: a zero operand has as many leading and trailing zeros as its type
