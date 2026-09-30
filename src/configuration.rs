@@ -936,12 +936,12 @@ impl Configuration {
         self.runs_from(FixOptimizationLevel::Max)
     }
 
-    /// Move what a lambda given to an op applying it with an environment captures into that
-    /// environment, so that the lambda needs no closure object. Runs at `Basic` and above: the
-    /// functions the standard library defines around such an op give it a lambda capturing the
-    /// function they take, which costs a closure object on each call where this does not run.
-    pub fn enable_decapture_scope_lambdas(&self) -> bool {
-        self.runs_from(FixOptimizationLevel::Basic)
+    /// Move the capture list of the function given to an op applying it with an environment into
+    /// that environment, so that the function needs no closure object. Runs at `Max` and above,
+    /// where closure specialization runs: it is what makes every such function a global function
+    /// applied to its capture list, which is the shape this pass rewrites.
+    pub fn enable_decapture_scope_functions(&self) -> bool {
+        self.runs_from(FixOptimizationLevel::Max)
     }
 
     /// Replace a destructuring that meets the construction it reads by what the construction put
