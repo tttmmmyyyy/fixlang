@@ -241,3 +241,126 @@ pub fn test_ffi_export_rejects_a_128_bit_type() {
         "`Std::U128` cannot be used as an argument of an exported function.",
     );
 }
+
+/// `from_string` into a 128-bit type reads and rejects the texts the readers of the other integer
+/// types read and reject: a text that is not an optional sign followed by decimal digits is
+/// malformed, even where its digits name a number outside the type, and digits naming a number far
+/// beyond the type are out of range.
+#[test]
+pub fn test_the_128_bit_types_read_the_texts_the_other_integer_types_read() {
+    test_source(
+        r#"
+        module Main;
+
+        // Reads `text` as the type of the first argument, and asserts that the answer, written as
+        // text, or the error message is `expected`.
+        expect : [a : FromString, a : ToString] a -> String -> String -> IO ();
+        expect = |_, text, expected| (
+            let read : Result ErrMsg a = text.from_string;
+            let actual = if read.is_ok { read.as_ok.to_string } else { read.as_err };
+            assert_eq(|_|"reading \"" + text + "\"", actual, expected)
+        );
+
+        out_of_range : String -> String;
+        out_of_range = |text| "Failed to convert string to integer (out of range): " + text;
+
+        malformed : String -> String;
+        malformed = |text| "Failed to convert string to integer (invalid format): " + text;
+
+        main : IO ();
+        main = (
+            expect(0_U128, "99999999999999999999999999999999999999999999", out_of_range("99999999999999999999999999999999999999999999"));;
+            expect(0_I128, "-99999999999999999999999999999999999999999999", out_of_range("-99999999999999999999999999999999999999999999"));;
+            expect(0_U128, "0000000000340282366920938463463374607431768211455", "340282366920938463463374607431768211455");;
+            expect(0_I128, "", malformed(""));;
+            expect(0_U128, "-", malformed("-"));;
+            expect(0_I128, "+-1", malformed("+-1"));;
+            expect(0_U128, "1 ", malformed("1 "));;
+            expect(0_I128, "99999999999999999999999999999999999999999999x", malformed("99999999999999999999999999999999999999999999x"));;
+            pure()
+        );
+    "#,
+        Configuration::develop_mode(),
+    );
+}
+
+/// A value of a 128-bit type keeps all its bits wherever a value can be held: a field of a boxed
+/// struct placed after a narrower field, a field of an unbox struct, a variant of a union, an
+/// element of an array both below and above the size at which an array's buffer is aligned, and a
+/// value a closure captures.
+#[test]
+pub fn test_a_128_bit_value_keeps_its_bits_in_every_container() {
+    test_source(
+        r#"
+        module Main;
+
+        type Boxed = box struct { tag : U8, value : I128 };
+        type Unboxed = unbox struct { tag : U8, value : U128 };
+        type Wide = union { narrow : U8, wide : U128 };
+
+        main : IO ();
+        main = (
+            let args = *get_args;
+            let zero = args.@size - 1;
+            let w = 18446744073709551616_I128 + zero.i128;
+
+            let boxed = Boxed { tag : 1_U8, value : -w };
+            assert_eq(|_|"A field of a boxed struct", boxed.@value, -18446744073709551616_I128);;
+            let unboxed = Unboxed { tag : 1_U8, value : U128::maximum - w.u128 };
+            assert_eq(|_|"A field of an unbox struct", unboxed.@value, 340282366920938463444927863358058659839_U128);;
+            let wide = Wide::wide(U128::maximum - w.u128);
+            assert_eq(|_|"A variant of a union", wide.as_wide, 340282366920938463444927863358058659839_U128);;
+            let some = Option::some(-w);
+            assert_eq(|_|"A variant of Option", some.as_some, -18446744073709551616_I128);;
+
+            let small = [w, -w, w + 1_I128];
+            assert_eq(|_|"An element of a small array", small.@(1), -18446744073709551616_I128);;
+            let large = Array::from_map(1000, |k| k.i128 * w - 1_I128);
+            assert_eq(|_|"An element of a large array", large.@(999), 18428297329635842064383_I128);;
+            let pushed = large.push_back(-w);
+            assert_eq(|_|"An element pushed onto an array", pushed.@(1000), -18446744073709551616_I128);;
+
+            let times = |k| k.i128 * w;
+            assert_eq(|_|"A captured value", times(3), 55340232221128654848_I128);;
+            pure()
+        );
+    "#,
+        Configuration::develop_mode(),
+    );
+}
+
+/// An argument passed through the `...` of an `FFI_CALL` has no 128-bit type, as a declared
+/// parameter has none.
+#[test]
+pub fn test_ffi_call_rejects_a_128_bit_variadic_argument() {
+    test_source_fail(
+        r#"
+        module Main;
+        main : IO ();
+        main = println(FFI_CALL[CInt printf(Ptr, ...), nullptr, 1_U128].to_string);
+    "#,
+        Configuration::develop_mode(),
+        "`Std::U128` cannot be passed through the `...` of an `FFI_CALL`",
+    );
+}
+
+/// `from_bytes` into a 128-bit type takes 16 bytes and nothing else: a byte array longer than that
+/// is an error, as a shorter one is.
+#[test]
+pub fn test_the_128_bit_types_read_only_16_bytes() {
+    test_source(
+        r#"
+        module Main;
+        main : IO ();
+        main = (
+            let read_u128 : Array U8 -> Result ErrMsg U128 = from_bytes;
+            let read_i128 : Array U8 -> Result ErrMsg I128 = from_bytes;
+            assert(|_|"17 bytes into U128", read_u128(Array::fill(17, 0_U8)).is_err);;
+            assert(|_|"15 bytes into I128", read_i128(Array::fill(15, 0_U8)).is_err);;
+            assert(|_|"17 bytes into I128", read_i128(Array::fill(17, 0_U8)).is_err);;
+            pure()
+        );
+    "#,
+        Configuration::develop_mode(),
+    );
+}
