@@ -1,7 +1,7 @@
 //! Tests of the Fix examples written in comments: the examples of `Std` itself, and what
 //! `fix test` does with the examples of a project.
 
-use crate::commands::test::{test_example, ExampleOutcome};
+use crate::commands::test::{test_examples, ExampleOutcome};
 use crate::configuration::Configuration;
 use crate::doc_test::{collect_examples, examples_in_text, ExampleScope, TextLine};
 use crate::error::panic_if_err;
@@ -40,16 +40,14 @@ fn test_std_doc_examples() {
 
     let mut failures = vec![];
     let mut tested = 0;
-    for example in &examples {
-        match test_example(&config, example) {
-            ExampleOutcome::Ignored => {}
-            ExampleOutcome::Passed => tested += 1,
-            ExampleOutcome::Failed(failure) => {
-                tested += 1;
-                failures.push(format!("{}:\n{}", example.location(), failure));
-            }
+    test_examples(&config, &examples, |example, outcome| match outcome {
+        ExampleOutcome::Ignored => {}
+        ExampleOutcome::Passed => tested += 1,
+        ExampleOutcome::Failed(failure) => {
+            tested += 1;
+            failures.push(format!("{}:\n{}", example.location(), failure));
         }
-    }
+    });
     assert!(
         tested > 0,
         "`Std` documents its values with Fix examples that are tested"
@@ -952,6 +950,126 @@ sextuple = |x| 2 * triple(x);
     assert!(
         stderr.contains("doc test lib.fix:8 ... FAILED") && stderr.contains("quadruple"),
         "the example cannot use `quadruple`, which its module's import leaves out\n{}",
+        streams(&output)
+    );
+}
+
+/// The Fix examples of a project are compiled together into one program, which is built once: the
+/// warning a source raises is printed once, however many examples there are. In that program each
+/// example still reaches its own module by `DocTest`, by a relative path and by an absolute one,
+/// and an example that panics fails alone.
+#[test]
+fn test_examples_are_built_once_into_one_program() {
+    let lib = r#"module Lib;
+
+DEPRECATED[old_double, "Call `double` in place of `old_double`."];
+old_double : I64 -> I64;
+old_double = |x| 2 * x;
+
+// ```fix
+// assert_eq(|_|"", double(21), 42)
+// ```
+//
+// ```fix
+// # module DocTest;
+// # import Lib;
+// # type Pair = struct { fst : I64, snd : I64 };
+// # half : I64 = 21;
+// # main : IO () = (
+// let pair : ::DocTest::Pair = DocTest::Pair { fst : ::DocTest::half, snd : DocTest::half };
+// assert_eq(|_|"", double(pair.@fst), 42)
+// # );
+// ```
+//
+// ```fix,no_run
+// let x = double(1);
+// assert_eq(|_|"", x, 3)
+// ```
+//
+// ```fix
+// let x = [1].@(5);
+// assert_eq(|_|"", x, 1)
+// ```
+//
+// ```fix
+// assert_eq(|_|"", double(2), 4)
+// ```
+double : I64 -> I64;
+double = |x| old_double(x);
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &["--doc"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr
+            .matches("Call `double` in place of `old_double`.")
+            .count(),
+        1,
+        "the program of the examples is built once\n{}",
+        streams(&output)
+    );
+    for line in [
+        "doc test lib.fix:7 ... ok",
+        "doc test lib.fix:11 ... ok",
+        "doc test lib.fix:22 ... ok",
+        "doc test lib.fix:27 ... FAILED",
+        "doc test lib.fix:32 ... ok",
+        "doc tests: 4 passed, 1 failed, 0 ignored.",
+    ] {
+        assert!(
+            stderr.contains(line),
+            "`fix test` reports `{}`\n{}",
+            line,
+            streams(&output)
+        );
+    }
+    assert!(
+        stderr.contains("Index out of range"),
+        "the example that panics shows what it wrote\n{}",
+        streams(&output)
+    );
+}
+
+/// Two Fix examples that cannot be compiled into one program, as two that export functions under
+/// one C name, are taken out of the program of the examples and tested alone, where each passes.
+/// An error of the sources, which lies in no example, is reported for each example.
+#[test]
+fn test_examples_that_cannot_share_a_program_are_tested_alone() {
+    let example_exporting = |value: &str| {
+        format!(
+            "// ```fix\n\
+             // # module DocTest;\n\
+             // # {value} : CInt -> CInt = |x| x;\n\
+             // # FFI_EXPORT[{value}, doc_test_exported];\n\
+             // # main : IO () = (\n\
+             // pure()\n\
+             // # );\n\
+             // ```\n"
+        )
+    };
+    let lib = format!(
+        "module Lib;\n\n{}//\n{}//\n// ```fix\n// assert_eq(|_|\"\", value, 1)\n// ```\nvalue : I64 = 1;\n",
+        example_exporting("first"),
+        example_exporting("second"),
+    );
+    let dir = project_dir(&[("lib.fix", &lib)], &[]);
+    let output = fix_test(&dir, &["--doc"]);
+    assert!(
+        output.status.success()
+            && String::from_utf8_lossy(&output.stderr)
+                .contains("doc tests: 3 passed, 0 failed, 0 ignored."),
+        "each example passes\n{}",
+        streams(&output)
+    );
+
+    let broken_lib = lib.replace("value : I64 = 1;", "value : I64 = \"one\";");
+    let dir = project_dir(&[("lib.fix", &broken_lib)], &[]);
+    let output = fix_test(&dir, &["--doc"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("doc tests: 0 passed, 3 failed, 0 ignored.")
+            && stderr.matches("Type mismatch").count() == 3,
+        "each example fails with the error of the source\n{}",
         streams(&output)
     );
 }

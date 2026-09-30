@@ -4,15 +4,21 @@
 //! is a Fix example. A line of an example whose text begins with `# ` after its indentation is
 //! hidden: it is compiled with the `# ` taken off, and left out when a doc comment is shown to a
 //! reader. `fix test` compiles each example as the module `DocTest` and runs its `DocTest::main`.
+//! It compiles the examples of a program together into one program where it can (see
+//! `ExampleBuild`).
 
 use crate::{
-    ast::{import::ImportStatement, name::Name, program::Program},
-    constants::{DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME},
+    ast::{
+        import::ImportStatement,
+        name::{FullName, Name},
+        program::Program,
+    },
+    constants::{DOC_TEST_EXAMPLE_ENV_VAR, DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME},
     error::Errors,
     hash::md5_hex,
     misc::{save_temporary_source, to_absolute_path, Set},
     parse::{
-        parser::{comment_ranges, parse_source_module_defn},
+        parser::{comment_ranges, parse_source_module_defn, ModuleRenaming},
         sourcefile::{line_comment_text, LineOrigin, SourceFile, SourceOrigin, Span},
     },
 };
@@ -198,6 +204,16 @@ pub enum ExampleTask {
     Ignore,
 }
 
+impl ExampleTask {
+    /// The source the task compiles, or `None` for a task that compiles nothing.
+    pub fn source(&self) -> Option<&SourceFile> {
+        match self {
+            ExampleTask::Run(source) | ExampleTask::Compile(source) => Some(source),
+            ExampleTask::Ignore => None,
+        }
+    }
+}
+
 impl FixExample {
     /// The place the example is reported at: the file its comment is written in and the line that
     /// opens it.
@@ -211,6 +227,123 @@ impl FixExample {
             self.fence.start_line_no()
         )
     }
+}
+
+/// The Fix examples a build of `fix test` compiles beside the sources of the program, and the
+/// value the program runs.
+#[derive(Clone)]
+pub struct ExampleBuild {
+    /// The examples, each with the name of the module it is compiled as.
+    pub examples: Vec<ExampleModule>,
+    /// The source of the module whose `main` runs the example whose index in `examples` the
+    /// environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives, where the build holds several
+    /// examples. A build of one example has none, and runs its `DocTest::main`.
+    pub dispatcher: Option<SourceFile>,
+}
+
+/// A Fix example as a build compiles it.
+#[derive(Clone)]
+pub struct ExampleModule {
+    /// The source assembled from the example, which declares the module `DocTest`.
+    pub source: SourceFile,
+    /// The name the module is compiled as.
+    pub name: Name,
+}
+
+/// The name of the module whose `main` runs one of the examples a build holds.
+const DISPATCHER_MODULE_NAME: &str = "DocTest.Examples";
+
+impl ExampleBuild {
+    /// The build of the example whose source is `source` alone, compiled as the module `DocTest`.
+    pub fn single(source: SourceFile) -> Self {
+        ExampleBuild {
+            examples: vec![ExampleModule {
+                source,
+                name: DOC_TEST_MODULE_NAME.to_string(),
+            }],
+            dispatcher: None,
+        }
+    }
+
+    /// The build of the examples whose sources are `sources` in one program, which runs the
+    /// example whose index in `sources` the environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives.
+    ///
+    /// The example at index `i` is compiled as the module `DocTest.Example{i}.DocTest`. The name
+    /// ends in `DocTest`, so a path the example writes relative, such as `DocTest::helper`, reaches
+    /// the module as it reaches the module `DocTest` (see `NameSpace::is_suffix_of`). The parser
+    /// renames the module in the `module` declaration and in each absolute path (see
+    /// `ModuleRenaming`).
+    pub fn merged(sources: Vec<SourceFile>) -> Result<Self, Errors> {
+        let examples = sources
+            .into_iter()
+            .enumerate()
+            .map(|(index, source)| ExampleModule {
+                source,
+                name: format!("{0}.Example{1}.{0}", DOC_TEST_MODULE_NAME, index),
+            })
+            .collect::<Vec<_>>();
+        let dispatcher =
+            save_temporary_source(&dispatcher_source(&examples), "doc_test_dispatcher")?;
+        Ok(ExampleBuild {
+            examples,
+            dispatcher: Some(dispatcher),
+        })
+    }
+
+    /// The sources the build adds to the program, each with the renaming its module is compiled
+    /// under.
+    pub fn sources(&self) -> Vec<(SourceFile, Option<ModuleRenaming>)> {
+        let examples = self.examples.iter().map(|example| {
+            let renaming = ModuleRenaming {
+                written: DOC_TEST_MODULE_NAME.to_string(),
+                compiled: example.name.clone(),
+            };
+            (example.source.clone(), Some(renaming))
+        });
+        let dispatcher = self.dispatcher.iter().map(|source| (source.clone(), None));
+        examples.chain(dispatcher).collect()
+    }
+
+    /// The value the program runs: `main` of the dispatcher, or `DocTest::main` of the one example.
+    pub fn entry(&self) -> FullName {
+        let module = match self.dispatcher {
+            Some(_) => DISPATCHER_MODULE_NAME,
+            None => DOC_TEST_MODULE_NAME,
+        };
+        FullName::from_strs(&[module], MAIN_FUNCTION_NAME)
+    }
+}
+
+/// The source of the module `DocTest.Examples`, whose `main` runs the example of `examples` whose
+/// index the environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives.
+///
+/// The `main` of each example is read inside a function, so that a run reads the `main` of the
+/// example it runs alone: a global value is evaluated when it is first read, and the value of a
+/// `main` can panic before any I/O action of it runs.
+fn dispatcher_source(examples: &[ExampleModule]) -> String {
+    let mains = examples
+        .iter()
+        .map(|example| format!("        |_| ::{}::{}", example.name, MAIN_FUNCTION_NAME))
+        .collect::<Vec<_>>()
+        .join(",\n");
+    format!(
+        r#"module {module};
+
+{main} : IO () = (
+    let value = *"{var}".borrow_c_str_io(|name| FFI_CALL_IO[Ptr getenv(Ptr), name]);
+    let index : I64 = String::unsafe_from_c_str_ptr(value).from_string.as_ok;
+    let examples : Array (() -> IO ()) = [
+{mains}
+    ];
+    let example = examples.@(index);
+    example()
+);
+"#,
+        module = DISPATCHER_MODULE_NAME,
+        main = MAIN_FUNCTION_NAME,
+        var = DOC_TEST_EXAMPLE_ENV_VAR,
+        mains = mains,
+    )
 }
 
 /// Reports a module of `program` named `DocTest`, the name each Fix example is compiled as. A

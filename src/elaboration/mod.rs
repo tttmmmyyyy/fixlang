@@ -8,7 +8,7 @@ use crate::ast::program::Program;
 use crate::configuration::{Configuration, OutputFileType, SubCommand};
 use crate::error::Errors;
 use crate::fixstd::stdlib::{make_std_mod, make_tuple_traits_mod};
-use crate::parse::parser::{parse_file_path, parse_source_file};
+use crate::parse::parser::{parse_file_path, parse_renamed_source_file};
 use crate::tool::stopwatch::StopWatch;
 use std::fs::File;
 use std::io::Read;
@@ -202,7 +202,7 @@ where
     dir_path
 }
 
-/// Load all source files specified in the configuration, together with the doc test example it
+/// Load all source files specified in the configuration, together with the Fix examples it
 /// carries, link them, and return the resulting `Program`.
 pub fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     // Create `Std` module.
@@ -217,8 +217,12 @@ pub fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
             parsed_programs.push(parsed_program)
         });
     }
-    if let Some(example) = &config.doc_test_example {
-        let parse_result = parse_source_file(example.clone(), config);
+    for (source, renaming) in config
+        .doc_tests
+        .iter()
+        .flat_map(|doc_tests| doc_tests.sources())
+    {
+        let parse_result = parse_renamed_source_file(source, renaming, config);
         errors.eat_err_or(parse_result, |parsed_program| {
             parsed_programs.push(parsed_program)
         });

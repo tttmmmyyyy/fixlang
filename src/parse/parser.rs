@@ -92,6 +92,24 @@ struct ParseContext {
     pattern_wildcard_counter: u32,
     // Counter for naming `_` type wildcards; see `fresh_type_wildcard_name`.
     type_wildcard_counter: u32,
+    /// The renaming the module of this source is compiled under, if any.
+    renaming: Option<ModuleRenaming>,
+}
+
+/// A module that a source names by one name and that is compiled under another. Each place the
+/// grammar names a module — the `module` declaration, an `import` statement, and the first name of
+/// an absolute path — names the module `compiled` where it writes `written`.
+///
+/// # Examples
+/// Under the renaming of `DocTest` to `DocTest.Example3.DocTest`, the source
+/// `module DocTest; main : IO () = ::DocTest::helper;` declares the module
+/// `DocTest.Example3.DocTest`, and its `main` refers to `::DocTest.Example3.DocTest::helper`.
+#[derive(Clone)]
+pub struct ModuleRenaming {
+    /// The name the source writes.
+    pub written: Name,
+    /// The name the module is compiled as.
+    pub compiled: Name,
 }
 
 // Format the fresh name `<prefix><counter>` and advance the counter. Mints the
@@ -104,6 +122,15 @@ fn next_prefixed_name(prefix: &str, counter: &mut u32) -> String {
 
 impl ParseContext {
     fn from_source(source: SourceFile, config: &Configuration) -> Self {
+        Self::renaming_module(source, config, None)
+    }
+
+    /// The context of parsing `source`, whose module `renaming` compiles under another name.
+    fn renaming_module(
+        source: SourceFile,
+        config: &Configuration,
+        renaming: Option<ModuleRenaming>,
+    ) -> Self {
         Self {
             tuple_sizes: vec![],
             do_context: DoContext::default(),
@@ -114,6 +141,15 @@ impl ParseContext {
             abs_path_uses: vec![],
             pattern_wildcard_counter: 0,
             type_wildcard_counter: 0,
+            renaming,
+        }
+    }
+
+    /// The name the module that the source writes as `written` is compiled as.
+    fn compiled_module_name(&self, written: &str) -> Name {
+        match &self.renaming {
+            Some(renaming) if renaming.written == written => renaming.compiled.clone(),
+            _ => written.to_string(),
         }
     }
 
@@ -461,6 +497,16 @@ fn classify_repair_hint(positives: &[Rule]) -> RepairHintKind {
 /// Parses `source` into the program of the one module it declares, with every span pointing into
 /// `source`.
 pub fn parse_source_file(source: SourceFile, config: &Configuration) -> Result<Program, Errors> {
+    parse_renamed_source_file(source, None, config)
+}
+
+/// Parses `source` as `parse_source_file` does, compiling the module `renaming` names under the name
+/// it gives.
+pub fn parse_renamed_source_file(
+    source: SourceFile,
+    renaming: Option<ModuleRenaming>,
+    config: &Configuration,
+) -> Result<Program, Errors> {
     let source_cloned = source.clone();
     let source_code = source.string()?;
     let file = match FixParser::parse(Rule::file, &source_code) {
@@ -469,19 +515,20 @@ pub fn parse_source_file(source: SourceFile, config: &Configuration) -> Result<P
             return Err(message_parse_error(e, &source));
         }
     };
-    parse_file(file, source_cloned, config)
+    parse_file(file, source_cloned, renaming, config)
 }
 
 /// The program the parsed file `file` declares, which is the one module it is made of. `src` is the
-/// source it was parsed from, which its spans point into.
+/// source it was parsed from, which its spans point into, and `renaming` renames its module.
 fn parse_file(
     mut file: Pairs<Rule>,
     src: SourceFile,
+    renaming: Option<ModuleRenaming>,
     config: &Configuration,
 ) -> Result<Program, Errors> {
     let pair = file.next().unwrap();
     match pair.as_rule() {
-        Rule::module => return parse_module(pair, src, config),
+        Rule::module => return parse_module(pair, src, renaming, config),
         _ => unreachable!(),
     }
 }
@@ -561,16 +608,18 @@ fn parse_source_as_rule<T>(
 }
 
 /// The program of the one module `pair` declares: its declaration, its import statements, and
-/// everything defined in it. `src` is the source it was parsed from, which its spans point into.
+/// everything defined in it. `src` is the source it was parsed from, which its spans point into,
+/// and `renaming` renames the module.
 fn parse_module(
     pair: Pair<Rule>,
     src: SourceFile,
+    renaming: Option<ModuleRenaming>,
     config: &Configuration,
 ) -> Result<Program, Errors> {
     assert_eq!(pair.as_rule(), Rule::module);
     let mut errors = Errors::empty();
 
-    let mut ctx: ParseContext = ParseContext::from_source(src.clone(), config);
+    let mut ctx = ParseContext::renaming_module(src.clone(), config, renaming);
 
     let mut pairs = pair.into_inner();
     let mod_info = parse_module_defn(pairs.next().unwrap(), &mut ctx);
@@ -1426,7 +1475,7 @@ fn parse_kind_braced(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<Kind> {
 fn parse_module_defn(pair: Pair<Rule>, ctx: &mut ParseContext) -> ModuleInfo {
     assert_eq!(pair.as_rule(), Rule::module_defn);
     let span = Span::from_pair(&ctx.source, &pair);
-    let mod_name = pair.into_inner().next().unwrap().as_str().to_string();
+    let mod_name = ctx.compiled_module_name(pair.into_inner().next().unwrap().as_str());
     ModuleInfo {
         name: mod_name,
         source: span,
@@ -2347,7 +2396,13 @@ fn parse_fullname_or_capital_fullname(pair: Pair<Rule>, ctx: &mut ParseContext) 
             if fullname.namespace.is_absolute {
                 path_spans.push(Span::from_pair(&ctx.source, &pair));
             }
-            fullname.namespace.names.push(pair.as_str().to_string());
+            // The first name of an absolute path is a module's.
+            let name = if fullname.namespace.is_absolute && fullname.namespace.names.is_empty() {
+                ctx.compiled_module_name(pair.as_str())
+            } else {
+                pair.as_str().to_string()
+            };
+            fullname.namespace.names.push(name);
         } else if pair.as_rule() == Rule::double_colon {
             if fullname.namespace.names.is_empty() {
                 // If the namespace starts with `::`, it is an absolute namespace.
@@ -3156,7 +3211,7 @@ fn parse_import_statement(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportSta
     let mut importee_pairs = pair.into_inner();
     let module_pair = importee_pairs.next().unwrap();
     let module_span = Span::from_pair(&ctx.source, &module_pair);
-    let module = module_pair.as_str().to_string();
+    let module = ctx.compiled_module_name(module_pair.as_str());
     let mut stmt = ImportStatement {
         importer: ctx.module_name.clone(),
         module_name: module,

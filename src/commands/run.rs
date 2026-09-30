@@ -51,7 +51,7 @@ pub fn build_executable(config: Configuration) -> Result<(), Errors> {
 /// Builds the program as an executable under `RUN_PATH` and hands `use_executable` the settings it
 /// was built with and its path. The executable is then moved to the path `config.out_file_path`
 /// names, and removed when the settings name no path.
-fn with_temporary_executable<T>(
+pub fn with_temporary_executable<T>(
     mut config: Configuration,
     use_executable: impl FnOnce(&Configuration, &str) -> Result<T, Errors>,
 ) -> Result<T, Errors> {

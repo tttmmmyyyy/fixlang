@@ -65,6 +65,13 @@ impl Errors {
         self.errs.iter().any(|e| e.severity == Severity::Error)
     }
 
+    /// The diagnostics of error severity, in the order they were reported.
+    pub fn errors(&self) -> impl Iterator<Item = &Error> {
+        self.errs
+            .iter()
+            .filter(|err| err.severity == Severity::Error)
+    }
+
     /// Whether this collection contains any diagnostic at all (errors or warnings).
     pub fn has_diagnostics(&self) -> bool {
         !self.errs.is_empty()
