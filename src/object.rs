@@ -13,7 +13,7 @@ use crate::constants::{
 use crate::fixstd::builtin::{
     make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty,
     make_i32_ty, make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u16_ty, make_u32_ty,
-    make_u64_ty, make_u8_ty,
+    make_i128_ty, make_u128_ty, make_u64_ty, make_u8_ty,
 };
 use crate::fixstd::runtime::{
     RUNTIME_ARRAY_SIZE_OVERFLOW, RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC,
@@ -62,6 +62,8 @@ pub enum ObjectFieldType {
     U32,
     I64,
     U64,
+    I128,
+    U128,
     F32,
     F64,
     /// A value of the given type laid out in place. The flag marks a punched field, whose value has
@@ -132,6 +134,8 @@ impl ObjectFieldType {
             ObjectFieldType::U32 => gc.context.i32_type().into(),
             ObjectFieldType::I64 => gc.context.i64_type().into(),
             ObjectFieldType::U64 => gc.context.i64_type().into(),
+            ObjectFieldType::I128 => gc.context.i128_type().into(),
+            ObjectFieldType::U128 => gc.context.i128_type().into(),
             ObjectFieldType::F32 => gc.context.f32_type().into(),
             ObjectFieldType::F64 => gc.context.f64_type().into(),
             ObjectFieldType::ArrayStorageBuf(ty) => gc.embedded_type_of(ty),
@@ -187,6 +191,16 @@ impl ObjectFieldType {
             ObjectFieldType::U64 => gc
                 .get_di_builder()
                 .create_basic_type("Std::U64", 64, DW_ATE_UNSIGNED, 0)
+                .unwrap()
+                .as_type(),
+            ObjectFieldType::I128 => gc
+                .get_di_builder()
+                .create_basic_type("Std::I128", 128, DW_ATE_SIGNED, 0)
+                .unwrap()
+                .as_type(),
+            ObjectFieldType::U128 => gc
+                .get_di_builder()
+                .create_basic_type("Std::U128", 128, DW_ATE_UNSIGNED, 0)
                 .unwrap()
                 .as_type(),
             ObjectFieldType::F32 => gc
@@ -1560,6 +1574,8 @@ fn primitive_field_types(name: &FullName) -> &'static [ObjectFieldType] {
             (make_u32_ty(), vec![ObjectFieldType::U32]),
             (make_i64_ty(), vec![ObjectFieldType::I64]),
             (make_u64_ty(), vec![ObjectFieldType::U64]),
+            (make_i128_ty(), vec![ObjectFieldType::I128]),
+            (make_u128_ty(), vec![ObjectFieldType::U128]),
             (make_f32_ty(), vec![ObjectFieldType::F32]),
             (make_f64_ty(), vec![ObjectFieldType::F64]),
         ]
@@ -1762,6 +1778,8 @@ fn field_occupies_no_storage(field: ObjectFieldType, type_env: &TypeEnv) -> bool
         | ObjectFieldType::U32
         | ObjectFieldType::I64
         | ObjectFieldType::U64
+        | ObjectFieldType::I128
+        | ObjectFieldType::U128
         | ObjectFieldType::F32
         | ObjectFieldType::F64
         | ObjectFieldType::UnionTag => false,
@@ -2272,6 +2290,8 @@ pub fn create_obj<'c, 'm>(
             ObjectFieldType::U32 => {}
             ObjectFieldType::I64 => {}
             ObjectFieldType::U64 => {}
+            ObjectFieldType::I128 => {}
+            ObjectFieldType::U128 => {}
             ObjectFieldType::F32 => {}
             ObjectFieldType::F64 => {}
             ObjectFieldType::SubObject(_, _) => {}
@@ -2554,6 +2574,8 @@ fn build_traverse<'c, 'm>(
             ObjectFieldType::U32 => {}
             ObjectFieldType::I64 => {}
             ObjectFieldType::U64 => {}
+            ObjectFieldType::I128 => {}
+            ObjectFieldType::U128 => {}
             ObjectFieldType::F32 => {}
             ObjectFieldType::F64 => {}
             // Reference-count-inert: the storage buffer has no length, and the owning `Array` value's
@@ -2686,6 +2708,8 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
                 ObjectFieldType::U32 => "<U32 member>".to_string(),
                 ObjectFieldType::I64 => "<I64 member>".to_string(),
                 ObjectFieldType::U64 => "<U64 member>".to_string(),
+                ObjectFieldType::I128 => "<I128 member>".to_string(),
+                ObjectFieldType::U128 => "<U128 member>".to_string(),
                 ObjectFieldType::F32 => "<F32 member>".to_string(),
                 ObjectFieldType::F64 => "<F64 member>".to_string(),
                 ObjectFieldType::UnionBuf(_) => "<union value>".to_string(),

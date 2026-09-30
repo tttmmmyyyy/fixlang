@@ -273,9 +273,23 @@ mod tests {
         ast::name::FullName,
         ast::program::TypedExpr,
         ast::types::{type_tyvar_star, Scheme},
-        fixstd::builtin::{make_bool_ty, make_i64_ty},
+        fixstd::builtin::{expr_int_lit, make_bool_ty, make_i64_ty, make_u128_ty},
     };
     use std::panic::{catch_unwind, AssertUnwindSafe};
+
+    /// An integer literal wider than 64 bits reads back from the format of a cache file with every
+    /// bit it was written with.
+    #[test]
+    fn an_integer_literal_wider_than_64_bits_reads_back_from_the_cache_format() {
+        let expr = TypedExpr::from_expr(expr_int_lit(u128::MAX, make_u128_ty(), None));
+        let bytes = postcard::to_allocvec(&expr).unwrap();
+        let (read, rest): (TypedExpr, _) = postcard::take_from_bytes(&bytes).unwrap();
+        assert!(rest.is_empty(), "bytes follow the expression");
+        assert_eq!(
+            read.expr.get_builtin().op.name(),
+            format!("int({})", u128::MAX)
+        );
+    }
 
     /// A field accessor and a value the user writes are two entities whose names differ only in a
     /// character a file name cannot carry. Their cache files must stay apart: a shared file hands

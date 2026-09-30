@@ -13,8 +13,8 @@ use crate::{
     constants::{
         ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME,
         ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED, DESTRUCTOR_NAME, F32_NAME, F64_NAME, FFI_NAME,
-        HOLE_NAME, IOSTATE_NAME, IO_NAME, MARK_THREADED_NAME, PTR_NAME, PUNCHED_ARRAY_NAME,
-        STD_NAME, WITH_RETAINED_NAME,
+        HOLE_NAME, I128_NAME, IOSTATE_NAME, IO_NAME, MARK_THREADED_NAME, PTR_NAME, PUNCHED_ARRAY_NAME,
+        STD_NAME, U128_NAME, WITH_RETAINED_NAME,
     },
     error::Errors,
     fixstd::builtin::{
@@ -24,7 +24,7 @@ use crate::{
         array_copy_capacity_bounds_unchecked, array_get_capacity, array_get_size,
         array_is_storage_unique_function, array_mutate_elements_ios_internal, array_punch,
         array_set_capacity_bounds_unchecked, array_truncate_bounds_unchecked, array_unsafe_empty,
-        array_unsafe_get_bounds_unchecked, bit_not_function, bitwise_operation_function,
+        array_unsafe_get_bounds_unchecked, bit_count_function, bit_not_function, BitCount, bitwise_operation_function,
         borrow_boxed_function, boxed_from_retained_ptr_ios, boxed_to_retained_ptr_ios,
         boxed_trait_instance, cast_between_float_function, cast_between_integral_function,
         cast_float_to_int_function, cast_int_to_float_function, destructor_make,
@@ -293,10 +293,21 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         )))))
     };
 
+    // The deprecated `to_<type>` functions are kept for the numeric types that had them before the
+    // `To<type>` traits replaced them. A numeric type added since is reached through the traits
+    // alone, so none of these functions converts from it or to it.
+    let deprecated_cast_types = integral_types
+        .iter()
+        .chain(float_types.iter())
+        .filter(|ty| {
+            let name = &ty.toplevel_tycon().unwrap().name.name;
+            name != I128_NAME && name != U128_NAME
+        })
+        .collect::<Vec<_>>();
     // Fix → Fix: integer/float to integer/float.
-    for from in integral_types.iter().chain(float_types.iter()) {
+    for from in &deprecated_cast_types {
         let from_name = from.toplevel_tycon().unwrap().name.name.clone();
-        for to in integral_types.iter().chain(float_types.iter()) {
+        for to in &deprecated_cast_types {
             let to_name = to.toplevel_tycon().unwrap().name.name.clone();
             register_deprecated_cast(
                 &mut fix_module,
@@ -304,12 +315,12 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 from,
                 &from_name,
                 &to_name,
-                to.clone(),
+                (*to).clone(),
             );
         }
     }
     // Fix → C alias: integer/float to any C numeric type.
-    for from in integral_types.iter().chain(float_types.iter()) {
+    for from in &deprecated_cast_types {
         let from_name = from.toplevel_tycon().unwrap().name.name.clone();
         for (to_name_c, sign, size) in &c_types {
             let Some(to_type_c) = c_alias_ty(to_name_c, sign, *size) else {
@@ -328,6 +339,15 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     // Bit operations
     for int_ty in integral_types {
         let ty_name = int_ty.toplevel_tycon().unwrap().name.name.clone();
+        for count in BitCount::ALL {
+            errors.eat_err(fix_module.add_global_value(
+                FullName::from_strs(&[STD_NAME, &ty_name], count.function_name()),
+                bit_count_function(int_ty.clone(), count),
+                None,
+                None,
+                Some(count.document().to_string()),
+            ));
+        }
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "bit_not"),
             bit_not_function(int_ty.clone()),

@@ -1,9 +1,9 @@
-// The nine values that write an integer or a pointer as text write the digits into a buffer without
-// checking its bounds. An integer's buffer is sized by counting the digits before writing them, and
-// a pointer's by the fixed number of digits every address is written with, so that count and that
-// number are the whole of what keeps the write inside the buffer.
+// The eleven values that write an integer or a pointer as text write the digits into a buffer
+// without checking its bounds. An integer's buffer is sized by counting the digits before writing
+// them, and a pointer's by the fixed number of digits every address is written with, so that count
+// and that number are the whole of what keeps the write inside the buffer.
 //
-// This file writes the widest text each of the nine can produce, under Valgrind, so that a write
+// This file writes the widest text each of the eleven can produce, under Valgrind, so that a write
 // past the buffer shows up as an invalid write.
 
 #[cfg(test)]
@@ -14,7 +14,7 @@ mod integer_text_buffer_tests {
         tests::test_util::test_source,
     };
 
-    /// Writes the widest text each of the nine functions can produce -- the greatest value of an
+    /// Writes the widest text each of the eleven functions can produce -- the greatest value of an
     /// unsigned type, the least of a signed one, and a pointer whose every digit is written --
     /// under Valgrind, so that a buffer sized short of that text shows up as a write past its
     /// allocation. Their lengths are summed and checked, so a text of the wrong width fails too.
@@ -40,8 +40,10 @@ main = (
               + I32::minimum.to_string.get_size
               + U64::maximum.to_string.get_size
               + I64::minimum.to_string.get_size
+              + U128::maximum.to_string.get_size
+              + I128::minimum.to_string.get_size
               + nullptr.add_offset(I64::minimum).to_string.get_size;
-    assert_eq(|_|"the widest texts come to their known total", total, 95);;
+    assert_eq(|_|"the widest texts come to their known total", total, 174);;
     pure()
 );
 "#;

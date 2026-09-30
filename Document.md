@@ -940,7 +940,7 @@ The type for booleans is `Bool`, and literals for booleans are `true` and `false
 
 ## Numbers and literals
 
-Types for numbers are `I8`, `I16`, `I32`, `I64` (signed integers), `U8`, `U16`, `U32`, `U64` (unsigned integers) and `F32`, `F64` (floating point values).
+Types for numbers are `I8`, `I16`, `I32`, `I64`, `I128` (signed integers), `U8`, `U16`, `U32`, `U64`, `U128` (unsigned integers) and `F32`, `F64` (floating point values).
 
 A number literal is interpreted as a floating point literal if it contains a decimal point, and as an integer literal otherwise.
 For example, `42` is an `I64` type number literal, and `3.14` is an `F64` type number literal.
@@ -2241,6 +2241,8 @@ The following types can be used for `{return_type}` or `{arg_type_i}`:
 * Numeric types with explicit bit widths: `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`, `F32`, `F64`
 * C numeric types: `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble`
 * Substitute for `void`: `()`, available as `{return_type}`. Giving it as an `{arg_type_i}` is an error.
+
+`I128` and `U128` have no counterpart among the C types, so they are available in neither position. Pass such a value as two `U64`s, its low and its high 64 bits.
 
 An argument written past the declared parameters — one that goes through the `...` — is a value of one of the types an `{arg_type_i}` may be: a pointer or a number. C carries such an argument as one scalar, so write a `Bool` as a `U8` or a `CInt`, take a `Ptr` to a `String` with `Std::String::borrow_c_str`, and take a `Ptr` to a boxed value with `Std::FFI::boxed_to_retained_ptr` or `Std::FFI::borrow_boxed`.
 

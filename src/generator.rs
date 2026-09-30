@@ -2248,6 +2248,8 @@ impl<'c, 'm> Generator<'c, 'm> {
                     ObjectFieldType::U32 => {}
                     ObjectFieldType::I64 => {}
                     ObjectFieldType::U64 => {}
+                    ObjectFieldType::I128 => {}
+                    ObjectFieldType::U128 => {}
                     ObjectFieldType::F32 => {}
                     ObjectFieldType::F64 => {}
                     ObjectFieldType::SubObject(subty, is_punched) => {

@@ -74,6 +74,28 @@ pub fn test_signed_overflow_check_stops_dividing_the_least_by_minus_one() {
     );
 }
 
+/// An overflow of a 128-bit type stops the program, and the report shows operands wider than 64
+/// bits in full.
+///
+/// The product is computed at run time, from an operand built from the run-time zero, so the check
+/// on a 128-bit multiplication is emitted and linked rather than folded away.
+#[test]
+pub fn test_signed_overflow_check_reports_128_bit_operands() {
+    test_source_fail(
+        &source_with_a_runtime_zero("eval (I128::maximum + zero.i128) * 2_I128;"),
+        integer_operations_checked_config(),
+        "Signed integer overflow: I128 multiplication, with 170141183460469231731687303715884105727 and 2",
+    );
+    assert_the_check_stops_evaluating(
+        "I128::maximum + 1_I128",
+        "Signed integer overflow: I128 addition, with 170141183460469231731687303715884105727 and 1",
+    );
+    assert_the_check_stops_evaluating(
+        "I128::minimum / -1_I128",
+        "Signed integer overflow: I128 division, with -170141183460469231731687303715884105728 and -1",
+    );
+}
+
 /// The check leaves unsigned arithmetic alone: an unsigned operation wraps, so a build that stops
 /// at a signed overflow computes it and carries on.
 ///
@@ -99,6 +121,9 @@ pub fn test_signed_overflow_check_leaves_unsigned_arithmetic_alone() {
 
             let half64 = 9223372036854775807_U64 * one.to_U64;
             assert_eq(|_|"U64 add", half64 + half64, 18446744073709551614_U64);;
+
+            let half128 = 170141183460469231731687303715884105727_U128 * one.u128;
+            assert_eq(|_|"U128 add", half128 + half128, 340282366920938463463374607431768211454_U128);;
         "#,
     );
     test_source(&source, integer_operations_checked_config());

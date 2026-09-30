@@ -1701,6 +1701,125 @@ Applies a function to the value inside the functor.
 * `f` - The function to be applied.
 * `value` - The functor value to be transformed.
 
+### namespace Std::I128
+
+#### abs
+
+Type: `Std::I128 -> Std::I128`
+
+#### bit_and
+
+Type: `Std::I128 -> Std::I128 -> Std::I128`
+
+Calculates bitwise AND of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
+#### bit_not
+
+Type: `Std::I128 -> Std::I128`
+
+Calculates bitwise NOT of a value.
+
+##### Parameters
+
+* `x` - The value to negate.
+
+#### bit_or
+
+Type: `Std::I128 -> Std::I128 -> Std::I128`
+
+Calculates bitwise OR of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
+#### bit_xor
+
+Type: `Std::I128 -> Std::I128 -> Std::I128`
+
+Calculates bitwise XOR of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
+#### count_ones
+
+Type: `Std::I128 -> Std::I128`
+
+`v.count_ones` counts the one bits of `v`: `11_U8.count_ones` is `3_U8`.
+
+The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` is `8_I8`.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
+#### leading_zeros
+
+Type: `Std::I128 -> Std::I128`
+
+`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
+#### maximum
+
+Type: `Std::I128`
+
+#### minimum
+
+Type: `Std::I128`
+
+#### shift_left
+
+Type: `Std::I128 -> Std::I128 -> Std::I128`
+
+`v.shift_left(bits)` shifts `v` to the left by `bits` bits.
+
+`bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
+
+#### shift_right
+
+Type: `Std::I128 -> Std::I128 -> Std::I128`
+
+`v.shift_right(bits)` shifts `v` to the right by `bits` bits.
+
+`bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
+
+#### trailing_zeros
+
+Type: `Std::I128 -> Std::I128`
+
+`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
+
+A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 ### namespace Std::I16
 
 #### abs
@@ -1749,6 +1868,30 @@ Calculates bitwise XOR of two values.
 
 * `x` - The first value.
 * `y` - The second value.
+
+#### count_ones
+
+Type: `Std::I16 -> Std::I16`
+
+`v.count_ones` counts the one bits of `v`: `11_U8.count_ones` is `3_U8`.
+
+The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` is `8_I8`.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
+#### leading_zeros
+
+Type: `Std::I16 -> Std::I16`
+
+`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
 
 #### maximum
 
@@ -1968,6 +2111,18 @@ Type: `Std::I16 -> Std::U8`
 
 Casts a value of `I16` into a value of `U8`.
 
+#### trailing_zeros
+
+Type: `Std::I16 -> Std::I16`
+
+`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
+
+A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 ### namespace Std::I32
 
 #### abs
@@ -2016,6 +2171,30 @@ Calculates bitwise XOR of two values.
 
 * `x` - The first value.
 * `y` - The second value.
+
+#### count_ones
+
+Type: `Std::I32 -> Std::I32`
+
+`v.count_ones` counts the one bits of `v`: `11_U8.count_ones` is `3_U8`.
+
+The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` is `8_I8`.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
+#### leading_zeros
+
+Type: `Std::I32 -> Std::I32`
+
+`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
 
 #### maximum
 
@@ -2235,6 +2414,18 @@ Type: `Std::I32 -> Std::U8`
 
 Casts a value of `I32` into a value of `U8`.
 
+#### trailing_zeros
+
+Type: `Std::I32 -> Std::I32`
+
+`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
+
+A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 ### namespace Std::I64
 
 #### abs
@@ -2283,6 +2474,30 @@ Calculates bitwise XOR of two values.
 
 * `x` - The first value.
 * `y` - The second value.
+
+#### count_ones
+
+Type: `Std::I64 -> Std::I64`
+
+`v.count_ones` counts the one bits of `v`: `11_U8.count_ones` is `3_U8`.
+
+The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` is `8_I8`.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
+#### leading_zeros
+
+Type: `Std::I64 -> Std::I64`
+
+`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
 
 #### maximum
 
@@ -2502,6 +2717,18 @@ Type: `Std::I64 -> Std::U8`
 
 Casts a value of `I64` into a value of `U8`.
 
+#### trailing_zeros
+
+Type: `Std::I64 -> Std::I64`
+
+`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
+
+A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 ### namespace Std::I8
 
 #### abs
@@ -2550,6 +2777,30 @@ Calculates bitwise XOR of two values.
 
 * `x` - The first value.
 * `y` - The second value.
+
+#### count_ones
+
+Type: `Std::I8 -> Std::I8`
+
+`v.count_ones` counts the one bits of `v`: `11_U8.count_ones` is `3_U8`.
+
+The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` is `8_I8`.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
+#### leading_zeros
+
+Type: `Std::I8 -> Std::I8`
+
+`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
 
 #### maximum
 
@@ -2768,6 +3019,18 @@ Casts a value of `I8` into a value of `U64`.
 Type: `Std::I8 -> Std::U8`
 
 Casts a value of `I8` into a value of `U8`.
+
+#### trailing_zeros
+
+Type: `Std::I8 -> Std::I8`
+
+`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
+
+A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
 
 ### namespace Std::IO
 
@@ -4690,6 +4953,18 @@ Trait member of `Std::ToF64`
 
 Casts a value into `F64` type.
 
+### namespace Std::ToI128
+
+#### i128
+
+Type: `[a : Std::ToI128] a -> Std::I128`
+
+Trait member of `Std::ToI128`
+
+Casts a value into `I128` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `I128`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 ### namespace Std::ToI16
 
 #### i16
@@ -4746,6 +5021,18 @@ Type: `[a : Std::ToString] a -> Std::String`
 
 Trait member of `Std::ToString`
 
+### namespace Std::ToU128
+
+#### u128
+
+Type: `[a : Std::ToU128] a -> Std::U128`
+
+Trait member of `Std::ToU128`
+
+Casts a value into `U128` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `U128`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 ### namespace Std::ToU16
 
 #### u16
@@ -4794,6 +5081,121 @@ Casts a value into `U8` type.
 
 A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `U8`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
+### namespace Std::U128
+
+#### bit_and
+
+Type: `Std::U128 -> Std::U128 -> Std::U128`
+
+Calculates bitwise AND of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
+#### bit_not
+
+Type: `Std::U128 -> Std::U128`
+
+Calculates bitwise NOT of a value.
+
+##### Parameters
+
+* `x` - The value to negate.
+
+#### bit_or
+
+Type: `Std::U128 -> Std::U128 -> Std::U128`
+
+Calculates bitwise OR of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
+#### bit_xor
+
+Type: `Std::U128 -> Std::U128 -> Std::U128`
+
+Calculates bitwise XOR of two values.
+
+##### Parameters
+
+* `x` - The first value.
+* `y` - The second value.
+
+#### count_ones
+
+Type: `Std::U128 -> Std::U128`
+
+`v.count_ones` counts the one bits of `v`: `11_U8.count_ones` is `3_U8`.
+
+The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` is `8_I8`.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
+#### leading_zeros
+
+Type: `Std::U128 -> Std::U128`
+
+`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
+#### maximum
+
+Type: `Std::U128`
+
+#### minimum
+
+Type: `Std::U128`
+
+#### shift_left
+
+Type: `Std::U128 -> Std::U128 -> Std::U128`
+
+`v.shift_left(bits)` shifts `v` to the left by `bits` bits.
+
+`bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
+
+#### shift_right
+
+Type: `Std::U128 -> Std::U128 -> Std::U128`
+
+`v.shift_right(bits)` shifts `v` to the right by `bits` bits.
+
+`bits` must be at least zero and less than the number of bits in the type of `v`. Outside that range the result is an unspecified value of that type, and `--check-integer-operations` stops the program.
+
+##### Parameters
+
+* `bits` - The number of bits to shift.
+* `v` - The value to shift.
+
+#### trailing_zeros
+
+Type: `Std::U128 -> Std::U128`
+
+`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
+
+A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 ### namespace Std::U16
 
 #### bit_and
@@ -4838,6 +5240,30 @@ Calculates bitwise XOR of two values.
 
 * `x` - The first value.
 * `y` - The second value.
+
+#### count_ones
+
+Type: `Std::U16 -> Std::U16`
+
+`v.count_ones` counts the one bits of `v`: `11_U8.count_ones` is `3_U8`.
+
+The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` is `8_I8`.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
+#### leading_zeros
+
+Type: `Std::U16 -> Std::U16`
+
+`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
 
 #### maximum
 
@@ -5057,6 +5483,18 @@ Type: `Std::U16 -> Std::U8`
 
 Casts a value of `U16` into a value of `U8`.
 
+#### trailing_zeros
+
+Type: `Std::U16 -> Std::U16`
+
+`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
+
+A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 ### namespace Std::U32
 
 #### bit_and
@@ -5101,6 +5539,30 @@ Calculates bitwise XOR of two values.
 
 * `x` - The first value.
 * `y` - The second value.
+
+#### count_ones
+
+Type: `Std::U32 -> Std::U32`
+
+`v.count_ones` counts the one bits of `v`: `11_U8.count_ones` is `3_U8`.
+
+The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` is `8_I8`.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
+#### leading_zeros
+
+Type: `Std::U32 -> Std::U32`
+
+`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
 
 #### maximum
 
@@ -5320,6 +5782,18 @@ Type: `Std::U32 -> Std::U8`
 
 Casts a value of `U32` into a value of `U8`.
 
+#### trailing_zeros
+
+Type: `Std::U32 -> Std::U32`
+
+`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
+
+A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 ### namespace Std::U64
 
 #### bit_and
@@ -5364,6 +5838,30 @@ Calculates bitwise XOR of two values.
 
 * `x` - The first value.
 * `y` - The second value.
+
+#### count_ones
+
+Type: `Std::U64 -> Std::U64`
+
+`v.count_ones` counts the one bits of `v`: `11_U8.count_ones` is `3_U8`.
+
+The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` is `8_I8`.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
+#### leading_zeros
+
+Type: `Std::U64 -> Std::U64`
+
+`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
 
 #### maximum
 
@@ -5583,6 +6081,18 @@ Type: `Std::U64 -> Std::U8`
 
 Casts a value of `U64` into a value of `U8`.
 
+#### trailing_zeros
+
+Type: `Std::U64 -> Std::U64`
+
+`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
+
+A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 ### namespace Std::U8
 
 #### bit_and
@@ -5627,6 +6137,30 @@ Calculates bitwise XOR of two values.
 
 * `x` - The first value.
 * `y` - The second value.
+
+#### count_ones
+
+Type: `Std::U8 -> Std::U8`
+
+`v.count_ones` counts the one bits of `v`: `11_U8.count_ones` is `3_U8`.
+
+The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` is `8_I8`.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
+#### leading_zeros
+
+Type: `Std::U8 -> Std::U8`
+
+`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
 
 #### maximum
 
@@ -5846,6 +6380,18 @@ Type: `Std::U8 -> Std::U8`
 
 Casts a value of `U8` into a value of `U8`.
 
+#### trailing_zeros
+
+Type: `Std::U8 -> Std::U8`
+
+`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
+
+A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 ### namespace Std::Zero
 
 #### zero
@@ -5914,6 +6460,12 @@ The type of 32-bit floating point values.
 Defined as: `type F64 = unbox { built-in }`
 
 The type of 64-bit floating point values.
+
+#### I128
+
+Defined as: `type I128 = unbox { built-in }`
+
+The type of 128-bit signed integers.
 
 #### I16
 
@@ -6075,6 +6627,12 @@ Type: `t1`
 ##### field `2`
 
 Type: `t2`
+
+#### U128
+
+Defined as: `type U128 = unbox { built-in }`
+
+The type of 128-bit unsigned integers.
 
 #### U16
 
@@ -6974,6 +7532,16 @@ Type: `a -> Std::F64`
 
 Casts a value into `F64` type.
 
+#### trait `a : ToI128`
+
+##### method `i128`
+
+Type: `a -> Std::I128`
+
+Casts a value into `I128` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `I128`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
+
 #### trait `a : ToI16`
 
 ##### method `i16`
@@ -7019,6 +7587,16 @@ A floating-point value is rounded towards zero. Where the rounded value lies out
 ##### method `to_string`
 
 Type: `a -> Std::String`
+
+#### trait `a : ToU128`
+
+##### method `u128`
+
+Type: `a -> Std::U128`
+
+Casts a value into `U128` type.
+
+A floating-point value is rounded towards zero. Where the rounded value lies outside the range of `U128`, and where the value is a NaN, the result is unspecified; `--check-integer-operations` stops the program there.
 
 #### trait `a : ToU16`
 
@@ -7196,6 +7774,8 @@ The empty array with zero capacity.
 
 ### impl `Std::F32 : Std::ToF64`
 
+### impl `Std::F32 : Std::ToI128`
+
 ### impl `Std::F32 : Std::ToI16`
 
 ### impl `Std::F32 : Std::ToI32`
@@ -7205,6 +7785,8 @@ The empty array with zero capacity.
 ### impl `Std::F32 : Std::ToI8`
 
 ### impl `Std::F32 : Std::ToString`
+
+### impl `Std::F32 : Std::ToU128`
 
 ### impl `Std::F32 : Std::ToU16`
 
@@ -7270,6 +7852,8 @@ The empty array with zero capacity.
 
 ### impl `Std::F64 : Std::ToF64`
 
+### impl `Std::F64 : Std::ToI128`
+
 ### impl `Std::F64 : Std::ToI16`
 
 ### impl `Std::F64 : Std::ToI32`
@@ -7279,6 +7863,8 @@ The empty array with zero capacity.
 ### impl `Std::F64 : Std::ToI8`
 
 ### impl `Std::F64 : Std::ToString`
+
+### impl `Std::F64 : Std::ToU128`
 
 ### impl `Std::F64 : Std::ToU16`
 
@@ -7291,6 +7877,86 @@ The empty array with zero capacity.
 ### impl `Std::F64 : Std::Zero`
 
 ### impl `Std::FFI::Destructor a : Std::Boxed`
+
+### impl `Std::I128 : Std::Add`
+
+### impl `Std::I128 : Std::Div`
+
+### impl `Std::I128 : Std::Eq`
+
+### impl `Std::I128 : Std::FromBytes`
+
+### impl `Std::I128 : Std::FromString`
+
+### impl `Std::I128 : Std::LessThan`
+
+### impl `Std::I128 : Std::LessThanOrEq`
+
+### impl `Std::I128 : Std::Mul`
+
+### impl `Std::I128 : Std::Neg`
+
+### impl `Std::I128 : Std::One`
+
+### impl `Std::I128 : Std::Rem`
+
+### impl `Std::I128 : Std::Sub`
+
+### impl `Std::I128 : Std::ToBytes`
+
+### impl `Std::I128 : Std::ToCChar`
+
+### impl `Std::I128 : Std::ToCDouble`
+
+### impl `Std::I128 : Std::ToCFloat`
+
+### impl `Std::I128 : Std::ToCInt`
+
+### impl `Std::I128 : Std::ToCLong`
+
+### impl `Std::I128 : Std::ToCLongLong`
+
+### impl `Std::I128 : Std::ToCShort`
+
+### impl `Std::I128 : Std::ToCSizeT`
+
+### impl `Std::I128 : Std::ToCUnsignedChar`
+
+### impl `Std::I128 : Std::ToCUnsignedInt`
+
+### impl `Std::I128 : Std::ToCUnsignedLong`
+
+### impl `Std::I128 : Std::ToCUnsignedLongLong`
+
+### impl `Std::I128 : Std::ToCUnsignedShort`
+
+### impl `Std::I128 : Std::ToF32`
+
+### impl `Std::I128 : Std::ToF64`
+
+### impl `Std::I128 : Std::ToI128`
+
+### impl `Std::I128 : Std::ToI16`
+
+### impl `Std::I128 : Std::ToI32`
+
+### impl `Std::I128 : Std::ToI64`
+
+### impl `Std::I128 : Std::ToI8`
+
+### impl `Std::I128 : Std::ToString`
+
+### impl `Std::I128 : Std::ToU128`
+
+### impl `Std::I128 : Std::ToU16`
+
+### impl `Std::I128 : Std::ToU32`
+
+### impl `Std::I128 : Std::ToU64`
+
+### impl `Std::I128 : Std::ToU8`
+
+### impl `Std::I128 : Std::Zero`
 
 ### impl `Std::I16 : Std::Add`
 
@@ -7348,6 +8014,8 @@ The empty array with zero capacity.
 
 ### impl `Std::I16 : Std::ToF64`
 
+### impl `Std::I16 : Std::ToI128`
+
 ### impl `Std::I16 : Std::ToI16`
 
 ### impl `Std::I16 : Std::ToI32`
@@ -7357,6 +8025,8 @@ The empty array with zero capacity.
 ### impl `Std::I16 : Std::ToI8`
 
 ### impl `Std::I16 : Std::ToString`
+
+### impl `Std::I16 : Std::ToU128`
 
 ### impl `Std::I16 : Std::ToU16`
 
@@ -7424,6 +8094,8 @@ The empty array with zero capacity.
 
 ### impl `Std::I32 : Std::ToF64`
 
+### impl `Std::I32 : Std::ToI128`
+
 ### impl `Std::I32 : Std::ToI16`
 
 ### impl `Std::I32 : Std::ToI32`
@@ -7433,6 +8105,8 @@ The empty array with zero capacity.
 ### impl `Std::I32 : Std::ToI8`
 
 ### impl `Std::I32 : Std::ToString`
+
+### impl `Std::I32 : Std::ToU128`
 
 ### impl `Std::I32 : Std::ToU16`
 
@@ -7500,6 +8174,8 @@ The empty array with zero capacity.
 
 ### impl `Std::I64 : Std::ToF64`
 
+### impl `Std::I64 : Std::ToI128`
+
 ### impl `Std::I64 : Std::ToI16`
 
 ### impl `Std::I64 : Std::ToI32`
@@ -7509,6 +8185,8 @@ The empty array with zero capacity.
 ### impl `Std::I64 : Std::ToI8`
 
 ### impl `Std::I64 : Std::ToString`
+
+### impl `Std::I64 : Std::ToU128`
 
 ### impl `Std::I64 : Std::ToU16`
 
@@ -7576,6 +8254,8 @@ The empty array with zero capacity.
 
 ### impl `Std::I8 : Std::ToF64`
 
+### impl `Std::I8 : Std::ToI128`
+
 ### impl `Std::I8 : Std::ToI16`
 
 ### impl `Std::I8 : Std::ToI32`
@@ -7585,6 +8265,8 @@ The empty array with zero capacity.
 ### impl `Std::I8 : Std::ToI8`
 
 ### impl `Std::I8 : Std::ToString`
+
+### impl `Std::I8 : Std::ToU128`
 
 ### impl `Std::I8 : Std::ToU16`
 
@@ -7728,6 +8410,86 @@ The empty string.
 
 ### impl `Std::Tuple3 t0 t1 : Std::Functor`
 
+### impl `Std::U128 : Std::Add`
+
+### impl `Std::U128 : Std::Div`
+
+### impl `Std::U128 : Std::Eq`
+
+### impl `Std::U128 : Std::FromBytes`
+
+### impl `Std::U128 : Std::FromString`
+
+### impl `Std::U128 : Std::LessThan`
+
+### impl `Std::U128 : Std::LessThanOrEq`
+
+### impl `Std::U128 : Std::Mul`
+
+### impl `Std::U128 : Std::Neg`
+
+### impl `Std::U128 : Std::One`
+
+### impl `Std::U128 : Std::Rem`
+
+### impl `Std::U128 : Std::Sub`
+
+### impl `Std::U128 : Std::ToBytes`
+
+### impl `Std::U128 : Std::ToCChar`
+
+### impl `Std::U128 : Std::ToCDouble`
+
+### impl `Std::U128 : Std::ToCFloat`
+
+### impl `Std::U128 : Std::ToCInt`
+
+### impl `Std::U128 : Std::ToCLong`
+
+### impl `Std::U128 : Std::ToCLongLong`
+
+### impl `Std::U128 : Std::ToCShort`
+
+### impl `Std::U128 : Std::ToCSizeT`
+
+### impl `Std::U128 : Std::ToCUnsignedChar`
+
+### impl `Std::U128 : Std::ToCUnsignedInt`
+
+### impl `Std::U128 : Std::ToCUnsignedLong`
+
+### impl `Std::U128 : Std::ToCUnsignedLongLong`
+
+### impl `Std::U128 : Std::ToCUnsignedShort`
+
+### impl `Std::U128 : Std::ToF32`
+
+### impl `Std::U128 : Std::ToF64`
+
+### impl `Std::U128 : Std::ToI128`
+
+### impl `Std::U128 : Std::ToI16`
+
+### impl `Std::U128 : Std::ToI32`
+
+### impl `Std::U128 : Std::ToI64`
+
+### impl `Std::U128 : Std::ToI8`
+
+### impl `Std::U128 : Std::ToString`
+
+### impl `Std::U128 : Std::ToU128`
+
+### impl `Std::U128 : Std::ToU16`
+
+### impl `Std::U128 : Std::ToU32`
+
+### impl `Std::U128 : Std::ToU64`
+
+### impl `Std::U128 : Std::ToU8`
+
+### impl `Std::U128 : Std::Zero`
+
 ### impl `Std::U16 : Std::Add`
 
 ### impl `Std::U16 : Std::Div`
@@ -7784,6 +8546,8 @@ The empty string.
 
 ### impl `Std::U16 : Std::ToF64`
 
+### impl `Std::U16 : Std::ToI128`
+
 ### impl `Std::U16 : Std::ToI16`
 
 ### impl `Std::U16 : Std::ToI32`
@@ -7793,6 +8557,8 @@ The empty string.
 ### impl `Std::U16 : Std::ToI8`
 
 ### impl `Std::U16 : Std::ToString`
+
+### impl `Std::U16 : Std::ToU128`
 
 ### impl `Std::U16 : Std::ToU16`
 
@@ -7860,6 +8626,8 @@ The empty string.
 
 ### impl `Std::U32 : Std::ToF64`
 
+### impl `Std::U32 : Std::ToI128`
+
 ### impl `Std::U32 : Std::ToI16`
 
 ### impl `Std::U32 : Std::ToI32`
@@ -7869,6 +8637,8 @@ The empty string.
 ### impl `Std::U32 : Std::ToI8`
 
 ### impl `Std::U32 : Std::ToString`
+
+### impl `Std::U32 : Std::ToU128`
 
 ### impl `Std::U32 : Std::ToU16`
 
@@ -7936,6 +8706,8 @@ The empty string.
 
 ### impl `Std::U64 : Std::ToF64`
 
+### impl `Std::U64 : Std::ToI128`
+
 ### impl `Std::U64 : Std::ToI16`
 
 ### impl `Std::U64 : Std::ToI32`
@@ -7945,6 +8717,8 @@ The empty string.
 ### impl `Std::U64 : Std::ToI8`
 
 ### impl `Std::U64 : Std::ToString`
+
+### impl `Std::U64 : Std::ToU128`
 
 ### impl `Std::U64 : Std::ToU16`
 
@@ -8012,6 +8786,8 @@ The empty string.
 
 ### impl `Std::U8 : Std::ToF64`
 
+### impl `Std::U8 : Std::ToI128`
+
 ### impl `Std::U8 : Std::ToI16`
 
 ### impl `Std::U8 : Std::ToI32`
@@ -8021,6 +8797,8 @@ The empty string.
 ### impl `Std::U8 : Std::ToI8`
 
 ### impl `Std::U8 : Std::ToString`
+
+### impl `Std::U8 : Std::ToU128`
 
 ### impl `Std::U8 : Std::ToU16`
 

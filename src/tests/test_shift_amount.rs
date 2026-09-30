@@ -121,11 +121,11 @@ pub fn test_the_check_stops_a_shift_of_an_unsigned_type() {
     );
 }
 
-/// The report shows the amount the program wrote, so it widens the amount to 64 bits by the
+/// The report shows the amount the program wrote, so it widens the amount to 128 bits by the
 /// signedness of its type: a negative amount of a signed type reads as the negative number, and an
 /// amount of an unsigned type as the magnitude its bits hold.
 ///
-/// The types here are narrower than 64 bits, where the widening itself decides what the report
+/// The types here are narrower than 128 bits, where the widening itself decides what the report
 /// says. `test_the_report_reads_an_unsigned_amount_of_its_own_width_as_a_magnitude` covers
 /// the width at which it does not.
 #[test]
@@ -138,19 +138,32 @@ pub fn test_the_report_widens_the_amount_by_the_signedness_of_its_type() {
         "eval 1_U8.shift_right(zero.to_U8 - 1_U8);",
         "Shift amount outside the width of the type: U8 shift_right, with 255",
     );
+    assert_the_check_stops_running(
+        "eval 1_U64.shift_right(zero.to_U64 - 1_U64);",
+        "Shift amount outside the width of the type: U64 shift_right, with 18446744073709551615",
+    );
 }
 
-/// An amount of an unsigned type as wide as the report's own 64 bits reads as the magnitude its
+/// An amount of an unsigned type as wide as the report's own 128 bits reads as the magnitude its
 /// bits hold, the way a narrower one does.
 ///
 /// The widening leaves such an amount untouched, so the signedness the report reads it back under
-/// is the whole of what decides the number it shows. Read as signed, `U64::maximum` shows as -1,
+/// is the whole of what decides the number it shows. Read as signed, `U128::maximum` shows as -1,
 /// which is a number its own type cannot hold.
 #[test]
 pub fn test_the_report_reads_an_unsigned_amount_of_its_own_width_as_a_magnitude() {
     assert_the_check_stops_running(
-        "eval 1_U64.shift_right(zero.to_U64 - 1_U64);",
-        "Shift amount outside the width of the type: U64 shift_right, with 18446744073709551615",
+        "eval 1_U128.shift_right(zero.u128 - 1_U128);",
+        "Shift amount outside the width of the type: U128 shift_right, with 340282366920938463463374607431768211455",
+    );
+}
+
+/// The report shows a negative amount of the widest signed type as the negative number it is.
+#[test]
+pub fn test_the_report_reads_a_negative_amount_of_the_widest_signed_type() {
+    assert_the_check_stops_running(
+        "eval 1_I128.shift_left(zero.i128 - 1_I128);",
+        "Shift amount outside the width of the type: I128 shift_left, with -1",
     );
 }
 
