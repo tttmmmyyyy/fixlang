@@ -105,7 +105,8 @@ pub fn return_registers_of_target(triple: &str) -> ReturnRegisters {
 /// The registers of each class that returning a value costs.
 #[derive(Clone, Copy, Default)]
 struct RegisterDemand {
-    /// Integer and pointer scalars, one register each.
+    /// Integer and pointer scalars: one register for each 64 bits of a scalar, so an `i128` takes
+    /// two.
     integer: usize,
     /// Floating-point scalars, one register each.
     float: usize,
@@ -136,14 +137,21 @@ impl RegisterDemand {
 
 /// What returning `ty` costs. LLVM's return lowering flattens a struct or an array into its scalar
 /// elements (`ComputeValueVTs`) and gives each one a register, so this descends through both: a
-/// `{ i8, [3 x i64] }` costs four integer registers, one more than x86-64 has.
+/// `{ i8, [3 x i64] }` costs four integer registers, one more than x86-64 has, and so does
+/// `{ i128, i128 }`.
 fn demand_of(ty: BasicTypeEnum) -> RegisterDemand {
     match ty {
         BasicTypeEnum::StructType(st) => (0..st.count_fields())
             .map(|i| demand_of(st.get_field_type_at_index(i).unwrap()))
             .fold(RegisterDemand::default(), RegisterDemand::plus),
         BasicTypeEnum::ArrayType(at) => demand_of(at.get_element_type()).times(at.len() as usize),
-        BasicTypeEnum::IntType(_) | BasicTypeEnum::PointerType(_) => RegisterDemand {
+        // An integer wider than a register is returned in as many registers as its bits fill:
+        // x86-64 and AArch64 both return an `i128` in two.
+        BasicTypeEnum::IntType(it) => RegisterDemand {
+            integer: (it.get_bit_width() as usize).div_ceil(64),
+            ..Default::default()
+        },
+        BasicTypeEnum::PointerType(_) => RegisterDemand {
             integer: 1,
             ..Default::default()
         },
