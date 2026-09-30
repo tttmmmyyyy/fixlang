@@ -2210,180 +2210,112 @@ pub fn bitwise_operation_function(
     (expr, scm)
 }
 
-/// Evaluates `Std::I64::bit_not`, and the same value of the other integer types: the operand with
-/// every bit flipped.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct BitNotOp {
-    /// The local binding holding the operand whose bits are flipped.
-    operand_name: FullName,
-}
-
-#[typetag::serde]
-impl BuiltinOp for BitNotOp {
-    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get value
-        let operand = gc
-            .get_scoped_obj_field(&self.operand_name, 0)
-            .into_int_value();
-
-        // Flip every bit.
-        let val = gc
-            .builder()
-            .build_not(operand, "not@bitwise_not_function")
-            .unwrap();
-
-        // Return result.
-        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@bit_not"));
-        obj.insert_field(gc, 0, val)
-    }
-
-    fn name(&self) -> String {
-        format!("bit_not({})", self.operand_name.to_string())
-    }
-
-    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.operand_name]
-    }
-
-    fn result_locality(
-        &self,
-        result_ty: &Arc<TypeNode>,
-        arg_tys: &[Arc<TypeNode>],
-        type_env: &TypeEnv,
-    ) -> ExtShape {
-        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-/// The value with every bit of `operand` flipped.
-/// Type: ty -> ty
-pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
-    const OPERAND_NAME: &str = "operand";
-
-    let scm = Scheme::generalize(
-        Default::default(),
-        vec![],
-        vec![],
-        type_fun(ty.clone(), ty.clone()),
-    );
-    let expr = expr_abs(
-        vec![var_local(OPERAND_NAME)],
-        expr_builtin(
-            Box::new(BitNotOp {
-                operand_name: FullName::local(OPERAND_NAME),
-            }),
-            ty,
-            None,
-        ),
-        None,
-    );
-    (expr, scm)
-}
-
-/// A count of bits of an integer that `BitCountOp` answers.
+/// An operation on the bits of one integer that `UnaryBitOp` performs, answering with a value of
+/// the operand's type.
 #[derive(Clone, Copy, Serialize, Deserialize)]
-pub enum BitCount {
-    /// The zero bits above the most significant one bit.
+pub enum UnaryBitOperation {
+    /// Flips every bit.
+    Not,
+    /// Counts the zero bits above the most significant one bit.
     LeadingZeros,
-    /// The zero bits below the least significant one bit.
+    /// Counts the zero bits below the least significant one bit.
     TrailingZeros,
-    /// The one bits.
-    Ones,
+    /// Counts the one bits.
+    CountOnes,
 }
 
-impl BitCount {
-    /// Every count, in the order the standard library declares them.
-    pub const ALL: [BitCount; 3] = [
-        BitCount::LeadingZeros,
-        BitCount::TrailingZeros,
-        BitCount::Ones,
+impl UnaryBitOperation {
+    /// Every operation, in the order the standard library declares them.
+    pub const ALL: [UnaryBitOperation; 4] = [
+        UnaryBitOperation::Not,
+        UnaryBitOperation::LeadingZeros,
+        UnaryBitOperation::TrailingZeros,
+        UnaryBitOperation::CountOnes,
     ];
 
-    /// The name the count has in the namespace of each integer type: `Std::I64::leading_zeros`.
+    /// The name the operation has in the namespace of each integer type: `Std::I64::bit_not`.
     pub fn function_name(&self) -> &'static str {
         match self {
-            BitCount::LeadingZeros => "leading_zeros",
-            BitCount::TrailingZeros => "trailing_zeros",
-            BitCount::Ones => "count_ones",
+            UnaryBitOperation::Not => "bit_not",
+            UnaryBitOperation::LeadingZeros => "leading_zeros",
+            UnaryBitOperation::TrailingZeros => "trailing_zeros",
+            UnaryBitOperation::CountOnes => "count_ones",
         }
     }
 
-    /// The documentation of the count's function in the standard library.
+    /// The documentation of the operation's function in the standard library.
     pub fn document(&self) -> &'static str {
         match self {
-            BitCount::LeadingZeros => include_str!("../docs/std_leading_zeros.md"),
-            BitCount::TrailingZeros => include_str!("../docs/std_trailing_zeros.md"),
-            BitCount::Ones => include_str!("../docs/std_count_ones.md"),
-        }
-    }
-
-    /// The LLVM intrinsic that computes the count. It takes the integer and returns the count as a
-    /// value of the same type.
-    fn intrinsic_name(&self) -> &'static str {
-        match self {
-            BitCount::LeadingZeros => "llvm.ctlz",
-            BitCount::TrailingZeros => "llvm.cttz",
-            BitCount::Ones => "llvm.ctpop",
-        }
-    }
-
-    /// Whether the intrinsic takes, after the integer, the flag that makes a zero operand's count
-    /// poison.
-    fn intrinsic_takes_zero_is_poison_flag(&self) -> bool {
-        match self {
-            BitCount::LeadingZeros | BitCount::TrailingZeros => true,
-            BitCount::Ones => false,
+            UnaryBitOperation::Not => include_str!("../docs/std_bit_not.md"),
+            UnaryBitOperation::LeadingZeros => include_str!("../docs/std_leading_zeros.md"),
+            UnaryBitOperation::TrailingZeros => include_str!("../docs/std_trailing_zeros.md"),
+            UnaryBitOperation::CountOnes => include_str!("../docs/std_count_ones.md"),
         }
     }
 }
 
-/// Evaluates `Std::I64::leading_zeros`, `Std::I64::trailing_zeros` and `Std::I64::count_ones`, and
-/// the same functions of the other integer types: a count of the operand's bits, as a value of the
-/// operand's type.
+/// Evaluates `Std::I64::bit_not`, `Std::I64::leading_zeros`, `Std::I64::trailing_zeros` and
+/// `Std::I64::count_ones`, and the same functions of the other integer types: the operand with
+/// every bit flipped, or a count of its bits, as a value of the operand's type.
 ///
 /// Every operand has an answer: a zero operand has as many leading and trailing zeros as its type
 /// has bits.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct BitCountOp {
-    /// The local binding holding the operand whose bits are counted.
+pub struct UnaryBitOp {
+    /// The local binding holding the operand.
     operand_name: FullName,
-    /// Which bits are counted.
-    count: BitCount,
+    /// What is done to the operand's bits.
+    operation: UnaryBitOperation,
+}
+
+impl UnaryBitOp {
+    /// Emits the call to the LLVM intrinsic `name`, which counts the bits of `operand` and answers
+    /// with the count at the operand's type.
+    ///
+    /// # Arguments
+    /// * `takes_zero_is_poison` - whether the intrinsic takes, after the integer, the flag that
+    ///   makes a zero operand's count poison. The flag passed is false, so a zero operand counts
+    ///   every bit of its type.
+    fn build_count<'c, 'm>(
+        gc: &mut Generator<'c, 'm>,
+        name: &str,
+        operand: IntValue<'c>,
+        takes_zero_is_poison: bool,
+    ) -> IntValue<'c> {
+        let intrinsic = gc.intrinsic_function(name, &[operand.get_type().into()]);
+        let mut args: Vec<BasicMetadataValueEnum<'c>> = vec![operand.into()];
+        if takes_zero_is_poison {
+            args.push(gc.context.bool_type().const_zero().into());
+        }
+        gc.builder()
+            .build_call(intrinsic, &args, "count@unary_bit_op")
+            .unwrap()
+            .try_as_basic_value()
+            .expect_basic("a bit-counting intrinsic answers an integer")
+            .into_int_value()
+    }
 }
 
 #[typetag::serde]
-impl BuiltinOp for BitCountOp {
+impl BuiltinOp for UnaryBitOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let operand = gc
             .get_scoped_obj_field(&self.operand_name, 0)
             .into_int_value();
-        let intrinsic_name = self.count.intrinsic_name();
-        let intrinsic = gc.intrinsic_function(intrinsic_name, &[operand.get_type().into()]);
-        let mut args: Vec<BasicMetadataValueEnum<'c>> = vec![operand.into()];
-        if self.count.intrinsic_takes_zero_is_poison_flag() {
-            // The flag is false, so a zero operand counts every bit of its type.
-            args.push(gc.context.bool_type().const_zero().into());
-        }
-        let val = gc
-            .builder()
-            .build_call(intrinsic, &args, "count@bit_count")
-            .unwrap()
-            .try_as_basic_value()
-            .expect_basic("a bit-counting intrinsic answers an integer")
-            .into_int_value();
-
-        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@bit_count"));
+        let val = match self.operation {
+            UnaryBitOperation::Not => gc.builder().build_not(operand, "not@unary_bit_op").unwrap(),
+            UnaryBitOperation::LeadingZeros => Self::build_count(gc, "llvm.ctlz", operand, true),
+            UnaryBitOperation::TrailingZeros => Self::build_count(gc, "llvm.cttz", operand, true),
+            UnaryBitOperation::CountOnes => Self::build_count(gc, "llvm.ctpop", operand, false),
+        };
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@unary_bit_op"));
         obj.insert_field(gc, 0, val)
     }
 
     fn name(&self) -> String {
         format!(
             "{}({})",
-            self.count.function_name(),
+            self.operation.function_name(),
             self.operand_name.to_string()
         )
     }
@@ -2406,9 +2338,12 @@ impl BuiltinOp for BitCountOp {
     }
 }
 
-/// The function counting the bits of an integer of type `ty` that `count` names.
+/// The function performing `operation` on the bits of an integer of type `ty`.
 /// Type: ty -> ty
-pub fn bit_count_function(ty: Arc<TypeNode>, count: BitCount) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn unary_bit_function(
+    ty: Arc<TypeNode>,
+    operation: UnaryBitOperation,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     const OPERAND_NAME: &str = "operand";
 
     let scm = Scheme::generalize(
@@ -2420,9 +2355,9 @@ pub fn bit_count_function(ty: Arc<TypeNode>, count: BitCount) -> (Arc<ExprNode>,
     let expr = expr_abs(
         vec![var_local(OPERAND_NAME)],
         expr_builtin(
-            Box::new(BitCountOp {
+            Box::new(UnaryBitOp {
                 operand_name: FullName::local(OPERAND_NAME),
-                count,
+                operation,
             }),
             ty,
             None,
