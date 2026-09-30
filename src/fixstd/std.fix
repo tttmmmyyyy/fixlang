@@ -3096,12 +3096,22 @@ namespace String {
         String { _data : bytes.unsafe_set_bounds_unchecked(length, 0_U8) }
     );
 
-    // Writes `chunk` into `bytes` as exactly 19 decimal digits, with leading zeros, so that they end
-    // just before `end`.
+    // The number of decimal digits `_from_decimal_integer_128` writes from each chunk it cuts off the
+    // end of a 128-bit magnitude: the most digits a `U64` holds every value of.
+    _decimal_chunk_length : I64;
+    _decimal_chunk_length = 19;
+
+    // `10 ^ _decimal_chunk_length`, the number `_from_decimal_integer_128` divides a magnitude by to
+    // cut a chunk off its end. It must stay in sync with `_decimal_chunk_length`.
+    _decimal_chunk_divisor : U128;
+    _decimal_chunk_divisor = 10000000000000000000_U128;
+
+    // Writes `chunk` into `bytes` as exactly `_decimal_chunk_length` decimal digits, with leading
+    // zeros, so that they end just before `end`.
     //
-    // `bytes` must be unshared and hold at least `end` bytes, `end` must be at least 19, and `chunk`
-    // must be below `10^19`. This function checks none of these, and violating them causes undefined
-    // behavior.
+    // `bytes` must be unshared and hold at least `end` bytes, `end` must be at least
+    // `_decimal_chunk_length`, and `chunk` must be below `_decimal_chunk_divisor`. This function
+    // checks none of these, and violating them causes undefined behavior.
     //
     // # Parameters
     // * `end` - The index just after the last digit.
@@ -3109,14 +3119,17 @@ namespace String {
     // * `bytes` - The array to write into.
     _write_decimal_chunk : I64 -> U64 -> Array U8 -> Array U8;
     _write_decimal_chunk = |end, chunk, bytes| (
-        // Nine pairs of digits are written from the last one backward, and the one digit left leads.
-        let (rest, bytes) = loop((end, chunk, bytes), |(pair_end, rest, bytes)| (
-            if pair_end == end - 18 { break $ (rest, bytes) };
+        let start = end - _decimal_chunk_length;
+        // The digits are written from the last one backward, two at each step while two places
+        // are left, and then one where one place is left.
+        let (unwritten_end, rest, bytes) = loop((end, chunk, bytes), |(pair_end, rest, bytes)| (
+            if pair_end - start < 2 { break $ (pair_end, rest, bytes) };
             let higher = rest / 100_U64;
             let bytes = bytes._write_decimal_digit_pair(pair_end - 2, rest - higher * 100_U64);
             continue $ (pair_end - 2, higher, bytes)
         ));
-        bytes.unsafe_set_bounds_unchecked(end - 19, '0' + rest.u8)
+        if unwritten_end == start { bytes };
+        bytes.unsafe_set_bounds_unchecked(start, '0' + rest.u8)
     );
 
     // Creates the decimal text of the integer whose sign is `negative` and whose magnitude is
@@ -3128,19 +3141,18 @@ namespace String {
     // * `magnitude` - The absolute value of the integer.
     _from_decimal_integer_128 : Bool -> U128 -> String;
     _from_decimal_integer_128 = |negative, magnitude| (
-        // The digits are cut into chunks of 19 from the last digit until the leading digits fit in
-        // a `U64`. 19 is the largest number of digits whose every value a `U64` holds.
-        let chunk_divisor = 10000000000000000000_U128;
+        // Chunks of `_decimal_chunk_length` digits are cut off the end until the leading digits fit
+        // in a `U64`.
         let (chunk_count, leading) = loop((0, magnitude), |(count, rest)| (
             if rest <= U64::maximum.u128 { break $ (count, rest.u64) };
-            continue $ (count + 1, rest / chunk_divisor)
+            continue $ (count + 1, rest / _decimal_chunk_divisor)
         ));
-        let length = _decimal_integer_length(negative, leading) + 19 * chunk_count;
+        let length = _decimal_integer_length(negative, leading) + _decimal_chunk_length * chunk_count;
         let bytes = Array::empty(length + 1)._unsafe_grow_size(length + 1);
         let bytes = loop((length, magnitude, bytes), |(end, rest, bytes)| (
             if rest <= U64::maximum.u128 { break $ bytes._write_decimal_integer(end, negative, rest.u64) };
-            let bytes = bytes._write_decimal_chunk(end, (rest % chunk_divisor).u64);
-            continue $ (end - 19, rest / chunk_divisor, bytes)
+            let bytes = bytes._write_decimal_chunk(end, (rest % _decimal_chunk_divisor).u64);
+            continue $ (end - _decimal_chunk_length, rest / _decimal_chunk_divisor, bytes)
         ));
         String { _data : bytes.unsafe_set_bounds_unchecked(length, 0_U8) }
     );
@@ -3864,8 +3876,8 @@ namespace U128 {
     //
     // # Parameters
     // * `bs` - The bytes to read.
-    _from_bytes_unchecked : Array U8 -> U128;
-    _from_bytes_unchecked = |bs| bs.borrow_elements(|ptr| (
+    _unsafe_from_bytes_size_unchecked : Array U8 -> U128;
+    _unsafe_from_bytes_size_unchecked = |bs| bs.borrow_elements(|ptr| (
         let low = FFI_CALL[U64 fixruntime_u128_low_from_bytes(Ptr), ptr];
         let high = FFI_CALL[U64 fixruntime_u128_high_from_bytes(Ptr), ptr];
         high.u128.shift_left(64_U128).bit_or(low.u128)
@@ -4430,7 +4442,7 @@ impl U128 : FromBytes {
         if bs.@size != 16 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U128."
         };
-        Result::ok $ U128::_from_bytes_unchecked(bs)
+        Result::ok $ U128::_unsafe_from_bytes_size_unchecked(bs)
     );
 }
 impl U128 : ToString {
@@ -4450,7 +4462,7 @@ impl I128 : FromBytes {
         if bs.@size != 16 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I128."
         };
-        Result::ok $ U128::_from_bytes_unchecked(bs).i128
+        Result::ok $ U128::_unsafe_from_bytes_size_unchecked(bs).i128
     );
 }
 impl I128 : ToString {

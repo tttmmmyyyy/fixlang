@@ -27,9 +27,9 @@ void fixruntime_eprintln(const char *msg)
     fflush(stderr);
 }
 
-// Each of the twelve below moves a number between a value and the bytes holding it: the
-// `_to_bytes` ones write `v` into the object at `buf`, and the `_from_bytes` ones answer with the
-// number the object at `buf` holds.
+// Each of the functions below moves a number between a value and the bytes holding it: the
+// `_to_bytes` ones write the number into the object at `buf`, and the `_from_bytes` ones answer
+// with the number the object at `buf` holds. A 128-bit number crosses to C as two 64-bit halves.
 void fixruntime_u8_to_bytes(uint8_t *buf, uint8_t v)
 {
     *buf = v;
