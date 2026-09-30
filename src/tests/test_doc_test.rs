@@ -1073,3 +1073,50 @@ fn test_examples_that_cannot_share_a_program_are_tested_alone() {
         streams(&output)
     );
 }
+
+/// An example written as statements sees `Std` as its module narrows it: a name the module hides
+/// from `Std` and declares itself is the module's own in the example, as it is in the module.
+#[test]
+fn test_example_sees_std_as_its_module_narrows_it() {
+    let lib = r#"module Lib;
+import Std hiding Tuple2;
+
+// ```fix
+// let pair = Tuple2 { fst : 1, snd : 2 };
+// assert_eq(|_|"", pair.@snd, 2)
+// ```
+type Tuple2 = struct { fst : I64, snd : I64 };
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &[]);
+    assert!(
+        output.status.success()
+            && String::from_utf8_lossy(&output.stderr).contains("doc test lib.fix:4 ... ok"),
+        "the example's `Tuple2` is `Lib::Tuple2`, which its module declares in place of `Std`'s\n{}",
+        streams(&output)
+    );
+}
+
+/// An example written as statements in a module whose import statement is too long for one line
+/// is reported at its place in the comment: the import statements the example is wrapped with are
+/// written on the line of its opening fence.
+#[test]
+fn test_error_in_an_example_of_a_module_with_a_long_import_is_reported_at_its_place() {
+    let util = "module Util;\nfirst_long_function_name : I64 = 1;\nsecond_long_function_name : I64 = 2;\nthird_long_function_name : I64 = 3;\nfourth_long_function_name : I64 = 4;\n";
+    let lib = r#"module Lib;
+import Util::{first_long_function_name, second_long_function_name, third_long_function_name, fourth_long_function_name};
+
+// ```fix
+// let x : I64 = "a string";
+// pure()
+// ```
+value : I64 = first_long_function_name;
+"#;
+    let dir = project_dir(&[("lib.fix", lib), ("util.fix", util)], &[]);
+    let output = fix_test(&dir, &[]);
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("5 | // let x : I64 = \"a string\";"),
+        "the error of the example is reported at the line it is written on\n{}",
+        streams(&output)
+    );
+}
