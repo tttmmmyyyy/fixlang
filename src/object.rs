@@ -11,9 +11,9 @@ use crate::constants::{
     TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_BITS, UNION_TAG_IDX,
 };
 use crate::fixstd::builtin::{
-    make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty,
-    make_i32_ty, make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u16_ty, make_u32_ty,
-    make_i128_ty, make_u128_ty, make_u64_ty, make_u8_ty,
+    make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i128_ty,
+    make_i16_ty, make_i32_ty, make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u128_ty,
+    make_u16_ty, make_u32_ty, make_u64_ty, make_u8_ty,
 };
 use crate::fixstd::runtime::{
     RUNTIME_ARRAY_SIZE_OVERFLOW, RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC,
