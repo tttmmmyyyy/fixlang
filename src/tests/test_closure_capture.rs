@@ -346,7 +346,7 @@ mod tests {
         let built = closures_taking_a_capture_list_through_the_environment(&dump);
         // The standard library builds closures of this kind for what it prints, so each built-in is
         // found by the rest of the tuple its lambda is applied to and by what the lambda returns.
-        for (builtin, rest_of_type) in [
+        for (builtin, type_after_capture_list) in [
             ("borrow_elements", "), Std::Ptr) -> Std::I64 "),
             (
                 "mutate_elements",
@@ -358,7 +358,7 @@ mod tests {
             ),
         ] {
             assert!(
-                built.iter().any(|line| line.contains(rest_of_type)),
+                built.iter().any(|line| line.contains(type_after_capture_list)),
                 "the lambda given to `{}` should be built as a closure taking its capture list \
                  through the environment:\n{}",
                 builtin,
