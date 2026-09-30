@@ -359,7 +359,9 @@ mod tests {
             ),
         ] {
             assert!(
-                built.iter().any(|line| line.contains(type_after_capture_list)),
+                built
+                    .iter()
+                    .any(|line| line.contains(type_after_capture_list)),
                 "the lambda given to `{}` should be built as a closure taking its capture list \
                  through the environment:\n{}",
                 builtin,
