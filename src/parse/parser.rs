@@ -37,6 +37,7 @@ use crate::constants::{
     PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX,
 };
 use crate::error::Errors;
+use crate::ffi::PASS_128_BIT_INTEGER_AS_HALVES;
 use crate::fixstd::builtin::{
     expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, floating_literal_value,
     integral_literal_value, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty,
@@ -2695,8 +2696,9 @@ fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Ty
         return Err(Errors::from_msg_srcs(
             format!(
                 "`{}` has no counterpart among the C types, so a C function cannot take or return it.\n\
-                 HINT: pass the value as two `U64`s, its low and its high 64 bits.",
-                pair.as_str()
+                 HINT: {}.",
+                pair.as_str(),
+                PASS_128_BIT_INTEGER_AS_HALVES
             ),
             &[&Some(span)],
         ));

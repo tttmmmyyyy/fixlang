@@ -331,6 +331,13 @@ impl TyCon {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
     }
 
+    /// Whether this is `I128` or `U128` of `Std`, the integer types wider than every integer type
+    /// standard C has.
+    pub fn is_128_bit_integer(&self) -> bool {
+        self.name == FullName::from_strs(&[STD_NAME], I128_NAME)
+            || self.name == FullName::from_strs(&[STD_NAME], U128_NAME)
+    }
+
     /// Whether this is the type `String` of `Std`.
     pub fn is_string(&self) -> bool {
         return self.name == FullName::from_strs(&[STD_NAME], STRING_NAME);
@@ -1420,6 +1427,11 @@ impl TypeNode {
     /// Whether this is the type `String`.
     pub fn is_string(&self) -> bool {
         self.toplevel_tycon_satisfies(TyCon::is_string)
+    }
+
+    /// Whether this is `I128` or `U128`.
+    pub fn is_128_bit_integer(&self) -> bool {
+        self.toplevel_tycon_satisfies(TyCon::is_128_bit_integer)
     }
 
     /// Whether the top-level type constructor of this type is `IO`, i.e. whether this is `IO` or

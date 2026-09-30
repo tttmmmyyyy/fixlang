@@ -238,7 +238,7 @@ pub fn test_ffi_export_rejects_a_128_bit_type() {
         main = pure();
     "#,
         Configuration::develop_mode(),
-        "`Std::U128` cannot be used as an argument of an exported function.",
+        "`Std::U128` cannot be used as an argument of an exported function. C has no standard 128-bit integer type, so pass the value as two `U64`s, its low and its high 64 bits.",
     );
 }
 
@@ -340,7 +340,7 @@ pub fn test_ffi_call_rejects_a_128_bit_variadic_argument() {
         main = println(FFI_CALL[CInt printf(Ptr, ...), nullptr, 1_U128].to_string);
     "#,
         Configuration::develop_mode(),
-        "`Std::U128` cannot be passed through the `...` of an `FFI_CALL`",
+        "`Std::U128` cannot be passed through the `...` of an `FFI_CALL`. C has no standard 128-bit integer type, so pass the value as two `U64`s, its low and its high 64 bits.",
     );
 }
 

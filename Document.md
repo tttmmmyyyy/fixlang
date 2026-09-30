@@ -2318,7 +2318,7 @@ Give the exported value a type the C ABI can carry:
 * Boxed types, which the foreign language receives as an opaque pointer (see [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language))
 * `()`, available as the result type, where it becomes `void`
 
-Any other type is rejected when the program is compiled.
+Any other type is rejected when the program is compiled. `I128` and `U128` are among them, since C has no standard 128-bit integer type: exchange such a value as two `U64`s, its low and its high 64 bits.
 
 * To exchange a struct, a tuple or a union, take a `Ptr` to memory the foreign language owns and copy through it, as described in [Returning more than one value](#returning-more-than-one-value).
 * For a truth value, take a `U8` or a `CInt` and convert it on the Fix side.
