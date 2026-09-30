@@ -3130,17 +3130,17 @@ namespace String {
     _from_decimal_integer_128 = |negative, magnitude| (
         // The digits are cut into chunks of 19 from the last one, the most digits a `U64` holds
         // every value of, until the leading digits fit in a `U64`.
-        let chunk_size = 10000000000000000000_U128;
+        let chunk_divisor = 10000000000000000000_U128;
         let (chunk_count, leading) = loop((0, magnitude), |(count, rest)| (
             if rest <= U64::maximum.u128 { break $ (count, rest.u64) };
-            continue $ (count + 1, rest / chunk_size)
+            continue $ (count + 1, rest / chunk_divisor)
         ));
         let length = _decimal_integer_length(negative, leading) + 19 * chunk_count;
         let bytes = Array::empty(length + 1)._unsafe_grow_size(length + 1);
         let bytes = loop((length, magnitude, bytes), |(end, rest, bytes)| (
             if rest <= U64::maximum.u128 { break $ bytes._write_decimal_integer(end, negative, rest.u64) };
-            let bytes = bytes._write_decimal_chunk(end, (rest % chunk_size).u64);
-            continue $ (end - 19, rest / chunk_size, bytes)
+            let bytes = bytes._write_decimal_chunk(end, (rest % chunk_divisor).u64);
+            continue $ (end - 19, rest / chunk_divisor, bytes)
         ));
         String { _data : bytes.unsafe_set_bounds_unchecked(length, 0_U8) }
     );
