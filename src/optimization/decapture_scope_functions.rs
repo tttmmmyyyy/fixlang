@@ -14,7 +14,7 @@ capture list into the environment instead, so that the function the op is given 
 ```
 let h = F(cap);
 ...
-op(h, env, ...)
+op(.., h, env, ..)
 ```
 
 becomes
@@ -27,7 +27,7 @@ let h = |q| (
 );
 ...
 let env1 = (env, c);
-op(h, env1, ...)
+op(.., h, env1, ..)
 ```
 
 where `(env, r_1, ..., r_k)` is the tuple the op applies `h` to, and `F` is a global function.

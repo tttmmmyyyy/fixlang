@@ -7601,9 +7601,9 @@ impl BuiltinOp for WithRetainedOp {
     fn name(&self) -> String {
         format!(
             "with_retained({}, {}, {})",
-            self.x_name.to_string(),
             self.f_name.to_string(),
-            self.env_name.to_string()
+            self.env_name.to_string(),
+            self.x_name.to_string()
         )
     }
 
@@ -8770,9 +8770,9 @@ impl BuiltinOp for BorrowPtrOp {
     fn name(&self) -> String {
         format!(
             "borrow_ptr({}, {}, {})",
-            self.x_name.to_string(),
             self.f_name.to_string(),
             self.env_name.to_string(),
+            self.x_name.to_string(),
         )
     }
 
@@ -8914,9 +8914,9 @@ impl BuiltinOp for MutatePtrOp {
         format!(
             "mutate_ptr{}({}, {}, {}, {})",
             if self.force_unique { "" } else { "[unique]" },
-            self.x_name.to_string(),
             self.f_name.to_string(),
             self.env_name.to_string(),
+            self.x_name.to_string(),
             self.ios_name.to_string(),
         )
     }
