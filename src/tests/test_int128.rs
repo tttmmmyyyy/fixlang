@@ -1,7 +1,7 @@
 //! The 128-bit integer types `I128` and `U128`: their literals, their arithmetic and conversions,
 //! their text and bytes, and the C signatures that do not take them.
 
-use crate::configuration::Configuration;
+use crate::configuration::{Configuration, FixOptimizationLevel};
 use crate::tests::test_util::{test_source, test_source_fail, test_with_a_runtime_zero};
 
 /// A literal of a 128-bit type holds every value of its type, the bits past 64 included, and a
@@ -363,4 +363,39 @@ pub fn test_the_128_bit_types_read_only_16_bytes() {
     "#,
         Configuration::develop_mode(),
     );
+}
+
+/// A 128-bit value passed from one function to another reaches it intact at every optimization
+/// level. An iterator over an array of structs holding one hands the value to the next closure in a
+/// tail call with more arguments than fit in registers, which at `-O none` put the 128-bit value on
+/// the stack.
+#[test]
+pub fn test_a_128_bit_value_crosses_a_tail_call_at_every_level() {
+    let source = r#"
+        module Main;
+
+        type Pair = unbox struct { a : U8, b : I128 };
+
+        main : IO ();
+        main = (
+            let args = *get_args;
+            let zero = args.@size - 1;
+            let pairs = Array::from_map(3 + zero, |i| Pair { a : i.u8, b : i.i128 });
+            let text = pairs.to_iter.map(|p| p.@a.to_string + ":" + p.@b.to_string).join(",");
+            assert_eq(|_|"The pairs as text", text, "0:0,1:1,2:2");;
+            let tuples = Array::from_map(3 + zero, |k| (k.u8, k.i128));
+            let sum = tuples.to_iter.fold(0_I128, |(_, x), acc| acc + x);
+            assert_eq(|_|"The sum of the 128-bit values", sum, 3_I128);;
+            pure()
+        );
+    "#;
+    for opt_level in [
+        FixOptimizationLevel::None,
+        FixOptimizationLevel::Basic,
+        FixOptimizationLevel::Max,
+    ] {
+        let mut config = Configuration::develop_mode();
+        config.set_fix_opt_level(opt_level);
+        test_source(source, config);
+    }
 }
