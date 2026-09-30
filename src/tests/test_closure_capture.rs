@@ -344,8 +344,9 @@ mod tests {
             "lambdas capturing values, given to built-ins applying a function in a scope",
         );
         let built = closures_taking_a_capture_list_through_the_environment(&dump);
-        // The standard library builds closures of this kind for what it prints, so each built-in is
-        // found by the rest of the tuple its lambda is applied to and by what the lambda returns.
+        // The standard library builds closures of this kind for what it prints, so the closure of
+        // each built-in's lambda is picked out by its type after the capture list: the rest of the
+        // tuple the lambda is applied to, and what the lambda returns.
         for (builtin, type_after_capture_list) in [
             ("borrow_elements", "), Std::Ptr) -> Std::I64 "),
             (

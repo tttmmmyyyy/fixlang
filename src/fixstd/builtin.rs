@@ -7661,8 +7661,8 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 }
 
 /// The function operand of `WithRetainedOp`, `BorrowPtrOp` and `MutatePtrOp`, and the environment
-/// operand they hand it. Each of them takes the value it acts on first, then the function, then the
-/// environment.
+/// operand they hand it. The `free_vars_mut` of each of them lists the value it acts on first, then
+/// the function, then the environment.
 const SCOPE_OP_ENV_OPERAND: EnvOperand = EnvOperand {
     function: 1,
     env: 2,
