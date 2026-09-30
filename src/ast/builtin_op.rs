@@ -11,11 +11,11 @@ use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::sync::Arc;
 
-/// One inline-LLVM builtin operation. Each builtin is a struct that implements this trait; an
-/// `InlineLLVM` holds a `Box<dyn LLVMGen>`. `typetag` serializes the trait object (tagged by op) so
-/// the typecheck cache round-trips it.
+/// One builtin operation. Each builtin is a struct that implements this trait; a `BuiltinOpExpr`
+/// holds a `Box<dyn BuiltinOp>`. `typetag` serializes the trait object (tagged by op) so the
+/// typecheck cache round-trips it.
 #[typetag::serde(tag = "op")]
-pub trait LLVMGen: DynClone + Send + Sync {
+pub trait BuiltinOp: DynClone + Send + Sync {
     /// Emit the op's code and return its value.
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c>;
 
@@ -130,7 +130,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     ///
     /// A `generate` that emits a check or a reference count it does not declare leaves that one
     /// reading the state, so the declarations stay honest about what the annotation covers.
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         unreachable!("assuming_local called on an op that declares no uniqueness check and no reference counting")
     }
 
@@ -142,7 +142,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// This op with its runtime uniqueness branch dropped. Only an op that reports a branch through
     /// `unique_check_operand` is asked to drop it, and every such op overrides this method; an op with
     /// no branch is never routed here.
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         unreachable!("assuming_unique called on an op that carries no uniqueness branch")
     }
 
@@ -156,9 +156,9 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// argument `i`'s leaf, which also declares that argument leaf unconsumed. It may therefore only
     /// name a leaf the op passes through without producing a new reference to it — an op that hands
     /// back a value whose reference count or sharing it also reports on, or that publishes the value,
-    /// must not (see `InlineLLVMIsUniqueFunctionBody` and `InlineLLVMMarkThreadedFunctionBody`, which
-    /// say why). A leaf that joins an argument with another source says only where the result's
-    /// sharing comes from: the op consumes that argument like any other.
+    /// must not (see `IsUniqueOp` and `MarkThreadedOp`, which say why). A leaf that joins an
+    /// argument with another source says only where the result's sharing comes from: the op
+    /// consumes that argument like any other.
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -211,9 +211,9 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// Downcast hook, for the few passes that special-case a concrete op.
     fn as_any(&self) -> &dyn Any;
 }
-dyn_clone::clone_trait_object!(LLVMGen);
+dyn_clone::clone_trait_object!(BuiltinOp);
 
-/// The two operands `LLVMGen::env_operand` names, by their positions among the op's operands.
+/// The two operands `BuiltinOp::env_operand` names, by their positions among the op's operands.
 #[derive(Clone, Copy)]
 pub struct EnvOperand {
     /// The operand the op applies as a function.
@@ -244,8 +244,8 @@ pub fn unique_check_on_boxed_leaf(
 
 /// The clone path a force-unique op takes when its container is shared: it retain-copies the
 /// contents into a new container and releases the old one. Every op declaring a uniqueness check
-/// takes it, so its targets are composed here — by `LLVMGen::internal_rc_targets`'s default, and by
-/// the ops that override that default to add targets of their own.
+/// takes it, so its targets are composed here — by `BuiltinOp::internal_rc_targets`'s default, and
+/// by the ops that override that default to add targets of their own.
 pub fn clone_path_rc_targets(check: Option<UniqueCheckOperand>) -> Vec<RcTarget> {
     match check {
         Some(check) => vec![
@@ -256,26 +256,26 @@ pub fn clone_path_rc_targets(check: Option<UniqueCheckOperand>) -> Vec<RcTarget>
     }
 }
 
-/// An inline-LLVM builtin operation as it stands in an expression: the operation to emit, and the
-/// type the expression was declared at.
+/// A builtin operation as it stands in an expression: the operation to emit, and the type the
+/// expression was declared at.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVM {
+pub struct BuiltinOpExpr {
     /// The operation this expression emits.
-    pub generator: Box<dyn LLVMGen>,
-    /// The type of this LLVM expression.
+    pub op: Box<dyn BuiltinOp>,
+    /// The type of this expression.
     ///
-    /// For example, in `@ : I64 -> Array a -> a = |i, arr| LLVM<Array::@(i, arr)>;`, the
-    /// `generic_ty` of the InlineLLVM `LLVM<arr.Array::@(i, arr)>` is `a`.
+    /// For example, in `@ : I64 -> Array a -> a = |i, arr| array_get(i, arr);`, the
+    /// `generic_ty` of the `BuiltinOpExpr` `array_get(i, arr)` is `a`.
     ///
     /// `generic_ty` may contain type variables, and type instantiation leaves it as it is.
     pub generic_ty: Arc<TypeNode>,
 }
 
-impl InlineLLVM {
+impl BuiltinOpExpr {
     /// This expression with every global `FullName` in its type made absolute.
-    pub fn global_to_absolute(&self) -> Arc<InlineLLVM> {
-        Arc::new(InlineLLVM {
-            generator: self.generator.clone(),
+    pub fn global_to_absolute(&self) -> Arc<BuiltinOpExpr> {
+        Arc::new(BuiltinOpExpr {
+            op: self.op.clone(),
             generic_ty: self.generic_ty.global_to_absolute(),
         })
     }

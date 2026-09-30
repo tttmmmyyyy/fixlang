@@ -44,6 +44,13 @@ mod integration_tests {
     /// What `flatten_chain` prints: the sum of `r + i` over 50 rows of 20.
     const FLATTEN_CHAIN_OUTPUT: &str = "34000";
 
+    /// What `dyn_flatten_chain` prints: each of `0..2` twice, times ten.
+    const DYN_FLATTEN_CHAIN_OUTPUT: &str = "0,0,10,10,20,20";
+
+    /// What `field_name_reused_by_later_run` prints: each of the three rounds reads the `some` its
+    /// triple holds, `3i + (i + 7) + 7` over `i` in `1..3`.
+    const FIELD_NAME_REUSED_BY_LATER_RUN_OUTPUT: &str = "66";
+
     /// What `split_field_order` prints: `run` folds `high` into `low` three times to reach 7321, and
     /// adds the weight of the value it was handed on each round, 3007 + 2073 + 1732.
     const SPLIT_FIELD_ORDER_OUTPUT: &str = "14133";
@@ -325,6 +332,32 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("field_in_another_argument");
         for opt_level in OPT_LEVELS {
             build_run_and_read_rc_ir(&project_dir, opt_level, FIELD_IN_ANOTHER_ARGUMENT_OUTPUT);
+        }
+    }
+
+    /// A struct built from a field the program names and a field it computes, where the name was
+    /// bound by an earlier run of the pass: the name bound for the computed field is one the struct
+    /// does not already read, so each field keeps the value it was written with.
+    #[test]
+    pub fn test_a_field_named_by_an_earlier_run_keeps_its_value() {
+        let (_temp_dir, project_dir) = setup_test_env("dyn_flatten_chain");
+        for opt_level in OPT_LEVELS {
+            build_run_and_read_rc_ir(&project_dir, opt_level, DYN_FLATTEN_CHAIN_OUTPUT);
+        }
+    }
+
+    /// A name an earlier run of the pass bound to a union, read after a later run binds a field of
+    /// another struct in the same global: the name the later run chooses is one the global does not
+    /// bind yet, so the reader is given the union the name was bound to.
+    #[test]
+    pub fn test_a_field_name_from_an_earlier_run_is_read_as_it_was_bound() {
+        let (_temp_dir, project_dir) = setup_test_env("field_name_reused_by_later_run");
+        for opt_level in OPT_LEVELS {
+            build_run_and_read_rc_ir(
+                &project_dir,
+                opt_level,
+                FIELD_NAME_REUSED_BY_LATER_RUN_OUTPUT,
+            );
         }
     }
 }

@@ -178,6 +178,23 @@ Untested code is where a latent bug survives, because a tested path carrying a b
 
 **A test that names the case it declines to cover is the cheapest form of this.** A test's doc routinely explains why it chose the input it chose, and such a sentence is the author telling you which neighbouring case they decided not to exercise, together with the reason they believed it was uninteresting. Check the reason rather than the choice. When it says two *inputs* are equivalent, the case may genuinely be covered; when it says one *stage* treats them alike — a widening that is a no-op at that width, a conversion that is the identity for that type, a path that short-circuits for that size — then every stage after that one is still untested on it, and that is where the bug sits. So read the test files the target owns for the sentences that justify an input, take each case such a sentence names, and run it.
 
+#### Run a pass over its own output
+
+A pass that mints names, markers or counters — a fresh-name counter starting at zero, a prefix it
+reserves for the bindings it introduces, a table keyed by the names it binds — is usually written
+against input that holds none of them. Run it a second time, or place it after another run of
+itself in the pipeline, and its input is full of exactly those: the counter reissues a name already
+bound, the reserved prefix is no longer a guarantee of freshness, and a table keyed by name lets one
+binding stand in for another. The failure is a wrong value with no diagnostic, because renaming
+passes treat two distinct names as distinct however alike they look.
+
+The probe is to feed the pass its own output — call it twice in the pipeline, or hand it the dump
+of a program it has already rewritten — and diff the program's answers across optimization levels.
+When the pass is meant to run only once, the probe still pays: the next change that reruns it, or
+places a sibling that mints the same names ahead of it, meets the same collision. Look first where
+the freshness check is local — a name checked against one expression's free variables rather than
+against every binder of the enclosing function.
+
 #### Feed a corpus of broken inputs to the mode whose whole specification is "do not fail"
 
 Some modes exist to keep going on input the normal mode rejects: an error-tolerant elaboration serving an editor mid-edit, a parser's error recovery, a documentation generator over a project that does not build, any partial answer computed while the user is still typing. Such a mode has no expected output to write down, which is why it is usually tested with a handful of hand-picked cases — and that is also what makes it cheap to hunt, because **"it must not crash" is the entire specification, so any invalid input is a test and the crash is the oracle**.

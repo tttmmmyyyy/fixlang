@@ -473,7 +473,7 @@ impl<'a> Overlay<'a> {
             }
         }
         match &*expr.expr {
-            Expr::Var(_) | Expr::LLVM(_) => {}
+            Expr::Var(_) | Expr::Builtin(_) => {}
             Expr::App(func, args) => {
                 self.collect_expr(func);
                 for a in args {

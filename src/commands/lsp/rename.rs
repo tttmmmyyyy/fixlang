@@ -897,7 +897,7 @@ fn walk_expr_for_inline_qualified(
                 }
             }
         }
-        Expr::LLVM(_) => {}
+        Expr::Builtin(_) => {}
         Expr::App(func, args) => {
             walk_expr_for_inline_qualified(func, pick, old_name, new_name, edits);
             for a in args {

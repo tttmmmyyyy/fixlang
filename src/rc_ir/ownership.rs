@@ -10,15 +10,15 @@
 //! unboxed union (whose operation dispatches on the tag rather than naming a variant), or a punched
 //! array. `truncate_to_unit` and `units_under` bridge the two. An **origin** is the object a leaf's
 //! reference belongs to (`origin`), reached by following the alias edges — move-binds, unboxed-
-//! aggregate projections, unboxed-union payloads, and pure `Llvm` projections — back to the binding
-//! that produced it.
+//! aggregate projections, unboxed-union payloads, and pure `Builtin` projections — back to the
+//! binding that produced it.
 //!
 //! What one reference-count operation bumps is a count of references per object
 //! (`acted_references`). A retain of an unboxed union and a release of one field of the payload it
 //! holds key to the same unit, and the counts are what tell the two apart: the release un-bumps
 //! part of what the retain bumped.
 
-use crate::ast::inline_llvm::LLVMGen;
+use crate::ast::builtin_op::BuiltinOp;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
@@ -40,7 +40,7 @@ enum Binding {
     Move(RcVar),
     /// `let x = op(args)`: an alias when the result leaf is a pure projection of one argument,
     /// otherwise a producer. Carries the result type to consult `result_prov`.
-    Llvm(Box<dyn LLVMGen>, Vec<RcVar>, Arc<TypeNode>),
+    Builtin(Box<dyn BuiltinOp>, Vec<RcVar>, Arc<TypeNode>),
     /// `let x = f(args)` or a closure — an opaque producer.
     Producer,
     /// A `destructure` field: field `idx` of the container.
@@ -118,8 +118,8 @@ fn collect_bindings(node: &RcExprNode, vars: &mut VarTable) {
         RcExpr::Let(x, rhs, k) => {
             let binding = match rhs {
                 RcRhs::Var(y) => Binding::Move(y.clone()),
-                RcRhs::Llvm(llvm_gen, args) => {
-                    Binding::Llvm(llvm_gen.clone(), args.clone(), x.ty.clone())
+                RcRhs::Builtin(op, args) => {
+                    Binding::Builtin(op.clone(), args.clone(), x.ty.clone())
                 }
                 RcRhs::Closure(fref, _) => {
                     vars.closure_targets.insert(x.name.clone(), fref.clone());
@@ -292,14 +292,14 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             }
             Origin::of_candidates(candidates, &(var.clone(), path.to_vec()))
         }
-        Some(Binding::Llvm(llvm_gen, args, result_ty)) => {
+        Some(Binding::Builtin(op, args, result_ty)) => {
             let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-            let decl = llvm_gen.result_prov(result_ty, &arg_tys, type_env);
+            let decl = op.result_prov(result_ty, &arg_tys, type_env);
             // A result leaf that is a single `Arg(j, p)` is a pure projection of argument `j`'s leaf
             // `p` — an alias; anything else (a fresh allocation, a boxed-container read, a join of
-            // several sources) is a producer, stopping here. An `Llvm` op is never partially applied,
-            // so a well-formed `result_prov` names only real argument indices (`args[j]` else panics).
-            // A path whose own record does not name an object is handled by
+            // several sources) is a producer, stopping here. A `Builtin` op is never partially
+            // applied, so a well-formed `result_prov` names only real argument indices (`args[j]`
+            // else panics). A path whose own record does not name an object is handled by
             // `origin_from_leaves_under`: a reference-counting unit path may name an unboxed union
             // itself, whose provenance is declared on the leaves of its variants.
             match decl.leaf_origins_at(path).and_then(as_arg_projection) {
@@ -473,7 +473,7 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
                 }
                 // A match holds the only sub-expressions a right-hand side can carry, so every
                 // other shape consumes within itself.
-                RcRhs::Var(..) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Llvm(..) => {
+                RcRhs::Var(..) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Builtin(..) => {
                     rhs_consumes(rhs, &x.ty, vars, prog, type_env, owns, out)
                 }
             }
@@ -517,10 +517,11 @@ pub(crate) fn destructure_consumes(
         .collect()
 }
 
-/// The leaves an `App`, `Llvm`, or `Closure` right-hand side consumes: an owning argument position
-/// (`owns` decides, for the callee's parameter leaf), a captured value, and the closure callee. A
-/// `Var` move and a `Match` consume nothing here — a move is an alias, and a match's consumes live in
-/// its arms. `result_ty` is the type the right-hand side binds, needed to read an op's passthrough.
+/// The leaves an `App`, `Builtin`, or `Closure` right-hand side consumes: an owning argument
+/// position (`owns` decides, for the callee's parameter leaf), a captured value, and the closure
+/// callee. A `Var` move and a `Match` consume nothing here — a move is an alias, and a match's
+/// consumes live in its arms. `result_ty` is the type the right-hand side binds, needed to read an
+/// op's passthrough.
 pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
     rhs: &RcRhs,
     result_ty: &Arc<TypeNode>,
@@ -557,11 +558,11 @@ pub(crate) fn rhs_consumes<F: Fn(&RcVar, &FieldPath) -> bool>(
                 }
             }
         }
-        RcRhs::Llvm(llvm_gen, args) => {
+        RcRhs::Builtin(op, args) => {
             let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-            let passthrough = passthrough_arg_leaves(&**llvm_gen, result_ty, args, type_env);
+            let passthrough = passthrough_arg_leaves(&**op, result_ty, args, type_env);
             for (i, a) in args.iter().enumerate() {
-                if llvm_gen.borrows_operand(i, &arg_tys, type_env) {
+                if op.borrows_operand(i, &arg_tys, type_env) {
                     continue;
                 }
                 for leaf in boxed_leaf_paths(&a.ty, type_env) {
@@ -605,20 +606,20 @@ fn resolve_callee_params<'a>(
     Some(func.params.as_slice())
 }
 
-/// The `(arg index, leaf path)` pairs an LLVM op passes through unchanged to its result: the result
-/// leaves whose sole source in `result_prov` is one argument leaf.
+/// The `(arg index, leaf path)` pairs a builtin op passes through unchanged to its result: the
+/// result leaves whose sole source in `result_prov` is one argument leaf.
 ///
 /// Dropping an argument leaf's consume is sound exactly when the result aliases that leaf, and a
 /// result leaf with a single argument leaf behind it aliases it. A leaf that joins an argument with
 /// another source aliases nothing, so it keeps its consume.
 fn passthrough_arg_leaves(
-    llvm_gen: &dyn LLVMGen,
+    op: &dyn BuiltinOp,
     result_ty: &Arc<TypeNode>,
     args: &[RcVar],
     type_env: &TypeEnv,
 ) -> Set<(usize, FieldPath)> {
     let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-    let decl = llvm_gen.result_prov(result_ty, &arg_tys, type_env);
+    let decl = op.result_prov(result_ty, &arg_tys, type_env);
     decl.leaves().filter_map(as_arg_projection).collect()
 }
 

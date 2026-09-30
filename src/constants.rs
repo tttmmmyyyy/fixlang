@@ -128,15 +128,14 @@ pub const CLOSURE_LAM_SUFFIX: &str = "#closure_lam";
 /// The suffix, followed by a hash of which argument received which decaptured lambda, of a
 /// function specialized on the lambdas passed to it.
 pub const CLOSURE_SPEC_SUFFIX: &str = "#closure_spec";
-/// The suffix of the local binding holding the call of a decaptured lambda, which an inline-LLVM
+/// The suffix of the local binding holding the call of a decaptured lambda, which a builtin
 /// expression reads in place of the variable that held the lambda's capture list.
 pub const CLOSURE_CALL_LAM_SUFFIX: &str = "#closure_call_lam";
 /// The prefix of the type constructor naming a capture list that closure specialization builds. A
 /// parameter of this type is a function whose identity the receiving body knows.
 pub const CAP_LIST_PREFIX: &str = "#CapList";
-/// The prefix, followed by a counter, of the local names `decapture_scope_lambdas` binds, and of
-/// the type constructor of the capture struct it moves into an environment operand.
-pub const SCOPE_CAP_PREFIX: &str = "#ScopeCap";
+/// The prefix, followed by a counter, of the local names `decapture_scope_functions` binds.
+pub const DECAPTURE_PREFIX: &str = "#decapture";
 /// The prefix of the name `collapse_constructions` binds a field value to, so that a reader of the
 /// struct is given a name rather than the expression that produced the value.
 pub const BOUND_FIELD_PREFIX: &str = "#field";

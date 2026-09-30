@@ -11,13 +11,13 @@
 //! function or a global value, both referenceable by name (a direct call names its callee by that
 //! name) — every `Retain`/`Release` names one reference-counting unit of its variable; a function
 //! carries a capture parameter exactly for the closure ABI; every match has at least one arm, with
-//! any catch-all arm last; an `Llvm` operation's embedded operand names match its argument list;
+//! any catch-all arm last; a `Builtin` operation's embedded operand names match its argument list;
 //! and a closure value stores the capture layout its target function projects.
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
-use crate::fixstd::builtin::{InlineLLVMCaptureProjectBody, InlineLLVMNoStorageValueBody};
+use crate::fixstd::builtin::{CaptureProjectOp, NoStorageValueOp};
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{FieldPath, FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar};
 use crate::rc_ir::ownership::rc_units;
@@ -95,13 +95,10 @@ fn capture_layouts(prog: &RcProgram, stage: &str) -> Map<FuncRef, Vec<Arc<TypeNo
     for func in prog.funcs.values() {
         let mut layout: Option<Vec<Arc<TypeNode>>> = None;
         for_each_rhs(&func.body, &mut |rhs| {
-            let RcRhs::Llvm(llvm_gen, _) = rhs else {
+            let RcRhs::Builtin(op, _) = rhs else {
                 return;
             };
-            let Some(proj) = llvm_gen
-                .as_any()
-                .downcast_ref::<InlineLLVMCaptureProjectBody>()
-            else {
+            let Some(proj) = op.as_any().downcast_ref::<CaptureProjectOp>() else {
                 return;
             };
             check_capture_projection(func, proj, layout.as_ref(), stage);
@@ -121,7 +118,7 @@ fn capture_layouts(prog: &RcProgram, stage: &str) -> Map<FuncRef, Vec<Arc<TypeNo
 /// reading the old layout.
 fn check_capture_projection(
     func: &RcFunc,
-    proj: &InlineLLVMCaptureProjectBody,
+    proj: &CaptureProjectOp,
     prev_layout: Option<&Vec<Arc<TypeNode>>>,
     stage: &str,
 ) {
@@ -191,11 +188,11 @@ struct Validator<'a> {
     location: String,
     /// Every name bound anywhere in this body; a second binding of one is a duplicate.
     seen: Set<FullName>,
-    /// The names bound to a value made by `InlineLLVMNoStorageValueBody`. A value of a type that
-    /// occupies no storage holds no boxed value, since a pointer takes storage, so no reference
-    /// count acts on one. `lower_lam` leaves such a capture out of the closure on that ground, and
-    /// this is where the ground is checked: the passes that run between the stages this validator
-    /// is called at — reference-count insertion, `borrow_ify`, `cancel` — must place no node on one.
+    /// The names bound to a value made by `NoStorageValueOp`. A value of a type that occupies no
+    /// storage holds no boxed value, since a pointer takes storage, so no reference count acts on
+    /// one. `lower_lam` leaves such a capture out of the closure on that ground, and this is where
+    /// the ground is checked: the passes that run between the stages this validator is called at —
+    /// reference-count insertion, `borrow_ify`, `cancel` — must place no node on one.
     made_without_storage: Set<FullName>,
     /// The names currently in scope, which a use must resolve to.
     scope: Set<FullName>,
@@ -310,12 +307,8 @@ impl<'a> Validator<'a> {
         match node.expr.as_ref() {
             RcExpr::Let(x, rhs, k) => {
                 self.check_rhs(x, rhs);
-                if let RcRhs::Llvm(llvm_gen, _) = rhs {
-                    if llvm_gen
-                        .as_any()
-                        .downcast_ref::<InlineLLVMNoStorageValueBody>()
-                        .is_some()
-                    {
+                if let RcRhs::Builtin(op, _) = rhs {
+                    if op.as_any().downcast_ref::<NoStorageValueOp>().is_some() {
                         self.made_without_storage.insert(x.name.clone());
                     }
                 }
@@ -357,8 +350,8 @@ impl<'a> Validator<'a> {
     }
 
     /// Check a right-hand side: the variables it uses, and the invariants its own form carries — a
-    /// closure's target function and stored capture layout, an `Llvm` operation's operand names, and
-    /// a match's arms.
+    /// closure's target function and stored capture layout, a `Builtin` operation's operand names,
+    /// and a match's arms.
     fn check_rhs(&mut self, x: &RcVar, rhs: &RcRhs) {
         match rhs {
             RcRhs::Var(y) => self.use_var(&y.name),
@@ -426,17 +419,17 @@ impl<'a> Validator<'a> {
                     self.use_var(&c.name);
                 }
             }
-            RcRhs::Llvm(llvm_gen, args) => {
-                // The generator embeds its operand names — code generation resolves the operands from
+            RcRhs::Builtin(op, args) => {
+                // The op embeds its operand names — code generation resolves the operands from
                 // them — while the `args` list carries the same names, in the same order, for the
                 // reference-counting analyses. Lowering builds one from the other and renaming rewrites
                 // both, so the two stay identical; a rewrite that updated one and not the other would
                 // desync what code generation reads from what the analyses track.
-                let embedded_names = llvm_gen.free_vars();
+                let embedded_names = op.free_vars();
                 let arg_names: Vec<FullName> = args.iter().map(|a| a.name.clone()).collect();
                 if embedded_names != arg_names {
                     panic!(
-                        "[RC IR validate] {}: LLVM operand names {:?} disagree with argument names {:?} in `{}`",
+                        "[RC IR validate] {}: builtin operand names {:?} disagree with argument names {:?} in `{}`",
                         self.stage,
                         embedded_names.iter().map(|n| n.to_string()).collect::<Vec<_>>(),
                         arg_names.iter().map(|n| n.to_string()).collect::<Vec<_>>(),
@@ -448,13 +441,13 @@ impl<'a> Validator<'a> {
                 // the leaf belongs to; a leaf declaring two sources would let one name stand for two
                 // objects, and `cancel` pairs a release with a retain by name.
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-                let prov = llvm_gen.result_prov(&x.ty, &arg_tys, self.type_env);
+                let prov = op.result_prov(&x.ty, &arg_tys, self.type_env);
                 for origins in prov.leaves() {
                     if origins.len() > 1 {
                         panic!(
                             "[RC IR validate] {}: `{}` declares {} sources for one result leaf in `{}`",
                             self.stage,
-                            llvm_gen.name(),
+                            op.name(),
                             origins.len(),
                             self.location,
                         );
@@ -515,7 +508,7 @@ mod tests {
     use super::*;
     use crate::ast::types::{type_fun, type_funptr};
     use crate::fixstd::builtin::{
-        bulitin_tycons, make_dynamic_object_ty, make_i64_ty, make_ptr_ty, InlineLLVMNullPtrLit,
+        bulitin_tycons, make_dynamic_object_ty, make_i64_ty, make_ptr_ty, NullPtrLitOp,
     };
     use crate::rc_ir::ast::{MatchArm, RcState};
 
@@ -751,12 +744,12 @@ mod tests {
     /// code generation reads and what the reference-counting analyses track stay the same names.
     #[test]
     #[should_panic(expected = "disagree with argument names")]
-    fn rejects_llvm_operand_name_mismatch() {
+    fn rejects_builtin_operand_name_mismatch() {
         // let r = <nullptr op with no embedded operands>(x); ret r
         // The op's embedded operand names () disagree with the argument list (x).
         let body = node(RcExpr::Let(
             var("r"),
-            RcRhs::Llvm(Box::new(InlineLLVMNullPtrLit {}), vec![var("x")]),
+            RcRhs::Builtin(Box::new(NullPtrLitOp {}), vec![var("x")]),
             node(RcExpr::Ret(var("r"))),
         ));
         check(&body, &["x"]);
@@ -767,7 +760,7 @@ mod tests {
     /// the capture it owns, so its reference counting balances.
     fn projecting_func(read_var: &RcVar, cap_idx: usize, cap_tys: Vec<Arc<TypeNode>>) -> RcFunc {
         let capture = var_of("cap", make_dynamic_object_ty());
-        let proj = Box::new(InlineLLVMCaptureProjectBody {
+        let proj = Box::new(CaptureProjectOp {
             assume_local: false,
             cap_name: read_var.name.clone(),
             cap_idx,
@@ -775,7 +768,7 @@ mod tests {
         });
         let body = node(RcExpr::Let(
             var("c"),
-            RcRhs::Llvm(proj, vec![read_var.clone()]),
+            RcRhs::Builtin(proj, vec![read_var.clone()]),
             node(RcExpr::Release(
                 capture.clone(),
                 vec![],

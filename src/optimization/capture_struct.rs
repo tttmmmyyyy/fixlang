@@ -15,9 +15,8 @@ use crate::{
 };
 use std::sync::Arc;
 
-// The unboxed struct that carries a lambda's captured variables to the code that reads them: the
-// global function the lambda is lifted to, or the lambda itself where it receives them as an
-// argument.
+// The unboxed struct that carries a lambda's captured variables to the global function the lambda
+// is lifted to.
 //
 // The type constructor lives in the namespace of `owner`, and its name is `prefix@owner`, so that a
 // value of it says which function it was built for. Two lambdas capturing the same names at the same

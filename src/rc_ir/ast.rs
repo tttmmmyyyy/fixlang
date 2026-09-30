@@ -1,6 +1,6 @@
 //! The RC IR data types.
 
-use crate::ast::inline_llvm::LLVMGen;
+use crate::ast::builtin_op::BuiltinOp;
 use crate::ast::name::{FullName, Name};
 use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
@@ -162,7 +162,7 @@ pub enum RcExpr {
 /// tag.
 pub type FieldPath = Vec<usize>;
 
-/// The boxed leaf whose runtime uniqueness an inline-LLVM op branches on: which operand carries the
+/// The boxed leaf whose runtime uniqueness a builtin op branches on: which operand carries the
 /// container, and the path to the leaf within that operand's value.
 pub struct UniqueCheckOperand {
     /// The position, among the operation's arguments, of the operand holding the container.
@@ -171,7 +171,7 @@ pub struct UniqueCheckOperand {
     pub path: FieldPath,
 }
 
-/// A value an inline-LLVM operation reference-counts inside its own `generate`, named the way the
+/// A value a builtin operation reference-counts inside its own `generate`, named the way the
 /// operation sees it. Locality inference resolves each against the operation's operands and result,
 /// and annotates the operation only where all of them are local.
 pub enum RcTarget {
@@ -217,7 +217,7 @@ impl MatchArm {
 }
 
 /// A compound expression. It appears only as the right-hand side of a `Let`; the arguments of `App`
-/// and `Llvm` are atoms (variables).
+/// and `Builtin` are atoms (variables).
 #[derive(Clone, Serialize)]
 pub enum RcRhs {
     /// Move / rename `y := x`, consuming `x`.
@@ -229,9 +229,10 @@ pub enum RcRhs {
     /// unboxed `{funptr, capture-object pointer}` pair; only the capture object is boxed (a null
     /// pointer for an empty capture).
     Closure(FuncRef, Vec<RcVar>),
-    /// A built-in operation (arithmetic, projection getters, set/mod, construction, fill, literals,
-    /// FFI, and so on), reusing the existing inline-LLVM generators.
-    Llvm(Box<dyn LLVMGen>, Vec<RcVar>),
+    /// A builtin operation (arithmetic, projection getters, set/mod, construction, fill, literals,
+    /// FFI, and so on): the `BuiltinOp` of the expression it was lowered from, with the operand
+    /// names it embeds rewritten to the variables of the argument list.
+    Builtin(Box<dyn BuiltinOp>, Vec<RcVar>),
     /// The sole branching construct (booleans included). It always appears as the right-hand side
     /// of a `Let`.
     Match(RcVar, Vec<MatchArm>),
@@ -367,10 +368,10 @@ fn collect_mentions_inner(node: &RcExprNode, mention: &mut impl FnMut(&FullName)
                     mention(&fref.name);
                     caps.iter().for_each(|c| mention(&c.name));
                 }
-                // The names the generator embeds are the operand list again, in the same order —
+                // The names the op embeds are the operand list again, in the same order —
                 // `validate` checks it — so reading the operands reads every name the operation
-                // holds, without cloning the generator to ask it for them.
-                RcRhs::Llvm(_, args) => {
+                // holds, without cloning the op to ask it for them.
+                RcRhs::Builtin(_, args) => {
                     args.iter().for_each(|a| mention(&a.name));
                 }
                 RcRhs::Match(scrut, arms) => {
@@ -466,7 +467,7 @@ fn for_each_var_of_rhs(rhs: &RcRhs, visit: &mut impl FnMut(&RcVar)) {
                 visit(var);
             }
         }
-        RcRhs::Llvm(_, operands) => {
+        RcRhs::Builtin(_, operands) => {
             for var in operands {
                 visit(var);
             }

@@ -309,22 +309,22 @@ mod tests {
         test_source(source, Configuration::develop_mode());
     }
 
-    /// The only occurrence of `x` is an argument to an inline-LLVM expression, which an array read
+    /// The only occurrence of `x` is an argument to a builtin expression, which an array read
     /// compiles to.
     #[test]
-    fn test_name_used_only_as_an_llvm_argument_keeps_its_binding() {
+    fn test_name_used_only_as_a_builtin_argument_keeps_its_binding() {
         let source = r#"
         module Main;
 
-        used_as_llvm_argument : I64 -> I64;
-        used_as_llvm_argument = |a| (
+        used_as_builtin_argument : I64 -> I64;
+        used_as_builtin_argument = |a| (
             let x = [a, a + 1, a + 2];
             x.@(2)
         );
 
         main : IO ();
         main = (
-            assert_eq(|_|"the read answers the last element of what `x` is bound to", used_as_llvm_argument(5), 7);;
+            assert_eq(|_|"the read answers the last element of what `x` is bound to", used_as_builtin_argument(5), 7);;
             pure()
         );
         "#;

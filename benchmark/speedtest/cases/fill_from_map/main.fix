@@ -6,7 +6,7 @@ import Std::{
 };
 
 // Fix-source equivalent of `Array::fill`: `from_map` builds the array with a Fix-level loop
-// rather than the InlineLLVM `fill`. Comparing it against the `fill` benchmark measures whether
+// rather than the builtin `fill`. Comparing it against the `fill` benchmark measures whether
 // the optimizer makes a Fix-source fill as fast as the hand-written LLVM fill.
 fill_bench : I64 -> I64 -> I64;
 fill_bench = |m, iters| (
