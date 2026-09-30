@@ -2316,12 +2316,21 @@ impl BitCount {
         }
     }
 
-    /// The LLVM intrinsic that counts: one integer in, the count out at the same type.
+    /// The LLVM intrinsic that counts: the integer in, the count out at the same type.
     fn intrinsic_name(&self) -> &'static str {
         match self {
             BitCount::LeadingZeros => "llvm.ctlz",
             BitCount::TrailingZeros => "llvm.cttz",
             BitCount::Ones => "llvm.ctpop",
+        }
+    }
+
+    /// Whether the intrinsic takes, after the integer, the flag that makes a zero operand's count
+    /// poison.
+    fn intrinsic_takes_zero_is_poison_flag(&self) -> bool {
+        match self {
+            BitCount::LeadingZeros | BitCount::TrailingZeros => true,
+            BitCount::Ones => false,
         }
     }
 }
@@ -2349,9 +2358,8 @@ impl BuiltinOp for BitCountOp {
         let intrinsic_name = self.count.intrinsic_name();
         let intrinsic = gc.intrinsic_function(intrinsic_name, &[operand.get_type().into()]);
         let mut args: Vec<BasicMetadataValueEnum<'c>> = vec![operand.into()];
-        if !matches!(self.count, BitCount::Ones) {
-            // The flag that makes a zero operand's count poison. It is false, so a zero operand
-            // counts every bit of its type.
+        if self.count.intrinsic_takes_zero_is_poison_flag() {
+            // The flag is false, so a zero operand counts every bit of its type.
             args.push(gc.context.bool_type().const_zero().into());
         }
         let val = gc
@@ -10490,6 +10498,11 @@ fn build_abort_on_integer_operation<'c, 'm>(
     let mut args: Vec<BasicMetadataValueEnum<'c>> =
         vec![reported_operation_ptr.into(), operands_are_signed.into()];
     for operand in operands {
+        assert!(
+            operand.get_type().get_bit_width() <= 128,
+            "the report takes operands of 128 bits, and this one is {} bits wide",
+            operand.get_type().get_bit_width()
+        );
         let widened = if is_signed {
             gc.builder()
                 .build_int_s_extend_or_bit_cast(*operand, i128_ty, "reported_operand")

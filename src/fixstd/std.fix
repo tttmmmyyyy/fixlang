@@ -3128,7 +3128,6 @@ namespace String {
     // * `magnitude` - The absolute value of the integer.
     _from_decimal_integer_128 : Bool -> U128 -> String;
     _from_decimal_integer_128 = |negative, magnitude| (
-        if magnitude <= U64::maximum.u128 { _from_decimal_integer(negative, magnitude.u64) };
         // The digits are cut into chunks of 19 from the last one, the most digits a `U64` holds
         // every value of, until the leading digits fit in a `U64`.
         let chunk_size = 10000000000000000000_U128;
@@ -3858,13 +3857,19 @@ namespace U128 {
     minimum : U128;
     minimum = 0_U128;
 
-    // Returns the integer whose low 64 bits are `low` and whose high 64 bits are `high`.
+    // Returns the integer in the 16 bytes of `bs`, read in the byte order of the target.
+    //
+    // `bs` must hold 16 bytes. This function does not check it, and violating it causes undefined
+    // behavior.
     //
     // # Parameters
-    // * `low` - The low 64 bits.
-    // * `high` - The high 64 bits.
-    _from_halves : U64 -> U64 -> U128;
-    _from_halves = |low, high| high.u128.shift_left(64_U128).bit_or(low.u128);
+    // * `bs` - The bytes to read.
+    _from_bytes_unchecked : Array U8 -> U128;
+    _from_bytes_unchecked = |bs| bs.borrow_elements(|ptr| (
+        let low = FFI_CALL[U64 fixruntime_u128_low_from_bytes(Ptr), ptr];
+        let high = FFI_CALL[U64 fixruntime_u128_high_from_bytes(Ptr), ptr];
+        high.u128.shift_left(64_U128).bit_or(low.u128)
+    ));
 }
 impl U128 : Zero {
     zero = 0_U128;
@@ -4425,9 +4430,7 @@ impl U128 : FromBytes {
         if bs.@size != 16 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U128."
         };
-        let low = bs.borrow_elements(|ptr| FFI_CALL[U64 fixruntime_u128_low_from_bytes(Ptr), ptr]);
-        let high = bs.borrow_elements(|ptr| FFI_CALL[U64 fixruntime_u128_high_from_bytes(Ptr), ptr]);
-        Result::ok $ U128::_from_halves(low, high)
+        Result::ok $ U128::_from_bytes_unchecked(bs)
     );
 }
 impl U128 : ToString {
@@ -4447,9 +4450,7 @@ impl I128 : FromBytes {
         if bs.@size != 16 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I128."
         };
-        let low = bs.borrow_elements(|ptr| FFI_CALL[U64 fixruntime_u128_low_from_bytes(Ptr), ptr]);
-        let high = bs.borrow_elements(|ptr| FFI_CALL[U64 fixruntime_u128_high_from_bytes(Ptr), ptr]);
-        Result::ok $ U128::_from_halves(low, high).i128
+        Result::ok $ U128::_from_bytes_unchecked(bs).i128
     );
 }
 impl I128 : ToString {

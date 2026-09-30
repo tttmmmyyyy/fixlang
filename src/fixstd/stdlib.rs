@@ -13,8 +13,9 @@ use crate::{
     constants::{
         ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME,
         ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED, DESTRUCTOR_NAME, F32_NAME, F64_NAME, FFI_NAME,
-        HOLE_NAME, I128_NAME, IOSTATE_NAME, IO_NAME, MARK_THREADED_NAME, PTR_NAME, PUNCHED_ARRAY_NAME,
-        STD_NAME, U128_NAME, WITH_RETAINED_NAME,
+        HOLE_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME, IOSTATE_NAME, IO_NAME, MARK_THREADED_NAME,
+        PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
+        WITH_RETAINED_NAME,
     },
     error::Errors,
     fixstd::builtin::{
@@ -35,7 +36,7 @@ use crate::{
         integral_types, is_unique_function, less_than_or_equal_to_trait_instance_float,
         less_than_or_equal_to_trait_instance_int, less_than_trait_instance_float,
         less_than_trait_instance_int, make_bool_ty, make_dynamic_object_ty, make_floating_ty,
-        make_integral_ty, make_iostate_unsafe_create, make_ptr_ty, mark_threaded_function,
+        make_integral_ty, make_iostate_unsafe_create, make_numeric_ty, make_ptr_ty, mark_threaded_function,
         multiply_trait_instance_float, multiply_trait_instance_int, negate_trait_instance_float,
         negate_trait_instance_int, not_trait_instance_bool, offset_from_function,
         punched_array_plug, quiet_nan_value, remainder_trait_instance_int, set_array,
@@ -296,14 +297,11 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     // The deprecated `to_<type>` functions are kept for the numeric types that had them before the
     // `To<type>` traits replaced them. A numeric type added since is reached through the traits
     // alone, so none of these functions converts from it or to it.
-    let deprecated_cast_types = integral_types
-        .iter()
-        .chain(float_types.iter())
-        .filter(|ty| {
-            let name = &ty.toplevel_tycon().unwrap().name.name;
-            name != I128_NAME && name != U128_NAME
-        })
-        .collect::<Vec<_>>();
+    let deprecated_cast_types = [
+        I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME, F32_NAME,
+        F64_NAME,
+    ]
+    .map(|name| make_numeric_ty(name).0);
     // Fix → Fix: integer/float to integer/float.
     for from in &deprecated_cast_types {
         let from_name = from.toplevel_tycon().unwrap().name.name.clone();
@@ -315,7 +313,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 from,
                 &from_name,
                 &to_name,
-                (*to).clone(),
+                to.clone(),
             );
         }
     }
