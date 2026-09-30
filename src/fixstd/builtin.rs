@@ -7572,24 +7572,18 @@ pub fn hole_function() -> (Arc<ExprNode>, Arc<Scheme>) {
 /// returns. The function is given the tuple `(env, x)`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct WithRetainedOp {
+    /// The value held retained while the function runs.
+    x_name: FullName,
     /// The function applied to the value.
     f_name: FullName,
     /// The environment handed to the function beside the value.
     env_name: FullName,
-    /// The value held retained while the function runs.
-    x_name: FullName,
 }
-
-/// The function operand of `WithRetainedOp`, and the environment operand it hands it.
-const WITH_RETAINED_ENV_OPERAND: EnvOperand = EnvOperand {
-    function: 0,
-    env: 1,
-};
 
 #[typetag::serde]
 impl BuiltinOp for WithRetainedOp {
     fn env_operand(&self) -> Option<EnvOperand> {
-        Some(WITH_RETAINED_ENV_OPERAND)
+        Some(SCOPE_OP_ENV_OPERAND)
     }
 
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
@@ -7607,14 +7601,14 @@ impl BuiltinOp for WithRetainedOp {
     fn name(&self) -> String {
         format!(
             "with_retained({}, {}, {})",
+            self.x_name.to_string(),
             self.f_name.to_string(),
-            self.env_name.to_string(),
-            self.x_name.to_string()
+            self.env_name.to_string()
         )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
-        vec![&mut self.f_name, &mut self.env_name, &mut self.x_name]
+        vec![&mut self.x_name, &mut self.f_name, &mut self.env_name]
     }
 
     fn result_locality(
@@ -7645,9 +7639,9 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         with_empty_env(F_NAME, 1, |g_name, env_name| {
             expr_builtin(
                 Box::new(WithRetainedOp {
+                    x_name: FullName::local(X_NAME),
                     f_name: g_name,
                     env_name,
-                    x_name: FullName::local(X_NAME),
                 }),
                 type_tyvar_star(B_NAME),
                 None,
@@ -8761,7 +8755,7 @@ pub struct BorrowPtrOp {
 #[typetag::serde]
 impl BuiltinOp for BorrowPtrOp {
     fn env_operand(&self) -> Option<EnvOperand> {
-        Some(LENT_PTR_ENV_OPERAND)
+        Some(SCOPE_OP_ENV_OPERAND)
     }
 
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ret_ty: &Arc<TypeNode>) -> Object<'c> {
@@ -8776,9 +8770,9 @@ impl BuiltinOp for BorrowPtrOp {
     fn name(&self) -> String {
         format!(
             "borrow_ptr({}, {}, {})",
+            self.x_name.to_string(),
             self.f_name.to_string(),
             self.env_name.to_string(),
-            self.x_name.to_string(),
         )
     }
 
@@ -8888,7 +8882,7 @@ pub struct MutatePtrOp {
 #[typetag::serde]
 impl BuiltinOp for MutatePtrOp {
     fn env_operand(&self) -> Option<EnvOperand> {
-        Some(LENT_PTR_ENV_OPERAND)
+        Some(SCOPE_OP_ENV_OPERAND)
     }
 
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
@@ -8920,9 +8914,9 @@ impl BuiltinOp for MutatePtrOp {
         format!(
             "mutate_ptr{}({}, {}, {}, {})",
             if self.force_unique { "" } else { "[unique]" },
+            self.x_name.to_string(),
             self.f_name.to_string(),
             self.env_name.to_string(),
-            self.x_name.to_string(),
             self.ios_name.to_string(),
         )
     }
@@ -9012,9 +9006,10 @@ impl BuiltinOp for MutatePtrOp {
 
 /// The operand position of the value `BorrowPtrOp` and `MutatePtrOp` lend a pointer into.
 const LENT_VALUE_ARG: usize = 0;
-/// The function operand of `BorrowPtrOp` and `MutatePtrOp`, and the environment operand they hand
-/// it.
-const LENT_PTR_ENV_OPERAND: EnvOperand = EnvOperand {
+/// The function operand of `WithRetainedOp`, `BorrowPtrOp` and `MutatePtrOp`, and the environment
+/// operand they hand it. Each of them takes the value it acts on first, then the function, then the
+/// environment.
+const SCOPE_OP_ENV_OPERAND: EnvOperand = EnvOperand {
     function: 1,
     env: 2,
 };
