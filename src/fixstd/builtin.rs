@@ -7945,7 +7945,7 @@ fn is_unique_result_locality(result_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> E
 #[typetag::serde]
 impl BuiltinOp for IsUniqueOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
+        let bool_ty = gc.context.i8_type();
 
         // Get argument
         let obj = gc.get_scoped_obj(&self.var_name);
@@ -8142,7 +8142,7 @@ pub struct ArrayIsStorageUniqueOp {
 #[typetag::serde]
 impl BuiltinOp for ArrayIsStorageUniqueOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
+        let bool_ty = gc.context.i8_type();
 
         // Get argument.
         let array = gc.get_scoped_obj(&self.var_name);
@@ -9642,11 +9642,7 @@ impl BuiltinOp for IntEqOp {
             .unwrap();
         let value = gc
             .builder()
-            .build_int_z_extend(
-                value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-                "eq",
-            )
+            .build_int_z_extend(value, gc.context.i8_type(), "eq")
             .unwrap();
         let obj = create_obj(
             make_bool_ty(),
@@ -9719,11 +9715,7 @@ impl BuiltinOp for PtrEqOp {
             .unwrap();
         let value = gc
             .builder()
-            .build_int_z_extend(
-                value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-                "eq_of_ptr",
-            )
+            .build_int_z_extend(value, gc.context.i8_type(), "eq_of_ptr")
             .unwrap();
         let obj = create_obj(
             make_bool_ty(),
@@ -9794,11 +9786,7 @@ impl BuiltinOp for FloatEqOp {
             .unwrap();
         let value = gc
             .builder()
-            .build_int_z_extend(
-                value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-                "eq_of_float",
-            )
+            .build_int_z_extend(value, gc.context.i8_type(), "eq_of_float")
             .unwrap();
         let obj = create_obj(
             make_bool_ty(),
@@ -9890,11 +9878,7 @@ impl BuiltinOp for IntLessThanOp {
             .unwrap();
         let value = gc
             .builder()
-            .build_int_z_extend(
-                value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-                LESS_THAN_TRAIT_LT_NAME,
-            )
+            .build_int_z_extend(value, gc.context.i8_type(), LESS_THAN_TRAIT_LT_NAME)
             .unwrap();
         let obj = create_obj(
             make_bool_ty(),
@@ -9970,11 +9954,7 @@ impl BuiltinOp for FloatLessThanOp {
             .unwrap();
         let value = gc
             .builder()
-            .build_int_z_extend(
-                value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-                LESS_THAN_TRAIT_LT_NAME,
-            )
+            .build_int_z_extend(value, gc.context.i8_type(), LESS_THAN_TRAIT_LT_NAME)
             .unwrap();
         let obj = create_obj(
             make_bool_ty(),
@@ -10066,7 +10046,7 @@ impl BuiltinOp for IntLessThanOrEqOp {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+                gc.context.i8_type(),
                 LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
             )
             .unwrap();
@@ -10146,7 +10126,7 @@ impl BuiltinOp for FloatLessThanOrEqOp {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+                gc.context.i8_type(),
                 LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
             )
             .unwrap();
@@ -11314,7 +11294,7 @@ impl BuiltinOp for BoolNegOp {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
-        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
+        let bool_ty = gc.context.i8_type();
         let false_val = bool_ty.const_zero();
         let value = gc
             .builder()
