@@ -7660,6 +7660,14 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
+/// The function operand of `WithRetainedOp`, `BorrowPtrOp` and `MutatePtrOp`, and the environment
+/// operand they hand it. Each of them takes the value it acts on first, then the function, then the
+/// environment.
+const SCOPE_OP_ENV_OPERAND: EnvOperand = EnvOperand {
+    function: 1,
+    env: 2,
+};
+
 /// Applies the function operand `f` of an op that declares `BuiltinOp::env_operand` to the tuple
 /// `(env, args...)`, and returns what it returns.
 fn apply_with_env<'c, 'm>(
@@ -9006,13 +9014,6 @@ impl BuiltinOp for MutatePtrOp {
 
 /// The operand position of the value `BorrowPtrOp` and `MutatePtrOp` lend a pointer into.
 const LENT_VALUE_ARG: usize = 0;
-/// The function operand of `WithRetainedOp`, `BorrowPtrOp` and `MutatePtrOp`, and the environment
-/// operand they hand it. Each of them takes the value it acts on first, then the function, then the
-/// environment.
-const SCOPE_OP_ENV_OPERAND: EnvOperand = EnvOperand {
-    function: 1,
-    env: 2,
-};
 /// The path of the value in the result of `MutatePtrOp`, `(ios, (value, function result))`.
 const MUTATE_PTR_VALUE_PATH: [usize; 2] = [1, 0];
 
