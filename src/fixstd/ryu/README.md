@@ -28,8 +28,9 @@ source with a comment that opens with `Modified from upstream Ryu by the Fix pro
 - `d2fixed.c` writes the power of ten as Fix writes it, `1.50e2` where upstream writes `1.50e+02`,
   and writes `.0` where the precision is 0, `2.0` where upstream writes `2`. The power of ten is
   written by `append_exponent`, which `digit_table.h` gains together with `exponent_length`, and
-  which `float_text.c` calls as well. Upstream's `d2fixed`, `d2fixed_buffered`, `d2exp` and
-  `d2exp_buffered` are deleted.
+  which `float_text.c` calls as well. A number given to `d2fixed.c` is finite, which it asserts,
+  where upstream writes `Infinity` and `nan`. Upstream's `copy_special_str_printf`, `d2fixed`,
+  `d2fixed_buffered`, `d2exp` and `d2exp_buffered` are deleted.
 
 To take a newer Ryu, diff upstream's files against the revision recorded above, and carry the
 differences into these files. The build carries this directory to the C compiler through

@@ -339,33 +339,6 @@ static inline int append_zero_fraction(const uint32_t precision, char* const res
   return 1 + (int) precision;
 }
 
-static inline int copy_special_str_printf(char* const result, const bool sign, const uint64_t mantissa) {
-#if defined(_MSC_VER)
-  // TODO: Check that -nan is expected output on Windows.
-  if (sign) {
-    result[0] = '-';
-  }
-  if (mantissa) {
-    if (mantissa < (1ull << (DOUBLE_MANTISSA_BITS - 1))) {
-      memcpy(result + sign, "nan(snan)", 9);
-      return sign + 9;
-    }
-    memcpy(result + sign, "nan", 3);
-    return sign + 3;
-  }
-#else
-  if (mantissa) {
-    memcpy(result, "nan", 3);
-    return 3;
-  }
-  if (sign) {
-    result[0] = '-';
-  }
-#endif
-  memcpy(result + sign, "Infinity", 8);
-  return sign + 8;
-}
-
 int d2fixed_buffered_n(double d, uint32_t precision, char* result) {
   const uint64_t bits = double_to_bits(d);
 #ifdef RYU_DEBUG
@@ -381,10 +354,10 @@ int d2fixed_buffered_n(double d, uint32_t precision, char* result) {
   const uint64_t ieeeMantissa = bits & ((1ull << DOUBLE_MANTISSA_BITS) - 1);
   const uint32_t ieeeExponent = (uint32_t) ((bits >> DOUBLE_MANTISSA_BITS) & ((1u << DOUBLE_EXPONENT_BITS) - 1));
 
+  // Modified from upstream Ryu by the Fix project: `d` is finite, since the Fix runtime writes an
+  // infinity and a NaN itself.
+  assert(ieeeExponent != ((1u << DOUBLE_EXPONENT_BITS) - 1u));
   // Case distinction; exit early for the easy cases.
-  if (ieeeExponent == ((1u << DOUBLE_EXPONENT_BITS) - 1u)) {
-    return copy_special_str_printf(result, ieeeSign, ieeeMantissa);
-  }
   if (ieeeExponent == 0 && ieeeMantissa == 0) {
     int index = 0;
     if (ieeeSign) {
@@ -562,10 +535,6 @@ int d2fixed_buffered_n(double d, uint32_t precision, char* result) {
   return index;
 }
 
-
-
-
-
 int d2exp_buffered_n(double d, uint32_t precision, char* result) {
   const uint64_t bits = double_to_bits(d);
 #ifdef RYU_DEBUG
@@ -581,10 +550,10 @@ int d2exp_buffered_n(double d, uint32_t precision, char* result) {
   const uint64_t ieeeMantissa = bits & ((1ull << DOUBLE_MANTISSA_BITS) - 1);
   const uint32_t ieeeExponent = (uint32_t) ((bits >> DOUBLE_MANTISSA_BITS) & ((1u << DOUBLE_EXPONENT_BITS) - 1));
 
+  // Modified from upstream Ryu by the Fix project: `d` is finite, since the Fix runtime writes an
+  // infinity and a NaN itself.
+  assert(ieeeExponent != ((1u << DOUBLE_EXPONENT_BITS) - 1u));
   // Case distinction; exit early for the easy cases.
-  if (ieeeExponent == ((1u << DOUBLE_EXPONENT_BITS) - 1u)) {
-    return copy_special_str_printf(result, ieeeSign, ieeeMantissa);
-  }
   if (ieeeExponent == 0 && ieeeMantissa == 0) {
     int index = 0;
     if (ieeeSign) {
