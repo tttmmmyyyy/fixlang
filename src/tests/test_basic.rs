@@ -6098,7 +6098,7 @@ pub fn test_float_to_string_precision() {
 /// both edges of the window `to_string` writes the point positionally in, at every scale either
 /// type reaches.
 #[test]
-pub fn test_float_texts_read_back_and_are_literals_across_every_decade() {
+pub fn test_float_texts_are_literals_and_the_shortest_reads_back_across_every_decade() {
     let source = r#"
         module Main;
 
@@ -6177,8 +6177,8 @@ pub fn test_float_texts_read_back_and_are_literals_across_every_decade() {
         //
         // # Parameters
         // * `v` - The number to write.
-        writes_literals_f64 : F64 -> Bool;
-        writes_literals_f64 = |v| [
+        texts_are_literals_f64 : F64 -> Bool;
+        texts_are_literals_f64 = |v| [
             v.to_string, v.to_string_precision(0_U8), v.to_string_precision(1_U8),
             v.to_string_exp_precision(0_U8), v.to_string_exp_precision(1_U8), v.to_string_exp
         ].to_iter.fold(true, |text, acc| acc && text.is_float_literal);
@@ -6188,8 +6188,8 @@ pub fn test_float_texts_read_back_and_are_literals_across_every_decade() {
         //
         // # Parameters
         // * `v` - The number to write.
-        writes_literals_f32 : F32 -> Bool;
-        writes_literals_f32 = |v| [
+        texts_are_literals_f32 : F32 -> Bool;
+        texts_are_literals_f32 = |v| [
             v.to_string, v.to_string_precision(0_U8), v.to_string_precision(1_U8),
             v.to_string_exp_precision(0_U8), v.to_string_exp_precision(1_U8), v.to_string_exp
         ].to_iter.fold(true, |text, acc| acc && text.is_float_literal);
@@ -6207,7 +6207,7 @@ pub fn test_float_texts_read_back_and_are_literals_across_every_decade() {
             let ok = Iterator::range(-323, 309).fold(true, |e, acc|
                 let p = Iterator::range(0, e.abs).fold(1.0, |_, x| if e < 0 { x / 10.0 } else { x * 10.0 });
                 [p, -p].to_iter.fold(acc, |v, acc|
-                    neighbours_f64(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f64 && w.writes_literals_f64)
+                    neighbours_f64(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f64 && w.texts_are_literals_f64)
                 )
             );
             assert_eq(|_|"every F64 decade reads back as what it was written from, and every text of it is a literal", ok, true);;
@@ -6216,7 +6216,7 @@ pub fn test_float_texts_read_back_and_are_literals_across_every_decade() {
             let ok = Iterator::range(-44, 39).fold(true, |e, acc|
                 let p = Iterator::range(0, e.abs).fold(1.0_F32, |_, x| if e < 0 { x / 10.0_F32 } else { x * 10.0_F32 });
                 [p, -p].to_iter.fold(acc, |v, acc|
-                    neighbours_f32(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f32 && w.writes_literals_f32)
+                    neighbours_f32(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f32 && w.texts_are_literals_f32)
                 )
             );
             assert_eq(|_|"every F32 decade reads back as what it was written from, and every text of it is a literal", ok, true);;

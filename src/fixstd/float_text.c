@@ -194,7 +194,7 @@ static inline void fixruntime_write_digits(char *out, uint64_t mantissa, uint32_
 static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, char *buf, int64_t size,
                                            int positional_low, int positional_high)
 {
-    const int digit_count = (int)decimal.length;
+    const int digit_count = (int)decimal.digit_count;
     // Where the point falls among the digits: the first digit carries `10^(point-1)`.
     const int point = decimal.exponent + digit_count;
     const bool positional = point > positional_low && point <= positional_high;

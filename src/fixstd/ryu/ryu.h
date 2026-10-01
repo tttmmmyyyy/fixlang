@@ -34,12 +34,12 @@ extern "C" {
 #define d2fixed_buffered_n fixruntime_ryu_d2fixed_buffered_n
 #define d2exp_buffered_n fixruntime_ryu_d2exp_buffered_n
 
-// A positive number written in decimal: `mantissa * 10^exponent`, where `mantissa` has `length`
-// digits.
+// A positive number written in decimal: `mantissa * 10^exponent`, where `mantissa` has
+// `digit_count` digits.
 typedef struct ryu_decimal {
   uint64_t mantissa;
   int32_t exponent;
-  uint32_t length;
+  uint32_t digit_count;
 } ryu_decimal;
 
 // Each of the two below gives the shortest decimal that reads back as `f`, which is finite and
