@@ -1244,3 +1244,34 @@ two : I64 = 2;
         streams(&output)
     );
 }
+
+/// A Fix example that fails to link, by calling a C function nothing defines, fails as it does
+/// built alone, and the other examples are still tested: the link error carries no location to tell
+/// which example caused it, the sources build without the examples, and so each example is tested
+/// alone.
+#[test]
+fn test_example_failing_to_link_fails_alone() {
+    let lib = r#"module Lib;
+
+// ```fix
+// assert_eq(|_|"", double(21), 42)
+// ```
+//
+// ```fix
+// let r = FFI_CALL[CInt doc_test_undefined_function(CInt), 1.to_CInt];
+// assert_eq(|_|"", r.to_I64, 0)
+// ```
+double : I64 -> I64;
+double = |x| 2 * x;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &["--doc"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("doc test lib.fix:3 ... ok")
+            && stderr.contains("doc test lib.fix:7 ... FAILED")
+            && stderr.contains("doc tests: 1 passed, 1 failed, 0 ignored."),
+        "the example that fails to link fails, and the other passes\n{}",
+        streams(&output)
+    );
+}

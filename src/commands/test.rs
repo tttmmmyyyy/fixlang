@@ -141,8 +141,10 @@ impl ExampleOutcome {
 /// under one C name. So where the program fails to build, the examples the errors lie in are taken
 /// out of it and tested alone, and the rest are built together again.
 ///
-/// An error that lies in no example, such as an error in the sources, is returned, and no example
-/// is reported.
+/// An error that lies in no example is an error of the sources where they fail to build without the
+/// examples as well, and it is then returned with no example reported. Where the sources build, one
+/// of the examples caused the error without a location to tell which, as an example calling a C
+/// function nothing defines does at link time, and each example left is tested alone.
 pub fn test_examples(
     config: &Configuration,
     examples: &[FixExample],
@@ -177,7 +179,10 @@ pub fn test_examples(
             return Ok(());
         };
         let Some(blamed) = examples_errors_lie_in(&errors, &example_build) else {
-            return Err(errors);
+            let mut sources_config = config.clone();
+            sources_config.example_build = Some(panic_if_err(ExampleBuild::merged(vec![])));
+            build_executable(sources_config)?;
+            break;
         };
         assert!(
             !blamed.is_empty(),
