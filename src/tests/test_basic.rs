@@ -6057,11 +6057,11 @@ pub fn test_float_to_string_precision() {
         main : IO ();
         main = (
             let x = 3.14_F32;
-            assert_eq(|_|"case to_string_precision F32 0", x.to_string_precision(0_U8), "3.0");;
+            assert_eq(|_|"case to_string_precision F32 0", x.to_string_precision(0_U8), "3");;
             assert_eq(|_|"case to_string_precision F32 255", x.to_string_precision(255_U8), "3.140000104904174804687500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");;
 
             let x = -3.14;
-            assert_eq(|_|"case to_string_precision F64 0", x.to_string_precision(0_U8), "-3.0");;
+            assert_eq(|_|"case to_string_precision F64 0", x.to_string_precision(0_U8), "-3");;
             assert_eq(|_|"case to_string_precision F64 255", x.to_string_precision(255_U8), "-3.140000000000000124344978758017532527446746826171875000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000");;
 
             // The widest text this writes for a `F32`: the least one, whose whole part takes
@@ -6094,9 +6094,9 @@ pub fn test_float_to_string_precision() {
 
 /// Every text `to_string` writes for a number other than zero reads back as the number it was
 /// written from, and every text `to_string`, `to_string_precision` and `to_string_exp_precision`
-/// write is spelled as a floating point literal of Fix, at a precision of 0 too. The walk crosses
-/// both edges of the window `to_string` writes the point positionally in, at every scale either
-/// type reaches.
+/// write, at a precision of 1 or more, is spelled as a floating point literal of Fix. The walk
+/// crosses both edges of the window `to_string` writes the point positionally in, at every scale
+/// either type reaches.
 #[test]
 pub fn test_float_texts_are_literals_and_the_shortest_reads_back_across_every_decade() {
     let source = r#"
@@ -6173,25 +6173,23 @@ pub fn test_float_texts_are_literals_and_the_shortest_reads_back_across_every_de
         );
 
         // Whether every text `to_string`, `to_string_precision` and `to_string_exp_precision` write
-        // for `v` is a floating point literal.
+        // for `v`, at a precision of 1 or more, is a floating point literal.
         //
         // # Parameters
         // * `v` - The number to write.
         texts_are_literals_f64 : F64 -> Bool;
         texts_are_literals_f64 = |v| [
-            v.to_string, v.to_string_precision(0_U8), v.to_string_precision(1_U8),
-            v.to_string_exp_precision(0_U8), v.to_string_exp_precision(1_U8), v.to_string_exp
+            v.to_string, v.to_string_precision(1_U8), v.to_string_exp_precision(1_U8), v.to_string_exp
         ].to_iter.fold(true, |text, acc| acc && text.is_float_literal);
 
         // Whether every text `to_string`, `to_string_precision` and `to_string_exp_precision` write
-        // for `v` is a floating point literal.
+        // for `v`, at a precision of 1 or more, is a floating point literal.
         //
         // # Parameters
         // * `v` - The number to write.
         texts_are_literals_f32 : F32 -> Bool;
         texts_are_literals_f32 = |v| [
-            v.to_string, v.to_string_precision(0_U8), v.to_string_precision(1_U8),
-            v.to_string_exp_precision(0_U8), v.to_string_exp_precision(1_U8), v.to_string_exp
+            v.to_string, v.to_string_precision(1_U8), v.to_string_exp_precision(1_U8), v.to_string_exp
         ].to_iter.fold(true, |text, acc| acc && text.is_float_literal);
 
         main : IO ();
@@ -6527,11 +6525,11 @@ pub fn test_float_to_string_exp_precision() {
         main : IO ();
         main = (
             let x = 123.45_F32;
-            assert_eq(|_|"", x.to_string_exp_precision(0_U8), "1.0e2");;
+            assert_eq(|_|"", x.to_string_exp_precision(0_U8), "1e2");;
             assert_eq(|_|"", x.to_string_exp_precision(255_U8), "1.234499969482421875000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e2");;
 
             let x = -123.45_F64;
-            assert_eq(|_|"", x.to_string_exp_precision(0_U8), "-1.0e2");;
+            assert_eq(|_|"", x.to_string_exp_precision(0_U8), "-1e2");;
             assert_eq(|_|"", x.to_string_exp_precision(255_U8), "-1.234500000000000028421709430404007434844970703125000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e2");;
 
             // The widest text this writes for a `F32`: the greatest negative one, with a sign before
@@ -6606,13 +6604,13 @@ pub fn test_float_to_string_precision_carries_into_a_new_digit() {
         module Main;
         main : IO ();
         main = (
-            assert_eq(|_|"9.5 to 0 places", 9.5.to_string_precision(0_U8), "10.0");;
+            assert_eq(|_|"9.5 to 0 places", 9.5.to_string_precision(0_U8), "10");;
             assert_eq(|_|"99.96 to 1 place", 99.96.to_string_precision(1_U8), "100.0");;
             assert_eq(|_|"-99.96 to 1 place", (-99.96).to_string_precision(1_U8), "-100.0");;
             assert_eq(|_|"0.96 to 1 place", 0.96.to_string_precision(1_U8), "1.0");;
             assert_eq(|_|"F32 99.96 to 1 place", 99.96_F32.to_string_precision(1_U8), "100.0");;
 
-            assert_eq(|_|"9.5 to 0 places with a power of ten", 9.5.to_string_exp_precision(0_U8), "1.0e1");;
+            assert_eq(|_|"9.5 to 0 places with a power of ten", 9.5.to_string_exp_precision(0_U8), "1e1");;
             assert_eq(|_|"99.96 to 1 place with a power of ten", 99.96.to_string_exp_precision(1_U8), "1.0e2");;
             assert_eq(|_|"-9.96 to 1 place with a power of ten", (-9.96).to_string_exp_precision(1_U8), "-1.0e1");;
             assert_eq(|_|"9.9999996 with the default places", 9.9999996.to_string_exp, "1.000000e1");;
@@ -6634,22 +6632,22 @@ pub fn test_float_to_string_precision_rounds_a_tie_to_even() {
         main = (
             assert_eq(|_|"positional ties at 0 places",
                       [0.5, 1.5, 2.5, 3.5, -0.5, -2.5].map(to_string_precision(0_U8)),
-                      ["0.0", "2.0", "2.0", "4.0", "-0.0", "-2.0"]);;
+                      ["0", "2", "2", "4", "-0", "-2"]);;
             assert_eq(|_|"just below a half at 0 places",
                       [0.49999999999999994, -0.4].map(to_string_precision(0_U8)),
-                      ["0.0", "-0.0"]);;
+                      ["0", "-0"]);;
             assert_eq(|_|"positional ties at 2 places",
                       [0.125, 0.375, -0.625].map(to_string_precision(2_U8)),
                       ["0.12", "0.38", "-0.62"]);;
             assert_eq(|_|"ties with a power of ten at 0 places",
                       [2.5, 3.5, 25.0, 0.25, -9.5].map(to_string_exp_precision(0_U8)),
-                      ["2.0e0", "4.0e0", "2.0e1", "2.0e-1", "-1.0e1"]);;
+                      ["2e0", "4e0", "2e1", "2e-1", "-1e1"]);;
             assert_eq(|_|"ties with a power of ten at 1 place",
                       [0.125, 1.25, 1.75].map(to_string_exp_precision(1_U8)),
                       ["1.2e-1", "1.2e0", "1.8e0"]);;
             assert_eq(|_|"F32 ties",
                       [0.5_F32.to_string_precision(0_U8), 2.5_F32.to_string_exp_precision(0_U8), 0.375_F32.to_string_precision(2_U8)],
-                      ["0.0", "2.0e0", "0.38"]);;
+                      ["0", "2e0", "0.38"]);;
             pure()
         );
     "#;
@@ -6657,8 +6655,8 @@ pub fn test_float_to_string_precision_rounds_a_tie_to_even() {
 }
 
 /// Pins the text the functions writing a given number of places write for zero: a negative zero,
-/// and a negative number that rounds to zero, keep their sign, a precision of 0 writes `0.0`, and
-/// `from_string` reads the negative zero back.
+/// and a negative number that rounds to zero, keep their sign, and `from_string` reads the negative
+/// zero back.
 #[test]
 pub fn test_float_to_string_precision_of_zero() {
     let source = r#"
@@ -6667,10 +6665,10 @@ pub fn test_float_to_string_precision_of_zero() {
         main = (
             assert_eq(|_|"F64 zero",
                       [0.0.to_string_precision(2_U8), 0.0.to_string_exp_precision(3_U8), 0.0.to_string_exp_precision(0_U8)],
-                      ["0.00", "0.000e0", "0.0e0"]);;
+                      ["0.00", "0.000e0", "0e0"]);;
             assert_eq(|_|"F64 negative zero",
                       [(-0.0).to_string_precision(2_U8), (-0.0).to_string_exp_precision(0_U8), (-0.0).to_string_exp],
-                      ["-0.00", "-0.0e0", "-0.000000e0"]);;
+                      ["-0.00", "-0e0", "-0.000000e0"]);;
             assert_eq(|_|"F32 negative zero",
                       [(-0.0_F32).to_string_precision(2_U8), (-0.0_F32).to_string_exp],
                       ["-0.00", "-0.000000e0"]);;

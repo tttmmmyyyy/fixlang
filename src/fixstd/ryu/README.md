@@ -25,9 +25,8 @@ source with a comment that opens with `Modified from upstream Ryu by the Fix pro
 - `d2s.c` and `f2s.c` give the shortest digits as a number, through `d2s_shortest` and
   `f2s_shortest`, and `float_text.c` writes Fix's text from them. Upstream's `to_chars`, the
   `*_buffered*` functions and `copy_special_str` in `common.h` are deleted.
-- `d2fixed.c` writes the power of ten as Fix writes it, `1.50e2` where upstream writes `1.50e+02`,
-  and writes `.0` where the precision is 0, `2.0` where upstream writes `2`. The power of ten is
-  written by `append_exponent`, which `digit_table.h` gains together with `exponent_length`, and
+- `d2fixed.c` writes the power of ten as Fix writes it, `1.50e2` where upstream writes `1.50e+02`.
+  The power of ten is written by `append_exponent`, which `digit_table.h` gains together with `exponent_length`, and
   which `float_text.c` calls as well. A number given to `d2fixed.c` is finite, which it asserts,
   where upstream writes `Infinity` and `nan`. Upstream's `copy_special_str_printf`, `d2fixed`,
   `d2fixed_buffered`, `d2exp` and `d2exp_buffered` are deleted.
@@ -60,7 +59,7 @@ of ten they are multiplied by: `{ 25, -2, 2 }` for `0.25`, which has 2 digits. F
 `fixruntime_write_float_text` in `float_text.c` writes Fix's spelling: `0.25`, `1.0e300`.
 
 `d2fixed_buffered_n` and `d2exp_buffered_n` write a number with a given number of places,
-positionally or with a power of ten: `3.140`, `3.140e0`, `2.0`, `2.0e0`.
+positionally or with a power of ten: `3.140`, `3.140e0`, and at a precision of 0, `3`, `3e0`.
 
 `float_text.c` writes an infinity, a NaN and a zero itself, as `inf`, `-inf`, `nan`, `0.0` and
 `-0.0`.

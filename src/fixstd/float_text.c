@@ -76,13 +76,6 @@ static int64_t fixruntime_write_non_finite_text(double v, char *buf, int64_t siz
     return fixruntime_copy_float_text(text, (int)strlen(text), buf, size);
 }
 
-// The digits a text with a given number of places behind the point carries after it: `precision`,
-// or the one `0` that a precision of 0 writes.
-static inline int fixruntime_places(uint8_t precision)
-{
-    return precision == 0 ? 1 : precision;
-}
-
 // Writes `v` at `buf` with `precision` digits after the point, null-terminated, and reports how
 // many bytes the text took, the null left out. Stops the program where `size` is short of the
 // widest text that could be written, before writing anything.
@@ -94,8 +87,9 @@ static inline int fixruntime_places(uint8_t precision)
 // * `write_finite` - The Ryu function that writes a finite `v`: `d2fixed_buffered_n` or
 //   `d2exp_buffered_n`.
 // * `widest_length` - The length of the widest text `write_finite` writes for the type at this
-//   precision, the null left out — must stay in sync with the `size` the `to_string_precision`
-//   and `to_string_exp_precision` of `src/fixstd/std.fix` derive.
+//   precision, the null left out, counting a point at a precision of 0 too, where none is
+//   written — must stay in sync with the `size` the `to_string_precision` and
+//   `to_string_exp_precision` of `src/fixstd/std.fix` derive.
 static int64_t fixruntime_write_precision_text(int (*write_finite)(double, uint32_t, char *), int widest_length,
                                                double v, uint8_t precision, char *buf, int64_t size)
 {
@@ -112,8 +106,8 @@ static int64_t fixruntime_write_precision_text(int (*write_finite)(double, uint3
 // Each of the four below writes `v` at `buf` with `precision` digits after the point, null-
 // terminated, and reports how many bytes the text took, the null left out. The `exp` ones write
 // the number with a power of ten, `1.50e2`, and the others write it positionally, `150.00`. A
-// precision of 0 writes `.0` after the digits, `2.0e2` and `200.0`. An `F32` is written as the
-// `double` it widens to.
+// precision of 0 writes no point, `2e2` and `200`. An `F32` is written as the `double` it widens
+// to.
 //
 // The widest text of each is that of the number whose whole part or power of ten is the widest the
 // type reaches, with a sign before it: the 39 digits of the whole part of the least `F32`, the 309
@@ -121,28 +115,28 @@ static int64_t fixruntime_write_precision_text(int (*write_finite)(double, uint3
 int64_t fixruntime_f32_to_str_exp_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
     // `-`, a digit, `.`, the places, `e` and `-45`.
-    const int widest_length = 3 + fixruntime_places(precision) + 4;
+    const int widest_length = 3 + precision + 4;
     return fixruntime_write_precision_text(d2exp_buffered_n, widest_length, (double)v, precision, buf, size);
 }
 
 int64_t fixruntime_f32_to_str_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
     // `-`, 39 digits, `.` and the places.
-    const int widest_length = 1 + 39 + 1 + fixruntime_places(precision);
+    const int widest_length = 1 + 39 + 1 + precision;
     return fixruntime_write_precision_text(d2fixed_buffered_n, widest_length, (double)v, precision, buf, size);
 }
 
 int64_t fixruntime_f64_to_str_exp_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
     // `-`, a digit, `.`, the places, `e` and `-324`.
-    const int widest_length = 3 + fixruntime_places(precision) + 5;
+    const int widest_length = 3 + precision + 5;
     return fixruntime_write_precision_text(d2exp_buffered_n, widest_length, v, precision, buf, size);
 }
 
 int64_t fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
     // `-`, 309 digits, `.` and the places.
-    const int widest_length = 1 + 309 + 1 + fixruntime_places(precision);
+    const int widest_length = 1 + 309 + 1 + precision;
     return fixruntime_write_precision_text(d2fixed_buffered_n, widest_length, v, precision, buf, size);
 }
 

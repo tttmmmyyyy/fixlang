@@ -62,7 +62,7 @@ main : IO () = (
     // positionally for an `F64`, and one at the far edge of that window for an `F32`.
     let total = total + (-2.2250738585072014e-308).to_string.@size
                       + (-1.0e12_F32).to_string.@size;
-    assert_eq(|_|"the texts of every precision come to their known total", total, 224619);;
+    assert_eq(|_|"the texts of every precision come to their known total", total, 224611);;
     pure()
 );
 "#;

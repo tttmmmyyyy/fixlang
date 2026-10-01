@@ -327,18 +327,6 @@ static inline uint32_t lengthForIndex(const uint32_t idx) {
   return (log10Pow2(16 * (int32_t) idx) + 1 + 16 + 8) / 9;
 }
 
-// Modified from upstream Ryu by the Fix project: writes the point and the `precision` zeros after
-// the `0` of a zero, or `.0` where `precision` is 0, and reports how many bytes it wrote.
-static inline int append_zero_fraction(const uint32_t precision, char* const result) {
-  result[0] = '.';
-  if (precision == 0) {
-    result[1] = '0';
-    return 2;
-  }
-  memset(result + 1, '0', precision);
-  return 1 + (int) precision;
-}
-
 int d2fixed_buffered_n(double d, uint32_t precision, char* result) {
   const uint64_t bits = double_to_bits(d);
 #ifdef RYU_DEBUG
@@ -364,7 +352,11 @@ int d2fixed_buffered_n(double d, uint32_t precision, char* result) {
       result[index++] = '-';
     }
     result[index++] = '0';
-    index += append_zero_fraction(precision, result + index);
+    if (precision > 0) {
+      result[index++] = '.';
+      memset(result + index, '0', precision);
+      index += precision;
+    }
     return index;
   }
 
@@ -526,12 +518,6 @@ int d2fixed_buffered_n(double d, uint32_t precision, char* result) {
     memset(result + index, '0', precision);
     index += precision;
   }
-  if (precision == 0) {
-    // Modified from upstream Ryu by the Fix project: a precision of 0 writes `.0` after the
-    // digits.
-    memcpy(result + index, ".0", 2);
-    index += 2;
-  }
   return index;
 }
 
@@ -560,7 +546,13 @@ int d2exp_buffered_n(double d, uint32_t precision, char* result) {
       result[index++] = '-';
     }
     result[index++] = '0';
-    index += append_zero_fraction(precision, result + index);
+    if (precision > 0) {
+      result[index++] = '.';
+      memset(result + index, '0', precision);
+      index += precision;
+    }
+    // Modified from upstream Ryu by the Fix project: the power of ten is written as `e0`, where
+    // upstream writes `e+00`.
     memcpy(result + index, "e0", 2);
     index += 2;
     return index;
@@ -753,12 +745,8 @@ int d2exp_buffered_n(double d, uint32_t precision, char* result) {
       }
     }
   }
-  // Modified from upstream Ryu by the Fix project: a precision of 0 writes `.0` after the digit, and
-  // the power of ten is written with no `+` and no padding.
-  if (!printDecimalPoint) {
-    memcpy(result + index, ".0", 2);
-    index += 2;
-  }
+  // Modified from upstream Ryu by the Fix project: the power of ten is written with no `+` and no
+  // padding.
   result[index++] = 'e';
   index += append_exponent(exp, result + index);
   return index;

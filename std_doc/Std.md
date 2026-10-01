@@ -1137,15 +1137,13 @@ Type: `Std::U8 -> Std::F32 -> Std::String`
 Writes this number with one digit before the point, `prec` digits after it, and a power of
 ten. The last digit is rounded to the nearest, a tie to the even one.
 
-With `prec` 0, the point is followed by one `0`, so that the text has the form of a floating
-point literal of Fix. Near the greatest number of the type, rounding can carry the text past
-it: `3.4028235e38_F32.to_string_exp_precision(3_U8)` is `3.403e38`, which no `F32` holds.
+With `prec` 0, no point is written.
 
 ##### Examples
 
 `123.456_F32.to_string_exp_precision(2_U8)` is `1.23e2`,
 `0.0123_F32.to_string_exp_precision(1_U8)` is `1.2e-2`, and
-`123.456_F32.to_string_exp_precision(0_U8)` is `1.0e2`.
+`123.456_F32.to_string_exp_precision(0_U8)` is `1e2`.
 
 ##### Parameters
 
@@ -1159,13 +1157,12 @@ Type: `Std::U8 -> Std::F32 -> Std::String`
 Writes this number positionally with `prec` digits after the point. The last digit is
 rounded to the nearest, a tie to the even one.
 
-With `prec` 0, the point is followed by one `0`, so that the text is a floating point
-literal of Fix.
+With `prec` 0, no point is written.
 
 ##### Examples
 
 `3.14159_F32.to_string_precision(2_U8)` is `3.14`, and `2.5_F32.to_string_precision(0_U8)`
-is `2.0`.
+is `2`.
 
 ##### Parameters
 
@@ -1388,14 +1385,12 @@ Type: `Std::U8 -> Std::F64 -> Std::String`
 Writes this number with one digit before the point, `prec` digits after it, and a power of
 ten. The last digit is rounded to the nearest, a tie to the even one.
 
-With `prec` 0, the point is followed by one `0`, so that the text has the form of a floating
-point literal of Fix. Near the greatest number of the type, rounding can carry the text past
-it: `1.7976931348623157e308.to_string_exp_precision(0_U8)` is `2.0e308`, which no `F64` holds.
+With `prec` 0, no point is written.
 
 ##### Examples
 
 `123.456.to_string_exp_precision(2_U8)` is `1.23e2`, `0.0123.to_string_exp_precision(1_U8)`
-is `1.2e-2`, and `123.456.to_string_exp_precision(0_U8)` is `1.0e2`.
+is `1.2e-2`, and `123.456.to_string_exp_precision(0_U8)` is `1e2`.
 
 ##### Parameters
 
@@ -1409,12 +1404,11 @@ Type: `Std::U8 -> Std::F64 -> Std::String`
 Writes this number positionally with `prec` digits after the point. The last digit is
 rounded to the nearest, a tie to the even one.
 
-With `prec` 0, the point is followed by one `0`, so that the text is a floating point
-literal of Fix.
+With `prec` 0, no point is written.
 
 ##### Examples
 
-`3.14159.to_string_precision(2_U8)` is `3.14`, and `2.5.to_string_precision(0_U8)` is `2.0`.
+`3.14159.to_string_precision(2_U8)` is `3.14`, and `2.5.to_string_precision(0_U8)` is `2`.
 
 ##### Parameters
 

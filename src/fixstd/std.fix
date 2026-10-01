@@ -4297,25 +4297,22 @@ namespace F32 {
     // Writes this number with one digit before the point, `prec` digits after it, and a power of
     // ten. The last digit is rounded to the nearest, a tie to the even one.
     //
-    // With `prec` 0, the point is followed by one `0`, so that the text has the form of a floating
-    // point literal of Fix. Near the greatest number of the type, rounding can carry the text past
-    // it: `3.4028235e38_F32.to_string_exp_precision(3_U8)` is `3.403e38`, which no `F32` holds.
+    // With `prec` 0, no point is written.
     //
     // # Examples
     // `123.456_F32.to_string_exp_precision(2_U8)` is `1.23e2`,
     // `0.0123_F32.to_string_exp_precision(1_U8)` is `1.2e-2`, and
-    // `123.456_F32.to_string_exp_precision(0_U8)` is `1.0e2`.
+    // `123.456_F32.to_string_exp_precision(0_U8)` is `1e2`.
     //
     // # Parameters
     // * `prec` - The number of digits after the point.
     // * `v` - The number to write.
     to_string_exp_precision : U8 -> F32 -> String;
     to_string_exp_precision = |prec, v| (
-        // A sign, a digit, a point, `prec` digits or the `0` that stands for none, `e`, the `-` of a
-        // negative exponent, the 2 digits an `F32` exponent reaches and a null. Must stay in sync
-        // with the widest text `fixruntime_f32_to_str_exp_precision` in `src/fixstd/float_text.c` checks
-        // the buffer for.
-        let size = 8 + max(prec.i64, 1);
+        // A sign, a digit, a point, `prec` digits, `e`, the `-` of a negative exponent, the 2
+        // digits an `F32` exponent reaches and a null. Must stay in sync with the widest text
+        // `fixruntime_f32_to_str_exp_precision` in `src/fixstd/float_text.c` checks the buffer for.
+        let size = 8 + prec.i64;
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f32_to_str_exp_precision(Ptr, I64, F32, U8), ptr, size, v, prec]);
         data._unsafe_from_c_str_with_len(length)
@@ -4324,22 +4321,21 @@ namespace F32 {
     // Writes this number positionally with `prec` digits after the point. The last digit is
     // rounded to the nearest, a tie to the even one.
     //
-    // With `prec` 0, the point is followed by one `0`, so that the text is a floating point
-    // literal of Fix.
+    // With `prec` 0, no point is written.
     //
     // # Examples
     // `3.14159_F32.to_string_precision(2_U8)` is `3.14`, and `2.5_F32.to_string_precision(0_U8)`
-    // is `2.0`.
+    // is `2`.
     //
     // # Parameters
     // * `prec` - The number of digits after the point.
     // * `v` - The number to write.
     to_string_precision : U8 -> F32 -> String;
     to_string_precision = |prec, v| (
-        // A sign, the 39 digits the greatest `F32` takes in its whole part, a point, `prec` digits
-        // or the `0` that stands for none, and a null. Must stay in sync with the widest text
+        // A sign, the 39 digits the greatest `F32` takes in its whole part, a point, `prec`
+        // digits and a null. Must stay in sync with the widest text
         // `fixruntime_f32_to_str_precision` in `src/fixstd/float_text.c` checks the buffer for.
-        let size = 42 + max(prec.i64, 1);
+        let size = 42 + prec.i64;
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f32_to_str_precision(Ptr, I64, F32, U8), ptr, size, v, prec]);
         data._unsafe_from_c_str_with_len(length)
@@ -4404,24 +4400,21 @@ namespace F64 {
     // Writes this number with one digit before the point, `prec` digits after it, and a power of
     // ten. The last digit is rounded to the nearest, a tie to the even one.
     //
-    // With `prec` 0, the point is followed by one `0`, so that the text has the form of a floating
-    // point literal of Fix. Near the greatest number of the type, rounding can carry the text past
-    // it: `1.7976931348623157e308.to_string_exp_precision(0_U8)` is `2.0e308`, which no `F64` holds.
+    // With `prec` 0, no point is written.
     //
     // # Examples
     // `123.456.to_string_exp_precision(2_U8)` is `1.23e2`, `0.0123.to_string_exp_precision(1_U8)`
-    // is `1.2e-2`, and `123.456.to_string_exp_precision(0_U8)` is `1.0e2`.
+    // is `1.2e-2`, and `123.456.to_string_exp_precision(0_U8)` is `1e2`.
     //
     // # Parameters
     // * `prec` - The number of digits after the point.
     // * `v` - The number to write.
     to_string_exp_precision : U8 -> F64 -> String;
     to_string_exp_precision = |prec, v| (
-        // A sign, a digit, a point, `prec` digits or the `0` that stands for none, `e`, the `-` of a
-        // negative exponent, the 3 digits an `F64` exponent reaches and a null. Must stay in sync
-        // with the widest text `fixruntime_f64_to_str_exp_precision` in `src/fixstd/float_text.c` checks
-        // the buffer for.
-        let size = 9 + max(prec.i64, 1);
+        // A sign, a digit, a point, `prec` digits, `e`, the `-` of a negative exponent, the 3
+        // digits an `F64` exponent reaches and a null. Must stay in sync with the widest text
+        // `fixruntime_f64_to_str_exp_precision` in `src/fixstd/float_text.c` checks the buffer for.
+        let size = 9 + prec.i64;
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f64_to_str_exp_precision(Ptr, I64, F64, U8), ptr, size, v, prec]);
         data._unsafe_from_c_str_with_len(length)
@@ -4430,21 +4423,20 @@ namespace F64 {
     // Writes this number positionally with `prec` digits after the point. The last digit is
     // rounded to the nearest, a tie to the even one.
     //
-    // With `prec` 0, the point is followed by one `0`, so that the text is a floating point
-    // literal of Fix.
+    // With `prec` 0, no point is written.
     //
     // # Examples
-    // `3.14159.to_string_precision(2_U8)` is `3.14`, and `2.5.to_string_precision(0_U8)` is `2.0`.
+    // `3.14159.to_string_precision(2_U8)` is `3.14`, and `2.5.to_string_precision(0_U8)` is `2`.
     //
     // # Parameters
     // * `prec` - The number of digits after the point.
     // * `v` - The number to write.
     to_string_precision : U8 -> F64 -> String;
     to_string_precision = |prec, v| (
-        // A sign, the 309 digits the greatest `F64` takes in its whole part, a point, `prec` digits
-        // or the `0` that stands for none, and a null. Must stay in sync with the widest text
+        // A sign, the 309 digits the greatest `F64` takes in its whole part, a point, `prec`
+        // digits and a null. Must stay in sync with the widest text
         // `fixruntime_f64_to_str_precision` in `src/fixstd/float_text.c` checks the buffer for.
-        let size = 312 + max(prec.i64, 1);
+        let size = 312 + prec.i64;
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f64_to_str_precision(Ptr, I64, F64, U8), ptr, size, v, prec]);
         data._unsafe_from_c_str_with_len(length)
