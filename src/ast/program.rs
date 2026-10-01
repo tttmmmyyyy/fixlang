@@ -2855,43 +2855,68 @@ impl Program {
     }
 
     /// Reports each name that is used by more than one of the types, the traits and the associated
-    /// types, aliases included.
+    /// types, aliases included, at the declarations that use it.
     pub fn validate_capital_name_confliction(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
-        let types = self.tycon_names_with_aliases();
-        let traits = self.trait_names_with_aliases();
-        let assoc_tys = self.assoc_ty_to_arity();
+        let type_env = self.type_env();
+        let types = type_env
+            .tycons
+            .iter()
+            .map(|(tycon, info)| (tycon.name.clone(), info.source.clone()))
+            .chain(
+                type_env
+                    .aliases
+                    .iter()
+                    .map(|(tycon, info)| (tycon.name.clone(), info.source.clone())),
+            )
+            .collect::<Map<_, _>>();
+        let traits = self
+            .trait_env
+            .traits
+            .iter()
+            .map(|(trait_id, defn)| (trait_id.name.clone(), defn.source.clone()))
+            .chain(
+                self.trait_env
+                    .aliases
+                    .data
+                    .iter()
+                    .map(|(trait_id, alias)| (trait_id.name.clone(), alias.source.clone())),
+            )
+            .collect::<Map<_, _>>();
+        let assoc_tys = self
+            .trait_env
+            .traits
+            .iter()
+            .flat_map(|(trait_id, defn)| {
+                defn.assoc_types.iter().map(|(name, assoc_ty)| {
+                    let namespace = trait_id.name.to_namespace();
+                    (FullName::new(&namespace, name), assoc_ty.src.clone())
+                })
+            })
+            .collect::<Map<_, _>>();
 
-        // Check if there is a name confliction between types and traits.
-        for name in types.iter() {
-            if traits.contains(name) {
-                errors.append(Errors::from_msg(format!(
-                    "Name confliction: `{}` is both a type and a trait.",
-                    name.to_string()
-                )));
-            }
-        }
-
-        // Check if there is a name confliction between types and traits.
-        for name in types.iter() {
-            if assoc_tys.contains_key(name) {
-                errors.append(Errors::from_msg(format!(
-                    "Name confliction: `{}` is both a type and an associated type.",
-                    name.to_string()
-                )));
-            }
-        }
-
-        // Check if there is a name confliction between traits and associated types.
-        for name in traits.iter() {
-            if assoc_tys.contains_key(name) {
-                errors.append(Errors::from_msg(format!(
-                    "Name confliction: `{}` is both a trait and an associated type.",
-                    name.to_string()
-                )));
-            }
-        }
+        let mut report =
+            |lhs: &Map<FullName, Option<Span>>, rhs: &Map<FullName, Option<Span>>, kinds: &str| {
+                let mut names = lhs
+                    .keys()
+                    .filter(|name| rhs.contains_key(*name))
+                    .collect::<Vec<_>>();
+                names.sort();
+                for name in names {
+                    errors.append(Errors::from_msg_srcs(
+                        format!(
+                            "Name confliction: `{}` is both {}.",
+                            name.to_string(),
+                            kinds
+                        ),
+                        &[&lhs[name], &rhs[name]],
+                    ));
+                }
+            };
+        report(&types, &traits, "a type and a trait");
+        report(&types, &assoc_tys, "a type and an associated type");
+        report(&traits, &assoc_tys, "a trait and an associated type");
 
         errors.to_result()
     }
