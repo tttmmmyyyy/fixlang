@@ -47,7 +47,7 @@ translation unit of its own.
 ## The text these produce
 
 `d2s_buffered_n` and `f2s_buffered_n` write scientific text: `1E300`, `3.333333333333333E-1`,
-`-0E0`. Fix spells a number differently — `1e300`, `0.3333333333333333`, `-0.0` — so
+`-0E0`. Fix spells a number differently — `1.0e300`, `0.3333333333333333`, `-0.0` — so
 `fixruntime_f64_to_str_shortest` in `float_text.c` takes the digits and the exponent from that
 text and writes Fix's spelling.
 

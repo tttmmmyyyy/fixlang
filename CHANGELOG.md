@@ -26,6 +26,10 @@
 - #790: A struct pattern that leaves out fields of its struct without writing `_` is now warned about. When you add a field to a struct, the warning points out each pattern that takes the struct apart. Add the missing fields to the pattern, or write `_` after its fields. A future version of Fix will report such a pattern as an error.
 - #790: `_` can no longer be the name of a struct field or a union variant. Names that start with `_`, such as `_x`, are still allowed.
 
+#### Std
+
+- #792: `F64::to_string` and `F32::to_string` now write a number with a single significant digit and a power of ten as `1.0e300`, where they wrote `1e300`. The text they write for a finite number is now always a valid floating point literal of Fix, with `_F32` after it for an `F32`.
+
 #### Tool
 
 - #780: `install.sh` now lists the releases newest first and offers the newest full release as the default. The default used to be whichever release GitHub listed first, which could be a pre-release such as `v1.5.0-rc.1`. Pre-releases are marked `(pre-release)` in the list, and you can install one by typing its name.
