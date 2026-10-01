@@ -17,7 +17,7 @@ mod float_text_buffer_tests {
     use crate::{
         configuration::{Configuration, ValgrindTool},
         misc::{function_name, platform_valgrind_supported},
-        tests::test_util::test_source,
+        tests::test_util::{test_source, test_source_fail},
     };
 
     /// Writes the widest text each of the eight functions can produce -- the least value of each
@@ -68,5 +68,29 @@ main : IO () = (
         let mut config = Configuration::develop_mode();
         config.set_valgrind(ValgrindTool::MemCheck);
         test_source(source, config);
+    }
+
+    /// A buffer one byte short of a text and its null stops the program with the two sizes, before
+    /// the text is written. `-2.2250738585072014e-308` is written in 24 bytes, so a buffer of 24
+    /// bytes is one short of what it needs.
+    #[test]
+    pub fn test_text_one_byte_past_its_buffer_stops_the_program() {
+        let source = r#"
+module Main;
+
+main : IO () = (
+    let size = 24;
+    let data = Array::fill(size, 0_U8);
+    let (data, length) = data.mutate_elements(|ptr|
+        FFI_CALL_IO[I64 fixruntime_f64_to_str_shortest(Ptr, I64, F64), ptr, size, -2.2250738585072014e-308]
+    );
+    println("wrote " + length.to_string + " bytes into " + data.@size.to_string)
+);
+"#;
+        test_source_fail(
+            source,
+            Configuration::develop_mode(),
+            "A number's text takes 25 bytes and its buffer holds 24",
+        );
     }
 }
