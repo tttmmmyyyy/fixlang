@@ -60,7 +60,6 @@ use inkwell::llvm_sys::core::LLVMBuildFreeze;
 use inkwell::llvm_sys::debuginfo::LLVMMetadataReplaceAllUsesWith;
 use inkwell::module::Module;
 use inkwell::types::BasicTypeEnum;
-use inkwell::types::IntType;
 use inkwell::types::StructType;
 use inkwell::values::AsValueRef;
 use inkwell::values::BasicValue;
@@ -346,10 +345,9 @@ impl<'c> Object<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
             if self.is_carried_whole(gc) {
-                let whole = self.value(gc).into_struct_value();
                 return gc
                     .builder()
-                    .build_extract_value(whole, field_idx, "field")
+                    .build_extract_value(self.parts[0].into_struct_value(), field_idx, "field")
                     .unwrap();
             }
             // The object's parts already hold the field, spread across a contiguous range; slice
@@ -430,13 +428,16 @@ impl<'c> Object<'c> {
         assert!(!self.is_funptr());
         if self.is_unbox(&gc.type_env) {
             if self.is_carried_whole(gc) {
-                let whole = self.value(gc).into_struct_value();
-                let whole = gc
+                self.parts[0] = gc
                     .builder()
-                    .build_insert_value(whole, val, field_idx, "set_field")
+                    .build_insert_value(
+                        self.parts[0].into_struct_value(),
+                        val,
+                        field_idx,
+                        "set_field",
+                    )
                     .unwrap()
                     .as_basic_value_enum();
-                self.parts = gc.value_parts(whole);
                 return self;
             }
             // Swap the field's parts in place: split the new field value into its own parts and
@@ -1954,9 +1955,8 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Split an embedded type into the parts a value of it is carried as: the scalars of its nested
-    /// structs, except that a struct wide enough for `is_carried_whole` is one part of its own, of
-    /// `narrow_type` of it. A non-struct type is the parts `leaf_parts` gives it, and a zero-sized
-    /// type is none.
+    /// structs, except that a struct wide enough for `is_carried_whole` is one part of its own. A
+    /// non-struct type is the parts `leaf_parts` gives it, and a zero-sized type is none.
     ///
     /// Splitting an unbox struct across a function boundary, rather than passing one aggregate, keeps
     /// a loop-carried field (such as an `Array`'s `@size`) visible to LLVM's value analyses: the
@@ -1965,7 +1965,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// deeply nested type from paying one LLVM value per scalar; see `Configuration::max_split_scalars`.
     pub fn type_parts(&self, ty: BasicTypeEnum<'c>) -> Vec<BasicTypeEnum<'c>> {
         if self.is_carried_whole(ty) {
-            return vec![self.narrow_type(ty)];
+            return vec![ty];
         }
         self.split_type_parts(ty)
     }
@@ -1985,13 +1985,18 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    /// The parts a value of the non-struct type `ty` is carried as: one part of `narrow_type` of
-    /// it, except that an integer wider than 64 bits is its 64-bit words, least significant first,
-    /// so an `i128` is two `i64`s.
+    /// The parts a value of the non-struct type `ty` is carried as: the value itself, except that an
+    /// integer wider than 64 bits is its 64-bit words, least significant first. An `i128` is two
+    /// `i64`s.
+    ///
+    /// No Fix function then takes an `i128` argument. LLVM 22's x86-64 backend miscompiles a `tailcc`
+    /// tail call to a function that takes an `i128` on the stack: the caller's stack pointer comes
+    /// back 16 bytes off. An `i128` inside an array or a struct argument is passed correctly, so a
+    /// part carried whole and a union's payload buffer keep theirs.
     fn leaf_parts(&self, ty: BasicTypeEnum<'c>) -> Vec<BasicTypeEnum<'c>> {
         match Self::wide_integer_words(ty) {
             Some(words) => vec![self.context.i64_type().into(); words],
-            None => vec![self.narrow_type(ty)],
+            None => vec![ty],
         }
     }
 
@@ -2043,10 +2048,10 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// The parts a value is carried as, in the order of `type_parts` on its type, emitting an
     /// `extractvalue` per struct field at the current insert position. A zero-sized value yields no
-    /// part, and a value carried whole is one part, converted by `narrow_value`.
+    /// part, and a value carried whole is one part already.
     pub fn value_parts(&self, val: BasicValueEnum<'c>) -> Vec<BasicValueEnum<'c>> {
         if self.is_carried_whole(val.get_type()) {
-            return vec![self.narrow_value(val)];
+            return vec![val];
         }
         self.split_value_parts(val)
     }
@@ -2066,27 +2071,41 @@ impl<'c, 'm> Generator<'c, 'm> {
                     self.split_value_parts(field)
                 })
                 .collect(),
-            BasicValueEnum::IntValue(iv)
-                if Self::wide_integer_words(iv.get_type().into()).is_some() =>
-            {
-                self.split_words(iv)
-            }
-            _ => vec![self.narrow_value(val)],
+            BasicValueEnum::IntValue(iv) => match Self::wide_integer_words(iv.get_type().into()) {
+                Some(words) => (0..words)
+                    .map(|word| {
+                        let shifted = self
+                            .builder()
+                            .build_right_shift(
+                                iv,
+                                iv.get_type().const_int(64 * word as u64, false),
+                                false,
+                                "split_word",
+                            )
+                            .unwrap();
+                        self.builder()
+                            .build_int_truncate(shifted, self.context.i64_type(), "split_word")
+                            .unwrap()
+                            .as_basic_value_enum()
+                    })
+                    .collect(),
+                None => vec![val],
+            },
+            _ => vec![val],
         }
     }
 
     /// Reassemble a value of `ty` from a part iterator produced in `type_parts` order, emitting an
     /// `insertvalue` per struct field. The inverse of `value_parts`. A zero-sized type consumes
     /// no part and is rebuilt as the zero of its type; a type carried whole consumes the one part
-    /// that `narrow_value` made of its value.
+    /// that is its value.
     pub fn assemble_from_parts(
         &self,
         ty: BasicTypeEnum<'c>,
         parts: &mut impl Iterator<Item = BasicValueEnum<'c>>,
     ) -> BasicValueEnum<'c> {
         if self.is_carried_whole(ty) {
-            let part = parts.next().expect("too few parts to assemble the value");
-            return self.widen_value(part, ty);
+            return parts.next().expect("too few parts to assemble the value");
         }
         self.assemble_split_parts(ty, parts)
     }
@@ -2116,238 +2135,29 @@ impl<'c, 'm> Generator<'c, 'm> {
             }
             BasicTypeEnum::IntType(it) if Self::wide_integer_words(ty).is_some() => {
                 let words = Self::wide_integer_words(ty).unwrap();
-                let words = (0..words)
-                    .map(|_| {
-                        parts
-                            .next()
-                            .expect("too few parts to assemble the value")
-                            .into_int_value()
-                    })
-                    .collect::<Vec<_>>();
-                self.join_words(&words, it).as_basic_value_enum()
-            }
-            _ => {
-                let part = parts.next().expect("too few parts to assemble the value");
-                self.widen_value(part, ty)
-            }
-        }
-    }
-
-    /// The 64-bit words of `iv`, least significant first.
-    fn split_words(&self, iv: IntValue<'c>) -> Vec<BasicValueEnum<'c>> {
-        let words = Self::wide_integer_words(iv.get_type().into()).unwrap();
-        (0..words)
-            .map(|word| {
-                let shifted = self
-                    .builder()
-                    .build_right_shift(
-                        iv,
-                        iv.get_type().const_int(64 * word as u64, false),
-                        false,
-                        "split_word",
-                    )
-                    .unwrap();
-                self.builder()
-                    .build_int_truncate(shifted, self.context.i64_type(), "split_word")
-                    .unwrap()
-                    .as_basic_value_enum()
-            })
-            .collect()
-    }
-
-    /// The integer of type `it` whose 64-bit words are `words`, least significant first. The
-    /// inverse of `split_words`.
-    fn join_words(&self, words: &[IntValue<'c>], it: IntType<'c>) -> IntValue<'c> {
-        let mut val = it.const_zero();
-        for (idx, word) in words.iter().enumerate() {
-            let widened = self
-                .builder()
-                .build_int_z_extend(*word, it, "join_word")
-                .unwrap();
-            let shifted = self
-                .builder()
-                .build_left_shift(widened, it.const_int(64 * idx as u64, false), "join_word")
-                .unwrap();
-            val = self.builder().build_or(val, shifted, "join_word").unwrap();
-        }
-        val
-    }
-
-    /// `ty` with every integer wider than 64 bits inside it replaced by an array of its 64-bit
-    /// words: an `i128` becomes `[2 x i64]`, and an array of `n` of them `[2n x i64]`. A type
-    /// holding no such integer is itself.
-    ///
-    /// A part carried as one value -- a union's payload buffer, a struct carried whole -- is
-    /// carried in this type. LLVM 22's x86-64 backend miscompiles a call that pops its own
-    /// arguments (`tailcc`) when its stack arguments hold an `i128` and do not fill a multiple of
-    /// 16 bytes, an `i128` inside an array or a struct included: the caller's stack pointer comes
-    /// back 16 bytes off. With no `i128` in any part, no Fix function takes one.
-    fn narrow_type(&self, ty: BasicTypeEnum<'c>) -> BasicTypeEnum<'c> {
-        let i64_ty = self.context.i64_type();
-        match ty {
-            BasicTypeEnum::IntType(_) => match Self::wide_integer_words(ty) {
-                Some(words) => i64_ty.array_type(words as u32).into(),
-                None => ty,
-            },
-            BasicTypeEnum::ArrayType(at) => {
-                let elem_ty = at.get_element_type();
-                match Self::wide_integer_words(elem_ty) {
-                    Some(words) => i64_ty.array_type(at.len() * words as u32).into(),
-                    None => {
-                        let narrow_elem_ty = self.narrow_type(elem_ty);
-                        if narrow_elem_ty == elem_ty {
-                            ty
-                        } else {
-                            narrow_elem_ty.array_type(at.len()).into()
-                        }
-                    }
-                }
-            }
-            BasicTypeEnum::StructType(st) => {
-                let field_tys = st.get_field_types();
-                let narrow_field_tys = field_tys
-                    .iter()
-                    .map(|field_ty| self.narrow_type(*field_ty))
-                    .collect::<Vec<_>>();
-                if narrow_field_tys == field_tys {
-                    ty
-                } else {
-                    self.context
-                        .struct_type(&narrow_field_tys, st.is_packed())
-                        .into()
-                }
-            }
-            _ => ty,
-        }
-    }
-
-    /// `val` converted into `narrow_type` of its type, element by element.
-    fn narrow_value(&self, val: BasicValueEnum<'c>) -> BasicValueEnum<'c> {
-        let ty = val.get_type();
-        let narrow_ty = self.narrow_type(ty);
-        if narrow_ty == ty {
-            return val;
-        }
-        // The narrowed value's elements, in order: an integer's words, or the narrowed elements
-        // of an array or the narrowed fields of a struct.
-        let elems: Vec<BasicValueEnum<'c>> = match val {
-            BasicValueEnum::IntValue(iv) => self.split_words(iv),
-            BasicValueEnum::ArrayValue(av) => (0..av.get_type().len())
-                .flat_map(|i| {
-                    let elem = self
+                let mut val = it.const_zero();
+                for word in 0..words {
+                    let part = parts.next().expect("too few parts to assemble the value");
+                    let widened = self
                         .builder()
-                        .build_extract_value(av, i, "narrow_elem")
+                        .build_int_z_extend(part.into_int_value(), it, "assemble_word")
                         .unwrap();
-                    match elem {
-                        BasicValueEnum::IntValue(iv)
-                            if Self::wide_integer_words(iv.get_type().into()).is_some() =>
-                        {
-                            self.split_words(iv)
-                        }
-                        _ => vec![self.narrow_value(elem)],
-                    }
-                })
-                .collect(),
-            BasicValueEnum::StructValue(sv) => (0..sv.get_type().count_fields())
-                .map(|i| {
-                    let field = self
+                    let shifted = self
                         .builder()
-                        .build_extract_value(sv, i, "narrow_field")
+                        .build_left_shift(
+                            widened,
+                            it.const_int(64 * word as u64, false),
+                            "assemble_word",
+                        )
                         .unwrap();
-                    self.narrow_value(field)
-                })
-                .collect(),
-            _ => unreachable!("`{:?}` holds no integer to narrow", ty),
-        };
-        self.build_aggregate(narrow_ty, elems)
-    }
-
-    /// The value of type `ty` that `narrow_value` converted into `part`. The inverse of
-    /// `narrow_value`.
-    fn widen_value(&self, part: BasicValueEnum<'c>, ty: BasicTypeEnum<'c>) -> BasicValueEnum<'c> {
-        if self.narrow_type(ty) == ty {
-            return part;
-        }
-        let narrow_elem = |i: u32| -> BasicValueEnum<'c> {
-            match part {
-                BasicValueEnum::ArrayValue(av) => self
-                    .builder()
-                    .build_extract_value(av, i, "widen_elem")
-                    .unwrap(),
-                BasicValueEnum::StructValue(sv) => self
-                    .builder()
-                    .build_extract_value(sv, i, "widen_elem")
-                    .unwrap(),
-                _ => unreachable!("a narrowed value is an array or a struct"),
-            }
-        };
-        let words_from = |first: u32, count: usize| -> Vec<IntValue<'c>> {
-            (0..count as u32)
-                .map(|w| narrow_elem(first + w).into_int_value())
-                .collect()
-        };
-        match ty {
-            BasicTypeEnum::IntType(it) => {
-                let words = Self::wide_integer_words(ty).unwrap();
-                self.join_words(&words_from(0, words), it).into()
-            }
-            BasicTypeEnum::ArrayType(at) => {
-                let elem_ty = at.get_element_type();
-                let elems = (0..at.len())
-                    .map(|i| match Self::wide_integer_words(elem_ty) {
-                        Some(words) => self
-                            .join_words(
-                                &words_from(i * words as u32, words),
-                                elem_ty.into_int_type(),
-                            )
-                            .into(),
-                        None => self.widen_value(narrow_elem(i), elem_ty),
-                    })
-                    .collect();
-                self.build_aggregate(ty, elems)
-            }
-            BasicTypeEnum::StructType(st) => {
-                let fields = (0..st.count_fields())
-                    .map(|i| {
-                        self.widen_value(narrow_elem(i), st.get_field_type_at_index(i).unwrap())
-                    })
-                    .collect();
-                self.build_aggregate(ty, fields)
-            }
-            _ => unreachable!("`{:?}` holds no integer to widen", ty),
-        }
-    }
-
-    /// The array or struct of type `ty` whose elements or fields are `elems`, in order.
-    fn build_aggregate(
-        &self,
-        ty: BasicTypeEnum<'c>,
-        elems: Vec<BasicValueEnum<'c>>,
-    ) -> BasicValueEnum<'c> {
-        match ty {
-            BasicTypeEnum::ArrayType(at) => {
-                let mut agg = at.get_poison();
-                for (i, elem) in elems.into_iter().enumerate() {
-                    agg = self
+                    val = self
                         .builder()
-                        .build_insert_value(agg, elem, i as u32, "build_elem")
-                        .unwrap()
-                        .into_array_value();
+                        .build_or(val, shifted, "assemble_word")
+                        .unwrap();
                 }
-                agg.into()
+                val.as_basic_value_enum()
             }
-            BasicTypeEnum::StructType(st) => {
-                let mut agg = st.get_poison();
-                for (i, elem) in elems.into_iter().enumerate() {
-                    agg = self
-                        .builder()
-                        .build_insert_value(agg, elem, i as u32, "build_field")
-                        .unwrap()
-                        .into_struct_value();
-                }
-                agg.into()
-            }
-            _ => unreachable!("`{:?}` is not an aggregate", ty),
+            _ => parts.next().expect("too few parts to assemble the value"),
         }
     }
 

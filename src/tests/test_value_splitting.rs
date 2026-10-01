@@ -422,9 +422,8 @@ fn test_field_part_ranges_tile_the_part_list() {
     }
 }
 
-/// An integer wider than 64 bits is carried as its 64-bit words, alone or inside an array, so no
-/// function Fix defines takes an `i128` argument, and the parts of a struct holding one still tile
-/// its fields.
+/// An integer wider than 64 bits is carried as its 64-bit words, so no function Fix defines takes an
+/// `i128` argument, and the parts of a struct holding one still tile its fields.
 #[test]
 fn test_a_128_bit_integer_is_carried_as_two_words() {
     let config = panic_if_err(Configuration::check_mode());
@@ -447,20 +446,4 @@ fn test_a_128_bit_integer_is_carried_as_two_words() {
     assert_eq!(gc.part_count(outer.into()), 4);
     assert_eq!(gc.field_part_range(outer, 1), (1, 2));
     assert_eq!(gc.field_part_range(outer, 2), (3, 1));
-
-    // A union's payload buffer of two `i128`s is one part, of four `i64`s.
-    let union_like = context.struct_type(
-        &[
-            context.i8_type().into(),
-            context.i128_type().array_type(2).into(),
-        ],
-        false,
-    );
-    assert_eq!(
-        gc.type_parts(union_like.into()),
-        vec![
-            context.i8_type().into(),
-            context.i64_type().array_type(4).into()
-        ]
-    );
 }

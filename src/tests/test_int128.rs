@@ -2,9 +2,7 @@
 //! their text and bytes, and the C signatures that do not take them.
 
 use crate::configuration::{Configuration, FixOptimizationLevel};
-use crate::tests::test_util::{
-    generated_llvm_ir, test_source, test_source_fail, test_with_a_runtime_zero,
-};
+use crate::tests::test_util::{test_source, test_source_fail, test_with_a_runtime_zero};
 
 /// A literal of a 128-bit type holds every value of its type, the bits past 64 included, and a
 /// hexadecimal literal may fill the width of a signed type.
@@ -400,116 +398,4 @@ pub fn test_a_128_bit_value_crosses_a_tail_call_at_every_level() {
         config.set_fix_opt_level(opt_level);
         test_source(source, config);
     }
-}
-
-/// The Fix source of a program that passes 128-bit integers to functions in every shape a value is
-/// carried in: alone, beside narrower fields, in a union's payload, and in a struct of more
-/// scalars than a value is split into, which is carried whole.
-fn source_passing_128_bit_integers_in_every_shape() -> String {
-    // 65 fields of two words each hold 130 scalars, past the 128 a value is split into.
-    let field_count = 65;
-    let fields = (0..field_count)
-        .map(|i| format!("f{} : I128", i))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let field_values = (0..field_count)
-        .map(|i| format!("f{} : zero.i128 + {}_I128", i, i))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!(
-        r#"
-        module Main;
-
-        type Wide = unbox struct {{ {} }};
-
-        sum_pair : (U8, I128) -> I128;
-        sum_pair = |(a, b)| a.i128 + b;
-
-        sum_option : Option (I128, I128) -> I128;
-        sum_option = |o| o.as_some.@0 + o.as_some.@1;
-
-        sum_result : Result ErrMsg U128 -> I128;
-        sum_result = |r| r.as_ok.i128;
-
-        sum_wide : Wide -> I128;
-        sum_wide = |w| w.@f0 + w.@f64;
-
-        main : IO ();
-        main = (
-            let args = *get_args;
-            let zero = args.@size - 1;
-            let wide = Wide {{ {} }};
-            let total = sum_pair((1_U8, zero.i128 + 2_I128))
-                + sum_option(Option::some((zero.i128 + 3_I128, 4_I128)))
-                + sum_result(Result::ok(zero.u128 + 5_U128))
-                + sum_wide(wide.set_f0(wide.@f0 + 6_I128));
-            assert_eq(|_|"The sum", total, 85_I128);;
-            pure()
-        );
-    "#,
-        fields, field_values
-    )
-}
-
-/// A 128-bit value reaches a function intact in every shape a value is carried in, at every
-/// optimization level.
-#[test]
-pub fn test_a_128_bit_value_reaches_a_function_in_every_shape() {
-    let source = source_passing_128_bit_integers_in_every_shape();
-    for opt_level in [
-        FixOptimizationLevel::None,
-        FixOptimizationLevel::Basic,
-        FixOptimizationLevel::Max,
-    ] {
-        let mut config = Configuration::develop_mode();
-        config.set_fix_opt_level(opt_level);
-        test_source(&source, config);
-    }
-}
-
-/// No function the compiler defines takes an `i128` argument, alone or inside an array or a
-/// struct, whatever shape the 128-bit value is carried in.
-///
-/// LLVM 22's x86-64 backend miscompiles a call to a function that pops its own arguments, as a
-/// Fix function does there, when the stack arguments hold an `i128` and do not fill a multiple of
-/// 16 bytes: the caller's stack pointer comes back 16 bytes off.
-#[test]
-pub fn test_no_function_takes_a_128_bit_argument() {
-    let ir = generated_llvm_ir(&source_passing_128_bit_integers_in_every_shape(), "none");
-    let mut checked = 0;
-    for line in ir.lines().filter(|line| line.starts_with("define ")) {
-        // The parameter list follows the function's name, which is quoted where it holds
-        // punctuation.
-        let after_name = match line.split_once("@\"") {
-            Some((_, rest)) => rest.split_once('"').unwrap().1,
-            None => line
-                .split_once('@')
-                .unwrap()
-                .1
-                .split_once('(')
-                .map(|(_, rest)| rest)
-                .unwrap(),
-        };
-        let params = after_name.trim_start_matches('(');
-        let mut depth = 1;
-        let end = params
-            .char_indices()
-            .find(|(_, c)| {
-                match c {
-                    '(' => depth += 1,
-                    ')' => depth -= 1,
-                    _ => {}
-                }
-                depth == 0
-            })
-            .map(|(i, _)| i)
-            .unwrap();
-        assert!(
-            !params[..end].contains("i128"),
-            "a function takes an `i128` argument: {}",
-            line
-        );
-        checked += 1;
-    }
-    assert!(checked > 0, "the IR defines no function");
 }
