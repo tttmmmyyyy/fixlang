@@ -8,7 +8,7 @@
 
 - #787: A field of a struct literal or of a struct pattern can be written by its name alone. `S { x, y: 2 }` means `S { x: x, y: 2 }`, where the second `x` is the value named `x`. `let S { x, y: y2 } = s;` binds `x` to the field `x` of `s`, as `let S { x: x, y: y2 } = s;` does.
 - #790: A struct pattern can write `_` after its fields to leave out the other fields of the struct: `let S { x, _ } = s;`.
-- #791: 128-bit integer types `I128` and `U128`. A literal is written with the suffix `_I128` or `_U128`, as in `340282366920938463463374607431768211455_U128`. `FFI_CALL` and `FFI_EXPORT` do not take them, since C has no standard 128-bit integer type.
+- #791, #798: 128-bit integer types `I128` and `U128`. A literal is written with the suffix `_I128` or `_U128`, as in `340282366920938463463374607431768211455_U128`. `FFI_CALL` and `FFI_EXPORT` do not take them, since C has no standard 128-bit integer type.
 
 #### Tool
 
@@ -16,8 +16,8 @@
 
 #### Std
 
-- #791: `I128` and `U128` have what the other integer types have: arithmetic, comparison, the bit operations, conversions to and from the other numeric types (`x.i128`, `x.u128`), `maximum`, `minimum`, `Zero`, `One`, `ToString`, `FromString`, `ToBytes` and `FromBytes`, and `I128::abs`.
-- #791: `leading_zeros`, `trailing_zeros` and `count_ones` count the bits of an integer, for every integer type: `1_U8.leading_zeros` is `7_U8`. The count has the type of the integer counted. An integer of zero has as many leading and trailing zeros as its type has bits.
+- #791, #798: `I128` and `U128` have what the other integer types have: arithmetic, comparison, the bit operations, conversions to and from the other numeric types (`x.i128`, `x.u128`), `maximum`, `minimum`, `Zero`, `One`, `ToString`, `FromString`, `ToBytes` and `FromBytes`, and `I128::abs`.
+- #791, #798: `leading_zeros`, `trailing_zeros` and `count_ones` count the bits of an integer, for every integer type: `1_U8.leading_zeros` is `7_U8`. The count has the type of the integer counted. An integer of zero has as many leading and trailing zeros as its type has bits.
 
 ### Changed
 
