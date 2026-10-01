@@ -6623,6 +6623,39 @@ pub fn test_float_to_string_precision_carries_into_a_new_digit() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Pins how the functions writing a given number of places round a number lying exactly halfway
+/// between two texts: to the one whose last digit is even, at a precision of 0 and above it, and
+/// positionally and with a power of ten. A number just below a half rounds down.
+#[test]
+pub fn test_float_to_string_precision_rounds_a_tie_to_even() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            assert_eq(|_|"positional ties at 0 places",
+                      [0.5, 1.5, 2.5, 3.5, -0.5, -2.5].map(to_string_precision(0_U8)),
+                      ["0.0", "2.0", "2.0", "4.0", "-0.0", "-2.0"]);;
+            assert_eq(|_|"just below a half at 0 places",
+                      [0.49999999999999994, -0.4].map(to_string_precision(0_U8)),
+                      ["0.0", "-0.0"]);;
+            assert_eq(|_|"positional ties at 2 places",
+                      [0.125, 0.375, -0.625].map(to_string_precision(2_U8)),
+                      ["0.12", "0.38", "-0.62"]);;
+            assert_eq(|_|"ties with a power of ten at 0 places",
+                      [2.5, 3.5, 25.0, 0.25, -9.5].map(to_string_exp_precision(0_U8)),
+                      ["2.0e0", "4.0e0", "2.0e1", "2.0e-1", "-1.0e1"]);;
+            assert_eq(|_|"ties with a power of ten at 1 place",
+                      [0.125, 1.25, 1.75].map(to_string_exp_precision(1_U8)),
+                      ["1.2e-1", "1.2e0", "1.8e0"]);;
+            assert_eq(|_|"F32 ties",
+                      [0.5_F32.to_string_precision(0_U8), 2.5_F32.to_string_exp_precision(0_U8), 0.375_F32.to_string_precision(2_U8)],
+                      ["0.0", "2.0e0", "0.38"]);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// Pins the text the functions writing a given number of places write for zero: a negative zero,
 /// and a negative number that rounds to zero, keep their sign, a precision of 0 writes `0.0`, and
 /// `from_string` reads the negative zero back.
