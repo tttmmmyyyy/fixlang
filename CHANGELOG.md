@@ -12,7 +12,7 @@
 
 #### Tool
 
-- #785: Renaming a type in the language server no longer turns an empty item list under a namespace in an import statement, such as the `Ns::{}` of `import Lib::{Point::*, Ns::{}};`, into an import of a type or trait named `Ns`.
+- #785: When renaming a type rewrites a whole import statement, the language server now keeps an empty item list under a namespace, such as `Ns::{}`, instead of writing it as an import of a type or trait named `Ns`.
 
 ## [1.5.0] - 2026-09-27
 
