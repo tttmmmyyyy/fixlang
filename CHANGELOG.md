@@ -23,7 +23,7 @@
 #### Std
 
 - #792: `F64::to_string` and `F32::to_string` now write a number with a single significant digit and a power of ten as `1.0e300`, where they wrote `1e300`. The text they write for a finite number is now always a valid floating point literal of Fix, with `_F32` after it for an `F32`.
-- `to_string_precision`, `to_string_exp` and `to_string_exp_precision` of `F64` and `F32` now write the power of ten with no `+` and no leading zero, and write `.0` at a precision of 0. `100.0.to_string_exp` is `1.000000e2`, where it was `1.000000e+02`, and `2.5.to_string_precision(0_U8)` is `2.0`, where it was `2`. Every text they write for a finite number is now a floating point literal of Fix.
+- `to_string_precision`, `to_string_exp` and `to_string_exp_precision` of `F64` and `F32` now write the power of ten with no `+` and no leading zero, and write `.0` at a precision of 0. `100.0.to_string_exp` is `1.000000e2`, where it was `1.000000e+02`, and `2.5.to_string_precision(0_U8)` is `2.0`, where it was `2`. Every text they write for a finite number now has the form of a floating point literal of Fix.
 
 #### Tool
 

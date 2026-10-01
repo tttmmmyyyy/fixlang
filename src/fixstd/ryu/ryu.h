@@ -56,8 +56,8 @@ ryu_decimal f2s_shortest(float f);
 // `d2fixed_buffered_n` writes the number positionally, and `d2exp_buffered_n` writes one digit
 // before the point and a power of ten after the digits. The power of ten is written as Fix writes
 // it, with `-` for a negative one and no padding: `1.50e2`, `1.50e-2`. With a precision of 0, the
-// point is written all the same, followed by one `0`: `2.0`, `2.0e2`. So every text these write is
-// a floating point literal of Fix.
+// point is written all the same, followed by one `0`: `2.0`, `2.0e2`. So every text these write has
+// the form of a floating point literal of Fix.
 int d2fixed_buffered_n(double d, uint32_t precision, char* result);
 int d2exp_buffered_n(double d, uint32_t precision, char* result);
 
