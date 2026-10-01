@@ -5990,8 +5990,8 @@ pub fn test_float_to_string() {
             assert_eq(|_|"a negative infinity", (0.0 - inf).to_string, "-inf");;
             assert_eq(|_|"a NaN", (inf - inf).to_string, "nan");;
 
-            // `inf` and `nan` are the texts `from_string` takes back, which is why they are
-            // written where Ryu writes `Infinity` and `NaN`.
+            // `inf`, `-inf` and `nan` read back through `from_string` as what they were written
+            // from.
             let read_back : String -> F64 = |text| text.from_string.as_ok;
             assert_eq(|_|"an infinity reads back as an infinity", read_back(inf.to_string), inf);;
             assert_eq(|_|"a negative infinity reads back as a negative infinity",
@@ -6599,7 +6599,7 @@ pub fn test_float_to_string_precision_of_non_finite_numbers() {
 
 /// Pins the text the functions writing a given number of places write where rounding carries
 /// through every digit: the carry adds a leading `1`, moving the point one place to the right, and
-/// with a power of ten it raises the power. This is the text `printf` writes for `%.*f` and `%.*e`.
+/// with a power of ten it raises the power.
 #[test]
 pub fn test_float_to_string_precision_carries_into_a_new_digit() {
     let source = r#"
@@ -6624,7 +6624,7 @@ pub fn test_float_to_string_precision_carries_into_a_new_digit() {
 }
 
 /// Pins the text the functions writing a given number of places write for zero: a negative zero,
-/// and a negative number that rounds to zero, keep their sign, as `printf` writes them, and
+/// and a negative number that rounds to zero, keep their sign, a precision of 0 writes `0.0`, and
 /// `from_string` reads the negative zero back.
 #[test]
 pub fn test_float_to_string_precision_of_zero() {

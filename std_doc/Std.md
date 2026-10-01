@@ -1128,7 +1128,7 @@ Casts a value of `F32` into a value of `U8`.
 Type: `Std::F32 -> Std::String`
 
 Writes this number with one digit before the point, six after it, and a power of ten, as
-`to_string_exp_precision(6_U8)` does: `123.456` is written `1.234560e2`.
+`to_string_exp_precision(6_U8)` does: `123.456_F32` is written `1.234560e2`.
 
 #### to_string_exp_precision
 
@@ -1142,8 +1142,9 @@ literal of Fix.
 
 ##### Examples
 
-`123.456.to_string_exp_precision(2_U8)` is `1.23e2`, `0.0123.to_string_exp_precision(1_U8)`
-is `1.2e-2`, and `123.456.to_string_exp_precision(0_U8)` is `1.0e2`.
+`123.456_F32.to_string_exp_precision(2_U8)` is `1.23e2`,
+`0.0123_F32.to_string_exp_precision(1_U8)` is `1.2e-2`, and
+`123.456_F32.to_string_exp_precision(0_U8)` is `1.0e2`.
 
 ##### Parameters
 
@@ -1162,7 +1163,8 @@ literal of Fix.
 
 ##### Examples
 
-`3.14159.to_string_precision(2_U8)` is `3.14`, and `2.5.to_string_precision(0_U8)` is `2.0`.
+`3.14159_F32.to_string_precision(2_U8)` is `3.14`, and `2.5_F32.to_string_precision(0_U8)`
+is `2.0`.
 
 ##### Parameters
 

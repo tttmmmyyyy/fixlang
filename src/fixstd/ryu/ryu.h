@@ -24,7 +24,7 @@ extern "C" {
 #include <inttypes.h>
 
 // Modified from upstream Ryu by the Fix project: this file declares the four functions the Fix
-// runtime calls, of which `d2s_shortest`, `f2s_shortest` and `ryu_decimal` are the Fix project's.
+// runtime calls. `ryu_decimal`, `d2s_shortest` and `f2s_shortest` are the Fix project's.
 //
 // The runtime links Ryu into every program it builds, and a program may carry Ryu on its own, so
 // each function here takes a name that begins with `fixruntime_`, which no name of such a program
@@ -42,8 +42,8 @@ typedef struct ryu_decimal {
   uint32_t length;
 } ryu_decimal;
 
-// The shortest decimal that reads back as `f`, which is finite and other than zero. The sign of
-// `f` is left out.
+// Each of the two below gives the shortest decimal that reads back as `f`, which is finite and
+// other than zero. The sign of `f` is left out.
 //
 // For example, `d2s_shortest(-0.25)` is `{ 25, -2, 2 }`, and `d2s_shortest(1e300)` is
 // `{ 1, 300, 1 }`.

@@ -17,17 +17,16 @@ program `fix` builds links these objects.
 
 ## The files
 
-The files are upstream's, changed in three ways. Each change is marked in the source with a comment
-that opens with `Modified from upstream Ryu by the Fix project`, apart from the deletions.
+The files are upstream's, changed in three ways. Each change other than a deletion is marked in the
+source with a comment that opens with `Modified from upstream Ryu by the Fix project`.
 
-- `ryu.h` declares only the four functions `float_text.c` calls, and opens with a `#define` for each,
-  which gives the function a name beginning with `fixruntime_ryu_`.
+- `ryu.h` declares only the four functions `float_text.c` calls, and opens with a `#define` for
+  each, which gives the function a name beginning with `fixruntime_ryu_`.
 - `d2s.c` and `f2s.c` give the shortest digits as a number, through `d2s_shortest` and
-  `f2s_shortest`, in place of upstream's text: the text Fix writes is not the one upstream writes,
-  and `float_text.c` writes Fix's from the digits. Upstream's `to_chars`, the `*_buffered*`
-  functions and `copy_special_str` in `common.h` are deleted.
-- `d2fixed.c` writes the power of ten without `+` and without padding (`1.50e2`, not `1.50e+02`),
-  and writes `.0` where the precision is 0 (`2.0`, not `2`). Upstream's `d2fixed`,
+  `f2s_shortest`, and `float_text.c` writes Fix's text from them. Upstream's `to_chars`, the
+  `*_buffered*` functions and `copy_special_str` in `common.h` are deleted.
+- `d2fixed.c` writes the power of ten as Fix writes it, `1.50e2` where upstream writes `1.50e+02`,
+  and writes `.0` where the precision is 0, `2.0` where upstream writes `2`. Upstream's `d2fixed`,
   `d2fixed_buffered`, `d2exp` and `d2exp_buffered` are deleted.
 
 To take a newer Ryu, diff upstream's files against the revision recorded above, and carry the
@@ -51,9 +50,6 @@ declares without a `#define`.
 | `d2s_full_table.h`, `f2s_full_table.h`, `d2fixed_full_table.h` | The powers of ten the algorithm looks up. |
 | `d2s_small_table.h` | The powers of ten computed rather than tabulated, which `RYU_OPTIMIZE_SIZE` selects. |
 
-`d2s.c` and `f2s.c` each define a `to_chars` of their own, so each source is compiled as a
-translation unit of its own.
-
 ## What these produce
 
 `d2s_shortest` and `f2s_shortest` give the shortest digits that read back as a number and the power
@@ -63,5 +59,5 @@ of ten they are multiplied by: `{ 25, -2, 2 }` for `0.25`, which has 2 digits. F
 `d2fixed_buffered_n` and `d2exp_buffered_n` write a number with a given number of places,
 positionally or with a power of ten: `3.140`, `3.140e0`, `2.0`, `2.0e0`.
 
-Ryu spells an infinity and a NaN its own way, so `float_text.c` writes those without it, as `inf`,
-`-inf` and `nan`, and writes a zero as `0.0` and `-0.0`.
+`float_text.c` writes an infinity, a NaN and a zero itself, as `inf`, `-inf`, `nan`, `0.0` and
+`-0.0`.

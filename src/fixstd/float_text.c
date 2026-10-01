@@ -3,9 +3,10 @@ Writing a floating point number as text and reading one back, for `Std::F64` and
 
 Ryu, whose sources sit beside this one under `ryu/`, finds the shortest digits that read back as a
 finite number, from which the text is written here, and writes the text with a given number of
-places behind the point. An infinity and a NaN are written here, as `inf`, `-inf` and `nan`. A text is read by
-fast_float, carried under `ffc/`, which rounds the decimal number a text names to the nearest
-number of the type, and takes `.` for the point whatever locale the program runs in.
+places behind the point. An infinity, a NaN and a zero are written here, as `inf`, `-inf`, `nan`,
+`0.0` and `-0.0`. A text is read by fast_float, carried under `ffc/`, which rounds the decimal
+number a text names to the nearest number of the type, and takes `.` for the point whatever locale
+the program runs in.
 */
 
 #include <inttypes.h>
@@ -179,8 +180,8 @@ static inline void fixruntime_write_digits(char *out, uint64_t mantissa, uint32_
 // it, at `buf`, null-terminated, and reports how many bytes the text took, the null left out.
 //
 // The digits are written positionally where the point falls inside or near them, and with a power
-// of ten otherwise, so that the text stays about as wide as the digits it carries: `1.0e300` rather
-// than a 1 followed by 300 zeros. Either way the text has a point and a digit on each side of it.
+// of ten otherwise, so that the text stays about as wide as the digits it carries: `1e300` is
+// written `1.0e300`. Either way the text has a point and a digit on each side of it.
 //
 // # Arguments
 // * `decimal` - The shortest digits that read back as the number, and the power of ten they are

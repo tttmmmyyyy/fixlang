@@ -6,7 +6,7 @@
 // before it writes the text into the buffer, and aborts where the text and its null do not fit.
 // So what this file does is write the widest text each of the eight can produce, which is what
 // proves the check never fires — and an undersized buffer is caught by the abort wherever the
-// tests run, rather than by the Valgrind this file also asks for.
+// tests run, with Valgrind or without it.
 //
 // The run is under Valgrind all the same, because the check answers for the write into the buffer
 // and Valgrind answers for everything around it: the `Array` the buffer lives in, the write into
@@ -21,8 +21,9 @@ mod float_text_buffer_tests {
     };
 
     /// Writes the widest text each of the eight functions can produce -- the least value of each
-    /// type, at every precision they accept -- under Valgrind, so that a buffer sized short of
-    /// that text shows up as a write past its allocation.
+    /// type, whose whole part is the widest, and the greatest negative one, whose exponent is the
+    /// widest, at every precision the functions accept -- under Valgrind, so that a buffer sized
+    /// short of that text shows up as a write past its allocation.
     #[test]
     pub fn test_widest_text_fits_its_buffer() {
         if !platform_valgrind_supported() {
@@ -50,8 +51,8 @@ main : IO () = (
               + widest_whole_f64.to_string_precision(prec).@size
               + widest_exponent_f64.to_string_exp_precision(prec).@size
     );
-    // The four that take no precision. The exponential two write the 6 places `to_string_exp`
-    // writes; `to_string` writes the shortest digits, whose widest text comes next.
+    // The four that take no precision. `to_string_exp` writes 6 places; `to_string` writes the
+    // shortest digits, whose widest text comes next.
     let total = total + widest_whole_f32.to_string.@size
                       + widest_exponent_f32.to_string_exp.@size
                       + widest_whole_f64.to_string.@size
