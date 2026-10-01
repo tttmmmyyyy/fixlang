@@ -4311,7 +4311,8 @@ namespace F32 {
     to_string_exp_precision : U8 -> F32 -> String;
     to_string_exp_precision = |prec, v| (
         // A sign, a digit, a point, `prec` digits or the `0` that stands for none, `e`, the `-` of a
-        // negative exponent, the 2 digits an `F32` exponent reaches and a null.
+        // negative exponent, the 2 digits an `F32` exponent reaches and a null. Must stay in sync with the widest text
+        // `fixruntime_f32_to_str_exp_precision` in `src/fixstd/float_text.c` checks the buffer for.
         let size = 8 + max(prec.i64, 1);
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f32_to_str_exp_precision(Ptr, I64, F32, U8), ptr, size, v, prec]);
@@ -4334,7 +4335,8 @@ namespace F32 {
     to_string_precision : U8 -> F32 -> String;
     to_string_precision = |prec, v| (
         // A sign, the 39 digits the greatest `F32` takes in its whole part, a point, `prec` digits
-        // or the `0` that stands for none, and a null.
+        // or the `0` that stands for none, and a null. Must stay in sync with the widest text
+        // `fixruntime_f32_to_str_precision` in `src/fixstd/float_text.c` checks the buffer for.
         let size = 42 + max(prec.i64, 1);
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f32_to_str_precision(Ptr, I64, F32, U8), ptr, size, v, prec]);
@@ -4413,7 +4415,8 @@ namespace F64 {
     to_string_exp_precision : U8 -> F64 -> String;
     to_string_exp_precision = |prec, v| (
         // A sign, a digit, a point, `prec` digits or the `0` that stands for none, `e`, the `-` of a
-        // negative exponent, the 3 digits an `F64` exponent reaches and a null.
+        // negative exponent, the 3 digits an `F64` exponent reaches and a null. Must stay in sync with the widest text
+        // `fixruntime_f64_to_str_exp_precision` in `src/fixstd/float_text.c` checks the buffer for.
         let size = 9 + max(prec.i64, 1);
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f64_to_str_exp_precision(Ptr, I64, F64, U8), ptr, size, v, prec]);
@@ -4435,7 +4438,8 @@ namespace F64 {
     to_string_precision : U8 -> F64 -> String;
     to_string_precision = |prec, v| (
         // A sign, the 309 digits the greatest `F64` takes in its whole part, a point, `prec` digits
-        // or the `0` that stands for none, and a null.
+        // or the `0` that stands for none, and a null. Must stay in sync with the widest text
+        // `fixruntime_f64_to_str_precision` in `src/fixstd/float_text.c` checks the buffer for.
         let size = 312 + max(prec.i64, 1);
         let data = Array::empty(size);
         let (data, length) = data.mutate_elements(|ptr| FFI_CALL_IO[I64 fixruntime_f64_to_str_precision(Ptr, I64, F64, U8), ptr, size, v, prec]);
