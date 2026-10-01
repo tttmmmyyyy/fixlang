@@ -121,12 +121,9 @@ fn next_prefixed_name(prefix: &str, counter: &mut u32) -> String {
 }
 
 impl ParseContext {
-    fn from_source(source: SourceFile, config: &Configuration) -> Self {
-        Self::renaming_module(source, config, None)
-    }
-
-    /// The context of parsing `source`, whose module `renaming` compiles under another name.
-    fn renaming_module(
+    /// The context of parsing `source`, whose module `renaming`, if given, compiles under another
+    /// name.
+    fn from_source(
         source: SourceFile,
         config: &Configuration,
         renaming: Option<ModuleRenaming>,
@@ -603,7 +600,7 @@ fn parse_source_as_rule<T>(
         }
     };
     let config = Configuration::diagnostics_mode(DiagnosticsConfig::default())?; // Use any Configuration
-    let mut ctx = ParseContext::from_source(source, &config);
+    let mut ctx = ParseContext::from_source(source, &config, None);
     parser(file.next().unwrap(), &mut ctx)
 }
 
@@ -619,7 +616,7 @@ fn parse_module(
     assert_eq!(pair.as_rule(), Rule::module);
     let mut errors = Errors::empty();
 
-    let mut ctx = ParseContext::renaming_module(src.clone(), config, renaming);
+    let mut ctx = ParseContext::from_source(src.clone(), config, renaming);
 
     let mut pairs = pair.into_inner();
     let mod_info = parse_module_defn(pairs.next().unwrap(), &mut ctx);
