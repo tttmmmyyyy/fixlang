@@ -914,5 +914,15 @@ mod tests {
             "```fix\n    ```\n```\n",
             "a fence indented four columns or more closes no block"
         );
+        assert_eq!(
+            docstring_for_display("- item\n\n  ```fix\n  # hidden\n  ```\n"),
+            "- item\n\n  ```fix\n  ```\n",
+            "a fence on its own line inside a list item opens a Fix example"
+        );
+        assert_eq!(
+            docstring_for_display("- ```fix\n  # shown\n  ```\n> ```fix\n> # shown\n> ```\n"),
+            "- ```fix\n  # shown\n  ```\n> ```fix\n> # shown\n> ```\n",
+            "a fence after a list marker or in a block quote opens no Fix example"
+        );
     }
 }
