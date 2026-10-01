@@ -276,8 +276,7 @@ impl ExampleBuild {
     /// The example at index `i` is compiled as the module `DocTest.Example{i}.DocTest`. The name
     /// ends in `DocTest`, so a path the example writes relative, such as `DocTest::helper`, reaches
     /// the module as it reaches the module `DocTest` (see `NameSpace::is_suffix_of`). The parser
-    /// renames the module in the `module` declaration and in each absolute path (see
-    /// `ModuleRenaming`).
+    /// renames the module at each place the source names it (see `ModuleRenaming`).
     pub fn merged(sources: Vec<SourceFile>) -> Result<Self, Errors> {
         let examples = sources
             .into_iter()
@@ -322,8 +321,8 @@ impl ExampleBuild {
 /// The source of the module `DocTest.Examples`, whose `main` runs the example of `examples` whose
 /// index the environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives.
 ///
-/// The `main` of each example is read inside a function, so that a run reads the `main` of the
-/// example it runs alone: a global value is evaluated when it is first read, and the value of a
+/// The `main` of each example is read inside a function, so that a run reads only the `main` of
+/// the example it runs: a global value is evaluated when it is first read, and the value of a
 /// `main` can panic before any I/O action of it runs.
 fn dispatcher_source(examples: &[ExampleModule]) -> String {
     let mains = examples

@@ -3258,7 +3258,7 @@ double : I64 -> I64;
 double = |x| 2 * x;
 ```
 
-An example is an expression of type `IO ()`. `fix test` compiles it as the following module, where `Lib` stands for the module the comment is written in, and the `import` statements of `Lib` follow `import Lib;`. So an example sees the names that the body of `Lib` sees:
+An example is an expression of type `IO ()`. `fix test` compiles it as the following module, where `Lib` stands for the module the comment is written in. The `import` statements of `Lib` follow `import Lib;`, so an example sees the names that the body of `Lib` sees:
 
 ```
 module DocTest;

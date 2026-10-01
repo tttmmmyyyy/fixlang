@@ -31,9 +31,9 @@ pub enum TestSelection {
 /// Runs the tests `selection` names and exits the `fix` process.
 ///
 /// `Test::test` runs with the terminal's streams attached. The Fix examples are then tested by
-/// `test_examples`: each runs in a process of its own, whose output is collected and shown where the
-/// example fails, and the examples that remain run after one fails. The process exits with a status
-/// other than 0 when a test failed.
+/// `test_examples`: each runs in a process of its own, whose output is collected and shown where
+/// the example fails, and the examples that remain run after one fails. The process exits with a
+/// status other than 0 when a test failed.
 ///
 /// A program without Fix examples is tested as `Test::test` alone, which exits with the status
 /// `Test::test` exits with, and reports the error of a program that does not define it.
@@ -131,16 +131,16 @@ impl ExampleOutcome {
 }
 
 /// Tests the Fix examples `examples` as their tasks ask, under `config` and beside the sources
-/// `config` names, and hands `report` each example with what became of it, in the order of
-/// `examples`.
+/// `config` names, and hands `report` each example with its outcome, in the order of `examples`.
 ///
 /// The examples to compile are built together into one program, which is run once for each example
-/// to run, in a process of its own with its output collected (see `ExampleBuild::merged`). What an
-/// example does in that program is what it does in a program of its own, except where two examples
-/// cannot share one program, as two that export functions under one C name cannot, or where one
-/// example does not compile. So where the program fails to build, the examples the errors lie in
-/// are taken out of it and tested alone, and the rest are built together again. Where an error lies in no example, as an error in
-/// the sources does, each example is tested alone, which reports that error for each of them.
+/// to run, in a process of its own with its output collected (see `ExampleBuild::merged`). An
+/// example behaves in that program as it does in a program of its own, except an example that does
+/// not compile and two examples that cannot share a program, such as two that export functions
+/// under one C name. So where the program fails to build, the examples the errors lie in are taken
+/// out of it and tested alone, and the rest are built together again. Where an error lies in no
+/// example, such as an error in the sources, each example is tested alone, and the error is
+/// reported for each of them.
 pub fn test_examples(
     config: &Configuration,
     examples: &[FixExample],
@@ -190,9 +190,8 @@ pub fn test_examples(
     }
 }
 
-/// What became of the example `example`, which the program built together at `exec_path` under
-/// `config` holds at index `position`: an example to compile passed as the program was built, and
-/// an example to run is run.
+/// The outcome of `example`, which is at index `position` in the program built at `exec_path` under
+/// `config`: an example to compile passed when the program was built, and an example to run is run.
 fn outcome_in_program(
     config: &Configuration,
     exec_path: &str,
