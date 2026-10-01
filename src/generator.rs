@@ -1989,10 +1989,12 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// integer wider than 64 bits is its 64-bit words, least significant first. An `i128` is two
     /// `i64`s.
     ///
-    /// No Fix function then takes an `i128` argument. LLVM 22's x86-64 backend miscompiles a `tailcc`
-    /// tail call to a function that takes an `i128` on the stack: the caller's stack pointer comes
-    /// back 16 bytes off. An `i128` inside an array or a struct argument is passed correctly, so a
-    /// part carried whole and a union's payload buffer keep theirs.
+    /// No Fix function then takes a bare `i128` argument. LLVM 22's x86-64 backend miscompiles a
+    /// call to a function that pops its own arguments, as a `tailcc` Fix function does there, when
+    /// its stack arguments hold a bare `i128` and do not add up to a multiple of 16 bytes: the
+    /// caller's stack pointer comes back 16 bytes lower than before the call. An `i128` inside an
+    /// array or a struct argument is passed correctly, so a part carried whole and a union's payload
+    /// buffer keep theirs.
     fn leaf_parts(&self, ty: BasicTypeEnum<'c>) -> Vec<BasicTypeEnum<'c>> {
         match Self::wide_integer_words(ty) {
             Some(words) => vec![self.context.i64_type().into(); words],
