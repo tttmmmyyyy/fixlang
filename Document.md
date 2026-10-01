@@ -3321,7 +3321,7 @@ Marks after `fix`, separated by spaces, change what `fix test` does with an exam
 `fix docs` subcommand generates documentations (markdown files) for a Fix project.
 This command requires the project file to be present in the current directory.
 
-Consecutive line comments above declarations are recognized as documentations, and they are read as Markdown. A code block whose info string is `fix` is shown without its hidden lines (see [Fix examples in comments](#fix-examples-in-comments)):
+Consecutive line comments above declarations are recognized as documentations, and they are read as Markdown. A code block whose info string begins with the word `fix` is shown without its hidden lines (see [Fix examples in comments](#fix-examples-in-comments)):
 
 ```
 // This is a documentation comment for the module.
