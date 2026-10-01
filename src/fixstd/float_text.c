@@ -150,14 +150,14 @@ int64_t fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8
     return fixruntime_write_precision_text(d2fixed_buffered_n, v, precision, buf, size);
 }
 
-// Writes the `length` decimal digits of `mantissa` at `out`, the most significant first. No null
-// follows them.
+// Writes the `digit_count` decimal digits of `mantissa` at `out`, the most significant first. No
+// null follows them.
 //
 // # Examples
 // `fixruntime_write_digits(out, 1234, 4)` writes `1234`.
-static inline void fixruntime_write_digits(char *out, uint64_t mantissa, uint32_t length)
+static inline void fixruntime_write_digits(char *out, uint64_t mantissa, uint32_t digit_count)
 {
-    uint32_t end = length;
+    uint32_t end = digit_count;
     while (mantissa >= 100)
     {
         const uint32_t pair = (uint32_t)(mantissa % 100);
@@ -198,9 +198,9 @@ static inline void fixruntime_write_digits(char *out, uint64_t mantissa, uint32_
 static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, char *buf, int64_t size,
                                            int positional_low, int positional_high)
 {
-    const int count = (int)decimal.length;
+    const int digit_count = (int)decimal.length;
     // Where the point falls among the digits: the first digit carries `10^(point-1)`.
-    const int point = decimal.exponent + count;
+    const int point = decimal.exponent + digit_count;
     const bool positional = point > positional_low && point <= positional_high;
     // The power of ten written after the digits when the text is not positional.
     const int exponent = point - 1;
@@ -212,10 +212,10 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
     if (!positional)
     {
         // A digit, a point, the other digits or a `0`, `e`, the sign of the power and its digits.
-        length += 2 + (count == 1 ? 1 : count - 1) + 1 + (exponent < 0) +
+        length += 2 + (digit_count == 1 ? 1 : digit_count - 1) + 1 + (exponent < 0) +
                   (exponent_magnitude >= 100 ? 3 : exponent_magnitude >= 10 ? 2 : 1);
     }
-    else if (point >= count)
+    else if (point >= digit_count)
     {
         // The digits, the zeros up to the point, and `.0`.
         length += point + 2;
@@ -223,12 +223,12 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
     else if (point > 0)
     {
         // The digits with a point among them.
-        length += count + 1;
+        length += digit_count + 1;
     }
     else
     {
         // `0.`, the zeros after the point, and the digits.
-        length += 2 - point + count;
+        length += 2 - point + digit_count;
     }
     fixruntime_check_float_text_fits(length, size);
 
@@ -241,11 +241,11 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
     {
         // 1234e30 -> 1.234e33, and 1e30 -> 1.0e30. The digits are written one place to the right,
         // and the first of them is moved in front of the point.
-        fixruntime_write_digits(out + 1, decimal.mantissa, (uint32_t)count);
+        fixruntime_write_digits(out + 1, decimal.mantissa, (uint32_t)digit_count);
         out[0] = out[1];
         out[1] = '.';
-        int written = count + 1;
-        if (count == 1)
+        int written = digit_count + 1;
+        if (digit_count == 1)
         {
             out[written++] = '0';
         }
@@ -256,11 +256,11 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
         }
         fixruntime_write_exponent(out + written, exponent_magnitude);
     }
-    else if (point >= count)
+    else if (point >= digit_count)
     {
         // 1234e3 -> 1234000.0
-        fixruntime_write_digits(out, decimal.mantissa, (uint32_t)count);
-        for (int i = count; i < point; i++)
+        fixruntime_write_digits(out, decimal.mantissa, (uint32_t)digit_count);
+        for (int i = digit_count; i < point; i++)
         {
             out[i] = '0';
         }
@@ -271,7 +271,7 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
     {
         // 1234e-2 -> 12.34. The digits are written one place to the right, and those before the
         // point are moved back in front of it.
-        fixruntime_write_digits(out + 1, decimal.mantissa, (uint32_t)count);
+        fixruntime_write_digits(out + 1, decimal.mantissa, (uint32_t)digit_count);
         for (int i = 0; i < point; i++)
         {
             out[i] = out[i + 1];
@@ -287,14 +287,14 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
         {
             out[2 + i] = '0';
         }
-        fixruntime_write_digits(out + 2 - point, decimal.mantissa, (uint32_t)count);
+        fixruntime_write_digits(out + 2 - point, decimal.mantissa, (uint32_t)digit_count);
     }
     buf[length] = '\0';
     return length;
 }
 
-// Writes `v`, which is finite and zero, the way Fix spells it, at `buf`, null-terminated, and
-// reports how many bytes the text took, the null left out.
+// Writes a zero, negative where `negative` is true, the way Fix spells it, at `buf`, null-
+// terminated, and reports how many bytes the text took, the null left out.
 static int64_t fixruntime_write_zero_text(bool negative, char *buf, int64_t size)
 {
     return negative ? fixruntime_copy_float_text("-0.0", 4, buf, size) : fixruntime_copy_float_text("0.0", 3, buf, size);

@@ -39,22 +39,22 @@ main : IO () = (
     // The least value of each type, whose whole part is the widest either type reaches, and the
     // greatest negative one, whose exponent is the widest, written to every precision the
     // functions accept. Each buffer is therefore filled to the width its size was derived for.
-    let widest_f32 = -3.4028235e38_F32;
+    let widest_whole_f32 = -3.4028235e38_F32;
     let widest_exponent_f32 = -1.4e-45_F32;
-    let widest_f64 = -1.7976931348623157e308;
+    let widest_whole_f64 = -1.7976931348623157e308;
     let widest_exponent_f64 = -5.0e-324;
     let total = range(0, 256).fold(0, |p, total|
         let prec = p.u8;
-        total + widest_f32.to_string_precision(prec).@size
+        total + widest_whole_f32.to_string_precision(prec).@size
               + widest_exponent_f32.to_string_exp_precision(prec).@size
-              + widest_f64.to_string_precision(prec).@size
+              + widest_whole_f64.to_string_precision(prec).@size
               + widest_exponent_f64.to_string_exp_precision(prec).@size
     );
     // The four that take no precision. The exponential two write the 6 places `to_string_exp`
     // writes; `to_string` writes the shortest digits, whose widest text comes next.
-    let total = total + widest_f32.to_string.@size
+    let total = total + widest_whole_f32.to_string.@size
                       + widest_exponent_f32.to_string_exp.@size
-                      + widest_f64.to_string.@size
+                      + widest_whole_f64.to_string.@size
                       + widest_exponent_f64.to_string_exp.@size;
     // `to_string` writes the shortest digits, and its buffer is sized for the widest text those
     // reach: a number whose digits fill the type and whose point sits outside the window written
