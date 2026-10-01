@@ -329,6 +329,7 @@ int64_t fixruntime_f64_to_str_shortest(char *buf, int64_t size, double v)
     return fixruntime_write_float_text(signbit(v), d2s_shortest(v), buf, size, F64_POSITIONAL_LOW,
                                        F64_POSITIONAL_HIGH);
 }
+
 // How the last reading of a number on this thread came out: one of the three `FLOAT_TEXT_*`
 // values below. `fixruntime_read_f64` and `fixruntime_read_f32` answer with the number alone, and
 // `std.fix` reads this through `fixruntime_float_text_outcome` right after each call.
