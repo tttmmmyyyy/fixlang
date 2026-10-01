@@ -383,7 +383,7 @@ fn dispatcher_source(examples: &[ExampleModule]) -> (String, usize) {
         r#"module {module};
 
 {main} : IO () = (
-    let value = *"{var}".borrow_c_str_io(|name| FFI_CALL_IO[Ptr getenv(Ptr), name]);
+    let value = *"{var}".borrow_c_str_io(|name| FFI_CALL_IO[Ptr fixruntime_getenv(Ptr), name]);
     let index : I64 = String::unsafe_from_c_str_ptr(value).from_string.as_ok;
     let examples : Array (() -> IO ()) = [
 "#,

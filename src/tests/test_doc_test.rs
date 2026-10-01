@@ -1202,3 +1202,36 @@ double = |x| old_double(x);
         streams(&output)
     );
 }
+
+/// A library that calls the C function `getenv` at a signature of its own has its Fix examples
+/// tested: the program the examples are built into reads which example to run without declaring
+/// `getenv` itself.
+#[test]
+fn test_examples_of_a_library_declaring_getenv_its_own_way() {
+    let lib = r#"module Lib;
+
+// Whether the environment variable `PATH` is set.
+//
+// ```fix
+// assert_eq(|_|"", *path_is_set, true)
+// ```
+path_is_set : IO Bool = (
+    let value = *"PATH".borrow_c_str_io(|name| FFI_CALL_IO[U64 getenv(Ptr), name]);
+    pure(value != 0_U64)
+);
+
+// ```fix
+// assert_eq(|_|"", 1 + 1, 2)
+// ```
+two : I64 = 2;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &["--doc"]);
+    assert!(
+        output.status.success()
+            && String::from_utf8_lossy(&output.stderr)
+                .contains("doc tests: 2 passed, 0 failed, 0 ignored."),
+        "both examples pass\n{}",
+        streams(&output)
+    );
+}
