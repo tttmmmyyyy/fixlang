@@ -234,6 +234,8 @@ ryu_decimal f2s_shortest(float f) {
   // Decode bits into mantissa and exponent.
   const uint32_t ieeeMantissa = bits & ((1u << FLOAT_MANTISSA_BITS) - 1);
   const uint32_t ieeeExponent = (bits >> FLOAT_MANTISSA_BITS) & ((1u << FLOAT_EXPONENT_BITS) - 1);
+  assert(ieeeExponent != ((1u << FLOAT_EXPONENT_BITS) - 1u));
+  assert(ieeeExponent != 0 || ieeeMantissa != 0);
 
   const floating_decimal_32 v = f2d(ieeeMantissa, ieeeExponent);
   const ryu_decimal result = { v.mantissa, v.exponent, decimalLength9(v.mantissa) };

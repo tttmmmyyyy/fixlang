@@ -350,6 +350,8 @@ ryu_decimal d2s_shortest(double f) {
   // Decode bits into mantissa and exponent.
   const uint64_t ieeeMantissa = bits & ((1ull << DOUBLE_MANTISSA_BITS) - 1);
   const uint32_t ieeeExponent = (uint32_t) ((bits >> DOUBLE_MANTISSA_BITS) & ((1u << DOUBLE_EXPONENT_BITS) - 1));
+  assert(ieeeExponent != ((1u << DOUBLE_EXPONENT_BITS) - 1u));
+  assert(ieeeExponent != 0 || ieeeMantissa != 0);
 
   floating_decimal_64 v;
   const bool isSmallInt = d2d_small_int(ieeeMantissa, ieeeExponent, &v);
