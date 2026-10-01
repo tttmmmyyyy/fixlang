@@ -1094,7 +1094,8 @@ fn test_examples_that_cannot_share_a_program_are_tested_alone() {
 }
 
 /// An example written as statements sees `Std` as its module narrows it: a name the module hides
-/// from `Std` and declares itself is the module's own in the example, as it is in the module.
+/// from `Std` and declares itself is the module's own in the example, as it is in the module. The
+/// `main` the example is wrapped into is of type `IO ()` however the module narrows `Std`.
 #[test]
 fn test_example_sees_std_as_its_module_narrows_it() {
     let lib = r#"module Lib;
@@ -1112,6 +1113,22 @@ type Tuple2 = struct { fst : I64, snd : I64 };
         output.status.success()
             && String::from_utf8_lossy(&output.stderr).contains("doc test lib.fix:4 ... ok"),
         "the example's `Tuple2` is `Lib::Tuple2`, which its module declares in place of `Std`'s\n{}",
+        streams(&output)
+    );
+    let lib = r#"module Lib;
+import Std::{I64, Monad};
+
+// ```fix
+// pure()
+// ```
+value : I64 = 1;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &[]);
+    assert!(
+        output.status.success()
+            && String::from_utf8_lossy(&output.stderr).contains("doc test lib.fix:4 ... ok"),
+        "the example's `main` is of type `IO ()` where its module imports no `IO`\n{}",
         streams(&output)
     );
 }

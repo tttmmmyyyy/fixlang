@@ -3263,7 +3263,7 @@ An example is an expression of type `IO ()`. `fix test` compiles it as the follo
 ```
 module DocTest;
 import Lib;
-main : IO () = (
+main : ::Std::IO () = (
     let x = double(21);
     assert_eq(|_|"", x, 42)
 );

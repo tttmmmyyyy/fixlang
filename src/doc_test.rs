@@ -176,7 +176,7 @@ impl ExampleScope {
     ///
     /// # Examples
     /// For the module `Geometry` that writes `import Math::{sqrt};`, the line is
-    /// `module DocTest; import Geometry; import Math::sqrt; main : IO () = (`.
+    /// `module DocTest; import Geometry; import Math::sqrt; main : ::Std::IO () = (`.
     fn statement_header(&self) -> String {
         let imports = self
             .imports
@@ -184,7 +184,7 @@ impl ExampleScope {
             .map(|stmt| format!(" {}", stmt.stringify_on_one_line()))
             .collect::<String>();
         format!(
-            "module {}; import {};{} {} : IO () = (",
+            "module {}; import {};{} {} : ::Std::IO () = (",
             DOC_TEST_MODULE_NAME, self.module, imports, MAIN_FUNCTION_NAME
         )
     }
@@ -624,7 +624,7 @@ fn example_of_block(
 /// The example `let x = 1;` / `assert_eq(|_|"", x, 1)` of a comment in the module
 /// `Geometry` is compiled as
 /// ~~~text
-/// module DocTest; import Geometry; main : IO () = (
+/// module DocTest; import Geometry; main : ::Std::IO () = (
 /// let x = 1;
 /// assert_eq(|_|"", x, 1)
 /// );
