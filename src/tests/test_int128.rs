@@ -2,7 +2,9 @@
 //! their text and bytes, and the C signatures that do not take them.
 
 use crate::configuration::{Configuration, FixOptimizationLevel};
-use crate::tests::test_util::{test_source, test_source_fail, test_with_a_runtime_zero};
+use crate::tests::test_util::{
+    generated_llvm_ir, test_source, test_source_fail, test_with_a_runtime_zero,
+};
 
 /// A literal of a 128-bit type holds every value of its type, the bits past 64 included, and a
 /// hexadecimal literal may fill the width of a signed type.
@@ -398,4 +400,117 @@ pub fn test_a_128_bit_value_crosses_a_tail_call_at_every_level() {
         config.set_fix_opt_level(opt_level);
         test_source(source, config);
     }
+}
+
+/// The Fix source of a program that passes 128-bit integers to functions in every shape a value is
+/// carried in: alone, beside narrower fields, in a union's payload, and in a struct of more
+/// scalars than a value is split into, which is carried whole.
+fn source_passing_128_bit_integers_in_every_shape() -> String {
+    // 65 fields of two words each hold 130 scalars, past the 128 a value is split into.
+    let field_count = 65;
+    let fields = (0..field_count)
+        .map(|i| format!("f{} : I128", i))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let field_values = (0..field_count)
+        .map(|i| format!("f{} : zero.i128 + {}_I128", i, i))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!(
+        r#"
+        module Main;
+
+        type Wide = unbox struct {{ {} }};
+
+        sum_pair : (U8, I128) -> I128;
+        sum_pair = |(a, b)| a.i128 + b;
+
+        sum_option : Option (I128, I128) -> I128;
+        sum_option = |o| o.as_some.@0 + o.as_some.@1;
+
+        sum_result : Result ErrMsg U128 -> I128;
+        sum_result = |r| r.as_ok.i128;
+
+        sum_wide : Wide -> I128;
+        sum_wide = |w| w.@f0 + w.@f64;
+
+        main : IO ();
+        main = (
+            let args = *get_args;
+            let zero = args.@size - 1;
+            let wide = Wide {{ {} }};
+            let total = sum_pair((1_U8, zero.i128 + 2_I128))
+                + sum_option(Option::some((zero.i128 + 3_I128, 4_I128)))
+                + sum_result(Result::ok(zero.u128 + 5_U128))
+                + sum_wide(wide.set_f0(wide.@f0 + 6_I128));
+            assert_eq(|_|"The sum", total, 85_I128);;
+            pure()
+        );
+    "#,
+        fields, field_values
+    )
+}
+
+/// A 128-bit value reaches a function intact in every shape a value is carried in, at every
+/// optimization level.
+#[test]
+pub fn test_a_128_bit_value_reaches_a_function_in_every_shape() {
+    let source = source_passing_128_bit_integers_in_every_shape();
+    for opt_level in [
+        FixOptimizationLevel::None,
+        FixOptimizationLevel::Basic,
+        FixOptimizationLevel::Max,
+    ] {
+        let mut config = Configuration::develop_mode();
+        config.set_fix_opt_level(opt_level);
+        test_source(&source, config);
+    }
+}
+
+/// No function the compiler defines takes a bare `i128` argument, whatever shape the 128-bit value
+/// is carried in.
+///
+/// LLVM 22's x86-64 backend miscompiles a call to a function that pops its own arguments, as a
+/// Fix function does there, when its stack arguments hold a bare `i128` and do not add up to a
+/// multiple of 16 bytes: the caller's stack pointer comes back 16 bytes lower than before the call.
+/// An `i128` inside an array or a struct argument is passed correctly.
+#[test]
+pub fn test_no_function_takes_a_bare_128_bit_argument() {
+    let ir = generated_llvm_ir(&source_passing_128_bit_integers_in_every_shape(), "none");
+    let mut checked = 0;
+    for line in ir.lines().filter(|line| line.starts_with("define ")) {
+        // The parameter list follows the function's name, which is quoted where it holds
+        // punctuation.
+        let after_name = match line.split_once("@\"") {
+            Some((_, rest)) => rest.split_once('"').unwrap().1,
+            None => line.split_once('@').unwrap().1,
+        };
+        let params = &after_name[after_name.find('(').unwrap() + 1..];
+        // Split the list at the commas outside the brackets of an aggregate type, and read each
+        // parameter's type as its first word.
+        let mut depth = 0;
+        let mut param_start = 0;
+        for (i, c) in params.char_indices() {
+            match c {
+                '(' | '{' | '[' | '<' => depth += 1,
+                ')' | '}' | ']' | '>' if depth > 0 => depth -= 1,
+                _ => {}
+            }
+            let ends_param = (c == ',' && depth == 0) || (c == ')' && depth == 0);
+            if ends_param {
+                let param = params[param_start..i].trim();
+                assert!(
+                    param.split_whitespace().next() != Some("i128"),
+                    "a function takes a bare `i128` argument: {}",
+                    line
+                );
+                param_start = i + 1;
+            }
+            if c == ')' && depth == 0 {
+                break;
+            }
+        }
+        checked += 1;
+    }
+    assert!(checked > 0, "the IR defines no function");
 }
