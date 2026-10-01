@@ -155,8 +155,13 @@ impl ExampleScope {
         let imports = program
             .mod_to_import_stmts
             .get(module)
-            .into_iter()
-            .flatten()
+            .unwrap_or_else(|| {
+                panic!(
+                    "the module `{}` of the program has its import statements recorded",
+                    module
+                )
+            })
+            .iter()
             .filter(|stmt| !stmt.implicit)
             .cloned()
             .collect();
@@ -234,20 +239,20 @@ impl FixExample {
 #[derive(Clone)]
 pub struct ExampleBuild {
     /// The examples, each with the name of the module it is compiled as.
-    pub examples: Vec<ExampleModule>,
+    examples: Vec<ExampleModule>,
     /// The source of the module whose `main` runs the example whose index in `examples` the
     /// environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives, where the build holds several
     /// examples. A build of one example has none, and runs its `DocTest::main`.
-    pub dispatcher: Option<SourceFile>,
+    dispatcher: Option<SourceFile>,
 }
 
 /// A Fix example as a build compiles it.
 #[derive(Clone)]
-pub struct ExampleModule {
+struct ExampleModule {
     /// The source assembled from the example, which declares the module `DocTest`.
-    pub source: SourceFile,
+    source: SourceFile,
     /// The name the module is compiled as.
-    pub name: Name,
+    name: Name,
 }
 
 /// The name of the module whose `main` runs one of the examples a build holds.

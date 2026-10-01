@@ -119,6 +119,17 @@ pub enum ExampleOutcome {
     Ignored,
 }
 
+impl ExampleOutcome {
+    /// The outcome of an example whose test failed for the reason `failure` gives, or passed where
+    /// it gives none.
+    fn of_failure(failure: Option<String>) -> Self {
+        match failure {
+            None => ExampleOutcome::Passed,
+            Some(failure) => ExampleOutcome::Failed(failure),
+        }
+    }
+}
+
 /// Tests the Fix examples `examples` as their tasks ask, under `config` and beside the sources
 /// `config` names, and hands `report` each example with what became of it, in the order of
 /// `examples`.
@@ -148,7 +159,8 @@ pub fn test_examples(
         merged_config.doc_tests = Some(panic_if_err(ExampleBuild::merged(sources.clone())));
         let built = with_temporary_executable(merged_config, |merged_config, exec_path| {
             for (index, example) in examples.iter().enumerate() {
-                let outcome = match together.iter().position(|member| *member == index) {
+                // `together` is in ascending order, as `examples` is.
+                let outcome = match together.binary_search(&index).ok() {
                     Some(position) => {
                         outcome_in_program(merged_config, exec_path, position, example)
                     }
@@ -188,7 +200,10 @@ fn outcome_in_program(
     example: &FixExample,
 ) -> ExampleOutcome {
     let failure = match &example.task {
-        ExampleTask::Ignore => return ExampleOutcome::Ignored,
+        ExampleTask::Ignore => unreachable!(
+            "an ignored example at {} is built into no program",
+            example.location()
+        ),
         ExampleTask::Compile(_) => None,
         ExampleTask::Run(_) => match config.program_run_command(exec_path) {
             Ok(mut command) => {
@@ -198,10 +213,7 @@ fn outcome_in_program(
             Err(errors) => Some(errors.to_string()),
         },
     };
-    match failure {
-        None => ExampleOutcome::Passed,
-        Some(failure) => ExampleOutcome::Failed(failure),
-    }
+    ExampleOutcome::of_failure(failure)
 }
 
 /// The indices in `sources` of the sources the errors of `errors` lie in, or `None` where one of
@@ -243,10 +255,7 @@ fn test_example(config: &Configuration, example: &FixExample) -> ExampleOutcome 
             Err(errors) => Some(errors.to_string()),
         },
     };
-    match failure {
-        None => ExampleOutcome::Passed,
-        Some(failure) => ExampleOutcome::Failed(failure),
-    }
+    ExampleOutcome::of_failure(failure)
 }
 
 /// The files whose comments `fix test` takes the Fix examples of: those the `build` and the
