@@ -1788,30 +1788,9 @@ impl Program {
         required_src: &Option<Span>,
         tc: &TypeCheckContext,
     ) -> Result<(Arc<ExprNode>, ExportedFunctionType), Errors> {
-        // Check if the value is defined.
-        let gv = self.global_values.get(value_name);
-        if gv.is_none() {
-            return Err(Errors::from_msg_srcs(
-                format!("Value `{}` is not found.", value_name.to_string()),
-                &[required_src],
-            ));
-        }
-
-        // Validate the type of the value.
-        let gv: &GlobalValue = gv.unwrap();
+        let gv = self.find_value_to_export(value_name, required_src)?;
         let (required_ty, exported_ty) = if let Some(required_ty) = required_ty {
-            // If the type of the value is specified, check if it matches the required type.
-            if gv.scm.to_string_normalize() != required_ty.to_string() {
-                let gv_src = gv.scm.ty.get_source();
-                return Err(Errors::from_msg_srcs(
-                    format!(
-                        "The value `{}` should have type `{}`.",
-                        value_name.to_string(),
-                        required_ty.to_string()
-                    ),
-                    &[gv_src, required_src],
-                ));
-            }
+            self.check_value_has_type(value_name, &required_ty, required_src)?;
             let exported_ty = ExportedFunctionType {
                 doms: vec![],
                 codom: make_unit_ty(),
@@ -1836,6 +1815,44 @@ impl Program {
         self.instantiate_symbols(tc)?;
         let expr = expr_var(symbol_name, None).set_type(required_ty);
         Ok((expr, exported_ty))
+    }
+
+    /// The global value `value_name`, or an error at `required_src` saying the program has none.
+    fn find_value_to_export(
+        &self,
+        value_name: &FullName,
+        required_src: &Option<Span>,
+    ) -> Result<&GlobalValue, Errors> {
+        self.global_values.get(value_name).ok_or_else(|| {
+            Errors::from_msg_srcs(
+                format!("Value `{}` is not found.", value_name.to_string()),
+                &[required_src],
+            )
+        })
+    }
+
+    /// Reports a global value `value_name` that the program does not have, or whose declared type
+    /// is other than `required_ty`. A value declared at a more general type, such as
+    /// `[m : Monad] m ()` where `IO ()` is required, is reported too. The errors are placed at the
+    /// declaration of the value and at `required_src`.
+    pub fn check_value_has_type(
+        &self,
+        value_name: &FullName,
+        required_ty: &Arc<TypeNode>,
+        required_src: &Option<Span>,
+    ) -> Result<(), Errors> {
+        let gv = self.find_value_to_export(value_name, required_src)?;
+        if gv.scm.to_string_normalize() != required_ty.to_string() {
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "The value `{}` should have type `{}`.",
+                    value_name.to_string(),
+                    required_ty.to_string()
+                ),
+                &[gv.scm.ty.get_source(), required_src],
+            ));
+        }
+        Ok(())
     }
 
     /// `expr` with every reference to a global value replaced by a reference to the symbol that

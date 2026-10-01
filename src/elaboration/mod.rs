@@ -7,6 +7,7 @@ pub mod typecheckcache;
 use crate::ast::program::Program;
 use crate::configuration::{Configuration, OutputFileType, SubCommand};
 use crate::error::Errors;
+use crate::fixstd::builtin::make_io_unit_ty;
 use crate::fixstd::stdlib::{make_std_mod, make_tuple_traits_mod};
 use crate::parse::parser::{parse_file_path, parse_renamed_source_file};
 use crate::tool::stopwatch::StopWatch;
@@ -50,6 +51,19 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
 
     // Resolve type aliases that appear in declarations and associated type implementations.
     program.resolve_type_aliases_not_in_expr()?;
+
+    // Hold the `main` of each Fix example a program built from several of them runs to the rule of an
+    // entry point, with an error placed in the example. This runs before the import statements are
+    // checked, which would report a missing `main` at the module that runs the examples, where no
+    // example lies. The types of declarations are resolved by now, aliases included.
+    if let Some(example_build) = &config.example_build {
+        let mut errors = Errors::empty();
+        for main in example_build.dispatched_mains() {
+            let module_src = program.find_mod(&main.module()).map(|module| module.source);
+            errors.eat_err(program.check_value_has_type(&main, &make_io_unit_ty(), &module_src));
+        }
+        errors.to_result()?;
+    }
 
     // Validate user-defined types.
     program.validate_type_defns()?;

@@ -240,20 +240,10 @@ impl FixExample {
 pub struct ExampleBuild {
     /// The examples, each with the name of the module it is compiled as.
     examples: Vec<ExampleModule>,
-    /// The module whose `main` runs the example whose index in `examples` the environment
-    /// variable `DOC_TEST_EXAMPLE_ENV_VAR` gives, where the build holds several examples. A build
-    /// of one example has none, and runs its `DocTest::main`.
-    dispatcher: Option<Dispatcher>,
-}
-
-/// The module whose `main` runs one of the examples of a build of several.
-#[derive(Clone)]
-struct Dispatcher {
-    /// The source of the module.
-    source: SourceFile,
-    /// The line of `source` that reads the `main` of the example at index 0. The `main` of the
-    /// example at index `i` is read on the `i`-th line below it.
-    first_main_line: usize,
+    /// The source of the module whose `main` runs the example whose index in `examples` the
+    /// environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives, where the build holds several
+    /// examples. A build of one example has none, and runs its `DocTest::main`.
+    dispatcher: Option<SourceFile>,
 }
 
 /// A Fix example as a build compiles it.
@@ -313,35 +303,35 @@ impl ExampleBuild {
                 .all(is_reserved_module_name),
             "the modules a build of several examples adds have names reserved for the examples"
         );
-        let (content, first_main_line) = dispatcher_source(&examples);
-        let dispatcher = Dispatcher {
-            source: save_temporary_source(&content, "doc_test_dispatcher")?,
-            first_main_line,
-        };
+        let dispatcher =
+            save_temporary_source(&dispatcher_source(&examples), "doc_test_dispatcher")?;
         Ok(ExampleBuild {
             examples,
             dispatcher: Some(dispatcher),
         })
     }
 
-    /// The index of the example the location `span` belongs to: one in the source of the example,
-    /// or one on the line of the dispatcher that reads the `main` of the example, where an error is
-    /// reported for an example that defines no `main` of type `IO ()`.
+    /// The index of the example whose source the location `span` lies in.
     pub fn example_at(&self, span: &Span) -> Option<usize> {
-        if let Some(index) = self
-            .examples
+        self.examples
             .iter()
             .position(|example| span.input == example.source)
-        {
-            return Some(index);
+    }
+
+    /// The `main` of each example the dispatcher runs, which is none in a build of one example.
+    ///
+    /// The dispatcher calls each of them as a value of type `IO ()`, which a `main` declared at a
+    /// more general type, such as `[m : Monad] m ()`, also passes. A build checks each of them as it
+    /// checks the entry point (see `Program::check_value_has_type`), so that an example passes or
+    /// fails as it does in a build of its own.
+    pub fn dispatched_mains(&self) -> Vec<FullName> {
+        if self.dispatcher.is_none() {
+            return vec![];
         }
-        let dispatcher = self.dispatcher.as_ref()?;
-        if span.input != dispatcher.source {
-            return None;
-        }
-        span.start_line_no()
-            .checked_sub(dispatcher.first_main_line)
-            .filter(|index| *index < self.examples.len())
+        self.examples
+            .iter()
+            .map(|example| FullName::from_strs(&[&example.name], MAIN_FUNCTION_NAME))
+            .collect()
     }
 
     /// The sources the build adds to the program, each with the renaming its module is compiled
@@ -354,10 +344,7 @@ impl ExampleBuild {
             };
             (example.source.clone(), Some(renaming))
         });
-        let dispatcher = self
-            .dispatcher
-            .iter()
-            .map(|dispatcher| (dispatcher.source.clone(), None));
+        let dispatcher = self.dispatcher.iter().map(|source| (source.clone(), None));
         examples.chain(dispatcher).collect()
     }
 
@@ -372,33 +359,35 @@ impl ExampleBuild {
 }
 
 /// The source of the module `DocTest.Examples`, whose `main` runs the example of `examples` whose
-/// index the environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives, and the line of it that reads
-/// the `main` of the example at index 0. Each next example's `main` is read on the next line.
+/// index the environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives.
 ///
 /// The `main` of each example is read inside a function, so that a run reads only the `main` of
 /// the example it runs: a global value is evaluated when it is first read, and the value of a
 /// `main` can panic before any I/O action of it runs.
-fn dispatcher_source(examples: &[ExampleModule]) -> (String, usize) {
-    let head = format!(
+fn dispatcher_source(examples: &[ExampleModule]) -> String {
+    let mains = examples
+        .iter()
+        .map(|example| format!("        |_| ::{}::{}", example.name, MAIN_FUNCTION_NAME))
+        .collect::<Vec<_>>()
+        .join(",\n");
+    format!(
         r#"module {module};
 
 {main} : IO () = (
     let value = *"{var}".borrow_c_str_io(|name| FFI_CALL_IO[Ptr fixruntime_getenv(Ptr), name]);
     let index : I64 = String::unsafe_from_c_str_ptr(value).from_string.as_ok;
     let examples : Array (() -> IO ()) = [
+{mains}
+    ];
+    let example = examples.@(index);
+    example()
+);
 "#,
         module = DISPATCHER_MODULE_NAME,
         main = MAIN_FUNCTION_NAME,
         var = DOC_TEST_EXAMPLE_ENV_VAR,
-    );
-    let mains = examples
-        .iter()
-        .map(|example| format!("        |_| ::{}::{}", example.name, MAIN_FUNCTION_NAME))
-        .collect::<Vec<_>>()
-        .join(",\n");
-    let tail = "\n    ];\n    let example = examples.@(index);\n    example()\n);\n";
-    let first_main_line = head.matches('\n').count() + 1;
-    (format!("{}{}{}", head, mains, tail), first_main_line)
+        mains = mains,
+    )
 }
 
 /// Whether `name` is a module name reserved for the Fix examples: `DocTest`, or a name beginning

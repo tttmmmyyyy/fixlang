@@ -1157,11 +1157,12 @@ value : I64 = first_long_function_name;
     );
 }
 
-/// A Fix example written as a module that defines no `main` is taken out of the program of the
-/// examples alone: the error the program reports for it lies on the line that reads its `main`,
-/// which belongs to that example, so the other examples are still built together, once.
+/// A Fix example written as a module whose `main` is not of type `IO ()` — one that defines no
+/// `main`, and one whose `main` is of a more general type — fails as it does built alone, and is
+/// taken out of the program of the examples by itself: the error lies in its own source, so the
+/// other examples are still built together, once.
 #[test]
-fn test_example_without_main_is_taken_out_of_the_program_alone() {
+fn test_example_whose_main_is_not_of_type_io_is_taken_out_alone() {
     let lib = r#"module Lib;
 
 DEPRECATED[old_double, "Call `double` in place of `old_double`."];
@@ -1179,6 +1180,12 @@ old_double = |x| 2 * x;
 // ```
 //
 // ```fix
+// # module DocTest;
+// # main : [m : Monad] m ();
+// # main = pure();
+// ```
+//
+// ```fix
 // assert_eq(|_|"", double(2), 4)
 // ```
 double : I64 -> I64;
@@ -1189,8 +1196,10 @@ double = |x| old_double(x);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("doc test lib.fix:11 ... FAILED")
-            && stderr.contains("doc tests: 2 passed, 1 failed, 0 ignored."),
-        "the example without `main` fails, and the others pass\n{}",
+            && stderr.contains("doc test lib.fix:17 ... FAILED")
+            && stderr.contains("should have type `Std::IO ()`")
+            && stderr.contains("doc tests: 2 passed, 2 failed, 0 ignored."),
+        "the examples whose `main` is not of type `IO ()` fail, and the others pass\n{}",
         streams(&output)
     );
     assert_eq!(
