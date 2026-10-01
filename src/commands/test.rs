@@ -156,7 +156,7 @@ pub fn test_examples(
             .map(|index| examples[*index].task.source().unwrap().clone())
             .collect::<Vec<_>>();
         let mut merged_config = config.clone();
-        merged_config.doc_tests = Some(panic_if_err(ExampleBuild::merged(sources.clone())));
+        merged_config.example_build = Some(panic_if_err(ExampleBuild::merged(sources.clone())));
         let built = with_temporary_executable(merged_config, |merged_config, exec_path| {
             for (index, example) in examples.iter().enumerate() {
                 // `together` is in ascending order, as `examples` is.
@@ -241,7 +241,7 @@ fn examples_errors_lie_in(errors: &Errors, sources: &[SourceFile]) -> Option<Set
 fn test_example(config: &Configuration, example: &FixExample) -> ExampleOutcome {
     let config_of = |source: &SourceFile| {
         let mut config = config.clone();
-        config.doc_tests = Some(ExampleBuild::single(source.clone()));
+        config.example_build = Some(ExampleBuild::single(source.clone()));
         config
     };
     let failure = match &example.task {

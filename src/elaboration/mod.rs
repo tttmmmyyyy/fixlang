@@ -218,9 +218,9 @@ pub fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
         });
     }
     for (source, renaming) in config
-        .doc_tests
+        .example_build
         .iter()
-        .flat_map(|doc_tests| doc_tests.sources())
+        .flat_map(|example_build| example_build.sources())
     {
         let parse_result = parse_renamed_source_file(source, renaming, config);
         errors.eat_err_or(parse_result, |parsed_program| {

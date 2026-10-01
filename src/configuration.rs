@@ -449,7 +449,7 @@ pub struct Configuration {
     pub project_sources: Vec<ProjectSources>,
     /// The Fix examples of comments the build compiles beside the sources. The value
     /// `ExampleBuild::entry` names is then the entry point of the program.
-    pub doc_tests: Option<ExampleBuild>,
+    pub example_build: Option<ExampleBuild>,
     /// Object files given to the build, linked into the program beside the ones compiled from the
     /// sources.
     pub object_files: Vec<PathBuf>,
@@ -637,7 +637,7 @@ impl Configuration {
             extra_source_files: vec![],
             root_source_files: vec![],
             project_sources: vec![],
-            doc_tests: None,
+            example_build: None,
             object_files: vec![],
             fix_opt_level: env_vars::get_max_opt_level(),
             linked_libraries: vec![],
@@ -1078,7 +1078,7 @@ impl Configuration {
             extra_source_files: _,
             root_source_files: _,
             project_sources: _,
-            doc_tests: _,
+            example_build: _,
             preliminary_commands: _,
             allow_preliminary_commands: _,
 
@@ -1233,8 +1233,8 @@ impl Configuration {
     /// `elaborate_via_config` instantiates it from: the entry of the Fix examples of a build of
     /// them, `Test::test` for another test build, and `Main::main` otherwise.
     pub fn entry_io_value_name(&self) -> FullName {
-        if let Some(doc_tests) = &self.doc_tests {
-            doc_tests.entry()
+        if let Some(example_build) = &self.example_build {
+            example_build.entry()
         } else if matches!(self.subcommand, SubCommand::Test) {
             FullName::from_strs(&[TEST_MODULE_NAME], TEST_FUNCTION_NAME)
         } else {
