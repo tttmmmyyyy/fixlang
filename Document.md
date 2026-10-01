@@ -3245,7 +3245,7 @@ Also, at this time, the source files listed in the `build.test` section of the p
 
 ### Fix examples in comments
 
-A comment is read as Markdown, and a fenced code block in it whose info string is `fix` is a Fix example. `fix test` compiles and runs it. A comment is a `/* */` comment, or a run of `//` comments standing alone on consecutive lines; a `//` comment written after code on its line is a comment of its own. The text of a `//` comment starts after the `//` and one space after it, and the text of a `/* */` comment is read as it is written. An example is usually written in the [documentation comment](#generating-documentation) of what it shows, where `fix docs` shows it too:
+A comment is read as Markdown, and a fenced code block in it whose info string begins with the word `fix` is a Fix example. `fix test` compiles and runs it. A comment is a `/* */` comment, or a run of `//` comments standing alone on consecutive lines; a `//` comment written after code on its line is a comment of its own. The text of a `//` comment starts after the `//` and one space after it, and the text of a `/* */` comment is read as it is written. An example is usually written in the [documentation comment](#generating-documentation) of what it shows, where `fix docs` shows it too:
 
 ```
 // Doubles a number.
@@ -3304,15 +3304,15 @@ A line of an example whose text begins with `# ` after its indentation is hidden
 // ```
 ```
 
-Marks after `fix`, separated by commas, change what `fix test` does with an example:
+Marks after `fix`, separated by spaces, change what `fix test` does with an example:
 
 | Info string | What `fix test` does |
 | --- | --- |
 | `fix` | Compiles the example and runs it. |
-| `fix,no_run` | Compiles the example (including type checking) without running it. Use it for an example that reads the standard input, touches files or the network, or does not terminate. |
-| `fix,ignore` | Does nothing. Use it for a fragment that does not compile on its own. |
+| `fix no_run` | Compiles the example (including type checking) without running it. Use it for an example that reads the standard input, touches files or the network, or does not terminate. |
+| `fix ignore` | Does nothing. Use it for a fragment that does not compile on its own. |
 
-`fix test` reports any other mark as an error. A code block whose info string is empty or begins with another word, such as `fixme`, is not a Fix example. The opening fence of a Fix example stands on a line of its own, indented less than four columns. So a code block opened after a list marker, as in `- ```fix`, or inside a block quote is not a Fix example, while one opened on its own line inside a list item is.
+`fix test` reports any other mark as an error, and so it does marks separated by commas, as in `fix,no_run`. A code block whose info string is empty or begins with another word, such as `fixme`, is not a Fix example. The opening fence of a Fix example stands on a line of its own, indented less than four columns. So a code block opened after a list marker, as in `- ```fix`, or inside a block quote is not a Fix example, while one opened on its own line inside a list item is.
 
 `fix test` runs the Fix examples of every comment in the files listed in the `build` and `build.test` sections of the project file, so the helpers a project writes for its tests can carry tested examples too. The examples in dependencies are not run. The examples are built with the same settings as `Test::test`, so they can use the test dependencies.
 

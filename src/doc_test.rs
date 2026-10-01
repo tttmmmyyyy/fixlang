@@ -25,6 +25,8 @@ use crate::{
 use std::iter;
 use std::path::PathBuf;
 
+/// The language an info string names to make a code block a Fix example.
+const FIX_LANGUAGE: &str = "fix";
 /// The mark of an info string that leaves a Fix example out of the tests.
 const IGNORE_MARK: &str = "ignore";
 /// The mark of an info string that has a Fix example compiled but not run.
@@ -35,7 +37,7 @@ const NO_RUN_MARK: &str = "no_run";
 ///
 /// # Examples
 /// ~~~text
-/// "```fix,no_run\n# import Foo;\nlet x = 1;\n#\n```\n"  ->  "```fix\nlet x = 1;\n```\n"
+/// "```fix no_run\n# import Foo;\nlet x = 1;\n#\n```\n"  ->  "```fix\nlet x = 1;\n```\n"
 /// ~~~
 pub fn docstring_for_display(docstring: &str) -> String {
     let lines = docstring.split('\n').collect::<Vec<_>>();
@@ -72,7 +74,7 @@ pub struct TextLine {
 /// no backtick in its info string, which is what tells it from a line of inline code.
 ///
 /// # Examples
-/// ```` ```fix,no_run ```` opens a block with the info string `fix,no_run`, which the line
+/// ```` ```fix no_run ```` opens a block with the info string `fix no_run`, which the line
 /// ```` ``` ```` closes and the line ```` ```fix ```` does not.
 pub struct CodeFence<'a> {
     /// The character the fence is made of, a backtick or a tilde.
@@ -544,9 +546,19 @@ fn example_of_block(
     let opening = &lines[block.open];
     let fence = Some(opening.span.clone());
 
+    let mut words = info_words(block.fence.info);
+    if words.next() != Some(FIX_LANGUAGE) {
+        return Err(Errors::from_msg_srcs(
+            format!(
+                "Separate the marks of a Fix example from `{}` by spaces, as in `{} {}`.",
+                FIX_LANGUAGE, FIX_LANGUAGE, NO_RUN_MARK
+            ),
+            &[&fence],
+        ));
+    }
     let mut ignore = false;
     let mut no_run = false;
-    for mark in info_items(block.fence.info).skip(1) {
+    for mark in words {
         match mark {
             IGNORE_MARK => ignore = true,
             NO_RUN_MARK => no_run = true,
@@ -554,7 +566,7 @@ fn example_of_block(
                 return Err(Errors::from_msg_srcs(
                     format!(
                         "Unknown mark `{}` in the info string of a Fix example. The marks are `{}` \
-                         and `{}`.",
+                         and `{}`, separated by spaces.",
                         mark, IGNORE_MARK, NO_RUN_MARK
                     ),
                     &[&fence],
@@ -738,16 +750,22 @@ fn fix_example_blocks<'a>(lines: &[&'a str]) -> Vec<FencedBlock<'a>> {
         .collect()
 }
 
-/// The items of the info string `info`, separated by `,` and trimmed. The first is the language of
-/// the block, and the rest are marks.
-fn info_items(info: &str) -> impl Iterator<Item = &str> {
-    info.split(',').map(str::trim)
+/// The words of the info string `info`, separated by white space. The first is the language of the
+/// block, as Markdown reads it, and the rest are marks.
+fn info_words(info: &str) -> impl Iterator<Item = &str> {
+    info.split_whitespace()
 }
 
-/// Whether the block whose info string is `info` is a Fix example: the first item of the info
-/// string is `fix`.
+/// Whether the block whose info string is `info` is a Fix example: the first word of the info
+/// string is `fix`, or begins with `fix,`, as an info string writing its marks after commas does,
+/// which `example_of_block` reports.
+///
+/// # Examples
+/// `fix`, `fix no_run` and `fix,no_run` are Fix examples, and `fixme` and `rust` are not.
 fn is_fix_example(info: &str) -> bool {
-    info_items(info).next() == Some("fix")
+    info_words(info)
+        .next()
+        .is_some_and(|language| language == FIX_LANGUAGE || language.starts_with("fix,"))
 }
 
 /// `line` split into its indentation and the text that follows it.
@@ -907,7 +925,7 @@ mod tests {
             "a fence followed by text on its line closes no block"
         );
         assert_eq!(
-            docstring_for_display("~~~fix,no_run\n# hidden\nshown\n~~~\n"),
+            docstring_for_display("~~~fix no_run\n# hidden\nshown\n~~~\n"),
             "~~~fix\nshown\n~~~\n",
             "a block of tildes whose info string is `fix` is a Fix example"
         );

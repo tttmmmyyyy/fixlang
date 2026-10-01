@@ -30,7 +30,7 @@ main = (
 
 To test the uniqueness of a boxed value held in a field of an *unbox* struct (a common wrapper shape, e.g. an unbox struct holding a `Destructor`), act on that field with `unsafe_is_unique` as the `(Bool, _)`-functor action:
 
-```fix,ignore
+```fix ignore
 // `Wrap` is unboxed, so `unsafe_is_unique` cannot be called on it directly; what matters is the
 // sharing of the boxed field `_0`, recovered by acting on the field.
 type Wrap = unbox struct { _0 : SomeBoxedType };

@@ -18,14 +18,14 @@ module Std;
 // 
 // This is useful when you want to write a placeholder that will be implemented later:
 // 
-// ```fix,ignore
+// ```fix ignore
 // truth : I64;
 // truth = undefined("I will implement the truth later.");
 // ```
 // 
 // Another use case is aborting the program when a certain branch of the code should not be reached:
 // 
-// ```fix,ignore
+// ```fix ignore
 // if condition {
 //     // Do something.
 // } else {
@@ -52,7 +52,7 @@ type LoopState s r = unbox union { continue : s, break : r };
 
 // `loop` enables you to make a loop. `LoopState` is a union type defined as follows: 
 // 
-// ```fix,ignore
+// ```fix ignore
 // type LoopState s r = unbox union { continue : s, break : r };
 // ```
 // 
@@ -2881,12 +2881,12 @@ namespace String {
     // Do not use this function if you perform `IO` operations that modify the content pointed to by `ptr` or free `ptr`.
     //
     // For example,
-    // ```fix,ignore
+    // ```fix ignore
     // let str = unsafe_from_c_str_ptr(ptr);
     // FFI_CALL_IO[() free(Ptr), ptr];;
     // ```
     // may be rewritten to:
-    // ```fix,ignore
+    // ```fix ignore
     // FFI_CALL_IO[() free(Ptr), ptr];;
     // let str = unsafe_from_c_str_ptr(ptr);
     // ```

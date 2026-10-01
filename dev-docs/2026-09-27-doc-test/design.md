@@ -49,13 +49,13 @@ doc を持つ entity は、module（`module X;` の直前のコメント）、�
 
 ### Fix の例になるブロック
 
-コメントを Markdown として読み、その中の fenced code block（```` ``` ```` か `~~~` で囲んだもの。対の規則は CommonMark に従い、4 桁以上字下げした行は fence にならない。fence はそれだけで 1 行に書く。そのため、リストのマーカーと同じ行（`- ```fix`）と引用の中のブロックは対象にならず、リスト項目の中でも独立した行に書いた fence は対象になる）のうち、info string の最初の要素が `fix` であるものを **Fix の例** と呼ぶ。Fix の例は、次に述べる印で外さない限りテストとして実行する。
+コメントを Markdown として読み、その中の fenced code block（```` ``` ```` か `~~~` で囲んだもの。対の規則は CommonMark に従い、4 桁以上字下げした行は fence にならない。fence はそれだけで 1 行に書く。そのため、リストのマーカーと同じ行（`- ```fix`）と引用の中のブロックは対象にならず、リスト項目の中でも独立した行に書いた fence は対象になる）のうち、info string の最初の語が `fix` であるものを **Fix の例** と呼ぶ。Fix の例は、次に述べる印で外さない限りテストとして実行する。
 
-info string は `,` で区切り、各要素の前後の空白を取り除いて読む。
+info string は空白で区切って語に分ける。CommonMark の処理系が info string の最初の語を言語名として読むのと同じ区切りなので、Fix の例は、生の Markdown を表示しても Fix のコードとして色付けされる。
 
-- 最初の要素がちょうど `fix` なら Fix の例である。
-- 2 つ目以降の要素は **印** で、`ignore` か `no_run` のどちらかである。
-- 最初の要素が `fix` でないブロック（info string が空、`sh`、`fixme` など）は Fix の例ではない。表示されるだけで、テストにも隠し行の処理にもかからない。
+- 最初の語がちょうど `fix` なら Fix の例である。
+- 2 つ目以降の語は **印** で、`ignore` か `no_run` のどちらかである。
+- 最初の語が `fix` でないブロック（info string が空、`sh`、`fixme` など）は Fix の例ではない。表示されるだけで、テストにも隠し行の処理にもかからない。ただし、最初の語が `fix,` で始まるもの（`fix,no_run`）は、印をカンマで区切って書いた Fix の例と読み、エラーにする。
 
 印の意味は次のとおり。
 
@@ -67,8 +67,9 @@ info string は `,` で区切り、各要素の前後の空白を取り除いて
 
 `fix test` は、次の info string をエラーにする。エラーはコメントのその行を指す。
 
-- 2 つ目以降の要素に、`ignore` と `no_run` 以外のものがある。
+- 2 つ目以降の語に、`ignore` と `no_run` 以外のものがある。
 - `ignore` と `no_run` が両方ある。
+- 最初の語が `fix,` で始まる。印の区切りを空白の 1 通りにそろえ、`fix,no_run` と書いた例が黙ってテストから外れないようにするためである。
 
 `fix docs` と言語サーバは、これらをエラーにしない。印は実行するときにだけ意味を持ち、表示には影響しないからである（後述の「表示」で、info string は `fix` に書き換えられる）。
 
@@ -76,9 +77,10 @@ info string は `,` で区切り、各要素の前後の空白を取り除いて
 
 ```
 fix              ->  テストする
-fix,no_run       ->  コンパイルだけ
-fix, ignore      ->  テストしない
-fix,no-run       ->  fix test のエラー（知らない印）
+fix no_run       ->  コンパイルだけ
+fix ignore       ->  テストしない
+fix no-run       ->  fix test のエラー（知らない印）
+fix,no_run       ->  fix test のエラー（印をカンマで区切っている）
 fixme            ->  Fix の例ではない
 ```
 
@@ -238,7 +240,7 @@ error: Unknown name `deduplicate`.
 `fix docs`、言語サーバの hover、補完の説明の 3 か所は、docstring を出力する前に同じ変換を通す。変換は 1 つの関数にまとめる。
 
 - Fix の例から、隠し行と隠れた空行を取り除く。
-- Fix の例の info string を `fix` に書き換える。印は表示に関係しないので落とす。また mkdocs などの Markdown の処理系は info string の最初の語を言語の名前として読むので、`fix,no_run` のままでは Fix のコードとして扱われない。
+- Fix の例の info string を `fix` に書き換える。印は読み手に関係しないので落とす。
 
 `fix docs` は例を型検査しない。これまでどおり、コードの本体を型検査せずに文書を作る。
 
@@ -259,7 +261,7 @@ error: Unknown name `deduplicate`.
   - 文の形に包んで通るもの: `product`、`intersperse`、`split`、`String::from_U8`、`iget`、`iset`、`imod`、`iact`。
   - `ixchg` の例は、`assert_eq(...)` の後が `;` 1 つで、構文エラーになる。
   - `Array::dedup` の例は、存在しない `deduplicate` を呼び、しかも `==` の式として書かれている。`[1,1,2,2,3].dedup == [1,2,3]` は成り立つ。
-  - `unsafe_from_c_str_ptr` の 2 つの例は、どこにも定義していない `ptr` を使う。`fix,ignore` に当たる。
+  - `unsafe_from_c_str_ptr` の 2 つの例は、どこにも定義していない `ptr` を使う。`fix ignore` に当たる。
 - **`src/docs/std_*.md`:** `std_fix.md`、`std_ffi_get_funptr_release.md`、`std_unsafe_is_unique.md` の最初のブロックは完全なプログラムで、動く。`std_unsafe_is_unique.md` の 2 つ目のブロックは、定義していない `SomeBoxedType` を使う断片である。
 - **`~/fixlang-projs`:** 重複を除いて 102 個。完全なプログラムが 4 個、`module` を持たず `main` などを定義するものが 7 個、宣言が約 15 個、断片が約 76 個である。断片には、`"x = {}".format((42,))   // "x = 42"` のような結果のコメント付きのもの、`==>` で結果を書くもの、定義していない変数を使うもの、Fix でないもの（BNF の文法）がある。
 
@@ -290,6 +292,7 @@ Rust の doctest は、2021 edition までは例ごとに別々にコンパイ�
 
 ### C. 採らなかった案
 
+- **印をカンマで区切る（`fix,no_run`。rustdoc の文書が示す書き方）。** CommonMark の処理系は info string を空白で区切り、最初の語を言語名にする。そのため `fix,no_run` は、生の Markdown を表示したときに Fix のコードとして色付けされない。rustdoc はカンマと空白のどちらも区切りとして受け付けるが、表記を 1 通りにそろえるため、空白だけにする。
 - **info string の無いブロックもテストする（Rust の既定）。** 付録 A のとおり、既存のブロックの大半は単独では動かない断片で、ほぼすべてのライブラリの `fix test` が失敗するようになる。
 - **テスト専用の印 ```` ```fix-test ````（Julia の `jldoctest` の方式）。** ハイライトのための `fix` とは衝突しないが、テストしない Fix のコードにどの印を付けるかがぼやける。`fix` をテストにし、外すものに `ignore` を付けるほうが規則が単純である。
 - **文の形の例を、M の中の値として足す（`DocTest` を作らない）。** 例の中の名前の見え方は、M の import を写す今の方式と同じになる。今の方式は、例がいつも自分の module `DocTest` を持つ 1 つの形に揃う。M の中に足す方式は、例ごとの値の名前を型検査のキャッシュの鍵と合わせる工夫が要る。

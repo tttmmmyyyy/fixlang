@@ -150,11 +150,11 @@ module Lib;
 // );
 // ```
 //
-// ```fix,no_run
+// ```fix no_run
 // assert_eq(|_|"this example is compiled alone", double(1), 0)
 // ```
 //
-// ```fix,ignore
+// ```fix ignore
 // double(undefined_name)
 // ```
 double : I64 -> I64;
@@ -357,22 +357,27 @@ fn test_error_on_the_wrapper_is_reported_at_the_fence() {
     );
 }
 
-/// The info string of a Fix example carries `ignore`, `no_run` or neither, and a comment closes
-/// each example it opens. `fix test` rejects any other before it runs a test.
+/// The info string of a Fix example carries `ignore`, `no_run` or neither, separated from `fix` by
+/// spaces, and a comment closes each example it opens. `fix test` rejects any other before it runs
+/// a test.
 #[test]
 fn test_malformed_examples_are_rejected() {
     let lib = r#"module Lib;
 
-// ```fix, no-run
+// ```fix no-run
 // pure()
 // ```
 //
-// ```fix,ignore,no_run
+// ```fix ignore no_run
 // pure()
 // ```
 //
 // ```fix
 // module Other;
+// ```
+//
+// ```fix,no_run
+// pure()
 // ```
 //
 // ```fix
@@ -388,15 +393,19 @@ value = 1;
         streams(&output)
     );
     for (message, line) in [
-        ("Unknown mark `no-run`", "3 | // ```fix, no-run"),
+        ("Unknown mark `no-run`", "3 | // ```fix no-run"),
         (
             "is marked both `ignore` and `no_run`",
-            "7 | // ```fix,ignore,no_run",
+            "7 | // ```fix ignore no_run",
         ),
         ("declares the module `Other`", "12 | // module Other;"),
         (
+            "Separate the marks of a Fix example from `fix` by spaces, as in `fix no_run`.",
+            "15 | // ```fix,no_run",
+        ),
+        (
             "The comment ends inside this Fix example. Close it by a line of ```.",
-            "15 | // ```fix",
+            "19 | // ```fix",
         ),
     ] {
         assert!(
@@ -744,7 +753,7 @@ fn test_compile_error_of_the_test_function_stops_before_the_examples() {
 fn test_no_run_example_that_does_not_compile_fails() {
     let lib = r#"module Lib;
 
-// ```fix,no_run
+// ```fix no_run
 // let x : I64 = "a string";
 // pure()
 // ```
@@ -772,7 +781,7 @@ fn test_fix_docs_reads_each_doc_comment_on_its_own() {
 first : I64;
 first = 1;
 
-// ```fix,no_run
+// ```fix no_run
 // # let hidden = 1;
 // let shown = 2;
 // pure()
@@ -951,7 +960,7 @@ import Util::{triple};
 // assert_eq(|_|"", sextuple(1), triple(2))
 // ```
 //
-// ```fix,no_run
+// ```fix no_run
 // assert_eq(|_|"", sextuple(1), quadruple(1))
 // ```
 sextuple : I64 -> I64;
@@ -999,7 +1008,7 @@ old_double = |x| 2 * x;
 // # );
 // ```
 //
-// ```fix,no_run
+// ```fix no_run
 // let x = double(1);
 // assert_eq(|_|"", x, 3)
 // ```

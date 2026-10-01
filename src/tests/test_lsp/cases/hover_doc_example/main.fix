@@ -2,7 +2,7 @@ module Main;
 
 // Doubles a number.
 //
-// ```fix,no_run
+// ```fix no_run
 // # import Main;
 // let x = double(21);
 // #
