@@ -26,8 +26,10 @@ source with a comment that opens with `Modified from upstream Ryu by the Fix pro
   `f2s_shortest`, and `float_text.c` writes Fix's text from them. Upstream's `to_chars`, the
   `*_buffered*` functions and `copy_special_str` in `common.h` are deleted.
 - `d2fixed.c` writes the power of ten as Fix writes it, `1.50e2` where upstream writes `1.50e+02`,
-  and writes `.0` where the precision is 0, `2.0` where upstream writes `2`. Upstream's `d2fixed`,
-  `d2fixed_buffered`, `d2exp` and `d2exp_buffered` are deleted.
+  and writes `.0` where the precision is 0, `2.0` where upstream writes `2`. The power of ten is
+  written by `append_exponent`, which `digit_table.h` gains together with `exponent_length`, and
+  which `float_text.c` calls as well. Upstream's `d2fixed`, `d2fixed_buffered`, `d2exp` and
+  `d2exp_buffered` are deleted.
 
 To take a newer Ryu, diff upstream's files against the revision recorded above, and carry the
 differences into these files. The build carries this directory to the C compiler through

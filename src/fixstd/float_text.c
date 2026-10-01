@@ -29,31 +29,6 @@ the program runs in.
 // the declaration because the runtime has no header of its own.
 __attribute__((noreturn)) void fixruntime_abort(void);
 
-// Writes the exponent of a number written with a power of ten, such as the `300` of `1.0e300`, at
-// `buf` in decimal, and reports how many digits it took. No null follows them.
-//
-// `exponent` is from 0 to 999. The caller writes the `-` of a negative exponent before calling.
-//
-// # Examples
-// `fixruntime_write_exponent(buf, 300)` writes `300` and returns 3, and
-// `fixruntime_write_exponent(buf, 7)` writes `7` and returns 1.
-static int fixruntime_write_exponent(char *buf, int exponent)
-{
-    if (exponent >= 100)
-    {
-        memcpy(buf, DIGIT_TABLE + 2 * (exponent / 10), 2);
-        buf[2] = (char)('0' + exponent % 10);
-        return 3;
-    }
-    if (exponent >= 10)
-    {
-        memcpy(buf, DIGIT_TABLE + 2 * exponent, 2);
-        return 2;
-    }
-    buf[0] = (char)('0' + exponent);
-    return 1;
-}
-
 // The window the point is written positionally in: see `fixruntime_write_float_text`.
 #define F32_POSITIONAL_LOW (-6)
 #define F32_POSITIONAL_HIGH 13
@@ -205,16 +180,15 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
     const bool positional = point > positional_low && point <= positional_high;
     // The power of ten written after the digits when the text is not positional.
     const int exponent = point - 1;
-    const int exponent_magnitude = exponent < 0 ? -exponent : exponent;
 
     // The length is decided before anything is written, so that the text is written straight into
-    // `buf` once it is known to fit.
+    // `buf` once it is known to fit. Each shape below writes the text the matching shape above
+    // counts, which the check after them holds them to.
     int length = negative;
     if (!positional)
     {
-        // A digit, a point, the other digits or a `0`, `e`, the sign of the power and its digits.
-        length += 2 + (digit_count == 1 ? 1 : digit_count - 1) + 1 + (exponent < 0) +
-                  (exponent_magnitude >= 100 ? 3 : exponent_magnitude >= 10 ? 2 : 1);
+        // A digit, a point, the other digits or a `0`, `e`, and the power.
+        length += 2 + (digit_count == 1 ? 1 : digit_count - 1) + 1 + exponent_length(exponent);
     }
     else if (point >= digit_count)
     {
@@ -251,11 +225,8 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
             out[written++] = '0';
         }
         out[written++] = 'e';
-        if (exponent < 0)
-        {
-            out[written++] = '-';
-        }
-        fixruntime_write_exponent(out + written, exponent_magnitude);
+        written += append_exponent(exponent, out + written);
+        out += written;
     }
     else if (point >= digit_count)
     {
@@ -267,6 +238,7 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
         }
         out[point] = '.';
         out[point + 1] = '0';
+        out += point + 2;
     }
     else if (point > 0)
     {
@@ -278,6 +250,7 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
             out[i] = out[i + 1];
         }
         out[point] = '.';
+        out += digit_count + 1;
     }
     else
     {
@@ -289,6 +262,13 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
             out[2 + i] = '0';
         }
         fixruntime_write_digits(out + 2 - point, decimal.mantissa, (uint32_t)digit_count);
+        out += 2 - point + digit_count;
+    }
+    if (out - buf != length)
+    {
+        fprintf(stderr, "A number's text was counted as %d bytes and written in %" PRId64 "\n", length,
+                (int64_t)(out - buf));
+        fixruntime_abort();
     }
     buf[length] = '\0';
     return length;
