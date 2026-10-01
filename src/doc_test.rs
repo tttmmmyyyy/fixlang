@@ -593,16 +593,16 @@ fn assemble_example(
         lines: [vec![open_origin], code_origins, vec![close_origin]].concat(),
     };
     let assemble = |header: &str, footer: &str| {
-        let lines = iter::once(header.to_string())
+        let source_lines = iter::once(header.to_string())
             .chain(code.iter().cloned())
             .chain(iter::once(footer.to_string()))
             .collect::<Vec<_>>();
         assert_eq!(
-            lines.len(),
+            source_lines.len(),
             origin.lines.len(),
             "an assembled example has a line for each line its origin records"
         );
-        format!("{}\n", lines.join("\n"))
+        format!("{}\n", source_lines.join("\n"))
     };
 
     // The source is saved under a name the origin decides, so that a source read back from a
