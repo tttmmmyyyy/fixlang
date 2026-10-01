@@ -1116,7 +1116,7 @@ type Tuple2 = struct { fst : I64, snd : I64 };
         streams(&output)
     );
     let lib = r#"module Lib;
-import Std::{I64, Monad};
+import Std::{I64, Monad::pure};
 
 // ```fix
 // pure()
