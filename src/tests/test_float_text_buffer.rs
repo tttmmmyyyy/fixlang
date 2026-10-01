@@ -2,14 +2,14 @@
 // buffer's size is derived from the widest text the value can be asked for, and the derivation
 // holds only if the widest digits, the widest exponent and the null terminator were all counted.
 //
-// A buffer short of that text stops the program: the runtime builds every text in a buffer of its
-// own and hands its length to `fixruntime_copy_float_text`, which aborts where the text and its
-// null do not fit before copying anything. So what this file does is write the widest text each of
-// the eight can produce, which is what proves the check never fires — and an undersized buffer is
-// caught by the abort wherever the tests run, rather than by the Valgrind this file also asks for.
+// A buffer short of that text stops the program: the runtime knows the length of every text
+// before it writes the text into the buffer, and aborts where the text and its null do not fit.
+// So what this file does is write the widest text each of the eight can produce, which is what
+// proves the check never fires — and an undersized buffer is caught by the abort wherever the
+// tests run, rather than by the Valgrind this file also asks for.
 //
 // The run is under Valgrind all the same, because the check answers for the write into the buffer
-// and Valgrind answers for everything around it: the `Array` the buffer lives in, the copy into
+// and Valgrind answers for everything around it: the `Array` the buffer lives in, the write into
 // it, and the `String` built from it.
 
 #[cfg(test)]
@@ -36,30 +36,32 @@ mod float_text_buffer_tests {
 module Main;
 
 main : IO () = (
-    // The least value of each type, whose whole part and exponent are the widest either type
-    // reaches, written to every precision the functions accept. Each buffer is therefore filled
-    // to the width its size was derived for.
+    // The least value of each type, whose whole part is the widest either type reaches, and the
+    // greatest negative one, whose exponent is the widest, written to every precision the
+    // functions accept. Each buffer is therefore filled to the width its size was derived for.
     let widest_f32 = -3.4028235e38_F32;
+    let widest_exponent_f32 = -1.4e-45_F32;
     let widest_f64 = -1.7976931348623157e308;
+    let widest_exponent_f64 = -5.0e-324;
     let total = range(0, 256).fold(0, |p, total|
         let prec = p.u8;
         total + widest_f32.to_string_precision(prec).@size
-              + widest_f32.to_string_exp_precision(prec).@size
+              + widest_exponent_f32.to_string_exp_precision(prec).@size
               + widest_f64.to_string_precision(prec).@size
-              + widest_f64.to_string_exp_precision(prec).@size
+              + widest_exponent_f64.to_string_exp_precision(prec).@size
     );
-    // The four that take no precision. The exponential two write the 6 places their format gives
-    // by default; `to_string` writes the shortest digits, whose widest text comes next.
+    // The four that take no precision. The exponential two write the 6 places `to_string_exp`
+    // writes; `to_string` writes the shortest digits, whose widest text comes next.
     let total = total + widest_f32.to_string.@size
-                      + widest_f32.to_string_exp.@size
+                      + widest_exponent_f32.to_string_exp.@size
                       + widest_f64.to_string.@size
-                      + widest_f64.to_string_exp.@size;
+                      + widest_exponent_f64.to_string_exp.@size;
     // `to_string` writes the shortest digits, and its buffer is sized for the widest text those
     // reach: a number whose digits fill the type and whose point sits outside the window written
     // positionally for an `F64`, and one at the far edge of that window for an `F32`.
     let total = total + (-2.2250738585072014e-308).to_string.@size
                       + (-1.0e12_F32).to_string.@size;
-    assert_eq(|_|"the texts of every precision come to their known total", total, 224611);;
+    assert_eq(|_|"the texts of every precision come to their known total", total, 224619);;
     pure()
 );
 "#;

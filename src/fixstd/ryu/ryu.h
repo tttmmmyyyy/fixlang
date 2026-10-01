@@ -23,38 +23,43 @@ extern "C" {
 
 #include <inttypes.h>
 
-// Modified from upstream Ryu by the Fix project: the `#define` lines below were added, and the file
-// is otherwise as upstream gives it. The Fix runtime links Ryu into every program it builds, and a
-// program may carry Ryu on its own, so the runtime's copy gives each function a name that begins
-// with `fixruntime_`, which no name of such a program does.
-#define d2s_buffered_n fixruntime_ryu_d2s_buffered_n
-#define d2s_buffered fixruntime_ryu_d2s_buffered
-#define d2s fixruntime_ryu_d2s
-#define f2s_buffered_n fixruntime_ryu_f2s_buffered_n
-#define f2s_buffered fixruntime_ryu_f2s_buffered
-#define f2s fixruntime_ryu_f2s
+// Modified from upstream Ryu by the Fix project: this file declares the four functions the Fix
+// runtime calls, of which `d2s_shortest`, `f2s_shortest` and `ryu_decimal` are the Fix project's.
+//
+// The runtime links Ryu into every program it builds, and a program may carry Ryu on its own, so
+// each function here takes a name that begins with `fixruntime_`, which no name of such a program
+// does.
+#define d2s_shortest fixruntime_ryu_d2s_shortest
+#define f2s_shortest fixruntime_ryu_f2s_shortest
 #define d2fixed_buffered_n fixruntime_ryu_d2fixed_buffered_n
-#define d2fixed_buffered fixruntime_ryu_d2fixed_buffered
-#define d2fixed fixruntime_ryu_d2fixed
 #define d2exp_buffered_n fixruntime_ryu_d2exp_buffered_n
-#define d2exp_buffered fixruntime_ryu_d2exp_buffered
-#define d2exp fixruntime_ryu_d2exp
 
-int d2s_buffered_n(double f, char* result);
-void d2s_buffered(double f, char* result);
-char* d2s(double f);
+// A positive number written in decimal: `mantissa * 10^exponent`, where `mantissa` has `length`
+// digits.
+typedef struct ryu_decimal {
+  uint64_t mantissa;
+  int32_t exponent;
+  uint32_t length;
+} ryu_decimal;
 
-int f2s_buffered_n(float f, char* result);
-void f2s_buffered(float f, char* result);
-char* f2s(float f);
+// The shortest decimal that reads back as `f`, which is finite and other than zero. The sign of
+// `f` is left out.
+//
+// For example, `d2s_shortest(-0.25)` is `{ 25, -2, 2 }`, and `d2s_shortest(1e300)` is
+// `{ 1, 300, 1 }`.
+ryu_decimal d2s_shortest(double f);
+ryu_decimal f2s_shortest(float f);
 
+// Each of the two below writes the finite `d` at `result` with `precision` digits after the point,
+// and reports how many bytes the text took. No null follows it.
+//
+// `d2fixed_buffered_n` writes the number positionally, and `d2exp_buffered_n` writes one digit
+// before the point and a power of ten after the digits. The power of ten is written as Fix writes
+// it, with `-` for a negative one and no padding: `1.50e2`, `1.50e-2`. With a precision of 0, the
+// point is written all the same, followed by one `0`: `2.0`, `2.0e2`. So every text these write is
+// a floating point literal of Fix.
 int d2fixed_buffered_n(double d, uint32_t precision, char* result);
-void d2fixed_buffered(double d, uint32_t precision, char* result);
-char* d2fixed(double d, uint32_t precision);
-
 int d2exp_buffered_n(double d, uint32_t precision, char* result);
-void d2exp_buffered(double d, uint32_t precision, char* result);
-char* d2exp(double d, uint32_t precision);
 
 #ifdef __cplusplus
 }

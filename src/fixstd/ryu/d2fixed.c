@@ -28,7 +28,6 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 
 #ifdef RYU_DEBUG
@@ -328,6 +327,18 @@ static inline uint32_t lengthForIndex(const uint32_t idx) {
   return (log10Pow2(16 * (int32_t) idx) + 1 + 16 + 8) / 9;
 }
 
+// Modified from upstream Ryu by the Fix project: writes the point and the `precision` zeros after
+// the `0` of a zero, or `.0` where `precision` is 0, and reports how many bytes it wrote.
+static inline int append_zero_fraction(const uint32_t precision, char* const result) {
+  result[0] = '.';
+  if (precision == 0) {
+    result[1] = '0';
+    return 2;
+  }
+  memset(result + 1, '0', precision);
+  return 1 + (int) precision;
+}
+
 static inline int copy_special_str_printf(char* const result, const bool sign, const uint64_t mantissa) {
 #if defined(_MSC_VER)
   // TODO: Check that -nan is expected output on Windows.
@@ -380,11 +391,7 @@ int d2fixed_buffered_n(double d, uint32_t precision, char* result) {
       result[index++] = '-';
     }
     result[index++] = '0';
-    if (precision > 0) {
-      result[index++] = '.';
-      memset(result + index, '0', precision);
-      index += precision;
-    }
+    index += append_zero_fraction(precision, result + index);
     return index;
   }
 
@@ -546,20 +553,16 @@ int d2fixed_buffered_n(double d, uint32_t precision, char* result) {
     memset(result + index, '0', precision);
     index += precision;
   }
+  if (precision == 0) {
+    // Modified from upstream Ryu by the Fix project: a precision of 0 writes `.0` after the
+    // digits.
+    memcpy(result + index, ".0", 2);
+    index += 2;
+  }
   return index;
 }
 
-void d2fixed_buffered(double d, uint32_t precision, char* result) {
-  const int len = d2fixed_buffered_n(d, precision, result);
-  result[len] = '\0';
-}
 
-char* d2fixed(double d, uint32_t precision) {
-  char* const buffer = (char*)malloc(2000);
-  const int index = d2fixed_buffered_n(d, precision, buffer);
-  buffer[index] = '\0';
-  return buffer;
-}
 
 
 
@@ -588,13 +591,9 @@ int d2exp_buffered_n(double d, uint32_t precision, char* result) {
       result[index++] = '-';
     }
     result[index++] = '0';
-    if (precision > 0) {
-      result[index++] = '.';
-      memset(result + index, '0', precision);
-      index += precision;
-    }
-    memcpy(result + index, "e+00", 4);
-    index += 4;
+    index += append_zero_fraction(precision, result + index);
+    memcpy(result + index, "e0", 2);
+    index += 2;
     return index;
   }
 
@@ -785,12 +784,16 @@ int d2exp_buffered_n(double d, uint32_t precision, char* result) {
       }
     }
   }
+  // Modified from upstream Ryu by the Fix project: a precision of 0 writes `.0` after the digit, and
+  // the power of ten is written with no `+` and no padding.
+  if (!printDecimalPoint) {
+    memcpy(result + index, ".0", 2);
+    index += 2;
+  }
   result[index++] = 'e';
   if (exp < 0) {
     result[index++] = '-';
     exp = -exp;
-  } else {
-    result[index++] = '+';
   }
 
   if (exp >= 100) {
@@ -798,22 +801,12 @@ int d2exp_buffered_n(double d, uint32_t precision, char* result) {
     memcpy(result + index, DIGIT_TABLE + 2 * (exp / 10), 2);
     result[index + 2] = (char) ('0' + c);
     index += 3;
-  } else {
+  } else if (exp >= 10) {
     memcpy(result + index, DIGIT_TABLE + 2 * exp, 2);
     index += 2;
+  } else {
+    result[index++] = (char) ('0' + exp);
   }
 
   return index;
-}
-
-void d2exp_buffered(double d, uint32_t precision, char* result) {
-  const int len = d2exp_buffered_n(d, precision, result);
-  result[len] = '\0';
-}
-
-char* d2exp(double d, uint32_t precision) {
-  char* const buffer = (char*)malloc(2000);
-  const int index = d2exp_buffered_n(d, precision, buffer);
-  buffer[index] = '\0';
-  return buffer;
 }

@@ -1,10 +1,9 @@
 # Ryu
 
-Ulf Adams' implementation of Ryu, the algorithm that finds the shortest decimal text which reads
+Ulf Adams' implementation of Ryu, the algorithm that finds the shortest decimal digits which read
 back as the same binary floating point number, and of Ryu printf, which writes a number with a given
-number of places the way C's `printf` does. `Std::F64::to_string` and `Std::F32::to_string` are
-built on the first; `to_string_precision`, `to_string_exp` and `to_string_exp_precision` of both
-types on the second.
+number of places. `Std::F64::to_string` and `Std::F32::to_string` are built on the first;
+`to_string_precision`, `to_string_exp` and `to_string_exp_precision` of both types on the second.
 
 - Source: https://github.com/ulfjack/ryu
 - Revision: `4c0618b0e44f7ef027ebae05d2cc7812048f7c8f`
@@ -18,24 +17,35 @@ program `fix` builds links these objects.
 
 ## The files
 
-The files hold the content upstream gives them, except that `ryu.h` opens with a `#define` for each
-of its twelve functions, which gives the function a name beginning with `fixruntime_ryu_`. To take a
-newer Ryu, replace the files with the upstream files of the same names, put the `#define` lines back
-into `ryu.h` with one for each function it then declares, and record the revision they came from.
-The build carries this directory to the C compiler through `RUNTIME_HEADERS` and `RUNTIME_SOURCES`
-in `src/build/build.rs`, which `test_vendored_headers_are_all_carried` and
-`test_vendored_sources_are_all_compiled` hold to the files that are here.
+The files are upstream's, changed in three ways. Each change is marked in the source with a comment
+that opens with `Modified from upstream Ryu by the Fix project`, apart from the deletions.
+
+- `ryu.h` declares only the four functions `float_text.c` calls, and opens with a `#define` for each,
+  which gives the function a name beginning with `fixruntime_ryu_`.
+- `d2s.c` and `f2s.c` give the shortest digits as a number, through `d2s_shortest` and
+  `f2s_shortest`, in place of upstream's text: the text Fix writes is not the one upstream writes,
+  and `float_text.c` writes Fix's from the digits. Upstream's `to_chars`, the `*_buffered*`
+  functions and `copy_special_str` in `common.h` are deleted.
+- `d2fixed.c` writes the power of ten without `+` and without padding (`1.50e2`, not `1.50e+02`),
+  and writes `.0` where the precision is 0 (`2.0`, not `2`). Upstream's `d2fixed`,
+  `d2fixed_buffered`, `d2exp` and `d2exp_buffered` are deleted.
+
+To take a newer Ryu, diff upstream's files against the revision recorded above, and carry the
+differences into these files. The build carries this directory to the C compiler through
+`RUNTIME_HEADERS` and `RUNTIME_SOURCES` in `src/build/build.rs`, which
+`test_vendored_headers_are_all_carried` and `test_vendored_sources_are_all_compiled` hold to the
+files that are here.
 
 The renaming keeps Ryu's names out of the link of a program, which may carry Ryu on its own and
-define the same names. `test_runtime_defines_only_fixruntime_names` fails on a function a newer
-`ryu.h` declares without a `#define`.
+define the same names. `test_runtime_defines_only_fixruntime_names` fails on a function `ryu.h`
+declares without a `#define`.
 
 | File | Role |
 | --- | --- |
-| `ryu.h` | The declarations a caller uses. `float_text.c` calls `d2s_buffered_n`, `f2s_buffered_n`, `d2fixed_buffered_n` and `d2exp_buffered_n`. |
-| `d2s.c` | `double` to its shortest decimal text. |
-| `f2s.c` | `float` to its shortest decimal text. |
-| `d2fixed.c` | `double` to its text with a given number of places, positional (`%.*f`) or with a power of ten (`%.*e`). |
+| `ryu.h` | The declarations `float_text.c` uses: `d2s_shortest`, `f2s_shortest`, `d2fixed_buffered_n` and `d2exp_buffered_n`. |
+| `d2s.c` | `double` to its shortest decimal digits. |
+| `f2s.c` | `float` to its shortest decimal digits. |
+| `d2fixed.c` | `double` to its text with a given number of places, positional or with a power of ten. |
 | `common.h`, `digit_table.h` | Bit and digit helpers the sources above use. |
 | `d2s_intrinsics.h`, `f2s_intrinsics.h` | The 64 x 64 and 32 x 32 multiplications the algorithm rests on. |
 | `d2s_full_table.h`, `f2s_full_table.h`, `d2fixed_full_table.h` | The powers of ten the algorithm looks up. |
@@ -44,15 +54,14 @@ define the same names. `test_runtime_defines_only_fixruntime_names` fails on a f
 `d2s.c` and `f2s.c` each define a `to_chars` of their own, so each source is compiled as a
 translation unit of its own.
 
-## The text these produce
+## What these produce
 
-`d2s_buffered_n` and `f2s_buffered_n` write scientific text: `1E300`, `3.333333333333333E-1`,
-`-0E0`. Fix spells a number differently — `1.0e300`, `0.3333333333333333`, `-0.0` — so
-`fixruntime_f64_to_str_shortest` in `float_text.c` takes the digits and the exponent from that
-text and writes Fix's spelling.
+`d2s_shortest` and `f2s_shortest` give the shortest digits that read back as a number and the power
+of ten they are multiplied by: `{ 25, -2, 2 }` for `0.25`, which has 2 digits. From these,
+`fixruntime_write_float_text` in `float_text.c` writes Fix's spelling: `0.25`, `1.0e300`.
 
-`d2fixed_buffered_n` and `d2exp_buffered_n` write the text `printf` writes for `%.*f` and `%.*e`
-under the `C` locale: `3.140`, `3.140e+00`.
+`d2fixed_buffered_n` and `d2exp_buffered_n` write a number with a given number of places,
+positionally or with a power of ten: `3.140`, `3.140e0`, `2.0`, `2.0e0`.
 
 Ryu spells an infinity and a NaN its own way, so `float_text.c` writes those without it, as `inf`,
-`-inf` and `nan`.
+`-inf` and `nan`, and writes a zero as `0.0` and `-0.0`.
