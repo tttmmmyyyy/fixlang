@@ -183,60 +183,20 @@ impl ImportStatement {
     fn stringify_internal(&self, line_limit: usize) -> Text {
         let text = Text::from_str("import ");
         let text = text.append_to_last_line(&self.module_name);
-        let text = if self.items.len() == 0 {
-            text.append_to_last_line("::{}")
-        } else {
-            text
-        };
         let text = if self.items.len() == 1 && matches!(self.items[0], ImportTreeNode::Any(_)) {
             // For example, "import Std::*" should be written as "import Std"
             text
         } else {
-            if self.items.len() >= 1 {
-                let text = text.append_to_last_line("::");
-                let items_text = Text::join(
-                    self.items
-                        .iter()
-                        .map(|item| item.stringify(line_limit))
-                        .collect::<Vec<_>>(),
-                    ", ",
-                    line_limit,
-                );
-                let needs_brace = self.items.len() >= 2;
-                let items_text = if needs_brace {
-                    items_text.curly_brace()
-                } else {
-                    items_text
-                };
-                let text = text.append_nobreak(items_text);
-                text
-            } else {
-                text
-            }
+            text.append_to_last_line("::")
+                .append_nobreak(stringify_import_items(&self.items, line_limit))
         };
         let text = if self.hiding.len() >= 1 {
-            let text = text.append_to_last_line(" hiding ");
-            let hiding_text = Text::join(
-                self.hiding
-                    .iter()
-                    .map(|item| item.stringify(line_limit))
-                    .collect::<Vec<_>>(),
-                ", ",
-                line_limit,
-            );
-            let needs_brace = self.hiding.len() >= 2;
-            let hiding_text = if needs_brace {
-                hiding_text.curly_brace()
-            } else {
-                hiding_text
-            };
-            let text = text.append_nobreak(hiding_text);
-            text
+            text.append_to_last_line(" hiding ")
+                .append_nobreak(stringify_import_items(&self.hiding, line_limit))
         } else {
             text
         };
-        let text = text.append_to_last_line(";");
-        text
+        text.append_to_last_line(";")
     }
 
     /// Makes `name` accessible from `importer`: it is added to a statement of `imports` that brings
@@ -526,32 +486,32 @@ impl ImportTreeNode {
             ImportTreeNode::Any(_) => Text::from_str("*"),
             ImportTreeNode::Symbol(name, _) => Text::from_str(name),
             ImportTreeNode::TypeOrTrait(name, _) => Text::from_str(name),
-            ImportTreeNode::NameSpace(name, items, _) => {
-                let text = Text::from_str(name);
-                let text = if items.len() >= 1 {
-                    let text = text.append_to_last_line("::");
-                    let items_text = Text::join(
-                        items
-                            .iter()
-                            .map(|item| item.stringify(line_limit))
-                            .collect::<Vec<_>>(),
-                        ", ",
-                        line_limit,
-                    );
-                    let needs_brace = items.len() >= 2;
-                    let items_text = if needs_brace {
-                        items_text.curly_brace()
-                    } else {
-                        items_text
-                    };
-                    let text = text.append_nobreak(items_text);
-                    text
-                } else {
-                    text
-                };
-                text
-            }
+            ImportTreeNode::NameSpace(name, items, _) => Text::from_str(name)
+                .append_to_last_line("::")
+                .append_nobreak(stringify_import_items(items, line_limit)),
         }
+    }
+}
+
+/// The items `items` as an import statement lists them after `::` or `hiding`: one item alone, and
+/// none or several in braces, broken across lines where the list runs past `line_limit`.
+///
+/// # Examples
+/// The items `f` and `g` are written `{f, g}`, the item `f` alone is written `f`, and no item is
+/// written `{}`.
+fn stringify_import_items(items: &[ImportTreeNode], line_limit: usize) -> Text {
+    let items_text = Text::join(
+        items
+            .iter()
+            .map(|item| item.stringify(line_limit))
+            .collect::<Vec<_>>(),
+        ", ",
+        line_limit,
+    );
+    if items.len() == 1 {
+        items_text
+    } else {
+        items_text.curly_brace()
     }
 }
 
@@ -580,5 +540,39 @@ impl ImportItem {
                 namespace.push_front(name);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::error::panic_if_err;
+    use crate::parse::parser::parse_str_import_statements;
+    use std::path::PathBuf;
+
+    /// An import statement written back by `stringify` is the statement it was read from, for each
+    /// shape an import path takes: the whole module, no item, one item, several, nested lists, an
+    /// empty list under a namespace, and a `hiding` clause.
+    #[test]
+    fn test_stringify_writes_back_the_statement() {
+        let statements = [
+            "import Std;",
+            "import Std::{};",
+            "import Lib::f;",
+            "import Lib::{f, T};",
+            "import Lib.Util::Ns::{};",
+            "import Lib::{f, Ns::{g, T}, Other::*};",
+            "import Std hiding {Tuple2, IO::*};",
+            "import Std::{IO, Monad::pure} hiding IO::println;",
+        ];
+        let source = format!("module Main;\n{}\n", statements.join("\n"));
+        let parsed = panic_if_err(parse_str_import_statements(
+            PathBuf::from("main.fix"),
+            &source,
+        ));
+        let written = parsed
+            .iter()
+            .map(|statement| statement.stringify())
+            .collect::<Vec<_>>();
+        assert_eq!(written, statements);
     }
 }
