@@ -40,7 +40,7 @@ fn test_std_doc_examples() {
 
     let mut failures = vec![];
     let mut tested = 0;
-    test_examples(&config, &examples, |example, outcome| match outcome {
+    let result = test_examples(&config, &examples, |example, outcome| match outcome {
         ExampleOutcome::Ignored => {}
         ExampleOutcome::Passed => tested += 1,
         ExampleOutcome::Failed(failure) => {
@@ -48,6 +48,7 @@ fn test_std_doc_examples() {
             failures.push(format!("{}:\n{}", example.location(), failure));
         }
     });
+    panic_if_err(result);
     assert!(
         tested > 0,
         "`Std` documents its values with Fix examples that are tested"
@@ -413,32 +414,49 @@ value = 1;
     );
 }
 
-/// `fix test` rejects a module named `DocTest`, the name each Fix example is compiled as, at its
-/// declaration. A namespace, a type or a trait of that name is accepted, and so is the module where
-/// no example is compiled: under `--no-doc`, and in a project without an example.
+/// `fix test` rejects a module named `DocTest` or with a name beginning with `DocTest.`, the names
+/// the Fix examples are compiled under, at its declaration. A module whose name ends in `DocTest`
+/// and a namespace, a type or a trait named `DocTest` are accepted, and so is the module `DocTest`
+/// where no example is compiled: under `--no-doc`, and in a project without an example.
 #[test]
 fn test_the_module_name_doc_test_is_reserved() {
     let module = "module DocTest;\nvalue : I64;\nvalue = 1;\n";
-    let dir = project_dir(
-        &[
-            ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
-            ("doc_test.fix", module),
-        ],
-        &[],
-    );
-    let output = fix_test(&dir, &[]);
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        !output.status.success()
-            && stderr.contains("The module name `DocTest` is reserved")
-            && stderr.contains("1 | module DocTest;")
-            && !stderr.contains("doc test"),
-        "the module `DocTest` is rejected at its declaration before any example runs\n{}",
-        streams(&output)
-    );
+    for reserved in ["DocTest", "DocTest.Examples"] {
+        let dir = project_dir(
+            &[
+                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
+                (
+                    "doc_test.fix",
+                    &module.replace("module DocTest;", &format!("module {};", reserved)),
+                ),
+            ],
+            &[],
+        );
+        let output = fix_test(&dir, &[]);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success()
+                && stderr.contains(&format!("The module name `{}` is reserved", reserved))
+                && stderr.contains(&format!("1 | module {};", reserved))
+                && !stderr.contains("doc test"),
+            "the module `{}` is rejected at its declaration before any example runs\n{}",
+            reserved,
+            streams(&output)
+        );
+    }
 
     let lib_without_examples = "module Lib;\ndouble : I64 -> I64;\ndouble = |x| 2 * x;\n";
     for (build_files, args) in [
+        (
+            vec![
+                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
+                (
+                    "other.fix",
+                    "module Other.DocTest;\nvalue : I64;\nvalue = 1;\n",
+                ),
+            ],
+            vec![],
+        ),
         (
             vec![
                 ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
@@ -1067,9 +1085,10 @@ fn test_examples_that_cannot_share_a_program_are_tested_alone() {
     let output = fix_test(&dir, &["--doc"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("doc tests: 0 passed, 3 failed, 0 ignored.")
-            && stderr.matches("Type mismatch").count() == 3,
-        "each example fails with the error of the source\n{}",
+        !output.status.success()
+            && stderr.matches("Type mismatch").count() == 1
+            && !stderr.contains("doc test"),
+        "the error of the source is reported once, and no example is reported\n{}",
         streams(&output)
     );
 }

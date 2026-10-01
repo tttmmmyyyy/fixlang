@@ -305,6 +305,14 @@ impl ExampleBuild {
                 }
             })
             .collect::<Vec<_>>();
+        assert!(
+            examples
+                .iter()
+                .map(|example| example.name.as_str())
+                .chain(iter::once(DISPATCHER_MODULE_NAME))
+                .all(is_reserved_module_name),
+            "the modules a build of several examples adds have names reserved for the examples"
+        );
         let (content, first_main_line) = dispatcher_source(&examples);
         let dispatcher = Dispatcher {
             source: save_temporary_source(&content, "doc_test_dispatcher")?,
@@ -393,21 +401,31 @@ fn dispatcher_source(examples: &[ExampleModule]) -> (String, usize) {
     (format!("{}{}{}", head, mains, tail), first_main_line)
 }
 
-/// Reports a module of `program` named `DocTest`, the name each Fix example is compiled as. A
-/// namespace, a type or a trait of that name stays free; an example that refers to one of them by a
-/// name beginning with `DocTest` is reported as ambiguous, with the absolute path that tells them
-/// apart.
-pub fn check_doc_test_module_name_is_free(program: &Program) -> Result<(), Errors> {
+/// Whether `name` is a module name reserved for the Fix examples: `DocTest`, or a name beginning
+/// with `DocTest.`, which the modules a build of several examples adds are named.
+///
+/// # Examples
+/// `DocTest` and `DocTest.Examples` are reserved, and `DocTests` and `Lib.DocTest` are not.
+fn is_reserved_module_name(name: &str) -> bool {
+    name == DOC_TEST_MODULE_NAME || name.starts_with(&format!("{}.", DOC_TEST_MODULE_NAME))
+}
+
+/// Reports a module of `program` whose name is reserved for the Fix examples (see
+/// `is_reserved_module_name`). A namespace, a type or a trait named `DocTest` stays free; an
+/// example that refers to one of them by a name beginning with `DocTest` is reported as ambiguous,
+/// with the absolute path that tells them apart.
+pub fn check_doc_test_module_names_are_free(program: &Program) -> Result<(), Errors> {
     match program
         .modules
         .iter()
-        .find(|module| module.name == DOC_TEST_MODULE_NAME)
+        .find(|module| is_reserved_module_name(&module.name))
     {
         Some(module) => Err(Errors::from_msg_srcs(
             format!(
                 "The module name `{}` is reserved for the Fix examples of comments, which \
-                 `fix test` compiles as the module `{}`. Give this module another name.",
-                DOC_TEST_MODULE_NAME, DOC_TEST_MODULE_NAME
+                 `fix test` compiles as modules named `{}` or with names beginning with `{}.`. \
+                 Give this module another name.",
+                module.name, DOC_TEST_MODULE_NAME, DOC_TEST_MODULE_NAME
             ),
             &[&Some(module.source.clone())],
         )),

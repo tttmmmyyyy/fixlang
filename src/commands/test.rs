@@ -5,7 +5,7 @@ use crate::constants::{
     DOC_TEST_EXAMPLE_ENV_VAR, PROJECT_FILE_PATH, TEST_FUNCTION_NAME, TEST_MODULE_NAME,
 };
 use crate::doc_test::{
-    check_doc_test_module_name_is_free, collect_examples, ExampleBuild, ExampleTask, FixExample,
+    check_doc_test_module_names_are_free, collect_examples, ExampleBuild, ExampleTask, FixExample,
 };
 use crate::elaboration::load_source_files;
 use crate::error::{panic_if_err, Errors};
@@ -50,7 +50,7 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
         .iter()
         .any(|example| example.task.source().is_some())
     {
-        panic_if_err(check_doc_test_module_name_is_free(&program));
+        panic_if_err(check_doc_test_module_names_are_free(&program));
     }
     if selection == TestSelection::All && examples.is_empty() {
         run_command(&config);
@@ -72,7 +72,7 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
     config.out_file_path = None;
     let mut passed = 0;
     let mut ignored = 0;
-    test_examples(&config, &examples, |example, outcome| {
+    let result = test_examples(&config, &examples, |example, outcome| {
         let location = example.location();
         match outcome {
             ExampleOutcome::Ignored => {
@@ -90,6 +90,7 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
             }
         }
     });
+    panic_if_err(result);
 
     eprintln!(
         "doc tests: {} passed, {} failed, {} ignored.",
@@ -138,14 +139,15 @@ impl ExampleOutcome {
 /// example behaves in that program as it does in a program of its own, except an example that does
 /// not compile and two examples that cannot share a program, such as two that export functions
 /// under one C name. So where the program fails to build, the examples the errors lie in are taken
-/// out of it and tested alone, and the rest are built together again. Where an error lies in no
-/// example, such as an error in the sources, each example is tested alone, and the error is
-/// reported for each of them.
+/// out of it and tested alone, and the rest are built together again.
+///
+/// An error that lies in no example, such as an error in the sources, is returned, and no example
+/// is reported.
 pub fn test_examples(
     config: &Configuration,
     examples: &[FixExample],
     mut report: impl FnMut(&FixExample, ExampleOutcome),
-) {
+) -> Result<(), Errors> {
     // The indices in `examples` of the examples built together.
     let mut together = (0..examples.len())
         .filter(|index| examples[*index].task.source().is_some())
@@ -172,10 +174,10 @@ pub fn test_examples(
             Ok(())
         });
         let Err(errors) = built else {
-            return;
+            return Ok(());
         };
         let Some(blamed) = examples_errors_lie_in(&errors, &example_build) else {
-            break;
+            return Err(errors);
         };
         assert!(
             !blamed.is_empty(),
@@ -192,6 +194,7 @@ pub fn test_examples(
     for example in examples {
         report(example, test_example(config, example));
     }
+    Ok(())
 }
 
 /// The outcome of `example`, which is at index `position` in the program built at `exec_path` under
