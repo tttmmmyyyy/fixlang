@@ -8,6 +8,12 @@
 
 - #785: `fix test` now runs the Fix examples in comments, the code blocks whose info string is `fix`. An example passes when it exits with status 0. `fix test --doc` runs the examples alone, and `fix test --no-doc` runs `Test::test` alone. The module name `DocTest` and the module names beginning with `DocTest.` are now reserved for the examples: `fix test` rejects a module of such a name when it has an example to compile. See "Fix examples in comments" in `Document.md` for how to write an example.
 
+### Fixed
+
+#### Tool
+
+- #785: Renaming a type in the language server no longer turns an empty item list under a namespace in an import statement, such as the `Ns::{}` of `import Lib::{Point::*, Ns::{}};`, into an import of a type or trait named `Ns`.
+
 ## [1.5.0] - 2026-09-27
 
 ### Performance
