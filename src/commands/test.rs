@@ -155,8 +155,9 @@ pub fn test_examples(
             .iter()
             .map(|index| examples[*index].task.source().unwrap().clone())
             .collect::<Vec<_>>();
+        let example_build = panic_if_err(ExampleBuild::merged(sources));
         let mut merged_config = config.clone();
-        merged_config.example_build = Some(panic_if_err(ExampleBuild::merged(sources.clone())));
+        merged_config.example_build = Some(example_build.clone());
         let built = with_temporary_executable(merged_config, |merged_config, exec_path| {
             for (index, example) in examples.iter().enumerate() {
                 // `together` is in ascending order, as `examples` is.
@@ -173,17 +174,20 @@ pub fn test_examples(
         let Err(errors) = built else {
             return;
         };
-        match examples_errors_lie_in(&errors, &sources) {
-            Some(blamed) if !blamed.is_empty() => {
-                together = together
-                    .into_iter()
-                    .enumerate()
-                    .filter(|(position, _)| !blamed.contains(position))
-                    .map(|(_, index)| index)
-                    .collect();
-            }
-            _ => break,
-        }
+        let Some(blamed) = examples_errors_lie_in(&errors, &example_build) else {
+            break;
+        };
+        assert!(
+            !blamed.is_empty(),
+            "a build that failed reports an error\n{}",
+            errors.to_string()
+        );
+        together = together
+            .into_iter()
+            .enumerate()
+            .filter(|(position, _)| !blamed.contains(position))
+            .map(|(_, index)| index)
+            .collect();
     }
     for example in examples {
         report(example, test_example(config, example));
@@ -215,18 +219,16 @@ fn outcome_in_program(
     ExampleOutcome::of_failure(failure)
 }
 
-/// The indices in `sources` of the sources the errors of `errors` lie in, or `None` where one of
-/// them lies in none of `sources`. An error lies in each source one of its locations is in.
-fn examples_errors_lie_in(errors: &Errors, sources: &[SourceFile]) -> Option<Set<usize>> {
+/// The indices in `example_build` of the examples the errors of `errors` belong to, or `None` where
+/// one of them belongs to none. An error belongs to each example one of its locations belongs to
+/// (see `ExampleBuild::example_at`).
+fn examples_errors_lie_in(errors: &Errors, example_build: &ExampleBuild) -> Option<Set<usize>> {
     let mut blamed = Set::default();
     for error in errors.errors() {
-        let lying_in = (0..sources.len())
-            .filter(|index| {
-                error
-                    .srcs
-                    .iter()
-                    .any(|(_, span)| span.input == sources[*index])
-            })
+        let lying_in = error
+            .srcs
+            .iter()
+            .filter_map(|(_, span)| example_build.example_at(span))
             .collect::<Vec<_>>();
         if lying_in.is_empty() {
             return None;

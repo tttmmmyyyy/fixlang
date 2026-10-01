@@ -1120,3 +1120,49 @@ value : I64 = first_long_function_name;
         streams(&output)
     );
 }
+
+/// A Fix example written as a module that defines no `main` is taken out of the program of the
+/// examples alone: the error the program reports for it lies on the line that reads its `main`,
+/// which belongs to that example, so the other examples are still built together, once.
+#[test]
+fn test_example_without_main_is_taken_out_of_the_program_alone() {
+    let lib = r#"module Lib;
+
+DEPRECATED[old_double, "Call `double` in place of `old_double`."];
+old_double : I64 -> I64;
+old_double = |x| 2 * x;
+
+// ```fix
+// assert_eq(|_|"", double(21), 42)
+// ```
+//
+// ```fix
+// # module DocTest;
+// # import Lib;
+// # value : I64 = double(1);
+// ```
+//
+// ```fix
+// assert_eq(|_|"", double(2), 4)
+// ```
+double : I64 -> I64;
+double = |x| old_double(x);
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &["--doc"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("doc test lib.fix:11 ... FAILED")
+            && stderr.contains("doc tests: 2 passed, 1 failed, 0 ignored."),
+        "the example without `main` fails, and the others pass\n{}",
+        streams(&output)
+    );
+    assert_eq!(
+        stderr
+            .matches("Call `double` in place of `old_double`.")
+            .count(),
+        1,
+        "the other examples are built together once\n{}",
+        streams(&output)
+    );
+}

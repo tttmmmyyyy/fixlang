@@ -240,10 +240,20 @@ impl FixExample {
 pub struct ExampleBuild {
     /// The examples, each with the name of the module it is compiled as.
     examples: Vec<ExampleModule>,
-    /// The source of the module whose `main` runs the example whose index in `examples` the
-    /// environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives, where the build holds several
-    /// examples. A build of one example has none, and runs its `DocTest::main`.
-    dispatcher: Option<SourceFile>,
+    /// The module whose `main` runs the example whose index in `examples` the environment
+    /// variable `DOC_TEST_EXAMPLE_ENV_VAR` gives, where the build holds several examples. A build
+    /// of one example has none, and runs its `DocTest::main`.
+    dispatcher: Option<Dispatcher>,
+}
+
+/// The module whose `main` runs one of the examples of a build of several.
+#[derive(Clone)]
+struct Dispatcher {
+    /// The source of the module.
+    source: SourceFile,
+    /// The line of `source` that reads the `main` of the example at index 0. The `main` of the
+    /// example at index `i` is read on the `i`-th line below it.
+    first_main_line: usize,
 }
 
 /// A Fix example as a build compiles it.
@@ -273,25 +283,57 @@ impl ExampleBuild {
     /// The build of the examples whose sources are `sources` in one program, which runs the
     /// example whose index in `sources` the environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives.
     ///
-    /// The example at index `i` is compiled as the module `DocTest.Example{i}.DocTest`. The name
-    /// ends in `DocTest`, so a path the example writes relative, such as `DocTest::helper`, reaches
-    /// the module as it reaches the module `DocTest` (see `NameSpace::is_suffix_of`). The parser
-    /// renames the module at each place the source names it (see `ModuleRenaming`).
+    /// Each example is compiled as a module `DocTest.Example<hash>.DocTest`, where `<hash>` is
+    /// taken from the path of its source. The path is decided by where the example stands and what
+    /// it holds, so an example keeps its name as other examples come and go, and the caches keyed
+    /// by the names of what it defines still answer for it. The name ends in `DocTest`, so a path
+    /// the example writes relative, such as `DocTest::helper`, reaches the module as it reaches
+    /// the module `DocTest` (see `NameSpace::is_suffix_of`). The parser renames the module at each
+    /// place the source names it (see `ModuleRenaming`).
+    ///
+    /// # Examples
+    /// An example whose source is at `.fixlang/tmp/src/doc_test.<origin>.<content>.fix` is
+    /// compiled as a module such as `DocTest.Example3f9c0a1b2d4e5f60.DocTest`.
     pub fn merged(sources: Vec<SourceFile>) -> Result<Self, Errors> {
         let examples = sources
             .into_iter()
-            .enumerate()
-            .map(|(index, source)| ExampleModule {
-                source,
-                name: format!("{0}.Example{1}.{0}", DOC_TEST_MODULE_NAME, index),
+            .map(|source| {
+                let hash = md5_hex(&source.file_path.to_string_lossy());
+                ExampleModule {
+                    name: format!("{0}.Example{1}.{0}", DOC_TEST_MODULE_NAME, &hash[..16]),
+                    source,
+                }
             })
             .collect::<Vec<_>>();
-        let dispatcher =
-            save_temporary_source(&dispatcher_source(&examples), "doc_test_dispatcher")?;
+        let (content, first_main_line) = dispatcher_source(&examples);
+        let dispatcher = Dispatcher {
+            source: save_temporary_source(&content, "doc_test_dispatcher")?,
+            first_main_line,
+        };
         Ok(ExampleBuild {
             examples,
             dispatcher: Some(dispatcher),
         })
+    }
+
+    /// The index of the example the location `span` belongs to: one in the source of the example,
+    /// or one on the line of the dispatcher that reads the `main` of the example, where an error is
+    /// reported for an example that defines no `main` of type `IO ()`.
+    pub fn example_at(&self, span: &Span) -> Option<usize> {
+        if let Some(index) = self
+            .examples
+            .iter()
+            .position(|example| span.input == example.source)
+        {
+            return Some(index);
+        }
+        let dispatcher = self.dispatcher.as_ref()?;
+        if span.input != dispatcher.source {
+            return None;
+        }
+        span.start_line_no()
+            .checked_sub(dispatcher.first_main_line)
+            .filter(|index| *index < self.examples.len())
     }
 
     /// The sources the build adds to the program, each with the renaming its module is compiled
@@ -304,7 +346,10 @@ impl ExampleBuild {
             };
             (example.source.clone(), Some(renaming))
         });
-        let dispatcher = self.dispatcher.iter().map(|source| (source.clone(), None));
+        let dispatcher = self
+            .dispatcher
+            .iter()
+            .map(|dispatcher| (dispatcher.source.clone(), None));
         examples.chain(dispatcher).collect()
     }
 
@@ -319,35 +364,33 @@ impl ExampleBuild {
 }
 
 /// The source of the module `DocTest.Examples`, whose `main` runs the example of `examples` whose
-/// index the environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives.
+/// index the environment variable `DOC_TEST_EXAMPLE_ENV_VAR` gives, and the line of it that reads
+/// the `main` of the example at index 0. Each next example's `main` is read on the next line.
 ///
 /// The `main` of each example is read inside a function, so that a run reads only the `main` of
 /// the example it runs: a global value is evaluated when it is first read, and the value of a
 /// `main` can panic before any I/O action of it runs.
-fn dispatcher_source(examples: &[ExampleModule]) -> String {
-    let mains = examples
-        .iter()
-        .map(|example| format!("        |_| ::{}::{}", example.name, MAIN_FUNCTION_NAME))
-        .collect::<Vec<_>>()
-        .join(",\n");
-    format!(
+fn dispatcher_source(examples: &[ExampleModule]) -> (String, usize) {
+    let head = format!(
         r#"module {module};
 
 {main} : IO () = (
     let value = *"{var}".borrow_c_str_io(|name| FFI_CALL_IO[Ptr getenv(Ptr), name]);
     let index : I64 = String::unsafe_from_c_str_ptr(value).from_string.as_ok;
     let examples : Array (() -> IO ()) = [
-{mains}
-    ];
-    let example = examples.@(index);
-    example()
-);
 "#,
         module = DISPATCHER_MODULE_NAME,
         main = MAIN_FUNCTION_NAME,
         var = DOC_TEST_EXAMPLE_ENV_VAR,
-        mains = mains,
-    )
+    );
+    let mains = examples
+        .iter()
+        .map(|example| format!("        |_| ::{}::{}", example.name, MAIN_FUNCTION_NAME))
+        .collect::<Vec<_>>()
+        .join(",\n");
+    let tail = "\n    ];\n    let example = examples.@(index);\n    example()\n);\n";
+    let first_main_line = head.matches('\n').count() + 1;
+    (format!("{}{}{}", head, mains, tail), first_main_line)
 }
 
 /// Reports a module of `program` named `DocTest`, the name each Fix example is compiled as. A
