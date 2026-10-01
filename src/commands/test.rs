@@ -48,7 +48,7 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
     // example is compiled.
     if examples
         .iter()
-        .any(|example| !matches!(example.task, ExampleTask::Ignore))
+        .any(|example| example.task.source().is_some())
     {
         panic_if_err(check_doc_test_module_name_is_free(&program));
     }

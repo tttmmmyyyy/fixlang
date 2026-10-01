@@ -62,7 +62,7 @@ impl Errors {
     /// Items with `Severity::Warning` are not counted; a collection that
     /// holds only warnings is treated as a successful compilation.
     pub fn has_error(&self) -> bool {
-        self.errs.iter().any(|e| e.severity == Severity::Error)
+        self.errors().next().is_some()
     }
 
     /// The diagnostics of error severity, in the order they were reported.
