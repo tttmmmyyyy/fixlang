@@ -366,6 +366,15 @@ pub fn c_boundary_tycon(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<Ty
     Some(head)
 }
 
+/// The message reporting that `ty_name`, `I128` or `U128`, is written where FFI exchanges a value.
+pub fn unsupported_128_bit_integer_msg(ty_name: &str) -> String {
+    format!(
+        "FFI does not support the 128-bit integer type `{}`.\n\
+         HINT: pass the value as two `U64`s, its low and its high 64 bits.",
+        ty_name
+    )
+}
+
 /// The message reporting that a value of `ty` cannot be passed through the `...` of an `FFI_CALL`,
 /// and `None` for a type that can.
 ///
@@ -393,6 +402,9 @@ pub fn unpassable_variadic_type_msg(ty: &Arc<TypeNode>) -> Option<String> {
             msg_head
                 + ". Use `Std::String::borrow_c_str` to get a `Ptr` to its bytes, and pass that.",
         );
+    }
+    if ty.is_128_bit_integer() {
+        return Some(unsupported_128_bit_integer_msg(&ty.to_string()));
     }
     Some(msg_head + ". An argument passing through `...` is an integer (`I8` to `I64`, `U8` to `U64`), a floating point number (`F32`, `F64`), or a pointer (`Ptr`). The C types in `Std::FFI` such as `CInt` are aliases of these. To pass a boxed value, take a `Ptr` to it with `Std::FFI::boxed_to_retained_ptr` or `borrow_boxed`.")
 }

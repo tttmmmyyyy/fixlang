@@ -23,12 +23,12 @@ use crate::constants::{
     BOXED_TRAIT_NAME, BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX,
     CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
     DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
-    FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
+    FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
     IDENTITY_NAME, IOSTATE_NAME, IO_NAME, IS_UNIQUE_VALUE_FIELD, LAZY_NAME, PTR_NAME,
     PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, PUNCHED_ARRAY_NAME, STD_NAME, STORAGE_BUF_IDX,
     STRING_NAME, STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
     STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_NAME,
-    TUPLE_UNBOX, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
+    TUPLE_UNBOX, U128_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::fixstd::runtime::{
     RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_FLOAT_TO_INTEGER_OUT_OF_RANGE, RUNTIME_REALLOC,
@@ -52,7 +52,7 @@ use inkwell::module::Linkage;
 use inkwell::types::IntType;
 use inkwell::values::{BasicMetadataValueEnum, BasicValue, FloatValue, IntValue, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
-use num_bigint::BigInt;
+use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::iter;
@@ -195,6 +195,32 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
             fields: vec![],
             source: None,
             document: Some("The type of 64-bit unsigned integers.".to_string()),
+        },
+    );
+    ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], I128_NAME)),
+        TyConInfo {
+            punched_from: None,
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![],
+            source: None,
+            document: Some("The type of 128-bit signed integers.".to_string()),
+        },
+    );
+    ret.insert(
+        TyCon::new(FullName::from_strs(&[STD_NAME], U128_NAME)),
+        TyConInfo {
+            punched_from: None,
+            kind: kind_star(),
+            variant: TyConVariant::Primitive,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![],
+            source: None,
+            document: Some("The type of 128-bit unsigned integers.".to_string()),
         },
     );
     ret.insert(
@@ -484,9 +510,19 @@ pub fn make_i64_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I64_NAME)))
 }
 
-// Get U32 type.
+// Get U64 type.
 pub fn make_u64_ty() -> Arc<TypeNode> {
     type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U64_NAME)))
+}
+
+// Get I128 type.
+pub fn make_i128_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I128_NAME)))
+}
+
+// Get U128 type.
+pub fn make_u128_ty() -> Arc<TypeNode> {
+    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U128_NAME)))
 }
 
 // Get F32 type.
@@ -523,6 +559,8 @@ pub fn integral_types() -> Vec<Arc<TypeNode>> {
         make_u32_ty(),
         make_i64_ty(),
         make_u64_ty(),
+        make_i128_ty(),
+        make_u128_ty(),
     ]
 }
 
@@ -535,8 +573,7 @@ pub fn make_string_tycon() -> Arc<TyCon> {
     tycon(FullName::from_strs(&[STD_NAME], STRING_NAME))
 }
 
-/// The integral type of that name, and `None` where the name is not one of the eight integral
-/// types (`I8` to `I64`, `U8` to `U64`).
+/// The type of `integral_types` that has that name, and `None` where none of them has it.
 pub fn make_integral_ty(name: &str) -> Option<Arc<TypeNode>> {
     if name == I8_NAME {
         Some(make_i8_ty())
@@ -554,6 +591,10 @@ pub fn make_integral_ty(name: &str) -> Option<Arc<TypeNode>> {
         Some(make_i64_ty())
     } else if name == U64_NAME {
         Some(make_u64_ty())
+    } else if name == I128_NAME {
+        Some(make_i128_ty())
+    } else if name == U128_NAME {
+        Some(make_u128_ty())
     } else {
         None
     }
@@ -561,7 +602,7 @@ pub fn make_integral_ty(name: &str) -> Option<Arc<TypeNode>> {
 
 /// The smallest and the largest value the integral type of that name holds.
 ///
-/// Panics where the name is not one of the eight integral types.
+/// Panics where no type of `integral_types` has that name.
 ///
 /// # Examples
 /// `integral_ty_range("I8")` is `(-128, 127)`, and `integral_ty_range("U8")` is `(0, 255)`.
@@ -582,6 +623,10 @@ pub fn integral_ty_range(name: &str) -> (BigInt, BigInt) {
         (BigInt::from(i64::MIN), BigInt::from(i64::MAX))
     } else if name == U64_NAME {
         (BigInt::from(0), BigInt::from(u64::MAX))
+    } else if name == I128_NAME {
+        (BigInt::from(i128::MIN), BigInt::from(i128::MAX))
+    } else if name == U128_NAME {
+        (BigInt::from(0), BigInt::from(u128::MAX))
     } else {
         panic!("Not an integral type: {}", name);
     }
@@ -652,7 +697,7 @@ pub fn floating_literal_value(name: &str, raw: &str) -> Result<f64, String> {
 }
 
 /// The value the integer literal `raw` takes when it is written with the integral type of that
-/// name, as the bits of that type widened to a `u64`. Gives the report to make where `raw` names
+/// name, as the bits of that type widened to a `u128`. Gives the report to make where `raw` names
 /// no integer, or names one the type does not hold.
 ///
 /// Panics where `name` is not an integral type.
@@ -660,7 +705,7 @@ pub fn floating_literal_value(name: &str, raw: &str) -> Result<f64, String> {
 /// # Examples
 /// `integral_literal_value(I8_NAME, "12")` is `Ok(12)`, and `integral_literal_value(I8_NAME,
 /// "256")` is an `Err`.
-pub fn integral_literal_value(name: &str, raw: &str) -> Result<u64, String> {
+pub fn integral_literal_value(name: &str, raw: &str) -> Result<u128, String> {
     let Some((val, radix)) = parse_integer_literal_string(raw) else {
         return Err(format!(
             "A literal string `{}` cannot be parsed as an integer.",
@@ -686,7 +731,15 @@ pub fn integral_literal_value(name: &str, raw: &str) -> Result<u64, String> {
             raw, reason, name
         ));
     }
-    Ok(i128::try_from(&val).unwrap() as u64)
+    // Every value in the range checked above fits in 128 bits. A negative value becomes its two's
+    // complement.
+    let (sign, magnitude) = val.into_parts();
+    let magnitude = u128::try_from(magnitude).unwrap();
+    Ok(if sign == Sign::Minus {
+        magnitude.wrapping_neg()
+    } else {
+        magnitude
+    })
 }
 
 /// Read an integer literal, written in any of the four bases with an optional sign, and return
@@ -748,7 +801,8 @@ fn strip_sign_and_radix_prefix<'a>(raw: &'a str, prefix: &str) -> Option<(&'a st
 
 /// The numeric type of that name, and whether it is a floating point type.
 ///
-/// Panics where the name is not one of the eight integral types or the two floating point ones.
+/// Panics where the name is that of neither an integral type (`make_integral_ty`) nor a floating
+/// point type (`make_floating_ty`).
 pub fn make_numeric_ty(name: &str) -> (Arc<TypeNode>, bool) {
     if let Some(integral_ty) = make_integral_ty(name) {
         return (integral_ty, false);
@@ -870,10 +924,18 @@ pub fn tuple_defn(size: u32) -> TypeDefn {
     }
 }
 
+/// The constant of the integer type `int_ty` whose bits are those of `val` truncated to the width of
+/// `int_ty`.
+fn const_int_u128<'c>(int_ty: IntType<'c>, val: u128) -> IntValue<'c> {
+    // The words are read least significant first.
+    int_ty.const_int_arbitrary_precision(&[val as u64, (val >> 64) as u64])
+}
+
 /// An integer literal of the expression's type, whose value is `val` truncated to the type's width.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct IntLitOp {
-    val: u64,
+    /// The bits of the value in two's complement. The bits above the type's width are ignored.
+    val: u128,
 }
 
 #[typetag::serde]
@@ -891,7 +953,7 @@ impl BuiltinOp for IntLitOp {
             .get_field_type_at_index(0)
             .unwrap()
             .into_int_type();
-        let value = int_ty.const_int(self.val, false);
+        let value = const_int_u128(int_ty, self.val);
         obj.insert_field(gc, 0, value)
     }
 
@@ -923,7 +985,11 @@ impl BuiltinOp for IntLitOp {
     }
 }
 
-pub fn expr_int_lit(val: u64, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
+/// An integer literal of type `ty` whose value is the bits of `val` truncated to the width of `ty`.
+///
+/// # Examples
+/// `expr_int_lit(u128::MAX, make_i8_ty(), None)` is the literal `-1_I8`.
+pub fn expr_int_lit(val: u128, ty: Arc<TypeNode>, source: Option<Span>) -> Arc<ExprNode> {
     expr_builtin(Box::new(IntLitOp { val }), ty, source).global_to_absolute()
 }
 
@@ -1606,8 +1672,11 @@ fn build_saturating_float_to_int<'c, 'm>(
 ///
 /// The bounds are the powers of two just outside the range rather than the values at its ends.
 /// `I64::maximum` has no exact form in `F64`, so a bound built from it would be rounded to `2^63`
-/// and let the value that reaches it past the check. A power of two is exact in both floating-point
-/// types, and every value the range holds lies below the one the check compares against.
+/// and let the value that reaches it past the check. A power of two up to `2^127` is exact in both
+/// floating-point types, and every value the range holds lies below the one the check compares
+/// against. The one bound past that, `2^128` above `U128`, is exact in `F64` and rounds to infinity
+/// in `F32`. Every finite `F32` lies below `2^128`, so for `F32` the upper bound stops only the
+/// infinity, the one value above the range.
 fn build_float_to_int_range_check<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     value: FloatValue<'c>,
@@ -1632,9 +1701,9 @@ fn build_float_to_int_range_check<'c, 'm>(
 
     let width = to_int_ty.get_bit_width() as i32;
     assert!(
-        width <= 64,
-        "a bound of the range is a power of two that both floating-point types hold exactly, which \
-         reaches as far as `2^64`; this integer type is {} bits wide",
+        width <= 128,
+        "a bound of the range is a power of two that `F64` holds exactly, which reaches as far as \
+         `2^128`; this integer type is {} bits wide",
         width
     );
     let (lower, upper) = if is_signed {
@@ -2141,35 +2210,123 @@ pub fn bitwise_operation_function(
     (expr, scm)
 }
 
-/// Evaluates `Std::I64::bit_not`, and the same value of the other integer types: the operand with
-/// every bit flipped.
+/// An operation on the bits of one integer that `UnaryBitOp` performs, answering with a value of
+/// the operand's type.
+#[derive(Clone, Copy, Serialize, Deserialize)]
+pub enum UnaryBitOperation {
+    /// Flips every bit.
+    Not,
+    /// Counts the zero bits above the most significant one bit.
+    CountLeadingZeros,
+    /// Counts the zero bits below the least significant one bit.
+    CountTrailingZeros,
+    /// Counts the one bits.
+    CountOnes,
+}
+
+impl UnaryBitOperation {
+    /// Every operation, in the order the standard library declares them.
+    pub const ALL: [UnaryBitOperation; 4] = [
+        UnaryBitOperation::Not,
+        UnaryBitOperation::CountLeadingZeros,
+        UnaryBitOperation::CountTrailingZeros,
+        UnaryBitOperation::CountOnes,
+    ];
+
+    /// The name the operation has in the namespace of each integer type: `Std::I64::bit_not`.
+    pub fn function_name(&self) -> &'static str {
+        match self {
+            UnaryBitOperation::Not => "bit_not",
+            UnaryBitOperation::CountLeadingZeros => "count_leading_zeros",
+            UnaryBitOperation::CountTrailingZeros => "count_trailing_zeros",
+            UnaryBitOperation::CountOnes => "count_ones",
+        }
+    }
+
+    /// The documentation of the operation's function in the standard library.
+    pub fn document(&self) -> &'static str {
+        match self {
+            UnaryBitOperation::Not => include_str!("../docs/std_bit_not.md"),
+            UnaryBitOperation::CountLeadingZeros => {
+                include_str!("../docs/std_count_leading_zeros.md")
+            }
+            UnaryBitOperation::CountTrailingZeros => {
+                include_str!("../docs/std_count_trailing_zeros.md")
+            }
+            UnaryBitOperation::CountOnes => include_str!("../docs/std_count_ones.md"),
+        }
+    }
+}
+
+/// Evaluates `Std::I64::bit_not`, `Std::I64::count_leading_zeros`,
+/// `Std::I64::count_trailing_zeros` and `Std::I64::count_ones`, and the same functions of the other
+/// integer types: the operand with every bit flipped, or a count of its bits, as a value of the
+/// operand's type.
+///
+/// Every operand has an answer: a zero operand has as many leading and trailing zeros as its type
+/// has bits.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct BitNotOp {
-    /// The local binding holding the operand whose bits are flipped.
+pub struct UnaryBitOp {
+    /// The local binding holding the operand.
     operand_name: FullName,
+    /// What is done to the operand's bits.
+    operation: UnaryBitOperation,
+}
+
+impl UnaryBitOp {
+    /// Emits the call to the LLVM intrinsic `name`, which counts the bits of `operand` and answers
+    /// with the count at the operand's type.
+    ///
+    /// # Arguments
+    /// * `takes_zero_is_poison` - whether the intrinsic takes, after the integer, the flag that
+    ///   makes a zero operand's count poison. The flag passed is false, so a zero operand counts
+    ///   every bit of its type.
+    fn build_count<'c, 'm>(
+        gc: &mut Generator<'c, 'm>,
+        name: &str,
+        operand: IntValue<'c>,
+        takes_zero_is_poison: bool,
+    ) -> IntValue<'c> {
+        let intrinsic = gc.intrinsic_function(name, &[operand.get_type().into()]);
+        let mut args: Vec<BasicMetadataValueEnum<'c>> = vec![operand.into()];
+        if takes_zero_is_poison {
+            args.push(gc.context.bool_type().const_zero().into());
+        }
+        gc.builder()
+            .build_call(intrinsic, &args, "count@unary_bit_op")
+            .unwrap()
+            .try_as_basic_value()
+            .expect_basic("a bit-counting intrinsic answers an integer")
+            .into_int_value()
+    }
 }
 
 #[typetag::serde]
-impl BuiltinOp for BitNotOp {
+impl BuiltinOp for UnaryBitOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
-        // Get value
         let operand = gc
             .get_scoped_obj_field(&self.operand_name, 0)
             .into_int_value();
-
-        // Flip every bit.
-        let val = gc
-            .builder()
-            .build_not(operand, "not@bitwise_not_function")
-            .unwrap();
-
-        // Return result.
-        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@bit_not"));
+        let val = match self.operation {
+            UnaryBitOperation::Not => gc.builder().build_not(operand, "not@unary_bit_op").unwrap(),
+            UnaryBitOperation::CountLeadingZeros => {
+                Self::build_count(gc, "llvm.ctlz", operand, true)
+            }
+            UnaryBitOperation::CountTrailingZeros => {
+                Self::build_count(gc, "llvm.cttz", operand, true)
+            }
+            UnaryBitOperation::CountOnes => Self::build_count(gc, "llvm.ctpop", operand, false),
+        };
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@unary_bit_op"));
         obj.insert_field(gc, 0, val)
     }
 
     fn name(&self) -> String {
-        format!("bit_not({})", self.operand_name.to_string())
+        format!(
+            "{}({})",
+            self.operation.function_name(),
+            self.operand_name.to_string()
+        )
     }
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
@@ -2190,9 +2347,12 @@ impl BuiltinOp for BitNotOp {
     }
 }
 
-/// The value with every bit of `operand` flipped.
+/// The function performing `operation` on the bits of an integer of type `ty`.
 /// Type: ty -> ty
-pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
+pub fn unary_bit_function(
+    ty: Arc<TypeNode>,
+    operation: UnaryBitOperation,
+) -> (Arc<ExprNode>, Arc<Scheme>) {
     const OPERAND_NAME: &str = "operand";
 
     let scm = Scheme::generalize(
@@ -2204,8 +2364,9 @@ pub fn bit_not_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
     let expr = expr_abs(
         vec![var_local(OPERAND_NAME)],
         expr_builtin(
-            Box::new(BitNotOp {
+            Box::new(UnaryBitOp {
                 operand_name: FullName::local(OPERAND_NAME),
+                operation,
             }),
             ty,
             None,
@@ -7793,7 +7954,7 @@ fn is_unique_result_locality(result_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> E
 #[typetag::serde]
 impl BuiltinOp for IsUniqueOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
+        let bool_ty = gc.context.i8_type();
 
         // Get argument
         let obj = gc.get_scoped_obj(&self.var_name);
@@ -7990,7 +8151,7 @@ pub struct ArrayIsStorageUniqueOp {
 #[typetag::serde]
 impl BuiltinOp for ArrayIsStorageUniqueOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ret_ty: &Arc<TypeNode>) -> Object<'c> {
-        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
+        let bool_ty = gc.context.i8_type();
 
         // Get argument.
         let array = gc.get_scoped_obj(&self.var_name);
@@ -9490,11 +9651,7 @@ impl BuiltinOp for IntEqOp {
             .unwrap();
         let value = gc
             .builder()
-            .build_int_z_extend(
-                value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-                "eq",
-            )
+            .build_int_z_extend(value, gc.context.i8_type(), "eq")
             .unwrap();
         let obj = create_obj(
             make_bool_ty(),
@@ -9567,11 +9724,7 @@ impl BuiltinOp for PtrEqOp {
             .unwrap();
         let value = gc
             .builder()
-            .build_int_z_extend(
-                value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-                "eq_of_ptr",
-            )
+            .build_int_z_extend(value, gc.context.i8_type(), "eq_of_ptr")
             .unwrap();
         let obj = create_obj(
             make_bool_ty(),
@@ -9642,11 +9795,7 @@ impl BuiltinOp for FloatEqOp {
             .unwrap();
         let value = gc
             .builder()
-            .build_int_z_extend(
-                value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-                "eq_of_float",
-            )
+            .build_int_z_extend(value, gc.context.i8_type(), "eq_of_float")
             .unwrap();
         let obj = create_obj(
             make_bool_ty(),
@@ -9738,11 +9887,7 @@ impl BuiltinOp for IntLessThanOp {
             .unwrap();
         let value = gc
             .builder()
-            .build_int_z_extend(
-                value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-                LESS_THAN_TRAIT_LT_NAME,
-            )
+            .build_int_z_extend(value, gc.context.i8_type(), LESS_THAN_TRAIT_LT_NAME)
             .unwrap();
         let obj = create_obj(
             make_bool_ty(),
@@ -9818,11 +9963,7 @@ impl BuiltinOp for FloatLessThanOp {
             .unwrap();
         let value = gc
             .builder()
-            .build_int_z_extend(
-                value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
-                LESS_THAN_TRAIT_LT_NAME,
-            )
+            .build_int_z_extend(value, gc.context.i8_type(), LESS_THAN_TRAIT_LT_NAME)
             .unwrap();
         let obj = create_obj(
             make_bool_ty(),
@@ -9914,7 +10055,7 @@ impl BuiltinOp for IntLessThanOrEqOp {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+                gc.context.i8_type(),
                 LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
             )
             .unwrap();
@@ -9994,7 +10135,7 @@ impl BuiltinOp for FloatLessThanOrEqOp {
             .builder()
             .build_int_z_extend(
                 value,
-                ObjectFieldType::I8.to_basic_type(gc).into_int_type(),
+                gc.context.i8_type(),
                 LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME,
             )
             .unwrap();
@@ -10138,9 +10279,9 @@ fn build_integer_arithmetic<'c, 'm>(
     name: &str,
 ) -> IntValue<'c> {
     if matches!(operation, IntegerArithmetic::Negate) {
-        assert_eq!(
-            lhs.get_zero_extended_constant(),
-            Some(0),
+        // The constant zero of an integer type is its null value, at every width.
+        assert!(
+            lhs.is_const() && lhs.is_null(),
             "a negation subtracts its operand from zero, and `{:?}` is not zero",
             lhs
         );
@@ -10226,7 +10367,7 @@ fn build_division_overflow_check<'c, 'm>(
     ty: &Arc<TypeNode>,
 ) {
     let int_ty = lhs.get_type();
-    let least = int_ty.const_int(1u64 << (int_ty.get_bit_width() - 1), false);
+    let least = const_int_u128(int_ty, 1u128 << (int_ty.get_bit_width() - 1));
     let is_least = gc
         .builder()
         .build_int_compare(IntPredicate::EQ, lhs, least, "is_least_of_type")
@@ -10251,14 +10392,15 @@ fn build_division_overflow_check<'c, 'm>(
 /// type `ty` together with the `operands` it was performed on.
 ///
 /// The report names the operation as `<type> <operation>`, and carries each operand widened to the
-/// 64 bits the runtime takes. The widening and the report both read an operand under the sign of
-/// `ty`, so a negative operand of a signed type reads as that negative number rather than as the
-/// bit pattern the check saw, and an operand of an unsigned type as the magnitude its bits hold.
+/// 128 bits the runtime takes, split into its low and its high 64 bits. The widening and the report
+/// both read an operand under the sign of `ty`, so a negative operand of a signed type reads as that
+/// negative number rather than as the bit pattern the check saw, and an operand of an unsigned type
+/// as the magnitude its bits hold.
 ///
 /// # Arguments
 /// * `runtime_fn` — the runtime function that writes the report and ends the program. It takes the
-///   operation's name, whether the operands are read as signed, and then one 64-bit value per
-///   operand.
+///   operation's name, whether the operands are read as signed, and then the low and the high 64
+///   bits of each operand.
 /// * `bb_name` — what the pair of basic blocks the check branches between is called in the emitted
 ///   code.
 ///
@@ -10277,28 +10419,47 @@ fn build_abort_on_integer_operation<'c, 'm>(
     let reported_operation = format!("{} {}", ty.toplevel_tycon().unwrap().name.name, operation);
     let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
     let i64_ty = gc.context.i64_type();
+    let i128_ty = gc.context.i128_type();
     let is_signed = ty.is_signed_integer();
     // The report reads every operand back under the sign of `ty`, so it is told that sign: an
-    // operand of an unsigned type fills all 64 bits, and reading it as signed would report a
+    // operand of an unsigned type fills all its bits, and reading it as signed would report a
     // number its own type cannot hold.
     let operands_are_signed = gc.context.i32_type().const_int(is_signed as u64, false);
     let mut args: Vec<BasicMetadataValueEnum<'c>> =
         vec![reported_operation_ptr.into(), operands_are_signed.into()];
     for operand in operands {
         assert!(
-            operand.get_type().get_bit_width() <= 64,
-            "the report takes operands of 64 bits, and this one is {} bits wide",
+            operand.get_type().get_bit_width() <= 128,
+            "the report takes operands of 128 bits, and this one is {} bits wide",
             operand.get_type().get_bit_width()
         );
         let widened = if is_signed {
             gc.builder()
-                .build_int_s_extend_or_bit_cast(*operand, i64_ty, "reported_operand")
+                .build_int_s_extend_or_bit_cast(*operand, i128_ty, "reported_operand")
         } else {
             gc.builder()
-                .build_int_z_extend_or_bit_cast(*operand, i64_ty, "reported_operand")
+                .build_int_z_extend_or_bit_cast(*operand, i128_ty, "reported_operand")
         }
         .unwrap();
-        args.push(widened.into());
+        let low = gc
+            .builder()
+            .build_int_truncate(widened, i64_ty, "reported_operand_low")
+            .unwrap();
+        let high = gc
+            .builder()
+            .build_right_shift(
+                widened,
+                i128_ty.const_int(64, false),
+                false,
+                "reported_operand_high",
+            )
+            .unwrap();
+        let high = gc
+            .builder()
+            .build_int_truncate(high, i64_ty, "reported_operand_high")
+            .unwrap();
+        args.push(low.into());
+        args.push(high.into());
     }
     build_abort_if(gc, faulted, runtime_fn, &args, bb_name);
 }
@@ -11142,7 +11303,7 @@ impl BuiltinOp for BoolNegOp {
         let rhs = gc.get_scoped_obj(&self.rhs_name);
         let rhs_val = rhs.extract_field(gc, 0).into_int_value();
 
-        let bool_ty = ObjectFieldType::I8.to_basic_type(gc).into_int_type();
+        let bool_ty = gc.context.i8_type();
         let false_val = bool_ty.const_zero();
         let value = gc
             .builder()

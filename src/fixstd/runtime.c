@@ -27,9 +27,9 @@ void fixruntime_eprintln(const char *msg)
     fflush(stderr);
 }
 
-// Each of the twelve below moves a number between a value and the bytes holding it: the
-// `_to_bytes` ones write `v` into the object at `buf`, and the `_from_bytes` ones answer with the
-// number the object at `buf` holds.
+// Each of the functions below moves a number between a value and the bytes holding it: the
+// `_to_bytes` ones write the number into the object at `buf`, and the `_from_bytes` ones answer
+// with the number the object at `buf` holds. A 128-bit number crosses to C as two 64-bit halves.
 void fixruntime_u8_to_bytes(uint8_t *buf, uint8_t v)
 {
     *buf = v;
@@ -54,6 +54,13 @@ void fixruntime_f64_to_bytes(double *buf, double v)
 {
     *buf = v;
 }
+// Writes the 128-bit integer whose low 64 bits are `low` and whose high 64 bits are `high` into
+// the 16 bytes at `buf`, in the byte order of the target.
+void fixruntime_u128_to_bytes(void *buf, uint64_t low, uint64_t high)
+{
+    unsigned __int128 v = ((unsigned __int128)high << 64) | low;
+    memcpy(buf, &v, sizeof(v));
+}
 uint8_t fixruntime_u8_from_bytes(uint8_t *buf)
 {
     return *buf;
@@ -69,6 +76,22 @@ uint32_t fixruntime_u32_from_bytes(uint32_t *buf)
 uint64_t fixruntime_u64_from_bytes(uint64_t *buf)
 {
     return *buf;
+}
+// The low 64 bits of the 128-bit integer in the 16 bytes at `buf`, read in the byte order of the
+// target.
+uint64_t fixruntime_u128_low_from_bytes(const void *buf)
+{
+    unsigned __int128 v;
+    memcpy(&v, buf, sizeof(v));
+    return (uint64_t)v;
+}
+// The high 64 bits of the 128-bit integer in the 16 bytes at `buf`, read in the byte order of the
+// target.
+uint64_t fixruntime_u128_high_from_bytes(const void *buf)
+{
+    unsigned __int128 v;
+    memcpy(&v, buf, sizeof(v));
+    return (uint64_t)(v >> 64);
 }
 float fixruntime_f32_from_bytes(float *buf)
 {
@@ -205,39 +228,54 @@ __attribute__((noreturn)) void fixruntime_array_size_overflow(int64_t size)
 }
 
 // The bytes an operand of an integer operation takes in a report: the longest such number is
-// `18446744073709551615`, and the terminator follows it.
-#define FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE 21
+// `-170141183460469231731687303715884105728`, and the terminator follows it.
+#define FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE 41
 
-// Write `value` into `buf` as the number it holds under `is_signed`.
+// Write the operand whose 128 bits are `high` above `low` into `buf` as the number it holds under
+// `is_signed`.
 //
-// A value of an unsigned type fills all 64 bits, so reading it as signed would report a number its
-// own type cannot hold: an amount of `U64::maximum` would read as -1.
-static void fixruntime_write_integer_operand(char *buf, size_t size, int32_t is_signed, int64_t value)
+// An operand of a narrower type arrives extended to 128 bits under its own sign, so it reads as the
+// same number. A value of an unsigned type fills all its bits, so reading it as signed would report
+// a number its own type cannot hold: an amount of `U64::maximum` would read as -1.
+static void fixruntime_write_integer_operand(char *buf, int32_t is_signed, uint64_t low, uint64_t high)
 {
-    if (is_signed)
+    unsigned __int128 magnitude = ((unsigned __int128)high << 64) | low;
+    int negative = is_signed && (high >> 63) != 0;
+    if (negative)
     {
-        snprintf(buf, size, "%" PRId64, value);
+        magnitude = -magnitude;
     }
-    else
+    // The digits are produced least significant first, so they are written from the end.
+    char digits[FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE];
+    char *first = digits + sizeof(digits);
+    do
     {
-        snprintf(buf, size, "%" PRIu64, (uint64_t)value);
+        *--first = (char)('0' + (int)(magnitude % 10));
+        magnitude /= 10;
+    } while (magnitude != 0);
+    if (negative)
+    {
+        *--first = '-';
     }
+    size_t length = (size_t)(digits + sizeof(digits) - first);
+    memcpy(buf, first, length);
+    buf[length] = '\0';
 }
 
-__attribute__((noreturn)) void fixruntime_signed_overflow(const char *operation, int32_t operands_are_signed, int64_t lhs, int64_t rhs)
+__attribute__((noreturn)) void fixruntime_signed_overflow(const char *operation, int32_t operands_are_signed, uint64_t lhs_low, uint64_t lhs_high, uint64_t rhs_low, uint64_t rhs_high)
 {
     char lhs_text[FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE];
     char rhs_text[FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE];
-    fixruntime_write_integer_operand(lhs_text, sizeof(lhs_text), operands_are_signed, lhs);
-    fixruntime_write_integer_operand(rhs_text, sizeof(rhs_text), operands_are_signed, rhs);
+    fixruntime_write_integer_operand(lhs_text, operands_are_signed, lhs_low, lhs_high);
+    fixruntime_write_integer_operand(rhs_text, operands_are_signed, rhs_low, rhs_high);
     fprintf(stderr, "Signed integer overflow: %s, with %s and %s\n", operation, lhs_text, rhs_text);
     fixruntime_abort();
 }
 
-__attribute__((noreturn)) void fixruntime_shift_amount_out_of_range(const char *operation, int32_t operands_are_signed, int64_t amount)
+__attribute__((noreturn)) void fixruntime_shift_amount_out_of_range(const char *operation, int32_t operands_are_signed, uint64_t amount_low, uint64_t amount_high)
 {
     char amount_text[FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE];
-    fixruntime_write_integer_operand(amount_text, sizeof(amount_text), operands_are_signed, amount);
+    fixruntime_write_integer_operand(amount_text, operands_are_signed, amount_low, amount_high);
     fprintf(stderr, "Shift amount outside the width of the type: %s, with %s\n", operation, amount_text);
     fixruntime_abort();
 }

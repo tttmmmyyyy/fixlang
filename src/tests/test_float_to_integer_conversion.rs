@@ -258,6 +258,51 @@ pub fn test_the_check_lets_the_ends_of_the_range_through() {
     );
 }
 
+/// The ends of the ranges of the 128-bit types pass the check and convert to themselves, and the
+/// powers of two the ranges end below stop it.
+///
+/// `170141183460469212842221372237303250944` and `340282366920938425684442744474606501888` are the
+/// greatest values of `F64` below `2^127` and `2^128`. `F32` has no finite value at or above
+/// `2^128`, so every finite `F32` that is not negative converts into `U128`, the greatest of them
+/// `340282346638528859811704183484516925440` included, and only the infinity stops the check.
+#[test]
+pub fn test_the_check_bounds_the_128_bit_types() {
+    test_with_a_runtime_zero(
+        r#"
+            let z = zero.f64;
+            assert_eq(
+                |_|"The greatest F64 below 2^127 into I128",
+                (170141183460469212842221372237303250944.0 + z).i128,
+                170141183460469212842221372237303250944_I128
+            );;
+            assert_eq(
+                |_|"The greatest F64 below 2^128 into U128",
+                (340282366920938425684442744474606501888.0 + z).u128,
+                340282366920938425684442744474606501888_U128
+            );;
+            assert_eq(|_|"The least value of I128", (-170141183460469231731687303715884105728.0 + z).i128, I128::minimum);;
+            assert_eq(
+                |_|"The greatest F32 into U128",
+                (340282346638528859811704183484516925440.0_F32 + z.f32).u128,
+                340282346638528859811704183484516925440_U128
+            );;
+        "#,
+        integer_operations_checked_config(),
+    );
+    assert_the_check_stops_running(
+        "eval (170141183460469231731687303715884105728.0 + zero.f64).i128;",
+        "Floating-point value outside the range of the integer type: F64 to I128",
+    );
+    assert_the_check_stops_running(
+        "eval (340282366920938463463374607431768211456.0 + zero.f64).u128;",
+        "Floating-point value outside the range of the integer type: F64 to U128",
+    );
+    assert_the_check_stops_running(
+        "eval (1.0_F32 / zero.f32).u128;",
+        "Floating-point value outside the range of the integer type: F32 to U128, with inf",
+    );
+}
+
 /// `--no-runtime-check` takes the conversion check out with the rest of the checks that end the
 /// program, so a build given both it and `--check-integer-operations` runs on at a value the
 /// target type does not hold.

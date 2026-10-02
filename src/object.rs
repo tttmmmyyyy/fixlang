@@ -11,9 +11,9 @@ use crate::constants::{
     TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_BITS, UNION_TAG_IDX,
 };
 use crate::fixstd::builtin::{
-    make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i16_ty,
-    make_i32_ty, make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u16_ty, make_u32_ty,
-    make_u64_ty, make_u8_ty,
+    make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i128_ty,
+    make_i16_ty, make_i32_ty, make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u128_ty,
+    make_u16_ty, make_u32_ty, make_u64_ty, make_u8_ty,
 };
 use crate::fixstd::runtime::{
     RUNTIME_ARRAY_SIZE_OVERFLOW, RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC,
@@ -54,14 +54,12 @@ pub enum ObjectFieldType {
     LambdaFunction(Arc<TypeNode>),
     /// A `Std::Ptr`: an address the program carries and whose target it leaves alone.
     Ptr,
-    I8,
-    U8,
-    I16,
-    U16,
-    I32,
-    U32,
-    I64,
-    U64,
+    /// An integer of `bits` bits. `signed` says whether the Fix type it holds reads it with a
+    /// sign, which decides the name and the encoding a debugger shows it under.
+    Integer {
+        bits: u32,
+        signed: bool,
+    },
     F32,
     F64,
     /// A value of the given type laid out in place. The flag marks a punched field, whose value has
@@ -124,14 +122,11 @@ impl ObjectFieldType {
             }
             ObjectFieldType::SubObject(ty, _is_punched) => gc.embedded_type_of(ty),
             ObjectFieldType::Ptr => gc.context.ptr_type(AddressSpace::from(0)).into(),
-            ObjectFieldType::I8 => gc.context.i8_type().into(),
-            ObjectFieldType::U8 => gc.context.i8_type().into(),
-            ObjectFieldType::I16 => gc.context.i16_type().into(),
-            ObjectFieldType::U16 => gc.context.i16_type().into(),
-            ObjectFieldType::I32 => gc.context.i32_type().into(),
-            ObjectFieldType::U32 => gc.context.i32_type().into(),
-            ObjectFieldType::I64 => gc.context.i64_type().into(),
-            ObjectFieldType::U64 => gc.context.i64_type().into(),
+            ObjectFieldType::Integer { bits, .. } => gc
+                .context
+                .custom_width_int_type(NonZeroU32::new(*bits).expect("an integer has bits"))
+                .expect("LLVM holds an integer of every width a Fix type has")
+                .into(),
             ObjectFieldType::F32 => gc.context.f32_type().into(),
             ObjectFieldType::F64 => gc.context.f64_type().into(),
             ObjectFieldType::ArrayStorageBuf(ty) => gc.embedded_type_of(ty),
@@ -149,44 +144,18 @@ impl ObjectFieldType {
             ObjectFieldType::TraverseFunction => ptr_di_type("<ptr to traverser func>", gc),
             ObjectFieldType::LambdaFunction(_) => ptr_di_type("<ptr to closure func>", gc),
             ObjectFieldType::Ptr => ptr_di_type("Std::Ptr", gc),
-            ObjectFieldType::I8 => gc
+            ObjectFieldType::Integer { bits, signed } => gc
                 .get_di_builder()
-                .create_basic_type("Std::I8", 8, DW_ATE_SIGNED, 0)
-                .unwrap()
-                .as_type(),
-            ObjectFieldType::U8 => gc
-                .get_di_builder()
-                .create_basic_type("Std::U8", 8, DW_ATE_UNSIGNED, 0)
-                .unwrap()
-                .as_type(),
-            ObjectFieldType::I16 => gc
-                .get_di_builder()
-                .create_basic_type("Std::I16", 16, DW_ATE_SIGNED, 0)
-                .unwrap()
-                .as_type(),
-            ObjectFieldType::U16 => gc
-                .get_di_builder()
-                .create_basic_type("Std::U16", 16, DW_ATE_UNSIGNED, 0)
-                .unwrap()
-                .as_type(),
-            ObjectFieldType::I32 => gc
-                .get_di_builder()
-                .create_basic_type("Std::I32", 32, DW_ATE_SIGNED, 0)
-                .unwrap()
-                .as_type(),
-            ObjectFieldType::U32 => gc
-                .get_di_builder()
-                .create_basic_type("Std::U32", 32, DW_ATE_UNSIGNED, 0)
-                .unwrap()
-                .as_type(),
-            ObjectFieldType::I64 => gc
-                .get_di_builder()
-                .create_basic_type("Std::I64", 64, DW_ATE_SIGNED, 0)
-                .unwrap()
-                .as_type(),
-            ObjectFieldType::U64 => gc
-                .get_di_builder()
-                .create_basic_type("Std::U64", 64, DW_ATE_UNSIGNED, 0)
+                .create_basic_type(
+                    &format!("Std::{}{}", if *signed { "I" } else { "U" }, bits),
+                    *bits as u64,
+                    if *signed {
+                        DW_ATE_SIGNED
+                    } else {
+                        DW_ATE_UNSIGNED
+                    },
+                    0,
+                )
                 .unwrap()
                 .as_type(),
             ObjectFieldType::F32 => gc
@@ -1552,14 +1521,76 @@ fn primitive_field_types(name: &FullName) -> &'static [ObjectFieldType] {
         [
             (make_iostate_ty(), vec![]),
             (make_ptr_ty(), vec![ObjectFieldType::Ptr]),
-            (make_i8_ty(), vec![ObjectFieldType::I8]),
-            (make_u8_ty(), vec![ObjectFieldType::U8]),
-            (make_i16_ty(), vec![ObjectFieldType::I16]),
-            (make_u16_ty(), vec![ObjectFieldType::U16]),
-            (make_i32_ty(), vec![ObjectFieldType::I32]),
-            (make_u32_ty(), vec![ObjectFieldType::U32]),
-            (make_i64_ty(), vec![ObjectFieldType::I64]),
-            (make_u64_ty(), vec![ObjectFieldType::U64]),
+            (
+                make_i8_ty(),
+                vec![ObjectFieldType::Integer {
+                    bits: 8,
+                    signed: true,
+                }],
+            ),
+            (
+                make_u8_ty(),
+                vec![ObjectFieldType::Integer {
+                    bits: 8,
+                    signed: false,
+                }],
+            ),
+            (
+                make_i16_ty(),
+                vec![ObjectFieldType::Integer {
+                    bits: 16,
+                    signed: true,
+                }],
+            ),
+            (
+                make_u16_ty(),
+                vec![ObjectFieldType::Integer {
+                    bits: 16,
+                    signed: false,
+                }],
+            ),
+            (
+                make_i32_ty(),
+                vec![ObjectFieldType::Integer {
+                    bits: 32,
+                    signed: true,
+                }],
+            ),
+            (
+                make_u32_ty(),
+                vec![ObjectFieldType::Integer {
+                    bits: 32,
+                    signed: false,
+                }],
+            ),
+            (
+                make_i64_ty(),
+                vec![ObjectFieldType::Integer {
+                    bits: 64,
+                    signed: true,
+                }],
+            ),
+            (
+                make_u64_ty(),
+                vec![ObjectFieldType::Integer {
+                    bits: 64,
+                    signed: false,
+                }],
+            ),
+            (
+                make_i128_ty(),
+                vec![ObjectFieldType::Integer {
+                    bits: 128,
+                    signed: true,
+                }],
+            ),
+            (
+                make_u128_ty(),
+                vec![ObjectFieldType::Integer {
+                    bits: 128,
+                    signed: false,
+                }],
+            ),
             (make_f32_ty(), vec![ObjectFieldType::F32]),
             (make_f64_ty(), vec![ObjectFieldType::F64]),
         ]
@@ -1637,9 +1668,15 @@ pub fn ty_to_object_ty(
                     false,
                 ));
                 assert_eq!(object_ty.field_types.len(), ARRAY_SIZE_IDX as usize);
-                object_ty.field_types.push(ObjectFieldType::I64); // size
+                object_ty.field_types.push(ObjectFieldType::Integer {
+                    bits: 64,
+                    signed: true,
+                }); // size
                 assert_eq!(object_ty.field_types.len(), ARRAY_CAP_IDX as usize);
-                object_ty.field_types.push(ObjectFieldType::I64); // capacity
+                object_ty.field_types.push(ObjectFieldType::Integer {
+                    bits: 64,
+                    signed: true,
+                }); // capacity
             }
             TyConVariant::Struct => {
                 assert!(capture.is_empty());
@@ -1754,14 +1791,7 @@ fn field_occupies_no_storage(field: ObjectFieldType, type_env: &TypeEnv) -> bool
         | ObjectFieldType::TraverseFunction
         | ObjectFieldType::LambdaFunction(_)
         | ObjectFieldType::Ptr
-        | ObjectFieldType::I8
-        | ObjectFieldType::U8
-        | ObjectFieldType::I16
-        | ObjectFieldType::U16
-        | ObjectFieldType::I32
-        | ObjectFieldType::U32
-        | ObjectFieldType::I64
-        | ObjectFieldType::U64
+        | ObjectFieldType::Integer { .. }
         | ObjectFieldType::F32
         | ObjectFieldType::F64
         | ObjectFieldType::UnionTag => false,
@@ -2264,14 +2294,7 @@ pub fn create_obj<'c, 'm>(
                 write_alloc_offset(gc, ptr_to_ctrl_blk, alloc_offset);
             }
             ObjectFieldType::Ptr => {}
-            ObjectFieldType::I8 => {}
-            ObjectFieldType::U8 => {}
-            ObjectFieldType::I16 => {}
-            ObjectFieldType::U16 => {}
-            ObjectFieldType::I32 => {}
-            ObjectFieldType::U32 => {}
-            ObjectFieldType::I64 => {}
-            ObjectFieldType::U64 => {}
+            ObjectFieldType::Integer { .. } => {}
             ObjectFieldType::F32 => {}
             ObjectFieldType::F64 => {}
             ObjectFieldType::SubObject(_, _) => {}
@@ -2546,14 +2569,7 @@ fn build_traverse<'c, 'm>(
             ObjectFieldType::ControlBlock => {}
             ObjectFieldType::LambdaFunction(_) => {}
             ObjectFieldType::Ptr => {}
-            ObjectFieldType::I8 => {}
-            ObjectFieldType::U8 => {}
-            ObjectFieldType::I16 => {}
-            ObjectFieldType::U16 => {}
-            ObjectFieldType::I32 => {}
-            ObjectFieldType::U32 => {}
-            ObjectFieldType::I64 => {}
-            ObjectFieldType::U64 => {}
+            ObjectFieldType::Integer { .. } => {}
             ObjectFieldType::F32 => {}
             ObjectFieldType::F64 => {}
             // Reference-count-inert: the storage buffer has no length, and the owning `Array` value's
@@ -2678,14 +2694,9 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
                 ObjectFieldType::TraverseFunction => "<ptr to traverser function>".to_string(),
                 ObjectFieldType::LambdaFunction(_) => "<ptr to lambda function>".to_string(),
                 ObjectFieldType::Ptr => "<Ptr member>".to_string(),
-                ObjectFieldType::I8 => "<I8 member>".to_string(),
-                ObjectFieldType::U8 => "<U8 member>".to_string(),
-                ObjectFieldType::I16 => "<I16 member>".to_string(),
-                ObjectFieldType::U16 => "<U16 member>".to_string(),
-                ObjectFieldType::I32 => "<I32 member>".to_string(),
-                ObjectFieldType::U32 => "<U32 member>".to_string(),
-                ObjectFieldType::I64 => "<I64 member>".to_string(),
-                ObjectFieldType::U64 => "<U64 member>".to_string(),
+                ObjectFieldType::Integer { bits, signed } => {
+                    format!("<{}{} member>", if *signed { "I" } else { "U" }, bits)
+                }
                 ObjectFieldType::F32 => "<F32 member>".to_string(),
                 ObjectFieldType::F64 => "<F64 member>".to_string(),
                 ObjectFieldType::UnionBuf(_) => "<union value>".to_string(),

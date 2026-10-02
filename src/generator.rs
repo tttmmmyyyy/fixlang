@@ -1908,8 +1908,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Whether `ty` holds more than `limit` scalars, counting through nested structs. A non-struct
-    /// type is one scalar -- an array included, however many elements it holds -- and a zero-sized
-    /// type is none; see `MAX_SPLIT_SCALARS` for what that count is of.
+    /// type is as many scalars as it is parts under `leaf_parts` -- an array is one, however many
+    /// elements it holds -- and a zero-sized type is none; see `MAX_SPLIT_SCALARS` for what that
+    /// count is of.
     ///
     /// A type whose fields nest holds a number of scalars exponential in the nesting depth, so the
     /// count stops as soon as it settles the answer: counting the rest would cost what the limit is
@@ -1936,7 +1937,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 }
                 count
             }
-            _ => 1,
+            _ => self.leaf_parts(ty).len(),
         }
     }
 
@@ -1955,7 +1956,7 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Split an embedded type into the parts a value of it is carried as: the scalars of its nested
     /// structs, except that a struct wide enough for `is_carried_whole` is one part of its own. A
-    /// non-struct type is one part, and a zero-sized type is none.
+    /// non-struct type is the parts `leaf_parts` gives it, and a zero-sized type is none.
     ///
     /// Splitting an unbox struct across a function boundary, rather than passing one aggregate, keeps
     /// a loop-carried field (such as an `Array`'s `@size`) visible to LLVM's value analyses: the
@@ -1980,7 +1981,35 @@ impl<'c, 'm> Generator<'c, 'm> {
             BasicTypeEnum::StructType(st) => (0..st.count_fields())
                 .flat_map(|i| self.split_type_parts(st.get_field_type_at_index(i).unwrap()))
                 .collect(),
-            _ => vec![ty],
+            _ => self.leaf_parts(ty),
+        }
+    }
+
+    /// The parts a value of the non-struct type `ty` is carried as: the value itself, except that an
+    /// integer wider than 64 bits is its 64-bit words, least significant first. An `i128` is two
+    /// `i64`s.
+    ///
+    /// No Fix function then takes a bare `i128` argument. Since LLVM 18, the x86-64 backend can
+    /// miscompile a call to a `tailcc` function, as a Fix function is there, that takes a bare
+    /// `i128` on the stack, and the program crashes after the call returns
+    /// (https://github.com/llvm/llvm-project/issues/105223). An `i128` inside an array or a struct
+    /// argument does not trigger it, so a part carried whole and a union's payload buffer keep
+    /// theirs.
+    fn leaf_parts(&self, ty: BasicTypeEnum<'c>) -> Vec<BasicTypeEnum<'c>> {
+        match Self::wide_integer_words(ty) {
+            Some(words) => vec![self.context.i64_type().into(); words],
+            None => vec![ty],
+        }
+    }
+
+    /// The number of 64-bit words an integer of `ty` is split into as parts, and `None` for a type
+    /// carried as one part.
+    fn wide_integer_words(ty: BasicTypeEnum<'c>) -> Option<usize> {
+        match ty {
+            BasicTypeEnum::IntType(it) if it.get_bit_width() > 64 => {
+                Some((it.get_bit_width() as usize).div_ceil(64))
+            }
+            _ => None,
         }
     }
 
@@ -2002,7 +2031,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             BasicTypeEnum::StructType(st) => (0..st.count_fields())
                 .map(|i| self.split_part_count(st.get_field_type_at_index(i).unwrap()))
                 .sum(),
-            _ => 1,
+            _ => Self::wide_integer_words(ty).unwrap_or(1),
         }
     }
 
@@ -2044,6 +2073,26 @@ impl<'c, 'm> Generator<'c, 'm> {
                     self.split_value_parts(field)
                 })
                 .collect(),
+            BasicValueEnum::IntValue(iv) => match Self::wide_integer_words(iv.get_type().into()) {
+                Some(words) => (0..words)
+                    .map(|word| {
+                        let shifted = self
+                            .builder()
+                            .build_right_shift(
+                                iv,
+                                iv.get_type().const_int(64 * word as u64, false),
+                                false,
+                                "split_word",
+                            )
+                            .unwrap();
+                        self.builder()
+                            .build_int_truncate(shifted, self.context.i64_type(), "split_word")
+                            .unwrap()
+                            .as_basic_value_enum()
+                    })
+                    .collect(),
+                None => vec![val],
+            },
             _ => vec![val],
         }
     }
@@ -2083,6 +2132,30 @@ impl<'c, 'm> Generator<'c, 'm> {
                         .build_insert_value(val, field, i, "assemble_part")
                         .unwrap()
                         .into_struct_value();
+                }
+                val.as_basic_value_enum()
+            }
+            BasicTypeEnum::IntType(it) if Self::wide_integer_words(ty).is_some() => {
+                let words = Self::wide_integer_words(ty).unwrap();
+                let mut val = it.const_zero();
+                for word in 0..words {
+                    let part = parts.next().expect("too few parts to assemble the value");
+                    let widened = self
+                        .builder()
+                        .build_int_z_extend(part.into_int_value(), it, "assemble_word")
+                        .unwrap();
+                    let shifted = self
+                        .builder()
+                        .build_left_shift(
+                            widened,
+                            it.const_int(64 * word as u64, false),
+                            "assemble_word",
+                        )
+                        .unwrap();
+                    val = self
+                        .builder()
+                        .build_or(val, shifted, "assemble_word")
+                        .unwrap();
                 }
                 val.as_basic_value_enum()
             }
@@ -2240,14 +2313,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     ObjectFieldType::TraverseFunction => unreachable!(),
                     ObjectFieldType::LambdaFunction(_) => {}
                     ObjectFieldType::Ptr => {}
-                    ObjectFieldType::I8 => {}
-                    ObjectFieldType::U8 => {}
-                    ObjectFieldType::I16 => {}
-                    ObjectFieldType::U16 => {}
-                    ObjectFieldType::I32 => {}
-                    ObjectFieldType::U32 => {}
-                    ObjectFieldType::I64 => {}
-                    ObjectFieldType::U64 => {}
+                    ObjectFieldType::Integer { .. } => {}
                     ObjectFieldType::F32 => {}
                     ObjectFieldType::F64 => {}
                     ObjectFieldType::SubObject(subty, is_punched) => {
