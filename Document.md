@@ -941,7 +941,7 @@ The type for booleans is `Bool`, and literals for booleans are `true` and `false
 
 ## Numbers and literals
 
-Types for numbers are `I8`, `I16`, `I32`, `I64` (signed integers), `U8`, `U16`, `U32`, `U64` (unsigned integers) and `F32`, `F64` (floating point values).
+Types for numbers are `I8`, `I16`, `I32`, `I64`, `I128` (signed integers), `U8`, `U16`, `U32`, `U64`, `U128` (unsigned integers) and `F32`, `F64` (floating point values).
 
 A number literal is interpreted as a floating point literal if it contains a decimal point, and as an integer literal otherwise.
 For example, `42` is an `I64` type number literal, and `3.14` is an `F64` type number literal.
@@ -2243,6 +2243,8 @@ The following types can be used for `{return_type}` or `{arg_type_i}`:
 * C numeric types: `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble`
 * Substitute for `void`: `()`, available as `{return_type}`. Giving it as an `{arg_type_i}` is an error.
 
+FFI does not support the 128-bit integer types `I128` and `U128`, so they are available in neither position. Pass such a value as two `U64`s, its low and its high 64 bits.
+
 An argument written past the declared parameters — one that goes through the `...` — is a value of one of the types an `{arg_type_i}` may be: a pointer or a number. C carries such an argument as one scalar, so write a `Bool` as a `U8` or a `CInt`, take a `Ptr` to a `String` with `Std::String::borrow_c_str`, and take a `Ptr` to a boxed value with `Std::FFI::boxed_to_retained_ptr` or `Std::FFI::borrow_boxed`.
 
 The function signature must match what the C language header declares. A signature that does not match it has undefined behavior.
@@ -2317,7 +2319,7 @@ Give the exported value a type the C ABI can carry:
 * Boxed types, which the foreign language receives as an opaque pointer (see [Managing ownership of Fix's boxed value in a foreign language](#managing-ownership-of-fixs-boxed-value-in-a-foreign-language))
 * `()`, available as the result type, where it becomes `void`
 
-Any other type is rejected when the program is compiled.
+Any other type is rejected when the program is compiled. FFI does not support the 128-bit integer types `I128` and `U128`: exchange such a value as two `U64`s, its low and its high 64 bits.
 
 * To exchange a struct, a tuple or a union, take a `Ptr` to memory the foreign language owns and copy through it, as described in [Returning more than one value](#returning-more-than-one-value).
 * For a truth value, take a `U8` or a `CInt` and convert it on the Fix side.

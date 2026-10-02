@@ -421,3 +421,29 @@ fn test_field_part_ranges_tile_the_part_list() {
         assert_eq!(offset, parts.len());
     }
 }
+
+/// An integer wider than 64 bits is carried as its 64-bit words, so no function Fix defines takes an
+/// `i128` argument, and the parts of a struct holding one still tile its fields.
+#[test]
+fn test_a_128_bit_integer_is_carried_as_two_words() {
+    let config = panic_if_err(Configuration::check_mode());
+    let program = panic_if_err(elaborate_via_config(&config));
+    let type_env = program.type_env().clone();
+    let context = Context::create();
+    let target_machine = get_target_machine(config.get_llvm_opt_level(), &config);
+    let module = Generator::create_module("wide_integer_test", &context, &target_machine);
+    let gc = standalone_generator(&context, &module, &target_machine, &config, type_env);
+
+    let i64_ty: BasicTypeEnum = context.i64_type().into();
+    let outer = context.struct_type(
+        &[context.i8_type().into(), context.i128_type().into(), i64_ty],
+        false,
+    );
+    assert_eq!(
+        gc.type_parts(outer.into()),
+        vec![context.i8_type().into(), i64_ty, i64_ty, i64_ty]
+    );
+    assert_eq!(gc.part_count(outer.into()), 4);
+    assert_eq!(gc.field_part_range(outer, 1), (1, 2));
+    assert_eq!(gc.field_part_range(outer, 2), (3, 1));
+}

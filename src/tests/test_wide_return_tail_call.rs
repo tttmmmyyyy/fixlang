@@ -69,6 +69,40 @@ fn test_iofail_loop_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// A 128-bit integer is returned in two registers, so a result of two of them fills four and
+/// crosses the x86-64 budget of three, as does an `IOFail U128`, whose `Result` puts two 128-bit
+/// slots beside its tag. Each loop needs the rule although its result holds a handful of scalars.
+#[test]
+fn test_loops_returning_128_bit_integers_run_in_constant_stack() {
+    let source = r#"
+    module Main;
+
+    walk_pair : I64 -> (I128, I128) -> IO (I128, I128);
+    walk_pair = |i, st| (
+        if i == 0 { pure(st) };
+        let _ = *pure(0);
+        walk_pair(i - 1, (st.@0 + 1_I128, st.@1 + 2_I128))
+    );
+
+    walk_fail : I64 -> U128 -> IOFail U128;
+    walk_fail = |i, acc| (
+        if i == 0 { pure(acc) };
+        let _ = *pure(0);
+        walk_fail(i - 1, acc + 1_U128)
+    );
+
+    main : IO ();
+    main = (
+        let (a, b) = *walk_pair(1000000, (0_I128, 0_I128));
+        assert_eq(|_|"unexpected pair", (a, b), (1000000_I128, 2000000_I128));;
+        let res = *walk_fail(1000000, 0_U128).to_result;
+        assert_eq(|_|"unexpected result", res.as_ok, 1000000_U128);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
 /// `Std::loop_m` recurses on itself in tail position of a bind, so its own return width is what
 /// decides whether the loop is constant-stack. Here `break_m` carries an array and a scalar.
 #[test]

@@ -8,11 +8,17 @@
 
 - #787: A field of a struct literal or of a struct pattern can be written by its name alone. `S { x, y: 2 }` means `S { x: x, y: 2 }`, where the second `x` is the value named `x`. `let S { x, y: y2 } = s;` binds `x` to the field `x` of `s`, as `let S { x: x, y: y2 } = s;` does.
 - #790: A struct pattern can write `_` after its fields to leave out the other fields of the struct: `let S { x, _ } = s;`.
+- #791, #798: 128-bit integer types `I128` and `U128`. A literal is written with the suffix `_I128` or `_U128`, as in `340282366920938463463374607431768211455_U128`. FFI does not support them.
 
 #### Tool
 
 - #785: `fix test` now runs the Fix examples in comments, the code blocks whose info string begins with the word `fix`. An example passes when it exits with status 0. `fix test --doc` runs the examples alone, and `fix test --no-doc` runs `Test::test` alone. The module name `DocTest` and the module names beginning with `DocTest.` are now reserved for the examples: `fix test` rejects a module of such a name when it has an example to compile. See "Fix examples in comments" in `Document.md` for how to write an example.
 - #790: The language server offers two quick fixes for a struct pattern that leaves out fields without `_`: write each missing field as `name: _`, or write `_` after the fields.
+
+#### Std
+
+- #791, #798: `I128` and `U128` have what the other integer types have: arithmetic, comparison, the bit operations, conversions to and from the other numeric types (`x.i128`, `x.u128`), `maximum`, `minimum`, `Zero`, `One`, `ToString`, `FromString`, `ToBytes` and `FromBytes`, and `I128::abs`.
+- #791, #798: `count_leading_zeros`, `count_trailing_zeros` and `count_ones` count the bits of an integer, for every integer type: `1_U8.count_leading_zeros` is `7_U8`. The count has the type of the integer counted. An integer of zero has as many leading and trailing zeros as its type has bits.
 
 ### Changed
 
@@ -24,6 +30,7 @@
 #### Std
 
 - #792: `F64::to_string` and `F32::to_string` now write a number with a single significant digit and a power of ten as `1.0e300`, where they wrote `1e300`. The text they write for a finite number is now always a valid floating point literal of Fix, with `_F32` after it for an `F32`.
+- #800: `to_string_exp` and `to_string_exp_precision` of `F64` and `F32` now write the power of ten with no `+` and no leading zero, as a floating point literal of Fix writes it: `100.0.to_string_exp` is `1.000000e2`, where it was `1.000000e+02`, and `0.0123.to_string_exp_precision(1_U8)` is `1.2e-2`, where it was `1.2e-02`.
 
 #### Tool
 

@@ -28,7 +28,6 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 
 #ifdef RYU_DEBUG
@@ -328,33 +327,6 @@ static inline uint32_t lengthForIndex(const uint32_t idx) {
   return (log10Pow2(16 * (int32_t) idx) + 1 + 16 + 8) / 9;
 }
 
-static inline int copy_special_str_printf(char* const result, const bool sign, const uint64_t mantissa) {
-#if defined(_MSC_VER)
-  // TODO: Check that -nan is expected output on Windows.
-  if (sign) {
-    result[0] = '-';
-  }
-  if (mantissa) {
-    if (mantissa < (1ull << (DOUBLE_MANTISSA_BITS - 1))) {
-      memcpy(result + sign, "nan(snan)", 9);
-      return sign + 9;
-    }
-    memcpy(result + sign, "nan", 3);
-    return sign + 3;
-  }
-#else
-  if (mantissa) {
-    memcpy(result, "nan", 3);
-    return 3;
-  }
-  if (sign) {
-    result[0] = '-';
-  }
-#endif
-  memcpy(result + sign, "Infinity", 8);
-  return sign + 8;
-}
-
 int d2fixed_buffered_n(double d, uint32_t precision, char* result) {
   const uint64_t bits = double_to_bits(d);
 #ifdef RYU_DEBUG
@@ -370,10 +342,10 @@ int d2fixed_buffered_n(double d, uint32_t precision, char* result) {
   const uint64_t ieeeMantissa = bits & ((1ull << DOUBLE_MANTISSA_BITS) - 1);
   const uint32_t ieeeExponent = (uint32_t) ((bits >> DOUBLE_MANTISSA_BITS) & ((1u << DOUBLE_EXPONENT_BITS) - 1));
 
+  // Modified from upstream Ryu by the Fix project: `d` is finite, since the Fix runtime writes an
+  // infinity and a NaN itself.
+  assert(ieeeExponent != ((1u << DOUBLE_EXPONENT_BITS) - 1u));
   // Case distinction; exit early for the easy cases.
-  if (ieeeExponent == ((1u << DOUBLE_EXPONENT_BITS) - 1u)) {
-    return copy_special_str_printf(result, ieeeSign, ieeeMantissa);
-  }
   if (ieeeExponent == 0 && ieeeMantissa == 0) {
     int index = 0;
     if (ieeeSign) {
@@ -549,20 +521,6 @@ int d2fixed_buffered_n(double d, uint32_t precision, char* result) {
   return index;
 }
 
-void d2fixed_buffered(double d, uint32_t precision, char* result) {
-  const int len = d2fixed_buffered_n(d, precision, result);
-  result[len] = '\0';
-}
-
-char* d2fixed(double d, uint32_t precision) {
-  char* const buffer = (char*)malloc(2000);
-  const int index = d2fixed_buffered_n(d, precision, buffer);
-  buffer[index] = '\0';
-  return buffer;
-}
-
-
-
 int d2exp_buffered_n(double d, uint32_t precision, char* result) {
   const uint64_t bits = double_to_bits(d);
 #ifdef RYU_DEBUG
@@ -578,10 +536,10 @@ int d2exp_buffered_n(double d, uint32_t precision, char* result) {
   const uint64_t ieeeMantissa = bits & ((1ull << DOUBLE_MANTISSA_BITS) - 1);
   const uint32_t ieeeExponent = (uint32_t) ((bits >> DOUBLE_MANTISSA_BITS) & ((1u << DOUBLE_EXPONENT_BITS) - 1));
 
+  // Modified from upstream Ryu by the Fix project: `d` is finite, since the Fix runtime writes an
+  // infinity and a NaN itself.
+  assert(ieeeExponent != ((1u << DOUBLE_EXPONENT_BITS) - 1u));
   // Case distinction; exit early for the easy cases.
-  if (ieeeExponent == ((1u << DOUBLE_EXPONENT_BITS) - 1u)) {
-    return copy_special_str_printf(result, ieeeSign, ieeeMantissa);
-  }
   if (ieeeExponent == 0 && ieeeMantissa == 0) {
     int index = 0;
     if (ieeeSign) {
@@ -593,8 +551,10 @@ int d2exp_buffered_n(double d, uint32_t precision, char* result) {
       memset(result + index, '0', precision);
       index += precision;
     }
-    memcpy(result + index, "e+00", 4);
-    index += 4;
+    // Modified from upstream Ryu by the Fix project: the power of ten is written as `e0`, where
+    // upstream writes `e+00`.
+    memcpy(result + index, "e0", 2);
+    index += 2;
     return index;
   }
 
@@ -785,35 +745,9 @@ int d2exp_buffered_n(double d, uint32_t precision, char* result) {
       }
     }
   }
+  // Modified from upstream Ryu by the Fix project: the power of ten is written with no `+` and no
+  // padding.
   result[index++] = 'e';
-  if (exp < 0) {
-    result[index++] = '-';
-    exp = -exp;
-  } else {
-    result[index++] = '+';
-  }
-
-  if (exp >= 100) {
-    const int32_t c = exp % 10;
-    memcpy(result + index, DIGIT_TABLE + 2 * (exp / 10), 2);
-    result[index + 2] = (char) ('0' + c);
-    index += 3;
-  } else {
-    memcpy(result + index, DIGIT_TABLE + 2 * exp, 2);
-    index += 2;
-  }
-
+  index += append_exponent(exp, result + index);
   return index;
-}
-
-void d2exp_buffered(double d, uint32_t precision, char* result) {
-  const int len = d2exp_buffered_n(d, precision, result);
-  result[len] = '\0';
-}
-
-char* d2exp(double d, uint32_t precision) {
-  char* const buffer = (char*)malloc(2000);
-  const int index = d2exp_buffered_n(d, precision, buffer);
-  buffer[index] = '\0';
-  return buffer;
 }

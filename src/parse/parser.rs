@@ -37,6 +37,7 @@ use crate::constants::{
     PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX,
 };
 use crate::error::Errors;
+use crate::ffi::unsupported_128_bit_integer_msg;
 use crate::fixstd::builtin::{
     expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, floating_literal_value,
     integral_literal_value, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty,
@@ -2683,7 +2684,7 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
     let is_io = call_ffi_pair.as_rule() == Rule::ffi_call_c_io_symbol;
     let is_ios = call_ffi_pair.as_rule() == Rule::ffi_call_c_ios_symbol;
 
-    let ret_ty = parse_ffi_c_fun_ty(pairs.next().unwrap(), ctx);
+    let ret_ty = parse_ffi_c_fun_ty(pairs.next().unwrap(), ctx)?;
     let fun_name = pairs.next().unwrap().as_str().to_string();
     let param_tys = parse_ffi_param_tys(pairs.next().unwrap(), ctx)?;
 
@@ -2752,11 +2753,13 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
     Ok(expr)
 }
 
-// Parses one type written in a C function signature into the Fix type constructor that represents
-// it. A C type name such as `CInt` becomes the sized type it has on the target, and `()` becomes
-// the unit type, which stands for `void`.
-fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
+/// Parses one type written in a C function signature into the Fix type constructor that represents
+/// it. A C type name such as `CInt` becomes the sized type it has on the target, and `()` becomes
+/// the unit type, which stands for `void`. A 128-bit integer type, which FFI does not support, is an
+/// error.
+fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<TyCon>, Errors> {
     assert_eq!(pair.as_rule(), Rule::ffi_c_fun_ty);
+    let span = Span::from_pair(&ctx.source, &pair);
     let mut name = if pair.as_str() == "()" {
         make_tuple_name_abs(0)
     } else {
@@ -2769,7 +2772,17 @@ fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TyCon> {
         FullName::from_strs(&[STD_NAME], &name)
     };
     name.set_absolute();
-    tycon(name)
+    let ty = tycon(name);
+    if !ty.is_unit() && !ty.is_c_scalar() {
+        // The grammar admits the C type names, `Ptr`, `()` and the numeric types, and of these the
+        // 128-bit integers alone are not C scalars.
+        assert!(ty.is_128_bit_integer());
+        return Err(Errors::from_msg_srcs(
+            unsupported_128_bit_integer_msg(pair.as_str()),
+            &[&Some(span)],
+        ));
+    }
+    Ok(ty)
 }
 
 // Parses the parameter types of a C function signature written in `FFI_CALL`. A parameter written
@@ -2782,7 +2795,7 @@ fn parse_ffi_param_tys(
     let mut param_tys = vec![];
     for pair in pair.into_inner() {
         let span = Span::from_pair(&ctx.source, &pair);
-        let param_ty = parse_ffi_c_fun_ty(pair, ctx);
+        let param_ty = parse_ffi_c_fun_ty(pair, ctx)?;
         if param_ty.is_unit() {
             return Err(Errors::from_msg_srcs(
                 "`()` stands for `void`, which a C function cannot take as a parameter. It is available as the return type.".to_string(),
@@ -2984,7 +2997,7 @@ fn parse_expr_u8_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<ExprNode> 
             c as u8
         }
     };
-    expr_int_lit(byte as u64, make_u8_ty(), Some(span))
+    expr_int_lit(byte as u128, make_u8_ty(), Some(span))
 }
 
 fn parse_type(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {

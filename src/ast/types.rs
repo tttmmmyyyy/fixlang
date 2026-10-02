@@ -6,10 +6,10 @@ use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::typedecl::Field;
 use crate::constants::{
-    TraverserWorkType, BOOL_NAME, F32_NAME, F64_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
-    PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, STRING_NAME, TRAVERSER_WORK_MARK_GLOBAL,
-    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U16_NAME,
-    U32_NAME, U64_NAME, U8_NAME,
+    TraverserWorkType, BOOL_NAME, F32_NAME, F64_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME,
+    I8_NAME, PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, STRING_NAME, TRAVERSER_WORK_MARK_GLOBAL,
+    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U128_NAME,
+    U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
@@ -316,10 +316,12 @@ impl TyCon {
             U16_NAME => false,
             U32_NAME => false,
             U64_NAME => false,
+            U128_NAME => false,
             I8_NAME => true,
             I16_NAME => true,
             I32_NAME => true,
             I64_NAME => true,
+            I128_NAME => true,
             _ => unreachable!(),
         }
     }
@@ -327,6 +329,13 @@ impl TyCon {
     /// Whether this is the type `Bool` of `Std`.
     pub fn is_boolean(&self) -> bool {
         return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
+    }
+
+    /// Whether this is `I128` or `U128` of `Std`, the integer types wider than every integer type
+    /// standard C has.
+    pub fn is_128_bit_integer(&self) -> bool {
+        self.name == FullName::from_strs(&[STD_NAME], I128_NAME)
+            || self.name == FullName::from_strs(&[STD_NAME], U128_NAME)
     }
 
     /// Whether this is the type `String` of `Std`.
@@ -1418,6 +1427,11 @@ impl TypeNode {
     /// Whether this is the type `String`.
     pub fn is_string(&self) -> bool {
         self.toplevel_tycon_satisfies(TyCon::is_string)
+    }
+
+    /// Whether this is `I128` or `U128`.
+    pub fn is_128_bit_integer(&self) -> bool {
+        self.toplevel_tycon_satisfies(TyCon::is_128_bit_integer)
     }
 
     /// Whether the top-level type constructor of this type is `IO`, i.e. whether this is `IO` or
