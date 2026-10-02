@@ -1750,6 +1750,18 @@ Calculates bitwise XOR of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### count_leading_zeros
+
+Type: `Std::I128 -> Std::I128`
+
+`v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 #### count_ones
 
 Type: `Std::I128 -> Std::I128`
@@ -1762,13 +1774,13 @@ The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` i
 
 * `v` - The value whose bits are counted.
 
-#### leading_zeros
+#### count_trailing_zeros
 
 Type: `Std::I128 -> Std::I128`
 
-`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+`v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+A `v` of zero gives the number of bits in its type.
 
 ##### Parameters
 
@@ -1807,18 +1819,6 @@ Type: `Std::I128 -> Std::I128 -> Std::I128`
 
 * `bits` - The number of bits to shift.
 * `v` - The value to shift.
-
-#### trailing_zeros
-
-Type: `Std::I128 -> Std::I128`
-
-`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
-
-A `v` of zero gives the number of bits in its type.
-
-##### Parameters
-
-* `v` - The value whose bits are counted.
 
 ### namespace Std::I16
 
@@ -1869,6 +1869,18 @@ Calculates bitwise XOR of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### count_leading_zeros
+
+Type: `Std::I16 -> Std::I16`
+
+`v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 #### count_ones
 
 Type: `Std::I16 -> Std::I16`
@@ -1881,13 +1893,13 @@ The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` i
 
 * `v` - The value whose bits are counted.
 
-#### leading_zeros
+#### count_trailing_zeros
 
 Type: `Std::I16 -> Std::I16`
 
-`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+`v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+A `v` of zero gives the number of bits in its type.
 
 ##### Parameters
 
@@ -2111,18 +2123,6 @@ Type: `Std::I16 -> Std::U8`
 
 Casts a value of `I16` into a value of `U8`.
 
-#### trailing_zeros
-
-Type: `Std::I16 -> Std::I16`
-
-`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
-
-A `v` of zero gives the number of bits in its type.
-
-##### Parameters
-
-* `v` - The value whose bits are counted.
-
 ### namespace Std::I32
 
 #### abs
@@ -2172,6 +2172,18 @@ Calculates bitwise XOR of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### count_leading_zeros
+
+Type: `Std::I32 -> Std::I32`
+
+`v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 #### count_ones
 
 Type: `Std::I32 -> Std::I32`
@@ -2184,13 +2196,13 @@ The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` i
 
 * `v` - The value whose bits are counted.
 
-#### leading_zeros
+#### count_trailing_zeros
 
 Type: `Std::I32 -> Std::I32`
 
-`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+`v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+A `v` of zero gives the number of bits in its type.
 
 ##### Parameters
 
@@ -2414,18 +2426,6 @@ Type: `Std::I32 -> Std::U8`
 
 Casts a value of `I32` into a value of `U8`.
 
-#### trailing_zeros
-
-Type: `Std::I32 -> Std::I32`
-
-`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
-
-A `v` of zero gives the number of bits in its type.
-
-##### Parameters
-
-* `v` - The value whose bits are counted.
-
 ### namespace Std::I64
 
 #### abs
@@ -2475,6 +2475,18 @@ Calculates bitwise XOR of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### count_leading_zeros
+
+Type: `Std::I64 -> Std::I64`
+
+`v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 #### count_ones
 
 Type: `Std::I64 -> Std::I64`
@@ -2487,13 +2499,13 @@ The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` i
 
 * `v` - The value whose bits are counted.
 
-#### leading_zeros
+#### count_trailing_zeros
 
 Type: `Std::I64 -> Std::I64`
 
-`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+`v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+A `v` of zero gives the number of bits in its type.
 
 ##### Parameters
 
@@ -2717,18 +2729,6 @@ Type: `Std::I64 -> Std::U8`
 
 Casts a value of `I64` into a value of `U8`.
 
-#### trailing_zeros
-
-Type: `Std::I64 -> Std::I64`
-
-`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
-
-A `v` of zero gives the number of bits in its type.
-
-##### Parameters
-
-* `v` - The value whose bits are counted.
-
 ### namespace Std::I8
 
 #### abs
@@ -2778,6 +2778,18 @@ Calculates bitwise XOR of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### count_leading_zeros
+
+Type: `Std::I8 -> Std::I8`
+
+`v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 #### count_ones
 
 Type: `Std::I8 -> Std::I8`
@@ -2790,13 +2802,13 @@ The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` i
 
 * `v` - The value whose bits are counted.
 
-#### leading_zeros
+#### count_trailing_zeros
 
 Type: `Std::I8 -> Std::I8`
 
-`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+`v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+A `v` of zero gives the number of bits in its type.
 
 ##### Parameters
 
@@ -3019,18 +3031,6 @@ Casts a value of `I8` into a value of `U64`.
 Type: `Std::I8 -> Std::U8`
 
 Casts a value of `I8` into a value of `U8`.
-
-#### trailing_zeros
-
-Type: `Std::I8 -> Std::I8`
-
-`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
-
-A `v` of zero gives the number of bits in its type.
-
-##### Parameters
-
-* `v` - The value whose bits are counted.
 
 ### namespace Std::IO
 
@@ -5126,6 +5126,18 @@ Calculates bitwise XOR of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### count_leading_zeros
+
+Type: `Std::U128 -> Std::U128`
+
+`v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 #### count_ones
 
 Type: `Std::U128 -> Std::U128`
@@ -5138,13 +5150,13 @@ The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` i
 
 * `v` - The value whose bits are counted.
 
-#### leading_zeros
+#### count_trailing_zeros
 
 Type: `Std::U128 -> Std::U128`
 
-`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+`v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+A `v` of zero gives the number of bits in its type.
 
 ##### Parameters
 
@@ -5183,18 +5195,6 @@ Type: `Std::U128 -> Std::U128 -> Std::U128`
 
 * `bits` - The number of bits to shift.
 * `v` - The value to shift.
-
-#### trailing_zeros
-
-Type: `Std::U128 -> Std::U128`
-
-`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
-
-A `v` of zero gives the number of bits in its type.
-
-##### Parameters
-
-* `v` - The value whose bits are counted.
 
 ### namespace Std::U16
 
@@ -5241,6 +5241,18 @@ Calculates bitwise XOR of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### count_leading_zeros
+
+Type: `Std::U16 -> Std::U16`
+
+`v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 #### count_ones
 
 Type: `Std::U16 -> Std::U16`
@@ -5253,13 +5265,13 @@ The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` i
 
 * `v` - The value whose bits are counted.
 
-#### leading_zeros
+#### count_trailing_zeros
 
 Type: `Std::U16 -> Std::U16`
 
-`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+`v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+A `v` of zero gives the number of bits in its type.
 
 ##### Parameters
 
@@ -5483,18 +5495,6 @@ Type: `Std::U16 -> Std::U8`
 
 Casts a value of `U16` into a value of `U8`.
 
-#### trailing_zeros
-
-Type: `Std::U16 -> Std::U16`
-
-`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
-
-A `v` of zero gives the number of bits in its type.
-
-##### Parameters
-
-* `v` - The value whose bits are counted.
-
 ### namespace Std::U32
 
 #### bit_and
@@ -5540,6 +5540,18 @@ Calculates bitwise XOR of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### count_leading_zeros
+
+Type: `Std::U32 -> Std::U32`
+
+`v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 #### count_ones
 
 Type: `Std::U32 -> Std::U32`
@@ -5552,13 +5564,13 @@ The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` i
 
 * `v` - The value whose bits are counted.
 
-#### leading_zeros
+#### count_trailing_zeros
 
 Type: `Std::U32 -> Std::U32`
 
-`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+`v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+A `v` of zero gives the number of bits in its type.
 
 ##### Parameters
 
@@ -5782,18 +5794,6 @@ Type: `Std::U32 -> Std::U8`
 
 Casts a value of `U32` into a value of `U8`.
 
-#### trailing_zeros
-
-Type: `Std::U32 -> Std::U32`
-
-`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
-
-A `v` of zero gives the number of bits in its type.
-
-##### Parameters
-
-* `v` - The value whose bits are counted.
-
 ### namespace Std::U64
 
 #### bit_and
@@ -5839,6 +5839,18 @@ Calculates bitwise XOR of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### count_leading_zeros
+
+Type: `Std::U64 -> Std::U64`
+
+`v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 #### count_ones
 
 Type: `Std::U64 -> Std::U64`
@@ -5851,13 +5863,13 @@ The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` i
 
 * `v` - The value whose bits are counted.
 
-#### leading_zeros
+#### count_trailing_zeros
 
 Type: `Std::U64 -> Std::U64`
 
-`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+`v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+A `v` of zero gives the number of bits in its type.
 
 ##### Parameters
 
@@ -6081,18 +6093,6 @@ Type: `Std::U64 -> Std::U8`
 
 Casts a value of `U64` into a value of `U8`.
 
-#### trailing_zeros
-
-Type: `Std::U64 -> Std::U64`
-
-`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
-
-A `v` of zero gives the number of bits in its type.
-
-##### Parameters
-
-* `v` - The value whose bits are counted.
-
 ### namespace Std::U8
 
 #### bit_and
@@ -6138,6 +6138,18 @@ Calculates bitwise XOR of two values.
 * `x` - The first value.
 * `y` - The second value.
 
+#### count_leading_zeros
+
+Type: `Std::U8 -> Std::U8`
+
+`v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
+
+The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+
+##### Parameters
+
+* `v` - The value whose bits are counted.
+
 #### count_ones
 
 Type: `Std::U8 -> Std::U8`
@@ -6150,13 +6162,13 @@ The sign bit of a signed type counts as one of its bits, so `-1_I8.count_ones` i
 
 * `v` - The value whose bits are counted.
 
-#### leading_zeros
+#### count_trailing_zeros
 
 Type: `Std::U8 -> Std::U8`
 
-`v.leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.leading_zeros` is `7_U8`.
+`v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+A `v` of zero gives the number of bits in its type.
 
 ##### Parameters
 
@@ -6379,18 +6391,6 @@ Casts a value of `U8` into a value of `U64`.
 Type: `Std::U8 -> Std::U8`
 
 Casts a value of `U8` into a value of `U8`.
-
-#### trailing_zeros
-
-Type: `Std::U8 -> Std::U8`
-
-`v.trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.trailing_zeros` is `2_U8`.
-
-A `v` of zero gives the number of bits in its type.
-
-##### Parameters
-
-* `v` - The value whose bits are counted.
 
 ### namespace Std::Zero
 

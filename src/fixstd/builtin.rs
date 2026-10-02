@@ -2217,9 +2217,9 @@ pub enum UnaryBitOperation {
     /// Flips every bit.
     Not,
     /// Counts the zero bits above the most significant one bit.
-    LeadingZeros,
+    CountLeadingZeros,
     /// Counts the zero bits below the least significant one bit.
-    TrailingZeros,
+    CountTrailingZeros,
     /// Counts the one bits.
     CountOnes,
 }
@@ -2228,8 +2228,8 @@ impl UnaryBitOperation {
     /// Every operation, in the order the standard library declares them.
     pub const ALL: [UnaryBitOperation; 4] = [
         UnaryBitOperation::Not,
-        UnaryBitOperation::LeadingZeros,
-        UnaryBitOperation::TrailingZeros,
+        UnaryBitOperation::CountLeadingZeros,
+        UnaryBitOperation::CountTrailingZeros,
         UnaryBitOperation::CountOnes,
     ];
 
@@ -2237,8 +2237,8 @@ impl UnaryBitOperation {
     pub fn function_name(&self) -> &'static str {
         match self {
             UnaryBitOperation::Not => "bit_not",
-            UnaryBitOperation::LeadingZeros => "leading_zeros",
-            UnaryBitOperation::TrailingZeros => "trailing_zeros",
+            UnaryBitOperation::CountLeadingZeros => "count_leading_zeros",
+            UnaryBitOperation::CountTrailingZeros => "count_trailing_zeros",
             UnaryBitOperation::CountOnes => "count_ones",
         }
     }
@@ -2247,14 +2247,18 @@ impl UnaryBitOperation {
     pub fn document(&self) -> &'static str {
         match self {
             UnaryBitOperation::Not => include_str!("../docs/std_bit_not.md"),
-            UnaryBitOperation::LeadingZeros => include_str!("../docs/std_leading_zeros.md"),
-            UnaryBitOperation::TrailingZeros => include_str!("../docs/std_trailing_zeros.md"),
+            UnaryBitOperation::CountLeadingZeros => {
+                include_str!("../docs/std_count_leading_zeros.md")
+            }
+            UnaryBitOperation::CountTrailingZeros => {
+                include_str!("../docs/std_count_trailing_zeros.md")
+            }
             UnaryBitOperation::CountOnes => include_str!("../docs/std_count_ones.md"),
         }
     }
 }
 
-/// Evaluates `Std::I64::bit_not`, `Std::I64::leading_zeros`, `Std::I64::trailing_zeros` and
+/// Evaluates `Std::I64::bit_not`, `Std::I64::count_leading_zeros`, `Std::I64::count_trailing_zeros` and
 /// `Std::I64::count_ones`, and the same functions of the other integer types: the operand with
 /// every bit flipped, or a count of its bits, as a value of the operand's type.
 ///
@@ -2304,8 +2308,12 @@ impl BuiltinOp for UnaryBitOp {
             .into_int_value();
         let val = match self.operation {
             UnaryBitOperation::Not => gc.builder().build_not(operand, "not@unary_bit_op").unwrap(),
-            UnaryBitOperation::LeadingZeros => Self::build_count(gc, "llvm.ctlz", operand, true),
-            UnaryBitOperation::TrailingZeros => Self::build_count(gc, "llvm.cttz", operand, true),
+            UnaryBitOperation::CountLeadingZeros => {
+                Self::build_count(gc, "llvm.ctlz", operand, true)
+            }
+            UnaryBitOperation::CountTrailingZeros => {
+                Self::build_count(gc, "llvm.cttz", operand, true)
+            }
             UnaryBitOperation::CountOnes => Self::build_count(gc, "llvm.ctpop", operand, false),
         };
         let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@unary_bit_op"));

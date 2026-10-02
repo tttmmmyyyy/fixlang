@@ -17,7 +17,7 @@
 #### Std
 
 - #791, #798: `I128` and `U128` have what the other integer types have: arithmetic, comparison, the bit operations, conversions to and from the other numeric types (`x.i128`, `x.u128`), `maximum`, `minimum`, `Zero`, `One`, `ToString`, `FromString`, `ToBytes` and `FromBytes`, and `I128::abs`.
-- #791, #798: `leading_zeros`, `trailing_zeros` and `count_ones` count the bits of an integer, for every integer type: `1_U8.leading_zeros` is `7_U8`. The count has the type of the integer counted. An integer of zero has as many leading and trailing zeros as its type has bits.
+- #791, #798: `count_leading_zeros`, `count_trailing_zeros` and `count_ones` count the bits of an integer, for every integer type: `1_U8.count_leading_zeros` is `7_U8`. The count has the type of the integer counted. An integer of zero has as many leading and trailing zeros as its type has bits.
 
 ### Changed
 
