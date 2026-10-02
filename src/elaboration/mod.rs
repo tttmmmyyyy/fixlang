@@ -58,7 +58,10 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     if let Some(example_build) = &config.example_build {
         let mut errors = Errors::empty();
         for main in example_build.dispatched_mains() {
-            let module_src = program.find_mod(&main.module()).map(|module| module.source);
+            let module = program.find_mod(&main.module()).unwrap_or_else(|| {
+                panic!("the module of the example `main` `{}` is in the program", main.to_string())
+            });
+            let module_src = Some(module.source);
             errors.eat_err(program.check_value_has_type(&main, &make_io_unit_ty(), &module_src));
         }
         errors.to_result()?;

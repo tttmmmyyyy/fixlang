@@ -1781,7 +1781,6 @@ impl Program {
         required_src: &Option<Span>,
         tc: &TypeCheckContext,
     ) -> Result<(Arc<ExprNode>, ExportedFunctionType), Errors> {
-        let gv = self.find_value_to_export(value_name, required_src)?;
         let (required_ty, exported_ty) = if let Some(required_ty) = required_ty {
             self.check_value_has_type(value_name, &required_ty, required_src)?;
             let exported_ty = ExportedFunctionType {
@@ -1796,6 +1795,7 @@ impl Program {
                 "The type of the value `{}` is not suitable for export: ",
                 value_name.to_string(),
             );
+            let gv = self.find_value_to_export(value_name, required_src)?;
             let exported_ty = ExportedFunctionType::validate(
                 gv.scm.clone(),
                 &tc.type_env,

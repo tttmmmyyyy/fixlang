@@ -765,7 +765,8 @@ fn info_words(info: &str) -> impl Iterator<Item = &str> {
 fn is_fix_example(info: &str) -> bool {
     info_words(info)
         .next()
-        .is_some_and(|language| language == FIX_LANGUAGE || language.starts_with("fix,"))
+        .and_then(|language| language.strip_prefix(FIX_LANGUAGE))
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with(','))
 }
 
 /// `line` split into its indentation and the text that follows it.
