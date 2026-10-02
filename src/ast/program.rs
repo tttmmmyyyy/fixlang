@@ -1018,14 +1018,22 @@ impl Program {
     /// The name of every type constructor and of every type alias the program declares, which are
     /// the names a type written in a source can resolve to.
     pub fn tycon_names_with_aliases(&self) -> Set<FullName> {
-        let mut res: Set<FullName> = Default::default();
-        for (k, _) in self.type_env().tycons.iter() {
-            res.insert(k.name.clone());
-        }
-        for (k, _) in self.type_env().aliases.iter() {
-            res.insert(k.name.clone());
-        }
-        res
+        self.tycon_sources_with_aliases().into_keys().collect()
+    }
+
+    /// The name of every type constructor and every type alias, each with the declaration that
+    /// declares it.
+    pub fn tycon_sources_with_aliases(&self) -> Map<FullName, Option<Span>> {
+        let type_env = self.type_env();
+        let tycons = type_env
+            .tycons
+            .iter()
+            .map(|(tycon, info)| (tycon.name.clone(), info.source.clone()));
+        let aliases = type_env
+            .aliases
+            .iter()
+            .map(|(tycon, info)| (tycon.name.clone(), info.source.clone()));
+        tycons.chain(aliases).collect()
     }
 
     /// How many type parameters each associated type declared in the program takes, by the full
@@ -2913,41 +2921,12 @@ impl Program {
     pub fn validate_capital_name_confliction(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
-        let type_env = self.type_env();
-        let types = type_env
-            .tycons
-            .iter()
-            .map(|(tycon, info)| (tycon.name.clone(), info.source.clone()))
-            .chain(
-                type_env
-                    .aliases
-                    .iter()
-                    .map(|(tycon, info)| (tycon.name.clone(), info.source.clone())),
-            )
-            .collect::<Map<_, _>>();
-        let traits = self
-            .trait_env
-            .traits
-            .iter()
-            .map(|(trait_id, defn)| (trait_id.name.clone(), defn.source.clone()))
-            .chain(
-                self.trait_env
-                    .aliases
-                    .data
-                    .iter()
-                    .map(|(trait_id, alias)| (trait_id.name.clone(), alias.source.clone())),
-            )
-            .collect::<Map<_, _>>();
+        let types = self.tycon_sources_with_aliases();
+        let traits = self.trait_env.trait_sources();
         let assoc_tys = self
             .trait_env
-            .traits
-            .iter()
-            .flat_map(|(trait_id, defn)| {
-                defn.assoc_types.iter().map(|(name, assoc_ty)| {
-                    let namespace = trait_id.name.to_namespace();
-                    (FullName::new(&namespace, name), assoc_ty.src.clone())
-                })
-            })
+            .assoc_type_defns()
+            .map(|(name, defn)| (name, defn.src.clone()))
             .collect::<Map<_, _>>();
 
         let mut report =
@@ -2964,7 +2943,10 @@ impl Program {
                             name.to_string(),
                             kinds
                         ),
-                        &[&lhs[name], &rhs[name]],
+                        &[
+                            &lhs[name].as_ref().map(Span::to_head_character),
+                            &rhs[name].as_ref().map(Span::to_head_character),
+                        ],
                     ));
                 }
             };
