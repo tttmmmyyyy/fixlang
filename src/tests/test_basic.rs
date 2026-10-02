@@ -6623,7 +6623,8 @@ pub fn test_float_to_string_precision_carries_into_a_new_digit() {
 
 /// Pins how the functions writing a given number of places round a number lying exactly halfway
 /// between two texts: to the one whose last digit is even, at a precision of 0 and above it, and
-/// positionally and with a power of ten. A number just below a half rounds down.
+/// positionally and with a power of ten. A number whose magnitude is just below a half rounds to
+/// zero.
 #[test]
 pub fn test_float_to_string_precision_rounds_a_tie_to_even() {
     let source = r#"
