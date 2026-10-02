@@ -132,11 +132,14 @@ expr_tuple = { "(" ~ (sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ (sep* ~ comma_
 
 expr_make_struct = { 
     type_tycon ~ sep* ~ "{" ~ (
-        sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr ~ // First field
-        (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ expr)* ~  // Following fields
+        sep* ~ expr_make_struct_field ~ // First field
+        (sep* ~ "," ~ sep* ~ expr_make_struct_field)* ~  // Following fields
         (sep* ~ ",")? // Allow extra comma
     )? ~ sep* ~ "}"
 }
+
+// A field of a struct construction: `name : value`, or the name alone, which stands for `name : name`.
+expr_make_struct_field = { type_field_name ~ (sep* ~ ":" ~ sep* ~ expr)? }
 
 // Non Left Recursive expressions
 expr_nlr = { expr_lit | expr_hole | expr_var | expr_let | expr_eval | expr_if | expr_match | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c }
@@ -213,7 +216,18 @@ pattern_var = { name ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ pattern_nounion)* ~ (sep* ~ ",")? ~ sep* ~ ")" }
 
-pattern_struct = { type_tycon ~ sep* ~ "{" ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ type_field_name ~ sep* ~ ":" ~ sep* ~ pattern_nounion)* ~ (sep* ~ ",")? ~ sep* ~ "}" }
+pattern_struct = {
+    type_tycon ~ sep* ~ "{" ~ sep* ~
+    pattern_struct_field ~ (sep* ~ "," ~ sep* ~ pattern_struct_field)* ~ (sep* ~ "," ~ sep* ~ pattern_struct_rest)? ~
+    (sep* ~ ",")? ~ sep* ~ "}"
+}
+
+// The `_` written after the fields of a struct pattern, which leaves out the fields the pattern does
+// not name.
+pattern_struct_rest = { "_" ~ !name_char }
+
+// A field of a struct pattern: `name : pattern`, or the name alone, which stands for `name : name`.
+pattern_struct_field = { type_field_name ~ (sep* ~ ":" ~ sep* ~ pattern_nounion)? }
 
 pattern_union = { (capital_name ~ "::")* ~ type_field_name ~ sep* ~ "(" ~ sep* ~ pattern_nounion? ~ sep* ~ ")" }
 
@@ -268,7 +282,8 @@ kind = { kind_nlr ~ (sep* ~ "->" ~ sep* ~ kind_nlr)* }
 // === Type definitions ===
 type_name = { capital_name }
 
-type_field_name = { !keywords ~ (name_head ~ !"@") ~ name_char* }
+// A field or variant name. A lone `_` is excluded: in a struct pattern it leaves out the rest of the fields.
+type_field_name = { !keywords ~ !("_" ~ !name_char) ~ (name_head ~ !"@") ~ name_char* }
 
 type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
 

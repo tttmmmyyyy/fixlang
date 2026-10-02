@@ -34,7 +34,7 @@
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
-use crate::fixstd::builtin::{InlineLLVMMakeStructBody, InlineLLVMMakeUnionBody};
+use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp};
 use crate::misc::{grow_stack, Map};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
@@ -45,7 +45,6 @@ use std::sync::Arc;
 const PASS_TAG: &str = "cc";
 
 /// Simplify every function body and global initializer of `prog` to a fixpoint.
-// PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn simplify(prog: &mut RcProgram, config: &Configuration) {
     let mut counter = 0;
     for func in prog.funcs.values_mut() {
@@ -176,10 +175,10 @@ pub(crate) fn node_count(node: &RcExprNode) -> u64 {
 
 /// The variant number and payload operand of the union construction `rhs` builds.
 fn union_construction(rhs: &RcRhs) -> Option<(usize, &RcVar)> {
-    let RcRhs::Llvm(gen, args) = rhs else {
+    let RcRhs::Builtin(op, args) = rhs else {
         return None;
     };
-    let construction = gen.as_any().downcast_ref::<InlineLLVMMakeUnionBody>()?;
+    let construction = op.as_any().downcast_ref::<MakeUnionOp>()?;
     // An operation's operands are its free variables, of which a union construction has the payload
     // alone.
     assert_eq!(
@@ -193,7 +192,6 @@ fn union_construction(rhs: &RcRhs) -> Option<(usize, &RcVar)> {
 /// case-of-known-constructor on a union: `let x = union_tag(payload); let m = match x { .. }; k`,
 /// where `x` is consumed only by the match, collapses to the `tag` arm — its payload bound to the
 /// construction's operand, its result flowing into `m` — dropping both the construction and the match.
-// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
     let RcExpr::Let(x, rhs, k) = node.expr.as_ref() else {
         return None;
@@ -218,12 +216,11 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
 /// case-of-known-constructor on a struct: `let x = make_struct(a, b, ..); destructure x { .i -> fi };
 /// k`, where `x` is consumed only by the destructure, binds each field variable directly to the
 /// operand that built that field, dropping both the construction and the destructure.
-// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
-    let RcExpr::Let(x, RcRhs::Llvm(gen, args), k) = node.expr.as_ref() else {
+    let RcExpr::Let(x, RcRhs::Builtin(op, args), k) = node.expr.as_ref() else {
         return None;
     };
-    gen.as_any().downcast_ref::<InlineLLVMMakeStructBody>()?;
+    op.as_any().downcast_ref::<MakeStructOp>()?;
     let RcExpr::Destructure(container, fields, _, k2) = k.expr.as_ref() else {
         return None;
     };
@@ -261,7 +258,6 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
 /// at every level would double the term at every level. Where the inner arms build pairwise
 /// distinct constructors, each outer arm moves to one inner arm and the result always shrinks, by
 /// the constructions and the outer match that go away.
-// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     let RcExpr::Let(s, RcRhs::Match(inner_scrut, inner_arms), k) = node.expr.as_ref() else {
         return None;
@@ -473,9 +469,9 @@ fn with_continuation(node: &RcExprNode, k: RcExprNode) -> RcExprNode {
 }
 
 /// The number of times `name` occurs as a value in `node`: a move, a call callee or argument, an
-/// inline-LLVM operand, a closure capture, a match scrutinee, a destructured container, an `eval`, or
-/// the returned variable. Binders do not count. `Retain`/`Release` name a variable only for reference
-/// counting, so they are transparent.
+/// operand of a builtin operation, a closure capture, a match scrutinee, a destructured container,
+/// an `eval`, or the returned variable. Binders do not count. `Retain`/`Release` name a variable
+/// only for reference counting, so they are transparent.
 fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
     // A deep continuation chain recurses to its full depth here; grow the stack on demand.
     grow_stack(|| {
@@ -500,7 +496,7 @@ fn rhs_value_uses(name: &FullName, rhs: &RcRhs) -> usize {
         RcRhs::Var(v) => hit(v),
         RcRhs::App(callee, args) => hit(callee) + args.iter().map(hit).sum::<usize>(),
         RcRhs::Closure(_, caps) => caps.iter().map(hit).sum(),
-        RcRhs::Llvm(_, args) => args.iter().map(hit).sum(),
+        RcRhs::Builtin(_, args) => args.iter().map(hit).sum(),
         RcRhs::Match(scrut, arms) => {
             hit(scrut)
                 + arms
@@ -512,7 +508,6 @@ fn rhs_value_uses(name: &FullName, rhs: &RcRhs) -> usize {
 }
 
 /// A one-entry substitution map.
-// PROOF: P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
 fn single_subst(from: &FullName, to: &FullName) -> Map<FullName, FullName> {
     let mut subst: Map<FullName, FullName> = Map::default();
     subst.insert(from.clone(), to.clone());

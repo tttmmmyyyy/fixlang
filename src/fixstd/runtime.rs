@@ -37,7 +37,6 @@ pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
 pub const RUNTIME_SPRINTF: &str = "sprintf";
 /// libc `pthread_once`, which runs an initializer at the first thread to reach it and makes every
 /// other thread wait for that run to finish.
-// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub const RUNTIME_PTHREAD_ONCE: &str = "pthread_once";
 /// The runtime function giving the number of command line arguments the program was started with.
 pub const RUNTIME_GET_ARGC: &str = "fixruntime_get_argc";
@@ -93,7 +92,6 @@ pub fn compiler_defined_c_function_reason(name: &str, output: OutputFileType) ->
 
 /// Emits the runtime support functions into the module: their declarations when
 /// `mode` is `Declare`, the bodies of the ones implemented here when it is `Implement`.
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build_runtime<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let i64_ty = gc.context.i64_type();
     declare_noreturn_runtime_function(gc, mode, RUNTIME_ABORT, &[]);
@@ -241,7 +239,6 @@ fn build_sprintf_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
 
 /// Declare `pthread_once`, which takes the flag recording whether the initializer has run and the
 /// initializer itself. A multi-threaded program initializes each global through it.
-// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn build_pthread_once_function<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     let fn_ty = gc

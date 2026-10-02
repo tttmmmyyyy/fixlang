@@ -11,19 +11,16 @@ use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::sync::Arc;
 
-/// One inline-LLVM builtin operation. Each builtin is a struct that implements this trait; an
-/// `InlineLLVM` holds a `Box<dyn LLVMGen>`. `typetag` serializes the trait object (tagged by op) so
-/// the typecheck cache round-trips it.
-// PROOF: P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
+/// One builtin operation. Each builtin is a struct that implements this trait; a `BuiltinOpExpr`
+/// holds a `Box<dyn BuiltinOp>`. `typetag` serializes the trait object (tagged by op) so the
+/// typecheck cache round-trips it.
 #[typetag::serde(tag = "op")]
-pub trait LLVMGen: DynClone + Send + Sync {
+pub trait BuiltinOp: DynClone + Send + Sync {
     /// Emit the op's code and return its value.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c>;
 
     /// Emit the op, threading `tail` for a possible tail return. The default computes `generate` and
     /// returns it, building the tail return when `tail`. `fix` overrides this to emit a real tail call.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn generate_tail<'c, 'm>(
         &self,
         gc: &mut Generator<'c, 'm>,
@@ -40,11 +37,9 @@ pub trait LLVMGen: DynClone + Send + Sync {
     }
 
     /// The mutable free-variable references (for renaming).
-    // PROOF: D/A, P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     fn free_vars_mut(&mut self) -> Vec<&mut FullName>;
 
     /// The free variables by value.
-    // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn free_vars(&self) -> Vec<FullName> {
         dyn_clone::clone_box(self)
             .free_vars_mut()
@@ -74,7 +69,6 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// retains an unboxed global's boxed subobjects, and a borrow has no matching release.
     ///
     /// The default is the conservative answer; see `result_prov` for what an op that keeps it records.
-    // PROOF: D/A, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn borrows_operand(&self, _i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         false
     }
@@ -87,13 +81,12 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// same result either way, so a count one higher costs it a copy and nothing more. An op that
     /// returns the answer lets the program's meaning depend on the count, so a pass that raises one
     /// changes what the program does.
-    // PROOF: P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn observes_uniqueness(&self) -> bool {
         false
     }
 
-    /// Whether the code this op generates applies one of its operands as a function. Default: it
-    /// does not.
+    /// Whether the code this op generates applies one of its operands as a function. Default: the
+    /// op applies one exactly when it declares `env_operand`.
     ///
     /// An op that answers `true` reaches whatever function the operand holds, and which one that is
     /// is decided at run time. A pass asking what a body can reach — `funcs_observing_uniqueness` —
@@ -103,9 +96,17 @@ pub trait LLVMGen: DynClone + Send + Sync {
     ///
     /// `Generator::apply_lambda` checks this in develop mode, so an op that starts applying an
     /// operand and does not say so here fails the test suite rather than quietly losing an edge.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn applies_a_function_operand(&self) -> bool {
-        false
+        self.env_operand().is_some()
+    }
+
+    /// The operand this op applies as a function, and the operand it hands that function as the
+    /// first field of the tuple it applies it to. Default: the op has no such pair.
+    ///
+    /// With the pair, what a lambda given to the op captures can travel in the environment operand,
+    /// so that the lambda captures nothing and needs no closure object.
+    fn env_operand(&self) -> Option<EnvOperand> {
+        None
     }
 
     /// The container operand and boxed-leaf path whose runtime uniqueness this op branches on, for
@@ -114,7 +115,6 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// Whether the branch exists depends on those types, so an op that emits one declares it through
     /// `unique_check_on_boxed_leaf`, which is where that dependence is stated. Readers may then take
     /// a declared check to be one the op really emits.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     fn unique_check_operand(
         &self,
         _arg_tys: &[Arc<TypeNode>],
@@ -130,8 +130,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     ///
     /// A `generate` that emits a check or a reference count it does not declare leaves that one
     /// reading the state, so the declarations stay honest about what the annotation covers.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn assuming_local(&self) -> Box<dyn LLVMGen> {
+    fn assuming_local(&self) -> Box<dyn BuiltinOp> {
         unreachable!("assuming_local called on an op that declares no uniqueness check and no reference counting")
     }
 
@@ -143,8 +142,7 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// This op with its runtime uniqueness branch dropped. Only an op that reports a branch through
     /// `unique_check_operand` is asked to drop it, and every such op overrides this method; an op with
     /// no branch is never routed here.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn assuming_unique(&self) -> Box<dyn LLVMGen> {
+    fn assuming_unique(&self) -> Box<dyn BuiltinOp> {
         unreachable!("assuming_unique called on an op that carries no uniqueness branch")
     }
 
@@ -158,10 +156,9 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// argument `i`'s leaf, which also declares that argument leaf unconsumed. It may therefore only
     /// name a leaf the op passes through without producing a new reference to it — an op that hands
     /// back a value whose reference count or sharing it also reports on, or that publishes the value,
-    /// must not (see `InlineLLVMIsUniqueFunctionBody` and `InlineLLVMMarkThreadedFunctionBody`, which
-    /// say why). A leaf that joins an argument with another source says only where the result's
-    /// sharing comes from: the op consumes that argument like any other.
-    // PROOF: D/A, P1, P2, P3, P4, P7a, P7d, P7e, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18c, P19, P20, P21, P22, P23, P24, P26, P27, P28, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
+    /// must not (see `IsUniqueOp` and `MarkThreadedOp`, which say why). A leaf that joins an
+    /// argument with another source says only where the result's sharing comes from: the op
+    /// consumes that argument like any other.
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -214,7 +211,16 @@ pub trait LLVMGen: DynClone + Send + Sync {
     /// Downcast hook, for the few passes that special-case a concrete op.
     fn as_any(&self) -> &dyn Any;
 }
-dyn_clone::clone_trait_object!(LLVMGen);
+dyn_clone::clone_trait_object!(BuiltinOp);
+
+/// The two operands `BuiltinOp::env_operand` names, by their positions among the op's operands.
+#[derive(Clone, Copy)]
+pub struct EnvOperand {
+    /// The operand the op applies as a function.
+    pub function: usize,
+    /// The operand the op hands the function as the first field of the tuple it applies it to.
+    pub env: usize,
+}
 
 /// The uniqueness check an op emits on the value at `path` of operand `container_index`, if that
 /// value is reference-counted. `None` where it is not: an unboxed value is taken to be unique
@@ -238,8 +244,8 @@ pub fn unique_check_on_boxed_leaf(
 
 /// The clone path a force-unique op takes when its container is shared: it retain-copies the
 /// contents into a new container and releases the old one. Every op declaring a uniqueness check
-/// takes it, so its targets are composed here — by `LLVMGen::internal_rc_targets`'s default, and by
-/// the ops that override that default to add targets of their own.
+/// takes it, so its targets are composed here — by `BuiltinOp::internal_rc_targets`'s default, and
+/// by the ops that override that default to add targets of their own.
 pub fn clone_path_rc_targets(check: Option<UniqueCheckOperand>) -> Vec<RcTarget> {
     match check {
         Some(check) => vec![
@@ -250,26 +256,26 @@ pub fn clone_path_rc_targets(check: Option<UniqueCheckOperand>) -> Vec<RcTarget>
     }
 }
 
-/// An inline-LLVM builtin operation as it stands in an expression: the operation to emit, and the
-/// type the expression was declared at.
+/// A builtin operation as it stands in an expression: the operation to emit, and the type the
+/// expression was declared at.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct InlineLLVM {
+pub struct BuiltinOpExpr {
     /// The operation this expression emits.
-    pub generator: Box<dyn LLVMGen>,
-    /// The type of this LLVM expression.
+    pub op: Box<dyn BuiltinOp>,
+    /// The type of this expression.
     ///
-    /// For example, in `@ : I64 -> Array a -> a = |i, arr| LLVM<Array::@(i, arr)>;`, the
-    /// `generic_ty` of the InlineLLVM `LLVM<arr.Array::@(i, arr)>` is `a`.
+    /// For example, in `@ : I64 -> Array a -> a = |i, arr| array_get(i, arr);`, the
+    /// `generic_ty` of the `BuiltinOpExpr` `array_get(i, arr)` is `a`.
     ///
     /// `generic_ty` may contain type variables, and type instantiation leaves it as it is.
     pub generic_ty: Arc<TypeNode>,
 }
 
-impl InlineLLVM {
+impl BuiltinOpExpr {
     /// This expression with every global `FullName` in its type made absolute.
-    pub fn global_to_absolute(&self) -> Arc<InlineLLVM> {
-        Arc::new(InlineLLVM {
-            generator: self.generator.clone(),
+    pub fn global_to_absolute(&self) -> Arc<BuiltinOpExpr> {
+        Arc::new(BuiltinOpExpr {
+            op: self.op.clone(),
             generic_ty: self.generic_ty.global_to_absolute(),
         })
     }

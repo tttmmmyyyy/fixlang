@@ -26,12 +26,11 @@ use crate::{
         name::FullName,
         pattern::{Pattern, PatternInfo, PatternNode},
         program::{Program, Symbol, TypeEnv},
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+        traverse::{EndVisitResult, ExprVisitor, VisitState},
         types::{tycon, TyCon, TyConInfo, TyConVariant},
     },
     fixstd::builtin::{
-        make_tuple_name_abs, make_unit_ty, InlineLLVMStructGetBody, InlineLLVMStructPlugInBody,
-        InlineLLVMStructPunchBody, InlineLLVMStructSetBody,
+        make_tuple_name_abs, make_unit_ty, StructGetOp, StructPlugInOp, StructPunchOp, StructSetOp,
     },
     misc::{Map, Set},
 };
@@ -95,7 +94,7 @@ fn unwrap_pattern(pat: &Arc<PatternNode>, type_env: &TypeEnv) -> Arc<PatternNode
                 info,
             })
         }
-        Pattern::Struct(tc, field_to_pat) => {
+        Pattern::Struct(tc, field_to_pat, has_rest) => {
             if type_env.is_unwrapped_newtype(tc) {
                 assert_eq!(field_to_pat.len(), 1);
                 let (_, _, pat) = &field_to_pat[0];
@@ -108,7 +107,7 @@ fn unwrap_pattern(pat: &Arc<PatternNode>, type_env: &TypeEnv) -> Arc<PatternNode
                 let mut info = pat.info.clone();
                 unwrap_pattern_info(&mut info, type_env);
                 Arc::new(PatternNode {
-                    pattern: Pattern::Struct(tc.clone(), field_to_pat),
+                    pattern: Pattern::Struct(tc.clone(), field_to_pat, *has_rest),
                     info,
                 })
             }
@@ -189,14 +188,6 @@ impl<'a> ExprUnwrapper<'a> {
 }
 
 impl<'a> ExprVisitor for ExprUnwrapper<'a> {
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_tyanno(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -206,71 +197,55 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         EndVisitResult::changed(expr)
     }
 
-    fn start_visit_var(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let expr = unwrap_inferred_type(expr, self.type_env);
         EndVisitResult::changed(expr)
     }
 
-    fn start_visit_llvm(
+    /// Unwraps the type recorded for a builtin expression, and replaces the read, the write, the
+    /// punch and the plug-in of an unwrapped newtype's field by the field value itself, which is
+    /// what a value of that type has become.
+    fn end_visit_builtin(
         &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    /// Unwraps the type recorded for an inline LLVM expression, and replaces the read, the write,
-    /// the punch and the plug-in of an unwrapped newtype's field by the field value itself, which
-    /// is what a value of that type has become.
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, state: &mut VisitState) -> EndVisitResult {
+        expr: &Arc<ExprNode>,
+        state: &mut VisitState,
+    ) -> EndVisitResult {
         let old_ty = expr.type_.as_ref().unwrap().clone();
         let mut expr = unwrap_inferred_type(expr, self.type_env);
         let new_ty = expr.type_.as_ref().unwrap().clone();
 
-        let llvm = if let Expr::LLVM(llvm) = expr.expr.as_ref() {
-            llvm.as_ref().clone()
-        } else {
-            unreachable!()
-        };
+        let builtin = expr.get_builtin();
 
-        // `llvm.generic_ty` stays as it is: type checking is the last pass that reads it.
+        // `builtin.generic_ty` stays as it is: type checking is the last pass that reads it.
 
-        // Replace StructGetBody, StructSetBody, StructPunchBody, and StructPlugInBody for structures defined by the newtype pattern.
-        let gen = llvm.generator.as_ref();
-        if let Some(body) = gen.as_any().downcast_ref::<InlineLLVMStructGetBody>() {
-            // @ : S -> F = |s| GetBody(s)
+        // Replace StructGetOp, StructSetOp, StructPunchOp, and StructPlugInOp for structures defined by the newtype pattern.
+        let op = builtin.op.as_ref();
+        if let Some(get) = op.as_any().downcast_ref::<StructGetOp>() {
+            // @ : S -> F = |s| StructGetOp(s)
             // =>
             // @ : F -> F = |s| s
             let field_ty = new_ty;
-            let struct_name = body.var_name.clone();
+            let struct_name = get.var_name.clone();
             if self.is_local_of_unwrapped_newtype(&struct_name, state) {
                 expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
             }
-        } else if let Some(body) = gen.as_any().downcast_ref::<InlineLLVMStructSetBody>() {
-            // set : F -> S -> S = |f, s| SetBody(f)
+        } else if let Some(set) = op.as_any().downcast_ref::<StructSetOp>() {
+            // set : F -> S -> S = |f, s| StructSetOp(f)
             // =>
             // set : F -> F -> F = |f, s| f
             let field_ty = new_ty;
             let struct_ty = old_ty;
             let struct_tc = struct_ty.toplevel_tycon().unwrap();
             if self.type_env.is_unwrapped_newtype(struct_tc.as_ref()) {
-                let field_name = body.value_name.clone();
+                let field_name = set.value_name.clone();
                 expr = expr_var(field_name, expr.source.clone()).set_type(field_ty);
             }
-        } else if let Some(body) = gen.as_any().downcast_ref::<InlineLLVMStructPunchBody>() {
-            // punch : S -> (F, S*) = |s| Punch(s)
+        } else if let Some(punch) = op.as_any().downcast_ref::<StructPunchOp>() {
+            // punch : S -> (F, S*) = |s| StructPunchOp(s)
             // =>
             // punch : F -> (F, ()) = |s| (s, ())
             let field_unit_ty = new_ty;
-            let struct_name = body.var_name.clone();
+            let struct_name = punch.var_name.clone();
             if self.is_local_of_unwrapped_newtype(&struct_name, state) {
                 let field_ty = field_unit_ty.collect_type_arguments()[0].clone();
                 let unit_ty = make_unit_ty();
@@ -283,15 +258,15 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
                 )
                 .set_type(field_unit_ty);
             }
-        } else if let Some(body) = gen.as_any().downcast_ref::<InlineLLVMStructPlugInBody>() {
-            // plug_in : S* -> F -> S = |s, f| PlugIn(s, f)
+        } else if let Some(plug_in) = op.as_any().downcast_ref::<StructPlugInOp>() {
+            // plug_in : S* -> F -> S = |s, f| StructPlugInOp(s, f)
             // =>
             // plug_in : () -> F -> F = |_, f| f
             let struct_ty = old_ty;
             let struct_tc = struct_ty.toplevel_tycon().unwrap();
             if self.type_env.is_unwrapped_newtype(struct_tc.as_ref()) {
                 let field_ty = new_ty;
-                let field_name = body.field_name.clone();
+                let field_name = plug_in.field_name.clone();
                 assert!(field_name.is_local());
                 expr = expr_var(field_name, expr.source.clone()).set_type(field_ty);
             }
@@ -300,38 +275,14 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         EndVisitResult::changed(expr)
     }
 
-    fn start_visit_app(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let expr = unwrap_inferred_type(expr, self.type_env);
         EndVisitResult::changed(expr)
     }
 
-    fn start_visit_lam(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let expr = unwrap_inferred_type(expr, self.type_env);
         EndVisitResult::changed(expr)
-    }
-
-    fn start_visit_let(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// Unwraps the type recorded for a `let`, and rewrites the pattern it binds with, so that a
@@ -347,25 +298,9 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         EndVisitResult::changed(expr)
     }
 
-    fn start_visit_if(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let expr = unwrap_inferred_type(expr, self.type_env);
         EndVisitResult::changed(expr)
-    }
-
-    fn start_visit_match(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// Unwraps the type recorded for a `match`, and rewrites the pattern of each arm, so that a
@@ -382,14 +317,6 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
             unreachable!()
         }
         EndVisitResult::changed(expr)
-    }
-
-    fn start_visit_make_struct(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// Unwraps the type recorded for a struct literal, and replaces a literal of an unwrapped
@@ -410,14 +337,6 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         EndVisitResult::changed(expr)
     }
 
-    fn start_visit_array_lit(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_array_lit(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -427,14 +346,6 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         EndVisitResult::changed(expr)
     }
 
-    fn start_visit_ffi_call(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     fn end_visit_ffi_call(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -442,14 +353,6 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
     ) -> EndVisitResult {
         let expr = unwrap_inferred_type(expr, self.type_env);
         EndVisitResult::changed(expr)
-    }
-
-    fn start_visit_eval(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {

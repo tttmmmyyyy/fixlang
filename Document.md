@@ -623,6 +623,8 @@ You can construct a struct value by the syntax `{struct_name} { {field_name}: {f
 let product = Product { price: 100, sold: false };
 ```
 
+A field can be written by its name alone when its value is the value of that name. `Product { price, sold: false }` means `Product { price: price, sold: false }`.
+
 As in the case of unions, there are methods that are automatically defined for structs. For `Product` as above, the following methods are defined in the namespace `Product`.
 
 - `@price : Product -> I64` and `@sold : Product -> Bool`
@@ -648,6 +650,22 @@ or
 get_price : Product -> I64;
 get_price = |Product { price: price, sold: sold }| price;
 ```
+
+A field in a struct pattern can also be written by its name alone, which binds a variable of the same name: `Product { price, sold }` means `Product { price: price, sold: sold }`. So `get_price` can also be written as follows:
+
+```
+get_price : Product -> I64;
+get_price = |Product { price, sold }| price;
+```
+
+A struct pattern names every field of the struct. To leave some fields out, write `_` after the fields you name:
+
+```
+get_price : Product -> I64;
+get_price = |Product { price, _ }| price;
+```
+
+A pattern that leaves out fields without writing `_` is accepted with a warning. A future version of Fix will report such a pattern as an error.
 
 ## Iterators
 

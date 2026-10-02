@@ -1,0 +1,23 @@
+module Main;
+
+type S = struct { x : I64, y : I64, z : I64 };
+
+line_comment : S -> I64;
+line_comment = |s| (
+    let S {
+        x // the first
+    } = s;
+    x
+);
+
+block_comment : S -> I64;
+block_comment = |S { x, /* the first */ }| x;
+
+after_emoji : S -> I64;
+after_emoji = |s| let e = "😀😀"; let S { x } = s; x + e.get_size;
+
+main : IO ();
+main = (
+    let s = S { x : 1, y : 2, z : 3 };
+    println((line_comment(s), block_comment(s), after_emoji(s)).to_string)
+);

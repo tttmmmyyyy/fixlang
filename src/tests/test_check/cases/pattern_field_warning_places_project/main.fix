@@ -1,0 +1,35 @@
+module Main;
+
+type S = struct { x : I64, y : I64 };
+type T = struct { s : S, name : String };
+
+trait a : GetX {
+    get_x : a -> I64;
+}
+
+// In an implementation of a trait member.
+impl S : GetX {
+    get_x = |S { x }| x;
+}
+
+// In a `let`.
+in_let : S -> I64;
+in_let = |s| let S { y } = s; y;
+
+// In a `match` arm.
+in_match : S -> I64;
+in_match = |s| match s { S { x } => x };
+
+// Inside a pattern that names every field of its own struct.
+nested : T -> I64;
+nested = |T { s : S { y }, name }| y;
+
+// In a value `main` does not use.
+unused : S -> I64;
+unused = |S { x }| x;
+
+main : IO ();
+main = (
+    let s = S { x : 1, y : 2 };
+    println((get_x(s), in_let(s), in_match(s), nested(T { s : s, name : "t" })).to_string)
+);

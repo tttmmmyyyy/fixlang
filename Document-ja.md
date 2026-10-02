@@ -671,6 +671,8 @@ type Product = struct { price: I64, sold: Bool };
 let product = Product { price: 100, sold: false };
 ```
 
+フィールドの値がそのフィールドと同じ名前の値であるときは、フィールド名だけを書けます。`Product { price, sold: false }`は`Product { price: price, sold: false }`と同じ意味です。
+
 ユニオンの場合と同様に、構造体にも自動的に定義されるメソッドがあります。上記の`Product`の場合、次のメソッドが名前空間`Product`に定義されます。
 
 - `@price : Product -> I64` および `@sold : Product -> Bool`
@@ -698,6 +700,22 @@ get_price = |product| (
 get_price : Product -> I64;
 get_price = |Product { price: price, sold: sold }| price;
 ```
+
+構造体のパターンでもフィールド名だけを書くことができ、そのときは同じ名前の変数が束縛されます。`Product { price, sold }`は`Product { price: price, sold: sold }`と同じ意味です。したがって`get_price`は次のようにも書けます。
+
+```
+get_price : Product -> I64;
+get_price = |Product { price, sold }| price;
+```
+
+構造体のパターンには、その構造体のすべてのフィールドを書きます。一部のフィールドを省くときは、書いたフィールドの後に`_`を書きます。
+
+```
+get_price : Product -> I64;
+get_price = |Product { price, _ }| price;
+```
+
+`_`を書かずにフィールドを省いたパターンは、警告を出したうえで受け付けます。将来のバージョンの Fix では、このようなパターンはエラーになります。
 
 ## イテレータ
 

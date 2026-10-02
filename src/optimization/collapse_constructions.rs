@@ -34,11 +34,11 @@ use crate::{
         name::{FullName, Name},
         pattern::{Pattern, PatternNode},
         program::{Program, TypeEnv},
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+        traverse::{ExprVisitor, StartVisitResult, VisitState},
         types::{TyCon, TypeNode},
     },
     constants::BOUND_FIELD_PREFIX,
-    fixstd::builtin::InlineLLVMMakeUnionBody,
+    fixstd::builtin::MakeUnionOp,
     misc::{Map, Set},
     optimization::{
         inline_local, let_elimination::create_global_lambda_to_arity_map, pull_let,
@@ -64,6 +64,7 @@ pub fn run(prg: &mut Program) {
                 type_env: &type_env,
                 constructions: Map::default(),
                 bound_fields: &mut bound_field_count,
+                bound_names: names_bound_in(&expr),
             };
             let res = collapser.traverse(&expr);
             if !res.changed {
@@ -96,6 +97,56 @@ fn with_lets_pulled_out(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     unique_local_names::run_on_expr(&expr, Set::default())
 }
 
+/// Every local name `expr` binds: the parameters of its lambdas and the names its patterns bind.
+fn names_bound_in(expr: &Arc<ExprNode>) -> Set<FullName> {
+    let mut collector = BoundNameCollector {
+        names: Set::default(),
+    };
+    collector.traverse(expr);
+    collector.names
+}
+
+/// The walk of `names_bound_in`, carrying the names met so far.
+struct BoundNameCollector {
+    /// The names bound by the binders walked so far.
+    names: Set<FullName>,
+}
+
+impl ExprVisitor for BoundNameCollector {
+    /// Collects the parameters of a lambda.
+    fn start_visit_lam(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        self.names
+            .extend(expr.get_lam_params().iter().map(|param| param.name.clone()));
+        StartVisitResult::VisitChildren
+    }
+
+    /// Collects the names the pattern of a `let` binds.
+    fn start_visit_let(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        self.names.extend(expr.get_let_pat().pattern.vars());
+        StartVisitResult::VisitChildren
+    }
+
+    /// Collects the names the patterns of a `match` bind.
+    fn start_visit_match(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
+        for (pat, _) in expr.get_match_pat_vals() {
+            self.names.extend(pat.pattern.vars());
+        }
+        StartVisitResult::VisitChildren
+    }
+}
+
 /// A value whose construction this walk has seen.
 #[derive(Clone)]
 enum Construction {
@@ -112,9 +163,13 @@ struct Collapser<'a> {
     /// What each local in scope was built as, keyed by its name.
     constructions: Map<FullName, Construction>,
     /// How many fields this global has had bound to a name of their own, which is what the next
-    /// such name is numbered by. Counting across the rounds is what keeps two rounds from choosing
-    /// one name for two values.
+    /// such name is numbered from. Counting across the rounds keeps the names one run binds
+    /// distinct from each other.
     bound_fields: &'a mut usize,
+    /// Every local name the global binds, the ones this walk binds included. `constructions` is
+    /// keyed by name, so a name bound twice would let the second construction stand for the first
+    /// where the first is read.
+    bound_names: Set<FullName>,
 }
 
 impl<'a> Collapser<'a> {
@@ -136,11 +191,18 @@ impl<'a> Collapser<'a> {
             .unwrap_or(false)
     }
 
-    /// A name for a field value, which nothing else in the global carries.
+    /// A name for a field value, which nothing else in the global binds.
+    ///
+    /// The global can already hold names of this shape, bound by an earlier run of this pass, so
+    /// the count alone does not make a name fresh.
     fn fresh_field_name(&mut self) -> FullName {
-        let name = FullName::local(&format!("{}{}", BOUND_FIELD_PREFIX, self.bound_fields));
-        *self.bound_fields += 1;
-        name
+        loop {
+            let name = FullName::local(&format!("{}{}", BOUND_FIELD_PREFIX, self.bound_fields));
+            *self.bound_fields += 1;
+            if self.bound_names.insert(name.clone()) {
+                return name;
+            }
+        }
     }
 
     /// What `expr` was built as: what it builds itself, or what the name it is holds.
@@ -167,7 +229,7 @@ impl<'a> Collapser<'a> {
                     == Some(variant)
             }
             Pattern::Var(_, _) => true,
-            Pattern::Struct(_, _) => false,
+            Pattern::Struct(_, _, _) => false,
         })
     }
 
@@ -217,7 +279,7 @@ impl<'a> Collapser<'a> {
                 )
             }
             Pattern::Var(_, _) => expr_let_typed(pat.clone(), built.clone(), body.clone()),
-            Pattern::Struct(_, _) => {
+            Pattern::Struct(_, _, _) => {
                 unreachable!("`arm_for_variant` never selects an arm whose pattern is a struct")
             }
         }
@@ -226,15 +288,11 @@ impl<'a> Collapser<'a> {
 
 /// The variant `expr` constructs and the name holding its payload, where it constructs one.
 fn union_built_by(expr: &Arc<ExprNode>) -> Option<(usize, FullName)> {
-    let Expr::LLVM(llvm) = &*expr.expr else {
+    let Expr::Builtin(builtin) = &*expr.expr else {
         return None;
     };
-    let body = llvm
-        .generator
-        .as_ref()
-        .as_any()
-        .downcast_ref::<InlineLLVMMakeUnionBody>()?;
-    Some((body.variant_index(), body.payload_name().clone()))
+    let op = builtin.op.as_ref().as_any().downcast_ref::<MakeUnionOp>()?;
+    Some((op.variant_index(), op.payload_name().clone()))
 }
 
 /// What `expr` builds, where it builds a struct out of names or a union variant.
@@ -317,7 +375,7 @@ impl<'a> ExprVisitor for Collapser<'a> {
             return StartVisitResult::VisitChildren;
         }
 
-        let Pattern::Struct(pat_tycon, field_to_pat) = &pat.pattern else {
+        let Pattern::Struct(pat_tycon, field_to_pat, _) = &pat.pattern else {
             return StartVisitResult::VisitChildren;
         };
         let Some(Construction::Struct(tycon, fields)) = self.construction_of(&bound) else {
@@ -420,125 +478,5 @@ impl<'a> ExprVisitor for Collapser<'a> {
             .rev()
             .fold(named, |value, (pat, expr)| expr_let_typed(pat, expr, value));
         StartVisitResult::ReplaceAndRevisit(under_bindings)
-    }
-
-    // `ExprVisitor` declares every method without a default, so the rest of the methods are listed
-    // here and passed through: the children are visited, and the expression itself is left as it
-    // is. The reading is done as the walk starts a node, in the three methods above.
-
-    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-    fn end_visit_make_struct(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-    fn start_visit_var(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-    fn start_visit_llvm(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-    fn start_visit_app(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-    fn start_visit_lam(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-    fn start_visit_if(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_tyanno(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-    fn start_visit_array_lit(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_array_lit(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-    fn start_visit_ffi_call(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_ffi_call(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-    fn start_visit_eval(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 }

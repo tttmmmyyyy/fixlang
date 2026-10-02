@@ -6,7 +6,7 @@ use crate::{
     ast::{
         expr::ExprNode,
         name::FullName,
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult},
+        traverse::{ExprVisitor, StartVisitResult},
     },
     misc::{Map, Set},
 };
@@ -72,55 +72,23 @@ impl ExprVisitor for Renamer {
         StartVisitResult::ReplaceAndReturn(expr)
     }
 
-    fn end_visit_var(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_llvm(
+    fn start_visit_builtin(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
-        let mut llvm = expr.get_llvm().as_ref().clone();
+        let mut builtin = expr.get_builtin().as_ref().clone();
 
-        let generator = &mut llvm.generator;
-        for llvm_fv in generator.free_vars_mut() {
+        let op = &mut builtin.op;
+        for op_fv in op.free_vars_mut() {
             // Replace
-            if let Some(to) = self.map.get(llvm_fv) {
-                *llvm_fv = to.clone();
+            if let Some(to) = self.map.get(op_fv) {
+                *op_fv = to.clone();
             }
         }
 
-        let expr = expr.set_llvm(llvm);
+        let expr = expr.set_builtin(builtin);
         StartVisitResult::ReplaceAndReturn(expr)
-    }
-
-    fn end_visit_llvm(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_app(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_app(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_lam(
@@ -160,14 +128,6 @@ impl ExprVisitor for Renamer {
         self.map = bak_map;
 
         StartVisitResult::ReplaceAndReturn(expr)
-    }
-
-    fn end_visit_lam(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 
     fn start_visit_let(
@@ -211,30 +171,6 @@ impl ExprVisitor for Renamer {
         StartVisitResult::ReplaceAndReturn(expr)
     }
 
-    fn end_visit_let(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_if(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_if(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
     fn start_visit_match(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -269,93 +205,5 @@ impl ExprVisitor for Renamer {
         let expr = expr.set_match_pat_vals(pat_vals);
 
         StartVisitResult::ReplaceAndReturn(expr)
-    }
-
-    fn end_visit_match(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_tyanno(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_make_struct(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_make_struct(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_array_lit(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_array_lit(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_ffi_call(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_ffi_call(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_eval(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_eval(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 }

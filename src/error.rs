@@ -15,6 +15,9 @@ pub const WARN_DEPRECATED: &'static str = "deprecated";
 /// Diagnostic code for "import of a module whose project is not a declared dependency".
 pub const WARN_UNDECLARED_DEPENDENCY: &'static str = "undeclared-dependency";
 
+/// Diagnostic code for "struct pattern that leaves out fields without writing `_`".
+pub const WARN_MISSING_PATTERN_FIELD: &'static str = "missing-pattern-field";
+
 /// Severity of a diagnostic.
 ///
 /// Errors are fatal and cause compilation to fail. Warnings are non-fatal:
@@ -296,7 +299,6 @@ impl Error {
 
 /// Panics with `msg`, having installed a panic hook that prints the message alone, so that the
 /// thread name, the panic location and the backtrace note stay out of the compiler's output.
-// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 fn panic_notrace(msg: &str) -> ! {
     panic::set_hook(Box::new(move |info| {
         let msg = any_to_string(info.payload());
@@ -318,7 +320,6 @@ pub fn any_to_string(any: &dyn Any) -> String {
 }
 
 /// Ends the process, printing `msg` in the form a reported error takes.
-// PROOF: P3, P4 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn panic_with_msg(msg: &str) -> ! {
     let errs = Errors::from_msg(msg.to_string());
     panic_notrace(&errs.to_string())

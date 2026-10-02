@@ -153,22 +153,22 @@ type BoxTriple = box struct { a : Array I64, b : Array I64, c : I64 };
 main : IO () = (
     // unboxed container, one boxed field named: the two left behind are released here
     let u1 = UnboxTriple { a: [1, 2], b: [3, 4], c: 5 };
-    let UnboxTriple { a: ua } = u1;
+    let UnboxTriple { a: ua, _ } = u1;
     assert_eq(|_|"unbox partial", ua.@(1), 2);;
 
     // unboxed container used after a partial destructure
     let u2 = UnboxTriple { a: [6], b: [7, 8], c: 9 };
-    let UnboxTriple { b: ub } = u2;
+    let UnboxTriple { b: ub, _ } = u2;
     assert_eq(|_|"unbox partial kept", ub.@(1) + u2.@a.@(0) + u2.@c, 23);;
 
     // boxed container, one boxed field named: the container's own drop reaches the rest
     let b1 = BoxTriple { a: [10, 11], b: [12], c: 13 };
-    let BoxTriple { b: bb } = b1;
+    let BoxTriple { b: bb, _ } = b1;
     assert_eq(|_|"box partial", bb.@(0), 12);;
 
     // boxed container used after a partial destructure
     let b2 = BoxTriple { a: [14], b: [15, 16], c: 17 };
-    let BoxTriple { a: ba } = b2;
+    let BoxTriple { a: ba, _ } = b2;
     assert_eq(|_|"box partial kept", ba.@(0) + b2.@b.@(1) + b2.@c, 47);;
 
     // every field named, written in an order other than the declared one

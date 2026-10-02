@@ -1,4 +1,4 @@
-use crate::ast::inline_llvm::{InlineLLVM, LLVMGen};
+use crate::ast::builtin_op::{BuiltinOp, BuiltinOpExpr};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::PatternNode;
 use crate::ast::program::{EndNode, TypeEnv};
@@ -50,7 +50,6 @@ pub struct ExprNode {
 impl ExprNode {
     /// Every field of this node except the set of free variables, which the new node leaves to be
     /// calculated again.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn clone_except_fvs(&self) -> ExprNode {
         ExprNode {
             expr: self.expr.clone(),
@@ -64,7 +63,6 @@ impl ExprNode {
     }
 
     /// Every field of this node, the set of free variables included.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn clone_all(&self) -> Self {
         ExprNode {
             expr: self.expr.clone(),
@@ -107,7 +105,6 @@ impl ExprNode {
     }
 
     // Set inferred type.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_type(&self, ty: Arc<TypeNode>) -> Arc<Self> {
         let mut ret = self.clone_all();
         ret.type_ = Some(ty);
@@ -245,7 +242,7 @@ impl ExprNode {
     /// The type constructor a struct construction names, and the fields it gives values to.
     pub fn destructure_make_struct(
         &self,
-    ) -> Option<(Arc<TyCon>, &Vec<(Name, Option<Span>, Arc<ExprNode>)>)> {
+    ) -> Option<(Arc<TyCon>, &Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)>)> {
         match &*self.expr {
             Expr::MakeStruct(tc, fields) => Some((tc.clone(), fields)),
             _ => None,
@@ -434,7 +431,9 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn get_make_struct_fields(&self) -> Vec<(Name, Option<Span>, Arc<ExprNode>)> {
+    /// The fields of this struct construction, each as its name, where it is written, and its
+    /// value. Panics unless this is a struct construction.
+    pub fn get_make_struct_fields(&self) -> Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)> {
         match &*self.expr {
             Expr::MakeStruct(_, fields) => fields.clone(),
             _ => {
@@ -718,9 +717,11 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    /// This struct construction with its fields replaced by `fields`. Panics unless this is a
+    /// struct construction.
     pub fn set_make_struct_fields(
         &self,
-        fields: Vec<(Name, Option<Span>, Arc<ExprNode>)>,
+        fields: Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)>,
     ) -> Arc<Self> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
@@ -804,11 +805,13 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn set_llvm(&self, llvm: InlineLLVM) -> Arc<ExprNode> {
+    /// This `Expr::Builtin` node with its `BuiltinOpExpr` replaced by `builtin`. Panics on any other
+    /// node.
+    pub fn set_builtin(&self, builtin: BuiltinOpExpr) -> Arc<ExprNode> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
-            Expr::LLVM(_) => {
-                ret.expr = Arc::new(Expr::LLVM(Arc::new(llvm)));
+            Expr::Builtin(_) => {
+                ret.expr = Arc::new(Expr::Builtin(Arc::new(builtin)));
             }
             _ => {
                 panic!()
@@ -817,18 +820,19 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn get_llvm(&self) -> Arc<InlineLLVM> {
+    /// The `BuiltinOpExpr` of this `Expr::Builtin` node. Panics on any other node.
+    pub fn get_builtin(&self) -> Arc<BuiltinOpExpr> {
         match &*self.expr {
-            Expr::LLVM(llvm) => llvm.clone(),
+            Expr::Builtin(builtin) => builtin.clone(),
             _ => {
                 panic!()
             }
         }
     }
 
-    pub fn is_llvm(&self) -> bool {
+    pub fn is_builtin(&self) -> bool {
         match &*self.expr {
-            Expr::LLVM(_) => true,
+            Expr::Builtin(_) => true,
             _ => false,
         }
     }
@@ -845,10 +849,10 @@ impl ExprNode {
                 // Name resolution for values will be done in type checking phase.
                 Ok(self.clone())
             }
-            Expr::LLVM(llvm) => {
-                let mut llvm = llvm.as_ref().clone();
-                llvm.generic_ty = llvm.generic_ty.resolve_namespace(ctx)?;
-                Ok(self.clone().set_llvm(llvm))
+            Expr::Builtin(builtin) => {
+                let mut builtin = builtin.as_ref().clone();
+                builtin.generic_ty = builtin.generic_ty.resolve_namespace(ctx)?;
+                Ok(self.clone().set_builtin(builtin))
             }
             Expr::App(fun, args) => {
                 let mut args_res: Vec<Arc<ExprNode>> = vec![];
@@ -924,10 +928,10 @@ impl ExprNode {
     ) -> Result<Arc<ExprNode>, Errors> {
         match &*self.expr {
             Expr::Var(_) => Ok(self.clone()),
-            Expr::LLVM(llvm) => {
-                let mut llvm = llvm.as_ref().clone();
-                llvm.generic_ty = llvm.generic_ty.resolve_type_aliases(type_env)?;
-                Ok(self.clone().set_llvm(llvm))
+            Expr::Builtin(builtin) => {
+                let mut builtin = builtin.as_ref().clone();
+                builtin.generic_ty = builtin.generic_ty.resolve_type_aliases(type_env)?;
+                Ok(self.clone().set_builtin(builtin))
             }
             Expr::App(fun, args) => {
                 let args =
@@ -1003,11 +1007,11 @@ impl ExprNode {
         }
     }
 
-    // Find the minimum AST node which includes the specified source code position.
     /// What the source position `pos` points at inside this expression: the name a variable
     /// expression writes, a field name of a struct construction, or the type a type annotation or a
-    /// struct construction writes. The walk takes the innermost expression whose span covers `pos`,
-    /// so an expression written with no span answers nothing.
+    /// struct construction writes. A field written as its name alone (`S { x }`) answers the
+    /// variable its name also writes. The walk takes the innermost expression whose span covers
+    /// `pos`, so an expression written with no span answers nothing.
     pub fn find_node_at(self: &Arc<ExprNode>, pos: &SourcePos) -> Option<EndNode> {
         if self.source.is_none() {
             return None;
@@ -1018,7 +1022,7 @@ impl ExprNode {
         }
         match &*self.expr {
             Expr::Var(v) => Some(EndNode::Expr(v.as_ref().clone(), self.type_.clone())),
-            Expr::LLVM(_) => None,
+            Expr::Builtin(_) => None,
             Expr::App(func, args) => {
                 let node = func.find_node_at(pos);
                 if node.is_some() {
@@ -1089,15 +1093,17 @@ impl ExprNode {
                 ty.find_node_at(pos)
             }
             Expr::MakeStruct(tc, fields) => {
-                for (name, name_src, field_expr) in fields {
-                    if let Some(ns) = name_src {
-                        if ns.includes_pos_lsp(pos) {
-                            return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
-                        }
-                    }
+                for (name, field_src, field_expr) in fields {
+                    // The value comes first: a field written as its name alone gives its value the
+                    // span of its name.
                     let node = field_expr.find_node_at(pos);
                     if node.is_some() {
                         return node;
+                    }
+                    if let Some(field_src) = field_src {
+                        if field_src.name_src.includes_pos_lsp(pos) {
+                            return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
+                        }
                     }
                 }
                 Some(EndNode::Type(tc.as_ref().clone()))
@@ -1154,7 +1160,7 @@ impl ExprNode {
         grow_stack(|| {
             f(self);
             match &*self.expr {
-                Expr::Var(_) | Expr::LLVM(_) => {}
+                Expr::Var(_) | Expr::Builtin(_) => {}
                 Expr::App(func, args) => {
                     func.walk_nodes(f);
                     for a in args {
@@ -1217,11 +1223,10 @@ impl ExprNode {
 
     /// The names this expression uses without binding them itself, global names included, walked
     /// afresh each time. `free_vars` reads the same set from this node's cache.
-    // PROOF: A21 (dev-docs/proof/rc_ir/borrow-cancel)
     fn calc_free_vars(&self) -> Set<FullName> {
         match &*self.expr {
             Expr::Var(var) => vec![var.name.clone()].into_iter().collect(),
-            Expr::LLVM(llvm) => llvm.generator.free_vars().into_iter().collect(),
+            Expr::Builtin(builtin) => builtin.op.free_vars().into_iter().collect(),
             Expr::App(func, args) => {
                 let mut free_vars = func.free_vars();
                 for arg in args {
@@ -1330,9 +1335,9 @@ impl ExprNode {
                 let new_var = var.global_to_absolute();
                 Arc::new(Expr::Var(new_var))
             }
-            Expr::LLVM(llvm) => {
-                let new_llvm = llvm.global_to_absolute();
-                Arc::new(Expr::LLVM(new_llvm))
+            Expr::Builtin(builtin) => {
+                let new_builtin = builtin.global_to_absolute();
+                Arc::new(Expr::Builtin(new_builtin))
             }
             Expr::App(func, args) => {
                 let new_func = func.global_to_absolute();
@@ -1423,13 +1428,24 @@ impl ExprNode {
     }
 }
 
+/// Where a field of a struct construction or of a struct pattern is written.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct FieldSrc {
+    /// The span of the field name.
+    pub name_src: Span,
+    /// Whether the field is written as its name alone: `S { x }` stands for `S { x : x }`. The span
+    /// `name_src` then also covers the expression `x` that a construction gives the field as its
+    /// value, or the variable `x` that a pattern binds the field to.
+    pub is_shorthand: bool,
+}
+
 /// The kinds of expression a program is built out of.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Expr {
     /// A name standing for a value.
     Var(Arc<Var>),
-    /// An operation written in LLVM IR, holding the names it reads.
-    LLVM(Arc<InlineLLVM>),
+    /// A builtin operation, holding the names it reads.
+    Builtin(Arc<BuiltinOpExpr>),
     /// A function applied to arguments. An application of several arguments is generated by
     /// optimization.
     App(Arc<ExprNode>, Vec<Arc<ExprNode>>),
@@ -1449,9 +1465,9 @@ pub enum Expr {
     TyAnno(Arc<ExprNode>, Arc<TypeNode>),
     /// An array built out of the elements written in it.
     ArrayLit(Vec<Arc<ExprNode>>),
-    /// A struct construction: the type constructor, and each entry as the field name, the span of
-    /// just that field name, and the value the field is given.
-    MakeStruct(Arc<TyCon>, Vec<(Name, Option<Span>, Arc<ExprNode>)>),
+    /// A struct construction: the type constructor, and each entry as the field name, where the
+    /// field is written, and the value the field is given.
+    MakeStruct(Arc<TyCon>, Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)>),
     /// A call of a C function. `is_ios` says the call is written `FFI_CALL_IOS`, which takes an
     /// `IOState` alongside the arguments.
     FFICall(
@@ -1474,7 +1490,6 @@ impl Expr {
 
     /// This expression as a node of its own, written at `src`, with `aux_src` for the parameter of
     /// a lambda or for the type constructor name of a struct construction.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn into_expr_node_with_aux_src(
         self: &Arc<Self>,
         src: Option<Span>,
@@ -1496,13 +1511,13 @@ impl Expr {
     pub fn stringify(&self) -> Text {
         match self {
             Expr::Var(v) => Text::from_string(v.name.to_string()),
-            Expr::LLVM(l) => Text::from_string(l.generator.name()),
+            Expr::Builtin(b) => Text::from_string(b.op.name()),
             Expr::App(_, _) => {
                 // Stringify the funciton.
                 let (fun, args) = collect_app(&Arc::new(self.clone()).into_expr_node(None));
                 let brace_fun = match *(fun.expr) {
                     Expr::Var(_) => false,
-                    Expr::LLVM(_) => false,
+                    Expr::Builtin(_) => false,
                     Expr::App(_, _) => false,
                     _ => true,
                 };
@@ -1648,13 +1663,10 @@ pub fn var_local(var_name: &str) -> Arc<Var> {
     var_var(FullName::local(var_name))
 }
 
-pub fn expr_llvm(
-    generator: Box<dyn LLVMGen>,
-    ty: Arc<TypeNode>,
-    src: Option<Span>,
-) -> Arc<ExprNode> {
-    Arc::new(Expr::LLVM(Arc::new(InlineLLVM {
-        generator,
+/// An expression applying `op`, declared at `ty` (its `generic_ty`).
+pub fn expr_builtin(op: Box<dyn BuiltinOp>, ty: Arc<TypeNode>, src: Option<Span>) -> Arc<ExprNode> {
+    Arc::new(Expr::Builtin(Arc::new(BuiltinOpExpr {
+        op,
         generic_ty: ty,
     })))
     .into_expr_node(src)
@@ -1803,11 +1815,11 @@ pub fn expr_make_struct(tc: Arc<TyCon>, fields: Vec<(Name, Arc<ExprNode>)>) -> A
     Arc::new(Expr::MakeStruct(tc, fields)).into_expr_node(None)
 }
 
-// Construct a MakeStruct from `(field name, optional field-name source
-// span, field value)` triples.
-pub fn expr_make_struct_with_spans(
+/// A struct construction of `tc` from `(field name, where the field is written, field value)`
+/// triples.
+pub fn expr_make_struct_with_srcs(
     tc: Arc<TyCon>,
-    fields: Vec<(Name, Option<Span>, Arc<ExprNode>)>,
+    fields: Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)>,
 ) -> Arc<ExprNode> {
     Arc::new(Expr::MakeStruct(tc, fields)).into_expr_node(None)
 }

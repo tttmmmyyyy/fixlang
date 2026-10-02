@@ -149,7 +149,6 @@ impl Program {
     }
 
     /// Desugar opaque type variables. See the module-level comment for an overview.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn desugar_opaque_types(&mut self) {
         let targets = self.global_values_with_opaque_types();
 
@@ -236,7 +235,6 @@ impl Program {
     ///
     /// That same list is what a resolution's left hand side applies the TyCon to, so the arity
     /// `opaque_tycon_arity` reads there and the one counted here are one number.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn register_opaque_tycon(&mut self, info: &OpaqueInfo) {
         let ti = TyConInfo {
             punched_from: None,
@@ -649,7 +647,6 @@ fn opaque_tycon_arity(resolutions: &[OpaqueTyConResolution]) -> usize {
 ///
 /// Example: `Std::repeat` with scheme `[?it : Iterator, Item ?it = a] a -> I64 -> ?it`
 /// yields one OpaqueInfo with tycon `Std::repeat::?it`, tycon_vars `[a]`, tycon_kind `* -> *`.
-// PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 fn collect_opaque_infos(scm: &Arc<Scheme>, gv_name: &FullName) -> Vec<OpaqueInfo> {
     // Find all opaque type variables in the scheme.
     let all_vars = collect_free_vars(&scm.predicates, &scm.equalities, &scm.ty);
@@ -927,7 +924,6 @@ fn build_undefined_expr() -> Arc<ExprNode> {
 ///
 /// Example: `?it (Array I64)` with resolution `?it (Array a) -> ArrayIterator a`
 /// is resolved to `ArrayIterator I64`.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn resolve_opaque_type_in_type(
     ty: &Arc<TypeNode>,
     opaque_resolutions: &Map<FullName, Vec<OpaqueTyConResolution>>,
@@ -1051,13 +1047,13 @@ fn resolve_opaque_tycon_in_pattern(
             pattern: Pattern::Var(v.clone(), anno_ty.clone()),
             info,
         }),
-        Pattern::Struct(tc, field_to_pat) => {
+        Pattern::Struct(tc, field_to_pat, has_rest) => {
             let mut new_field_to_pat = field_to_pat.clone();
             for (_, _, subpat) in new_field_to_pat.iter_mut() {
                 *subpat = resolve_opaque_tycon_in_pattern(subpat, opaque_resolutions);
             }
             Arc::new(PatternNode {
-                pattern: Pattern::Struct(tc.clone(), new_field_to_pat),
+                pattern: Pattern::Struct(tc.clone(), new_field_to_pat, *has_rest),
                 info,
             })
         }
@@ -1155,8 +1151,8 @@ pub fn resolve_opaque_tycon_in_expr(
                 .collect();
             expr.set_ffi_call_args(new_args)
         }
-        // A variable holds no subexpression. An LLVM expression holds `generic_ty`, which stays
+        // A variable holds no subexpression. A builtin expression holds `generic_ty`, which stays
         // written in the type variables of the builtin that carries it, instantiation included.
-        Expr::Var(_) | Expr::LLVM(_) => expr,
+        Expr::Var(_) | Expr::Builtin(_) => expr,
     }
 }

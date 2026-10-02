@@ -34,7 +34,6 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, OnceLock};
 
 /// A type variable, identified by its name.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct TyVar {
     /// The name the variable is written with, e.g. `a`.
@@ -44,7 +43,6 @@ pub struct TyVar {
     pub kind: Arc<Kind>,
 }
 
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialEq for TyVar {
     /// Compares the name alone, which is what decides which variable this is; see the note on
     /// `Hash`.
@@ -57,10 +55,8 @@ impl PartialEq for TyVar {
     }
 }
 
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Eq for TyVar {}
 
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Hash for TyVar {
     /// Hashes the name alone, agreeing with the equality of `PartialEq`: the name is what decides
     /// which variable this is, and the kind is an attribute the variable carries.
@@ -69,7 +65,6 @@ impl Hash for TyVar {
     }
 }
 
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TyVar {
     /// A copy of this type variable carrying `kind`, leaving this one as it is.
     pub fn set_kind(&self, kind: Arc<Kind>) -> Arc<TyVar> {
@@ -87,7 +82,6 @@ impl TyVar {
 }
 
 /// An associated type as a type names it, e.g. `Item` in `Item iter`.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AssocType {
     /// The name the associated type is declared under, whose namespace is the trait declaring it.
@@ -97,7 +91,6 @@ pub struct AssocType {
     pub src: Option<Span>,
 }
 
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialEq for AssocType {
     /// Compares the name alone, which is what decides which associated type this is; where the
     /// name was written stays out of the comparison.
@@ -106,10 +99,8 @@ impl PartialEq for AssocType {
     }
 }
 
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Eq for AssocType {}
 
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Hash for AssocType {
     /// Hashes the name alone, agreeing with the equality of `PartialEq`.
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -117,7 +108,6 @@ impl Hash for AssocType {
     }
 }
 
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl AssocType {
     /// Gives this associated type's name its full name, read in the context `ctx` carries.
     ///
@@ -155,7 +145,6 @@ impl AssocType {
 }
 
 /// The kind of a type, which classifies types the way a type classifies values.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
 pub enum Kind {
     /// `*`, the kind of a type that has values of its own.
@@ -165,7 +154,6 @@ pub enum Kind {
     Arrow(Arc<Kind>, Arc<Kind>),
 }
 
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Kind {
     /// Whether this is `*`, the kind of a type that has values of its own.
     pub fn is_star(&self) -> bool {
@@ -194,7 +182,6 @@ impl Kind {
 
 /// What kind of declaration a type constructor comes from, which settles how its values are laid out
 /// and what the fields recorded for it mean.
-// PROOF: P1, P2, P2a, P5, P6, P7, P7c, P7f, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, PartialEq, Clone, Hash)]
 pub enum TyConVariant {
     /// A built-in type laid out as a single machine scalar, such as `Std::I64` or `Std::Ptr`.
@@ -229,17 +216,14 @@ const C_SCALAR_NAMES: &[&str] = &[
 
 /// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
 /// it. A type constructor is determined by its name.
-// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P15, P16, P17, P18, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, PartialEq, Hash, Eq, Serialize, Deserialize)]
 pub struct TyCon {
     /// The name the type is declared under.
     pub name: FullName,
 }
 
-// PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P15, P16, P17, P18, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TyCon {
     /// The type constructor named `fullname`.
-    // PROOF: P3, P4, P5, P6, P7, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(fullname: FullName) -> TyCon {
         TyCon { name: fullname }
     }
@@ -367,7 +351,6 @@ impl TyCon {
     /// # Arguments
     /// * `punched_at` — the position of the field made the hole, counted from 0 in the order the
     ///   fields are declared.
-    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn into_punched_type_name(&mut self, punched_at: usize) {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
@@ -387,7 +370,6 @@ impl TyCon {
 
 /// The declaration a type constructor comes from: the kind of declaration it is, the parameters it
 /// takes, and what its values hold. A type alias is declared by `TyAliasInfo`.
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct TyConInfo {
     /// The kind of the type constructor, which follows from the parameters it takes.
@@ -417,11 +399,9 @@ pub struct TyConInfo {
     pub punched_from: Option<TyCon>,
 }
 
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TyConInfo {
     /// Gives every type name standing in the declared field types its full name, read in the
     /// context `ctx` carries.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for field in &mut self.fields {
@@ -431,7 +411,6 @@ impl TyConInfo {
     }
 
     /// Expands every type alias standing in the declared field types.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for field in &mut self.fields {
@@ -468,7 +447,6 @@ impl TyConInfo {
 }
 
 /// A declaration of a type alias: the type it stands for, and the parameters it takes.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct TyAliasInfo {
     /// The kind of the type constructor the alias names.
@@ -481,7 +459,6 @@ pub struct TyAliasInfo {
     pub source: Option<Span>,
 }
 
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TyAliasInfo {
     /// The documentation comment written above this declaration.
     pub fn get_document(&self) -> Option<String> {
@@ -509,7 +486,6 @@ impl TyAliasInfo {
 pub const MAX_TYPE_DEPTH: usize = 500;
 
 /// A node of a type expression, together with the information the compiler carries alongside it.
-// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Serialize, Deserialize)]
 pub struct TypeNode {
     /// The type expression, which is what equality and hashing of a node read.
@@ -518,8 +494,8 @@ pub struct TypeNode {
     ///
     /// Left out of the serialized form, so that a node serializes to its type expression — the
     /// same thing `PartialEq` compares and `Hash` hashes. A reader that must not follow an edit
-    /// shifting a position would otherwise have to take the type out of whatever holds it, and an
-    /// inline-LLVM op holds its types behind a trait object no reader can reach into
+    /// shifting a position would otherwise have to take the type out of whatever holds it, and a
+    /// builtin op holds its types behind a trait object no reader can reach into
     /// (`divide_program::generated_code_hash` reads one).
     #[serde(skip)]
     pub info: TypeInfo,
@@ -543,7 +519,6 @@ pub struct TypeNode {
     depth_cache: OnceLock<usize>,
 }
 
-// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialEq for TypeNode {
     /// Compares the type expressions; the source information a node carries stays out of the
     /// comparison.
@@ -552,16 +527,13 @@ impl PartialEq for TypeNode {
     }
 }
 
-// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Eq for TypeNode {}
 
-// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl TypeNode {
     /// The hash of the type expression, which is what `PartialEq` compares; the source information
     /// the node carries stays out of both. The answer is kept on the node (`hash_cache`), so hashing
     /// a type that shares a subterm many times costs one visit per node rather than one per
     /// occurrence.
-    // PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn type_hash(&self) -> u64 {
         *self.hash_cache.get_or_init(|| {
             let mut hasher = DefaultHasher::new();
@@ -571,7 +543,6 @@ impl TypeNode {
     }
 }
 
-// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Hash for TypeNode {
     /// Writes `type_hash`, so that two nodes `PartialEq` calls equal hash alike.
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -579,7 +550,6 @@ impl Hash for TypeNode {
     }
 }
 
-// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Debug for TypeNode {
     /// Writes the type in source syntax, with its free type variables renamed `a`, `b`, ... in
     /// order of appearance, so that two types differing only in variable names print alike.
@@ -588,7 +558,6 @@ impl Debug for TypeNode {
     }
 }
 
-// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl TypeNode {
     /// The smallest node of this type covering `pos`, for a type read from a source file.
     pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
@@ -691,13 +660,11 @@ impl TypeNode {
     }
 
     /// Where this type was written; a type the compiler builds itself carries none.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn get_source(&self) -> &Option<Span> {
         &self.info.source
     }
 
     /// A copy of this type written at `src`, leaving this node as it is.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_source(&self, src: Option<Span>) -> Arc<Self> {
         let mut ret = self.clone();
         ret.info.source = src;
@@ -706,7 +673,6 @@ impl TypeNode {
 
     /// A copy of this type written at `src` where it carries no source of its own, and this type
     /// itself where it does.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_source_if_none(self: &Arc<TypeNode>, src: Option<Span>) -> Arc<TypeNode> {
         if self.info.source.is_none() {
             self.set_source(src)
@@ -825,7 +791,6 @@ impl TypeNode {
 
     /// A copy of this type variable carrying `kind`, leaving this node as it is. Panics for a type
     /// that is not a type variable.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     #[allow(dead_code)]
     pub fn set_tyvar_kind(&self, kind: Arc<Kind>) -> Arc<TypeNode> {
         let mut ret = self.clone();
@@ -843,7 +808,6 @@ impl TypeNode {
 
     /// A copy of this type with `tv` as its type variable, leaving this node as it is. Panics for
     /// a type that is not a type variable.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_tyvar(&self, tv: Arc<TyVar>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -858,7 +822,6 @@ impl TypeNode {
 
     /// A copy of this application with `fun` as the type being applied, keeping the argument.
     /// Panics for a type that is not a type application.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_tyapp_fun(&self, fun: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -873,7 +836,6 @@ impl TypeNode {
 
     /// A copy of this application with `arg` as the argument, keeping the type being applied.
     /// Panics for a type that is not a type application.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_tyapp_arg(&self, arg: Arc<TypeNode>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -888,7 +850,6 @@ impl TypeNode {
 
     /// A copy of this associated type application named `name`, keeping the arguments. Panics for
     /// a type that is not an associated type application.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_assocty_name(&self, name: AssocType) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -903,7 +864,6 @@ impl TypeNode {
 
     /// A copy of this associated type application applied to `args`, keeping the name. Panics for
     /// a type that is not an associated type application.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_assocty_args(&self, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -947,7 +907,6 @@ impl TypeNode {
 
     /// A copy of this type with `tc` as its type constructor, leaving this node as it is. Panics
     /// for a type that is not a type constructor standing on its own.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn set_tycon_tc(&self, tc: Arc<TyCon>) -> Arc<TypeNode> {
         let mut ret = self.clone();
         match &self.ty {
@@ -1063,7 +1022,6 @@ impl TypeNode {
     /// A punched field's slot is among them, at the type it was declared with, so a reader that can
     /// meet a punched type wants this one only to lay the fields out or to address one by its index;
     /// `unpunched_field_types` answers which of the slots hold a value.
-    // PROOF: P1, P2, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn field_types(&self, type_env: &TypeEnv) -> Vec<Arc<TypeNode>> {
         self.instance_field_types(self.toplevel_tycon_info(type_env), type_env)
     }
@@ -1087,7 +1045,6 @@ impl TypeNode {
     /// the tree it unfolds to, which doubles at every level of a type like `P (a, a)`. A node the
     /// walk leaves alone is answered with itself, so the graph the answer is stands as shared as the
     /// one that was walked.
-    // PROOF: P1, P2, P2a, P3, P4, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unwrap_newtypes_memoized(
         self: &Arc<TypeNode>,
         type_env: &TypeEnv,
@@ -1102,7 +1059,6 @@ impl TypeNode {
     }
 
     /// One node of the `unwrap_newtypes` walk, with the type this node stands for on the way out.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unwrap_newtypes_node(
         self: &Arc<TypeNode>,
         type_env: &TypeEnv,
@@ -1146,7 +1102,6 @@ impl TypeNode {
     /// applied to arguments and substituting for one leaves every application spine as it stands;
     /// the field types a declaration is stored with are unwrapped once, by the pass that unwraps
     /// newtypes.
-    // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn instance_field_types(
         &self,
         tycon_info: &TyConInfo,
@@ -1167,7 +1122,6 @@ impl TypeNode {
     /// substituted for the declaration's type variables. The types are as the declaration writes
     /// them, so one can name a newtype the program has unwrapped; `instance_field_types` answers
     /// with the types values are built at.
-    // PROOF: D/A, P1, P2, P2a, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     fn declared_field_types(&self, tycon_info: &TyConInfo) -> Vec<Arc<TypeNode>> {
         let args = self.collect_type_arguments();
         assert_eq!(args.len(), tycon_info.tyvars.len()); // Assumes fully applied
@@ -1189,7 +1143,6 @@ impl TypeNode {
     ///
     /// This is what a walk over the values a type holds descends: reference counting reaches a hole's
     /// slot through no path, and reading one would read a value that has moved on.
-    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unpunched_field_types(&self, type_env: &TypeEnv) -> Vec<(usize, Arc<TypeNode>)> {
         let tycon_info = self.toplevel_tycon_info(type_env);
         self.instance_field_types(tycon_info, type_env)
@@ -1232,7 +1185,6 @@ impl TypeNode {
 
     /// The arguments applied to this type's head, in the order they are applied: `f a b c` gives
     /// `vec![a, b, c]`.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn collect_type_arguments(&self) -> Vec<Arc<TypeNode>> {
         let mut ret: Vec<Arc<TypeNode>> = vec![];
         match &self.ty {
@@ -1384,7 +1336,6 @@ impl TypeNode {
 
     /// The type constructor at the head of this type, as `Array` heads `Array I64`. A type
     /// variable and an associated type application have none.
-    // PROOF: P1, P2, P2a, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn toplevel_tycon(&self) -> Option<Arc<TyCon>> {
         match &self.ty {
             Type::TyVar(_) => None,
@@ -1412,7 +1363,6 @@ impl TypeNode {
 
     /// Whether the top-level type constructor of this type satisfies `pred`. A type variable and an
     /// associated type application have no such constructor, and satisfy nothing.
-    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn toplevel_tycon_satisfies(&self, pred: impl FnOnce(&TyCon) -> bool) -> bool {
         match self.toplevel_tycon() {
             Some(tc) => pred(tc.as_ref()),
@@ -1422,20 +1372,17 @@ impl TypeNode {
 
     /// Whether this type is a function type `a -> b`, a value of which pairs the code to run with
     /// the values it captured.
-    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_closure(&self) -> bool {
         self.toplevel_tycon_satisfies(|tc| tc.name == make_arrow_name_abs())
     }
 
     /// Whether this type is one of the `Std::#FunPtr{n}` constructors, a pointer to code of `n`
     /// arguments that carries no captured value.
-    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_funptr(&self) -> bool {
         self.toplevel_tycon_satisfies(|tc| is_funptr_tycon(tc).is_some())
     }
 
     /// Whether this type is `Std::Array`.
-    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_array(&self) -> bool {
         self.toplevel_tycon_satisfies(is_array_tycon)
     }
@@ -1454,7 +1401,6 @@ impl TypeNode {
     }
 
     /// Whether this type is `Std::PunchedArray`, an array with one element moved out of it.
-    // PROOF: P1, P2, P2a, P7a, P7d, P7e, P15, P16, P17, P18, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_punched_array(&self) -> bool {
         self.toplevel_tycon_satisfies(is_punched_array_tycon)
     }
@@ -1482,7 +1428,6 @@ impl TypeNode {
 
     /// Whether the top-level type constructor of this type is a struct.
     /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
-    // PROOF: D/A, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_struct(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1494,7 +1439,6 @@ impl TypeNode {
     /// Whether the top-level type constructor of this type is a union, so that a value of it
     /// carries one of the declared fields and a tag saying which.
     /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
-    // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_union(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1519,7 +1463,6 @@ impl TypeNode {
     /// The declaration of this type's outermost type constructor: its variant, boxedness, type
     /// parameters and fields. Panics for a closure type, a type variable, or a type constructor
     /// absent from `type_env`.
-    // PROOF: D/A, P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn toplevel_tycon_info<'a>(&self, type_env: &'a TypeEnv) -> &'a TyConInfo {
         assert!(!self.is_closure());
         let tycon = self.toplevel_tycon().unwrap();
@@ -1528,14 +1471,12 @@ impl TypeNode {
 
     /// Whether a value of this type is held in place, with its fields laid out where the value
     /// sits. A closure is unboxed: it is a function pointer beside the object its captures live in.
-    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
         self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox
     }
 
     /// Whether a value of this type is a pointer to a heap block that holds its fields, so that the
     /// value costs one pointer wherever it is stored and its lifetime is reference-counted.
-    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7d, P7e, P15, P16, P17, P18, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_box(&self, type_env: &TypeEnv) -> bool {
         !self.is_unbox(type_env)
     }
@@ -1546,7 +1487,6 @@ impl TypeNode {
     /// Deciding this walks the fields of unboxed types, and that walk would not end on a type
     /// reaching itself that way; `Program::validate_layouts` rejects such a type before any of this
     /// runs.
-    // PROOF: P1, P2, P2a, P3, P4, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P15, P16, P17, P18, P18a, P18b, P18c, P19, P20, P21, P22, P23, P24, P27, P28, P29, P30, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_fully_unboxed(&self, type_env: &TypeEnv) -> bool {
         if self.is_box(type_env) {
             return false;
@@ -1569,7 +1509,6 @@ impl TypeNode {
     }
 
     /// A node holding `ty`, written nowhere.
-    // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn new(ty: Type) -> Self {
         Self {
             ty,
@@ -1581,7 +1520,6 @@ impl TypeNode {
     }
 
     /// A shared node holding `ty`, written nowhere.
-    // PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn new_arc(ty: Type) -> Arc<Self> {
         Arc::new(Self::new(ty))
     }
@@ -1595,7 +1533,6 @@ impl TypeNode {
     }
 
     /// A copy of this node holding the type expression `ty`, keeping the source it was written at.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     #[allow(dead_code)]
     pub fn set_ty(self: &Arc<Self>, ty: Type) -> Arc<Self> {
         let mut ret = (**self).clone();
@@ -1606,7 +1543,6 @@ impl TypeNode {
     /// The kind of this type, read from the kinds `kind_env` gives the type constructors and the
     /// associated types, and from the kinds the type variables carry. A type applied to an
     /// argument whose kind its own kind does not take is reported as an error.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn kind(self: &Arc<TypeNode>, kind_env: &KindEnv) -> Result<Arc<Kind>, Errors> {
         /// The error reported where `application` applies `fun` of kind `fun_kind` to `arg` of
         /// kind `arg_kind`, which `fun_kind` does not accept.
@@ -1858,7 +1794,6 @@ pub struct AssocTypeDefnHead {
     pub impl_type_as_written: Arc<TypeNode>,
 }
 
-// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Clone for TypeNode {
     /// Copies the type expression and where it was written, leaving the values kept on the node —
     /// its hash, whether it is ground, how deeply it nests — to be computed again.
@@ -1875,7 +1810,6 @@ impl Clone for TypeNode {
 
 /// A type expression, which is a type variable, a type constructor, or one of these applied to
 /// arguments.
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Eq, Hash, Serialize, Deserialize, Clone)]
 pub enum Type {
     /// A type variable, e.g. `a`.
@@ -1891,12 +1825,10 @@ pub enum Type {
 
 /// Whether two nodes hold the same type expression. Two occurrences of one node are the same type
 /// without looking inside, which is what keeps comparing a type that shares a subterm cheap.
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 fn type_node_eq(lhs: &Arc<TypeNode>, rhs: &Arc<TypeNode>) -> bool {
     Arc::ptr_eq(lhs, rhs) || lhs.ty == rhs.ty
 }
 
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialEq for Type {
     /// Compares the parts of the type expression, taking two occurrences of one node as equal on
     /// sight (`type_node_eq`). The derived `Hash` agrees with this, reading the expression a node
@@ -1921,7 +1853,6 @@ impl PartialEq for Type {
     }
 }
 
-// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl TypeNode {
     /// This type written in source syntax, with its type variables renamed `a`, `b`, ... in order
     /// of appearance, so that two types differing only in the names of their variables are written
@@ -2063,7 +1994,6 @@ impl TypeNode {
     ///
     /// # Arguments
     /// * `capture` — the types a dynamic object's destructor traverses, empty for every other type.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn traverser_name(
         self: &Arc<TypeNode>,
         capture: &Vec<Arc<TypeNode>>,
@@ -2093,7 +2023,6 @@ impl TypeNode {
     /// # Arguments
     /// * `capture` — the captured types of a dynamic object, which distinguish two dynamic objects
     ///   of the same type. Empty for every other type.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn hash_with_capture(self: &Arc<TypeNode>, capture: &Vec<Arc<TypeNode>>) -> String {
         // If the type is not dynamic, then the capturing types should be empty.
         assert!(self.is_dynamic() || capture.len() == 0);
@@ -2190,7 +2119,6 @@ pub fn type_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
 }
 
 /// The function type `src -> dst`.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn type_fun(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
     type_fun_with_arrow_src(src, dst, None)
 }
@@ -2216,7 +2144,6 @@ pub fn type_fun_with_arrow_src(
 
 /// The function pointer type taking `srcs` to `dst`, i.e. `Std::#FunPtr{n}` applied to them,
 /// where `n` is the number of arguments.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn type_funptr(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
     let mut ty = TypeNode::new_arc(Type::TyCon(Arc::new(make_funptr_tycon(srcs.len() as u32))));
     for src in srcs {
@@ -2227,26 +2154,22 @@ pub fn type_funptr(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode
 }
 
 /// The type `tyfun` applied to `param`.
-// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn type_tyapp(tyfun: Arc<TypeNode>, param: Arc<TypeNode>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyApp(tyfun, param))
 }
 
 /// The associated type `assoc_ty` applied to `args`, the first of which is the type the trait is
 /// implemented for.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn type_assocty(assoc_ty: AssocType, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::AssocTy(assoc_ty, args))
 }
 
 /// The type that is the type constructor `tycon`, with no argument applied.
-// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn type_tycon(tycon: &Arc<TyCon>) -> Arc<TypeNode> {
     TypeNode::new_arc(Type::TyCon(tycon.clone()))
 }
 
 /// The type constructor named `name`.
-// PROOF: P1, P2, P5, P6, P7, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn tycon(name: FullName) -> Arc<TyCon> {
     Arc::new(TyCon { name })
 }
@@ -2255,7 +2178,6 @@ pub fn tycon(name: FullName) -> Arc<TyCon> {
 ///
 /// # Examples
 /// `apply_type_args(Array, [I64])` is `Array I64`, and `apply_type_args(Array, [])` is `Array`.
-// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNode> {
     let mut applied = type_tycon(tycon);
     for arg in args {
@@ -2265,7 +2187,6 @@ pub fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNo
 }
 
 /// What a type node carries beside the type itself.
-// PROOF: P1, P2, P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
     /// The span of the source text the type was written at. A type the compiler builds itself has
@@ -2273,14 +2194,12 @@ pub struct TypeInfo {
     source: Option<Span>,
 }
 
-// PROOF: D/A, P1, P2, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl TypeNode {
     /// Whether no type variable occurs in this type.
     ///
     /// `free_vars` answers the same question by collecting the variables, which walks a type that
     /// shares a subterm once per occurrence rather than once per node. Every type reaching code
     /// generation is asked this, so it is answered here and kept on the node.
-    // PROOF: D/A, T (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_ground(&self) -> bool {
         *self.ground_cache.get_or_init(|| match &self.ty {
             Type::TyVar(_) => false,
@@ -2296,7 +2215,6 @@ impl TypeNode {
     /// This measures the type expression the program wrote or the compiler built: a chain of a
     /// thousand types that each hold the next is a thousand types of depth one. What grows this is
     /// a type reached from itself at a larger type argument.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn depth(&self) -> usize {
         *self.depth_cache.get_or_init(|| match &self.ty {
             Type::TyVar(_) | Type::TyCon(_) => 1,
@@ -2880,7 +2798,6 @@ impl Scheme {
     }
 
     /// Check that the kinds the constraints and the type demand of each type variable agree.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn check_kinds(&self, kind_env: &KindEnv) -> Result<(), Errors> {
         for p in &self.predicates {
             p.check_kinds(kind_env)?;
@@ -2914,7 +2831,6 @@ impl Scheme {
     /// An opaque type variable stays free, and so does a variable serving as a formal parameter of
     /// an equality on one: the definition determines those, and a use site chooses nothing for
     /// them.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn generalize(
         kind_signs: &[KindSignature],
         preds: Vec<Predicate>,
@@ -3119,8 +3035,8 @@ mod tests {
     ///
     /// The digest naming a compilation unit's object file serializes the RC IR
     /// (`divide_program::generated_code_hash`), and a type reaches it inside values that give no
-    /// way to take the type out — an inline-LLVM op holds the types of a closure's captures behind
-    /// a trait object. So a position in the serialized form of a type makes an edit that shifts it
+    /// way to take the type out — a builtin op holds the types of a closure's captures behind a
+    /// trait object. So a position in the serialized form of a type makes an edit that shifts it
     /// regenerate a unit whose code that edit leaves as it was.
     #[test]
     fn test_a_type_serializes_to_its_expression() {

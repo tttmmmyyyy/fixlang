@@ -223,7 +223,7 @@ Type: `(a -> b) -> a -> b`
 `x.with_retained(f)` runs `f` with retained `x`. 
 It is guaranteed that `x` is keep alive until `with_retained` is finished, even after `f` has finished using `x` in it. 
 
-A typical use case of this function is the implementation of `Std::FFI::borrow_boxed`.
+A typical use case of this function is the implementation of `Std::FFI::Destructor::borrow`.
 
 ##### Parameters
 
@@ -324,12 +324,12 @@ Type: `(Std::Ptr -> b) -> Std::Array a -> b`
 
 Calls a function with a pointer to the first element of the array's element buffer.
 
-The array is borrowed for the duration of the call, so the pointer is valid only while `borrower` runs. The pointer must not be used to mutate the array; to do that, use `mutate_elements`.
+The array is borrowed for the duration of the call, so the pointer is valid only while `f` runs. The pointer must not be used to mutate the array; to do that, use `mutate_elements`.
 
 ##### Parameters
 
-* `borrower` - The function to call with the pointer to the first element.
-* `array` - The array whose elements are borrowed.
+* `f` - The function to call with the pointer to the first element.
+* `x` - The array whose elements are borrowed.
 
 #### borrow_elements_io
 
@@ -534,7 +534,7 @@ Similar to `mutate_elements`, but this function is used when you want to run the
 
 Type: `(Std::Ptr -> Std::IO b) -> Std::Array a -> Std::IO::IOState -> (Std::IO::IOState, (Std::Array a, b))`
 
-Internal implementation of the `mutate_elements_io` function.
+Internal implementation of the `mutate_elements` and `mutate_elements_io` functions.
 
 ##### Parameters
 
@@ -1391,21 +1391,20 @@ Borrows a pointer to the data of a boxed value.
 
 The returned pointer points to:
 
-- if the value is an `Array`, the first element of the array,
 - if the value is a struct, the first field,
-- if the value is an union, the data field (not the tag field).
+- if the value is a union, the data field (not the tag field).
 
-The difference from `boxed_to_retained_ptr` is that this function returns a pointer to region where the payload of a boxed value is stored;
-on the other hand, `boxed_to_retained_ptr` returns a pointer to the boxed value itself (which currently points to the reference counter of the boxed value).
+Unlike `boxed_to_retained_ptr`, which returns a pointer to the boxed value itself (currently its reference counter), this function returns a pointer to the region where the payload of the boxed value is stored.
 
+The value is borrowed for the duration of the call, so the pointer is valid only while `f` runs.
 It is not allowed to mutate a boxed value through the borrowed pointer. If you want to do so, use `mutate_boxed`.
 
 See also: `borrow_boxed_io`, `mutate_boxed`, `mutate_boxed_io`.
 
 ##### Parameters
 
-* `borrower` - The action to be performed on the pointer.
-* `value` - The boxed value to be borrowed.
+* `f` - The function to call with the pointer.
+* `x` - The boxed value to be borrowed.
 
 #### borrow_boxed_io
 
@@ -1421,7 +1420,7 @@ See also: `borrow_boxed`, `mutate_boxed`, `mutate_boxed_io`.
 
 ##### Parameters
 
-* `action` - The IO action to be performed on the pointer.
+* `act` - The IO action to be performed on the pointer.
 * `value` - The boxed value to be borrowed.
 
 #### boxed_from_retained_ptr
@@ -1540,14 +1539,14 @@ See also: `borrow_boxed`, `borrow_boxed_io`, `mutate_boxed`.
 
 ##### Parameters
 
-* `action` - The IO action to be performed on the pointer.
+* `act` - The IO action to be performed on the pointer.
 * `value` - The boxed value to be mutated.
 
 #### mutate_boxed_ios
 
 Type: `[a : Std::Boxed] (Std::Ptr -> Std::IO b) -> a -> Std::IO::IOState -> (Std::IO::IOState, (a, b))`
 
-Internal implementation of the `mutate_boxed_io` function.
+Internal implementation of the `mutate_boxed` and `mutate_boxed_io` functions.
 
 ##### Parameters
 

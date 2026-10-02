@@ -24,7 +24,6 @@ use std::{
 use tempfile::TempDir;
 
 /// Guards the one `cargo build` of the `fix` binary a test process runs.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 static BUILD_FIX: Once = Once::new();
 
 /// Build the `fix` binary in release mode. Incremental compilation makes this a
@@ -66,16 +65,13 @@ fn fix_binary_path() -> PathBuf {
     fix_binary_dir().join("fix")
 }
 
-/// `PATH` with this worktree's build directory in front. A test project may
-/// look `fix` up by name from its own subprocess (e.g. cp-library's IO test
-/// runs `fix run` on a generated program), and such a lookup has to find the
-/// binary under test.
-fn path_env_with_fix_binary_dir() -> OsString {
-    let mut dirs = vec![fix_binary_dir()];
+/// `PATH` with `dir` in front, so a command looked up by name is found in `dir` first.
+pub fn path_env_with_dir_in_front(dir: PathBuf) -> OsString {
+    let mut dirs = vec![dir];
     if let Some(path) = env::var_os("PATH") {
         dirs.extend(env::split_paths(&path));
     }
-    env::join_paths(dirs).expect("The build directory path contains a path separator.")
+    env::join_paths(dirs).expect("The directory path contains a path separator.")
 }
 
 /// A `Command` that runs this worktree's freshly built `fix` binary by absolute
@@ -86,7 +82,9 @@ fn path_env_with_fix_binary_dir() -> OsString {
 pub fn fix_command() -> Command {
     build_fix();
     let mut command = Command::new(fix_binary_path());
-    command.env("PATH", path_env_with_fix_binary_dir());
+    // A test project may look `fix` up by name from its own subprocess (e.g. cp-library's IO test
+    // runs `fix run` on a generated program), and such a lookup has to find the binary under test.
+    command.env("PATH", path_env_with_dir_in_front(fix_binary_dir()));
     command
 }
 

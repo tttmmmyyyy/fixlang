@@ -39,7 +39,7 @@ fn visit(expr: &Arc<ExprNode>, hole_name: &FullName, tc: &TypeCheckContext, erro
         }
     }
     match &*expr.expr {
-        Expr::Var(_) | Expr::LLVM(_) => {}
+        Expr::Var(_) | Expr::Builtin(_) => {}
         Expr::App(f, args) => {
             visit(f, hole_name, tc, errors);
             for a in args {

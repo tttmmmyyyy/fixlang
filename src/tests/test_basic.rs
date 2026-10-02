@@ -5971,10 +5971,10 @@ pub fn test_float_to_string() {
             assert_eq(|_|"the widest positional F64 text takes 24 bytes", widest.to_string.@size, 24);;
 
             // Outside that window the text carries the power of ten instead of the zeros.
-            assert_eq(|_|"a power of ten just past the window", 1.0e16.to_string, "1e16");;
-            assert_eq(|_|"a large power of ten", 1.0e300.to_string, "1e300");;
-            assert_eq(|_|"a small power of ten", 1.0e-10.to_string, "1e-10");;
-            assert_eq(|_|"the least positive F64", 5.0e-324.to_string, "5e-324");;
+            assert_eq(|_|"a power of ten just past the window", 1.0e16.to_string, "1.0e16");;
+            assert_eq(|_|"a large power of ten", 1.0e300.to_string, "1.0e300");;
+            assert_eq(|_|"a small power of ten", 1.0e-10.to_string, "1.0e-10");;
+            assert_eq(|_|"the least positive F64", 5.0e-324.to_string, "5.0e-324");;
             assert_eq(|_|"the greatest F64",
                       1.7976931348623157e308.to_string, "1.7976931348623157e308");;
 
@@ -6007,14 +6007,14 @@ pub fn test_float_to_string() {
                       (1.0_F32 / 3.0_F32).to_string, "0.33333334");;
             assert_eq(|_|"the widest F32 written positionally",
                       1.0e12_F32.to_string, "1000000000000.0");;
-            assert_eq(|_|"an F32 just past that window", 1.0e13_F32.to_string, "1e13");;
+            assert_eq(|_|"an F32 just past that window", 1.0e13_F32.to_string, "1.0e13");;
             assert_eq(|_|"the smallest F32 written positionally",
                       1.0e-6_F32.to_string, "0.000001");;
             assert_eq(|_|"an F32 just under that window", 9.99e-7_F32.to_string, "9.99e-7");;
             assert_eq(|_|"the greatest F32", 3.4028235e38_F32.to_string, "3.4028235e38");;
-            assert_eq(|_|"the least positive F32", 1.4e-45_F32.to_string, "1e-45");;
+            assert_eq(|_|"the least positive F32", 1.4e-45_F32.to_string, "1.0e-45");;
 
-            // The widest text an `F32` reaches: a sign, a point, the five zeros the window's
+            // The widest text an `F32` reaches: a sign, `0.`, the five zeros the window's
             // lower edge allows and the eight digits that follow them.
             let widest = -1.0000001e-6_F32;
             assert_eq(|_|"the widest F32 text", widest.to_string, "-0.0000010000001");;
@@ -6092,11 +6092,11 @@ pub fn test_float_to_string_precision() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// Every text `to_string` writes for a normal number reads back as the number it was written
-/// from, which is what choosing the shortest digits is for. The walk crosses both edges of the
-/// window the point is written positionally in, at every scale either type reaches.
+/// Every text `to_string` writes for a number other than zero reads back as the number it was
+/// written from, and is spelled as a floating point literal of Fix. The walk crosses both edges of
+/// the window the point is written positionally in, at every scale either type reaches.
 #[test]
-pub fn test_float_to_string_round_trips_across_every_decade() {
+pub fn test_float_to_string_reads_back_as_a_literal_across_every_decade() {
     let source = r#"
         module Main;
 
@@ -6134,25 +6134,68 @@ pub fn test_float_to_string_round_trips_across_every_decade() {
             match back { ok(w) => w == v, err(_) => false }
         );
 
+        // Returns the index just past the run of digits that starts at `i` in `bytes`, or `none()`
+        // when no digit is at `i`.
+        //
+        // # Parameters
+        // * `bytes` - The text, without its null.
+        // * `i` - Where the digits start.
+        skip_digits : Array U8 -> I64 -> Option I64;
+        skip_digits = |bytes, i| (
+            let j = loop(i, |j|
+                if j < bytes.get_size && '0' <= bytes.@(j) && bytes.@(j) <= '9' { continue $ j + 1 }
+                else { break $ j }
+            );
+            if j == i { none() } else { some(j) }
+        );
+
+        // Whether `text` is spelled as a floating point literal of Fix: an optional `-`, digits, a
+        // point and digits, then optionally `e`, an optional `-` and digits.
+        //
+        // # Parameters
+        // * `text` - The text to look at.
+        is_float_literal : String -> Bool;
+        is_float_literal = |text| (
+            let bytes = text.get_bytes.get_sub(0, text.get_size);
+            let size = bytes.get_size;
+            let is_at = |i, c| i < size && bytes.@(i) == c;
+            let past_minus = |i| if is_at(i, '-') { i + 1 } else { i };
+            // The index past the digits, the point and the digits after it.
+            let past_point = skip_digits(bytes, past_minus(0)).bind(|i|
+                if is_at(i, '.') { skip_digits(bytes, i + 1) } else { none() }
+            );
+            match past_point {
+                none() => false,
+                some(i) => i == size || (is_at(i, 'e') && skip_digits(bytes, past_minus(i + 1)) == some(size))
+            }
+        );
+
         main : IO ();
         main = (
+            // `is_float_literal` accepts a literal with or without a power of ten, and rejects a
+            // text with no point or with no digit after it.
+            assert_eq(|_|"a literal with a power of ten", "-1.5e-10".is_float_literal, true);;
+            assert_eq(|_|"a literal without one", "0.25".is_float_literal, true);;
+            assert_eq(|_|"no point before the power of ten", "1e300".is_float_literal, false);;
+            assert_eq(|_|"no digit after the point", "1.".is_float_literal, false);;
+
             // Every power of ten an `F64` reaches, the subnormal ones included.
             let ok = Iterator::range(-323, 309).fold(true, |e, acc|
                 let p = Iterator::range(0, e.abs).fold(1.0, |_, x| if e < 0 { x / 10.0 } else { x * 10.0 });
                 [p, -p].to_iter.fold(acc, |v, acc|
-                    neighbours_f64(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f64)
+                    neighbours_f64(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f64 && w.to_string.is_float_literal)
                 )
             );
-            assert_eq(|_|"every F64 decade reads back as what it was written from", ok, true);;
+            assert_eq(|_|"every F64 decade reads back as what it was written from, written as a literal", ok, true);;
 
             // Every power of ten an `F32` reaches, the subnormal ones included.
             let ok = Iterator::range(-44, 39).fold(true, |e, acc|
                 let p = Iterator::range(0, e.abs).fold(1.0_F32, |_, x| if e < 0 { x / 10.0_F32 } else { x * 10.0_F32 });
                 [p, -p].to_iter.fold(acc, |v, acc|
-                    neighbours_f32(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f32)
+                    neighbours_f32(v).to_iter.fold(acc, |w, acc| acc && w.round_trips_f32 && w.to_string.is_float_literal)
                 )
             );
-            assert_eq(|_|"every F32 decade reads back as what it was written from", ok, true);;
+            assert_eq(|_|"every F32 decade reads back as what it was written from, written as a literal", ok, true);;
 
             pure()
         );
@@ -6282,11 +6325,11 @@ pub fn test_float_from_string_reads_decimal_texts() {
 
             // A number between the least subnormal and the greatest finite number is read, and
             // one beyond either is out of range.
-            expect(0.0, "5e-324", "5e-324");;
+            expect(0.0, "5e-324", "5.0e-324");;
             expect(0.0, "1.7976931348623157e308", "1.7976931348623157e308");;
             expect(0.0, "1e-400", out_of_range("1e-400"));;
             expect(0.0, "-1e400", out_of_range("-1e400"));;
-            expect(0.0_F32, "1e-45", "1e-45");;
+            expect(0.0_F32, "1e-45", "1.0e-45");;
             expect(0.0_F32, "3.4028235e38", "3.4028235e38");;
             expect(0.0_F32, "1e-50", out_of_range("1e-50"));;
             expect(0.0_F32, "3.5e38", out_of_range("3.5e38"));;
@@ -6294,11 +6337,11 @@ pub fn test_float_from_string_reads_decimal_texts() {
             // Each range ends where the nearest number of the type becomes zero or an infinity: at
             // half the least subnormal, and halfway from the greatest finite number to the next
             // power of two. A text inside either end is read as the number it rounds to.
-            expect(0.0, "3e-324", "5e-324");;
+            expect(0.0, "3e-324", "5.0e-324");;
             expect(0.0, "2e-324", out_of_range("2e-324"));;
             expect(0.0, "1.7976931348623158e308", "1.7976931348623157e308");;
             expect(0.0, "1.797693134862315808e308", out_of_range("1.797693134862315808e308"));;
-            expect(0.0_F32, "8e-46", "1e-45");;
+            expect(0.0_F32, "8e-46", "1.0e-45");;
             expect(0.0_F32, "7e-46", out_of_range("7e-46"));;
             expect(0.0_F32, "3.4028235677e38", "3.4028235e38");;
             expect(0.0_F32, "3.4028235678e38", out_of_range("3.4028235678e38"));;
@@ -9417,6 +9460,35 @@ pub fn test_mutate_boxed_io_shared() {
             );
             assert_eq(|_|"", x.@value, 0_I32);;
             assert_eq(|_|"", y.@value, 0x00333231_I32);; // '1' = 0x31, '2' = 0x32, '3' = 0x33, '\0' = 0x00
+            pure()
+        );
+    "##;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `mutate_elements` and `mutate_boxed` run in a global value's initializer, and a write through
+/// either one to the global afterwards goes to a copy: the global keeps what its initializer wrote.
+#[test]
+pub fn test_mutate_elements_and_mutate_boxed_in_global_initializer() {
+    let source = r##"
+        module Main;
+
+        g_arr : Array U8;
+        g_arr = [0_U8, 0_U8].mutate_elements(|ptr| FFI_CALL_IO[Ptr memset(Ptr, CInt, CSizeT), ptr, 7.c_int, 1.c_size_t]).@0;
+
+        g_box : Box I32;
+        g_box = Box { value : 0_I32 }.mutate_boxed(|ptr| FFI_CALL_IO[Ptr memset(Ptr, CInt, CSizeT), ptr, 7.c_int, 1.c_size_t]).@0;
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"", g_arr, [7_U8, 0_U8]);;
+            assert_eq(|_|"", g_box.@value, 7_I32);;
+            let (arr, _) = g_arr.mutate_elements(|ptr| FFI_CALL_IO[Ptr memset(Ptr, CInt, CSizeT), ptr, 9.c_int, 2.c_size_t]);
+            let (box, _) = g_box.mutate_boxed(|ptr| FFI_CALL_IO[Ptr memset(Ptr, CInt, CSizeT), ptr, 9.c_int, 1.c_size_t]);
+            assert_eq(|_|"", arr, [9_U8, 9_U8]);;
+            assert_eq(|_|"", box.@value, 9_I32);;
+            assert_eq(|_|"", g_arr, [7_U8, 0_U8]);;
+            assert_eq(|_|"", g_box.@value, 7_I32);;
             pure()
         );
     "##;

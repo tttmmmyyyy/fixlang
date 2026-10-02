@@ -864,7 +864,7 @@ main = (
 );
 "#;
 
-    // The same, where the observation is reached by an inline-LLVM operation applying an operand.
+    // The same, where the observation is reached by a builtin operation applying an operand.
     //
     // `Option::mod_some` names no function: the modifier arrives as an operand and the operation's
     // generated code applies it. A call graph built from the callees of `App` alone stops there, and
@@ -961,7 +961,7 @@ main = (
         test_source_without_valgrind(OBSERVED_UNIQUENESS_THROUGH_A_GLOBAL_CLOSURE_SOURCE);
     }
 
-    /// As `test_observed_uniqueness_survives_borrowing`, reached by an inline-LLVM operation that
+    /// As `test_observed_uniqueness_survives_borrowing`, reached by a builtin operation that
     /// applies one of its operands rather than by a call.
     #[test]
     pub fn test_observed_uniqueness_survives_borrowing_through_an_applied_operand() {

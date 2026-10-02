@@ -4,6 +4,7 @@ use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
+    hash::{Hash, Hasher},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -13,7 +14,6 @@ use std::{
 /// The content and the hash are computed on the first request and kept, so a file that is asked
 /// for many times is read once. The path is what a serialized `SourceFile` carries; the content
 /// and the hash are read again wherever it is deserialized.
-// PROOF: D/A, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SourceFile {
     /// The path the file is read from. It names the file: two `SourceFile`s are equal, and are
@@ -33,7 +33,6 @@ pub struct SourceFile {
     origin: Option<Arc<SourceOrigin>>,
 }
 
-// PROOF: D/A, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialEq for SourceFile {
     /// Two source files are equal when their paths are equal. The content and the hash are what
     /// the path names, so they follow from it.
@@ -42,10 +41,8 @@ impl PartialEq for SourceFile {
     }
 }
 
-// PROOF: D/A, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Eq for SourceFile {}
 
-// PROOF: D/A, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl PartialOrd for SourceFile {
     /// Source files are ordered by their paths, which orders every pair of them, so this always
     /// answers with an ordering.
@@ -54,7 +51,6 @@ impl PartialOrd for SourceFile {
     }
 }
 
-// PROOF: D/A, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Ord for SourceFile {
     /// Orders source files by their paths.
     fn cmp(&self, other: &Self) -> Ordering {
@@ -62,7 +58,13 @@ impl Ord for SourceFile {
     }
 }
 
-// PROOF: D/A, P2a, P3, P4, P15, P16, P17, P18, P18c, P19, P20, P21, P22, P23, P24, T (dev-docs/proof/rc_ir/borrow-cancel)
+impl Hash for SourceFile {
+    /// Hashes a source file by its path, which is what names it.
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.file_path.hash(state);
+    }
+}
+
 impl SourceFile {
     /// The content of the file. It is read from disk on the first request and kept for the later
     /// ones.
@@ -296,8 +298,7 @@ pub fn line_comment_text(comment: &str) -> &str {
 ///
 /// It owns the file it points into, so it can be stored in the syntax tree and written into the
 /// compiler's caches, where a `pest::Span` lives only as long as the content it borrows.
-// PROOF: P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Span {
     /// The file the range lies in.
     pub input: SourceFile,
@@ -307,7 +308,6 @@ pub struct Span {
     pub end: usize,
 }
 
-// PROOF: P2a, P15, P16, P17, P18, T (dev-docs/proof/rc_ir/borrow-cancel)
 impl Span {
     /// A span over `src` that covers nothing: it begins past every position of the file and ends
     /// before every one, so uniting it with a span answers with that span itself.

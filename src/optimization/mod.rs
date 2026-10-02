@@ -3,6 +3,7 @@ mod capture_struct;
 mod closure_specialization;
 mod collapse_constructions;
 mod dead_symbol_elimination;
+mod decapture_scope_functions;
 mod defunctionalize_fix;
 #[allow(dead_code)]
 mod eta_expansion;
@@ -10,6 +11,7 @@ mod find_usage_of_name;
 mod inline;
 mod inline_local;
 mod let_elimination;
+mod move_bodies;
 pub mod optimization;
 mod optimize_act;
 mod pull_let;

@@ -4,15 +4,38 @@
 
 ### Added
 
+#### Language
+
+- #787: A field of a struct literal or of a struct pattern can be written by its name alone. `S { x, y: 2 }` means `S { x: x, y: 2 }`, where the second `x` is the value named `x`. `let S { x, y: y2 } = s;` binds `x` to the field `x` of `s`, as `let S { x: x, y: y2 } = s;` does.
+- #790: A struct pattern can write `_` after its fields to leave out the other fields of the struct: `let S { x, _ } = s;`.
+
 #### Tool
 
 - #785: `fix test` now runs the Fix examples in comments, the code blocks whose info string begins with the word `fix`. An example passes when it exits with status 0. `fix test --doc` runs the examples alone, and `fix test --no-doc` runs `Test::test` alone. The module name `DocTest` and the module names beginning with `DocTest.` are now reserved for the examples: `fix test` rejects a module of such a name when it has an example to compile. See "Fix examples in comments" in `Document.md` for how to write an example.
+- #790: The language server offers two quick fixes for a struct pattern that leaves out fields without `_`: write each missing field as `name: _`, or write `_` after the fields.
+
+### Changed
+
+#### Language
+
+- #790: A struct pattern that leaves out fields of its struct without writing `_` is now warned about. When you add a field to a struct, the warning points out each pattern that takes the struct apart. Add the missing fields to the pattern, or write `_` after its fields. A future version of Fix will report such a pattern as an error.
+- #790: `_` can no longer be the name of a struct field or a union variant. Names that start with `_`, such as `_x`, are still allowed.
+
+#### Std
+
+- #792: `F64::to_string` and `F32::to_string` now write a number with a single significant digit and a power of ten as `1.0e300`, where they wrote `1e300`. The text they write for a finite number is now always a valid floating point literal of Fix, with `_F32` after it for an `F32`.
+
+#### Tool
+
+- #780: `install.sh` now lists the releases newest first and offers the newest full release as the default. The default used to be whichever release GitHub listed first, which could be a pre-release such as `v1.5.0-rc.1`. Pre-releases are marked `(pre-release)` in the list, and you can install one by typing its name.
 
 ### Fixed
 
 #### Tool
 
 - #785: When renaming a type rewrites a whole import statement, the language server now keeps an empty item list under a namespace, such as `Ns::{}`, instead of writing it as an import of a type or trait named `Ns`.
+- #790: The quick fix that adds the missing fields to a struct literal now writes them after the last field when a comment ends the field list, and at the right place on a line with characters such as emoji before the literal. It used to write them into the comment or a few characters off, which could break the code.
+- #780: A failed download in `install.sh` now leaves `~/.local/bin/fix` as it was. It used to leave an empty or partly written `fix` there, and later runs then took it for an installed one and installed nothing. `install.sh` can now also upgrade `fix` while it is running, for example as your editor's language server.
 
 ## [1.5.0] - 2026-09-27
 
@@ -33,6 +56,8 @@ Fix 1.5.0 makes programs faster, and builds them faster, than Fix 1.4.0.
 | Union-find | 1.06x |
 | Convolution modulo a prime | 1.05x |
 
+NOTE: The bipartite matching speedup needs care in reading. The benchmark's code keeps a reference to an array while it updates that array, instead of using the array linearly as Fix code should, and under 1.4.0 this copied the whole array on every augmenting path. The 1.5.0 compiler avoids that copy, but code written properly avoided it under 1.4.0 as well.
+
 **Builds take less time and memory.** Building cp-library's test suite from scratch takes 29% less time (53.3 s -> 37.7 s) and 38% less memory (1.46 GB -> 0.90 GB). Rebuilding it after a one-line edit takes 9% less time (39.1 s -> 35.6 s) and 48% less memory.
 
 ### Added
@@ -46,7 +71,7 @@ Fix 1.5.0 makes programs faster, and builds them faster, than Fix 1.4.0.
 
 - #767: LSP: The quick fix "Insert stub implementations" for a missing trait member now writes the parameters the member's documentation lists in its "Parameters" section, e.g. `compare : a -> a -> Ordering = |lhs, rhs| ?;`. A member with no "Parameters" section is stubbed as `= ?;`.
 - LSP: Hovering a `_` in a type annotation shows the type it was inferred to. This works in expression annotations and in let-binding annotations.
-- #214: LSP: Completion inside an `import` statement now offers what belongs there instead of expression symbols. You get module names where the module goes, the module's namespaces and entities where the items go (including inside `::{...}` and after `hiding`), and the `hiding` keyword after a complete module path.
+- #214: LSP: Completion in an `import` statement now suggests things you can import there, not the names used in expressions. It suggests module names for the module, the module's namespaces, types, traits and values for the items (also inside `::{...}` and after `hiding`), and the `hiding` keyword after the module name.
 - #638, #689, #705, #709, #729: Added the `--check-integer-operations` compiler option and the `check_integer_operations` field of the project file. They stop the program on a signed integer overflow, on a shift by an amount outside the width of its type, or on a conversion of a floating-point value to an integer type that does not hold it, and the report names the operation and the values: `Signed integer overflow: I64 addition, with 9223372036854775807 and 1`, `Shift amount outside the width of the type: I64 shift_left, with 64`, `Floating-point value outside the range of the integer type: F64 to I64, with nan`. The overflow check covers `+`, `-`, `*`, unary `-`, `/` and `%` on `I8`, `I16`, `I32` and `I64`; unsigned arithmetic wraps instead of overflowing, so it is never checked. The shift check covers every integer type, signed and unsigned. The conversion check covers every conversion from `F32` and `F64` to an integer type.
 - #723: Added the `--develop-mode` compiler option. It builds your program with the consistency checks the compiler's own test suite builds under: they cost run time, and they stop the program where one of them fails.
 - #188: Added the `--skip-eval` compiler option and the `skip_eval` field of the project file. They compile `eval {expr0}; {expr1}` as `{expr1}`, so you can leave a debugging `eval debug_println(...)` out of a build without editing the source.

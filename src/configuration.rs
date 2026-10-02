@@ -876,7 +876,6 @@ impl Configuration {
     /// The scope is the compiler's own passes. LLVM's pipeline follows the optimization level alone
     /// (`llvm_passes`), so that a build made to exercise a Fix pass keeps the LLVM effort its level
     /// asks for.
-    // PROOF: T (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn force_all_optimizations(&self) -> bool {
         false
     }
@@ -885,7 +884,6 @@ impl Configuration {
     ///
     /// # Arguments
     /// * `level` — the lowest optimization level the pass is written to run at.
-    // PROOF: T (dev-docs/proof/rc_ir/borrow-cancel)
     fn runs_from(&self, level: FixOptimizationLevel) -> bool {
         self.force_all_optimizations() || self.fix_opt_level >= level
     }
@@ -933,6 +931,14 @@ impl Configuration {
         self.runs_from(FixOptimizationLevel::Max)
     }
 
+    /// Move the capture list of the function given to an op applying it with an environment into
+    /// that environment, so that the function needs no closure object. Runs at `Max` and above,
+    /// where closure specialization runs: it is what makes every such function a global function
+    /// applied to its capture list, which is the shape this pass rewrites.
+    pub fn enable_decapture_scope_functions(&self) -> bool {
+        self.runs_from(FixOptimizationLevel::Max)
+    }
+
     /// Replace a destructuring that meets the construction it reads by what the construction put
     /// there. Runs at `Max` and above: it is what carries a value through the `Option` an iterator's
     /// `advance` builds, and closure specialization, which reads what it leaves, runs there.
@@ -972,7 +978,6 @@ impl Configuration {
     /// then cancels the reference counting the borrow makes net-zero. Its full benefit relies on
     /// closure specialization and inlining (which are also `Max`-only), and it adds compile-time
     /// analysis, so it runs only at `Max` and above; `Basic` stays lighter for faster compilation.
-    // PROOF: T (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn enable_borrow_optimization(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Max)
     }

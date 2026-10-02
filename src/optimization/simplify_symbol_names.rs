@@ -13,13 +13,12 @@ use crate::{
         expr::ExprNode,
         name::FullName,
         program::Program,
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
+        traverse::{EndVisitResult, ExprVisitor, VisitState},
     },
     constants::INSTANCIATED_NAME_SEPARATOR,
     misc::{insert_to_map_vec, Map},
 };
 
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run(prg: &mut Program) {
     // Get all names and unique them.
     let mut all_names = vec![];
@@ -141,7 +140,6 @@ struct SimplifyName {
 }
 
 impl ExprVisitor for SimplifyName {
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         let var = expr.get_var();
         let name = &var.clone().name;
@@ -153,183 +151,24 @@ impl ExprVisitor for SimplifyName {
         EndVisitResult::unchanged(expr)
     }
 
-    fn start_visit_var(
+    fn end_visit_builtin(
         &mut self,
-        _expr: &Arc<ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn start_visit_llvm(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    ) -> EndVisitResult {
         let mut changed = false;
-        let mut llvm = expr.get_llvm().as_ref().clone();
-        let generator = &mut llvm.generator;
-        for llvm_fv in generator.free_vars_mut() {
-            if let Some(new_name) = self.old_to_new_names.get(llvm_fv) {
-                *llvm_fv = new_name.clone();
+        let mut builtin = expr.get_builtin().as_ref().clone();
+        let op = &mut builtin.op;
+        for op_fv in op.free_vars_mut() {
+            if let Some(new_name) = self.old_to_new_names.get(op_fv) {
+                *op_fv = new_name.clone();
                 changed = true;
             }
         }
         if changed {
-            let expr = expr.set_llvm(llvm);
+            let expr = expr.set_builtin(builtin);
             return EndVisitResult::changed(expr);
         }
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_app(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_lam(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_let(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_if(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_match(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn end_visit_tyanno(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_make_struct(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn end_visit_make_struct(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_array_lit(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn end_visit_array_lit(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_ffi_call(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn end_visit_ffi_call(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_eval(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         EndVisitResult::unchanged(expr)
     }
 }

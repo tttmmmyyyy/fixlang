@@ -1,13 +1,12 @@
 use super::{
     application_inlining, closure_specialization, collapse_constructions, dead_symbol_elimination,
-    defunctionalize_fix, inline, inline_local, optimize_act, remove_tyanno, simplify_symbol_names,
-    skip_eval, split_struct_args, uncurry, unwrap_newtype,
+    decapture_scope_functions, defunctionalize_fix, inline, inline_local, optimize_act,
+    remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args, uncurry, unwrap_newtype,
 };
 use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
 
 /// Rewrite `prg` in place by running the optimization passes in order, each one gated by the
 /// setting in `config` that turns it on. A pass sees the program the passes above it left.
-// PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn run(prg: &mut Program, config: &Configuration) {
     let _sw = StopWatch::new("optimization::run", config.verbose);
 
@@ -127,6 +126,28 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config.enable_closure_specialization(),
         "closure_specialization",
         |prg| closure_specialization::run(prg, config.verbose),
+    );
+
+    // Move the capture list of the function given to a scope op such as
+    // `Std::Array::borrow_elements` into the op's environment operand, so that the function captures
+    // nothing. It runs after closure specialization, which leaves every such function a global
+    // function applied to its capture list.
+    run_pass(
+        prg,
+        config,
+        config.enable_decapture_scope_functions(),
+        "decapture_scope_functions",
+        decapture_scope_functions::run,
+    );
+
+    // Read the tuple the pass above builds for the function whose body it put in place of a call
+    // into the pattern taking that tuple apart in the body.
+    run_pass(
+        prg,
+        config,
+        config.enable_decapture_scope_functions() && config.enable_collapse_constructions(),
+        "collapse_constructions",
+        collapse_constructions::run,
     );
 
     run_pass(

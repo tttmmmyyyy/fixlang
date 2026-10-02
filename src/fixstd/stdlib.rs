@@ -22,27 +22,26 @@ use crate::{
         array_append_capacity_unchecked, array_append_value_capacity_unchecked,
         array_borrow_elements, array_check_range, array_check_size,
         array_copy_capacity_bounds_unchecked, array_get_capacity, array_get_size,
-        array_is_storage_unique_function, array_mutate_elements_internal,
-        array_mutate_elements_ios_internal, array_punch, array_set_capacity_bounds_unchecked,
-        array_truncate_bounds_unchecked, array_unsafe_empty, array_unsafe_get_bounds_unchecked,
-        bit_not_function, bitwise_operation_function, boxed_from_retained_ptr_ios,
-        boxed_to_retained_ptr_ios, boxed_trait_instance, cast_between_float_function,
-        cast_between_integral_function, cast_float_to_int_function, cast_int_to_float_function,
-        destructor_make, divide_trait_instance_float, divide_trait_instance_int,
-        eq_trait_instance_float, eq_trait_instance_int, eq_trait_instance_ptr, fix, floating_types,
-        get_get_boxed_ptr, get_mutate_boxed_internal, get_mutate_boxed_ios_internal, get_ptr_array,
-        get_release_function_of_boxed_value, get_retain_function_of_boxed_value, grow_size_array,
-        hole_function, infinity_value, integral_types, is_unique_function,
-        less_than_or_equal_to_trait_instance_float, less_than_or_equal_to_trait_instance_int,
-        less_than_trait_instance_float, less_than_trait_instance_int, make_bool_ty,
-        make_dynamic_object_ty, make_floating_ty, make_integral_ty, make_iostate_unsafe_create,
-        make_ptr_ty, mark_threaded_function, multiply_trait_instance_float,
-        multiply_trait_instance_int, negate_trait_instance_float, negate_trait_instance_int,
-        not_trait_instance_bool, offset_from_function, punched_array_plug, quiet_nan_value,
-        remainder_trait_instance_int, set_array, shift_function, subtract_trait_instance_float,
-        subtract_trait_instance_int, swap_array, swap_bounds_unchecked_array,
-        undefined_internal_function, unsafe_set_bounds_unchecked_array, with_retained_function,
-        BitOperationType,
+        array_is_storage_unique_function, array_mutate_elements_ios_internal, array_punch,
+        array_set_capacity_bounds_unchecked, array_truncate_bounds_unchecked, array_unsafe_empty,
+        array_unsafe_get_bounds_unchecked, bit_not_function, bitwise_operation_function,
+        borrow_boxed_function, boxed_from_retained_ptr_ios, boxed_to_retained_ptr_ios,
+        boxed_trait_instance, cast_between_float_function, cast_between_integral_function,
+        cast_float_to_int_function, cast_int_to_float_function, destructor_make,
+        divide_trait_instance_float, divide_trait_instance_int, eq_trait_instance_float,
+        eq_trait_instance_int, eq_trait_instance_ptr, fix, floating_types, get_get_boxed_ptr,
+        get_mutate_boxed_ios_internal, get_ptr_array, get_release_function_of_boxed_value,
+        get_retain_function_of_boxed_value, grow_size_array, hole_function, infinity_value,
+        integral_types, is_unique_function, less_than_or_equal_to_trait_instance_float,
+        less_than_or_equal_to_trait_instance_int, less_than_trait_instance_float,
+        less_than_trait_instance_int, make_bool_ty, make_dynamic_object_ty, make_floating_ty,
+        make_integral_ty, make_iostate_unsafe_create, make_ptr_ty, mark_threaded_function,
+        multiply_trait_instance_float, multiply_trait_instance_int, negate_trait_instance_float,
+        negate_trait_instance_int, not_trait_instance_bool, offset_from_function,
+        punched_array_plug, quiet_nan_value, remainder_trait_instance_int, set_array,
+        shift_function, subtract_trait_instance_float, subtract_trait_instance_int, swap_array,
+        swap_bounds_unchecked_array, undefined_internal_function,
+        unsafe_set_bounds_unchecked_array, with_retained_function, BitOperationType,
     },
     misc::{make_map, upper_camel_to_lower_snake, Map},
     parse::parser::parse_and_save_to_temporary_file,
@@ -118,7 +117,6 @@ fn register_deprecated_cast(
 
 /// Builds the `Std` module: the source `std.fix` parsed, plus the type aliases, trait instances and
 /// global values whose definitions the compiler supplies.
-// PROOF: D/A, P26, A21 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     let mut fix_module = parse_and_save_to_temporary_file(STD_SOURCE, "std", config)?;
 
@@ -561,13 +559,6 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("../docs/std_array_borrow_elements.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_mutate_elements_internal"),
-        array_mutate_elements_internal(),
-        None,
-        None,
-        Some(include_str!("../docs/std_array_mutate_elements_internal.md").to_string()),
-    ));
-    errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, ARRAY_NAME], "_mutate_elements_ios_internal"),
         array_mutate_elements_ios_internal(),
         None,
@@ -681,11 +672,11 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         Some(include_str!("../docs/std_ffi_get_boxed_ptr.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
-        FullName::from_strs(&[STD_NAME, FFI_NAME], "_mutate_boxed_internal"),
-        get_mutate_boxed_internal(),
+        FullName::from_strs(&[STD_NAME, FFI_NAME], "borrow_boxed"),
+        borrow_boxed_function(),
         None,
         None,
-        Some(include_str!("../docs/std_ffi_mutate_boxed_internal.md").to_string()),
+        Some(include_str!("../docs/std_ffi_borrow_boxed.md").to_string()),
     ));
     errors.eat_err(fix_module.add_global_value(
         FullName::from_strs(&[STD_NAME, FFI_NAME], "_mutate_boxed_ios_internal"),

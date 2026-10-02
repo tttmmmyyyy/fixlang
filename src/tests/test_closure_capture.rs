@@ -5,8 +5,11 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_util::{
-        build_run_and_read_rc_ir, build_within_and_run, rc_ir_function_bodies,
+    use crate::{
+        configuration::{Configuration, FixOptimizationLevel, ValgrindTool},
+        tests::test_util::{
+            build_run_and_read_rc_ir, build_within_and_run, rc_ir_function_bodies, test_source,
+        },
     };
     use std::time::Duration;
 
@@ -55,21 +58,25 @@ mod tests {
         );
     }
 
-    /// A lambda with no free variable, handed to a built-in that takes a closure. The built-in is
-    /// what leaves a closure to look at: a Fix function handed the same lambda is specialized on it,
-    /// and then none is built.
+    /// A lambda with no free variable, handed to a built-in that stores it as a closure. The
+    /// built-in is what leaves a closure to look at: a Fix function handed the same lambda is
+    /// specialized on it, and a built-in that applies its function in a scope takes the capture list
+    /// through its environment, and then none is built.
     const NO_FREE_VARIABLE_SOURCE: &str = r#"
         module Main;
 
-        _length : Array U8 -> I64;
-        _length = |bytes| bytes.borrow_elements(|ptr| FFI_CALL[I64 strlen(Ptr), ptr]);
+        _make_destructor : I64 -> IO (Destructor I64);
+        _make_destructor = |n| Destructor::make(n, |m| pure $ m + 1);
 
         main : IO ();
-        main = println $ _length("0123456789".get_bytes).to_string;
+        main = (
+            let dtor = *_make_destructor(9);
+            println $ dtor.borrow(|n| n).to_string
+        );
     "#;
 
-    /// What `NO_FREE_VARIABLE_SOURCE` prints: the length of the string it measures.
-    const NO_FREE_VARIABLE_OUTPUT: &str = "10";
+    /// What `NO_FREE_VARIABLE_SOURCE` prints: the number the destructor holds.
+    const NO_FREE_VARIABLE_OUTPUT: &str = "9";
 
     /// A lambda with no free variable stores nothing.
     ///
@@ -87,28 +94,31 @@ mod tests {
             NO_FREE_VARIABLE_OUTPUT,
             "a lambda with no free variable handed to a built-in taking a closure",
         );
-        assert_closures_at_type_store_nothing(&dump, "Std::Ptr -> Std::I64");
+        assert_closures_at_type_store_nothing(
+            &dump,
+            "Std::I64 -> Std::IO::IOState -> (Std::IO::IOState, Std::I64)",
+        );
     }
 
     /// A lambda that captures a unit and reads it: the pair it answers with carries the unit it
-    /// captured, so the body reaches the captured name.
+    /// captured, so the body reaches the captured name. `Destructor::make` stores the lambda as a
+    /// closure, where a built-in that applies its function takes what the lambda captures through
+    /// an environment instead.
     const CAPTURES_A_UNIT_SOURCE: &str = r#"
         module Main;
 
-        _length_keeping_unit : () -> Array U8 -> ((), I64);
-        _length_keeping_unit = |unit, bytes| bytes.borrow_elements(
-            |ptr| (unit, FFI_CALL[I64 strlen(Ptr), ptr])
-        );
+        _keeping_unit : () -> I64 -> IO (Destructor ((), I64));
+        _keeping_unit = |unit, n| Destructor::make(((), n), |(_, m)| pure $ (unit, m + 1));
 
         main : IO ();
         main = (
-            let (_, length) = _length_keeping_unit((), "0123456789".get_bytes);
-            println $ length.to_string
+            let dtor = *_keeping_unit((), 9);
+            println $ dtor.borrow(|(_, n)| n).to_string
         );
     "#;
 
-    /// What `CAPTURES_A_UNIT_SOURCE` prints: the length of the string it measures.
-    const CAPTURES_A_UNIT_OUTPUT: &str = "10";
+    /// What `CAPTURES_A_UNIT_SOURCE` prints: the number the destructor holds.
+    const CAPTURES_A_UNIT_OUTPUT: &str = "9";
 
     /// A captured value that occupies no storage is read by the body that captured it, and the
     /// closure still stores nothing: the value the body reads is made inside the function the lambda
@@ -121,7 +131,10 @@ mod tests {
             CAPTURES_A_UNIT_OUTPUT,
             "a lambda capturing a unit and reading it",
         );
-        assert_closures_at_type_store_nothing(&dump, "Std::Ptr -> ((), Std::I64)");
+        assert_closures_at_type_store_nothing(
+            &dump,
+            "((), Std::I64) -> Std::IO::IOState -> (Std::IO::IOState, ((), Std::I64))",
+        );
 
         // The capture list `Main` declares for the lambda is made where it is read, rather than
         // projected out of a capture object the closure would have had to carry it in.
@@ -280,6 +293,197 @@ mod tests {
                 "the field should be plugged back at -O {}",
                 opt_level
             );
+        }
+    }
+    /// Lambdas capturing values that occupy storage, given to the three kinds of built-in that
+    /// apply a function in a scope: `borrow_elements` lends a pointer, `mutate_elements` lends one
+    /// into a uniquely owned array, and `Destructor::borrow` holds its value retained.
+    const SCOPE_BUILTINS_SOURCE: &str = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let offset = 3;
+            let bytes = "0123456789".get_bytes;
+            let length = bytes.borrow_elements(|ptr| FFI_CALL[I64 strlen(Ptr), ptr] + offset);
+            let (bytes, _) = bytes.mutate_elements(|ptr|
+                FFI_CALL_IO[() memset(Ptr, CInt, CSizeT), ptr, 65.to_CInt, offset.to_CSizeT]
+            );
+            let dtor = *Destructor::make("n=", |s| pure(s));
+            println $ dtor.borrow(|s| s + length.to_string + "," + offset.to_string)
+                + "," + bytes.borrow_elements(String::unsafe_from_c_str_ptr)
+        );
+    "#;
+
+    /// What `SCOPE_BUILTINS_SOURCE` prints.
+    const SCOPE_BUILTINS_OUTPUT: &str = "n=13,3,AAA3456789";
+
+    /// The lines of `dump` building a closure that takes its capture list through the environment a
+    /// built-in applying a function in a scope hands it. The standard library gives such a built-in
+    /// the environment `()`, so the function takes `(((), c), ...)`, where `c` is a capture list
+    /// closure specialization minted.
+    fn closures_taking_a_capture_list_through_the_environment(dump: &str) -> Vec<&str> {
+        dump.lines()
+            .filter(|line| {
+                line.contains("= closure ")
+                    && line.contains(" : (((), ")
+                    && line.contains("#CapList@")
+            })
+            .collect()
+    }
+
+    /// A lambda given to a built-in that applies it in a scope takes what it captures through the
+    /// environment the built-in hands it, so the closure built from it stores nothing and allocates
+    /// no capture object.
+    #[test]
+    fn test_a_lambda_given_to_a_scope_builtin_stores_nothing() {
+        let dump = build_run_and_read_rc_ir(
+            SCOPE_BUILTINS_SOURCE,
+            "max",
+            SCOPE_BUILTINS_OUTPUT,
+            "lambdas capturing values, given to built-ins applying a function in a scope",
+        );
+        let built = closures_taking_a_capture_list_through_the_environment(&dump);
+        // The standard library builds closures of this kind for what it prints, so the closure of
+        // each built-in's lambda is picked out by its type after the capture list: the rest of the
+        // tuple the lambda is applied to, and what the lambda returns.
+        for (builtin, type_after_capture_list) in [
+            ("borrow_elements", "), Std::Ptr) -> Std::I64 "),
+            (
+                "mutate_elements",
+                "), Std::Ptr, Std::IO::IOState) -> (Std::IO::IOState, ()) ",
+            ),
+            (
+                "Destructor::borrow",
+                "), Std::FFI::Destructor (Std::Array Std::U8)) -> Std::Array Std::U8 ",
+            ),
+        ] {
+            assert!(
+                built
+                    .iter()
+                    .any(|line| line.contains(type_after_capture_list)),
+                "the lambda given to `{}` should be built as a closure taking its capture list \
+                 through the environment:\n{}",
+                builtin,
+                dump
+            );
+        }
+        for line in built {
+            assert!(
+                line.trim_end().ends_with("[]"),
+                "a closure taking its captures through the environment should store nothing:\n{}",
+                line
+            );
+        }
+    }
+
+    /// A function handing the function it takes to a built-in that applies a function in a scope,
+    /// inside a lambda that calls it.
+    const CALLS_ITS_ARGUMENT_IN_A_SCOPE_SOURCE: &str = r#"
+        module Main;
+
+        // Appends up to `max_size` bytes that `write` puts at a pointer, and keeps as many as it
+        // reports.
+        _append_written : I64 -> (Ptr -> IO I64) -> Array U8 -> Array U8;
+        _append_written = |max_size, write, bytes| (
+            let size = bytes.@size;
+            let bytes = bytes.reserve(size + max_size)._unsafe_grow_size(size + max_size);
+            let (bytes, length) = bytes.mutate_elements(|ptr| write(ptr.add_offset(size)));
+            bytes.truncate(size + length)
+        );
+
+        main : IO ();
+        main = (
+            let bytes = range(0, 3).fold(Array::empty(0), |i, bytes|
+                bytes._append_written(8, |ptr|
+                    FFI_CALL_IO[() memset(Ptr, CInt, CSizeT), ptr, (65 + i).to_CInt, 2.to_CSizeT]
+                        .map(|_| 2)
+                )
+            );
+            println $ bytes.to_iter.map(to_string).join(",")
+        );
+    "#;
+
+    /// What `CALLS_ITS_ARGUMENT_IN_A_SCOPE_SOURCE` prints: two bytes from each of the three writes.
+    const CALLS_ITS_ARGUMENT_IN_A_SCOPE_OUTPUT: &str = "65,65,66,66,67,67";
+
+    /// A function whose lambda given to a built-in applying a function in a scope calls the function
+    /// the caller passed is specialized on that function, as it is where the lambda is given
+    /// anywhere else, so no closure is built for what the caller passed.
+    #[test]
+    fn test_a_function_calling_its_argument_in_a_scope_is_specialized_on_it() {
+        let dump = build_run_and_read_rc_ir(
+            CALLS_ITS_ARGUMENT_IN_A_SCOPE_SOURCE,
+            "max",
+            CALLS_ITS_ARGUMENT_IN_A_SCOPE_OUTPUT,
+            "a function calling the function it takes inside a built-in applying it in a scope",
+        );
+        // The lambda `mutate_elements` is given stands as a closure taking its capture list through
+        // the environment, which is what says the build reached the scope at all.
+        let built = closures_taking_a_capture_list_through_the_environment(&dump);
+        assert!(
+            built.iter().any(|line| line.contains("Std::Ptr, Std::IO::IOState)")),
+            "the lambda given to `mutate_elements` should be built as a closure taking its capture \
+             list through the environment:\n{}",
+            dump
+        );
+        // What `main` passes as `write` is a known lambda, so no closure is built for it.
+        let write_closures = dump
+            .lines()
+            .filter(|line| {
+                line.contains("= closure ")
+                    && line.contains(
+                        " : Std::Ptr -> Std::IO::IOState -> (Std::IO::IOState, Std::I64) ",
+                    )
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            write_closures.is_empty(),
+            "no closure should be built for the function passed as `write`:\n{}",
+            write_closures.join("\n")
+        );
+    }
+
+    /// Values captured by lambdas given to built-ins that apply a function in a scope: a lambda
+    /// nested in another, whose captures include the pointer the outer one is lent, and a lambda
+    /// that captures the array it writes through, so that the write lands on a copy.
+    const MOVED_CAPTURES_SOURCE: &str = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let offset = 3;
+            let bytes = "0123456789".get_bytes;
+            let other = "abcdef".get_bytes;
+            let nested = bytes.borrow_elements(|p| other.borrow_elements(|q|
+                FFI_CALL[I64 strlen(Ptr), p] * 100 + FFI_CALL[I64 strlen(Ptr), q] + offset
+            ));
+            assert_eq(|_|"nested", nested, 1009);;
+            let (written, _) = bytes.mutate_elements(|ptr|
+                FFI_CALL_IO[() memset(Ptr, CInt, CSizeT), ptr, bytes.@(1).to_CInt, offset.to_CSizeT]
+            );
+            assert_eq(|_|"original", bytes.borrow_elements(String::unsafe_from_c_str_ptr), "0123456789");;
+            assert_eq(|_|"written", written.borrow_elements(String::unsafe_from_c_str_ptr), "1113456789");;
+            let dtor = *Destructor::make("n=", |s| pure(s));
+            assert_eq(|_|"retained", dtor.borrow(|s| s + nested.to_string), "n=1009");;
+            pure()
+        );
+    "#;
+
+    /// What the lambdas capture reaches them with the values it had where the lambdas were written,
+    /// at every optimization level: through the environment at `-O max`, and through the closure
+    /// below it. Memcheck finds no leak or double free in the reference counting of either.
+    #[test]
+    fn test_captures_moved_into_the_environment_keep_their_values() {
+        for opt_level in [
+            FixOptimizationLevel::None,
+            FixOptimizationLevel::Basic,
+            FixOptimizationLevel::Max,
+        ] {
+            let mut config = Configuration::develop_mode();
+            config.set_fix_opt_level(opt_level);
+            config.set_valgrind(ValgrindTool::MemCheck);
+            test_source(MOVED_CAPTURES_SOURCE, config);
         }
     }
 }

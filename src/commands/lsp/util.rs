@@ -4,7 +4,7 @@ use super::server::{get_file_content_at_previous_diagnostics, LatestContent};
 use crate::ast::expr::{Expr, ExprNode};
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::PatternNode;
-use crate::ast::program::{EndNode, Program, SymbolExpr};
+use crate::ast::program::{EndNode, Program};
 use crate::ast::traits::TraitId;
 use crate::ast::typedecl::TypeDeclValue;
 use crate::ast::types::TyCon;
@@ -96,6 +96,17 @@ pub(super) fn position_to_bytes(string: &str, position: Position) -> usize {
         }
     }
     bytes
+}
+
+/// The `lsp_types::Position` of the byte offset `bytes` in `string`, its column counted in UTF-16
+/// code units as the protocol counts them. `position_to_bytes` is its inverse.
+pub(super) fn bytes_to_position(string: &str, bytes: usize) -> Position {
+    let before = &string[..bytes];
+    let line_start = before.rfind('\n').map_or(0, |i| i + 1);
+    Position {
+        line: before.matches('\n').count() as u32,
+        character: before[line_start..].encode_utf16().count() as u32,
+    }
 }
 
 /// Returns true when the cursor of `text_position` sits inside a comment
@@ -295,11 +306,7 @@ pub(super) fn find_local_occurrences(
         if gv.find_node_at(name, pos).is_none() {
             continue;
         }
-        let roots: Vec<&Arc<ExprNode>> = match &gv.expr {
-            SymbolExpr::Simple(te) => vec![&te.expr],
-            SymbolExpr::Method(impls) => impls.iter().map(|m| &m.expr.expr).collect(),
-        };
-        for root in roots {
+        for root in gv.expr.exprs() {
             let mut stack: Vec<(FullName, Span)> = vec![];
             let Some(def_span) = find_enclosing_binder(root, pos, target, &mut stack) else {
                 continue;
@@ -351,7 +358,7 @@ fn find_enclosing_binder(
     };
 
     match &*expr.expr {
-        Expr::Var(_) | Expr::LLVM(_) => lookup(stack),
+        Expr::Var(_) | Expr::Builtin(_) => lookup(stack),
         Expr::App(func, args) => {
             if let Some(s) = find_enclosing_binder(func, pos, target, stack) {
                 return Some(s);
@@ -521,7 +528,7 @@ fn collect_uses_of_binding(
                 }
             }
         }
-        Expr::LLVM(_) => {}
+        Expr::Builtin(_) => {}
         Expr::App(func, args) => {
             collect_uses_of_binding(func, target, def_span, stack, out);
             for a in args {

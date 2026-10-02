@@ -15,9 +15,10 @@ use super::server::{send_response, DiagnosticsResult, LatestContent, ResponseErr
 use super::util::{
     find_local_occurrences, get_current_dir, path_to_uri, resolve_source_pos, span_to_range,
 };
-use crate::ast::expr::{Expr, ExprNode};
+use crate::ast::expr::{Expr, ExprNode, FieldSrc};
 use crate::ast::import::{ImportStatement, ImportTreeNode};
 use crate::ast::name::{FullName, Name, NameSpace};
+use crate::ast::pattern::Pattern;
 use crate::ast::program::{EndNode, Program, SymbolExpr};
 use crate::ast::traits::TraitId;
 use crate::ast::typedecl::TypeDeclValue;
@@ -147,14 +148,20 @@ pub(super) fn handle_rename(
                 };
                 let mut spans = vec![occ.definition];
                 spans.extend(occ.uses);
-                rename_edits(spans, new_name)
+                rename_value_edits(program, spans, new_name)
             } else {
-                rename_edits(find_global_value_references(program, name, true), new_name)
+                rename_value_edits(
+                    program,
+                    find_global_value_references(program, name, true),
+                    new_name,
+                )
             }
         }
-        EndNode::ValueDecl(name) => {
-            rename_edits(find_global_value_references(program, name, true), new_name)
-        }
+        EndNode::ValueDecl(name) => rename_value_edits(
+            program,
+            find_global_value_references(program, name, true),
+            new_name,
+        ),
         EndNode::Type(tycon) => collect_type_rename_edits(program, tycon, new_name),
         EndNode::TypeOrTrait(name) => {
             // Resolve to either a type or a trait. Type takes precedence
@@ -175,9 +182,19 @@ pub(super) fn handle_rename(
             new_name,
         ),
         EndNode::Field(tc, name) | EndNode::Variant(tc, name) => {
+            let shorthand_fields = shorthand_fields(program);
             find_field_occurrences(program, tc, name, true)
                 .into_iter()
-                .map(|occ| (occ.span, format!("{}{}", occ.prefix, new_name)))
+                .map(|occ| {
+                    if occ.is_shorthand {
+                        // The renamed field itself, written as its name alone: the name keeps
+                        // naming the value or the binder.
+                        (occ.span, field_written_with_value(new_name, name))
+                    } else {
+                        let text = format!("{}{}", occ.prefix, new_name);
+                        value_edit(&shorthand_fields, occ.span, text)
+                    }
+                })
                 .collect()
         }
         EndNode::Module(_) => unreachable!("Module rename is filtered out earlier"),
@@ -195,6 +212,70 @@ pub(super) fn handle_rename(
 /// One edit per span, each replacing the span with `new_text`.
 fn rename_edits(spans: Vec<Span>, new_text: &Name) -> Vec<(Span, String)> {
     spans.into_iter().map(|s| (s, new_text.clone())).collect()
+}
+
+/// One edit per span, each renaming the value named there to `new_name`.
+fn rename_value_edits(program: &Program, spans: Vec<Span>, new_name: &Name) -> Vec<(Span, String)> {
+    let shorthand_fields = shorthand_fields(program);
+    spans
+        .into_iter()
+        .map(|span| value_edit(&shorthand_fields, span, new_name.clone()))
+        .collect()
+}
+
+/// The edit that writes `text` over the name of a value at `span`. Where a struct field is written
+/// as its name alone at `span` (`S { x }`), that name also names the field, so the field is written
+/// out with `text` as its value (`x: text`) and keeps its name.
+///
+/// # Arguments
+/// * `shorthand_fields` — the field written as its name alone at each span, as `shorthand_fields`
+///   collects them.
+fn value_edit(shorthand_fields: &Map<Span, Name>, span: Span, text: String) -> (Span, String) {
+    let text = match shorthand_fields.get(&span) {
+        Some(field) => field_written_with_value(field, &text),
+        None => text,
+    };
+    (span, text)
+}
+
+/// The text of a struct field written with its value or binder. A rename writes a field that was
+/// written as its name alone this way, so that the field and the value keep their own names.
+///
+/// # Examples
+/// `field_written_with_value("x", "a")` is `x: a`.
+fn field_written_with_value(field: &Name, value: &Name) -> String {
+    format!("{}: {}", field, value)
+}
+
+/// The name of every field of a struct construction or a struct pattern written as its name alone,
+/// keyed by the span of that name.
+fn shorthand_fields(program: &Program) -> Map<Span, Name> {
+    /// Records each field of `fields` written as its name alone into `out`.
+    fn record<T>(fields: &[(Name, Option<FieldSrc>, T)], out: &mut Map<Span, Name>) {
+        for (name, field_src, _) in fields {
+            if let Some(field_src) = field_src {
+                if field_src.is_shorthand {
+                    out.insert(field_src.name_src.clone(), name.clone());
+                }
+            }
+        }
+    }
+    let mut out = Map::default();
+    for gv in program.global_values.values() {
+        gv.expr.walk_nodes(&mut |node| {
+            if let Expr::MakeStruct(_, fields) = &*node.expr {
+                record(fields, &mut out);
+            }
+        });
+        gv.expr.walk_patterns(&mut |pat| {
+            pat.walk_nodes(&mut |node| {
+                if let Pattern::Struct(_, fields, _) = &node.pattern {
+                    record(fields, &mut out);
+                }
+            });
+        });
+    }
+    out
 }
 
 /// Refuses a rename starting on an auto-generated accessor, or on a symbol
@@ -791,15 +872,8 @@ fn walk_symbol_expr_for_inline_qualified(
     new_name: &Name,
     edits: &mut Vec<(Span, String)>,
 ) {
-    match expr {
-        SymbolExpr::Simple(typed_expr) => {
-            walk_expr_for_inline_qualified(&typed_expr.expr, pick, old_name, new_name, edits);
-        }
-        SymbolExpr::Method(impls) => {
-            for impl_ in impls {
-                walk_expr_for_inline_qualified(&impl_.expr.expr, pick, old_name, new_name, edits);
-            }
-        }
+    for e in expr.exprs() {
+        walk_expr_for_inline_qualified(e, pick, old_name, new_name, edits);
     }
 }
 
@@ -823,7 +897,7 @@ fn walk_expr_for_inline_qualified(
                 }
             }
         }
-        Expr::LLVM(_) => {}
+        Expr::Builtin(_) => {}
         Expr::App(func, args) => {
             walk_expr_for_inline_qualified(func, pick, old_name, new_name, edits);
             for a in args {

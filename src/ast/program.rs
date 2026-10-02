@@ -5,9 +5,9 @@ use crate::ast::expr::{expr_var, Expr, ExprNode, Var};
 use crate::ast::import::{is_accessible, ImportItem, ImportStatement};
 use crate::ast::kind_scope::KindEnv;
 use crate::ast::name::{FullName, Name, NameSpace};
-use crate::ast::pattern::PatternNode;
+use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
-use crate::ast::typedecl::{Field, TypeDeclValue, TypeDefn};
+use crate::ast::typedecl::{describe_field_names, Field, TypeDeclValue, TypeDefn};
 use crate::ast::types::{
     is_opaque_tyvar, AssocType, Kind, OpaqueTyConResolution, Scheme, TyAliasInfo, TyCon, TyConInfo,
     TyConVariant, TypeNode,
@@ -27,7 +27,9 @@ use crate::elaboration::desugar_opaque::{
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
-use crate::error::{Error, Errors, WARN_DEPRECATED, WARN_UNDECLARED_DEPENDENCY};
+use crate::error::{
+    Error, Errors, WARN_DEPRECATED, WARN_MISSING_PATTERN_FIELD, WARN_UNDECLARED_DEPENDENCY,
+};
 use crate::ffi::{c_entry_point_signature, unpassable_variadic_type_msg, CSignature};
 use crate::fixstd::builtin::{
     boxed_trait_instance, bulitin_tycons, make_io_unit_ty, make_unit_ty, struct_act,
@@ -47,6 +49,7 @@ use crate::printer::Text;
 use crate::type_size::{no_size_reason, LayoutWalk};
 use build_time::build_time_utc;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::Write;
@@ -57,7 +60,6 @@ use std::vec;
 
 /// What a program declares about its types: the type constructors and the type aliases it can name,
 /// and which of the newtypes among them a value has stopped being built at.
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone)]
 pub struct TypeEnv {
     /// The declaration of every type constructor, built-in and user-defined, by its name.
@@ -78,10 +80,8 @@ pub struct TypeEnv {
     unwrapped_newtypes: Arc<Set<TyCon>>,
 }
 
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Default for TypeEnv {
     /// An environment in which no type constructor and no type alias is declared.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn default() -> Self {
         Self {
             tycons: Arc::new(Default::default()),
@@ -91,11 +91,9 @@ impl Default for TypeEnv {
     }
 }
 
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl TypeEnv {
     /// An environment holding `tycons` and `aliases` as declared, with every newtype among them
     /// still a type values are built at.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn new(tycons: Map<TyCon, TyConInfo>, aliases: Map<TyCon, TyAliasInfo>) -> TypeEnv {
         TypeEnv {
             tycons: Arc::new(tycons),
@@ -113,7 +111,6 @@ impl TypeEnv {
     ///
     /// Every newtype recorded is one this environment declares, which is what lets
     /// `unwrapped_newtype_info` answer with a declaration rather than with the possibility of one.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unwrap_newtypes(&mut self, newtypes: Set<TyCon>) {
         for tycon in &newtypes {
             assert!(
@@ -136,7 +133,6 @@ impl TypeEnv {
     /// The declaration of `tycon` if a value of it has become a value of its one field, and `None`
     /// otherwise. A recorded newtype is one this environment declares, which `unwrap_newtypes`
     /// states where it records them.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unwrapped_newtype_info(&self, tycon: &TyCon) -> Option<&TyConInfo> {
         if !self.unwrapped_newtypes.contains(tycon) {
             return None;
@@ -152,7 +148,6 @@ impl TypeEnv {
     /// Adds each declaration of `new_tycons` to this environment, replacing the one already held
     /// under the same name, each with its field types unwrapped, so that a declaration minted after
     /// the newtype-unwrapping pass answers as the ones that were there before it do.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_tycons(&mut self, new_tycons: Map<TyCon, TyConInfo>) {
         let declared_type_env = self.clone();
         let mut tycons = self.tycons.as_ref().clone();
@@ -166,7 +161,6 @@ impl TypeEnv {
     }
 
     /// The declaration of every type constructor this environment holds, by its name.
-    // PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn tycons(&self) -> &Map<TyCon, TyConInfo> {
         &self.tycons
     }
@@ -216,7 +210,6 @@ impl TypeEnv {
 
     /// Replace every type alias written in the definition of a type constructor of this environment
     /// by the type it stands for, so that a stage reading a field or variant type meets no alias.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_type_aliases_in_tycons(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         let type_env = self.clone();
@@ -450,29 +443,33 @@ impl SymbolExpr {
         }
     }
 
-    /// Visit every `Expr::Var` occurrence inside this symbol's expression(s).
-    /// For `Method`, walks every per-impl expression in turn.
-    pub fn walk_var_uses<F: FnMut(&Var, &Option<Span>)>(&self, f: &mut F) {
+    /// The expressions that define this symbol: the one expression of a value, or the expression
+    /// of each implementation of a trait member.
+    pub fn exprs(&self) -> Vec<&Arc<ExprNode>> {
         match self {
-            SymbolExpr::Simple(te) => te.expr.walk_var_uses(f),
-            SymbolExpr::Method(impls) => {
-                for impl_ in impls {
-                    impl_.expr.expr.walk_var_uses(f);
-                }
-            }
+            SymbolExpr::Simple(te) => vec![&te.expr],
+            SymbolExpr::Method(impls) => impls.iter().map(|m| &m.expr.expr).collect(),
         }
     }
 
-    /// Visit every pattern (in `Let` / `Match` arms) inside this symbol's
-    /// expression(s).
+    /// Visit every `Expr::Var` occurrence inside this symbol's expressions.
+    pub fn walk_var_uses<F: FnMut(&Var, &Option<Span>)>(&self, f: &mut F) {
+        for expr in self.exprs() {
+            expr.walk_var_uses(f);
+        }
+    }
+
+    /// Visit every node inside this symbol's expressions.
+    pub fn walk_nodes<F: FnMut(&ExprNode)>(&self, f: &mut F) {
+        for expr in self.exprs() {
+            expr.walk_nodes(f);
+        }
+    }
+
+    /// Visit every pattern (in `Let` / `Match` arms) inside this symbol's expressions.
     pub fn walk_patterns<F: FnMut(&Arc<PatternNode>)>(&self, f: &mut F) {
-        match self {
-            SymbolExpr::Simple(te) => te.expr.walk_patterns(f),
-            SymbolExpr::Method(impls) => {
-                for impl_ in impls {
-                    impl_.expr.expr.walk_patterns(f);
-                }
-            }
+        for expr in self.exprs() {
+            expr.walk_patterns(f);
         }
     }
 }
@@ -799,13 +796,11 @@ impl Program {
     }
 
     /// Declares the type `Std::Tuple{tuple_size}`.
-    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     fn add_tuple_defn(&mut self, tuple_size: u32) {
         self.type_defns.push(tuple_defn(tuple_size));
     }
 
     /// Declares the tuple type of each size the program uses, once per size.
-    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_tuple_defns(&mut self) {
         // Make elements of used_tuple_sizes unique.
         self.used_tuple_sizes.sort();
@@ -955,7 +950,6 @@ impl Program {
     /// giving each type variable written on the right-hand side of a definition its kind. A name
     /// two definitions declare is reported as an error, and the second definition is left out of
     /// the environment.
-    // PROOF: P1, P2, P5, P6, P7, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn calculate_type_env(&mut self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         let mut tycons = bulitin_tycons();
@@ -1014,7 +1008,6 @@ impl Program {
     /// The type of every top-level symbol of the program, by name. Compiling one unit needs the
     /// types of the symbols the other units define as well, since this unit's code refers to them,
     /// so this covers the whole program rather than any one unit.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn global_types(&self) -> Map<FullName, Arc<TypeNode>> {
         self.symbols
             .iter()
@@ -1871,7 +1864,7 @@ impl Program {
                     expr.set_var_var(v)
                 }
             }
-            Expr::LLVM(_) => expr.clone(),
+            Expr::Builtin(_) => expr.clone(),
             Expr::App(fun, args) => {
                 let fun = self.instantiate_expr(fun)?;
                 let args = collect_results(args.iter().map(|arg| self.instantiate_expr(arg)))?;
@@ -2011,7 +2004,6 @@ impl Program {
 
     /// The global value of each trait member, paired with the name it is registered under, built
     /// from the trait environment alone.
-    // PROOF: P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn trait_member_symbols(&self) -> Vec<(FullName, GlobalValue)> {
         let mut member_symbols: Vec<(FullName, GlobalValue)> = vec![];
         for (trait_id, trait_) in &self.trait_env.traits {
@@ -2087,7 +2079,6 @@ impl Program {
     /// needs endlessly many layouts. `no_size_reason` decides the first and bounds the second. Code
     /// generation would meet either as a descent through the fields that never ends, so this runs
     /// once the program's types are instantiated and before any of them is laid out.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn validate_layouts(&self) -> Result<(), Errors> {
         let type_env = self.type_env();
 
@@ -2323,7 +2314,6 @@ impl Program {
     /// Only the calls a program reaches are reported, so the symbols have to be instantiated by the
     /// time this runs. Run it before the program is optimized, while each expression still carries
     /// the source it came from.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn check_multi_threading_requirement(&self, config: &Configuration) -> Result<(), Errors> {
         if config.threaded {
             return Ok(());
@@ -2363,13 +2353,22 @@ impl Program {
         ))
     }
 
+    /// The diagnostics read off the type-checked expressions of the user's own code: the uses of
+    /// deprecated items, and the struct patterns that leave out fields without `_`. They are
+    /// reported alongside the elaborated program.
+    pub fn collect_diagnostics_of_typed_program(&self, config: &Configuration) -> Errors {
+        let mut diagnostics = self.collect_deprecation_diagnostics(config);
+        diagnostics.append(self.collect_missing_pattern_field_diagnostics(config));
+        diagnostics
+    }
+
     /// The uses of items marked `DEPRECATED[...]` that this program makes, as warnings, or as
     /// errors where `Configuration.deprecation_mode` is `Deny`.
     ///
     /// The diagnostics are scoped to the user's own code by `Configuration.root_source_files`: a
     /// use is reported where its source span lies in one of those files, so that what is reported
     /// is what the user can edit.
-    pub fn collect_deprecation_diagnostics(&self, config: &Configuration) -> Errors {
+    fn collect_deprecation_diagnostics(&self, config: &Configuration) -> Errors {
         let mut diagnostics = Errors::empty();
         // Exhaustive match: a new `DeprecationMode` variant must be handled here.
         let promote_to_error = match config.deprecation_mode {
@@ -2378,15 +2377,7 @@ impl Program {
             DeprecationMode::Deny => true,
         };
 
-        // Canonicalize the user-code file set once so per-use comparisons
-        // are simple `HashSet` lookups. Paths that fail to canonicalize
-        // (e.g. they no longer exist) are dropped; a missing file just
-        // won't match any use site, which is the safe direction.
-        let user_files: Set<PathBuf> = config
-            .root_source_files
-            .iter()
-            .filter_map(|p| to_absolute_path(p).ok())
-            .collect();
+        let user_files = UserSourceFiles::of(config);
 
         for (_gv_name, gv) in &self.global_values {
             // Skip uses inside an item that is itself deprecated. This is the
@@ -2420,11 +2411,7 @@ impl Program {
                     Some(s) => s,
                     None => continue,
                 };
-                let abs = match to_absolute_path(span.input.reported_path()) {
-                    Ok(p) => p,
-                    Err(_) => continue,
-                };
-                if !user_files.contains(&abs) {
+                if !user_files.contains_span(span) {
                     continue;
                 }
                 let msg = format!(
@@ -2440,6 +2427,79 @@ impl Program {
                 err.code = Some(WARN_DEPRECATED);
                 diagnostics.append(Errors::from_err(err));
             }
+        }
+        diagnostics
+    }
+
+    /// The struct patterns of the user's own code that leave out fields of their struct without
+    /// writing `_` after the fields they name, as warnings.
+    ///
+    /// A pattern that names every field of its struct is reported once a field is added to the
+    /// struct, so each place that takes the struct apart gets looked at again. A pattern that
+    /// leaves fields out on purpose says so with `_` (`S { x, _ }`).
+    ///
+    /// The diagnostics are scoped to the user's own code by `Configuration.root_source_files`, as
+    /// `collect_deprecation_diagnostics` scopes its own.
+    fn collect_missing_pattern_field_diagnostics(&self, config: &Configuration) -> Errors {
+        let user_files = UserSourceFiles::of(config);
+        let mut reports: Vec<(Span, Arc<TyCon>, Vec<Name>)> = vec![];
+        for gv in self.global_values.values() {
+            gv.expr.walk_patterns(&mut |pat| {
+                pat.walk_nodes(&mut |node| {
+                    let Pattern::Struct(tc, fields, false) = &node.pattern else {
+                        return;
+                    };
+                    let Some(span) = &node.info.source else {
+                        return;
+                    };
+                    if !user_files.contains_span(span) {
+                        return;
+                    }
+                    // A head that names no struct, which the language server's error-tolerant
+                    // check leaves in place, has no fields to compare against.
+                    let Some(ti) = self
+                        .type_env
+                        .tycons()
+                        .get(tc)
+                        .filter(|ti| ti.variant == TyConVariant::Struct)
+                    else {
+                        return;
+                    };
+                    let written: Set<&Name> = fields.iter().map(|(name, _, _)| name).collect();
+                    let missing: Vec<Name> = ti
+                        .fields
+                        .iter()
+                        .filter(|f| !written.contains(&f.name))
+                        .map(|f| f.name.clone())
+                        .collect();
+                    if !missing.is_empty() {
+                        reports.push((span.clone(), tc.clone(), missing));
+                    }
+                });
+            });
+        }
+        // The values are held in a map, so an order is chosen here to keep the report the same
+        // from one build to the next.
+        reports.sort_by(|(lhs, _, _), (rhs, _, _)| lhs.cmp(rhs));
+
+        let mut diagnostics = Errors::empty();
+        for (span, tc, missing) in reports {
+            let pronoun = if missing.len() == 1 { "it" } else { "them" };
+            let mut err = Error::warning_from_msg_srcs(
+                format!(
+                    "This pattern leaves out the {} of struct `{}`.\n\
+                     HINT: add {} to the pattern, or write `_` after the fields to leave out the \
+                     rest.\n\
+                     NOTE: a future version of Fix will report this as an error.",
+                    describe_field_names(&missing),
+                    tc.to_string(),
+                    pronoun,
+                ),
+                &[&Some(span)],
+            );
+            err.code = Some(WARN_MISSING_PATTERN_FIELD);
+            err.data = Some(json!(missing));
+            diagnostics.append(Errors::from_err(err));
         }
         diagnostics
     }
@@ -2489,11 +2549,7 @@ impl Program {
         }
 
         // The files the user writes, which are the ones an import is reported in.
-        let user_files: Set<PathBuf> = config
-            .root_source_files
-            .iter()
-            .filter_map(|path| to_absolute_path(path).ok())
-            .collect();
+        let user_files = UserSourceFiles::of(config);
 
         // The earliest import reaching each undeclared project, by the project that makes it: the
         // two projects, the module named, and where it is named.
@@ -2510,7 +2566,7 @@ impl Program {
             let Ok(path) = to_absolute_path(&span.input.file_path) else {
                 continue;
             };
-            if !user_files.contains(&path) {
+            if !user_files.contains_path(&path) {
                 continue;
             }
             let Some(importing_project) = file_to_project.get(&path) else {
@@ -2685,7 +2741,6 @@ impl Program {
     ///
     /// The name on the left-hand side of a type, of a trait and of a global value is a full name by
     /// the time this runs, so what is resolved here is the names written to the right of them.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_namespace_not_in_expr(&mut self) -> Result<(), Errors> {
         let env = self.create_name_resolution_env();
         let mut ctx = NameResolutionContext::new("NA".to_string(), env.clone());
@@ -2761,7 +2816,6 @@ impl Program {
     /// Validates the definition of every type the program declares: the type variables it writes,
     /// the associated types written in the types it gives its fields, the field it declares twice,
     /// and the number of variants a union declares.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn validate_type_defns(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for type_defn in &self.type_defns {
@@ -2925,7 +2979,6 @@ impl Program {
     /// and the functorial actions for each field of a struct, and a constructor, an extractor, a
     /// test and a modifier for each variant of a union. Each is defined in the namespace of the
     /// type, under the name a source writes it by, with the documentation shown for it.
-    // PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_methods(self: &mut Program) -> Result<(), Errors> {
         let mut errors = Errors::empty();
         for defn in &self.type_defns.clone() {
@@ -3103,7 +3156,6 @@ impl Program {
     }
 
     /// Implements `Std::Boxed` for every boxed struct and every boxed union the program declares.
-    // PROOF: P26, A21 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn add_boxed_impls(&mut self) -> Result<(), Errors> {
         for defn in &self.type_defns {
             match &defn.value {
@@ -3471,7 +3523,6 @@ impl Program {
     /// The checker tolerates a type error where the `diagnostics` subcommand asks it to, so that an
     /// editor is given a typed expression for a file that does not check; every other subcommand
     /// checks strictly.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn create_typechecker(&self, config: &Configuration) -> TypeCheckContext {
         let error_tolerant = matches!(
             &config.subcommand,
@@ -3531,4 +3582,35 @@ pub enum EndNode {
     /// The type a `_` type wildcard written in a type annotation was inferred to, which hover
     /// displays.
     InferredType(Arc<TypeNode>),
+}
+
+/// The files of the user's own code, `Configuration.root_source_files`, as absolute paths. The
+/// diagnostics about what the user writes are scoped to these files.
+struct UserSourceFiles(Set<PathBuf>);
+
+impl UserSourceFiles {
+    /// The user's files of `config`. A path that fails to canonicalize (a file that no longer
+    /// exists) is dropped: no span can lie in it.
+    fn of(config: &Configuration) -> Self {
+        UserSourceFiles(
+            config
+                .root_source_files
+                .iter()
+                .filter_map(|p| to_absolute_path(p).ok())
+                .collect(),
+        )
+    }
+
+    /// Whether the absolute path `path` is one of the user's files.
+    fn contains_path(&self, path: &PathBuf) -> bool {
+        self.0.contains(path)
+    }
+
+    /// Whether `span` lies in one of the user's files. A span in the source assembled from a Fix
+    /// example lies in the file the example is written in.
+    fn contains_span(&self, span: &Span) -> bool {
+        to_absolute_path(span.input.reported_path())
+            .map(|path| self.contains_path(&path))
+            .unwrap_or(false)
+    }
 }

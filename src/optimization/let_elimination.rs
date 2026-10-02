@@ -5,7 +5,7 @@
 
 This optimization transforms `let x = {e0} in {e1}` into `{e1}[x:={e0}]` if one of the following conditions hold:
 1. `e0` is just a name (variable).
-2. `x` is used only once in `e1`, not appear as arguments to LLVM expression, and any of the following sub-conditions hold:
+2. `x` is used only once in `e1`, not appear as arguments to a builtin expression, and any of the following sub-conditions hold:
 2-a. {e0} is a lambda expression and the occurrence of `x` is in an application
 2-b. {e0} is strictly partial application (i.e. # of args < n) of names to a global lambda expression with n-arguments `f = |a1,...,an| ...`,
      and the occurrence of `x` is in an application
@@ -27,20 +27,20 @@ For the definition of "evaluates before any other local names", see the implemen
 ## Effects
 
 This transformation in case 1., i.e., transforming `let x = y in {e1}` into `{e1}[x:=y]` even improves the performance of the program.
-Consider the following example which contains InlineLLVM nodes:
+Consider the following example which contains BuiltinOpExpr nodes:
 
 ```
 let x = arr; // Retain `arr` here, because it will be used later.
-let n = LLVM<x.Array::@(i)>; // Release `x` here, because it will not be used later.
+let n = array_get(i, x); // Release `x` here, because it will not be used later.
 let y = arr;
-let m = LLVM<y.Array::@(j)>;
+let m = array_get(j, y);
 ```
 
 After removing renaming, the code will look like this:
 
 ```
-let n = LLVM<arr.Array::@(i)>; // By the implementation of `LLVM<arr.@(i)>`, the array will not be retained nor released since `arr` will be used later.
-let m = LLVM<arr.Array::@(j)>;
+let n = array_get(i, arr); // By the implementation of `array_get`, the array will not be retained nor released since `arr` will be used later.
+let m = array_get(j, arr);
 ```
 
 and the cost for retaining and releasing an array is saved.
@@ -100,66 +100,6 @@ struct LetEliminator<'a> {
 }
 
 impl<'a> ExprVisitor for LetEliminator<'a> {
-    // `ExprVisitor` declares every method without a default. The eliminating is done in
-    // `end_visit_let` and `end_visit_match`; every other method here is passed through, visiting
-    // the children and leaving the expression as it is.
-
-    fn start_visit_var(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_llvm(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_app(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_lam(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_let(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     /// Eliminates a `let` binding a name, putting the bound expression where the name is read,
     /// where one of the conditions the module documentation lists holds.
     fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
@@ -187,7 +127,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         let mut probe = FreeOccurrenceProbe::new(x.clone());
         probe.traverse(&e1);
 
-        if probe.count == 1 && !probe.is_argument_to_llvm {
+        if probe.count == 1 && !probe.is_argument_to_builtin {
             // Case 2 of the documentation at the top.
             let mut any_sub_condition_holds = false;
 
@@ -227,26 +167,6 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         EndVisitResult::unchanged(expr)
     }
 
-    fn start_visit_if(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_match(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
     /// Replaces a `match` of one arm, whose condition is a name and whose pattern binds a name,
     /// with the arm's body, the name the pattern binds renamed to the name the condition reads.
     fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
@@ -270,82 +190,6 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         let expr = rename_free_name(&val, pat_name, cond_name);
         EndVisitResult::changed(expr)
     }
-
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_tyanno(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_make_struct(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_make_struct(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_array_lit(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_array_lit(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_ffi_call(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_ffi_call(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_eval(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
 }
 
 /// A walk that inspects the free occurrences of a given name in an expression.
@@ -365,8 +209,8 @@ struct FreeOccurrenceProbe {
     used_before_any_other_local_names: bool,
     /// Is any occurrence of `target_name` captured by a lambda expression?
     is_captured_by_lambda: bool,
-    /// Does any occurrence of `target_name` stand as an argument of an LLVM expression?
-    is_argument_to_llvm: bool,
+    /// Does any occurrence of `target_name` stand as an argument of a builtin expression?
+    is_argument_to_builtin: bool,
 }
 
 impl FreeOccurrenceProbe {
@@ -387,7 +231,7 @@ impl FreeOccurrenceProbe {
             is_applied: false,
             used_before_any_other_local_names: true,
             is_captured_by_lambda: false,
-            is_argument_to_llvm: false,
+            is_argument_to_builtin: false,
         }
     }
 
@@ -421,21 +265,10 @@ impl FreeOccurrenceProbe {
 }
 
 impl ExprVisitor for FreeOccurrenceProbe {
-    // `ExprVisitor` declares every method without a default. Every method not documented below is
-    // passed through: the children are visited, and the expression itself is left as it is.
-
     /// Whether the traversal enters `expr`: only where the target name occurs free in it, since a
     /// subexpression leaving every occurrence as it stands has nothing to report.
     fn should_visit(&self, expr: &Arc<ExprNode>) -> bool {
         self.target_occurs_in(expr)
-    }
-
-    fn start_visit_var(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
     }
 
     /// Counts one occurrence: a variable expression is reached only where it is an occurrence of
@@ -452,31 +285,27 @@ impl ExprVisitor for FreeOccurrenceProbe {
         EndVisitResult::unchanged(expr)
     }
 
-    fn start_visit_llvm(
+    /// Counts each argument of the builtin expression that is the target name, and records that the
+    /// target name stands as an argument of a builtin expression. Such an expression is reached
+    /// only where it takes the target name, which it may do more than once.
+    fn end_visit_builtin(
         &mut self,
-        _expr: &Arc<ExprNode>,
+        expr: &Arc<ExprNode>,
         _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    /// Counts each argument of the LLVM expression that is the target name, and records that the
-    /// target name stands as an argument of an LLVM expression. Such an expression is reached only
-    /// where it takes the target name, which it may do more than once.
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
+    ) -> EndVisitResult {
         let occurrence_count = expr
-            .get_llvm()
-            .generator
+            .get_builtin()
+            .op
             .free_vars()
             .iter()
             .filter(|fv| **fv == self.target_name)
             .count();
         assert!(
             occurrence_count > 0,
-            "visited an LLVM expression taking no `{}` as an argument",
+            "visited a builtin expression taking no `{}` as an argument",
             self.target_name.to_string()
         );
-        self.is_argument_to_llvm = true;
+        self.is_argument_to_builtin = true;
         self.count += occurrence_count;
 
         EndVisitResult::unchanged(expr)
@@ -519,10 +348,6 @@ impl ExprVisitor for FreeOccurrenceProbe {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_lam(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
     /// Visits the bound expression, and the value expression unless the pattern gives the target
     /// name to another binding. The bound expression is evaluated ahead of the value, so a target
     /// name read in the value while the bound expression reads a local name leaves
@@ -556,10 +381,6 @@ impl ExprVisitor for FreeOccurrenceProbe {
         StartVisitResult::Return
     }
 
-    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
     /// The condition of an `if` is evaluated ahead of its branches, so a target name read in a
     /// branch while the condition reads a local name leaves `used_before_any_other_local_names`
     /// false.
@@ -576,10 +397,6 @@ impl ExprVisitor for FreeOccurrenceProbe {
         }
 
         StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 
     /// Visits the condition and the arms whose pattern leaves the target name standing for the
@@ -616,26 +433,6 @@ impl ExprVisitor for FreeOccurrenceProbe {
         StartVisitResult::Return
     }
 
-    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_tyanno(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
     /// A struct expression is reached only where the target name appears in some field, and the
     /// fields are evaluated as a group, so another field reading a local name leaves
     /// `used_before_any_other_local_names` false.
@@ -655,14 +452,6 @@ impl ExprVisitor for FreeOccurrenceProbe {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_make_struct(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
     /// An array literal is reached only where the target name appears in some element, and the
     /// elements are evaluated as a group, so another element reading a local name leaves
     /// `used_before_any_other_local_names` false.
@@ -675,14 +464,6 @@ impl ExprVisitor for FreeOccurrenceProbe {
             self.used_before_any_other_local_names = false;
         }
         StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_array_lit(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 
     /// An FFI call is reached only where the target name appears in some argument, and the
@@ -699,14 +480,6 @@ impl ExprVisitor for FreeOccurrenceProbe {
         StartVisitResult::VisitChildren
     }
 
-    fn end_visit_ffi_call(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
     /// The side expression of an `eval` is evaluated ahead of its main expression, so a target name
     /// read in the main expression while the side expression reads a local name leaves
     /// `used_before_any_other_local_names` false.
@@ -719,10 +492,6 @@ impl ExprVisitor for FreeOccurrenceProbe {
             self.used_before_any_other_local_names = false;
         }
         StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 }
 

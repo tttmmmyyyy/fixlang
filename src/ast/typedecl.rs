@@ -76,12 +76,10 @@ impl TypeDefn {
         Ok(())
     }
 
-    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn tycon(&self) -> TyCon {
         TyCon::new(self.name.clone())
     }
 
-    // PROOF: P1, P2, P5, P6, P7, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn tycon_info(&self, punched_struct_fields: &[usize]) -> TyConInfo {
         let kind = self.kind();
         let (variant, is_unbox, fields) = match &self.value {
@@ -115,7 +113,6 @@ impl TypeDefn {
     }
 
     // Calculate kind of tycon defined by this type definition.
-    // PROOF: D/A (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn kind(&self) -> Arc<Kind> {
         let mut kind = kind_star();
         for tv in self.tyvars.iter().rev() {
@@ -141,7 +138,6 @@ impl TypeDefn {
 
     // Return TypeNode defined by this type definition.
     // If the definition is higher kinded, it returns a fully applied type (i.e., returns a type of kind `*`).
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn applied_type(&self) -> Arc<TypeNode> {
         let args: Vec<Arc<TypeNode>> = self
             .tyvars
@@ -184,7 +180,6 @@ impl TypeDefn {
         ret
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn validate_tyvars(&self) -> Result<(), Errors> {
         // Check if type variables are not duplicated.
         let mut names = Set::<String>::default();
@@ -237,7 +232,6 @@ impl TypeDefn {
         Ok(())
     }
 
-    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_alias(&self) -> bool {
         self.value.is_alias()
     }
@@ -277,7 +271,6 @@ impl TypeDeclValue {
         }
     }
 
-    // PROOF: P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_alias(&self) -> bool {
         match self {
             TypeDeclValue::Alias(_) => true,
@@ -331,7 +324,6 @@ impl Struct {
         }
     }
 
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_boxed(&self) -> bool {
         !self.is_unbox
     }
@@ -374,7 +366,6 @@ impl Union {
         }
     }
 
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn is_boxed(&self) -> bool {
         !self.is_unbox
     }
@@ -401,7 +392,23 @@ impl TypeAlias {
     }
 }
 
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
+/// The fields named `names`, as a diagnostic names them in a sentence.
+///
+/// # Examples
+/// `["b"]` gives ``field `b` ``, and `["a", "b"]` gives ``fields `a`, `b` ``.
+pub fn describe_field_names(names: &[Name]) -> String {
+    let list = names
+        .iter()
+        .map(|name| format!("`{}`", name))
+        .collect::<Vec<_>>()
+        .join(", ");
+    if names.len() == 1 {
+        format!("field {}", list)
+    } else {
+        format!("fields {}", list)
+    }
+}
+
 #[derive(Clone)]
 pub struct Field {
     pub name: Name,
@@ -417,7 +424,6 @@ pub struct Field {
     pub name_src: Option<Span>,
 }
 
-// PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Field {
     pub fn make(name: Name, syn_ty: Arc<TypeNode>, source: Option<Span>) -> Self {
         Field {
@@ -435,14 +441,12 @@ impl Field {
         self.ty.find_node_at(pos)
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         self.syn_ty = self.syn_ty.resolve_namespace(ctx)?;
         self.ty = self.ty.resolve_namespace(ctx)?;
         Ok(())
     }
 
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn resolve_type_aliases(&mut self, type_env: &TypeEnv) -> Result<(), Errors> {
         self.ty = self.ty.resolve_type_aliases(type_env)?;
         Ok(())

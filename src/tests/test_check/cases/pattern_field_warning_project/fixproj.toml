@@ -1,0 +1,10 @@
+[general]
+name = "pattern-field-warning-project"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]
+
+[[dependencies]]
+name = "dep-with-partial-pattern"
+path = "./dep"

@@ -22,7 +22,7 @@
 //! `Ext` throughout this module abbreviates *external*: an object outside the local heap, which is
 //! what `RefcntState::GLOBAL` and `RefcntState::THREADED` both mean to reference counting.
 
-use crate::ast::inline_llvm::LLVMGen;
+use crate::ast::builtin_op::BuiltinOp;
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
 use crate::ast::types::TypeNode;
@@ -431,7 +431,7 @@ enum Rewritten {
     /// The clone of the callee the call is routed to.
     Callee(RcVar),
     /// The operation, annotated as acting on local objects.
-    Op(Box<dyn LLVMGen>),
+    Op(Box<dyn BuiltinOp>),
 }
 
 /// What a walk does besides computing shapes.
@@ -503,7 +503,7 @@ impl<'a> Walk<'a> {
                             _ => unreachable!("only a call is routed to another function"),
                         },
                         Some(Rewritten::Op(op)) => match rhs {
-                            RcRhs::Llvm(_, args) => RcRhs::Llvm(op, args.clone()),
+                            RcRhs::Builtin(_, args) => RcRhs::Builtin(op, args.clone()),
                             _ => unreachable!("only an operation is annotated in place"),
                         },
                         None => rhs.clone(),
@@ -577,13 +577,13 @@ impl<'a> Walk<'a> {
     fn walk_rhs(&mut self, result: &RcVar, rhs: &RcRhs) -> (ExtShape, Option<Rewritten>) {
         match rhs {
             RcRhs::Var(y) => (self.shape_of(y), None),
-            RcRhs::Llvm(llvm_gen, args) => {
+            RcRhs::Builtin(op, args) => {
                 let arg_shapes: Vec<ExtShape> = args.iter().map(|a| self.shape_of(a)).collect();
                 let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-                let declared = llvm_gen.result_locality(&result.ty, &arg_tys, self.type_env);
+                let declared = op.result_locality(&result.ty, &arg_tys, self.type_env);
                 let result_shape = declared.substitute(&arg_shapes);
-                let op = self.annotate_op(llvm_gen, &arg_tys, &arg_shapes, &result_shape);
-                (result_shape, op.map(Rewritten::Op))
+                let annotated = self.annotate_op(op, &arg_tys, &arg_shapes, &result_shape);
+                (result_shape, annotated.map(Rewritten::Op))
             }
             RcRhs::Closure(_, caps) => {
                 // `{funptr, capture}`: the capture object is freshly allocated, so its root is
@@ -737,13 +737,13 @@ impl<'a> Walk<'a> {
     /// A check the same `generate` emits without declaring is not covered and goes on reading it.
     fn annotate_op(
         &mut self,
-        llvm_gen: &Box<dyn LLVMGen>,
+        op: &Box<dyn BuiltinOp>,
         arg_tys: &[Arc<TypeNode>],
         arg_shapes: &[ExtShape],
         result_shape: &ExtShape,
-    ) -> Option<Box<dyn LLVMGen>> {
-        let check = llvm_gen.unique_check_operand(arg_tys, self.type_env);
-        let targets = llvm_gen.internal_rc_targets(arg_tys, self.type_env);
+    ) -> Option<Box<dyn BuiltinOp>> {
+        let check = op.unique_check_operand(arg_tys, self.type_env);
+        let targets = op.internal_rc_targets(arg_tys, self.type_env);
         if check.is_none() && targets.is_empty() {
             return None;
         }
@@ -784,7 +784,7 @@ impl<'a> Walk<'a> {
                 return None;
             }
         }
-        Some(llvm_gen.assuming_local())
+        Some(op.assuming_local())
     }
 
     /// The annotation of a `Destructure`, which counts every reference the node itself moves. Out of
@@ -1024,7 +1024,6 @@ fn clone_gate(
 
 /// Annotate the reference-counting operations of `prog` whose target is provably local, cloning a
 /// function per input locality its callers reach it with where that proof depends on the inputs.
-// PROOF: P31, A19, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let summaries = summarize(prog, type_env);
     let gate = clone_gate(prog, type_env, &summaries);

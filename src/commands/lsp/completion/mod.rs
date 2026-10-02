@@ -22,7 +22,7 @@ use super::util::{
 };
 use crate::ast::expr::{hole_full_name, Expr, ExprNode};
 use crate::ast::name::{FullName, NameSpace};
-use crate::ast::program::{EndNode, Program, SymbolExpr};
+use crate::ast::program::{EndNode, Program};
 use crate::ast::types::TypeNode;
 use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig, SubCommand};
 use crate::constants::chars_allowed_in_identifiers;
@@ -451,11 +451,7 @@ fn find_enclosing_gv(abs_path: &PathBuf, content: &str, cursor_byte: usize) -> O
     let program = parse_source_file(source_file, &config).ok()?;
     let covers = |span: Option<&Span>| span.map(|s| s.includes_byte(cursor_byte)).unwrap_or(false);
     for (name, gv) in program.global_values.iter() {
-        let hit = match &gv.expr {
-            SymbolExpr::Simple(e) => covers(e.expr.source.as_ref()),
-            SymbolExpr::Method(impls) => impls.iter().any(|m| covers(m.expr.expr.source.as_ref())),
-        };
-        if hit {
+        if gv.expr.exprs().iter().any(|e| covers(e.source.as_ref())) {
             return Some(name.clone());
         }
     }
@@ -494,15 +490,8 @@ fn find_innermost_hole_at(program: &Program, cursor: &SourcePosLite) -> Option<A
     let target = hole_full_name();
     let mut best: Option<Arc<ExprNode>> = None;
     for (_name, gv) in &program.global_values {
-        match &gv.expr {
-            SymbolExpr::Simple(te) => {
-                walk_for_hole(&te.expr, cursor, &target, &mut best);
-            }
-            SymbolExpr::Method(impls) => {
-                for m in impls {
-                    walk_for_hole(&m.expr.expr, cursor, &target, &mut best);
-                }
-            }
+        for expr in gv.expr.exprs() {
+            walk_for_hole(expr, cursor, &target, &mut best);
         }
     }
     best
@@ -560,7 +549,7 @@ fn recurse_for_hole(
     best: &mut Option<Arc<ExprNode>>,
 ) {
     match &*expr.expr {
-        Expr::Var(_) | Expr::LLVM(_) => {}
+        Expr::Var(_) | Expr::Builtin(_) => {}
         Expr::App(func, args) => {
             walk_for_hole(func, cursor, target, best);
             for a in args {

@@ -174,6 +174,18 @@ mod integration_tests {
         var_bound_on(binding_by_rhs(dump, rhs_prefix))
     }
 
+    /// Whether an RC IR line retains the variable `var` or one of its fields.
+    ///
+    /// # Examples
+    /// `is_retain_of("  retain v1.0 @local", "v1")` is `true`, and
+    /// `is_retain_of("  retain v12 @local", "v1")` is `false`.
+    fn is_retain_of(line: &str, var: &str) -> bool {
+        line.trim_start()
+            .strip_prefix("retain ")
+            .and_then(|rest| rest.split_whitespace().next())
+            .is_some_and(|target| target.split('.').next() == Some(var))
+    }
+
     /// The variable the binding named `source_name` (its `(as ...)` annotation) binds.
     fn var_bound_as(dump: &str, source_name: &str) -> String {
         var_bound_on(binding_by_source_name(dump, source_name))
@@ -211,14 +223,11 @@ mod integration_tests {
         let dump = emit_main_rc_ir(&project_dir);
 
         let container = var_bound_as(&dump, "h");
-        let retain_line = format!("retain {}", container);
         assert!(
-            !dump
-                .lines()
-                .any(|l| l.trim_start().starts_with(&retain_line)),
-            "a field read out of a boxed container should not retain the container, but `{}` \
+            !dump.lines().any(|l| is_retain_of(l, &container)),
+            "a field read out of a boxed container should not retain the container, but `retain {}` \
              stands in:\n{}",
-            retain_line,
+            container,
             dump
         );
     }
@@ -630,9 +639,9 @@ mod integration_tests {
             "struct_plug_in_0[unique]",
             // An `unsafe_is_unique`, whose flag folds to the constant `true`.
             "is_unique[unique]",
-            // The two `_mutate_boxed_internal` cores, on a freshly allocated value.
-            "mutate_boxed[unique]",
-            "mutate_boxed_ios[unique]",
+            // The `_mutate_boxed_ios_internal` core of `mutate_boxed` and `mutate_boxed_io`, on a
+            // freshly allocated value.
+            "mutate_ptr[unique]",
         ] {
             assert!(
                 dump.contains(elided),
@@ -705,40 +714,69 @@ mod integration_tests {
         );
     }
 
-    /// Verifies both halves of what a write through an array's element pointer declares — that its
-    /// own check is dropped on an array proven unique, and that the array it returns is `fresh` — for
-    /// the plain and the IO-context variant, which carry that array at different result positions.
-    #[test]
-    fn test_unique_check_elim_mutate_elements() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_mutate_elements");
+    /// Assert both halves of what the two writes through a lent pointer in the case `case` declare:
+    /// that each drops its own check on a value proven unique, and that the value each returns,
+    /// bound as `mutated` and `mutated_io`, is `fresh`.
+    fn assert_writes_through_lent_pointer_are_unique(case: &str) {
+        let (_temp_dir, project_dir) = setup_test_env(case);
         let dump = emit_main_rc_ir(&project_dir);
 
-        // The array each write hands back is uniquely owned, which is what lets the write that
+        // The value each write hands back is uniquely owned, which is what lets the write that
         // follows drop its check. A wrong result position would leave these of unknown sharing.
         assert_binding_prov(&dump, "mutated", "[fresh]");
         assert_binding_prov(&dump, "mutated_io", "[fresh]");
 
-        // Both writes go to an array nothing else holds, so both drop their check. The case's own
+        // Both writes go to a value nothing else holds, so both drop their check. The case's own
         // writes are the only ones in the dump, so the checked form appearing at all is a failure.
-        for elided in [
-            "array_mutate_elements[unique]",
-            "array_mutate_elements_ios[unique]",
-        ] {
-            assert!(
-                dump.contains(elided),
-                "the write to an array proven unique should render `{}`:\n{}",
-                elided,
-                dump
-            );
-        }
-        for checked in ["array_mutate_elements(", "array_mutate_elements_ios("] {
-            assert!(
-                !dump.contains(checked),
-                "no write should keep its check, but `{}` is in the dump:\n{}",
-                checked,
-                dump
-            );
-        }
+        assert_eq!(
+            dump.matches("mutate_ptr[unique]").count(),
+            2,
+            "both writes to a value proven unique should render `mutate_ptr[unique]`:\n{}",
+            dump
+        );
+        assert!(
+            !dump.contains("mutate_ptr("),
+            "no write should keep its check:\n{}",
+            dump
+        );
+    }
+
+    /// Verifies both halves of what a write through an array's element pointer declares: that its
+    /// own check is dropped on an array proven unique, and that the array it returns is `fresh`.
+    #[test]
+    fn test_unique_check_elim_mutate_elements() {
+        assert_writes_through_lent_pointer_are_unique("unique_elim_mutate_elements");
+    }
+
+    /// Verifies both halves of what a write through the pointer to a boxed value's payload
+    /// declares: that its own check is dropped on a value proven unique, and that the value it
+    /// returns is `fresh`.
+    #[test]
+    fn test_unique_check_elim_mutate_boxed() {
+        assert_writes_through_lent_pointer_are_unique("unique_elim_mutate_boxed");
+    }
+
+    /// Verifies that `borrow_boxed` borrows the value it lends a pointer into: nothing retains the
+    /// value to pay for the borrow, so a value still read afterwards is retained nowhere.
+    #[test]
+    fn test_borrow_boxed_retains_nothing() {
+        let (_temp_dir, project_dir) = setup_test_env("borrow_boxed");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let rec = var_bound_as(&dump, "rec");
+        assert!(
+            dump.lines()
+                .any(|l| l.contains("borrow_ptr(") && l.contains(&rec)),
+            "the case should lend a pointer into `{}`:\n{}",
+            rec,
+            dump
+        );
+        assert!(
+            !dump.lines().any(|l| is_retain_of(l, &rec)),
+            "`borrow_boxed` should not retain the value it borrows, but `retain {}` stands in:\n{}",
+            rec,
+            dump
+        );
     }
 
     /// Verifies that a write into an array read out of a global keeps its uniqueness check.

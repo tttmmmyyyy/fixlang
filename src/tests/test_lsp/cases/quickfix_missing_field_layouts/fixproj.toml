@@ -1,0 +1,6 @@
+[general]
+name = "quickfix-missing-field-layouts"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

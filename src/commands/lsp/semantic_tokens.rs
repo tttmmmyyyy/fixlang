@@ -25,11 +25,11 @@
 
 use super::server::{send_response, DiagnosticsResult, LatestContent};
 use super::util::corresponding_line_map;
-use crate::ast::expr::{Expr, ExprNode};
+use crate::ast::expr::{Expr, ExprNode, FieldSrc};
 use crate::ast::name::FullName;
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::predicate::Predicate;
-use crate::ast::program::{Program, SymbolExpr};
+use crate::ast::program::Program;
 use crate::ast::typedecl::TypeDeclValue;
 use crate::ast::types::{Scheme, TyCon, TyConVariant, Type, TypeNode};
 use crate::misc::{to_absolute_path, Map, Set};
@@ -318,11 +318,7 @@ impl<'a> Overlay<'a> {
                     self.push_value(&defn, T_FUNCTION);
                 }
             }
-            let roots: Vec<Arc<ExprNode>> = match &gv.expr {
-                SymbolExpr::Simple(te) => vec![te.expr.clone()],
-                SymbolExpr::Method(impls) => impls.iter().map(|m| m.expr.expr.clone()).collect(),
-            };
-            for root in &roots {
+            for root in gv.expr.exprs() {
                 if let Some(src) = &root.source {
                     if self.is_in_file(src) {
                         self.collect_expr(root);
@@ -477,7 +473,7 @@ impl<'a> Overlay<'a> {
             }
         }
         match &*expr.expr {
-            Expr::Var(_) | Expr::LLVM(_) => {}
+            Expr::Var(_) | Expr::Builtin(_) => {}
             Expr::App(func, args) => {
                 self.collect_expr(func);
                 for a in args {
@@ -515,10 +511,8 @@ impl<'a> Overlay<'a> {
                     let token_type = self.classify_tycon(tc);
                     self.push_type(aux, token_type);
                 }
-                for (_name, name_span, e) in fields {
-                    if let Some(s) = name_span {
-                        self.push_value(s, T_PROPERTY);
-                    }
+                for (_name, field_src, e) in fields {
+                    self.push_field_name(field_src);
                     self.collect_expr(e);
                 }
             }
@@ -553,16 +547,14 @@ impl<'a> Overlay<'a> {
                     self.collect_type(ty);
                 }
             }
-            Pattern::Struct(tc, fields) => {
+            Pattern::Struct(tc, fields, _) => {
                 // The struct type-constructor name (`info.aux_src`).
                 if let Some(aux) = &pat.info.aux_src {
                     let token_type = self.classify_tycon(tc);
                     self.push_type(aux, token_type);
                 }
-                for (_name, name_span, sub) in fields {
-                    if let Some(s) = name_span {
-                        self.push_value(s, T_PROPERTY);
-                    }
+                for (_name, field_src, sub) in fields {
+                    self.push_field_name(field_src);
                     self.collect_pattern(sub);
                 }
             }
@@ -571,6 +563,16 @@ impl<'a> Overlay<'a> {
                     self.push_value(s, T_ENUM_MEMBER);
                 }
                 self.collect_pattern(sub);
+            }
+        }
+    }
+
+    /// Emit a token for the field name a struct literal or a struct pattern writes. A field written
+    /// as its name alone is left to its value or its binder, which colors the same name.
+    fn push_field_name(&mut self, field_src: &Option<FieldSrc>) {
+        if let Some(field_src) = field_src {
+            if !field_src.is_shorthand {
+                self.push_value(&field_src.name_src, T_PROPERTY);
             }
         }
     }

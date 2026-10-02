@@ -26,8 +26,7 @@ module Main;
 // - a boxed-struct field `act` on a fresh struct -> the `struct_punch_0 [unique]` and
 //   `struct_plug_in_0 [unique]` it carries the update out with.
 // - `unsafe_is_unique` on a fresh boxed value -> `is_unique [unique]`, the flag folded to `true`.
-// - `mutate_boxed` and `mutate_boxed_io` on a fresh boxed value -> `mutate_boxed [unique]` and
-//   `mutate_boxed_ios [unique]`.
+// - `mutate_boxed` and `mutate_boxed_io` on a fresh boxed value -> `mutate_ptr [unique]`.
 type Rec = box struct { x : I64, y : I64 };
 
 namespace Array {

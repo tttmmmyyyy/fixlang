@@ -1,10 +1,10 @@
+pub mod builtin_op;
 pub mod collect_annotation_tyvars;
 pub mod deprecation;
 pub mod equality;
 pub mod export_statement;
 pub mod expr;
 pub mod import;
-pub mod inline_llvm;
 pub mod kind_scope;
 pub mod name;
 pub mod pattern;

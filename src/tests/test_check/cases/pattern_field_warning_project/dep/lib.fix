@@ -1,0 +1,7 @@
+module Dep;
+
+type Pair = struct { first : I64, second : I64 };
+
+// Leaves out `second` without `_`: a dependency's own pattern, which its user cannot edit.
+first_of : Pair -> I64;
+first_of = |Pair { first }| first;

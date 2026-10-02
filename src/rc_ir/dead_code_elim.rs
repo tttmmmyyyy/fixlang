@@ -17,7 +17,6 @@ use crate::rc_ir::ast::{collect_mentions, FuncRef, RcExprNode, RcProgram};
 /// globals and whose edges are the names one body mentions. Fix expressions are pure and a global is
 /// a call-once initializer run when a reader first asks for it, so a global no reader mentions
 /// computes a value nothing observes, and it is dropped like an uncalled function.
-// PROOF: P27, P29, P30, T (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn eliminate_unreachable(prog: &mut RcProgram) {
     let globals: Map<FullName, &RcExprNode> = prog
         .globals
@@ -68,7 +67,7 @@ pub fn eliminate_unreachable(prog: &mut RcProgram) {
 mod tests {
     use super::eliminate_unreachable;
     use crate::ast::name::FullName;
-    use crate::fixstd::builtin::InlineLLVMMakeStructBody;
+    use crate::fixstd::builtin::MakeStructOp;
     use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState};
     use crate::rc_ir::test_program::{func, global, global_name, prog, var};
     use std::sync::Arc;
@@ -217,9 +216,9 @@ mod tests {
         );
     }
 
-    /// Every place a body can name a definition is followed: the `Var`, `App`, `Llvm` and `Match`
-    /// right-hand sides, the body of a match arm, the `Retain`, `Release`, `Eval` and `Destructure`
-    /// nodes, and the `Ret`. A global is lowered to an atom carrying its own name
+    /// Every place a body can name a definition is followed: the `Var`, `App`, `Builtin` and
+    /// `Match` right-hand sides, the body of a match arm, the `Retain`, `Release`, `Eval` and
+    /// `Destructure` nodes, and the `Ret`. A global is lowered to an atom carrying its own name
     /// (`Lowerer::lower_var`), so any of these can be the one place a definition is named from.
     #[test]
     fn test_every_mention_site_is_followed() {
@@ -276,8 +275,8 @@ mod tests {
         ));
         body = node(RcExpr::Let(
             local("operation"),
-            RcRhs::Llvm(
-                Box::new(InlineLLVMMakeStructBody {
+            RcRhs::Builtin(
+                Box::new(MakeStructOp {
                     field_names: vec![names[3].clone()],
                 }),
                 vec![at(3)],

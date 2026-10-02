@@ -32,12 +32,12 @@ use crate::{
         },
         name::FullName,
         program::{Program, Symbol},
-        traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
-        types::{type_fun, TyCon, TyConInfo, TypeNode},
+        traverse::{ExprVisitor, StartVisitResult, VisitState},
+        types::{type_fun, TyCon, TyConInfo},
     },
     misc::{Map, Set},
     optimization::{
-        capture_struct::{fresh_global_name, CaptureStruct},
+        capture_struct::{captured_fields, fresh_global_name, CaptureStruct},
         let_elimination,
         rename::substitute_free_name,
         uncurry::{internalize_let_to_var_at_head, is_std_fix},
@@ -90,7 +90,6 @@ pub fn run(prg: &mut Program, show_build_times: bool) {
 //
 // `stable` holds symbols already known to contain no further `fix` to defunctionalize; they are
 // carried over untouched.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 fn run_one(
     prg: &mut Program,
     stable: &mut Set<FullName>,
@@ -241,15 +240,7 @@ impl FixDefunctionalizer {
         let self_name = self_params[0].name.clone();
         let ab_ty = f_body.type_.as_ref().unwrap().clone(); // a -> b
 
-        // Capture = free local variables of `f`, with their types read from the current scope.
-        let cap_fields: Vec<(FullName, Arc<TypeNode>)> = f
-            .lambda_cap_names()
-            .iter()
-            .map(|n| {
-                let ty = state.scope.get_local(&n.name).unwrap().unwrap();
-                (n.clone(), ty)
-            })
-            .collect();
+        let cap_fields = captured_fields(f, state);
         // Name the lifted function first: the capture struct is named after it, so that a value of
         // that capture struct says which function consumes it.
         let func_name = fresh_global_name(
@@ -364,27 +355,6 @@ impl ExprVisitor for FixDefunctionalizer {
         StartVisitResult::ReplaceAndRevisit(new_expr)
     }
 
-    fn start_visit_var(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_var(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_llvm(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_llvm(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn end_visit_app(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_lam(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_lam(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
     fn start_visit_let(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
         // Record `let name = |..| ..` so a later `fix(name)` in this let's body resolves to the
         // lambda. The `let` is an ancestor of any such use, so recording on the way down suffices;
@@ -398,63 +368,6 @@ impl ExprVisitor for FixDefunctionalizer {
             }
         }
         StartVisitResult::VisitChildren
-    }
-    fn end_visit_let(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_if(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_if(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_match(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_match(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_tyanno(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_tyanno(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_make_struct(
-        &mut self,
-        _e: &Arc<ExprNode>,
-        _s: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_make_struct(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_array_lit(
-        &mut self,
-        _e: &Arc<ExprNode>,
-        _s: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_array_lit(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_ffi_call(
-        &mut self,
-        _e: &Arc<ExprNode>,
-        _s: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_ffi_call(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
-    }
-    fn start_visit_eval(&mut self, _e: &Arc<ExprNode>, _s: &mut VisitState) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-    fn end_visit_eval(&mut self, e: &Arc<ExprNode>, _s: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(e)
     }
 }
 

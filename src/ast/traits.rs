@@ -1107,7 +1107,6 @@ impl TraitEnv {
     ///
     /// The report for missing items carries `MissingTraitImplInfo`, from which the editor writes
     /// them out as a quick fix.
-    // PROOF: P26, A21 (dev-docs/proof/rc_ir/borrow-cancel)
     fn validate_trait_impl(impl_: &TraitImpl, defn: &TraitDefn) -> Result<(), Errors> {
         let trait_id = &defn.trait_;
 

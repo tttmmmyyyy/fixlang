@@ -18,7 +18,6 @@ use std::{fs::create_dir_all, path::PathBuf};
 
 /// Perform validations and type checking on the program, and return the updated program.
 /// Changes made to the program include instantiation of symbols and setting of entry points.
-// PROOF: P1, P2, P5, P6, P7 (dev-docs/proof/rc_ir/borrow-cancel)
 fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Errors> {
     let _sw = StopWatch::new("check_program", config.verbose);
 
@@ -126,7 +125,7 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         program.deferred_errors.append(errors);
         program
             .deferred_errors
-            .append(program.collect_deprecation_diagnostics(config));
+            .append(program.collect_diagnostics_of_typed_program(config));
         return Ok(program);
     }
 
@@ -143,11 +142,9 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         )?;
     }
 
-    // Collect deprecation diagnostics from all type-checked expressions and
-    // surface them according to `Configuration.deprecation_mode`.
     program
         .deferred_errors
-        .append(program.collect_deprecation_diagnostics(config));
+        .append(program.collect_diagnostics_of_typed_program(config));
 
     // Instantiate the value the entry point runs.
     match config.output_file_type {

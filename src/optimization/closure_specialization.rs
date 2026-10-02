@@ -1,7 +1,9 @@
 use super::{
     capture_struct::{fresh_global_name, CaptureStruct},
     find_usage_of_name::{self, UsageType},
-    let_elimination::create_global_lambda_to_arity_map,
+    move_bodies::move_bodies_into_callers,
+    pull_let,
+    rename::rename_free_names,
     uncurry::internalize_let_to_var_at_head,
     unique_local_names,
 };
@@ -23,10 +25,6 @@ use crate::{
     },
     graph::Graph,
     misc::{Map, Set},
-    optimization::{
-        inline_local, pull_let,
-        rename::{rename_free_names, substitute_free_name},
-    },
     tool::stopwatch::StopWatch,
 };
 use std::{
@@ -147,7 +145,7 @@ The names carry one `#closure` stem, so that a dump says which pass produced the
 * `<symbol>#closure_lam<n>` — the global function a decaptured lambda becomes.
 * `<symbol>#closure_spec_<hash>` — the copy of a global function specialized on the lambdas passed
   to it, where the hash stands for which way in received which value.
-* `<local>#closure_call_lam` — a local binding. Where an inline-LLVM expression reads a variable
+* `<local>#closure_call_lam` — a local binding. Where a builtin expression reads a variable
   holding a decaptured lambda's capture list, the call of that lambda is bound to a local of this
   name and the expression reads that instead.
 * `CLOSURE_CAP_NAME` — the parameter a decaptured lambda receives its capture list through.
@@ -548,7 +546,6 @@ impl LiftedLambdas {
 
     /// Remember the value a capture list of `cap`'s type constructor carries, and hold that type
     /// constructor until it is registered.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn record_capture_list(&mut self, cap: &CaptureStruct, tree: &ClosureTree) {
         self.trees.insert(cap.tycon.name.clone(), tree.clone());
         self.new_tycons
@@ -557,7 +554,6 @@ impl LiftedLambdas {
 
     /// Take the type constructors minted so far, for the caller to register into the program's type
     /// environment.
-    // PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
     fn take_new_tycons(&mut self) -> Map<TyCon, TyConInfo> {
         mem::take(&mut self.new_tycons)
     }
@@ -582,7 +578,6 @@ pub fn run(prg: &mut Program, show_build_times: bool) {
 /// Lift every lambda in the program to a global function, until lifting one leaves nothing more to
 /// lift. A lambda lifted here is a global function of its own, which the next pass over the symbols
 /// walks in turn.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_times: bool) {
     let _sw = StopWatch::new("closure_specialization::lift_all", show_build_times);
 
@@ -641,7 +636,6 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
 ///
 /// The bodies every copy is made from are the ones lifting left behind, so a copy names the same
 /// functions its original does and the table answers for all of them.
-// PROOF: P1, P2 (dev-docs/proof/rc_ir/borrow-cancel)
 fn realize_all(
     prg: &mut Program,
     lifted: &Rc<RefCell<LiftedLambdas>>,
@@ -743,127 +737,15 @@ fn realize_all(
     prg.type_env
         .add_tycons(lifted.borrow_mut().take_new_tycons());
 
-    inline_specialized_lambdas(&mut symbols, &specialized_lambdas);
+    // Put the body of each lambda a copy is specialized on where the copy calls it. A copy exists
+    // because a way into it receives a lambda whose identity is known, and what the copy does with
+    // that lambda is call it by name. Inlining runs before this pass, so no call made here has ever
+    // been offered a body: the value a loop body returns each round, for one, is built in the lambda
+    // and taken apart in the copy of `Std::loop` that calls it, and the simplifier cancels the two
+    // only once they stand in one function.
+    move_bodies_into_callers(&mut symbols, &specialized_lambdas);
 
     prg.symbols = symbols;
-}
-
-/// Whether putting `lambda`'s body where `copy` writes its name moves the body rather than copying
-/// it: `copy` is the only symbol naming `lambda`, it writes the name once, and that one place is the
-/// callee of a call supplying every argument.
-///
-/// The body goes into every place the name is written, so one place is what makes putting it there a
-/// move. What that one place is decides the rest: a name passed as an argument, captured, held as a
-/// value, or called with fewer arguments than the lambda takes leaves a closure where it stands,
-/// which is a body that has to stay.
-///
-/// # Arguments
-/// * `copy` - the body of the copy, in which the uses of `lambda` are counted.
-/// * `naming_symbol_counts` - how many symbols of the program name each global.
-/// * `arity_map` - how many parameters each global lambda takes.
-fn is_moved_by_placing(
-    lambda: &FullName,
-    copy: &Arc<ExprNode>,
-    naming_symbol_counts: &Map<FullName, usize>,
-    arity_map: &Map<FullName, usize>,
-) -> bool {
-    let naming_symbol_count = *naming_symbol_counts.get(lambda).unwrap_or_else(|| {
-        panic!(
-            "a copy is specialized on {}, which no symbol names",
-            lambda.to_string()
-        )
-    });
-    if naming_symbol_count != 1 {
-        return false;
-    }
-    let arity = match arity_map.get(lambda) {
-        Some(arity) => *arity,
-        None => return false,
-    };
-    // The walk records one use per place the name is written, so the copy writes the lambda's name
-    // once, and writes it as the callee of a call supplying every parameter, exactly when this is
-    // the whole of what it says about the name.
-    matches!(
-        find_usage_of_name::run(copy, lambda).as_slice(),
-        [UsageType::CalledAsFunction { arg_count }] if *arg_count == arity
-    )
-}
-
-/// Put the body of each lambda a copy is specialized on where the copy calls it.
-///
-/// A copy exists because a way into it receives a lambda whose identity is known, and what the copy
-/// does with that lambda is call it by name. Inlining runs before this pass, so no call made here
-/// has ever been offered a body: the value a loop body returns each round, for one, is built in the
-/// lambda and taken apart in the copy of `Std::loop` that calls it, and the simplifier cancels the
-/// two only once they stand in one function.
-///
-/// A body goes in one level deep and into a copy alone, so what the program grows by is bounded by
-/// the bodies the copies are specialized on, and the calls those bodies make are left as calls.
-fn inline_specialized_lambdas(
-    symbols: &mut Map<FullName, Symbol>,
-    specialized_lambdas: &Map<FullName, Vec<FullName>>,
-) {
-    // Every body as it stands before any of them is put anywhere. A lambda is a copy like the one
-    // receiving it, so reading the bodies as they are rewritten would hand a copy what another copy
-    // has already been given — one level per copy, but a chain of them across the program.
-    let bodies = specialized_lambdas
-        .iter()
-        .flat_map(|(copy, lambdas)| lambdas.iter().map(move |lambda| (copy, lambda)))
-        .map(|(copy, lambda)| {
-            let sym = symbols.get(lambda).unwrap_or_else(|| {
-                panic!(
-                    "{} is specialized on {}, which no copy was made for",
-                    copy.to_string(),
-                    lambda.to_string()
-                )
-            });
-            (lambda.clone(), sym.expr.as_ref().unwrap().clone())
-        })
-        .collect::<Map<FullName, Arc<ExprNode>>>();
-
-    // How many symbols name each global. A lambda named by one symbol alone is one whose body has
-    // nowhere else to be, so putting it there moves it rather than copying it.
-    let mut naming_symbol_counts: Map<FullName, usize> = Map::default();
-    for sym in symbols.values() {
-        for name in sym.expr.as_ref().unwrap().free_vars() {
-            *naming_symbol_counts.entry(name.clone()).or_insert(0) += 1;
-        }
-    }
-
-    // How many parameters each lifted lambda takes, which says whether the call a copy makes
-    // supplies an argument for all of them.
-    let arity_map = create_global_lambda_to_arity_map(symbols);
-
-    for (copy, lambdas) in specialized_lambdas {
-        // The body goes in where that is a move rather than a copy: this copy is the only symbol
-        // naming the lambda, and it names it as the callee of one saturated call, so the body ends up
-        // in one place and the lambda itself falls to dead-symbol elimination. Where the lambda is
-        // named anywhere else, or called more than once, placing the body would duplicate it, and how
-        // much duplication is worth its gain is the judgement `inline` makes.
-        let copy_expr = symbols[copy].expr.as_ref().unwrap().clone();
-        let moved_bodies = lambdas
-            .iter()
-            .filter(|lambda| {
-                is_moved_by_placing(lambda, &copy_expr, &naming_symbol_counts, &arity_map)
-            })
-            .map(|lambda| (lambda.clone(), bodies[lambda].clone()))
-            .collect::<Map<FullName, Arc<ExprNode>>>();
-        if moved_bodies.is_empty() {
-            continue;
-        }
-        // The lambda is named by the call alone, so putting the body where its name stands leaves the
-        // body applied to the arguments the call supplies.
-        let mut expr = copy_expr;
-        for (lambda, body) in moved_bodies {
-            expr = substitute_free_name(&expr, &lambda, &body);
-        }
-        let sym = symbols.get_mut(copy).unwrap();
-        sym.expr = Some(expr);
-        // Reduce what the substitution left: a lambda applied to the arguments the call supplies.
-        // Left standing, that application is a closure the program builds on the heap and calls
-        // through, once for every call of the function the lambda was handed to.
-        inline_local::run_on_symbol(sym, &arity_map);
-    }
 }
 
 /// The capture list a copy receives in place of the one its origin was built with, where the copy is
@@ -1030,6 +912,9 @@ fn reaches_a_direct_call(
                     )
                 })
             }
+            // A builtin operation applies the function it is given through a pointer, which is an
+            // indirect call.
+            UsageType::EnvFunctionOperand => false,
             // A value held where nothing takes it apart is passed on whole, so a way in is reached
             // through whatever holds it rather than here.
             UsageType::Elsewhere => false,
@@ -1109,7 +994,7 @@ fn capture_list_destructuring(
     let mut expr = body.clone();
     while expr.is_let() {
         let pat = expr.get_let_pat();
-        if let Pattern::Struct(pat_tycon, field_to_pat) = &pat.pattern {
+        if let Pattern::Struct(pat_tycon, field_to_pat, _) = &pat.pattern {
             if pat_tycon.as_ref() == tycon.as_ref() {
                 assert!(
                     field_to_pat.iter().all(|(_, _, pat)| pat.is_var()),
@@ -1665,22 +1550,18 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         StartVisitResult::ReplaceAndRevisit(expr)
     }
 
-    fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    /// Give an inline-LLVM expression the closures it is written against: each free variable holding
-    /// a bare capture list is bound, ahead of the expression, to the lifted lambda applied to that
+    /// Give a builtin expression the closures it is written against: each free variable holding a
+    /// bare capture list is bound, ahead of the expression, to the lifted lambda applied to that
     /// capture list, and the expression reads the binding under the name `CLOSURE_CALL_LAM_SUFFIX`
     /// gives it.
-    fn start_visit_llvm(
+    fn start_visit_builtin(
         &mut self,
-        llvm_expr: &Arc<ExprNode>,
+        builtin_expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
         // The expression each free variable holding a capture list is replaced with.
         let mut replacements = Map::default();
-        for free_name in llvm_expr.free_vars() {
+        for free_name in builtin_expr.free_vars() {
             let Some(known) = self.known_bare_value(&free_name) else {
                 continue;
             };
@@ -1694,7 +1575,8 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             replacements.insert(free_name.clone(), expr);
         }
 
-        // If none of the free variables in the LLVM expression refer to a decaptured lambda, do nothing.
+        // If none of the free variables in the builtin expression refer to a decaptured lambda, do
+        // nothing.
         if replacements.is_empty() {
             return StartVisitResult::VisitChildren;
         }
@@ -1705,16 +1587,16 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             new_name
         };
 
-        // Rename free variables in the LLVM expression
-        let mut llvm_expr = llvm_expr.clone();
+        // Rename free variables in the builtin expression
+        let mut builtin_expr = builtin_expr.clone();
         let mut renames: Map<FullName, FullName> = Default::default();
         for (name, _) in replacements.iter() {
             renames.insert(name.clone(), make_new_name(name));
         }
-        llvm_expr = rename_free_names(&llvm_expr, renames);
+        builtin_expr = rename_free_names(&builtin_expr, renames);
 
-        // Insert `let (new name) = (lambda function call);` before the LLVM expression
-        let mut expr = llvm_expr.clone();
+        // Insert `let (new name) = (lambda function call);` before the builtin expression
+        let mut expr = builtin_expr.clone();
         for (name, call_lam_expr) in replacements.iter() {
             let new_name = make_new_name(name);
             expr = expr_let_typed(
@@ -1726,10 +1608,6 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         }
 
         StartVisitResult::ReplaceAndRevisit(expr)
-    }
-
-    fn end_visit_llvm(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
     }
 
     /// Lift a lambda written among the arguments, name the copy of a lambda a call through a known
@@ -1854,10 +1732,6 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         StartVisitResult::ReplaceAndRevisit(apply(head, new_args))
     }
 
-    fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
     /// Retype the domain of a lambda whose parameter holds a bare capture list, so that the body is
     /// walked against the type that parameter now has.
     fn start_visit_lam(
@@ -1977,110 +1851,6 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             .set_type(value_ty);
         StartVisitResult::ReplaceAndRevisit(expr_let_typed(pat, value_expr, value))
     }
-
-    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_if(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_if(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_match(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_tyanno(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_tyanno(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_make_struct(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_make_struct(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_array_lit(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_array_lit(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_ffi_call(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_ffi_call(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
-
-    fn start_visit_eval(
-        &mut self,
-        _expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        StartVisitResult::VisitChildren
-    }
-
-    fn end_visit_eval(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        EndVisitResult::unchanged(expr)
-    }
 }
 
 impl ClosureSpecializationVisitor {
@@ -2090,7 +1860,7 @@ impl ClosureSpecializationVisitor {
             return false;
         };
         match &pat.pattern {
-            Pattern::Struct(tycon, _) => tycon.as_ref() == narrowed.original.as_ref(),
+            Pattern::Struct(tycon, _, _) => tycon.as_ref() == narrowed.original.as_ref(),
             _ => false,
         }
     }
@@ -2098,7 +1868,7 @@ impl ClosureSpecializationVisitor {
     /// Hand the identity of every field that holds a capture list to the name that field binds, where
     /// `pat` destructures a capture list this pass built.
     fn record_capture_list_fields(&mut self, pat: &Arc<PatternNode>) {
-        let Pattern::Struct(tycon, field_to_pat) = &pat.pattern else {
+        let Pattern::Struct(tycon, field_to_pat, _) = &pat.pattern else {
             return;
         };
         if self
@@ -2129,7 +1899,7 @@ impl ClosureSpecializationVisitor {
         bound: &Arc<ExprNode>,
         value: &Arc<ExprNode>,
     ) -> StartVisitResult {
-        let Pattern::Struct(_, field_to_pat) = &pat.pattern else {
+        let Pattern::Struct(_, field_to_pat, _) = &pat.pattern else {
             unreachable!()
         };
         let cap_fields = narrowed.cap.fields();
@@ -2159,13 +1929,10 @@ impl ClosureSpecializationVisitor {
 /// values a key or a name ran together would hand one copy to both.
 #[cfg(test)]
 mod tests {
-    use super::{is_moved_by_placing, ClosureTree, FuncCopy, Slot};
-    use crate::ast::expr::{expr_app, expr_let, expr_var, var_var, ExprNode};
+    use super::{ClosureTree, FuncCopy, Slot};
     use crate::ast::name::FullName;
-    use crate::ast::pattern::PatternNode;
     use crate::constants::{CLOSURE_LAM_SUFFIX, INSTANCIATED_NAME_SEPARATOR};
-    use crate::misc::{Map, Set};
-    use std::sync::Arc;
+    use crate::misc::Set;
 
     /// The name of the global function the `index`-th lambda of `Main::main` was lifted to.
     fn lifted(index: u32) -> FullName {
@@ -2176,162 +1943,6 @@ mod tests {
                 INSTANCIATED_NAME_SEPARATOR, CLOSURE_LAM_SUFFIX, index
             ),
         )
-    }
-
-    /// `func` applied to `arg_count` arguments, written one argument at a time.
-    fn call(func: &FullName, arg_count: usize) -> Arc<ExprNode> {
-        let mut expr = expr_var(func.clone(), None);
-        for index in 0..arg_count {
-            let arg = expr_var(FullName::local(&format!("a{}", index)), None);
-            expr = expr_app(expr, vec![arg], None);
-        }
-        expr
-    }
-
-    /// The two tables the placement rule reads: `lambda` is named by `naming_symbol_count` symbols
-    /// of the program and takes `arity` parameters.
-    fn tables(
-        lambda: &FullName,
-        naming_symbol_count: usize,
-        arity: usize,
-    ) -> (Map<FullName, usize>, Map<FullName, usize>) {
-        (
-            [(lambda.clone(), naming_symbol_count)]
-                .into_iter()
-                .collect(),
-            [(lambda.clone(), arity)].into_iter().collect(),
-        )
-    }
-
-    /// A copy naming the lambda as the callee of one call that supplies every argument is the shape
-    /// the body moves at.
-    #[test]
-    fn one_saturated_call_moves_the_body() {
-        let lambda = lifted(0);
-        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
-        assert!(is_moved_by_placing(
-            &lambda,
-            &call(&lambda, 2),
-            &naming_symbol_counts,
-            &arity_map
-        ));
-    }
-
-    /// A lambda a second symbol names is one whose body has somewhere else to be.
-    #[test]
-    fn a_lambda_two_symbols_name_keeps_its_body() {
-        let lambda = lifted(0);
-        let (naming_symbol_counts, arity_map) = tables(&lambda, 2, 2);
-        assert!(!is_moved_by_placing(
-            &lambda,
-            &call(&lambda, 2),
-            &naming_symbol_counts,
-            &arity_map
-        ));
-    }
-
-    /// A call supplying fewer arguments than the lambda takes leaves a closure where the name stood,
-    /// so the body stays where it is.
-    #[test]
-    fn a_call_short_of_an_argument_keeps_the_body() {
-        let lambda = lifted(0);
-        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 3);
-        assert!(!is_moved_by_placing(
-            &lambda,
-            &call(&lambda, 2),
-            &naming_symbol_counts,
-            &arity_map
-        ));
-    }
-
-    /// A call supplying more arguments than the lambda takes calls what the lambda returns.
-    #[test]
-    fn a_call_past_the_last_parameter_keeps_the_body() {
-        let lambda = lifted(0);
-        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
-        assert!(!is_moved_by_placing(
-            &lambda,
-            &call(&lambda, 3),
-            &naming_symbol_counts,
-            &arity_map
-        ));
-    }
-
-    /// Two calls name the lambda in two places, so the body stays where it is even where the two
-    /// together supply as many arguments as one saturated call would.
-    #[test]
-    fn two_calls_keep_the_body() {
-        let lambda = lifted(0);
-        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
-        let callee = FullName::from_strs(&["Main"], "g#0123abcd");
-        let copy = expr_app(
-            expr_app(expr_var(callee, None), vec![call(&lambda, 1)], None),
-            vec![call(&lambda, 1)],
-            None,
-        );
-        assert!(!is_moved_by_placing(
-            &lambda,
-            &copy,
-            &naming_symbol_counts,
-            &arity_map
-        ));
-    }
-
-    /// A lambda handed to a call as an argument is one the body would have to stay behind for.
-    #[test]
-    fn a_lambda_passed_as_an_argument_keeps_its_body() {
-        let lambda = lifted(0);
-        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
-        let callee = FullName::from_strs(&["Main"], "g#0123abcd");
-        let copy = expr_app(
-            expr_app(
-                expr_var(callee, None),
-                vec![expr_var(lambda.clone(), None)],
-                None,
-            ),
-            vec![call(&lambda, 2)],
-            None,
-        );
-        assert!(!is_moved_by_placing(
-            &lambda,
-            &copy,
-            &naming_symbol_counts,
-            &arity_map
-        ));
-    }
-
-    /// A lambda a `let` also binds is written in two places, so putting the body where the name
-    /// stands writes it into both rather than moving it. `find_usage_of_name` records nothing for
-    /// the `let`, which is why the rule counts the places the name is written.
-    #[test]
-    fn a_lambda_a_let_also_binds_keeps_its_body() {
-        let lambda = lifted(0);
-        let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
-        let copy = expr_let(
-            PatternNode::make_var(var_var(FullName::local("v")), None),
-            expr_var(lambda.clone(), None),
-            call(&lambda, 2),
-            None,
-        );
-        assert!(!is_moved_by_placing(
-            &lambda,
-            &copy,
-            &naming_symbol_counts,
-            &arity_map
-        ));
-    }
-
-    /// A lambda the arity table does not answer for is one the rule cannot judge.
-    #[test]
-    fn a_lambda_the_arity_table_does_not_answer_for_keeps_its_body() {
-        let lambda = lifted(0);
-        let naming_symbol_counts = [(lambda.clone(), 1)].into_iter().collect();
-        assert!(!is_moved_by_placing(
-            &lambda,
-            &call(&lambda, 2),
-            &naming_symbol_counts,
-            &Map::default()
-        ));
     }
 
     /// The values two capture fields of one lambda hold read differently from the one value the

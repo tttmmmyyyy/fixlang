@@ -1,4 +1,7 @@
 # `borrow_ify` と `cancel` が RC 規律を保存することの証明
+
+**この証明は保守していない** (`dev-docs/proof/README.md` の冒頭)。
+
 ## 1. 対象
 
 **この文書が証明するのは「保存 (preservation)」である。**「意味の保存 (correctness)」ではない。証明するのは

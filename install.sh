@@ -76,6 +76,35 @@ download_to() {
     fi
 }
 
+# Succeed when the release tag `$1` names a pre-release, i.e. carries a suffix after `-`
+# (`v1.5.0-rc.1`).
+# Must stay in sync with the `prerelease:` input in .github/workflows/release.yml.
+is_prerelease() {
+    case "$1" in
+        *-*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Sort release tags read from stdin, newest first, in semver order: `v1.5.0` comes before
+# `v1.5.0-rc.1`, which comes before `v1.5.0-beta.10`, which comes before `v1.5.0-beta.9`.
+# A pre-release suffix is a word (`alpha` < `beta` < `rc`) optionally followed by `.` and a number.
+sort_versions() {
+    awk '{
+        tag = $0; v = tag; sub(/^v/, "", v)
+        pre = ""; i = index(v, "-")
+        if (i > 0) { pre = substr(v, i + 1); v = substr(v, 1, i - 1) }
+        split(v, core, ".")
+        if (pre == "") { is_full = 1; word = "-"; num = 0 }
+        else {
+            is_full = 0; j = index(pre, ".")
+            if (j > 0) { word = substr(pre, 1, j - 1); num = substr(pre, j + 1) + 0 }
+            else { word = pre; num = 0 }
+        }
+        printf "%d %d %d %d %s %d %s\n", core[1] + 0, core[2] + 0, core[3] + 0, is_full, word, num, tag
+    }' | LC_ALL=C sort -k1,1nr -k2,2nr -k3,3nr -k4,4nr -k5,5r -k6,6nr | awk '{ print $7 }'
+}
+
 # ---- Main ----------------------------------------------------------------
 
 TARGET="$(detect_target)"
@@ -88,19 +117,33 @@ say ""
 
 # Fetch available releases from GitHub API.
 say "Fetching release list from GitHub..."
-RELEASES_JSON="$(fetch "https://api.github.com/repos/${REPO}/releases")"
-VERSIONS="$(printf '%s' "$RELEASES_JSON" | grep '"tag_name"' | sed 's/.*"tag_name":[ ]*"\([^"]*\)".*/\1/')"
+RELEASES_JSON="$(fetch "https://api.github.com/repos/${REPO}/releases?per_page=100")"
+VERSIONS="$(printf '%s' "$RELEASES_JSON" | grep '"tag_name"' | sed 's/.*"tag_name":[ ]*"\([^"]*\)".*/\1/' | sort_versions)"
 
 if [ -z "$VERSIONS" ]; then
     err "Failed to retrieve release information. Check your internet connection."
 fi
 
-LATEST="$(printf '%s\n' "$VERSIONS" | head -n1)"
+# The default is the newest release without a pre-release suffix.
+DEFAULT_VERSION="$(printf '%s\n' "$VERSIONS" | while IFS= read -r v; do
+    if ! is_prerelease "$v"; then
+        say "$v"
+        break
+    fi
+done)"
+# A repository with no stable release yet offers its newest pre-release.
+if [ -z "$DEFAULT_VERSION" ]; then
+    DEFAULT_VERSION="$(printf '%s\n' "$VERSIONS" | head -n1)"
+fi
 TOTAL="$(echo "$VERSIONS" | wc -l | tr -d ' ')"
 
 say "Available versions:"
 printf '%s\n' "$VERSIONS" | head -n10 | while IFS= read -r v; do
-    say "  ${v}"
+    if is_prerelease "$v"; then
+        say "  ${v} (pre-release)"
+    else
+        say "  ${v}"
+    fi
 done
 if [ "$TOTAL" -gt 10 ]; then
     say "  ... (${TOTAL} versions total)"
@@ -108,12 +151,12 @@ fi
 
 say ""
 if [ "$NON_INTERACTIVE" = "1" ]; then
-    VERSION="$LATEST"
-    say "Version to install [${LATEST}]: ${VERSION} (non-interactive, using default)"
+    VERSION="$DEFAULT_VERSION"
+    say "Version to install [${DEFAULT_VERSION}]: ${VERSION} (non-interactive, using default)"
 else
-    printf "Version to install [%s]: " "$LATEST"
+    printf "Version to install [%s]: " "$DEFAULT_VERSION"
     read -r VERSION_INPUT </dev/tty
-    VERSION="${VERSION_INPUT:-$LATEST}"
+    VERSION="${VERSION_INPUT:-$DEFAULT_VERSION}"
 fi
 
 # Basic sanity check: version tag should start with 'v'.
@@ -160,11 +203,20 @@ say ""
 
 mkdir -p "$INSTALL_DIR"
 
-if ! download_to "$DOWNLOAD_URL" "$INSTALL_PATH"; then
-    err "Download failed. Version '${VERSION}' may not have a pre-built binary for ${TARGET}."
+# Download into a temporary file beside the target and move it into place, so a failed or
+# interrupted download leaves any installed binary as it was, and a running one can be replaced.
+# The download tool creates the file, so it gets the mode the umask gives a new file.
+DOWNLOAD_PATH="${INSTALL_DIR}/.${BINARY_NAME}.download.$$"
+trap 'rm -f "$DOWNLOAD_PATH"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if ! download_to "$DOWNLOAD_URL" "$DOWNLOAD_PATH"; then
+    err "Download failed. Version '${VERSION}' may have no pre-built binary for ${TARGET}, or the connection failed."
 fi
 
-chmod +x "$INSTALL_PATH"
+chmod +x "$DOWNLOAD_PATH"
+mv -f "$DOWNLOAD_PATH" "$INSTALL_PATH"
 
 say "Installed: ${INSTALL_PATH}"
 

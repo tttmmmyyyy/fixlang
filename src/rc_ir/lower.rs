@@ -7,16 +7,15 @@
 //! insertion is a separate backward pass. The one reference-counting effect already present is the
 //! retain baked into the boxed capture getter, per the retain-getter model.
 
-use crate::ast::expr::{Expr, ExprNode, Var};
-use crate::ast::inline_llvm::InlineLLVM;
+use crate::ast::builtin_op::BuiltinOpExpr;
+use crate::ast::expr::{Expr, ExprNode, FieldSrc, Var};
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::program::{Symbol, TypeEnv};
 use crate::ast::types::{TyCon, TypeNode};
 use crate::constants::{BOOL_FALSE_TAG, BOOL_TRUE_TAG, CAP_NAME};
 use crate::fixstd::builtin::{
-    make_dynamic_object_ty, InlineLLVMArrayLitBody, InlineLLVMCaptureProjectBody,
-    InlineLLVMFFICallBody, InlineLLVMMakeStructBody, InlineLLVMNoStorageValueBody,
+    make_dynamic_object_ty, ArrayLitOp, CaptureProjectOp, FFICallOp, MakeStructOp, NoStorageValueOp,
 };
 use crate::hash::md5_hex;
 use crate::misc::{grow_stack, Map, Set};
@@ -55,7 +54,6 @@ enum LoweredSymbol {
 /// `symbols` holds it (`Program::global_types`). `roots` names what code generation reaches the
 /// lowered program from outside it; it becomes `RcProgram::roots`, and the build driver takes it
 /// from `Program::root_value_names`.
-// PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
 pub fn lower_program(
     type_env: &TypeEnv,
     symbols: &[Symbol],
@@ -153,7 +151,6 @@ impl<'a> Lowerer<'a> {
     /// # Arguments
     /// * `hint` — the readable part of the name, shown in an RC IR dump.
     /// * `source` — where the value the variable holds is written, for diagnostics and debug info.
-    // PROOF: D/A, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn fresh_var(&mut self, hint: &str, ty: Arc<TypeNode>, source: Option<Span>) -> RcVar {
         self.fresh_counter += 1;
         let name = FullName::local(&format!(
@@ -171,7 +168,6 @@ impl<'a> Lowerer<'a> {
 
     /// Name a lifted lambda `<current top-level symbol>::closure{N}`, so its name carries the source
     /// module (matching how a top-level function's name does) and a debugger shows a meaningful name.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn fresh_closure_ref(&mut self) -> FuncRef {
         let ns = self
             .current_symbol
@@ -270,7 +266,6 @@ impl<'a> Lowerer<'a> {
     /// symbol's own name, and a symbol of any other type becomes the initializer of a global value.
     /// The counters naming the lambdas lifted out and the local variables minted restart here, so
     /// both are numbered within the symbol they were written in.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_symbol(&mut self, sym: &Symbol) -> LoweredSymbol {
         self.current_symbol = Some(sym.name.clone());
         self.closure_counter = 0;
@@ -322,7 +317,6 @@ impl<'a> Lowerer<'a> {
     ///   The body reads them like any other captured name, so each is bound here to a value made on
     ///   the spot; `lower_lam` says which names these are and why one made here is the value that
     ///   was left out.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P29, P30, P31, A19, A21 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lambda_as_function(
         &mut self,
         lam: &ExprNode,
@@ -352,13 +346,14 @@ impl<'a> Lowerer<'a> {
             // capture is the null pointer. Recording this lets the capture's release skip the null
             // check. Set it before any clone so it propagates.
             capture_var.skip_null_check = !captures.is_empty();
-            // Bind the capture object under the implicit name `#CAP` too, so a built-in that reads the
-            // raw capture object by that name (the `fix` combinator's `FixBody`) resolves to it.
+            // Bind the capture object under the implicit name `#CAP` too, so a builtin op that
+            // reads the raw capture object by that name (the `fix` combinator's `FixCombinatorOp`)
+            // resolves to it.
             self.bind(&FullName::local(CAP_NAME), capture_var.clone());
             let capture_tys: Vec<Arc<TypeNode>> =
                 captures.iter().map(|(_, v)| v.ty.clone()).collect();
             for (i, (ast_name, _)) in captures.iter().enumerate() {
-                let llvm_gen = Box::new(InlineLLVMCaptureProjectBody {
+                let op = Box::new(CaptureProjectOp {
                     assume_local: false,
                     cap_name: capture_var.name.clone(),
                     cap_idx: i,
@@ -368,7 +363,7 @@ impl<'a> Lowerer<'a> {
                 proj.debug_name = Some(ast_name.to_string());
                 bindings.push(PendingBinding::Let(
                     proj.clone(),
-                    RcRhs::Llvm(llvm_gen, vec![capture_var.clone()]),
+                    RcRhs::Builtin(op, vec![capture_var.clone()]),
                     None,
                 ));
                 self.bind(ast_name, proj);
@@ -390,7 +385,7 @@ impl<'a> Lowerer<'a> {
             made.debug_name = Some(ast_name.to_string());
             bindings.push(PendingBinding::Let(
                 made.clone(),
-                RcRhs::Llvm(Box::new(InlineLLVMNoStorageValueBody {}), vec![]),
+                RcRhs::Builtin(Box::new(NoStorageValueOp {}), vec![]),
                 None,
             ));
             self.bind(ast_name, made);
@@ -419,7 +414,6 @@ impl<'a> Lowerer<'a> {
     /// Lower `expr` to the single variable holding its value, appending to `bindings` everything
     /// that must be evaluated to reach it. An expression that is already an atom — a local variable,
     /// a global name — becomes that atom and appends nothing.
-    // PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_to_var(&mut self, expr: &ExprNode, bindings: &mut Vec<PendingBinding>) -> RcVar {
         // A deeply nested expression recurses deeply here (as it does in RC insertion and code
         // generation); grow the stack on demand so a large program does not overflow it.
@@ -432,7 +426,7 @@ impl<'a> Lowerer<'a> {
         let source = expr.source.clone();
         match expr.expr.as_ref() {
             Expr::Var(v) => self.lower_var(v, &ty, &source),
-            Expr::LLVM(inline) => self.lower_llvm(inline, ty, source, bindings),
+            Expr::Builtin(builtin) => self.lower_builtin(builtin, ty, source, bindings),
             Expr::App(fun, args) => self.lower_app(fun, args, ty, source, bindings),
             Expr::Lam(_, _) => self.lower_lam(expr, ty, source, bindings),
             Expr::Let(pat, bound, val) => self.lower_let(pat, bound, val, bindings),
@@ -451,7 +445,6 @@ impl<'a> Lowerer<'a> {
     /// Lower a variable reference to the atom holding its value: a local is the RC IR variable
     /// currently bound to it, and a global is an atom carrying the symbol's name, which code
     /// generation materializes.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P31, A19 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_var(&mut self, v: &Arc<Var>, ty: &Arc<TypeNode>, source: &Option<Span>) -> RcVar {
         match self.resolve(&v.name) {
             // A local: reuse the variable already bound (it is already an atom).
@@ -476,21 +469,20 @@ impl<'a> Lowerer<'a> {
         }
     }
 
-    /// Lower an inline-LLVM operation: its free variables become its operands, in the fixed order
-    /// the generator reads them, and the appended binding holds the value the operation produces.
-    // PROOF: D/A, P27, P29, P30, A21 (dev-docs/proof/rc_ir/borrow-cancel)
-    fn lower_llvm(
+    /// Lower a builtin operation: its free variables become its operands, in the fixed order the op
+    /// reads them, and the appended binding holds the value the operation produces.
+    fn lower_builtin(
         &mut self,
-        inline: &Arc<InlineLLVM>,
+        builtin: &Arc<BuiltinOpExpr>,
         ty: Arc<TypeNode>,
         source: Option<Span>,
         bindings: &mut Vec<PendingBinding>,
     ) -> RcVar {
-        let mut llvm_gen = inline.generator.clone();
-        // The generator's free variables are its operands, in a fixed order. A local operand reuses
-        // the variable already bound to it; an operand that is not a local is a reference to a global
+        let mut op = builtin.op.clone();
+        // The op's free variables are its operands, in a fixed order. A local operand reuses the
+        // variable already bound to it; an operand that is not a local is a reference to a global
         // value or function, materialized by code generation from its (unchanged) name.
-        let operand_vars: Vec<RcVar> = llvm_gen
+        let operand_vars: Vec<RcVar> = op
             .free_vars()
             .iter()
             .map(|name| match self.resolve(name) {
@@ -498,7 +490,7 @@ impl<'a> Lowerer<'a> {
                 None => {
                     let ty = self.global_types.get(name).cloned().unwrap_or_else(|| {
                         panic!(
-                            "LLVM operand `{}` is not bound in scope during RC IR lowering",
+                            "the builtin operand `{}` is not bound in scope during RC IR lowering",
                             name.to_string()
                         )
                     });
@@ -512,9 +504,9 @@ impl<'a> Lowerer<'a> {
                 }
             })
             .collect();
-        // Rewrite the generator's embedded operand names to the fresh local names, so code
-        // generation resolves them from scope.
-        let slots = llvm_gen.free_vars_mut();
+        // Rewrite the op's embedded operand names to the fresh local names, so code generation
+        // resolves them from scope.
+        let slots = op.free_vars_mut();
         // The operands were built from this op's free variables, so the two correspond. Were they to
         // differ, `zip` would leave the operands past the shorter one naming variables that lowering
         // has replaced.
@@ -529,7 +521,7 @@ impl<'a> Lowerer<'a> {
         let result = self.fresh_var("v", ty, source.clone());
         bindings.push(PendingBinding::Let(
             result.clone(),
-            RcRhs::Llvm(llvm_gen, operand_vars),
+            RcRhs::Builtin(op, operand_vars),
             source,
         ));
         result
@@ -537,7 +529,6 @@ impl<'a> Lowerer<'a> {
 
     /// Lower a function application: the callee and then the arguments become variables, and the
     /// appended binding calls the one on the others.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_app(
         &mut self,
         fun: &ExprNode,
@@ -565,7 +556,6 @@ impl<'a> Lowerer<'a> {
     /// under a fresh name, and the binding appended builds the closure from that function and the
     /// values it stores, in the order it stores them. Of the values the lambda captures, those the
     /// closure stores are the ones whose type occupies storage.
-    // PROOF: P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_lam(
         &mut self,
         expr: &ExprNode,
@@ -654,7 +644,6 @@ impl<'a> Lowerer<'a> {
 
     /// Lower an `if` to a match on the two variants of the `Bool` union, the branches becoming its
     /// arms. Each arm's payload holds the variant's unit contents.
-    // PROOF: D/A, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_if(
         &mut self,
         cond: &ExprNode,
@@ -773,7 +762,7 @@ impl<'a> Lowerer<'a> {
                     body,
                 }
             }
-            Pattern::Struct(_, _) => {
+            Pattern::Struct(_, _, _) => {
                 // A struct/tuple pattern in a `match` is a single non-variant (default) arm that
                 // binds the whole scrutinee and destructures it.
                 let payload =
@@ -799,7 +788,7 @@ impl<'a> Lowerer<'a> {
     /// them.
     fn lower_make_struct(
         &mut self,
-        fields: &[(Name, Option<Span>, Arc<ExprNode>)],
+        fields: &[(Name, Option<FieldSrc>, Arc<ExprNode>)],
         ty: Arc<TypeNode>,
         source: Option<Span>,
         bindings: &mut Vec<PendingBinding>,
@@ -809,13 +798,13 @@ impl<'a> Lowerer<'a> {
             .iter()
             .map(|(_, _, e)| self.lower_to_var(e, bindings))
             .collect();
-        let llvm_gen = Box::new(InlineLLVMMakeStructBody {
+        let op = Box::new(MakeStructOp {
             field_names: field_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("struct", ty, source.clone());
         bindings.push(PendingBinding::Let(
             result.clone(),
-            RcRhs::Llvm(llvm_gen, field_vars),
+            RcRhs::Builtin(op, field_vars),
             source,
         ));
         result
@@ -823,7 +812,6 @@ impl<'a> Lowerer<'a> {
 
     /// Lower an array literal: the elements are lowered left to right, and the appended binding
     /// builds an array holding them in that order.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn lower_array_lit(
         &mut self,
         elems: &[Arc<ExprNode>],
@@ -835,13 +823,13 @@ impl<'a> Lowerer<'a> {
             .iter()
             .map(|e| self.lower_to_var(e, bindings))
             .collect();
-        let llvm_gen = Box::new(InlineLLVMArrayLitBody {
+        let op = Box::new(ArrayLitOp {
             elem_names: elem_vars.iter().map(|v| v.name.clone()).collect(),
         });
         let result = self.fresh_var("array", ty, source.clone());
         bindings.push(PendingBinding::Let(
             result.clone(),
-            RcRhs::Llvm(llvm_gen, elem_vars),
+            RcRhs::Builtin(op, elem_vars),
             source,
         ));
         result
@@ -875,7 +863,7 @@ impl<'a> Lowerer<'a> {
             .iter()
             .map(|arg| self.lower_to_var(arg, bindings))
             .collect();
-        let llvm_gen = Box::new(InlineLLVMFFICallBody {
+        let op = Box::new(FFICallOp {
             fun_name: fun_name.clone(),
             ret_tycon: ret_tycon.clone(),
             param_tycons: param_tycons.to_vec(),
@@ -886,7 +874,7 @@ impl<'a> Lowerer<'a> {
         let result = self.fresh_var("ffi", ty, source.clone());
         bindings.push(PendingBinding::Let(
             result.clone(),
-            RcRhs::Llvm(llvm_gen, arg_vars),
+            RcRhs::Builtin(op, arg_vars),
             source,
         ));
         result
@@ -949,7 +937,7 @@ impl<'a> Lowerer<'a> {
                 }
                 vec![v.name.clone()]
             }
-            Pattern::Struct(_tc, field_pats) => {
+            Pattern::Struct(_tc, field_pats, _) => {
                 let field_tys = obj.ty.field_types(self.type_env);
                 let mut fields = vec![]; // (field index, field variable) for the whole destructure
                 let mut nested = vec![]; // (field variable, sub-pattern) lowered after the extraction

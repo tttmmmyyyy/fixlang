@@ -3,9 +3,9 @@
 //! Every retain and release the generated code performs comes from a `Retain` or `Release` node of
 //! the RC IR: a variable read yields the value alone, and a read-getter leaves its container to the
 //! `Release` node that disposes it. The work outside reference counting — closure layout, FFI,
-//! struct and array construction, the inline-LLVM builtins — is done by the `Generator` helpers.
+//! struct and array construction, the builtin operations — is done by the `Generator` helpers.
 
-use crate::ast::inline_llvm::LLVMGen;
+use crate::ast::builtin_op::BuiltinOp;
 use crate::ast::name::FullName;
 use crate::ast::types::TypeNode;
 use crate::configuration::Configuration;
@@ -38,7 +38,6 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Generate LLVM code for the functions and global initializers of `prog` — one compilation
     /// unit's worth. A function this module already declared (because its body refers to it) is
     /// reused; the rest are declared here, and every one of them is implemented.
-    // PROOF: P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn implement_rc_program(&mut self, prog: &RcProgram) {
         let mut func_vals: Map<FuncRef, FunctionValue<'c>> = Map::default();
         for (fref, func) in prog.funcs.iter() {
@@ -90,7 +89,6 @@ impl<'c, 'm> Generator<'c, 'm> {
     const ACCESSES_PER_INITIALIZATION: u64 = 1 << 20;
 
     /// Call `init_value_fn` and store what it returns into `global_var_ptr`.
-    // PROOF: P3, P4, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn store_init_value(
         &mut self,
         init_value_fn: FunctionValue<'c>,
@@ -109,7 +107,6 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// the scope as plain objects, then evaluate the body in tail position. Capture read-back and the
     /// release of unused parameters/captures are already explicit in the body, so nothing extra is
     /// done here.
-    // PROOF: D/A, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn implement_rc_function(
         &mut self,
         func: &RcFunc,
@@ -185,7 +182,6 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// Generate the code for an RC IR expression, dispatching on the kind of node and following its
     /// continuation. The node's debug location is already in effect. Returns the produced object
     /// when `tail` is false; when `tail` is true the return has been built and `None` is returned.
-    // PROOF: D/A, P7a, P7c, P7d, P7e, P7f, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P18a, P18b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn eval_rc_expr_inner(
         &mut self,
         node: &RcExprNode,
@@ -257,7 +253,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                     self.bind_and_continue(x, obj.unwrap(), k, tail, func_vals)
                 }
             }
-            RcExpr::Let(x, RcRhs::Llvm(llvm_gen, args), k) => {
+            RcExpr::Let(x, RcRhs::Builtin(op, args), k) => {
                 // What an op declares about an operand -- whether it borrows it, what it counts on
                 // it, where its result comes from -- is answered from the type the RC IR carries,
                 // while `generate` reads an operand's type out of the scope it reads the value
@@ -275,22 +271,22 @@ impl<'c, 'm> Generator<'c, 'm> {
                         }
                     }
                 }
-                // An inline-LLVM op may build the tail return itself (`FixBody`), in which case it
-                // yields no value. A diverging op (`undefined`) does not: it emits `unreachable` and
-                // yields a poison value, so the continuation is generated as dead code.
-                let llvm_tail = self.binding_fuses_into_return(x, k, tail);
+                // A builtin op may build the tail return itself (`FixCombinatorOp`), in which case
+                // it yields no value. A diverging op (`undefined`) does not: it emits `unreachable`
+                // and yields a poison value, so the continuation is generated as dead code.
+                let op_tail = self.binding_fuses_into_return(x, k, tail);
                 // What the op says about applying its operands, for `apply_lambda` to check it by.
                 let outer_op = self.config.develop_mode.then(|| {
-                    self.generating_llvm_op
-                        .replace((llvm_gen.name(), llvm_gen.applies_a_function_operand()))
+                    self.generating_builtin_op
+                        .replace((op.name(), op.applies_a_function_operand()))
                 });
-                let generated = llvm_gen.generate_tail(self, &x.ty, llvm_tail);
+                let generated = op.generate_tail(self, &x.ty, op_tail);
                 if let Some(outer_op) = outer_op {
-                    self.generating_llvm_op = outer_op;
+                    self.generating_builtin_op = outer_op;
                 }
                 if let Some(obj) = generated.as_ref() {
                     self.build_assert_declared_passthrough_answers_the_operand(
-                        llvm_gen.as_ref(),
+                        op.as_ref(),
                         args,
                         obj,
                     );
@@ -301,9 +297,9 @@ impl<'c, 'm> Generator<'c, 'm> {
                         // tail position; elsewhere the continuation below would be dropped and the
                         // block left without a terminator.
                         assert!(
-                            llvm_tail,
-                            "inline-LLVM op `{}` yielded no value outside tail position",
-                            llvm_gen.name()
+                            op_tail,
+                            "builtin op `{}` yielded no value outside tail position",
+                            op.name()
                         );
                         None
                     }
@@ -347,8 +343,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    /// Abort, in compiler development mode, where an inline-LLVM op that declared its result to be
-    /// one of its operands answered with another object.
+    /// Abort, in compiler development mode, where a builtin op that declared its result to be one
+    /// of its operands answered with another object.
     ///
     /// `result_prov` lets an op declare its result to be argument `i` itself, the same object.
     /// Reference counting reads that as identity: the argument goes unconsumed, and a retain of the
@@ -364,7 +360,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// one that does.
     fn build_assert_declared_passthrough_answers_the_operand(
         &mut self,
-        llvm_gen: &dyn LLVMGen,
+        op: &dyn BuiltinOp,
         args: &[RcVar],
         result: &Object<'c>,
     ) {
@@ -375,7 +371,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             return;
         }
         let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
-        let prov = llvm_gen.result_prov(&result.ty, &arg_tys, self.type_env());
+        let prov = op.result_prov(&result.ty, &arg_tys, self.type_env());
         let Some(origins) = prov.leaf_origins_at(&[]) else {
             return;
         };
@@ -413,8 +409,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             is_different,
             "assert_declared_passthrough",
             &format!(
-                "The inline-LLVM operation `{}` declared its result to be an operand, and answered with another object.\n",
-                llvm_gen.name()
+                "The builtin operation `{}` declared its result to be an operand, and answered with another object.\n",
+                op.name()
             ),
         );
     }
@@ -479,7 +475,6 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Bind `obj` to `x` on the scope, emit its debug local variable, evaluate the continuation `k`,
     /// then pop the binding.
-    // PROOF: P7a, P7d, P7e, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn bind_and_continue(
         &mut self,
         x: &RcVar,
@@ -501,7 +496,6 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// matching the current back end, which materializes every source `let` binding as a scoped
     /// value. Genuine tail calls and tail recursion go through unnamed temporaries, so they still
     /// fuse in every build.
-    // PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
     fn binding_fuses_into_return(&self, x: &RcVar, k: &RcExprNode, tail: bool) -> bool {
         tail && carries_var_to_return(k, &x.name) && !(self.has_di() && x.debug_name.is_some())
     }
@@ -516,9 +510,8 @@ impl<'c, 'm> Generator<'c, 'm> {
         }
     }
 
-    /// Evaluate a `Var` or `Closure` right-hand side to an object. `App`, `Match`, and `Llvm` are
-    /// handled directly in `eval_rc_expr_inner`.
-    // PROOF: P7a, P7c, P7d, P7e, P7f, P18a, P18b, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
+    /// Evaluate a `Var` or `Closure` right-hand side to an object. `App`, `Match`, and `Builtin`
+    /// are handled directly in `eval_rc_expr_inner`.
     fn eval_rc_rhs(
         &mut self,
         rhs: &RcRhs,
@@ -530,14 +523,13 @@ impl<'c, 'm> Generator<'c, 'm> {
             RcRhs::Closure(func, captures) => {
                 self.build_rc_closure(func, captures, result_ty, func_vals)
             }
-            RcRhs::App(..) | RcRhs::Match(..) | RcRhs::Llvm(..) => {
-                unreachable!("App, Match, and Llvm are handled in eval_rc_expr_inner")
+            RcRhs::App(..) | RcRhs::Match(..) | RcRhs::Builtin(..) => {
+                unreachable!("App, Match, and Builtin are handled in eval_rc_expr_inner")
             }
         }
     }
 
     /// Build a closure value `{funptr, capture-object pointer}` for `Closure(func, captures)`.
-    // PROOF: D/A, P8, P9, P10, P11, P12, P13, P14, P14a, P14b, P26, P27, P28, P29, P30, A21 (dev-docs/proof/rc_ir/borrow-cancel)
     fn build_rc_closure(
         &mut self,
         func: &FuncRef,
@@ -588,7 +580,6 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// yields the match value. The scrutinee's per-arm container release and dead-branch releases are
     /// already explicit `Release` nodes in the arm bodies; here only the payload retain-getter is
     /// baked in (mirroring `get_union_value`).
-    // PROOF: D/A, P5, P6, P7, P7a, P7c, P7d, P7e, P7f, P18a, P18b, P26, P27, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn eval_rc_match(
         &mut self,
         result: &RcVar,
@@ -718,7 +709,6 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// it keeps it, and the accessor where it reads it — which is where it keeps the value, and
     /// where it reads the value another unit keeps and publishes. Whatever it does not generate it
     /// declares.
-    // PROOF: D/A, P3, P4, P26, P27, P28, P29, P30 (dev-docs/proof/rc_ir/borrow-cancel)
     fn implement_rc_global(
         &mut self,
         global_init: &RcGlobalInit,
@@ -959,7 +949,6 @@ impl<'c, 'm> Generator<'c, 'm> {
 
 /// Whether the continuation `k` carries `x` to the terminator only by move-renames — i.e. the
 /// binding of `x` is in tail position.
-// PROOF: P7a, P7d, P7e (dev-docs/proof/rc_ir/borrow-cancel)
 fn carries_var_to_return(k: &RcExprNode, x: &FullName) -> bool {
     match k.expr.as_ref() {
         RcExpr::Ret(r) => r.name == *x,

@@ -5,7 +5,7 @@ use crate::misc::{collect_results, grow_stack, insert_to_map_vec, shorten_for_re
 use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
-        expr::{AppSourceCodeOrderType, Expr, ExprNode},
+        expr::{AppSourceCodeOrderType, Expr, ExprNode, FieldSrc},
         import::ImportStatement,
         kind_scope::KindEnv,
         name::{FullName, Name, NameSpace},
@@ -15,6 +15,7 @@ use crate::{
         qual_pred::{QualPred, QualPredScheme},
         qual_type::QualType,
         traits::{TraitEnv, TraitId},
+        typedecl::describe_field_names,
         types::{
             is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar,
             type_fun, type_tyapp, type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme,
@@ -151,14 +152,12 @@ where
 ///
 /// No type on the right hand side names a type variable the substitution replaces, so replacing
 /// every such variable of a type takes one walk over that type.
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Substitution {
     /// The type replacing each type variable, by the variable's name.
     data: Map<Name, Arc<TypeNode>>,
 }
 
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Default for Substitution {
     /// A substitution that replaces no type variable.
     fn default() -> Self {
@@ -168,7 +167,6 @@ impl Default for Substitution {
     }
 }
 
-// PROOF: P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
 impl Substitution {
     /// Whether this substitution replaces no type variable, so that applying it changes nothing.
     pub fn is_empty(&self) -> bool {
@@ -181,7 +179,6 @@ impl Substitution {
     }
 
     /// The substitution that replaces the type variable named `var` by `ty`, and nothing else.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn single(var: &str, ty: Arc<TypeNode>) -> Self {
         let mut data = Map::<String, Arc<TypeNode>>::default();
         data.insert(var.to_string(), ty);
@@ -210,7 +207,6 @@ impl Substitution {
     /// # Returns
     /// Whether the two agreed. Where they disagree, the replacements taken from `other` before the
     /// disagreement stay, so a caller that carries on has to drop this substitution.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn merge(&mut self, other: &Self) -> bool {
         for (var, ty) in &other.data {
             if self.data.contains_key(var) {
@@ -234,7 +230,6 @@ impl Substitution {
     /// A type none of whose variables this substitution replaces is returned as
     /// it came: the common case of a substitution that says nothing about a type
     /// walks the type and hands back the same node.
-    // PROOF: P1, P2, P2a, P15, P16, P17, P18 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn substitute_type(&self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         match &ty.ty {
             Type::TyVar(tyvar) => self.data.get(&tyvar.name).map_or(ty.clone(), |sub| {
@@ -657,7 +652,6 @@ impl TypeCheckContext {
     /// unification mismatch is swallowed (`Ok(())`) so the caller can
     /// keep elaborating siblings; non-unification errors (e.g. an
     /// associated-type reduction failure) always propagate.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unify_or_tolerated_mismatch(
         &mut self,
         expected: &Arc<TypeNode>,
@@ -1113,7 +1107,6 @@ impl TypeCheckContext {
     /// Perform typechecking: update the type substitution so that `ei` has
     /// type `ty`, and return the given AST augmented with inferred
     /// information.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unify_type_of_expr(
         &mut self,
         ei: &Arc<ExprNode>,
@@ -1165,7 +1158,6 @@ impl TypeCheckContext {
     /// later stage — as the `Expr::MakeStruct` arm holds them in the
     /// struct's declaration order for code generation — reorders them
     /// after the walk rather than before it.
-    // PROOF: D/A, P26, A21 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unify_type_of_expr_inner(
         &mut self,
         ei: &Arc<ExprNode>,
@@ -1337,8 +1329,8 @@ impl TypeCheckContext {
                     Ok(ei)
                 }
             }
-            Expr::LLVM(lit) => {
-                self.unify_or_tolerated_mismatch(&ty, &lit.generic_ty, &ei.source)?;
+            Expr::Builtin(builtin) => {
+                self.unify_or_tolerated_mismatch(&ty, &builtin.generic_ty, &ei.source)?;
                 Ok(ei.clone())
             }
             Expr::App(fun, args) => {
@@ -1664,7 +1656,7 @@ impl TypeCheckContext {
                     }
                 }
             }
-            Pattern::Struct(tc, pats) => {
+            Pattern::Struct(tc, pats, _) => {
                 // The head has to name a struct: the sub-patterns are matched against that
                 // struct's fields, and the value is destructured in its field order.
                 let tycon_info = self.resolve_struct_tycon(tc, &pat.info.source, !tolerate)?;
@@ -1675,9 +1667,9 @@ impl TypeCheckContext {
                     if let Some(ti) = tycon_info {
                         let struct_field_names =
                             ti.fields.iter().map(|f| f.name.clone()).collect::<Set<_>>();
-                        for (name, name_src, _) in pats {
+                        for (name, field_src, _) in pats {
                             if !struct_field_names.contains(name) {
-                                errors.append(unknown_field_error(tc, name, name_src));
+                                errors.append(unknown_field_error(tc, name, field_src));
                             }
                         }
                     }
@@ -2149,7 +2141,6 @@ impl TypeCheckContext {
     /// known about its arguments. Two types no substitution can make equal give
     /// `UnificationErr::Disjoint`, and two that could be made equal only by reading an opaque type
     /// as a type constructor applied to an argument give `UnificationErr::IndivisibleOpaque`.
-    // PROOF: P2a, P15, P16, P17, P18, P26 (dev-docs/proof/rc_ir/borrow-cancel)
     pub fn unify(
         &mut self,
         ty1: &Arc<TypeNode>,
@@ -2321,7 +2312,6 @@ impl TypeCheckContext {
 
     /// Binds the type variable `tyvar1` to `ty2` by extending the substitution,
     /// rejecting a binding that would be circular or kind-mismatched.
-    // PROOF: P26 (dev-docs/proof/rc_ir/borrow-cancel)
     fn unify_tyvar(
         &mut self,
         tyvar1: Arc<TyVar>,
@@ -2518,7 +2508,7 @@ impl TypeCheckContext {
                 let subpat = self.map_types_for_pattern(subpat, pat_ty)?;
                 pat.set_union_pat(subpat)
             }
-            Pattern::Struct(_, field_to_pat) => {
+            Pattern::Struct(_, field_to_pat, _) => {
                 let mut field_to_pat = field_to_pat.clone();
                 for (_field_name, _, subpat) in field_to_pat.iter_mut() {
                     *subpat = self.map_types_for_pattern(subpat, pat_ty)?;
@@ -2622,7 +2612,7 @@ impl TypeCheckContext {
         let expr = expr.set_type(ty);
         Ok(match &*expr.expr {
             Expr::Var(_) => expr,
-            Expr::LLVM(_) => expr,
+            Expr::Builtin(_) => expr,
             Expr::App(fun, args) => {
                 let args =
                     collect_results(args.iter().map(|arg| self.map_types(arg, expr_ty, pat_ty)))?;
@@ -2694,7 +2684,7 @@ impl TypeCheckContext {
     /// precedence over the failure at the root).
     pub fn check_types_are_fixed(&self, expr: &Arc<ExprNode>) -> Result<(), Errors> {
         match &*expr.expr {
-            Expr::Var(_) | Expr::LLVM(_) => {}
+            Expr::Var(_) | Expr::Builtin(_) => {}
             Expr::App(fun, args) => {
                 for arg in args {
                     self.check_types_are_fixed(arg)?;
@@ -2754,7 +2744,7 @@ impl TypeCheckContext {
         match &pat.pattern {
             Pattern::Var(_, _) => {}
             Pattern::Union(_, _, subpat) => self.check_pattern_types_are_fixed(subpat)?,
-            Pattern::Struct(_, fields) => {
+            Pattern::Struct(_, fields, _) => {
                 for (_, _, subpat) in fields {
                     self.check_pattern_types_are_fixed(subpat)?;
                 }
@@ -2785,7 +2775,7 @@ impl TypeCheckContext {
             ));
         }
         match &*expr.expr {
-            Expr::Var(_) | Expr::LLVM(_) => {}
+            Expr::Var(_) | Expr::Builtin(_) => {}
             Expr::App(fun, args) => {
                 for arg in args {
                     self.check_all_typed(arg)?;
@@ -2847,7 +2837,7 @@ impl TypeCheckContext {
         match &pat.pattern {
             Pattern::Var(_, _) => {}
             Pattern::Union(_, _, subpat) => self.check_all_pattern_typed(subpat)?,
-            Pattern::Struct(_, fields) => {
+            Pattern::Struct(_, fields, _) => {
                 for (_, _, subpat) in fields {
                     self.check_all_pattern_typed(subpat)?;
                 }
@@ -2863,47 +2853,44 @@ impl TypeCheckContext {
 fn duplicate_field_error(
     tc: &Arc<TyCon>,
     name: &Name,
-    name_src: &Option<Span>,
-    first_src: &Option<Span>,
+    field_src: &Option<FieldSrc>,
+    first_src: &Option<FieldSrc>,
 ) -> Error {
     let mut err = Error::from_msg_srcs(
         format!("Duplicate field `{}` of struct `{}`.", name, tc.to_string()),
-        &[name_src],
+        &[&field_name_span(field_src)],
     );
     if let Some(first_src) = first_src {
         err.add_src(
             "The field is given here first.".to_string(),
-            first_src.clone(),
+            first_src.name_src.clone(),
         );
     }
     err
 }
 
 /// The report for a name the struct `tc` does not declare, located at the name.
-fn unknown_field_error(tc: &Arc<TyCon>, name: &Name, name_src: &Option<Span>) -> Errors {
+fn unknown_field_error(tc: &Arc<TyCon>, name: &Name, field_src: &Option<FieldSrc>) -> Errors {
     Errors::from_msg_srcs(
         format!("Unknown field `{}` for struct `{}`.", name, tc.to_string()),
-        &[name_src],
+        &[&field_name_span(field_src)],
     )
+}
+
+/// The span of the field name a struct literal or a struct pattern writes, which is where a report
+/// about that field is located.
+fn field_name_span(field_src: &Option<FieldSrc>) -> Option<Span> {
+    field_src.as_ref().map(|src| src.name_src.clone())
 }
 
 /// The report for declared fields a struct literal leaves out, located at the
 /// whole literal, which is where the editor's quick fix inserts them.
 fn missing_fields_error(tc: &Arc<TyCon>, missing: &[Name], source: &Option<Span>) -> Error {
-    let msg = if missing.len() == 1 {
-        format!(
-            "Missing field `{}` of struct `{}`.",
-            missing[0],
-            tc.to_string()
-        )
-    } else {
-        let list = missing
-            .iter()
-            .map(|n| format!("`{}`", n))
-            .collect::<Vec<_>>()
-            .join(", ");
-        format!("Missing fields {} of struct `{}`.", list, tc.to_string())
-    };
+    let msg = format!(
+        "Missing {} of struct `{}`.",
+        describe_field_names(missing),
+        tc.to_string()
+    );
     let mut err = Error::from_msg_srcs(msg, &[source]);
     err.code = Some(ERR_MISSING_STRUCT_FIELD);
     err.data = Some(json!(missing));
@@ -2918,17 +2905,17 @@ fn missing_fields_error(tc: &Arc<TyCon>, missing: &[Name], source: &Option<Span>
 /// at the second `a`; for `S { a : x, b : y }` it returns none.
 fn duplicate_field_errors(
     tc: &Arc<TyCon>,
-    fields: &[(Name, Option<Span>, Arc<PatternNode>)],
+    fields: &[(Name, Option<FieldSrc>, Arc<PatternNode>)],
 ) -> Errors {
     let mut errors = Errors::empty();
-    let mut first_srcs: Map<Name, Option<Span>> = Map::default();
-    for (name, name_src, _) in fields {
+    let mut first_srcs: Map<Name, Option<FieldSrc>> = Map::default();
+    for (name, field_src, _) in fields {
         let Some(first_src) = first_srcs.get(name).cloned() else {
-            first_srcs.insert(name.clone(), name_src.clone());
+            first_srcs.insert(name.clone(), field_src.clone());
             continue;
         };
         errors.append(Errors::from_err(duplicate_field_error(
-            tc, name, name_src, &first_src,
+            tc, name, field_src, &first_src,
         )));
     }
     errors
@@ -2954,9 +2941,9 @@ fn duplicate_field_errors(
 fn make_struct_fields_in_declaration_order(
     ti: &TyConInfo,
     tc: &Arc<TyCon>,
-    fields: &[(Name, Option<Span>, Arc<ExprNode>)],
+    fields: &[(Name, Option<FieldSrc>, Arc<ExprNode>)],
     source: &Option<Span>,
-) -> Result<Vec<(Name, Option<Span>, Arc<ExprNode>)>, Errors> {
+) -> Result<Vec<(Name, Option<FieldSrc>, Arc<ExprNode>)>, Errors> {
     let mut errors = Errors::empty();
     let name_to_idx: Map<&Name, usize> = ti
         .fields
@@ -2964,17 +2951,17 @@ fn make_struct_fields_in_declaration_order(
         .enumerate()
         .map(|(idx, f)| (&f.name, idx))
         .collect();
-    let mut slots: Vec<Option<(Name, Option<Span>, Arc<ExprNode>)>> =
+    let mut slots: Vec<Option<(Name, Option<FieldSrc>, Arc<ExprNode>)>> =
         (0..ti.fields.len()).map(|_| None).collect();
     for field in fields {
-        let (name, name_src, _) = field;
+        let (name, field_src, _) = field;
         let Some(&idx) = name_to_idx.get(name) else {
-            errors.append(unknown_field_error(tc, name, name_src));
+            errors.append(unknown_field_error(tc, name, field_src));
             continue;
         };
         match &slots[idx] {
             Some((_, first_src, _)) => errors.append(Errors::from_err(duplicate_field_error(
-                tc, name, name_src, first_src,
+                tc, name, field_src, first_src,
             ))),
             None => slots[idx] = Some(field.clone()),
         }

@@ -32,3 +32,9 @@ qualified = ::Main::Point { x: 3, y: 4 };
 
 std_qualified : Std::I64;
 std_qualified = ::Main::Point::@x(qualified);
+
+shorthand : I64 -> Point;
+shorthand = |x| Point { x, y: 0 };
+
+shorthand_pattern : Point -> I64;
+shorthand_pattern = |Point { x, y: _ }| x;
