@@ -336,6 +336,13 @@ impl ExampleBuild {
             .collect()
     }
 
+    /// The build of the program's sources with no example in them, whose entry runs nothing. It is
+    /// the build `merged` gives for no example, so the sources build under the entry and the
+    /// settings they build under with the examples.
+    pub fn without_examples() -> Result<Self, Errors> {
+        Self::merged(vec![])
+    }
+
     /// The sources the build adds to the program, each with the renaming its module is compiled
     /// under.
     pub fn sources(&self) -> Vec<(SourceFile, Option<ModuleRenaming>)> {

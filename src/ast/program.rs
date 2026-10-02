@@ -1803,7 +1803,7 @@ impl Program {
                 "The type of the value `{}` is not suitable for export: ",
                 value_name.to_string(),
             );
-            let gv = self.find_value_to_export(value_name, required_src)?;
+            let gv = self.find_global_value(value_name, required_src)?;
             let exported_ty = ExportedFunctionType::validate(
                 gv.scm.clone(),
                 &tc.type_env,
@@ -1819,7 +1819,7 @@ impl Program {
     }
 
     /// The global value `value_name`, or an error at `required_src` saying the program has none.
-    fn find_value_to_export(
+    fn find_global_value(
         &self,
         value_name: &FullName,
         required_src: &Option<Span>,
@@ -1842,7 +1842,7 @@ impl Program {
         required_ty: &Arc<TypeNode>,
         required_src: &Option<Span>,
     ) -> Result<(), Errors> {
-        let gv = self.find_value_to_export(value_name, required_src)?;
+        let gv = self.find_global_value(value_name, required_src)?;
         if gv.scm.to_string_normalize() != required_ty.to_string() {
             return Err(Errors::from_msg_srcs(
                 format!(

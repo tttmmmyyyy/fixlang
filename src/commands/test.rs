@@ -159,7 +159,7 @@ pub fn test_examples(
             .iter()
             .map(|index| examples[*index].task.source().unwrap().clone())
             .collect::<Vec<_>>();
-        let example_build = panic_if_err(ExampleBuild::merged(sources));
+        let example_build = ExampleBuild::merged(sources)?;
         let mut merged_config = config.clone();
         merged_config.example_build = Some(example_build.clone());
         let built = with_temporary_executable(merged_config, |merged_config, exec_path| {
@@ -180,7 +180,7 @@ pub fn test_examples(
         };
         let Some(blamed) = examples_errors_lie_in(&errors, &example_build) else {
             let mut sources_config = config.clone();
-            sources_config.example_build = Some(panic_if_err(ExampleBuild::merged(vec![])));
+            sources_config.example_build = Some(ExampleBuild::without_examples()?);
             build_executable(sources_config)?;
             break;
         };
