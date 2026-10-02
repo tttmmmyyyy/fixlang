@@ -51,10 +51,11 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // Resolve type aliases that appear in declarations and associated type implementations.
     program.resolve_type_aliases_not_in_expr()?;
 
-    // Hold the `main` of each Fix example a program built from several of them runs to the rule of an
-    // entry point, with an error placed in the example. This runs before the import statements are
-    // checked, which would report a missing `main` at the module that runs the examples, where no
-    // example lies. The types of declarations are resolved by now, aliases included.
+    // In a program built from several Fix examples, check that the `main` of each example has type
+    // `IO ()`, as an entry point must, and place the error in the example. This runs before the
+    // import statements are checked, because that check would report a missing `main` at the module
+    // that runs the examples, where no example lies. The types of declarations, aliases included,
+    // are resolved by now.
     if let Some(example_build) = &config.example_build {
         let mut errors = Errors::empty();
         for main in example_build.dispatched_mains() {

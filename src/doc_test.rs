@@ -320,7 +320,7 @@ impl ExampleBuild {
             .position(|example| span.input == example.source)
     }
 
-    /// The `main` of each example the dispatcher runs, which is none in a build of one example.
+    /// The `main` of each example the dispatcher runs. A build of one example has none.
     ///
     /// The dispatcher calls each of them as a value of type `IO ()`, which a `main` declared at a
     /// more general type, such as `[m : Monad] m ()`, also passes. A build checks each of them as it
@@ -393,7 +393,7 @@ fn dispatcher_source(examples: &[ExampleModule]) -> String {
 }
 
 /// Whether `name` is a module name reserved for the Fix examples: `DocTest`, or a name beginning
-/// with `DocTest.`, which the modules a build of several examples adds are named.
+/// with `DocTest.`. A build of several examples gives the modules it adds names of this kind.
 ///
 /// # Examples
 /// `DocTest` and `DocTest.Examples` are reserved, and `DocTests` and `Lib.DocTest` are not.
@@ -757,8 +757,8 @@ fn info_words(info: &str) -> impl Iterator<Item = &str> {
 }
 
 /// Whether the block whose info string is `info` is a Fix example: the first word of the info
-/// string is `fix`, or begins with `fix,`, as an info string writing its marks after commas does,
-/// which `example_of_block` reports.
+/// string is `fix`, or begins with `fix,`. A block of the second kind is taken as a Fix example so
+/// that its marks, written after commas, are reported as an error.
 ///
 /// # Examples
 /// `fix`, `fix no_run` and `fix,no_run` are Fix examples, and `fixme` and `rust` are not.

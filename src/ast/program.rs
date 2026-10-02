@@ -1824,8 +1824,8 @@ impl Program {
         })
     }
 
-    /// Reports a global value `value_name` that the program does not have, or whose declared type
-    /// is other than `required_ty`. A value declared at a more general type, such as
+    /// Reports that the program has no global value `value_name`, or that its declared type differs
+    /// from `required_ty`. A value declared at a more general type, such as
     /// `[m : Monad] m ()` where `IO ()` is required, is reported too. The errors are placed at the
     /// declaration of the value and at `required_src`.
     pub fn check_value_has_type(

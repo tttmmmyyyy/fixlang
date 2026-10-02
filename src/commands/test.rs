@@ -141,10 +141,10 @@ impl ExampleOutcome {
 /// under one C name. So where the program fails to build, the examples the errors lie in are taken
 /// out of it and tested alone, and the rest are built together again.
 ///
-/// An error that lies in no example is an error of the sources where they fail to build without the
-/// examples as well, and it is then returned with no example reported. Where the sources build, one
-/// of the examples caused the error without a location to tell which, as an example calling a C
-/// function nothing defines does at link time, and each example left is tested alone.
+/// Where an error lies in no example, the sources are built without the examples. If they fail to
+/// build, the error is theirs: it is returned, and no example is reported. If they build, one of the
+/// examples caused the error but nothing tells which, as when an example calls a C function that
+/// nothing defines and the link fails. Each example left is then tested alone.
 pub fn test_examples(
     config: &Configuration,
     examples: &[FixExample],
