@@ -1756,7 +1756,7 @@ Type: `Std::I128 -> Std::I128`
 
 `v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+The sign bit of a signed type counts as the most significant bit, so the count is zero for a negative `v`. If `v` is zero, the count is the number of bits in its type: `0_U8.count_leading_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -1780,7 +1780,7 @@ Type: `Std::I128 -> Std::I128`
 
 `v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-A `v` of zero gives the number of bits in its type.
+If `v` is zero, the count is the number of bits in its type: `0_U8.count_trailing_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -1875,7 +1875,7 @@ Type: `Std::I16 -> Std::I16`
 
 `v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+The sign bit of a signed type counts as the most significant bit, so the count is zero for a negative `v`. If `v` is zero, the count is the number of bits in its type: `0_U8.count_leading_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -1899,7 +1899,7 @@ Type: `Std::I16 -> Std::I16`
 
 `v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-A `v` of zero gives the number of bits in its type.
+If `v` is zero, the count is the number of bits in its type: `0_U8.count_trailing_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -2178,7 +2178,7 @@ Type: `Std::I32 -> Std::I32`
 
 `v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+The sign bit of a signed type counts as the most significant bit, so the count is zero for a negative `v`. If `v` is zero, the count is the number of bits in its type: `0_U8.count_leading_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -2202,7 +2202,7 @@ Type: `Std::I32 -> Std::I32`
 
 `v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-A `v` of zero gives the number of bits in its type.
+If `v` is zero, the count is the number of bits in its type: `0_U8.count_trailing_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -2481,7 +2481,7 @@ Type: `Std::I64 -> Std::I64`
 
 `v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+The sign bit of a signed type counts as the most significant bit, so the count is zero for a negative `v`. If `v` is zero, the count is the number of bits in its type: `0_U8.count_leading_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -2505,7 +2505,7 @@ Type: `Std::I64 -> Std::I64`
 
 `v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-A `v` of zero gives the number of bits in its type.
+If `v` is zero, the count is the number of bits in its type: `0_U8.count_trailing_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -2784,7 +2784,7 @@ Type: `Std::I8 -> Std::I8`
 
 `v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+The sign bit of a signed type counts as the most significant bit, so the count is zero for a negative `v`. If `v` is zero, the count is the number of bits in its type: `0_U8.count_leading_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -2808,7 +2808,7 @@ Type: `Std::I8 -> Std::I8`
 
 `v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-A `v` of zero gives the number of bits in its type.
+If `v` is zero, the count is the number of bits in its type: `0_U8.count_trailing_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -5132,7 +5132,7 @@ Type: `Std::U128 -> Std::U128`
 
 `v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+The sign bit of a signed type counts as the most significant bit, so the count is zero for a negative `v`. If `v` is zero, the count is the number of bits in its type: `0_U8.count_leading_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -5156,7 +5156,7 @@ Type: `Std::U128 -> Std::U128`
 
 `v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-A `v` of zero gives the number of bits in its type.
+If `v` is zero, the count is the number of bits in its type: `0_U8.count_trailing_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -5247,7 +5247,7 @@ Type: `Std::U16 -> Std::U16`
 
 `v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+The sign bit of a signed type counts as the most significant bit, so the count is zero for a negative `v`. If `v` is zero, the count is the number of bits in its type: `0_U8.count_leading_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -5271,7 +5271,7 @@ Type: `Std::U16 -> Std::U16`
 
 `v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-A `v` of zero gives the number of bits in its type.
+If `v` is zero, the count is the number of bits in its type: `0_U8.count_trailing_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -5546,7 +5546,7 @@ Type: `Std::U32 -> Std::U32`
 
 `v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+The sign bit of a signed type counts as the most significant bit, so the count is zero for a negative `v`. If `v` is zero, the count is the number of bits in its type: `0_U8.count_leading_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -5570,7 +5570,7 @@ Type: `Std::U32 -> Std::U32`
 
 `v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-A `v` of zero gives the number of bits in its type.
+If `v` is zero, the count is the number of bits in its type: `0_U8.count_trailing_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -5845,7 +5845,7 @@ Type: `Std::U64 -> Std::U64`
 
 `v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+The sign bit of a signed type counts as the most significant bit, so the count is zero for a negative `v`. If `v` is zero, the count is the number of bits in its type: `0_U8.count_leading_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -5869,7 +5869,7 @@ Type: `Std::U64 -> Std::U64`
 
 `v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-A `v` of zero gives the number of bits in its type.
+If `v` is zero, the count is the number of bits in its type: `0_U8.count_trailing_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -6144,7 +6144,7 @@ Type: `Std::U8 -> Std::U8`
 
 `v.count_leading_zeros` counts the zero bits of `v` above its most significant one bit: `1_U8.count_leading_zeros` is `7_U8`.
 
-The sign bit of a signed type counts as the most significant bit, so a negative `v` gives zero. A `v` of zero gives the number of bits in its type.
+The sign bit of a signed type counts as the most significant bit, so the count is zero for a negative `v`. If `v` is zero, the count is the number of bits in its type: `0_U8.count_leading_zeros` is `8_U8`.
 
 ##### Parameters
 
@@ -6168,7 +6168,7 @@ Type: `Std::U8 -> Std::U8`
 
 `v.count_trailing_zeros` counts the zero bits of `v` below its least significant one bit: `12_U8.count_trailing_zeros` is `2_U8`.
 
-A `v` of zero gives the number of bits in its type.
+If `v` is zero, the count is the number of bits in its type: `0_U8.count_trailing_zeros` is `8_U8`.
 
 ##### Parameters
 
