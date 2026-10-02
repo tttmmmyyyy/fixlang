@@ -44,8 +44,8 @@ pub fn test_command(mut config: Configuration, selection: TestSelection) {
 
     let program = panic_if_err(load_source_files(&config));
     let examples = panic_if_err(collect_examples(&program, &panic_if_err(doc_test_files())));
-    // The module name `DocTest` is the one each example is compiled as, so it is free where an
-    // example is compiled.
+    // The examples are compiled as modules whose names are reserved for them (see
+    // `is_reserved_module_name`), so those names are free where an example is compiled.
     if examples
         .iter()
         .any(|example| example.task.source().is_some())

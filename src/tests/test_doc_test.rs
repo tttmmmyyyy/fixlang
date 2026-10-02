@@ -1066,7 +1066,7 @@ double = |x| old_double(x);
 
 /// Two Fix examples that cannot be compiled into one program, as two that export functions under
 /// one C name, are taken out of the program of the examples and tested alone, where each passes.
-/// An error of the sources, which lies in no example, is reported for each example.
+/// An error of the sources, which lies in no example, is reported once, and no example is reported.
 #[test]
 fn test_examples_that_cannot_share_a_program_are_tested_alone() {
     let example_exporting = |value: &str| {
