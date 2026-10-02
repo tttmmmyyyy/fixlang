@@ -573,8 +573,7 @@ pub fn make_string_tycon() -> Arc<TyCon> {
     tycon(FullName::from_strs(&[STD_NAME], STRING_NAME))
 }
 
-/// The integral type of that name, and `None` where the name is not one of the ten integral
-/// types (`I8` to `I128`, `U8` to `U128`).
+/// The type of `integral_types` that has that name, and `None` where none of them has it.
 pub fn make_integral_ty(name: &str) -> Option<Arc<TypeNode>> {
     if name == I8_NAME {
         Some(make_i8_ty())
@@ -603,7 +602,7 @@ pub fn make_integral_ty(name: &str) -> Option<Arc<TypeNode>> {
 
 /// The smallest and the largest value the integral type of that name holds.
 ///
-/// Panics where the name is not one of the ten integral types.
+/// Panics where no type of `integral_types` has that name.
 ///
 /// # Examples
 /// `integral_ty_range("I8")` is `(-128, 127)`, and `integral_ty_range("U8")` is `(0, 255)`.
@@ -802,7 +801,8 @@ fn strip_sign_and_radix_prefix<'a>(raw: &'a str, prefix: &str) -> Option<(&'a st
 
 /// The numeric type of that name, and whether it is a floating point type.
 ///
-/// Panics where the name is not one of the ten integral types or the two floating point ones.
+/// Panics where the name is that of neither an integral type (`make_integral_ty`) nor a floating
+/// point type (`make_floating_ty`).
 pub fn make_numeric_ty(name: &str) -> (Arc<TypeNode>, bool) {
     if let Some(integral_ty) = make_integral_ty(name) {
         return (integral_ty, false);
