@@ -2693,8 +2693,8 @@ fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Ty
     name.set_absolute();
     let ty = tycon(name);
     if !ty.is_unit() && !ty.is_c_scalar() {
-        // The grammar admits only the numeric types besides `Ptr` and `()`, and every numeric type
-        // but the 128-bit integers is a C scalar.
+        // The grammar admits the C type names, `Ptr`, `()` and the numeric types, and of these the
+        // 128-bit integers alone are not C scalars.
         assert!(ty.is_128_bit_integer());
         return Err(Errors::from_msg_srcs(
             unsupported_128_bit_integer_msg(pair.as_str()),
