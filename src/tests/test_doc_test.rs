@@ -469,6 +469,13 @@ fn test_the_module_name_doc_test_is_reserved() {
         (
             vec![
                 ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
+                ("other.fix", "module DocTests;\nvalue : I64;\nvalue = 1;\n"),
+            ],
+            vec![],
+        ),
+        (
+            vec![
+                ("lib.fix", LIB_WITH_PASSING_EXAMPLES),
                 (
                     "other.fix",
                     "module Other;\nnamespace DocTest {\n    value : I64;\n    value = 1;\n}\n",
@@ -1281,6 +1288,101 @@ double = |x| 2 * x;
             && stderr.contains("doc test lib.fix:7 ... FAILED")
             && stderr.contains("doc tests: 1 passed, 1 failed, 0 ignored."),
         "the example that fails to link fails, and the other passes\n{}",
+        streams(&output)
+    );
+}
+
+/// A Fix example written as a module that declares a type and a trait of one name fails as it does
+/// built alone, and is taken out of the program of the examples by itself: the name confliction is
+/// reported at the declarations, which lie in the example, so the other examples are still built
+/// together, once.
+#[test]
+fn test_example_declaring_a_type_and_a_trait_of_one_name_is_taken_out_alone() {
+    let lib = r#"module Lib;
+
+DEPRECATED[old_double, "Call `double` in place of `old_double`."];
+old_double : I64 -> I64;
+old_double = |x| 2 * x;
+
+// ```fix
+// assert_eq(|_|"", double(21), 42)
+// ```
+//
+// ```fix
+// # module DocTest;
+// # type Piyo = struct { data : I64 };
+// # trait a : Piyo {
+// #     val : a;
+// # }
+// # main : IO ();
+// # main = pure();
+// ```
+//
+// ```fix
+// assert_eq(|_|"", double(2), 4)
+// ```
+double : I64 -> I64;
+double = |x| old_double(x);
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &["--doc"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("doc test lib.fix:11 ... FAILED")
+            && stderr.contains("is both a type and a trait")
+            && stderr.contains("doc tests: 2 passed, 1 failed, 0 ignored."),
+        "the example declaring `Piyo` twice fails, and the others pass\n{}",
+        streams(&output)
+    );
+    assert_eq!(
+        stderr
+            .matches("Call `double` in place of `old_double`.")
+            .count(),
+        1,
+        "the other examples are built together once\n{}",
+        streams(&output)
+    );
+}
+
+/// A Fix example written as a module whose `main` is declared through a type alias of `IO ()`
+/// passes in the program of the examples, as it does built alone, and the examples are built
+/// together once.
+#[test]
+fn test_example_whose_main_is_declared_through_an_alias_of_io() {
+    let lib = r#"module Lib;
+
+DEPRECATED[old_double, "Call `double` in place of `old_double`."];
+old_double : I64 -> I64;
+old_double = |x| 2 * x;
+
+// ```fix
+// assert_eq(|_|"", double(21), 42)
+// ```
+//
+// ```fix
+// # module DocTest;
+// # import Lib;
+// # type Action = IO ();
+// # main : Action;
+// # main = assert_eq(|_|"", double(2), 4);
+// ```
+double : I64 -> I64;
+double = |x| old_double(x);
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &["--doc"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success() && stderr.contains("doc tests: 2 passed, 0 failed, 0 ignored."),
+        "both examples pass\n{}",
+        streams(&output)
+    );
+    assert_eq!(
+        stderr
+            .matches("Call `double` in place of `old_double`.")
+            .count(),
+        1,
+        "the examples are built together once\n{}",
         streams(&output)
     );
 }
