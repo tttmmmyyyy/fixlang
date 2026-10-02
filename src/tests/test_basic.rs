@@ -6672,6 +6672,9 @@ pub fn test_float_to_string_precision_of_zero() {
             assert_eq(|_|"F32 negative zero",
                       [(-0.0_F32).to_string_precision(2_U8), (-0.0_F32).to_string_exp],
                       ["-0.00", "-0.000000e0"]);;
+            assert_eq(|_|"zero at 0 places",
+                      [0.0.to_string_precision(0_U8), (-0.0).to_string_precision(0_U8), (-0.0_F32).to_string_precision(0_U8)],
+                      ["0", "-0", "-0"]);;
             assert_eq(|_|"a negative number rounded to zero", (-0.001).to_string_precision(2_U8), "-0.00");;
             let back : Result ErrMsg F64 = (-0.0).to_string_precision(2_U8).from_string;
             assert_eq(|_|"from_string reads the negative zero back", back.as_ok.to_bytes, (-0.0).to_bytes);;
