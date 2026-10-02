@@ -23,7 +23,6 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 #include <limits.h>
 
@@ -33,7 +32,6 @@
 
 #include "ryu/common.h"
 #include "ryu/f2s_intrinsics.h"
-#include "ryu/digit_table.h"
 
 #define FLOAT_MANTISSA_BITS 23
 #define FLOAT_EXPONENT_BITS 8
@@ -227,119 +225,19 @@ static inline floating_decimal_32 f2d(const uint32_t ieeeMantissa, const uint32_
   return fd;
 }
 
-static inline int to_chars(const floating_decimal_32 v, const bool sign, char* const result) {
-  // Step 5: Print the decimal representation.
-  int index = 0;
-  if (sign) {
-    result[index++] = '-';
-  }
-
-  uint32_t output = v.mantissa;
-  const uint32_t olength = decimalLength9(output);
-
-#ifdef RYU_DEBUG
-  printf("DIGITS=%u\n", v.mantissa);
-  printf("OLEN=%u\n", olength);
-  printf("EXP=%u\n", v.exponent + olength);
-#endif
-
-  // Print the decimal digits.
-  // The following code is equivalent to:
-  // for (uint32_t i = 0; i < olength - 1; ++i) {
-  //   const uint32_t c = output % 10; output /= 10;
-  //   result[index + olength - i] = (char) ('0' + c);
-  // }
-  // result[index] = '0' + output % 10;
-  uint32_t i = 0;
-  while (output >= 10000) {
-#ifdef __clang__ // https://bugs.llvm.org/show_bug.cgi?id=38217
-    const uint32_t c = output - 10000 * (output / 10000);
-#else
-    const uint32_t c = output % 10000;
-#endif
-    output /= 10000;
-    const uint32_t c0 = (c % 100) << 1;
-    const uint32_t c1 = (c / 100) << 1;
-    memcpy(result + index + olength - i - 1, DIGIT_TABLE + c0, 2);
-    memcpy(result + index + olength - i - 3, DIGIT_TABLE + c1, 2);
-    i += 4;
-  }
-  if (output >= 100) {
-    const uint32_t c = (output % 100) << 1;
-    output /= 100;
-    memcpy(result + index + olength - i - 1, DIGIT_TABLE + c, 2);
-    i += 2;
-  }
-  if (output >= 10) {
-    const uint32_t c = output << 1;
-    // We can't use memcpy here: the decimal dot goes between these two digits.
-    result[index + olength - i] = DIGIT_TABLE[c + 1];
-    result[index] = DIGIT_TABLE[c];
-  } else {
-    result[index] = (char) ('0' + output);
-  }
-
-  // Print decimal point if needed.
-  if (olength > 1) {
-    result[index + 1] = '.';
-    index += olength + 1;
-  } else {
-    ++index;
-  }
-
-  // Print the exponent.
-  result[index++] = 'E';
-  int32_t exp = v.exponent + (int32_t) olength - 1;
-  if (exp < 0) {
-    result[index++] = '-';
-    exp = -exp;
-  }
-
-  if (exp >= 10) {
-    memcpy(result + index, DIGIT_TABLE + 2 * exp, 2);
-    index += 2;
-  } else {
-    result[index++] = (char) ('0' + exp);
-  }
-
-  return index;
-}
-
-int f2s_buffered_n(float f, char* result) {
+// Modified from upstream Ryu by the Fix project: gives the digits `f2d` finds as a number, in place
+// of upstream's `f2s_buffered_n`, which wrote them as text.
+ryu_decimal f2s_shortest(float f) {
   // Step 1: Decode the floating-point number, and unify normalized and subnormal cases.
   const uint32_t bits = float_to_bits(f);
 
-#ifdef RYU_DEBUG
-  printf("IN=");
-  for (int32_t bit = 31; bit >= 0; --bit) {
-    printf("%u", (bits >> bit) & 1);
-  }
-  printf("\n");
-#endif
-
-  // Decode bits into sign, mantissa, and exponent.
-  const bool ieeeSign = ((bits >> (FLOAT_MANTISSA_BITS + FLOAT_EXPONENT_BITS)) & 1) != 0;
+  // Decode bits into mantissa and exponent.
   const uint32_t ieeeMantissa = bits & ((1u << FLOAT_MANTISSA_BITS) - 1);
   const uint32_t ieeeExponent = (bits >> FLOAT_MANTISSA_BITS) & ((1u << FLOAT_EXPONENT_BITS) - 1);
-
-  // Case distinction; exit early for the easy cases.
-  if (ieeeExponent == ((1u << FLOAT_EXPONENT_BITS) - 1u) || (ieeeExponent == 0 && ieeeMantissa == 0)) {
-    return copy_special_str(result, ieeeSign, ieeeExponent, ieeeMantissa);
-  }
+  assert(ieeeExponent != ((1u << FLOAT_EXPONENT_BITS) - 1u));
+  assert(ieeeExponent != 0 || ieeeMantissa != 0);
 
   const floating_decimal_32 v = f2d(ieeeMantissa, ieeeExponent);
-  return to_chars(v, ieeeSign, result);
-}
-
-void f2s_buffered(float f, char* result) {
-  const int index = f2s_buffered_n(f, result);
-
-  // Terminate the string.
-  result[index] = '\0';
-}
-
-char* f2s(float f) {
-  char* const result = (char*) malloc(16);
-  f2s_buffered(f, result);
+  const ryu_decimal result = { v.mantissa, v.exponent, decimalLength9(v.mantissa) };
   return result;
 }

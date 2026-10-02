@@ -2,14 +2,14 @@
 // buffer's size is derived from the widest text the value can be asked for, and the derivation
 // holds only if the widest digits, the widest exponent and the null terminator were all counted.
 //
-// A buffer short of that text stops the program: the runtime builds every text in a buffer of its
-// own and hands its length to `fixruntime_copy_float_text`, which aborts where the text and its
-// null do not fit before copying anything. So what this file does is write the widest text each of
-// the eight can produce, which is what proves the check never fires — and an undersized buffer is
-// caught by the abort wherever the tests run, rather than by the Valgrind this file also asks for.
+// A buffer short of that text stops the program: the runtime knows the length of every text
+// before it writes the text into the buffer, and aborts where the text and its null do not fit.
+// So what this file does is write the widest text each of the eight can produce, which is what
+// proves the check never fires — and an undersized buffer is caught by the abort wherever the
+// tests run, with Valgrind or without it.
 //
 // The run is under Valgrind all the same, because the check answers for the write into the buffer
-// and Valgrind answers for everything around it: the `Array` the buffer lives in, the copy into
+// and Valgrind answers for everything around it: the `Array` the buffer lives in, the write into
 // it, and the `String` built from it.
 
 #[cfg(test)]
@@ -17,12 +17,13 @@ mod float_text_buffer_tests {
     use crate::{
         configuration::{Configuration, ValgrindTool},
         misc::{function_name, platform_valgrind_supported},
-        tests::test_util::test_source,
+        tests::test_util::{test_source, test_source_fail},
     };
 
     /// Writes the widest text each of the eight functions can produce -- the least value of each
-    /// type, at every precision they accept -- under Valgrind, so that a buffer sized short of
-    /// that text shows up as a write past its allocation.
+    /// type, whose whole part is the widest, and the greatest negative one, whose exponent is the
+    /// widest, at every precision the functions accept -- under Valgrind, so that a buffer sized
+    /// short of that text shows up as a write past its allocation.
     #[test]
     pub fn test_widest_text_fits_its_buffer() {
         if !platform_valgrind_supported() {
@@ -36,24 +37,26 @@ mod float_text_buffer_tests {
 module Main;
 
 main : IO () = (
-    // The least value of each type, whose whole part and exponent are the widest either type
-    // reaches, written to every precision the functions accept. Each buffer is therefore filled
-    // to the width its size was derived for.
-    let widest_f32 = -3.4028235e38_F32;
-    let widest_f64 = -1.7976931348623157e308;
+    // The least value of each type, whose whole part is the widest either type reaches, and the
+    // greatest negative one, whose exponent is the widest, written to every precision the
+    // functions accept. Each buffer is therefore filled to the width its size was derived for.
+    let widest_whole_f32 = -3.4028235e38_F32;
+    let widest_exponent_f32 = -1.4e-45_F32;
+    let widest_whole_f64 = -1.7976931348623157e308;
+    let widest_exponent_f64 = -5.0e-324;
     let total = range(0, 256).fold(0, |p, total|
         let prec = p.u8;
-        total + widest_f32.to_string_precision(prec).@size
-              + widest_f32.to_string_exp_precision(prec).@size
-              + widest_f64.to_string_precision(prec).@size
-              + widest_f64.to_string_exp_precision(prec).@size
+        total + widest_whole_f32.to_string_precision(prec).@size
+              + widest_exponent_f32.to_string_exp_precision(prec).@size
+              + widest_whole_f64.to_string_precision(prec).@size
+              + widest_exponent_f64.to_string_exp_precision(prec).@size
     );
-    // The four that take no precision. The exponential two write the 6 places their format gives
-    // by default; `to_string` writes the shortest digits, whose widest text comes next.
-    let total = total + widest_f32.to_string.@size
-                      + widest_f32.to_string_exp.@size
-                      + widest_f64.to_string.@size
-                      + widest_f64.to_string_exp.@size;
+    // The four that take no precision. `to_string_exp` writes 6 places; `to_string` writes the
+    // shortest digits, whose widest text comes next.
+    let total = total + widest_whole_f32.to_string.@size
+                      + widest_exponent_f32.to_string_exp.@size
+                      + widest_whole_f64.to_string.@size
+                      + widest_exponent_f64.to_string_exp.@size;
     // `to_string` writes the shortest digits, and its buffer is sized for the widest text those
     // reach: a number whose digits fill the type and whose point sits outside the window written
     // positionally for an `F64`, and one at the far edge of that window for an `F32`.
@@ -66,5 +69,29 @@ main : IO () = (
         let mut config = Configuration::develop_mode();
         config.set_valgrind(ValgrindTool::MemCheck);
         test_source(source, config);
+    }
+
+    /// A buffer one byte short of a text and its null stops the program with the two sizes, before
+    /// the text is written. `-2.2250738585072014e-308` is written in 24 bytes, so a buffer of 24
+    /// bytes is one short of what it needs.
+    #[test]
+    pub fn test_text_one_byte_past_its_buffer_stops_the_program() {
+        let source = r#"
+module Main;
+
+main : IO () = (
+    let size = 24;
+    let data = Array::fill(size, 0_U8);
+    let (data, length) = data.mutate_elements(|ptr|
+        FFI_CALL_IO[I64 fixruntime_f64_to_str_shortest(Ptr, I64, F64), ptr, size, -2.2250738585072014e-308]
+    );
+    println("wrote " + length.to_string + " bytes into " + data.@size.to_string)
+);
+"#;
+        test_source_fail(
+            source,
+            Configuration::develop_mode(),
+            "A number's text takes 25 bytes and its buffer holds 24",
+        );
     }
 }

@@ -156,10 +156,7 @@ struct RuntimeSource {
     text: &'static str,
 }
 
-/// The C sources the runtime is built from.
-///
-/// `ryu/d2s.c` and `ryu/f2s.c` each define a `to_chars` of their own, so each is a translation unit
-/// of its own.
+/// The C sources the runtime is built from, each compiled to an object of its own.
 const RUNTIME_SOURCES: [RuntimeSource; 5] = [
     RuntimeSource {
         object_name: "runtime",
