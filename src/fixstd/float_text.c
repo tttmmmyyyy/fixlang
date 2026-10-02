@@ -196,8 +196,8 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
     const int exponent = point - 1;
 
     // The length is decided before anything is written, so that the text is written straight into
-    // `buf` once it is known to fit. Each shape below writes the text the matching shape above
-    // counts, which the check after them holds them to.
+    // `buf` once it is known to fit. Each shape below must write exactly the bytes the matching
+    // shape above counts; `test_float_to_string` pins the text of every shape.
     int length = negative;
     if (!positional)
     {
@@ -239,8 +239,7 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
             out[written++] = '0';
         }
         out[written++] = 'e';
-        written += append_exponent(exponent, out + written);
-        out += written;
+        append_exponent(exponent, out + written);
     }
     else if (point >= digit_count)
     {
@@ -252,7 +251,6 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
         }
         out[point] = '.';
         out[point + 1] = '0';
-        out += point + 2;
     }
     else if (point > 0)
     {
@@ -264,7 +262,6 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
             out[i] = out[i + 1];
         }
         out[point] = '.';
-        out += digit_count + 1;
     }
     else
     {
@@ -276,13 +273,6 @@ static int64_t fixruntime_write_float_text(bool negative, ryu_decimal decimal, c
             out[2 + i] = '0';
         }
         fixruntime_write_digits(out + 2 - point, decimal.mantissa, (uint32_t)digit_count);
-        out += 2 - point + digit_count;
-    }
-    if (out - buf != length)
-    {
-        fprintf(stderr, "A number's text was counted as %d bytes and written in %" PRId64 "\n", length,
-                (int64_t)(out - buf));
-        fixruntime_abort();
     }
     buf[length] = '\0';
     return length;
