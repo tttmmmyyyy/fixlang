@@ -77,27 +77,27 @@ static int64_t fixruntime_write_non_finite_text(double v, char *buf, int64_t siz
 }
 
 // Writes `v` at `buf` with `precision` digits after the point, null-terminated, and reports how
-// many bytes the text took, the null left out. Stops the program where `size` is short of the
-// widest text that could be written, before writing anything.
+// many bytes the text took, the null left out. Stops the program where `size` is short of
+// `length_bound` and its null, before writing anything.
 //
 // Ryu writes with no bound, so the text is written straight into `buf` once `buf` is known to hold
-// the widest of them.
+// `length_bound` bytes and a null.
 //
 // # Arguments
 // * `write_finite` - The Ryu function that writes a finite `v`: `d2fixed_buffered_n` or
 //   `d2exp_buffered_n`.
-// * `widest_length` - The length of the widest text `write_finite` writes for the type at this
-//   precision, the null left out, counting a point at a precision of 0 too, where none is
-//   written — must stay in sync with the `size` the `to_string_precision` and
+// * `length_bound` - A length no text `write_finite` writes for the type at this precision exceeds,
+//   the null left out: that of the widest text, counting a point at a precision of 0 too, where
+//   none is written — must stay in sync with the `size` the `to_string_precision` and
 //   `to_string_exp_precision` of `src/fixstd/std.fix` derive.
-static int64_t fixruntime_write_precision_text(int (*write_finite)(double, uint32_t, char *), int widest_length,
+static int64_t fixruntime_write_precision_text(int (*write_finite)(double, uint32_t, char *), int length_bound,
                                                double v, uint8_t precision, char *buf, int64_t size)
 {
     if (!isfinite(v))
     {
         return fixruntime_write_non_finite_text(v, buf, size);
     }
-    fixruntime_check_float_text_fits(widest_length, size);
+    fixruntime_check_float_text_fits(length_bound, size);
     const int length = write_finite(v, precision, buf);
     buf[length] = '\0';
     return length;
@@ -115,29 +115,29 @@ static int64_t fixruntime_write_precision_text(int (*write_finite)(double, uint3
 int64_t fixruntime_f32_to_str_exp_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
     // `-`, a digit, `.`, the places, `e` and `-45`.
-    const int widest_length = 3 + precision + 4;
-    return fixruntime_write_precision_text(d2exp_buffered_n, widest_length, (double)v, precision, buf, size);
+    const int length_bound = 3 + precision + 4;
+    return fixruntime_write_precision_text(d2exp_buffered_n, length_bound, (double)v, precision, buf, size);
 }
 
 int64_t fixruntime_f32_to_str_precision(char *buf, int64_t size, float v, uint8_t precision)
 {
     // `-`, 39 digits, `.` and the places.
-    const int widest_length = 1 + 39 + 1 + precision;
-    return fixruntime_write_precision_text(d2fixed_buffered_n, widest_length, (double)v, precision, buf, size);
+    const int length_bound = 1 + 39 + 1 + precision;
+    return fixruntime_write_precision_text(d2fixed_buffered_n, length_bound, (double)v, precision, buf, size);
 }
 
 int64_t fixruntime_f64_to_str_exp_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
     // `-`, a digit, `.`, the places, `e` and `-324`.
-    const int widest_length = 3 + precision + 5;
-    return fixruntime_write_precision_text(d2exp_buffered_n, widest_length, v, precision, buf, size);
+    const int length_bound = 3 + precision + 5;
+    return fixruntime_write_precision_text(d2exp_buffered_n, length_bound, v, precision, buf, size);
 }
 
 int64_t fixruntime_f64_to_str_precision(char *buf, int64_t size, double v, uint8_t precision)
 {
     // `-`, 309 digits, `.` and the places.
-    const int widest_length = 1 + 309 + 1 + precision;
-    return fixruntime_write_precision_text(d2fixed_buffered_n, widest_length, v, precision, buf, size);
+    const int length_bound = 1 + 309 + 1 + precision;
+    return fixruntime_write_precision_text(d2fixed_buffered_n, length_bound, v, precision, buf, size);
 }
 
 // Writes the `digit_count` decimal digits of `mantissa` at `out`, the most significant first. No
