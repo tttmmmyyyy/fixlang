@@ -2258,9 +2258,10 @@ impl UnaryBitOperation {
     }
 }
 
-/// Evaluates `Std::I64::bit_not`, `Std::I64::count_leading_zeros`, `Std::I64::count_trailing_zeros` and
-/// `Std::I64::count_ones`, and the same functions of the other integer types: the operand with
-/// every bit flipped, or a count of its bits, as a value of the operand's type.
+/// Evaluates `Std::I64::bit_not`, `Std::I64::count_leading_zeros`,
+/// `Std::I64::count_trailing_zeros` and `Std::I64::count_ones`, and the same functions of the other
+/// integer types: the operand with every bit flipped, or a count of its bits, as a value of the
+/// operand's type.
 ///
 /// Every operand has an answer: a zero operand has as many leading and trailing zeros as its type
 /// has bits.
