@@ -369,8 +369,9 @@ pub fn test_the_128_bit_types_read_only_16_bytes() {
 
 /// A 128-bit value passed from one function to another reaches it intact at every optimization
 /// level. An iterator over an array of structs holding one hands the value to the next closure in a
-/// tail call with more arguments than fit in registers, which at `-O none` put the 128-bit value on
-/// the stack.
+/// tail call with more arguments than fit in registers. At `-O none` that call would take a bare
+/// `i128` on the stack, which LLVM miscompiles
+/// (https://github.com/llvm/llvm-project/issues/105223), were the value not split into two `i64`s.
 #[test]
 pub fn test_a_128_bit_value_crosses_a_tail_call_at_every_level() {
     let source = r#"
@@ -470,10 +471,10 @@ pub fn test_a_128_bit_value_reaches_a_function_in_every_shape() {
 /// No function the compiler defines takes a bare `i128` argument, whatever shape the 128-bit value
 /// is carried in.
 ///
-/// LLVM 22's x86-64 backend miscompiles a call to a function that pops its own arguments, as a
-/// Fix function does there, when its stack arguments hold a bare `i128` and do not add up to a
-/// multiple of 16 bytes: the caller's stack pointer comes back 16 bytes lower than before the call.
-/// An `i128` inside an array or a struct argument is passed correctly.
+/// Since LLVM 18, the x86-64 backend can miscompile a call to a `tailcc` function, as a Fix
+/// function is there, that takes a bare `i128` on the stack, and the program crashes after the call
+/// returns (https://github.com/llvm/llvm-project/issues/105223). An `i128` inside an array or a
+/// struct argument does not trigger it.
 #[test]
 pub fn test_no_function_takes_a_bare_128_bit_argument() {
     let ir = generated_llvm_ir(&source_passing_128_bit_integers_in_every_shape(), "none");
