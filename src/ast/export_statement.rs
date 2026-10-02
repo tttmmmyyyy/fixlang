@@ -8,7 +8,7 @@ use crate::ast::types::{Type, TypeNode};
 use crate::configuration::OutputFileType;
 use crate::error::Errors;
 use crate::ffi::{
-    assert_crosses_as_c_type, c_boundary_tycon, CSignature, PASS_128_BIT_INTEGER_AS_HALVES,
+    assert_crosses_as_c_type, c_boundary_tycon, unsupported_128_bit_integer_msg, CSignature,
 };
 use crate::fixstd::builtin::{make_iostate_ty, run_io};
 use crate::fixstd::runtime::compiler_defined_c_function_reason;
@@ -206,10 +206,7 @@ fn unexportable_type_msg(ty: &Arc<TypeNode>, position: &str) -> String {
         return head + ". Use `U8` or `CInt`, and convert it on the Fix side.";
     }
     if ty.is_128_bit_integer() {
-        return format!(
-            "{}. C has no standard 128-bit integer type, so {}.",
-            head, PASS_128_BIT_INTEGER_AS_HALVES
-        );
+        return unsupported_128_bit_integer_msg(&ty.to_string());
     }
     head + ". An exported function can exchange scalar values: integers (`I8` to `I64`, `U8` to `U64`), floating point numbers (`F32`, `F64`), and pointers (`Ptr`, and boxed values, which cross as an opaque pointer). The C types in `Std::FFI` such as `CInt` are aliases of these. To exchange a struct, take a `Ptr` to memory the foreign side owns and copy through it with `memcpy`; `Std::FFI::borrow_boxed` and `mutate_boxed` give a pointer to the payload of a boxed value, and `Std::Array::borrow_elements` and `mutate_elements` a pointer to an array's elements."
 }

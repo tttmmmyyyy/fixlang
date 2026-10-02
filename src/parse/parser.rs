@@ -37,7 +37,7 @@ use crate::constants::{
     PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX,
 };
 use crate::error::Errors;
-use crate::ffi::PASS_128_BIT_INTEGER_AS_HALVES;
+use crate::ffi::unsupported_128_bit_integer_msg;
 use crate::fixstd::builtin::{
     expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, floating_literal_value,
     integral_literal_value, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty,
@@ -2674,8 +2674,8 @@ fn parse_expr_call_c(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Exp
 
 /// Parses one type written in a C function signature into the Fix type constructor that represents
 /// it. A C type name such as `CInt` becomes the sized type it has on the target, and `()` becomes
-/// the unit type, which stands for `void`. A numeric type with no counterpart among the C types,
-/// such as `I128`, is an error.
+/// the unit type, which stands for `void`. A 128-bit integer type, which FFI does not support, is an
+/// error.
 fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<TyCon>, Errors> {
     assert_eq!(pair.as_rule(), Rule::ffi_c_fun_ty);
     let span = Span::from_pair(&ctx.source, &pair);
@@ -2693,13 +2693,11 @@ fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Ty
     name.set_absolute();
     let ty = tycon(name);
     if !ty.is_unit() && !ty.is_c_scalar() {
+        // The grammar admits only the numeric types besides `Ptr` and `()`, and every numeric type
+        // but the 128-bit integers is a C scalar.
+        assert!(ty.is_128_bit_integer());
         return Err(Errors::from_msg_srcs(
-            format!(
-                "`{}` has no counterpart among the C types, so a C function cannot take or return it.\n\
-                 HINT: {}.",
-                pair.as_str(),
-                PASS_128_BIT_INTEGER_AS_HALVES
-            ),
+            unsupported_128_bit_integer_msg(pair.as_str()),
             &[&Some(span)],
         ));
     }

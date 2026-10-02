@@ -197,8 +197,8 @@ pub fn test_the_128_bit_types_convert_to_and_from_bytes() {
     );
 }
 
-/// A C function signature written in `FFI_CALL` does not take a 128-bit type, since C has no
-/// standard type for it, and the report says how to pass such a value.
+/// The signature written in `FFI_CALL` does not take a 128-bit integer type, and the report says how
+/// to pass such a value.
 #[test]
 pub fn test_ffi_call_rejects_a_128_bit_type() {
     test_source_fail(
@@ -211,7 +211,7 @@ pub fn test_ffi_call_rejects_a_128_bit_type() {
         );
     "#,
         Configuration::develop_mode(),
-        "`I128` has no counterpart among the C types, so a C function cannot take or return it.\nHINT: pass the value as two `U64`s, its low and its high 64 bits.",
+        "FFI does not support the 128-bit integer type `I128`.\nHINT: pass the value as two `U64`s, its low and its high 64 bits.",
     );
     test_source_fail(
         r#"
@@ -223,7 +223,7 @@ pub fn test_ffi_call_rejects_a_128_bit_type() {
         );
     "#,
         Configuration::develop_mode(),
-        "`U128` has no counterpart among the C types",
+        "FFI does not support the 128-bit integer type `U128`.",
     );
 }
 
@@ -240,7 +240,7 @@ pub fn test_ffi_export_rejects_a_128_bit_type() {
         main = pure();
     "#,
         Configuration::develop_mode(),
-        "`Std::U128` cannot be used as an argument of an exported function. C has no standard 128-bit integer type, so pass the value as two `U64`s, its low and its high 64 bits.",
+        "FFI does not support the 128-bit integer type `Std::U128`.\nHINT: pass the value as two `U64`s, its low and its high 64 bits.",
     );
 }
 
@@ -342,7 +342,7 @@ pub fn test_ffi_call_rejects_a_128_bit_variadic_argument() {
         main = println(FFI_CALL[CInt printf(Ptr, ...), nullptr, 1_U128].to_string);
     "#,
         Configuration::develop_mode(),
-        "`Std::U128` cannot be passed through the `...` of an `FFI_CALL`. C has no standard 128-bit integer type, so pass the value as two `U64`s, its low and its high 64 bits.",
+        "FFI does not support the 128-bit integer type `Std::U128`.\nHINT: pass the value as two `U64`s, its low and its high 64 bits.",
     );
 }
 
