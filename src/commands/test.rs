@@ -10,7 +10,6 @@ use crate::doc_test::{
 use crate::elaboration::load_source_files;
 use crate::error::{panic_if_err, Errors};
 use crate::metafiles::project_file::ProjectFile;
-use crate::misc::Set;
 use crate::parse::sourcefile::SourceFile;
 use colored::Colorize;
 use std::io;
@@ -135,66 +134,48 @@ impl ExampleOutcome {
 /// `config` names, and hands `report` each example with its outcome, in the order of `examples`.
 ///
 /// The examples to compile are built together into one program, which is run once for each example
-/// to run, in a process of its own with its output collected (see `ExampleBuild::merged`). An
-/// example behaves in that program as it does in a program of its own, except an example that does
-/// not compile and two examples that cannot share a program, such as two that export functions
-/// under one C name. So where the program fails to build, the examples the errors lie in are taken
-/// out of it and tested alone, and the rest are built together again.
-///
-/// Where an error lies in no example, the sources are built without the examples. If they fail to
-/// build, the error is theirs: it is returned, and no example is reported. If they build, one of the
-/// examples caused the error but nothing tells which, as when an example calls a C function that
-/// nothing defines and the link fails. Each example left is then tested alone.
+/// to run, in a process of its own with its output collected (see `ExampleBuild::merged`). Where
+/// that program fails to build, as it does when one example does not compile, the sources are built
+/// without the examples. If they fail to build too, the error is the sources': it is returned, and
+/// no example is reported. Otherwise each example is built and tested alone, which reports what is
+/// wrong with each.
 pub fn test_examples(
     config: &Configuration,
     examples: &[FixExample],
     mut report: impl FnMut(&FixExample, ExampleOutcome),
 ) -> Result<(), Errors> {
-    // The indices in `examples` of the examples built together.
-    let mut together = (0..examples.len())
-        .filter(|index| examples[*index].task.source().is_some())
+    let sources = examples
+        .iter()
+        .filter_map(|example| example.task.source().cloned())
         .collect::<Vec<_>>();
-    while !together.is_empty() {
-        let sources = together
-            .iter()
-            .map(|index| examples[*index].task.source().unwrap().clone())
-            .collect::<Vec<_>>();
-        let example_build = ExampleBuild::merged(sources)?;
+    if !sources.is_empty() {
         let mut merged_config = config.clone();
-        merged_config.example_build = Some(example_build.clone());
+        merged_config.example_build = Some(ExampleBuild::merged(sources)?);
         let built = with_temporary_executable(merged_config, |merged_config, exec_path| {
-            for (index, example) in examples.iter().enumerate() {
-                // `together` is in ascending order, as `examples` is.
-                let outcome = match together.binary_search(&index).ok() {
-                    Some(position) => {
-                        outcome_in_program(merged_config, exec_path, position, example)
+            // The position in the program of the next example it holds.
+            let mut position = 0;
+            for example in examples {
+                let outcome = match example.task {
+                    ExampleTask::Ignore => ExampleOutcome::Ignored,
+                    ExampleTask::Run(_) | ExampleTask::Compile(_) => {
+                        position += 1;
+                        outcome_in_program(merged_config, exec_path, position - 1, example)
                     }
-                    None => test_example(config, example),
                 };
                 report(example, outcome);
             }
             Ok(())
         });
-        let Err(errors) = built else {
+        if built.is_ok() {
             return Ok(());
-        };
-        let Some(blamed) = examples_errors_lie_in(&errors, &example_build) else {
-            let mut sources_config = config.clone();
-            sources_config.example_build = Some(ExampleBuild::without_examples()?);
-            build_executable(sources_config)?;
-            break;
-        };
-        assert!(
-            !blamed.is_empty(),
-            "a build that failed reports an error\n{}",
-            errors.to_string()
+        }
+        let mut sources_config = config.clone();
+        sources_config.example_build = Some(ExampleBuild::without_examples()?);
+        build_executable(sources_config)?;
+        eprintln!(
+            "The Fix examples do not build together into one program, so each of them is built \
+             and tested alone."
         );
-        together = together
-            .into_iter()
-            .enumerate()
-            .filter(|(position, _)| !blamed.contains(position))
-            .map(|(_, index)| index)
-            .collect();
     }
     for example in examples {
         report(example, test_example(config, example));
@@ -225,25 +206,6 @@ fn outcome_in_program(
         },
     };
     ExampleOutcome::of_failure(failure)
-}
-
-/// The indices in `example_build` of the examples the errors of `errors` belong to, or `None` where
-/// one of them belongs to none. An error belongs to each example one of its locations belongs to
-/// (see `ExampleBuild::example_at`).
-fn examples_errors_lie_in(errors: &Errors, example_build: &ExampleBuild) -> Option<Set<usize>> {
-    let mut blamed = Set::default();
-    for error in errors.errors() {
-        let lying_in = error
-            .srcs
-            .iter()
-            .filter_map(|(_, span)| example_build.example_at(span))
-            .collect::<Vec<_>>();
-        if lying_in.is_empty() {
-            return None;
-        }
-        blamed.extend(lying_in);
-    }
-    Some(blamed)
 }
 
 /// Tests the Fix example `example` as its task asks: builds it alone under `config`, beside the

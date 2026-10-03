@@ -51,26 +51,6 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     // Resolve type aliases that appear in declarations and associated type implementations.
     program.resolve_type_aliases_not_in_expr()?;
 
-    // In a program built from several Fix examples, check that the `main` of each example has type
-    // `IO ()`, as an entry point must, and place the error in the example. This runs before the
-    // import statements are checked, because that check would report a missing `main` at the module
-    // that runs the examples, where no example lies. The types of declarations, aliases included,
-    // are resolved by now.
-    if let Some(example_build) = &config.example_build {
-        let mut errors = Errors::empty();
-        for main in example_build.dispatched_mains() {
-            let module = program.find_mod(&main.module()).unwrap_or_else(|| {
-                panic!(
-                    "the module of the example `main` `{}` is in the program",
-                    main.to_string()
-                )
-            });
-            let module_src = Some(module.source);
-            errors.eat_err(program.check_value_has_type(&main, &make_io_unit_ty(), &module_src));
-        }
-        errors.to_result()?;
-    }
-
     // Validate user-defined types.
     program.validate_type_defns()?;
 
@@ -152,6 +132,17 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     program
         .deferred_errors
         .append(program.collect_diagnostics_of_typed_program(config));
+
+    // In a program built from several Fix examples, check that the `main` of each example has type
+    // `IO ()`, as an entry point must. The program runs each `main` as an `IO ()`, which a `main` of
+    // a more general type, such as `[m : Monad] m ()`, also passes.
+    if let Some(example_build) = &config.example_build {
+        let mut errors = Errors::empty();
+        for main in example_build.dispatched_mains() {
+            errors.eat_err(program.check_value_has_type(&main, &make_io_unit_ty(), &None));
+        }
+        errors.to_result()?;
+    }
 
     // Instantiate the value the entry point runs.
     match config.output_file_type {

@@ -313,13 +313,6 @@ impl ExampleBuild {
         })
     }
 
-    /// The index of the example whose source the location `span` lies in.
-    pub fn example_at(&self, span: &Span) -> Option<usize> {
-        self.examples
-            .iter()
-            .position(|example| span.input == example.source)
-    }
-
     /// The `main` of each example the dispatcher runs. A build of one example has none.
     ///
     /// The dispatcher calls each of them as a value of type `IO ()`, which a `main` declared at a

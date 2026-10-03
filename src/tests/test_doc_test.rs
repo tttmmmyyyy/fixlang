@@ -1174,11 +1174,11 @@ value : I64 = first_long_function_name;
 }
 
 /// A Fix example written as a module whose `main` is not of type `IO ()` — one that defines no
-/// `main`, and one whose `main` is of a more general type — fails as it does built alone, and is
-/// taken out of the program of the examples by itself: the error lies in its own source, so the
-/// other examples are still built together, once.
+/// `main`, and one whose `main` is of a more general type — fails as it does built alone. The
+/// program of the examples does not build, so `fix test` says so and tests each example alone, and
+/// the other examples pass.
 #[test]
-fn test_example_whose_main_is_not_of_type_io_is_taken_out_alone() {
+fn test_example_whose_main_is_not_of_type_io_fails() {
     let lib = r#"module Lib;
 
 DEPRECATED[old_double, "Call `double` in place of `old_double`."];
@@ -1218,12 +1218,9 @@ double = |x| old_double(x);
         "the examples whose `main` is not of type `IO ()` fail, and the others pass\n{}",
         streams(&output)
     );
-    assert_eq!(
-        stderr
-            .matches("Call `double` in place of `old_double`.")
-            .count(),
-        1,
-        "the other examples are built together once\n{}",
+    assert!(
+        stderr.contains("so each of them is built and tested alone"),
+        "`fix test` says it tests each example alone\n{}",
         streams(&output)
     );
 }
@@ -1292,12 +1289,10 @@ double = |x| 2 * x;
     );
 }
 
-/// A Fix example written as a module that declares a type and a trait of one name fails as it does
-/// built alone, and is taken out of the program of the examples by itself: the name confliction is
-/// reported at the declarations, which lie in the example, so the other examples are still built
-/// together, once.
+/// A Fix example written as a module that declares a type and a trait of one name fails, and the
+/// error is reported at the two declarations in the comment.
 #[test]
-fn test_example_declaring_a_type_and_a_trait_of_one_name_is_taken_out_alone() {
+fn test_name_confliction_in_an_example_is_reported_at_the_declarations() {
     let lib = r#"module Lib;
 
 DEPRECATED[old_double, "Call `double` in place of `old_double`."];
@@ -1334,12 +1329,10 @@ double = |x| old_double(x);
         "the example declaring `Piyo` twice fails, and the others pass\n{}",
         streams(&output)
     );
-    assert_eq!(
-        stderr
-            .matches("Call `double` in place of `old_double`.")
-            .count(),
-        1,
-        "the other examples are built together once\n{}",
+    assert!(
+        stderr.contains("13 | // # type Piyo = struct { data : I64 };")
+            && stderr.contains("14 | // # trait a : Piyo {"),
+        "the error quotes the two declarations\n{}",
         streams(&output)
     );
 }
