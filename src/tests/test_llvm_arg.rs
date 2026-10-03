@@ -244,8 +244,8 @@ mod tests {
     /// as it would have without the option. That is why the help of `--llvm-arg` tells a user to
     /// compare the programs.
     ///
-    /// The report opens with `fix --llvm-arg`, the name `set_llvm_options` hands LLVM for itself,
-    /// which is what marks the message as LLVM's.
+    /// The report opens with `LLVM`, the name `set_llvm_options` hands LLVM for itself, and names
+    /// the option the value was given to.
     #[test]
     fn test_an_option_whose_value_llvm_cannot_read_is_reported_and_the_build_goes_on() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
@@ -260,7 +260,7 @@ mod tests {
             "a value LLVM cannot read should leave the object code as it was"
         );
         assert!(
-            stderr.contains("fix --llvm-arg"),
+            stderr.contains("LLVM: for the --align-all-blocks option"),
             "LLVM's report should name the option the value came from, but the build said: {}",
             stderr
         );
@@ -314,7 +314,7 @@ mod tests {
 
     /// A loop that packs three bits of each input byte into its output and leaves with the bits
     /// still pending, which gives the loop values that leave it through its exit block.
-    const PACK_BITS: &str = r#"
+    const BIT_PACKING_LOOP: &str = r#"
         module Main;
 
         encode : Array U8 -> Array U8;
@@ -344,8 +344,9 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_llvm_arg_overrides_an_option_every_build_hands_llvm() {
-        let build =
-            |build_args: &[&str]| build_and_run(PACK_BITS, "a loop packing bits", build_args);
+        let build = |build_args: &[&str]| {
+            build_and_run(BIT_PACKING_LOOP, "a loop packing bits", build_args)
+        };
         let (default, default_output) = build(&[]);
         let (overridden, overridden_output) =
             build(&["--llvm-arg=-no-phi-elim-live-out-early-exit=false"]);
@@ -442,7 +443,7 @@ mod tests {
 
     /// The copy of a value leaving a loop is made once, on the edge out of the loop: the loop of
     /// `VALUE_LEAVING_A_LOOP` keeps the two copies its `or` needs and no third. This is what
-    /// `LLVM_DEFAULT_OPTIONS` asks of LLVM, so the test fails where LLVM renames or drops the
+    /// `LLVM_OPTIONS_OF_EVERY_BUILD` asks of LLVM, so the test fails where LLVM renames or drops the
     /// option, which LLVM otherwise does silently.
     #[cfg(target_arch = "x86_64")]
     #[test]

@@ -279,32 +279,6 @@ fn test_wide_return_through_a_function_value_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-/// Two function values read out of structs call each other in tail position, and the result fits in
-/// a register, so the indirect tail call passes no out-pointer.
-#[test]
-fn test_narrow_return_through_function_values_runs_in_constant_stack() {
-    let source = r#"
-    module Main;
-
-    type F = box struct { f : F -> F -> I64 -> I64 };
-
-    call_f : F -> F -> I64 -> I64;
-    call_f = |a, b, n| (a.@f)(a, b, n);
-
-    count_down_by : I64 -> F;
-    count_down_by = |k| F { f : |me, other, n| if n <= 0 { n } else { call_f(other, me, n - k) } };
-
-    main : IO ();
-    main = (
-        let k = (*IO::get_args).@size;
-        let r = call_f(count_down_by(k), count_down_by(k), 1000000 * k);
-        assert_eq(|_|"unexpected result", r, 0);;
-        pure()
-    );
-    "#;
-    test_source(source, Configuration::develop_mode());
-}
-
 /// Two function values read out of structs call each other in tail position, once through a wide
 /// result and once through a narrow one, built at every optimization level and with debug
 /// information. Each level runs its own pipeline and debug information adds records beside every
@@ -349,6 +323,7 @@ fn test_tail_calls_through_function_values_run_in_constant_stack_at_every_level(
         FixOptimizationLevel::None,
         FixOptimizationLevel::Basic,
         FixOptimizationLevel::Max,
+        FixOptimizationLevel::Experimental,
     ] {
         let mut config = Configuration::develop_mode();
         config.set_fix_opt_level(opt_level);

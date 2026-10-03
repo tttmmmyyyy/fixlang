@@ -586,9 +586,8 @@ fn set_llvm_options(args: &[String]) {
     static PARSED: OnceLock<Vec<String>> = OnceLock::new();
     let parsed = PARSED.get_or_init(|| {
         // LLVM reads the first argument as the name of the program, the way a `main` does, and puts
-        // it in front of what it reports. Naming the option here is what marks such a report as
-        // LLVM's.
-        let argv: Vec<CString> = once("fix --llvm-arg")
+        // it in front of what it reports, which is what marks such a report as LLVM's.
+        let argv: Vec<CString> = once("LLVM")
             .chain(args.iter().map(String::as_str))
             .map(|arg| CString::new(arg).expect("no argument of a command line holds a NUL byte"))
             .collect();
