@@ -1065,8 +1065,9 @@ double = |x| old_double(x);
 }
 
 /// Two Fix examples that cannot be compiled into one program, as two that export functions under
-/// one C name, are taken out of the program of the examples and tested alone, where each passes.
-/// An error of the sources, which lies in no example, is reported once, and no example is reported.
+/// one C name, are tested one by one, where each passes: the program of the examples fails to
+/// build, and the sources build alone. An error of the sources is reported once, and no example is
+/// reported.
 #[test]
 fn test_examples_that_cannot_share_a_program_are_tested_alone() {
     let example_exporting = |value: &str| {
@@ -1270,9 +1271,8 @@ two : I64 = 2;
 }
 
 /// A Fix example that fails to link, by calling a C function nothing defines, fails as it does
-/// built alone, and the other examples are still tested: the link error carries no location to tell
-/// which example caused it, the sources build without the examples, and so each example is tested
-/// alone.
+/// built alone, and the other example still passes: the program of the examples fails to link, the
+/// sources build alone, and so each example is tested one by one.
 #[test]
 fn test_example_failing_to_link_fails_alone() {
     let lib = r#"module Lib;
@@ -1306,10 +1306,6 @@ double = |x| 2 * x;
 fn test_name_confliction_in_an_example_is_reported_at_the_declarations() {
     let lib = r#"module Lib;
 
-DEPRECATED[old_double, "Call `double` in place of `old_double`."];
-old_double : I64 -> I64;
-old_double = |x| 2 * x;
-
 // ```fix
 // assert_eq(|_|"", double(21), 42)
 // ```
@@ -1323,26 +1319,22 @@ old_double = |x| 2 * x;
 // # main : IO ();
 // # main = pure();
 // ```
-//
-// ```fix
-// assert_eq(|_|"", double(2), 4)
-// ```
 double : I64 -> I64;
-double = |x| old_double(x);
+double = |x| 2 * x;
 "#;
     let dir = project_dir(&[("lib.fix", lib)], &[]);
     let output = fix_test(&dir, &["--doc"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("doc test lib.fix:11 ... FAILED")
+        stderr.contains("doc test lib.fix:7 ... FAILED")
             && stderr.contains("is both a type and a trait")
-            && stderr.contains("doc tests: 2 passed, 1 failed, 0 ignored."),
+            && stderr.contains("doc tests: 1 passed, 1 failed, 0 ignored."),
         "the example declaring `Piyo` twice fails, and the others pass\n{}",
         streams(&output)
     );
     assert!(
-        stderr.contains("13 | // # type Piyo = struct { data : I64 };")
-            && stderr.contains("14 | // # trait a : Piyo {"),
+        stderr.contains("9 | // # type Piyo = struct { data : I64 };")
+            && stderr.contains("10 | // # trait a : Piyo {"),
         "the error quotes the two declarations\n{}",
         streams(&output)
     );
