@@ -245,7 +245,7 @@ fn test_dispatch_through_array_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-/// The callee of each tail call is a function read out of a structure, and the step it recurses by
+/// The callee of each tail call is a function read out of a struct, and the step it recurses by
 /// comes from the command line, so no pass can resolve the callee and the recursion reaches code
 /// generation as an indirect tail call. The five-tuple result crosses the x86-64 return budget, so
 /// the call forwards the caller's out-pointer.
@@ -273,8 +273,8 @@ fn test_wide_return_through_a_function_value_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
-/// The narrow counterpart of `test_wide_return_through_a_function_value_runs_in_constant_stack`: two
-/// function values call each other, and the result fits in a register.
+/// Two function values read out of structs call each other in tail position, and the result fits in
+/// a register, so the indirect tail call passes no out-pointer.
 #[test]
 fn test_narrow_return_through_function_values_runs_in_constant_stack() {
     let source = r#"

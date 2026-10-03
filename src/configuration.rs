@@ -58,8 +58,8 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 /// instruction counts — `Graph::BFS` 15.1%, `Graph::DFS` 11.7%, `prime_table` 8.8%,
 /// `Compress::HuffDecode` 5.0% — against 1.75% back on `Hash::SHA256` and 1.57% on `sort`.
 ///
-/// A pass here must leave a tail call followed directly by its `ret`, which the backend needs in
-/// order to compile the call as a jump. `pseudo-probe` takes 0.21% off the instruction counts on top
+/// A pass here must leave a tail call followed directly by its `ret`, so that the backend can
+/// compile the call as a jump. `pseudo-probe` takes 0.21% off the instruction counts on top
 /// of these two, and inserts a probe between such a call and its `ret`: an indirect tail call then
 /// becomes an ordinary call, and a recursion through a function value overflows the stack (fixlang
 /// issue #806).

@@ -39,7 +39,7 @@
 
 #### Language
 
-- #806: A tail call made through a function value now runs in constant stack at `-O max`. Since 1.5.0, a recursion whose function calls itself through a function held in a struct, as `(w.@f)(w, n - 1)` does, overflowed the stack at `-O max`, the default level, when its result was wider than three integers.
+- #806: At `-O max`, the default level, a recursion that calls itself through a function held in a struct, as `(w.@f)(w, n - 1)` does, now runs in constant stack. Since 1.5.0 it overflowed the stack when its result was wider than three integers.
 
 #### Tool
 
