@@ -1174,8 +1174,8 @@ value : I64 = first_long_function_name;
 }
 
 /// A Fix example written as a module that defines no `main` fails as it does built alone. The
-/// program of the examples does not build, so `fix test` says so and tests each example alone, and
-/// the other examples pass.
+/// program of the examples does not build, so `fix test` says that it tests each example alone,
+/// which is slower, and the other example passes.
 #[test]
 fn test_example_without_main_fails() {
     let lib = r#"module Lib;
@@ -1196,11 +1196,11 @@ double = |x| 2 * x;
     let output = fix_test(&dir, &["--doc"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("so each of them is built and tested alone")
+        stderr.contains("Each of them is now built alone, which takes 2 builds instead of one and is slower.")
             && stderr.contains("doc test lib.fix:3 ... ok")
             && stderr.contains("doc test lib.fix:7 ... FAILED")
             && stderr.contains("doc tests: 1 passed, 1 failed, 0 ignored."),
-        "`fix test` says it tests each example alone, and only the example without `main` fails\n{}",
+        "`fix test` says that testing each example alone is slower, and only the example without `main` fails\n{}",
         streams(&output)
     );
 }

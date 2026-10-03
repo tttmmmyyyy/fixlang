@@ -150,7 +150,7 @@ pub fn test_examples(
         .collect::<Vec<_>>();
     if !sources.is_empty() {
         let mut merged_config = config.clone();
-        merged_config.example_build = Some(ExampleBuild::merged(sources)?);
+        merged_config.example_build = Some(ExampleBuild::merged(sources.clone())?);
         let built = with_temporary_executable(merged_config, |merged_config, exec_path| {
             // The position in the program of the next example it holds.
             let mut position = 0;
@@ -172,10 +172,15 @@ pub fn test_examples(
         let mut sources_config = config.clone();
         sources_config.example_build = Some(ExampleBuild::without_examples()?);
         build_executable(sources_config)?;
-        eprintln!(
-            "The Fix examples do not build together into one program, so each of them is built \
-             and tested alone."
-        );
+        if sources.len() > 1 {
+            eprintln!(
+                "The {} Fix examples do not build together into one program, which happens when \
+                 one of them does not compile. Each of them is now built alone, which takes {} \
+                 builds instead of one and is slower.",
+                sources.len(),
+                sources.len()
+            );
+        }
     }
     for example in examples {
         report(example, test_example(config, example));
