@@ -10,6 +10,7 @@ use crate::doc_test::{
 use crate::elaboration::load_source_files;
 use crate::error::{panic_if_err, Errors};
 use crate::metafiles::project_file::ProjectFile;
+use crate::misc::info_msg;
 use crate::parse::sourcefile::SourceFile;
 use colored::Colorize;
 use std::io;
@@ -178,11 +179,10 @@ pub fn test_examples(
         sources_config.example_build = Some(ExampleBuild::without_examples()?);
         build_executable(sources_config)?;
         if source_count > 1 {
-            eprintln!(
-                "The {} Fix examples do not build together into one program, which happens when \
-                 one of them does not compile. Each of them is now built alone, which takes {} \
-                 builds instead of one and is slower.",
-                source_count, source_count
+            info_msg(
+                "One of the Fix examples (i.e., the code blocks marked `fix` in the comments) does \
+                 not compile, so the examples are compiled one by one. This may take longer than \
+                 usual.",
             );
         }
     }

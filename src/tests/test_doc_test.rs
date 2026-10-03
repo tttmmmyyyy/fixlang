@@ -1196,7 +1196,7 @@ double = |x| 2 * x;
     let output = fix_test(&dir, &["--doc"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("Each of them is now built alone, which takes 2 builds instead of one and is slower.")
+        stderr.contains("so the examples are compiled one by one. This may take longer than usual.")
             && stderr.contains("doc test lib.fix:3 ... ok")
             && stderr.contains("doc test lib.fix:7 ... FAILED")
             && stderr.contains("doc tests: 1 passed, 1 failed, 0 ignored."),
@@ -1449,7 +1449,7 @@ double = |x| 2 * x;
     assert!(
         stderr.contains("doc test lib.fix:3 ... FAILED")
             && stderr.contains("doc tests: 0 passed, 1 failed, 1 ignored.")
-            && !stderr.contains("built alone"),
+            && !stderr.contains("compiled one by one"),
         "the example fails, and `fix test` says nothing about building each example alone\n{}",
         streams(&output)
     );
