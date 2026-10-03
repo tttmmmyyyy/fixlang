@@ -13,8 +13,8 @@ use crate::{
     generator::{enum_attribute_kind_id, Generator},
     misc::function_name,
     tests::test_util::{
-        emitted_llvm_ir, fix_command, standalone_generator, test_source, test_source_fail,
-        test_source_with_c, EmittedIr,
+        compile_c_object, emitted_llvm_ir, fix_command, standalone_generator, test_source,
+        test_source_fail, test_source_with_c, EmittedIr,
     },
 };
 use inkwell::{
@@ -26,7 +26,6 @@ use std::{
     fs::{self, File},
     io::Write,
     path::PathBuf,
-    process::Command,
 };
 
 // An exported function exchanges values with C through the C ABI, and the wrapper the compiler
@@ -182,19 +181,9 @@ pub fn test_narrow_integer_extension_attribute_follows_the_host_abi() {
         .write_all(source.as_bytes())
         .unwrap();
     // The C function the program calls, which takes a narrow integer.
-    File::create(work_dir.join("store_byte.c"))
-        .unwrap()
-        .write_all(b"#include <stdint.h>\nvoid c_store_byte(uint8_t *p, uint8_t v) { *p = v; }\n")
-        .unwrap();
-    let output = Command::new("gcc")
-        .args(["-O2", "-c", "-o", "store_byte.o", "store_byte.c"])
-        .current_dir(&work_dir)
-        .output()
-        .unwrap();
-    assert!(
-        output.status.success(),
-        "gcc failed:\n{}",
-        String::from_utf8_lossy(&output.stderr)
+    compile_c_object(
+        "#include <stdint.h>\nvoid c_store_byte(uint8_t *p, uint8_t v) { *p = v; }\n",
+        &work_dir.join("store_byte.o"),
     );
 
     let output = fix_command()
