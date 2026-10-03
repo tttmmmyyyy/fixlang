@@ -3288,7 +3288,7 @@ main : ::Std::IO () = (
 );
 ```
 
-An example passes when this program exits with status 0. A failing `assert_eq`, `undefined` or an index out of range therefore makes the example fail. Each example runs in a process of its own, and a compile error in an example is reported at its place in the comment.
+An example passes when this program exits with status 0. A failing `assert_eq`, `undefined` or an index out of range therefore makes the example fail.
 
 An example that begins with a `module` declaration is the source of the module as it stands. It declares the module `DocTest`, imports what it uses, including the module the comment is written in, and defines `main : IO ()`. Write an example in this form to define types or functions, or to import only some of the entities of a module:
 
