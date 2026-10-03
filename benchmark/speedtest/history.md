@@ -2,6 +2,44 @@
 
 Newer is above.
 
+**LangArena rows measured before the pinned revision rose from `85ac364` to `123412b` are
+comparable with rows after it on thirty-seven of the fifty programs, and on thirteen they are not.**
+The thirteen were measured with one compiler on both sides -- `main` at `39f5521` -- so nothing but
+the benchmark sources differs between the two columns. The `39f5521` row in `log.csv` is the last
+one on `85ac364`, and the first row on `123412b` is the first one recorded once this change is on
+`main`.
+
+| program | instructions | |
+| --- | --- | --- |
+| `Json::Generate` | **-41.59%** | writes its document from structs, each coordinate's name with `format` |
+| `Graph::AStar` | **+19.87%** | searches without a closed set, as the other languages now do |
+| `Compress::BWTEncode` | **-11.27%** | orders each doubling round by a table of rank pairs |
+| `Maze::AStar` | **+7.71%** | pushes a cell only when its estimate improves on the best one |
+| `Compress::BWTDecode` | -4.97% | builds its input with the encoder above |
+| `Etc::CacheSimulation` | +3.99% | its source did not change; see below |
+| `Compress::ArithDecode` | +3.82% | finds the byte by binary search, and runs 350 iterations where it ran 220 |
+| `Json::ParseMapping` | -1.47% | builds its input with the writer of `Json::Generate` |
+| `Json::ParseDom` | -0.84% | the same |
+| `Calculator::Ast` | -0.80% | passes over an unknown byte and reads upper-case letters |
+| `CSV::Parse` | +0.12% | adds the checksum of its text to its own |
+| `Calculator::Interpreter` | -0.04% | as `Calculator::Ast` |
+| `Compress::LZWDecode` | -0.01% | reads a number past the dictionary as an empty text |
+
+Twelve of them follow `tttmmmyyyy/LangArena#4`, which brought the Fix implementation in line with
+the upstream rewrites of the same programs in every language, and the JSON writer of
+`tttmmmyyyy/LangArena#3`.
+
+`Etc::CacheSimulation` moved with no change to its source or to the releases it builds on. All
+fifty programs are one Fix project, and the compilation units are cut by symbol name, so the
+programs whose code changed move the unit boundaries for the others as well. Built with
+`--cu-size inf`, which holds the whole program in one unit, and counted on the development
+machine, it runs 12,554,966,849 instructions on
+`85ac364` and 12,542,966,822 on `123412b` (-0.10%).
+
+The other thirty-seven moved by less than 0.01%. Their cycles can still move, since the code of
+every program sits at a new address: `Brainfuck::Array` took 36.23% more cycles on the same
+instructions.
+
 **LangArena rows measured before the pinned revision rose from `3d8a862` to `85ac364` are
 comparable with rows after it on forty-seven of the fifty programs.** The three were measured with
 one compiler on both sides -- `main` at `f7d3a2b` -- and the first row on `85ac364` is the first one
