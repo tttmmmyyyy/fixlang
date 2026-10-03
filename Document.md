@@ -3289,7 +3289,7 @@ main : ::Std::IO () = (
 );
 ```
 
-An example passes when this program exits with status 0, whatever it writes to the standard output and the standard error. A failing `assert_eq`, `undefined` or an index out of range therefore makes the example fail. Each example runs in a process of its own, and a compile error in an example is reported at its place in the comment. `fix test` compiles the examples together into one program, so a C function that one example exports with `FFI_EXPORT` can be called with `FFI_CALL` from another. Such an example passes in `fix test`, but it fails to link when its code is used alone.
+An example passes when this program exits with status 0, whatever it writes to the standard output and the standard error. A failing `assert_eq`, `undefined` or an index out of range therefore makes the example fail. Each example runs in a process of its own, and a compile error in an example is reported at its place in the comment.
 
 An example that begins with a `module` declaration is the source of the module as it stands. It declares the module `DocTest`, imports what it uses, including the module the comment is written in, and defines `main : IO ()`. Write an example in this form to define types or functions, or to import only some of the entities of a module:
 
