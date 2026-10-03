@@ -75,11 +75,11 @@ mod tests {
         total
     }
 
-    /// Builds `ONE_LOOP` with `build_args` on the build command, and answers the bytes of object
-    /// code it wrote together with what the program prints.
-    fn build_and_run(build_args: &[&str]) -> (u64, String) {
-        let (temp_dir, program_path) =
-            build_program(ONE_LOOP, "max", build_args, None, "a program of one loop");
+    /// Builds `source` with `build_args` on the build command, and answers the bytes of object
+    /// code it wrote together with what the program prints. `description` names the program in a
+    /// failure.
+    fn build_and_run(source: &str, description: &str, build_args: &[&str]) -> (u64, String) {
+        let (temp_dir, program_path) = build_program(source, "max", build_args, None, description);
         let size = object_code_size(temp_dir.path());
         let output = Command::new(&program_path)
             .output()
@@ -134,14 +134,14 @@ mod tests {
     /// option are what make the difference in size the option's doing.
     #[test]
     fn test_llvm_arg_reaches_llvm() {
-        let (plain, plain_output) = build_and_run(&[]);
-        let (plain_again, _) = build_and_run(&[]);
+        let (plain, plain_output) = build_and_run(ONE_LOOP, "a program of one loop", &[]);
+        let (plain_again, _) = build_and_run(ONE_LOOP, "a program of one loop", &[]);
         assert_eq!(
             plain, plain_again,
             "two builds of one source should compile to the same bytes of object code"
         );
 
-        let (aligned, aligned_output) = build_and_run(&[ALIGN_ALL_BLOCKS_TO_64]);
+        let (aligned, aligned_output) = build_and_run(ONE_LOOP, "a program of one loop", &[ALIGN_ALL_BLOCKS_TO_64]);
         assert!(
             aligned > plain,
             "asking for a 64-byte boundary at the head of every block should grow the object \
@@ -160,8 +160,8 @@ mod tests {
     /// what a renamed option does: LLVM says nothing about it, and the build succeeds.
     #[test]
     fn test_an_option_llvm_does_not_know_leaves_the_program_alone() {
-        let (plain, _) = build_and_run(&[]);
-        let (with_unknown, _) = build_and_run(&[OPTION_LLVM_DOES_NOT_HAVE]);
+        let (plain, _) = build_and_run(ONE_LOOP, "a program of one loop", &[]);
+        let (with_unknown, _) = build_and_run(ONE_LOOP, "a program of one loop", &[OPTION_LLVM_DOES_NOT_HAVE]);
         assert_eq!(
             plain, with_unknown,
             "an option LLVM does not know should leave the object code as it was"
@@ -339,23 +339,8 @@ mod tests {
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_llvm_arg_overrides_an_option_every_build_hands_llvm() {
-        let build = |build_args: &[&str]| {
-            let (temp_dir, program_path) =
-                build_program(PACK_BITS, "max", build_args, None, "a loop packing bits");
-            let output = Command::new(&program_path)
-                .output()
-                .expect("Failed to run the program");
-            assert!(
-                output.status.success(),
-                "the program failed: {}\n{}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr)
-            );
-            (
-                object_code_size(temp_dir.path()),
-                String::from_utf8_lossy(&output.stdout).to_string(),
-            )
-        };
+        let build =
+            |build_args: &[&str]| build_and_run(PACK_BITS, "a loop packing bits", build_args);
         let (default, default_output) = build(&[]);
         let (overridden, overridden_output) =
             build(&["--llvm-arg=-no-phi-elim-live-out-early-exit=false"]);
@@ -422,10 +407,10 @@ mod tests {
         }
         let mut inside = Set::default();
         for (index, instruction) in instructions.iter().enumerate() {
-            let target = instruction.split_whitespace().nth(1);
             if !instruction.starts_with('j') {
                 continue;
             }
+            let target = instruction.split_whitespace().nth(1);
             if let Some(&start) = target.and_then(|target| labels.get(target)) {
                 if start <= index {
                     inside.extend(start..=index);
@@ -436,7 +421,7 @@ mod tests {
             .into_iter()
             .filter(|&index| {
                 let mut parts = instructions[index].splitn(2, char::is_whitespace);
-                let opcode = parts.next().unwrap_or("");
+                let opcode = parts.next().unwrap();
                 let operands: Vec<&str> = parts
                     .next()
                     .unwrap_or("")
