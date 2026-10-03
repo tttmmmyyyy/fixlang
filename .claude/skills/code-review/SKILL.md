@@ -875,7 +875,7 @@ In this case, keep one as a `use` import and qualify the other minimally, or qua
 
 ## Aspect: comment-style
 
-Scan the doc/inline comments touched by the diff — in Rust source, in the prose of hand-written Markdown docs, and in the changelog entries the change adds. Rewrite whatever violates a convention below; the *Every Rust item must have a doc comment* convention is the one that *adds* a missing comment rather than rewriting. Each convention is tagged with where it applies — **[Rust]** for Rust comments only, **[Rust + Markdown]** for prose in both, **[Changelog]** for entries in `CHANGELOG.md`.
+Scan the doc/inline comments touched by the diff — in Rust source, in the prose of hand-written Markdown docs, and in the changelog entries the change adds. Rewrite whatever violates a convention below; the *Every Rust item must have a doc comment* convention is the one that *adds* a missing comment rather than rewriting. Each convention is tagged with where it applies — **[Rust]** for Rust comments only, **[Rust + Markdown]** for prose in both, **[User docs]** for the documents the project publishes to its users, **[Changelog]** for entries in `CHANGELOG.md`.
 
 ### Conventions
 
@@ -1004,6 +1004,21 @@ Point at things by a name the reader can search for — a function, type, module
 
 **Rewrite**: replace the numeric locator with the name of the thing it points to.
 
+#### Tell the user how to use the thing, not everything it does — [User docs]
+
+A user document (`Document.md`, `README.md`, the docs under `docs/`) is read by someone who wants to use a feature correctly. It says what that takes: what to write, what it means, what to avoid, and what goes wrong with the mistakes a user is likely to make. It is not where the specification is recorded; the edge cases of the implementation, the behavior of uses nobody would write, and the rules a user meets only by going out of the way belong in the design document under `dev-docs/`. Every such sentence is one more thing the reader has to read past to find what they came for.
+
+The test, for each sentence the diff adds: **would a user who never reads it write or use the feature wrongly?** A sentence that fails the test describes the implementation rather than the use. Shapes it takes:
+
+- the parsing rules behind a syntax the user writes the ordinary way anyway;
+- a limitation that only an unusual layout or an unusual use reaches;
+- what happens when two features are combined in a way the document never suggests;
+- an error case whose diagnostic already tells the user what to do.
+
+A warning that steers a likely mistake passes the test: "marks are separated by spaces; `fix,no_run` is an error" stops the mistake a reader who knows another tool's convention would make.
+
+**Rewrite**: remove the sentence. When the removed text is recorded nowhere else — no design document under `dev-docs/` states it — report it instead, so the author can move it there rather than lose it.
+
 #### Write changelog entries for the user, and keep them short — [Changelog]
 
 A changelog entry is read by a Fix programmer working out what an upgrade means for their code, so it says what they can now observe or now have to do. Two anti-patterns to catch:
@@ -1037,12 +1052,12 @@ An entry states the change in a sentence or two; the numbers are what take a rea
 
 1. Run `git diff <base>` to find changed files and the touched line ranges. Three file kinds are in scope:
    - **Rust source** (`.rs`): all conventions apply.
-   - **Hand-written Markdown docs** (`.md`) — e.g. `Document.md`, `README.md`, docs under `docs/`: only the **[Rust + Markdown]** conventions apply. **Exclude generated docs** under `std_doc/` (regenerated from source, so a hand edit would be overwritten) **and dev docs** under `dev-docs/` (written for the people working on the change, under the `devdoc` skill's conventions).
+   - **Hand-written Markdown docs** (`.md`) — e.g. `Document.md`, `README.md`, docs under `docs/`: only the **[Rust + Markdown]** and **[User docs]** conventions apply. **Exclude generated docs** under `std_doc/` (regenerated from source, so a hand edit would be overwritten) **and dev docs** under `dev-docs/` (written for the people working on the change, under the `devdoc` skill's conventions).
    - **`CHANGELOG.md`**: the **[Rust + Markdown]** and **[Changelog]** conventions apply, within the `## [Unreleased]` section alone. Entries under a released version heading record what that release shipped, so they stay as written.
 2. For each changed `.rs` file, examine:
    - (a) comments that appear in the diff hunks (added or modified lines), for the rewriting conventions;
    - (b) Rust items defined or whose signature was modified in the diff hunks, for the *Every Rust item must have a doc comment* convention.
-3. For each changed hand-written `.md` file, examine the prose added or modified in the diff hunks for the **[Rust + Markdown]** conventions.
+3. For each changed hand-written `.md` file, examine the prose added or modified in the diff hunks for the **[Rust + Markdown]** and **[User docs]** conventions.
    In `CHANGELOG.md`, read the entries the diff adds against the **[Changelog]** conventions as well.
 4. For each violation:
    - Identify which convention it is.
@@ -1051,7 +1066,7 @@ An entry states the change in a sentence or two; the numbers are what take a rea
 5. After all edits, run `cargo check` to confirm nothing broke (comment edits shouldn't affect builds, but verify in case of doctest changes). Markdown edits don't affect the build.
 6. Report:
    - **Applied edits**: file, convention, brief rationale.
-   - **Flagged for review**: an item whose purpose you could not state without restating its name (*Every Rust item must have a doc comment*), and a `### Fixed` entry whose bug you could not date (*Leave out fixes for bugs that never shipped*) — file, item name or entry, and why it was left to the author. Every other convention ends in an edit.
+   - **Flagged for review**: an item whose purpose you could not state without restating its name (*Every Rust item must have a doc comment*), a `### Fixed` entry whose bug you could not date (*Leave out fixes for bugs that never shipped*), and a sentence of a user document that only records the specification and is recorded nowhere else (*Tell the user how to use the thing, not everything it does*) — file, item name or entry, and why it was left to the author. Every other convention ends in an edit.
 
 ### Scope
 
