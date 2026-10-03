@@ -1391,8 +1391,8 @@ double = |x| old_double(x);
     );
 }
 
-/// An example marked `ignore` takes no place in the program of the Fix examples: each example after
-/// it still runs as itself.
+/// An example marked `ignore` is left out of the program of the Fix examples, and each example
+/// after it runs as itself.
 #[test]
 fn test_examples_after_an_ignored_example_run_as_themselves() {
     let lib = r#"module Lib;
@@ -1425,9 +1425,9 @@ double = |x| 2 * x;
     );
 }
 
-/// Where the program of the Fix examples does not build and holds one example, `fix test` tests
-/// that example alone without saying that testing each example alone is slower, since it takes one
-/// build as the program does. An example marked `ignore` takes no build, so it is not counted.
+/// Where the program of the Fix examples holds one example and does not build, `fix test` tests
+/// that example alone and prints no message that this is slower: testing it alone takes one build,
+/// as the program does. An example marked `ignore` is not built, so it does not count.
 #[test]
 fn test_one_example_that_does_not_compile_is_tested_without_saying_it_is_slower() {
     let lib = r#"module Lib;

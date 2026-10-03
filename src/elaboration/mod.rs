@@ -134,8 +134,9 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         .append(program.collect_diagnostics_of_typed_program(config));
 
     // In a program built from several Fix examples, check that the `main` of each example has type
-    // `IO ()`, as an entry point must. The program runs each `main` as an `IO ()`, which a `main` of
-    // a more general type, such as `[m : Monad] m ()`, also passes.
+    // `IO ()`, as an entry point must. The program calls each `main` as an `IO ()`, which a `main`
+    // of a more general type, such as `[m : Monad] m ()`, can be instantiated to; this check makes
+    // such an example fail here as it fails when built alone.
     if let Some(example_build) = &config.example_build {
         let mut errors = Errors::empty();
         for main in example_build.dispatched_mains() {
