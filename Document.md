@@ -3265,7 +3265,7 @@ Also, at this time, the source files listed in the `build.test` section of the p
 
 ### Fix examples in comments
 
-A comment is read as Markdown, and a fenced code block in it whose info string begins with the word `fix` is a Fix example. `fix test` compiles and runs it. A comment is a `/* */` comment, or a run of `//` comments standing alone on consecutive lines; a `//` comment written after code on its line is a comment of its own. The text of a `//` comment starts after the `//` and one space after it, and the text of a `/* */` comment is read as it is written. An example is usually written in the [documentation comment](#generating-documentation) of what it shows, where `fix docs` shows it too:
+A comment is read as Markdown, and a fenced code block in any comment whose info string begins with the word `fix` is a Fix example. `fix test` compiles and runs it. An example is usually written in the [documentation comment](#generating-documentation) of what it shows, where `fix docs` shows it too:
 
 ```
 // Doubles a number.
@@ -3307,7 +3307,7 @@ An example that begins with a `module` declaration is the source of the module a
 // ```
 ```
 
-The module name `DocTest`, and the module names beginning with `DocTest.`, are reserved for the examples: when `fix test` compiles an example, it reports an error if the project or a dependency has a module of such a name. Where a module the example imports has a namespace, a type or a trait named `DocTest`, a name beginning with `DocTest` in the example is ambiguous; write the example's own names with the absolute path `::DocTest::`.
+The module name `DocTest`, and the module names beginning with `DocTest.`, are reserved for the examples: when `fix test` compiles an example, it reports an error if the project or a dependency has a module of such a name.
 
 A line of an example whose text begins with `# ` after its indentation is hidden: it is compiled with the `# ` removed, and it is not shown in the documentation `fix docs` generates or in the hover of the language server. A line of `#` alone is a hidden empty line. The following example is shown as the two lines `type Pair = (I64, I64);` and `let pair : Pair = (1, 2);`:
 
@@ -3332,7 +3332,7 @@ Marks after `fix`, separated by spaces, change what `fix test` does with an exam
 | `fix no_run` | Compiles the example (including type checking) without running it. Use it for an example that reads the standard input, touches files or the network, or does not terminate. |
 | `fix ignore` | Does nothing. Use it for a fragment that does not compile on its own. |
 
-`fix test` reports any other mark as an error. It also reports marks separated by commas, as in `fix,no_run`, as an error. A code block whose info string is empty or begins with another word, such as `fixme`, is not a Fix example. The opening fence of a Fix example stands on a line of its own, indented less than four columns. So a code block opened after a list marker, as in `- ```fix`, or inside a block quote is not a Fix example, while one opened on its own line inside a list item is.
+`fix test` reports any other mark as an error. It also reports marks separated by commas, as in `fix,no_run`, as an error. A code block whose info string is empty or begins with another word, such as `fixme`, is not a Fix example.
 
 `fix test` runs the Fix examples of every comment in the files listed in the `build` and `build.test` sections of the project file, so the helpers a project writes for its tests can carry tested examples too. The examples in dependencies are not run. The examples are built with the same settings as `Test::test`, so they can use the test dependencies.
 
