@@ -5835,8 +5835,8 @@ pub fn test_wide_signed_integer_bytes_round_trip() {
 }
 
 /// `from_bytes` and `to_bytes` of `F32` and `F64` carry a signaling NaN's bits through unchanged:
-/// the value crosses the C runtime twice as a `float` or a `double`, and nothing on the way may
-/// quiet it or drop its payload. The payload is drawn from the argument count so that the optimizer
+/// the value is stored and loaded as a `float` or a `double`, and nothing on the way may quiet it
+/// or drop its payload. The payload is drawn from the argument count so that the optimizer
 /// cannot fold the round trip.
 #[test]
 pub fn test_float_bytes_round_trip_keeps_signaling_nan() {
