@@ -141,7 +141,8 @@ mod tests {
             "two builds of one source should compile to the same bytes of object code"
         );
 
-        let (aligned, aligned_output) = build_and_run(ONE_LOOP, "a program of one loop", &[ALIGN_ALL_BLOCKS_TO_64]);
+        let (aligned, aligned_output) =
+            build_and_run(ONE_LOOP, "a program of one loop", &[ALIGN_ALL_BLOCKS_TO_64]);
         assert!(
             aligned > plain,
             "asking for a 64-byte boundary at the head of every block should grow the object \
@@ -161,7 +162,11 @@ mod tests {
     #[test]
     fn test_an_option_llvm_does_not_know_leaves_the_program_alone() {
         let (plain, _) = build_and_run(ONE_LOOP, "a program of one loop", &[]);
-        let (with_unknown, _) = build_and_run(ONE_LOOP, "a program of one loop", &[OPTION_LLVM_DOES_NOT_HAVE]);
+        let (with_unknown, _) = build_and_run(
+            ONE_LOOP,
+            "a program of one loop",
+            &[OPTION_LLVM_DOES_NOT_HAVE],
+        );
         assert_eq!(
             plain, with_unknown,
             "an option LLVM does not know should leave the object code as it was"
