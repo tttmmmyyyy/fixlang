@@ -39,7 +39,7 @@
 
 #### Language
 
-- #806: At `-O max`, the default level, a recursion that calls itself through a function held in a struct, as `(w.@f)(w, n - 1)` does, now runs in constant stack. Since 1.5.0 it overflowed the stack when its result was wider than three integers.
+- #806, #808: At `-O max`, the default level, a recursion that calls itself through a function held in a struct, as `(w.@f)(w, n - 1)` does, now runs in constant stack. Since 1.5.0 it overflowed the stack when its result was wider than three integers.
 
 #### Tool
 
