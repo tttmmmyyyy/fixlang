@@ -14,8 +14,10 @@ use crate::{
 // Each test below drives one such loop a million iterations deep and checks only that it finishes.
 // The outcome is binary — completes or overflows the stack — so machine load does not affect it.
 // They run at every optimization level: whether a tail call becomes a jump is decided by the
-// backend, which does it at `-O0` too, and by the `tail` marker, which code generation attaches to
-// every call in tail position.
+// backend, which does it at `-O0` too, by the `tail` marker, which code generation attaches to
+// every call in tail position, and by the passes the level runs, since a pass that puts anything
+// between a tail call and its `ret` keeps the backend from making the call a jump (fixlang issue
+// #806).
 //
 // AArch64 returns up to eight leaves in registers, which covers the four-leaf shapes; the shape that
 // exercises the return rule on every target is
@@ -247,26 +249,30 @@ fn test_dispatch_through_array_runs_in_constant_stack() {
 
 /// The callee of each tail call is a function read out of a struct, and the step it recurses by
 /// comes from the command line, so no pass can resolve the callee and the recursion reaches code
-/// generation as an indirect tail call. The five-tuple result crosses the x86-64 return budget, so
-/// the call forwards the caller's out-pointer.
+/// generation as an indirect tail call. The nine-integer result crosses the return budget of every
+/// supported target, so the call forwards the caller's out-pointer.
 #[test]
 fn test_wide_return_through_a_function_value_runs_in_constant_stack() {
     let source = r#"
     module Main;
 
-    type W = box struct { f : W -> I64 -> (I64, I64, I64, I64, I64) };
+    type Nine = ((I64, I64, I64), (I64, I64, I64), (I64, I64, I64));
 
-    call_w : W -> I64 -> (I64, I64, I64, I64, I64);
+    type W = box struct { f : W -> I64 -> Nine };
+
+    call_w : W -> I64 -> Nine;
     call_w = |w, n| (w.@f)(w, n);
 
     count_down_by : I64 -> W;
-    count_down_by = |k| W { f : |me, n| if n <= 0 { (n, 1, 2, 3, 4) } else { call_w(me, n - k) } };
+    count_down_by = |k| W { f : |me, n|
+        if n <= 0 { ((n, 1, 2), (3, 4, 5), (6, 7, 8)) } else { call_w(me, n - k) }
+    };
 
     main : IO ();
     main = (
         let k = (*IO::get_args).@size;
-        let (a, _, _, _, e) = call_w(count_down_by(k), 1000000 * k);
-        assert_eq(|_|"unexpected result", a + e, 4);;
+        let ((a, _, _), _, (_, _, i)) = call_w(count_down_by(k), 1000000 * k);
+        assert_eq(|_|"unexpected result", a + i, 8);;
         pure()
     );
     "#;
@@ -283,7 +289,7 @@ fn test_narrow_return_through_function_values_runs_in_constant_stack() {
     type F = box struct { f : F -> F -> I64 -> I64 };
 
     call_f : F -> F -> I64 -> I64;
-    call_f = |a, b, n| (a.@f)(b, a, n);
+    call_f = |a, b, n| (a.@f)(a, b, n);
 
     count_down_by : I64 -> F;
     count_down_by = |k| F { f : |me, other, n| if n <= 0 { n } else { call_f(other, me, n - k) } };
