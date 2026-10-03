@@ -38,9 +38,10 @@ use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
     alloc_array_storage, build_abort_if, build_array_storage_alloc_offset,
-    build_array_storage_is_aligned, build_capacity_check, build_elems_bytes, build_gep_array_elem,
-    build_gep_within_allocation, create_obj, get_array_storage, get_array_storage_buf,
-    read_alloc_offset, union_tag_value, write_alloc_offset, CapacityCheck, ObjectFieldType,
+    build_array_storage_is_aligned, build_array_value, build_capacity_check, build_elems_bytes,
+    build_gep_array_elem, build_gep_within_allocation, create_obj, get_array_storage,
+    get_array_storage_buf, read_alloc_offset, union_tag_value, write_alloc_offset, CapacityCheck,
+    ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -1118,18 +1119,16 @@ pub fn make_byte_array_of_global_storage<'c, 'm>(
     bytes: &[u8],
 ) -> Object<'c> {
     let array_ty = type_tyapp(make_array_ty(), make_u8_ty());
-    let array = create_obj(
-        array_ty,
-        &vec![],
-        None,
-        gc,
-        Some("array@make_byte_array_of_global_storage"),
-    );
     let storage_ptr = gc.add_global_byte_array_storage(bytes);
     let len = gc.context.i64_type().const_int(bytes.len() as u64, false);
-    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_ptr);
-    let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
-    array.insert_field(gc, ARRAY_CAP_IDX, len)
+    build_array_value(
+        gc,
+        array_ty,
+        storage_ptr.as_basic_value_enum(),
+        len,
+        len,
+        "array@make_byte_array_of_global_storage",
+    )
 }
 
 /// Evaluates a string literal to the `Array U8` backing a `String`: the literal's bytes plus the
@@ -2401,17 +2400,15 @@ impl BuiltinOp for NumberToBytesOp {
             .set_alignment(1)
             .unwrap();
 
-        let array = create_obj(
-            arr_ty.clone(),
-            &vec![],
-            None,
-            gc,
-            Some(&format!("_to_bytes({})", self.number_name.to_string())),
-        );
         let storage_val = storage.value(gc);
-        let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
-        let array = array.insert_field(gc, ARRAY_SIZE_IDX, size);
-        array.insert_field(gc, ARRAY_CAP_IDX, size)
+        build_array_value(
+            gc,
+            arr_ty.clone(),
+            storage_val,
+            size,
+            size,
+            &format!("_to_bytes({})", self.number_name.to_string()),
+        )
     }
 
     fn name(&self) -> String {
@@ -2775,20 +2772,19 @@ impl BuiltinOp for ArrayUnsafeEmptyOp {
         // `{ storage, size = 0, cap }`.
         let elem_ty = arr_ty.field_types(gc.type_env())[0].clone();
         let storage = alloc_array_storage(gc, elem_ty, cap, CapacityCheck::Run);
-        let array = create_obj(
-            arr_ty.clone(),
-            &vec![],
-            None,
+        let storage_val = storage.value(gc);
+        let size = gc.context.i64_type().const_zero();
+        build_array_value(
             gc,
-            Some(&format!(
+            arr_ty.clone(),
+            storage_val,
+            size,
+            cap,
+            &format!(
                 "{ARRAY_NAME}::{ARRAY_UNSAFE_EMPTY_NAME}({})",
                 self.capacity_name.to_string()
-            )),
-        );
-        let storage_val = storage.value(gc);
-        let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
-        let array = array.insert_field(gc, ARRAY_SIZE_IDX, gc.context.i64_type().const_zero());
-        array.insert_field(gc, ARRAY_CAP_IDX, cap)
+            ),
+        )
     }
 
     fn name(&self) -> String {
@@ -5537,11 +5533,8 @@ impl BuiltinOp for ArrayLitOp {
             .const_int(self.elem_names.len() as u64, false);
         let elem_ty = ty.field_types(gc.type_env())[0].clone();
         let storage = alloc_array_storage(gc, elem_ty, len, CapacityCheck::Run);
-        let array = create_obj(ty.clone(), &vec![], None, gc, Some("array_literal"));
         let storage_val = storage.value(gc);
-        let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
-        let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
-        let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
+        let array = build_array_value(gc, ty.clone(), storage_val, len, len, "array_literal");
         let buf = get_array_storage_buf(gc, &array);
         for (i, name) in self.elem_names.iter().enumerate() {
             let value = gc.get_scoped_obj_noretain(name);
