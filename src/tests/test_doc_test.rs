@@ -1173,17 +1173,12 @@ value : I64 = first_long_function_name;
     );
 }
 
-/// A Fix example written as a module whose `main` is not of type `IO ()` — one that defines no
-/// `main`, and one whose `main` is of a more general type — fails as it does built alone. The
+/// A Fix example written as a module that defines no `main` fails as it does built alone. The
 /// program of the examples does not build, so `fix test` says so and tests each example alone, and
 /// the other examples pass.
 #[test]
-fn test_example_whose_main_is_not_of_type_io_fails() {
+fn test_example_without_main_fails() {
     let lib = r#"module Lib;
-
-DEPRECATED[old_double, "Call `double` in place of `old_double`."];
-old_double : I64 -> I64;
-old_double = |x| 2 * x;
 
 // ```fix
 // assert_eq(|_|"", double(21), 42)
@@ -1194,33 +1189,49 @@ old_double = |x| 2 * x;
 // # import Lib;
 // # value : I64 = double(1);
 // ```
+double : I64 -> I64;
+double = |x| 2 * x;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &["--doc"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("so each of them is built and tested alone")
+            && stderr.contains("doc test lib.fix:3 ... ok")
+            && stderr.contains("doc test lib.fix:7 ... FAILED")
+            && stderr.contains("doc tests: 1 passed, 1 failed, 0 ignored."),
+        "`fix test` says it tests each example alone, and only the example without `main` fails\n{}",
+        streams(&output)
+    );
+}
+
+/// A Fix example written as a module whose `main` has a type more general than `IO ()` fails as it
+/// does built alone, though the program of the examples could run it as an `IO ()`.
+#[test]
+fn test_example_whose_main_is_of_a_more_general_type_fails() {
+    let lib = r#"module Lib;
+
+// ```fix
+// assert_eq(|_|"", double(21), 42)
+// ```
 //
 // ```fix
 // # module DocTest;
 // # main : [m : Monad] m ();
 // # main = pure();
 // ```
-//
-// ```fix
-// assert_eq(|_|"", double(2), 4)
-// ```
 double : I64 -> I64;
-double = |x| old_double(x);
+double = |x| 2 * x;
 "#;
     let dir = project_dir(&[("lib.fix", lib)], &[]);
     let output = fix_test(&dir, &["--doc"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("doc test lib.fix:11 ... FAILED")
-            && stderr.contains("doc test lib.fix:17 ... FAILED")
+        stderr.contains("doc test lib.fix:3 ... ok")
+            && stderr.contains("doc test lib.fix:7 ... FAILED")
             && stderr.contains("should have type `Std::IO ()`")
-            && stderr.contains("doc tests: 2 passed, 2 failed, 0 ignored."),
-        "the examples whose `main` is not of type `IO ()` fail, and the others pass\n{}",
-        streams(&output)
-    );
-    assert!(
-        stderr.contains("so each of them is built and tested alone"),
-        "`fix test` says it tests each example alone\n{}",
+            && stderr.contains("doc tests: 1 passed, 1 failed, 0 ignored."),
+        "the example whose `main` is of a more general type fails, and the other passes\n{}",
         streams(&output)
     );
 }
