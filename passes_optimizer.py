@@ -97,6 +97,8 @@ MEASUREMENT_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
 # Excluded because they may break the program: attributor, attributor-cgscc, unify-loop-exits.
 # `reg2mem` is excluded as well: the allocas it introduces escape into indirect tail calls, which
 # costs the program its guaranteed tail calls and overflows the stack.
+# `pseudo-probe` is excluded for the same outcome: the probe it inserts between a tail call and the
+# `ret` turns the call into an ordinary one (fixlang issue #806).
 PASSES = '''
 default<O3>
 aa-eval

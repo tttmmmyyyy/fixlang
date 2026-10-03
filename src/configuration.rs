@@ -54,11 +54,15 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 
 /// Passes run after the `default<O3>` rounds at the optimization levels built for speed.
 ///
-/// The three together take 0.80% off the cycle counts of the fifteen benchmark cases —
-/// `get_sub` 4.4%, `fib` 4.4%, `cp_lib_dijkstra` 2.8%, `levenshtein` 2.2% — against 2.0% back on
-/// `cp_lib_lsegtree` and 1.5% on `cp_lib_segtree`. **The three are one unit**: none of them earns
-/// that alone, and `pseudo-probe` on its own costs 0.48%. What they change is the shape of the
-/// code rather than the work it does, which is why the instruction count barely moves.
+/// Over the 106 cases of `benchmark/speedtest` run with `--langarena`, the two take 0.51% off the
+/// instruction counts — `Graph::BFS` 15.1%, `Graph::DFS` 11.7%, `prime_table` 8.8%,
+/// `Compress::HuffDecode` 5.0% — against 1.75% back on `Hash::SHA256` and 1.57% on `sort`.
+///
+/// A pass here must leave a tail call followed directly by its `ret`, which the backend needs in
+/// order to compile the call as a jump. `pseudo-probe` takes 0.21% off the instruction counts on top
+/// of these two, and inserts a probe between such a call and its `ret`: an indirect tail call then
+/// becomes an ordinary call, and a recursion through a function value overflows the stack (fixlang
+/// issue #806).
 const LLVM_TAIL_PASSES: [&str; 2] = ["speculative-execution", "loop-vectorize"];
 
 /// The passes the optimization levels built for speed run over each generated module, in order:
