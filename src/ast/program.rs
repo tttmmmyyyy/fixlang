@@ -16,12 +16,11 @@ use crate::configuration::{
     Configuration, DeprecationMode, OutputFileType, ProjectSources, SubCommand,
 };
 use crate::constants::{
-    C_ENTRY_POINT_NAME, DOT_FIXLANG, INSTANCIATED_NAME_SEPARATOR, MAIN_FUNCTION_NAME,
-    MAIN_MODULE_NAME, MARK_THREADED_NAME, MAX_UNION_VARIANTS, STD_NAME, STRUCT_ACT_SYMBOL,
-    STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL,
-    STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL, STRUCT_PUNCH_SYMBOL,
-    STRUCT_SETTER_SYMBOL, TEST_FUNCTION_NAME, TEST_MODULE_NAME, TUPLE_SIZE_BASE, UNION_AS_SYMBOL,
-    UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
+    C_ENTRY_POINT_NAME, DOT_FIXLANG, INSTANCIATED_NAME_SEPARATOR, MARK_THREADED_NAME,
+    MAX_UNION_VARIANTS, STD_NAME, STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL,
+    STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL, STRUCT_PUNCH_FORCE_UNIQUE_SYMBOL,
+    STRUCT_PUNCH_SYMBOL, STRUCT_SETTER_SYMBOL, TUPLE_SIZE_BASE, UNION_AS_SYMBOL, UNION_IS_SYMBOL,
+    UNION_MOD_SYMBOL,
 };
 use crate::elaboration::desugar_opaque::{
     remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type,
@@ -1019,14 +1018,22 @@ impl Program {
     /// The name of every type constructor and of every type alias the program declares, which are
     /// the names a type written in a source can resolve to.
     pub fn tycon_names_with_aliases(&self) -> Set<FullName> {
-        let mut res: Set<FullName> = Default::default();
-        for (k, _) in self.type_env().tycons.iter() {
-            res.insert(k.name.clone());
-        }
-        for (k, _) in self.type_env().aliases.iter() {
-            res.insert(k.name.clone());
-        }
-        res
+        self.tycon_sources_with_aliases().into_keys().collect()
+    }
+
+    /// The name of every type constructor and every type alias, each with the declaration that
+    /// declares it.
+    pub fn tycon_sources_with_aliases(&self) -> Map<FullName, Option<Span>> {
+        let type_env = self.type_env();
+        let tycons = type_env
+            .tycons
+            .iter()
+            .map(|(tycon, info)| (tycon.name.clone(), info.source.clone()));
+        let aliases = type_env
+            .aliases
+            .iter()
+            .map(|(tycon, info)| (tycon.name.clone(), info.source.clone()));
+        tycons.chain(aliases).collect()
     }
 
     /// How many type parameters each associated type declared in the program takes, by the full
@@ -1733,25 +1740,16 @@ impl Program {
         errors.to_result()
     }
 
-    /// Instantiates the program's entry point at type `IO ()` and stores it in
-    /// `entry_io_value`.
-    ///
-    /// # Arguments
-    /// * `test_mode` — when true the entry point is `Test::test`, as `fix test`
-    ///   runs it; otherwise it is `Main::main`.
+    /// Instantiates the program's entry point, the value `entry_io_value_name`, at type `IO ()`
+    /// and stores it in `entry_io_value`.
     pub fn instantiate_entry_io_value(
         &mut self,
         tc: &TypeCheckContext,
-        test_mode: bool,
+        entry_io_value_name: &FullName,
     ) -> Result<(), Errors> {
-        let entry_func_name = if test_mode {
-            FullName::from_strs(&[TEST_MODULE_NAME], TEST_FUNCTION_NAME)
-        } else {
-            FullName::from_strs(&[MAIN_MODULE_NAME], MAIN_FUNCTION_NAME)
-        };
         let entry_ty = make_io_unit_ty();
         let (expr, _ty) =
-            self.instantiate_exported_value(&entry_func_name, Some(entry_ty), &None, tc)?;
+            self.instantiate_exported_value(entry_io_value_name, Some(entry_ty), &None, tc)?;
         self.entry_io_value = Some(expr);
         Ok(())
     }
@@ -1791,30 +1789,8 @@ impl Program {
         required_src: &Option<Span>,
         tc: &TypeCheckContext,
     ) -> Result<(Arc<ExprNode>, ExportedFunctionType), Errors> {
-        // Check if the value is defined.
-        let gv = self.global_values.get(value_name);
-        if gv.is_none() {
-            return Err(Errors::from_msg_srcs(
-                format!("Value `{}` is not found.", value_name.to_string()),
-                &[required_src],
-            ));
-        }
-
-        // Validate the type of the value.
-        let gv: &GlobalValue = gv.unwrap();
         let (required_ty, exported_ty) = if let Some(required_ty) = required_ty {
-            // If the type of the value is specified, check if it matches the required type.
-            if gv.scm.to_string_normalize() != required_ty.to_string() {
-                let gv_src = gv.scm.ty.get_source();
-                return Err(Errors::from_msg_srcs(
-                    format!(
-                        "The value `{}` should have type `{}`.",
-                        value_name.to_string(),
-                        required_ty.to_string()
-                    ),
-                    &[gv_src, required_src],
-                ));
-            }
+            self.check_value_has_type(value_name, &required_ty, required_src)?;
             let exported_ty = ExportedFunctionType {
                 doms: vec![],
                 codom: make_unit_ty(),
@@ -1827,6 +1803,7 @@ impl Program {
                 "The type of the value `{}` is not suitable for export: ",
                 value_name.to_string(),
             );
+            let gv = self.find_global_value(value_name, required_src)?;
             let exported_ty = ExportedFunctionType::validate(
                 gv.scm.clone(),
                 &tc.type_env,
@@ -1839,6 +1816,44 @@ impl Program {
         self.instantiate_symbols(tc)?;
         let expr = expr_var(symbol_name, None).set_type(required_ty);
         Ok((expr, exported_ty))
+    }
+
+    /// The global value `value_name`, or an error at `required_src` saying the program has none.
+    fn find_global_value(
+        &self,
+        value_name: &FullName,
+        required_src: &Option<Span>,
+    ) -> Result<&GlobalValue, Errors> {
+        self.global_values.get(value_name).ok_or_else(|| {
+            Errors::from_msg_srcs(
+                format!("Value `{}` is not found.", value_name.to_string()),
+                &[required_src],
+            )
+        })
+    }
+
+    /// Reports that the program has no global value `value_name`, or that its declared type differs
+    /// from `required_ty`. A value declared at a more general type, such as
+    /// `[m : Monad] m ()` where `IO ()` is required, is reported too. The errors are placed at the
+    /// declaration of the value and at `required_src`.
+    pub fn check_value_has_type(
+        &self,
+        value_name: &FullName,
+        required_ty: &Arc<TypeNode>,
+        required_src: &Option<Span>,
+    ) -> Result<(), Errors> {
+        let gv = self.find_global_value(value_name, required_src)?;
+        if gv.scm.to_string_normalize() != required_ty.to_string() {
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "The value `{}` should have type `{}`.",
+                    value_name.to_string(),
+                    required_ty.to_string()
+                ),
+                &[gv.scm.ty.get_source(), required_src],
+            ));
+        }
+        Ok(())
     }
 
     /// `expr` with every reference to a global value replaced by a reference to the symbol that
@@ -2902,43 +2917,42 @@ impl Program {
     }
 
     /// Reports each name that is used by more than one of the types, the traits and the associated
-    /// types, aliases included.
+    /// types, aliases included, at the declarations that use it.
     pub fn validate_capital_name_confliction(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
 
-        let types = self.tycon_names_with_aliases();
-        let traits = self.trait_names_with_aliases();
-        let assoc_tys = self.assoc_ty_to_arity();
+        let types = self.tycon_sources_with_aliases();
+        let traits = self.trait_env.trait_sources();
+        let assoc_tys = self
+            .trait_env
+            .assoc_type_defns()
+            .map(|(name, defn)| (name, defn.src.clone()))
+            .collect::<Map<_, _>>();
 
-        // Check if there is a name confliction between types and traits.
-        for name in types.iter() {
-            if traits.contains(name) {
-                errors.append(Errors::from_msg(format!(
-                    "Name confliction: `{}` is both a type and a trait.",
-                    name.to_string()
-                )));
-            }
-        }
-
-        // Check if there is a name confliction between types and traits.
-        for name in types.iter() {
-            if assoc_tys.contains_key(name) {
-                errors.append(Errors::from_msg(format!(
-                    "Name confliction: `{}` is both a type and an associated type.",
-                    name.to_string()
-                )));
-            }
-        }
-
-        // Check if there is a name confliction between traits and associated types.
-        for name in traits.iter() {
-            if assoc_tys.contains_key(name) {
-                errors.append(Errors::from_msg(format!(
-                    "Name confliction: `{}` is both a trait and an associated type.",
-                    name.to_string()
-                )));
-            }
-        }
+        let mut report =
+            |lhs: &Map<FullName, Option<Span>>, rhs: &Map<FullName, Option<Span>>, kinds: &str| {
+                let mut names = lhs
+                    .keys()
+                    .filter(|name| rhs.contains_key(*name))
+                    .collect::<Vec<_>>();
+                names.sort();
+                for name in names {
+                    errors.append(Errors::from_msg_srcs(
+                        format!(
+                            "Name confliction: `{}` is both {}.",
+                            name.to_string(),
+                            kinds
+                        ),
+                        &[
+                            &lhs[name].as_ref().map(Span::to_head_character),
+                            &rhs[name].as_ref().map(Span::to_head_character),
+                        ],
+                    ));
+                }
+            };
+        report(&types, &traits, "a type and a trait");
+        report(&types, &assoc_tys, "a type and an associated type");
+        report(&traits, &assoc_tys, "a trait and an associated type");
 
         errors.to_result()
     }
@@ -3574,9 +3588,10 @@ impl UserSourceFiles {
         self.0.contains(path)
     }
 
-    /// Whether `span` lies in one of the user's files.
+    /// Whether `span` lies in one of the user's files. A span in the source assembled from a Fix
+    /// example lies in the file the example is written in.
     fn contains_span(&self, span: &Span) -> bool {
-        to_absolute_path(&span.input.file_path)
+        to_absolute_path(span.input.reported_path())
             .map(|path| self.contains_path(&path))
             .unwrap_or(false)
     }

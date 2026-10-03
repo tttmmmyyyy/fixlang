@@ -1036,6 +1036,32 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// A mixed import that rename rewrites as a whole keeps an empty item list under a namespace
+    /// as it is written: `Shapes::{}` stays `Shapes::{}`, which imports nothing from `Shapes`, and
+    /// is not written as `Shapes`, which would import a type or a trait of that name.
+    #[test]
+    fn test_rename_struct_type_mixed_import_keeps_empty_item_list() {
+        let mut ctx = LspTestCtx::setup("rename_mixed_import_empty_list", &["lib.fix", "main.fix"]);
+        let we = ctx.rename("lib.fix", 2, 5, "Pixel");
+        let changes = we.get("changes").unwrap().as_object().unwrap();
+        let main_edits = changes
+            .iter()
+            .find(|(k, _)| k.contains("main.fix"))
+            .map(|(_, v)| v.as_array().unwrap().clone())
+            .expect("main.fix should have edits");
+        let rebuilt = main_edits
+            .iter()
+            .map(|edit| edit.get("newText").unwrap().as_str().unwrap())
+            .find(|text| text.starts_with("import "))
+            .unwrap_or_else(|| panic!("the import statement is rewritten as a whole in {:?}", we));
+        assert!(
+            rebuilt.contains("Shapes::{}"),
+            "the empty item list under `Shapes` is kept: {:?}",
+            rebuilt
+        );
+        ctx.shutdown();
+    }
+
     /// Renaming a global value should also rewrite the name token inside
     /// `FFI_EXPORT[...]` and `DEPRECATED[...]` pragmas. Cursor on the
     /// declaration LHS at line 2, col 0.

@@ -65,7 +65,14 @@ impl Errors {
     /// Items with `Severity::Warning` are not counted; a collection that
     /// holds only warnings is treated as a successful compilation.
     pub fn has_error(&self) -> bool {
-        self.errs.iter().any(|e| e.severity == Severity::Error)
+        self.errors().next().is_some()
+    }
+
+    /// The diagnostics of error severity, in the order they were reported.
+    pub fn errors(&self) -> impl Iterator<Item = &Error> {
+        self.errs
+            .iter()
+            .filter(|err| err.severity == Severity::Error)
     }
 
     /// Whether this collection contains any diagnostic at all (errors or warnings).
@@ -91,6 +98,13 @@ impl Errors {
             .partition(|err| err.severity == Severity::Warning);
         self.errs = errors;
         Errors { errs: warnings }
+    }
+
+    /// Drops the warning-severity diagnostics for which `keep` is false, keeping the order of the
+    /// rest. The error-severity ones stay.
+    pub fn retain_warnings(&mut self, mut keep: impl FnMut(&Error) -> bool) {
+        self.errs
+            .retain(|err| err.severity != Severity::Warning || keep(err));
     }
 
     /// Moves every diagnostic of `other` to the end of this collection, keeping their order.
@@ -178,7 +192,7 @@ impl Errors {
         for err in &self.errs {
             let path = match err.srcs.first() {
                 None => spanless_fallback.to_path_buf(),
-                Some((_, span)) => span.input.file_path.clone(),
+                Some((_, span)) => span.input.reported_path().clone(),
             };
             insert_to_map_vec(&mut errs_by_path, &path, err.clone());
         }

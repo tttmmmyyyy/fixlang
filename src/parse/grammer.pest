@@ -429,6 +429,15 @@ line_comment = _{"//" ~ line_commented_character* ~ ( NEWLINE | EOI )}
 
 line_commented_character = _{ !(NEWLINE | EOI) ~ ANY }
 
+// The comments of a source, found as the parser finds them: a string or a character literal is read
+// whole, across the lines a string spans, so a `//` or a `/*` inside one opens no comment. It accepts
+// every input, so it can be run over any source.
+source_comments = { SOI ~ (source_line_comment | source_block_comment | expr_string_lit | expr_u8_lit | ANY)* ~ EOI }
+
+source_line_comment = { "//" ~ line_commented_character* }
+
+source_block_comment = { "/*" ~ block_commented_character* ~ "*/" }
+
 // === File ===
 file = _{ SOI ~ sep* ~ module ~ sep* ~ EOI }
 

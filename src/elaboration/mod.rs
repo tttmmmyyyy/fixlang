@@ -7,8 +7,9 @@ pub mod typecheckcache;
 use crate::ast::program::Program;
 use crate::configuration::{Configuration, OutputFileType, SubCommand};
 use crate::error::Errors;
+use crate::fixstd::builtin::make_io_unit_ty;
 use crate::fixstd::stdlib::{make_std_mod, make_tuple_traits_mod};
-use crate::parse::parser::parse_file_path;
+use crate::parse::parser::{parse_file_path, parse_renamed_source_file};
 use crate::tool::stopwatch::StopWatch;
 use std::fs::File;
 use std::io::Read;
@@ -132,10 +133,22 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         .deferred_errors
         .append(program.collect_diagnostics_of_typed_program(config));
 
-    // Instantiate Main::main (or Test::test).
+    // In a program built from several Fix examples, check that the `main` of each example has type
+    // `IO ()`, as an entry point must. The program calls each `main` as an `IO ()`, which a `main`
+    // of a more general type, such as `[m : Monad] m ()`, can be instantiated to; this check makes
+    // such an example fail here as it fails when built alone.
+    if let Some(example_build) = &config.example_build {
+        let mut errors = Errors::empty();
+        for main in example_build.dispatched_mains() {
+            errors.eat_err(program.check_value_has_type(&main, &make_io_unit_ty(), &None));
+        }
+        errors.to_result()?;
+    }
+
+    // Instantiate the value the entry point runs.
     match config.output_file_type {
         OutputFileType::Executable => {
-            program.instantiate_entry_io_value(&typechecker, config.entry_point_runs_tests())?
+            program.instantiate_entry_io_value(&typechecker, &config.entry_io_value_name())?
         }
         OutputFileType::DynamicLibrary => {}
     };
@@ -199,8 +212,9 @@ where
     dir_path
 }
 
-/// Load all source files specified in the configuration, link them, and return the resulting `Program`.
-fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
+/// Load all source files specified in the configuration, together with the Fix examples it
+/// carries, link them, and return the resulting `Program`.
+pub fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     // Create `Std` module.
     let mut program = make_std_mod(config)?;
 
@@ -209,6 +223,16 @@ fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
     let mut errors = Errors::empty();
     for file_path in config.source_files() {
         let parse_result = parse_file_path(file_path.clone(), config);
+        errors.eat_err_or(parse_result, |parsed_program| {
+            parsed_programs.push(parsed_program)
+        });
+    }
+    for (source, renaming) in config
+        .example_build
+        .iter()
+        .flat_map(|example_build| example_build.sources())
+    {
+        let parse_result = parse_renamed_source_file(source, renaming, config);
         errors.eat_err_or(parse_result, |parsed_program| {
             parsed_programs.push(parsed_program)
         });

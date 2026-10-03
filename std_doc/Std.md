@@ -38,9 +38,7 @@ Type: `((a -> b) -> a -> b) -> a -> b`
 The idiom is `fix $ |loop, arg| -> {loop_body}`. In `{loop_body}`, you can call `loop` to make a recursion.
 
 Example:
-```
-module Main;
-
+```fix
 main : IO ();
 main = (
     let fact = fix $ |loop, n| if n == 0 { 1 } else { n * loop (n-1) };
@@ -54,7 +52,7 @@ Type: `s -> (s -> Std::LoopState s r) -> r`
 
 `loop` enables you to make a loop. `LoopState` is a union type defined as follows:
 
-```
+```fix
 type LoopState s r = unbox union { continue : s, break : r };
 ```
 
@@ -64,9 +62,7 @@ If `body` returns `break(r)`, then the loop ends and returns `r` as the result.
 If `body` returns `continue(s)`, then the loop calls again `body` on `s`.
 
 Example:
-```
-module Main;
-
+```fix
 main : IO ();
 main = (
     let sum = loop((0, 0), |(i, sum)|
@@ -92,9 +88,7 @@ It is convenient to use `continue_m` and `break_m` to create monadic loop body f
 
 The following program prints "Hello World! (i)" for i = 0, 1, 2.
 
-```
-module Main;
-
+```fix
 main : IO ();
 main = (
     loop_m(0, |i| (
@@ -147,14 +141,14 @@ Since `undefined(msg)` has generic type `a`, you can put it anywhere and it will
 
 This is useful when you want to write a placeholder that will be implemented later:
 
-```
+```fix
 truth : I64;
 truth = undefined("I will implement the truth later.");
 ```
 
 Another use case is aborting the program when a certain branch of the code should not be reached:
 
-```
+```fix
 if condition {
     // Do something.
 } else {
@@ -179,9 +173,7 @@ This function checks if a boxed value is uniquely referenced by a name, and retu
 The `[a : Boxed]` constraint was added in Fix 1.5.0. Before 1.5.0 the constraint was absent and this returned `true` for any unboxed value.
 
 Example: 
-```
-module Main;
-
+```fix
 type Resource = box struct { id : I64 };
 
 main : IO ();
@@ -206,7 +198,7 @@ main = (
 
 To test the uniqueness of a boxed value held in a field of an *unbox* struct (a common wrapper shape, e.g. an unbox struct holding a `Destructor`), act on that field with `unsafe_is_unique` as the `(Bool, _)`-functor action:
 
-```
+```fix
 // `Wrap` is unboxed, so `unsafe_is_unique` cannot be called on it directly; what matters is the
 // sharing of the boxed field `_0`, recovered by acting on the field.
 type Wrap = unbox struct { _0 : SomeBoxedType };
@@ -365,9 +357,9 @@ Remove consecutive duplicates from an array.
 
 ##### Examples
 
-```
-[1,1,2,2,3].deduplicate == [1,2,3]
-[1,2,1,2].deduplicate == [1,2,1,2]  // non-consecutive duplicates are kept
+```fix
+assert_eq(|_|"", [1,1,2,2,3].dedup, [1,2,3]);;
+assert_eq(|_|"", [1,2,1,2].dedup, [1,2,1,2]) // non-consecutive duplicates are kept
 ```
 
 #### empty
@@ -1509,9 +1501,7 @@ This function is used to release a pointer obtained by `boxed_to_retained_ptr`.
 Note that this function is requires a value of type `Lazy a`, not of `a`.
 So you can get release function for a boxed type `T` even when you don't have a value of type `T` -- you can just use `|_| undefined("") : T`:
 
-```
-module Main;
-
+```fix
 type VoidType = box struct {};
 // No constructor for `VoidType` is provided.
 
@@ -3537,7 +3527,7 @@ Stores can be created using index syntax on `Indexable`s or structs.
 
 ##### Examples
 
-```
+```fix
 let arr = [1, 2, 3];
 let arr = arr[1].iact(|x| some(x * 10));
 assert_eq(|_|"", arr, some([1, 20, 3]))
@@ -3558,7 +3548,7 @@ Stores can be created using index syntax on `Indexable`s or structs.
 
 ##### Examples
 
-```
+```fix
 let arr = [1, 2, 3];
 assert_eq(|_|"", arr[1].iget, 2)
 ```
@@ -3577,7 +3567,7 @@ Stores can be created using index syntax on `Indexable`s or structs.
 
 ##### Examples
 
-```
+```fix
 let arr = [1, 2, 3];
 let arr = arr[1].imod(|x| x * 10);
 assert_eq(|_|"", arr, [1, 20, 3])
@@ -3598,7 +3588,7 @@ Stores can be created using index syntax on `Indexable`s or structs.
 
 ##### Examples
 
-```
+```fix
 let arr = [1, 2, 3];
 let arr = arr[1].iset(42);
 assert_eq(|_|"", arr, [1, 42, 3])
@@ -3619,10 +3609,10 @@ Stores can be created using index syntax on `Indexable`s or structs.
 
 ##### Examples
 
-```
+```fix
 let arr = [1, 2, 3];
 let (arr, x) = arr[1].ixchg(42);
-assert_eq(|_|"", x, 2);
+assert_eq(|_|"", x, 2);;
 assert_eq(|_|"", arr, [1, 42, 3])
 ```
 
@@ -3891,8 +3881,8 @@ Type: `[?out : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = 
 Intersperse an element between elements of an iterator.
 
 Example:
-```
-assert_eq(|_|"", [1, 2, 3].from_array.intersperse(0).to_array, [1, 0, 2, 0, 3]);;
+```fix
+assert_eq(|_|"", [1, 2, 3].from_array.intersperse(0).to_array, [1, 0, 2, 0, 3])
 ```
 
 ##### Parameters
@@ -4011,8 +4001,8 @@ Create an iterator that yields the Cartesian product of two iterators.
 NOTE: Since this function is designed so that `iter1.product(iter2)` yields the Cartesian product, the elements of `product(iter2, iter1)` are in the opposite order.
 
 Example:
-```
-assert_eq(|_|"", range(1, 4).product(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]);;
+```fix
+assert_eq(|_|"", range(1, 4).product(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')])
 ```
 
 ##### Parameters
@@ -4524,9 +4514,9 @@ Type: `Std::U8 -> Std::String`
 Creates a string from a byte.
 
 Example:
-```
+```fix
 assert_eq(|_|"", String::from_U8('a'), "a");;
-assert_eq(|_|"", String::from_U8('\x00'), "");;
+assert_eq(|_|"", String::from_U8('\x00'), "")
 ```
 
 ##### Parameters
@@ -4650,10 +4640,10 @@ Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = Std::String] Std::String 
 `str.split(sep)` splits `str` by `sep` into an iterator.
 
 Example:
-```
+```fix
 assert_eq(|_|"Ex. 1", "ab,c,".split(",").to_array, ["ab", "c", ""]);;
 assert_eq(|_|"Ex. 2", "abc".split(",").to_array, ["abc"]);;
-assert_eq(|_|"Ex. 3", "abc".split("").to_array, ["a", "b", "c"]);; // Special behavior when the separator is empty.
+assert_eq(|_|"Ex. 3", "abc".split("").to_array, ["a", "b", "c"]) // Special behavior when the separator is empty.
 ```
 
 ##### Parameters
@@ -4759,12 +4749,12 @@ Since this function is not an `IO` action, the compiler does not guarantee the o
 Do not use this function if you perform `IO` operations that modify the content pointed to by `ptr` or free `ptr`.
 
 For example,
-```
+```fix
 let str = unsafe_from_c_str_ptr(ptr);
 FFI_CALL_IO[() free(Ptr), ptr];;
 ```
 may be rewritten to:
-```
+```fix
 FFI_CALL_IO[() free(Ptr), ptr];;
 let str = unsafe_from_c_str_ptr(ptr);
 ```

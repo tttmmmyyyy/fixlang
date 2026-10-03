@@ -906,10 +906,36 @@ impl TraitEnv {
 
     /// The names of every trait and every trait alias.
     pub fn trait_names(&self) -> Set<FullName> {
-        self.traits_with_aliases()
-            .into_iter()
-            .map(|t| t.name)
-            .collect()
+        self.trait_sources().into_keys().collect()
+    }
+
+    /// The name of every trait and every trait alias, each with the declaration that declares it.
+    pub fn trait_sources(&self) -> Map<FullName, Option<Span>> {
+        let traits = self
+            .traits
+            .iter()
+            .map(|(trait_id, defn)| (trait_id.name.clone(), defn.source.clone()));
+        let aliases = self
+            .aliases
+            .data
+            .iter()
+            .map(|(trait_id, alias)| (trait_id.name.clone(), alias.source.clone()));
+        traits.chain(aliases).collect()
+    }
+
+    /// Every declared associated type, by its full name: the namespace of the trait declaring it,
+    /// followed by its own name.
+    ///
+    /// # Examples
+    /// The associated type `Item` of the trait `Std::Iterator` is named `Std::Iterator::Item`.
+    pub fn assoc_type_defns(&self) -> impl Iterator<Item = (FullName, &AssocTypeDefn)> {
+        self.traits.iter().flat_map(|(trait_id, trait_info)| {
+            let namespace = trait_id.name.to_namespace();
+            trait_info
+                .assoc_types
+                .iter()
+                .map(move |(name, defn)| (FullName::new(&namespace, name), defn))
+        })
     }
 
     /// The identifier of every trait and every trait alias.
@@ -1489,38 +1515,25 @@ impl TraitEnv {
     /// The number of type parameters every declared associated type takes, by its full name. The
     /// type the trait is implemented for is the first of them, so `type Item a;` has arity 1.
     pub fn assoc_ty_to_arity(&self) -> Map<FullName, usize> {
-        let mut assoc_ty_arity = Map::default();
-        for (trait_id, trait_info) in &self.traits {
-            for (assoc_ty_name, assoc_ty_info) in &trait_info.assoc_types {
-                let assoc_type_namespace = trait_id.name.to_namespace();
-                let assoc_type_fullname = FullName::new(&assoc_type_namespace, &assoc_ty_name);
-                let arity = assoc_ty_info.params.len();
-                assoc_ty_arity.insert(assoc_type_fullname, arity);
-            }
-        }
-        assoc_ty_arity
+        self.assoc_type_defns()
+            .map(|(name, defn)| (name, defn.params.len()))
+            .collect()
     }
 
     /// The kinds every declared associated type works with: those of its type parameters and that
     /// of the type an application of it stands for.
     pub fn assoc_ty_kind_info(&self) -> Map<AssocType, AssocTypeKindInfo> {
         let mut assoc_ty_kind_info = Map::default();
-        for (trait_id, trait_info) in &self.traits {
-            for (assoc_ty_name, assoc_ty_info) in &trait_info.assoc_types {
-                let assoc_type_namespace = trait_id.name.to_namespace();
-                let assoc_type = AssocType {
-                    name: FullName::new(&assoc_type_namespace, &assoc_ty_name),
-                    src: None,
-                };
-                assoc_ty_kind_info.insert(
-                    assoc_type.clone(),
-                    AssocTypeKindInfo {
-                        name: assoc_type,
-                        param_kinds: assoc_ty_info.param_kinds(),
-                        value_kind: assoc_ty_info.kind_applied.clone(),
-                    },
-                );
-            }
+        for (name, assoc_ty_info) in self.assoc_type_defns() {
+            let assoc_type = AssocType { name, src: None };
+            assoc_ty_kind_info.insert(
+                assoc_type.clone(),
+                AssocTypeKindInfo {
+                    name: assoc_type,
+                    param_kinds: assoc_ty_info.param_kinds(),
+                    value_kind: assoc_ty_info.kind_applied.clone(),
+                },
+            );
         }
         assoc_ty_kind_info
     }

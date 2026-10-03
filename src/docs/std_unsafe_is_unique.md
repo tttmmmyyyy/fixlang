@@ -3,9 +3,9 @@ This function checks if a boxed value is uniquely referenced by a name, and retu
 The `[a : Boxed]` constraint was added in Fix 1.5.0. Before 1.5.0 the constraint was absent and this returned `true` for any unboxed value.
 
 Example: 
-```
-module Main;
-
+```fix
+# module DocTest;
+#
 type Resource = box struct { id : I64 };
 
 main : IO ();
@@ -30,7 +30,7 @@ main = (
 
 To test the uniqueness of a boxed value held in a field of an *unbox* struct (a common wrapper shape, e.g. an unbox struct holding a `Destructor`), act on that field with `unsafe_is_unique` as the `(Bool, _)`-functor action:
 
-```
+```fix ignore
 // `Wrap` is unboxed, so `unsafe_is_unique` cannot be called on it directly; what matters is the
 // sharing of the boxed field `_0`, recovered by acting on the field.
 type Wrap = unbox struct { _0 : SomeBoxedType };

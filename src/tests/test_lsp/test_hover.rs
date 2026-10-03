@@ -489,4 +489,24 @@ mod tests {
 
         ctx.shutdown();
     }
+
+    /// Hover shows the Fix example of a doc comment without its hidden lines, and with its info
+    /// string replaced by `fix`.
+    #[test]
+    fn test_hover_hides_the_hidden_lines_of_a_fix_example() {
+        let mut ctx = LspTestCtx::setup("hover_doc_example", &["main.fix"]);
+
+        // Source layout (1-based for human reading):
+        //
+        //  14: main : IO () = println(double(1).to_string);
+        let hover = ctx.hover("main.fix", 13, 23);
+        let text = hover_text(&hover).expect("hover on `double` should return content");
+        assert!(
+            text.contains("```fix\nlet x = double(21);\nassert_eq(|_|\"\", x, 42)\n```"),
+            "the example is shown without its hidden lines and its mark. Got: {:?}",
+            text
+        );
+
+        ctx.shutdown();
+    }
 }

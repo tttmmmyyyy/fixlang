@@ -18,14 +18,14 @@ module Std;
 // 
 // This is useful when you want to write a placeholder that will be implemented later:
 // 
-// ```
+// ```fix ignore
 // truth : I64;
 // truth = undefined("I will implement the truth later.");
 // ```
 // 
 // Another use case is aborting the program when a certain branch of the code should not be reached:
 // 
-// ```
+// ```fix ignore
 // if condition {
 //     // Do something.
 // } else {
@@ -52,7 +52,7 @@ type LoopState s r = unbox union { continue : s, break : r };
 
 // `loop` enables you to make a loop. `LoopState` is a union type defined as follows: 
 // 
-// ```
+// ```fix ignore
 // type LoopState s r = unbox union { continue : s, break : r };
 // ```
 // 
@@ -62,9 +62,9 @@ type LoopState s r = unbox union { continue : s, break : r };
 // If `body` returns `continue(s)`, then the loop calls again `body` on `s`.
 // 
 // Example:
-// ```
-// module Main;
-//  
+// ```fix
+// # module DocTest;
+// #
 // main : IO ();
 // main = (
 //     let sum = loop((0, 0), |(i, sum)|
@@ -806,9 +806,9 @@ namespace Array {
     // * `arr` - The input array.
     // 
     // # Examples
-    // ```
-    // [1,1,2,2,3].deduplicate == [1,2,3]
-    // [1,2,1,2].deduplicate == [1,2,1,2]  // non-consecutive duplicates are kept
+    // ```fix
+    // assert_eq(|_|"", [1,1,2,2,3].dedup, [1,2,3]);;
+    // assert_eq(|_|"", [1,2,1,2].dedup, [1,2,1,2]) // non-consecutive duplicates are kept
     // ```
     dedup : [a : Eq] Array a -> Array a;
     dedup = |arr| (
@@ -2363,8 +2363,8 @@ namespace Iterator {
     // NOTE: Since this function is designed so that `iter1.product(iter2)` yields the Cartesian product, the elements of `product(iter2, iter1)` are in the opposite order.
     // 
     // Example:
-    // ```
-    // assert_eq(|_|"", range(1, 4).product(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')]);;
+    // ```fix
+    // assert_eq(|_|"", range(1, 4).product(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')])
     // ```
     //
     // # Parameters
@@ -2426,8 +2426,8 @@ namespace Iterator {
     // Intersperse an element between elements of an iterator.
     //
     // Example:
-    // ```
-    // assert_eq(|_|"", [1, 2, 3].from_array.intersperse(0).to_array, [1, 0, 2, 0, 3]);;
+    // ```fix
+    // assert_eq(|_|"", [1, 2, 3].from_array.intersperse(0).to_array, [1, 0, 2, 0, 3])
     // ```
     //
     // # Parameters
@@ -2859,12 +2859,12 @@ namespace String {
     // Do not use this function if you perform `IO` operations that modify the content pointed to by `ptr` or free `ptr`.
     //
     // For example,
-    // ```
+    // ```fix ignore
     // let str = unsafe_from_c_str_ptr(ptr);
     // FFI_CALL_IO[() free(Ptr), ptr];;
     // ```
     // may be rewritten to:
-    // ```
+    // ```fix ignore
     // FFI_CALL_IO[() free(Ptr), ptr];;
     // let str = unsafe_from_c_str_ptr(ptr);
     // ```
@@ -3454,10 +3454,10 @@ namespace String {
     // `str.split(sep)` splits `str` by `sep` into an iterator.
     // 
     // Example:
-    // ```
+    // ```fix
     // assert_eq(|_|"Ex. 1", "ab,c,".split(",").to_array, ["ab", "c", ""]);;
     // assert_eq(|_|"Ex. 2", "abc".split(",").to_array, ["abc"]);;
-    // assert_eq(|_|"Ex. 3", "abc".split("").to_array, ["a", "b", "c"]);; // Special behavior when the separator is empty.
+    // assert_eq(|_|"Ex. 3", "abc".split("").to_array, ["a", "b", "c"]) // Special behavior when the separator is empty.
     // ```
     //
     // # Parameters
@@ -3490,9 +3490,9 @@ namespace String {
     // Creates a string from a byte.
     // 
     // Example:
-    // ```
+    // ```fix
     // assert_eq(|_|"", String::from_U8('a'), "a");;
-    // assert_eq(|_|"", String::from_U8('\x00'), "");;
+    // assert_eq(|_|"", String::from_U8('\x00'), "")
     // ```
     //
     // # Parameters
@@ -3710,9 +3710,9 @@ compose = |f, g, a| g(f(a));
 // 
 // The following program prints "Hello World! (i)" for i = 0, 1, 2.
 // 
-// ```
-// module Main;
-// 
+// ```fix
+// # module DocTest;
+// #
 // main : IO ();
 // main = (
 //     loop_m(0, |i| (
@@ -4835,7 +4835,7 @@ namespace Indexable {
     // 
     // # Examples
     // 
-    // ```
+    // ```fix
     // let arr = [1, 2, 3];
     // assert_eq(|_|"", arr[1].iget, 2)
     // ```
@@ -4851,7 +4851,7 @@ namespace Indexable {
     // Stores can be created using index syntax on `Indexable`s or structs.
     // 
     // # Examples
-    // ```
+    // ```fix
     // let arr = [1, 2, 3];
     // let arr = arr[1].iset(42);
     // assert_eq(|_|"", arr, [1, 42, 3])
@@ -4868,7 +4868,7 @@ namespace Indexable {
     // Stores can be created using index syntax on `Indexable`s or structs.
     //
     // # Examples
-    // ```
+    // ```fix
     // let arr = [1, 2, 3];
     // let arr = arr[1].imod(|x| x * 10);
     // assert_eq(|_|"", arr, [1, 20, 3])
@@ -4885,10 +4885,10 @@ namespace Indexable {
     // Stores can be created using index syntax on `Indexable`s or structs.
     // 
     // # Examples
-    // ```
+    // ```fix
     // let arr = [1, 2, 3];
     // let (arr, x) = arr[1].ixchg(42);
-    // assert_eq(|_|"", x, 2);
+    // assert_eq(|_|"", x, 2);;
     // assert_eq(|_|"", arr, [1, 42, 3])
     // ```
     // 
@@ -4903,7 +4903,7 @@ namespace Indexable {
     // Stores can be created using index syntax on `Indexable`s or structs.
     // 
     // # Examples
-    // ```
+    // ```fix
     // let arr = [1, 2, 3];
     // let arr = arr[1].iact(|x| some(x * 10));
     // assert_eq(|_|"", arr, some([1, 20, 3]))
