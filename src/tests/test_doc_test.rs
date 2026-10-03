@@ -1197,7 +1197,7 @@ double = |x| 2 * x;
     let output = fix_test(&dir, &["--doc"]);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("so the examples are compiled one by one. This may take longer than usual.")
+        stderr.contains("so the examples will be compiled one by one. This may take longer than usual.")
             && stderr.contains("doc test lib.fix:3 ... ok")
             && stderr.contains("doc test lib.fix:7 ... FAILED")
             && stderr.contains("doc tests: 1 passed, 1 failed, 0 ignored."),

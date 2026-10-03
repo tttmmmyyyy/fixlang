@@ -181,8 +181,8 @@ pub fn test_examples(
         if source_count > 1 {
             info_msg(
                 "One of the Fix examples (i.e., the code blocks marked `fix` in the comments) does \
-                 not compile, so the examples are compiled one by one. This may take longer than \
-                 usual.",
+                 not compile, so the examples will be compiled one by one. This may take longer \
+                 than usual.",
             );
         }
     }
