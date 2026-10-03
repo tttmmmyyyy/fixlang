@@ -1,4 +1,4 @@
-//! The options `--llvm-arg` hands to LLVM, and whether they still reach it.
+//! The options the compiler and `--llvm-arg` hand to LLVM, and whether they still reach it.
 //!
 //! LLVM ignores an option it does not know. An option whose value LLVM cannot read gets a message
 //! on the error stream and nothing more. The build succeeds either way, with the setting unmade, so
@@ -8,9 +8,16 @@
 
 #[cfg(test)]
 mod tests {
+    use crate::build::build_object_files::get_target_machine;
+    use crate::configuration::Configuration;
+    use crate::misc::{Map, Set};
     use crate::tests::test_util::{
         build_program, fix_build_source_command, fix_command_at_opt_level,
     };
+    use inkwell::context::Context;
+    use inkwell::memory_buffer::MemoryBuffer;
+    use inkwell::targets::FileType;
+    use inkwell::OptimizationLevel;
     use std::fs;
     use std::path::Path;
     use std::process::Command;
@@ -297,6 +304,119 @@ mod tests {
         assert_eq!(
             plain_output, aligned_output,
             "`fix run` should answer the same with the option as without it"
+        );
+    }
+
+    /// A loop whose length leaves it through a block holding nothing but a branch. The code
+    /// generator deletes that block, so the copy of the length the exit needs has to find another
+    /// place: on the edge out of the loop, or at the end of the loop's last block, where it runs
+    /// on every iteration.
+    const VALUE_LEAVING_A_LOOP: &str = r#"
+        define i64 @fill(i1 %flag) {
+        entry:
+          br i1 %flag, label %head, label %exit
+
+        head:
+          %len = phi i64 [ %len.next, %latch ], [ 0, %entry ]
+          %buf = phi ptr [ %buf.next, %latch ], [ null, %entry ]
+          br i1 %flag, label %append, label %latch
+
+        append:
+          %len.grown = or i64 %len, 1
+          %grows = icmp slt i64 0, %len.grown
+          br i1 %grows, label %reset, label %appended
+
+        reset:
+          br label %appended
+
+        appended:
+          %buf.appended = phi ptr [ null, %reset ], [ %buf, %append ]
+          %slot = getelementptr i8, ptr null, i64 %len
+          store i8 0, ptr %slot, align 1
+          br label %latch
+
+        latch:
+          %buf.next = phi ptr [ %buf.appended, %appended ], [ %buf, %head ]
+          %len.next = phi i64 [ %len.grown, %appended ], [ 0, %head ]
+          br i1 %flag, label %exit, label %head
+
+        exit:
+          %result = phi i64 [ 0, %entry ], [ %len.next, %latch ]
+          ret i64 %result
+        }
+    "#;
+
+    /// The register-to-register `mov` instructions of `assembly` that lie inside a loop, counting
+    /// as a loop the instructions from the label of a backward branch to the branch.
+    fn copies_inside_loops(assembly: &str) -> usize {
+        let mut labels = Map::default();
+        let mut instructions = vec![];
+        for line in assembly.lines() {
+            if let Some(label) = line.strip_suffix(':').filter(|l| l.starts_with(".LBB")) {
+                labels.insert(label.to_string(), instructions.len());
+            } else if line.starts_with('\t') && !line.starts_with("\t.") {
+                instructions.push(line.trim().split('#').next().unwrap().trim().to_string());
+            }
+        }
+        let mut inside = Set::default();
+        for (index, instruction) in instructions.iter().enumerate() {
+            let target = instruction.split_whitespace().nth(1);
+            if !instruction.starts_with('j') {
+                continue;
+            }
+            if let Some(&start) = target.and_then(|target| labels.get(target)) {
+                if start <= index {
+                    inside.extend(start..=index);
+                }
+            }
+        }
+        inside
+            .into_iter()
+            .filter(|&index| {
+                let mut parts = instructions[index].splitn(2, char::is_whitespace);
+                let opcode = parts.next().unwrap_or("");
+                let operands: Vec<&str> = parts
+                    .next()
+                    .unwrap_or("")
+                    .split(',')
+                    .map(str::trim)
+                    .collect();
+                opcode.starts_with("mov")
+                    && operands.len() == 2
+                    && operands.iter().all(|operand| operand.starts_with('%'))
+            })
+            .count()
+    }
+
+    /// The copy of a value leaving a loop is made on the way out of the loop rather than on every
+    /// iteration: the loop of `VALUE_LEAVING_A_LOOP` keeps the two copies its `or` needs and no
+    /// third. This is what `LLVM_DEFAULT_OPTIONS` asks of LLVM, so it fails where LLVM renames the
+    /// option or drops it, which LLVM would otherwise do without a word.
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_a_value_leaving_a_loop_is_copied_outside_it() {
+        let config = Configuration::develop_mode();
+        let target_machine = get_target_machine(OptimizationLevel::Aggressive, &config);
+        let context = Context::create();
+        let buffer = MemoryBuffer::create_from_memory_range_copy(
+            VALUE_LEAVING_A_LOOP.as_bytes(),
+            "value_leaving_a_loop",
+        );
+        let module = context
+            .create_module_from_ir(buffer)
+            .expect("the test's IR should parse");
+        module.set_triple(&target_machine.get_triple());
+        module.set_data_layout(&target_machine.get_target_data().get_data_layout());
+        let assembly = target_machine
+            .write_to_memory_buffer(&module, FileType::Assembly)
+            .expect("LLVM should compile the test's IR");
+        let assembly = String::from_utf8_lossy(assembly.as_slice()).to_string();
+        assert_eq!(
+            copies_inside_loops(&assembly),
+            2,
+            "the loop should copy only what its `or` needs, and leave the copy of the value it \
+             returns to the edge out of it:\n{}",
+            assembly
         );
     }
 }
