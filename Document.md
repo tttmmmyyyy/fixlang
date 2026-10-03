@@ -3277,7 +3277,7 @@ double : I64 -> I64;
 double = |x| 2 * x;
 ```
 
-An example is an expression of type `IO ()`. `fix test` compiles it as the following module, where `Lib` stands for the module the comment is written in. The `import` statements of `Lib` follow `import Lib;`, so an example sees the names that the body of `Lib` sees:
+An example is either an expression of type `IO ()`, or a Fix source that declares the module `DocTest` and defines `main : IO ()` in it. An example that begins with a `module` declaration is read as a source, and any other example as an expression. For an expression, `fix test` adds the module declaration, the imports and the declaration of `main` to it, and runs the following source, where `Lib` stands for the module the comment is written in. The `import` statements of `Lib` follow `import Lib;`, so the expression sees the names that the body of `Lib` sees:
 
 ```
 module DocTest;
@@ -3288,9 +3288,9 @@ main : ::Std::IO () = (
 );
 ```
 
-An example passes when this program exits with status 0. A failing `assert_eq`, `undefined` or an index out of range therefore makes the example fail.
+An example passes when its program exits with status 0. A failing `assert_eq`, `undefined` or an index out of range therefore makes the example fail.
 
-An example that begins with a `module` declaration is the source of the module as it stands. It declares the module `DocTest`, imports what it uses, including the module the comment is written in, and defines `main : IO ()`. Write an example in this form to define types or functions, or to import only some of the entities of a module:
+An example written as a source imports what it uses, including the module the comment is written in. Write an example in this form to define types or functions, or to import only some of the entities of a module:
 
 ```
 // ```fix
