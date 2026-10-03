@@ -100,6 +100,13 @@ impl Errors {
         Errors { errs: warnings }
     }
 
+    /// Drops the warning-severity diagnostics for which `keep` is false, keeping the order of the
+    /// rest. The error-severity ones stay.
+    pub fn retain_warnings(&mut self, mut keep: impl FnMut(&Error) -> bool) {
+        self.errs
+            .retain(|err| err.severity != Severity::Warning || keep(err));
+    }
+
     /// Moves every diagnostic of `other` to the end of this collection, keeping their order.
     pub fn append(&mut self, mut other: Errors) {
         self.errs.append(&mut other.errs);

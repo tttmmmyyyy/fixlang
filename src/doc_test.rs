@@ -14,7 +14,7 @@ use crate::{
         program::Program,
     },
     constants::{DOC_TEST_EXAMPLE_ENV_VAR, DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME},
-    error::Errors,
+    error::{Error, Errors},
     hash::md5_hex,
     misc::{save_temporary_source, to_absolute_path, Set},
     parse::{
@@ -310,6 +310,21 @@ impl ExampleBuild {
         Ok(ExampleBuild {
             examples,
             dispatcher: Some(dispatcher),
+        })
+    }
+
+    /// Whether the build reports the warning `warning`. A build of one example is made where the
+    /// examples are tested one by one, after the sources were built alone and reported their
+    /// warnings, so it reports only the warnings that lie in its example. A build of several
+    /// examples reports every warning.
+    pub fn reports_warning(&self, warning: &Error) -> bool {
+        if self.dispatcher.is_some() {
+            return true;
+        }
+        warning.srcs.iter().any(|(_, span)| {
+            self.examples
+                .iter()
+                .any(|example| span.input == example.source)
         })
     }
 

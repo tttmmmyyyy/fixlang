@@ -1446,3 +1446,64 @@ double = |x| 2 * x;
         streams(&output)
     );
 }
+
+/// Where the Fix examples are tested one by one, a warning of the sources is reported once, by the
+/// build of the sources alone, and a warning in an example is reported by the build of that
+/// example.
+#[test]
+fn test_examples_tested_one_by_one_report_each_warning_once() {
+    let lib = r#"module Lib;
+
+DEPRECATED[old_double, "Call `double` in place of `old_double`."];
+old_double : I64 -> I64;
+old_double = |x| 2 * x;
+
+DEPRECATED[old_triple, "Call `triple` in place of `old_triple`."];
+old_triple : I64 -> I64;
+old_triple = |x| 3 * x;
+
+// ```fix
+// assert_eq(|_|"", double(21), 42)
+// ```
+//
+// ```fix
+// assert_eq(|_|"", old_triple(1), 3)
+// ```
+//
+// ```fix
+// # module DocTest;
+// # import Lib;
+// # value : I64 = double(1);
+// ```
+double : I64 -> I64;
+double = |x| old_double(x);
+
+triple : I64 -> I64;
+triple = |x| 3 * x;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &["--doc"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("compiled one by one")
+            && stderr.contains("doc tests: 2 passed, 1 failed, 0 ignored."),
+        "the examples are tested one by one, and the one without `main` fails\n{}",
+        streams(&output)
+    );
+    assert_eq!(
+        stderr
+            .matches("Call `double` in place of `old_double`.")
+            .count(),
+        1,
+        "the warning of the sources is reported once\n{}",
+        streams(&output)
+    );
+    assert_eq!(
+        stderr
+            .matches("Call `triple` in place of `old_triple`.")
+            .count(),
+        1,
+        "the warning in an example is reported once\n{}",
+        streams(&output)
+    );
+}

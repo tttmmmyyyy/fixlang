@@ -291,6 +291,11 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     let out_path = config.get_output_file_path();
 
     let mut program = elaborate_via_config(&config)?;
+    if let Some(example_build) = &config.example_build {
+        program
+            .deferred_errors
+            .retain_warnings(|warning| example_build.reports_warning(warning));
+    }
     program.flush_warnings_to_stderr();
     // Surface any errors that were deferred to the diagnostic stage —
     // most importantly, deprecation diagnostics promoted to errors by
