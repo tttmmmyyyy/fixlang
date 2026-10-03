@@ -245,6 +245,60 @@ fn test_dispatch_through_array_runs_in_constant_stack() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// The callee of each tail call is a function read out of a structure, and the step it recurses by
+/// comes from the command line, so no pass can resolve the callee and the recursion reaches code
+/// generation as an indirect tail call. The five-tuple result crosses the x86-64 return budget, so
+/// the call forwards the caller's out-pointer.
+#[test]
+fn test_wide_return_through_a_function_value_runs_in_constant_stack() {
+    let source = r#"
+    module Main;
+
+    type W = box struct { f : W -> I64 -> (I64, I64, I64, I64, I64) };
+
+    call_w : W -> I64 -> (I64, I64, I64, I64, I64);
+    call_w = |w, n| (w.@f)(w, n);
+
+    count_down_by : I64 -> W;
+    count_down_by = |k| W { f : |me, n| if n <= 0 { (n, 1, 2, 3, 4) } else { call_w(me, n - k) } };
+
+    main : IO ();
+    main = (
+        let k = (*IO::get_args).@size;
+        let (a, _, _, _, e) = call_w(count_down_by(k), 1000000 * k);
+        assert_eq(|_|"unexpected result", a + e, 4);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// The narrow counterpart of `test_wide_return_through_a_function_value_runs_in_constant_stack`: two
+/// function values call each other, and the result fits in a register.
+#[test]
+fn test_narrow_return_through_function_values_runs_in_constant_stack() {
+    let source = r#"
+    module Main;
+
+    type F = box struct { f : F -> F -> I64 -> I64 };
+
+    call_f : F -> F -> I64 -> I64;
+    call_f = |a, b, n| (a.@f)(b, a, n);
+
+    count_down_by : I64 -> F;
+    count_down_by = |k| F { f : |me, other, n| if n <= 0 { n } else { call_f(other, me, n - k) } };
+
+    main : IO ();
+    main = (
+        let k = (*IO::get_args).@size;
+        let r = call_f(count_down_by(k), count_down_by(k), 1000000 * k);
+        assert_eq(|_|"unexpected result", r, 0);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
 /// Three arrays make nine leaves, above the largest return-register budget among supported targets,
 /// so this loop needs the out-pointer on AArch64 as well as on x86-64.
 #[test]
