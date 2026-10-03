@@ -5703,9 +5703,9 @@ pub fn test129() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// `from_bytes` reads a number out of bytes that lie at any address: the bytes of a string literal
-/// sit in the program's data, where the storage starts on no boundary a number's width asks for,
-/// and they read as the same number as an array built of those bytes.
+/// Verifies that `from_bytes` reads a number from bytes at any address: the bytes of a string
+/// literal, which need not be aligned to the number's width, read as the same number as an array
+/// built of the same bytes.
 #[test]
 pub fn test_from_bytes_reads_the_bytes_of_a_string_literal() {
     let source = r#"
@@ -5726,9 +5726,9 @@ pub fn test_from_bytes_reads_the_bytes_of_a_string_literal() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// The byte array `to_bytes` makes of a number holds storage for as many bytes as it reports
-/// capacity for, so it grows past the number's width and takes writes like any other array, and the
-/// bytes it started with stay where they were.
+/// Verifies that the byte array `to_bytes` returns has storage for the capacity it reports: it
+/// grows past the number's width and accepts writes like any other array, and its original bytes
+/// stay in place.
 #[test]
 pub fn test_to_bytes_answers_an_array_that_grows() {
     let source = r#"

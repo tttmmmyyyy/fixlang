@@ -516,9 +516,9 @@ pub fn test_no_function_takes_a_bare_128_bit_argument() {
     assert!(checked > 0, "the IR defines no function");
 }
 
-/// The 16 bytes of a 128-bit integer hold it in the byte order of the target: its low and high 64
-/// bits lie in the order the target puts the two halves of a number in, each in the bytes of a `U64`,
-/// and `from_bytes` reads them back the same way.
+/// Verifies that `to_bytes` of a 128-bit integer returns its 16 bytes in the byte order of the
+/// target: the bytes of its low and high 64 bits as `U64`s, with the two halves in the target's
+/// order, and that `from_bytes` reads them back.
 #[test]
 pub fn test_the_128_bit_types_bytes_are_in_the_byte_order_of_the_target() {
     test_source(

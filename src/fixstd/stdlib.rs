@@ -335,8 +335,8 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             );
         }
     }
-    // The bytes holding a number, which `ToBytes` and `FromBytes` of each numeric type read and
-    // write through
+    // Conversions between a number and its bytes, which the `ToBytes` and `FromBytes`
+    // implementations of the numeric types call.
     for ty in integral_types.iter().chain(float_types) {
         let ty_name = ty.toplevel_tycon().unwrap().name.name.clone();
         errors.eat_err(fix_module.add_global_value(

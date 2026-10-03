@@ -2395,7 +2395,8 @@ impl BuiltinOp for NumberToBytesOp {
         // A capacity of a few bytes is far within the bound the check guards.
         let storage = alloc_array_storage(gc, make_u8_ty(), size, CapacityCheck::Skip);
         let buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
-        // The buffer of a small array starts on no boundary wider than the allocator's.
+        // The buffer is aligned only as far as the allocator aligns it, which can be less than the
+        // number's width.
         gc.build_store(MemoryRegion::Data, buf, number)
             .set_alignment(1)
             .unwrap();
@@ -2474,8 +2475,8 @@ pub fn number_to_bytes_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme
 /// numeric types: the number the first bytes of a byte array hold, in the byte order of the target.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NumberFromBytesOp {
-    /// The local binding holding the byte array, which holds at least as many bytes as the number
-    /// takes. The caller of the primitive is what establishes it.
+    /// The local binding holding the byte array. The caller must ensure that the array holds at
+    /// least as many bytes as the number takes.
     bytes_name: FullName,
 }
 
@@ -2486,8 +2487,8 @@ impl BuiltinOp for NumberFromBytesOp {
         let buf = get_array_storage_buf(gc, &bytes);
         let number_ty = ty.get_struct_type(gc).get_field_type_at_index(0).unwrap();
         let number = gc.build_load(MemoryRegion::Data, number_ty, buf, "number@from_bytes");
-        // The buffer of a small array starts on no boundary wider than the allocator's, and a
-        // string literal's starts on none at all.
+        // The buffer is aligned only as far as the allocator aligns it, which can be less than the
+        // number's width, and the bytes of a string literal can start at any address.
         number
             .as_instruction_value()
             .expect("a load is an instruction")
