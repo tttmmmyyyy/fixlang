@@ -3308,7 +3308,7 @@ An example that begins with a `module` declaration is the source of the module a
 
 The module name `DocTest`, and the module names beginning with `DocTest.`, are reserved for the examples: when `fix test` compiles an example, it reports an error if the project or a dependency has a module of such a name.
 
-A line of an example whose text begins with `# ` after its indentation is hidden: it is compiled with the `# ` removed, and it is not shown in the documentation `fix docs` generates or in the hover of the language server. A line of `#` alone is a hidden empty line. The following example is shown as the two lines `type Pair = (I64, I64);` and `let pair : Pair = (1, 2);`:
+A line of an example whose text begins with `# ` after its indentation is hidden: it is compiled with the `# ` removed, and it is not shown in the documentation `fix docs` generates or in the hover of the language server. A line of `#` alone is a hidden empty line. The following example is shown as the definitions of `Pair` and `add_pair` alone, and `fix test` checks them with the hidden `main`:
 
 ```
 // ```fix
@@ -3316,10 +3316,11 @@ A line of an example whose text begins with `# ` after its indentation is hidden
 // # import Lib;
 // #
 // type Pair = (I64, I64);
-// # main : IO () = (
-// let pair : Pair = (1, 2);
-// # pure()
-// # );
+//
+// add_pair : Pair -> I64;
+// add_pair = |pair| pair.@0 + pair.@1;
+// #
+// # main : IO () = assert_eq(|_|"", add_pair((1, 2)), 3);
 // ```
 ```
 
