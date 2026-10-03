@@ -417,7 +417,7 @@ fn run_cli() {
     let test_subc = add_run_and_test_options(
         App::new("test")
             .trailing_var_arg(true)
-            .about("Tests a Fix program. Executes `Test::test : IO ()`, and then the Fix examples in the comments of the files listed in the `build` and `build.test` sections of the project file."),
+            .about("Tests a Fix program. Executes `Test::test : IO ()`, and then the Fix examples (i.e., the code blocks marked `fix`) in the comments of the files listed in the `build` and `build.test` sections of the project file."),
     )
     .arg(
         Arg::new("doc")

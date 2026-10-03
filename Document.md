@@ -3256,7 +3256,7 @@ In the LSP, deprecation warnings are published with `DiagnosticSeverity.WARNING`
 
 ## Tests
 
-When you run `fix test`, it executes `Test::test : IO ()`, and then each Fix example written in the comments (see [Fix examples in comments](#fix-examples-in-comments)).
+When you run `fix test`, it executes `Test::test : IO ()`, and then each Fix example (i.e., each code block marked `fix`) written in the comments (see [Fix examples in comments](#fix-examples-in-comments)).
 Also, at this time, the source files listed in the `build.test` section of the project file are compiled in addition to the source files listed in the `build` section.
 
 - `fix test --doc` runs the Fix examples alone, and `fix test --no-doc` runs `Test::test` alone.
