@@ -632,7 +632,7 @@ pub(crate) fn get_target_machine(
 ) -> TargetMachine {
     Target::initialize_native(&InitializationConfig::default())
         .unwrap_or_else(|e| panic_with_msg(&format!("failed to initialize native: {}", e)));
-    set_llvm_options(&config.llvm_args);
+    set_llvm_options(&config.llvm_options());
     let triple = TargetMachine::get_default_triple();
     let target = Target::from_triple(&triple)
         .unwrap_or_else(|e| panic_with_msg(&format!("failed to create target: {}", e)));

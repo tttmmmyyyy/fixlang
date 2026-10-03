@@ -81,6 +81,9 @@ fn llvm_passes_for_speed() -> Vec<String> {
         .collect()
 }
 
+/// Options every build hands LLVM's option parser, ahead of the ones `llvm_args` names.
+const LLVM_DEFAULT_OPTIONS: [&str; 1] = ["-no-phi-elim-live-out-early-exit"];
+
 /// How a linked library is bound to the program.
 #[derive(Clone, Copy)]
 pub enum LinkType {
@@ -1025,6 +1028,15 @@ impl Configuration {
     /// a build that prints a backtrace there keeps them.
     pub fn no_elim_frame_pointers(&self) -> bool {
         self.backtrace && OS == "macos"
+    }
+
+    /// The options handed to LLVM's option parser: `LLVM_DEFAULT_OPTIONS`, then `llvm_args`.
+    pub fn llvm_options(&self) -> Vec<String> {
+        LLVM_DEFAULT_OPTIONS
+            .iter()
+            .map(|option| option.to_string())
+            .chain(self.llvm_args.iter().cloned())
+            .collect()
     }
 
     /// The LLVM passes to run over each generated module, in order. Each entry is a
