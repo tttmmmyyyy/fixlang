@@ -81,7 +81,8 @@ fn llvm_passes_for_speed() -> Vec<String> {
         .collect()
 }
 
-/// Options every build hands LLVM's option parser, ahead of the ones `llvm_args` names.
+/// Options every build hands LLVM's option parser, ahead of the ones `llvm_args` names, so that an
+/// option `llvm_args` names sets again what one of these set.
 ///
 /// `-no-phi-elim-live-out-early-exit` keeps the copy of a value leaving a loop out of the loop. The
 /// code generator deletes a block that holds nothing but a branch, which a loop's exit block often

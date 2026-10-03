@@ -307,6 +307,68 @@ mod tests {
         );
     }
 
+    /// A loop that packs three bits of each input byte into its output and leaves with the bits
+    /// still pending, which gives the loop values that leave it through its exit block.
+    const PACK_BITS: &str = r#"
+        module Main;
+
+        encode : Array U8 -> Array U8;
+        encode = |input| (
+            loop((0, 0, 0, Array::empty(0)), |(i, bits, nbits, out)|
+                if i >= input.@size { break $ if nbits > 0 { out.push_back(bits.u8) } else { out } };
+                let bits = bits.shift_left(3).bit_or(input.@(i).i64.bit_and(7));
+                let nbits = nbits + 3;
+                if nbits >= 8 {
+                    continue $ (i + 1, bits.shift_right(nbits - 8), nbits - 8, out.push_back(bits.shift_right(nbits - 8).u8))
+                };
+                continue $ (i + 1, bits, nbits, out)
+            )
+        );
+
+        main : IO ();
+        main = (
+            let n = (*IO::get_args).@size * 100000;
+            let input = Array::from_map(n, |i| (i * 31 % 251).u8);
+            println $ encode(input).@size.to_string
+        );
+    "#;
+
+    /// An option `--llvm-arg` names is handed to LLVM after the ones every build hands it, so it
+    /// can set again what those set: turning `-no-phi-elim-live-out-early-exit` back off changes
+    /// the object code of a loop it acts on, and the program answers the same.
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_llvm_arg_overrides_an_option_every_build_hands_llvm() {
+        let build = |build_args: &[&str]| {
+            let (temp_dir, program_path) =
+                build_program(PACK_BITS, "max", build_args, None, "a loop packing bits");
+            let output = Command::new(&program_path)
+                .output()
+                .expect("Failed to run the program");
+            assert!(
+                output.status.success(),
+                "the program failed: {}\n{}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            );
+            (
+                object_code_size(temp_dir.path()),
+                String::from_utf8_lossy(&output.stdout).to_string(),
+            )
+        };
+        let (default, default_output) = build(&[]);
+        let (overridden, overridden_output) =
+            build(&["--llvm-arg=-no-phi-elim-live-out-early-exit=false"]);
+        assert_ne!(
+            default, overridden,
+            "turning the option back off with `--llvm-arg` should change the object code"
+        );
+        assert_eq!(
+            default_output, overridden_output,
+            "the program should answer the same with the option turned off as with it on"
+        );
+    }
+
     /// A loop whose length leaves it through a block holding nothing but a branch. The code
     /// generator deletes that block, so the copy of the length the exit needs has to find another
     /// place: on the edge out of the loop, or at the end of the loop's last block, where it runs
