@@ -13,8 +13,8 @@ use crate::{
     generator::{enum_attribute_kind_id, Generator},
     misc::function_name,
     tests::test_util::{
-        emitted_llvm_ir, fix_command, standalone_generator, test_source, test_source_fail,
-        test_source_with_c, EmittedIr,
+        compile_c_object, emitted_llvm_ir, fix_command, standalone_generator, test_source,
+        test_source_fail, test_source_with_c, EmittedIr,
     },
 };
 use inkwell::{
@@ -163,7 +163,7 @@ pub fn test_narrow_integer_extension_attribute_follows_the_host_abi() {
         FFI_EXPORT[add_i64, c_add_i64];
 
         write_byte : Ptr -> U8 -> IO ();
-        write_byte = |p, v| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, U8), p, v];
+        write_byte = |p, v| FFI_CALL_IO[() c_store_byte(Ptr, U8), p, v];
         FFI_EXPORT[write_byte, c_write_byte];
 
         main : IO ();
@@ -180,6 +180,11 @@ pub fn test_narrow_integer_extension_attribute_follows_the_host_abi() {
         .unwrap()
         .write_all(source.as_bytes())
         .unwrap();
+    // The C function the program calls, which takes a narrow integer.
+    compile_c_object(
+        "#include <stdint.h>\nvoid c_store_byte(uint8_t *p, uint8_t v) { *p = v; }\n",
+        &work_dir.join("store_byte.o"),
+    );
 
     let output = fix_command()
         .args([
@@ -189,6 +194,8 @@ pub fn test_narrow_integer_extension_attribute_follows_the_host_abi() {
             "--emit-llvm",
             "--file",
             "main.fix",
+            "--object",
+            "store_byte.o",
             "--output",
             "prog",
         ])
@@ -221,7 +228,7 @@ pub fn test_narrow_integer_extension_attribute_follows_the_host_abi() {
         format!("define i64 @c_add_i64(i64 %0, i64 %1)"),
         format!("define void @c_write_byte(ptr %0, i8{zeroext} %1)"),
         // The same holds for the C functions Fix calls.
-        format!("declare void @fixruntime_u8_to_bytes(ptr, i8{zeroext})"),
+        format!("declare void @c_store_byte(ptr, i8{zeroext})"),
     ] {
         assert!(
             ir.contains(&expected),

@@ -518,7 +518,7 @@ pub fn test_every_write_through_a_literals_bytes_lands_on_a_copy() {
 
         // Writes the byte 88 ('X') through the pointer the array lends.
         write_x : Ptr -> IO ();
-        write_x = |p| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, U8), p, 88_U8];
+        write_x = |p| FFI_CALL_IO[Ptr memset(Ptr, CInt, CSizeT), p, 88_I32, 1_U64].map(|_| ());
 
         main : IO ();
         main = (

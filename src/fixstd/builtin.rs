@@ -38,9 +38,10 @@ use crate::generator::{Generator, Object};
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
     alloc_array_storage, build_abort_if, build_array_storage_alloc_offset,
-    build_array_storage_is_aligned, build_capacity_check, build_elems_bytes, build_gep_array_elem,
-    build_gep_within_allocation, create_obj, get_array_storage, get_array_storage_buf,
-    read_alloc_offset, union_tag_value, write_alloc_offset, CapacityCheck, ObjectFieldType,
+    build_array_storage_is_aligned, build_array_value, build_capacity_check, build_elems_bytes,
+    build_gep_array_elem, build_gep_within_allocation, create_obj, get_array_storage,
+    get_array_storage_buf, read_alloc_offset, union_tag_value, write_alloc_offset, CapacityCheck,
+    ObjectFieldType,
 };
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
@@ -48,6 +49,7 @@ use crate::rc_ir::ast::{FieldPath, RcState, RcTarget, UniqueCheckOperand};
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::locality::{ExtCond, ExtShape, LeafCond};
 use crate::rc_ir::provenance::{sole_origin, LeafOrigin, Provenance};
+use crate::tbaa::MemoryRegion;
 use inkwell::module::Linkage;
 use inkwell::types::IntType;
 use inkwell::values::{BasicMetadataValueEnum, BasicValue, FloatValue, IntValue, PointerValue};
@@ -1117,18 +1119,16 @@ pub fn make_byte_array_of_global_storage<'c, 'm>(
     bytes: &[u8],
 ) -> Object<'c> {
     let array_ty = type_tyapp(make_array_ty(), make_u8_ty());
-    let array = create_obj(
-        array_ty,
-        &vec![],
-        None,
-        gc,
-        Some("array@make_byte_array_of_global_storage"),
-    );
     let storage_ptr = gc.add_global_byte_array_storage(bytes);
     let len = gc.context.i64_type().const_int(bytes.len() as u64, false);
-    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_ptr);
-    let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
-    array.insert_field(gc, ARRAY_CAP_IDX, len)
+    build_array_value(
+        gc,
+        array_ty,
+        storage_ptr.as_basic_value_enum(),
+        len,
+        len,
+        "array@make_byte_array_of_global_storage",
+    )
 }
 
 /// Evaluates a string literal to the `Array U8` backing a `String`: the literal's bytes plus the
@@ -2376,6 +2376,183 @@ pub fn unary_bit_function(
     (expr, scm)
 }
 
+/// Evaluates `Std::I64::_to_bytes`, and the same function of the other numeric types: a fresh byte
+/// array holding the operand in the byte order of the target.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct NumberToBytesOp {
+    /// The local binding holding the number.
+    number_name: FullName,
+}
+
+#[typetag::serde]
+impl BuiltinOp for NumberToBytesOp {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, arr_ty: &Arc<TypeNode>) -> Object<'c> {
+        let number = gc.get_scoped_obj_field(&self.number_name, 0);
+        let size = gc.sizeof(&number.get_type());
+        let size = gc.context.i64_type().const_int(size, false);
+
+        // A capacity of a few bytes is far within the bound the check guards.
+        let storage = alloc_array_storage(gc, make_u8_ty(), size, CapacityCheck::Skip);
+        let buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
+        // The buffer is aligned only as far as the allocator aligns it, which can be less than the
+        // number's width.
+        gc.build_store(MemoryRegion::Data, buf, number)
+            .set_alignment(1)
+            .unwrap();
+
+        let storage_val = storage.value(gc);
+        build_array_value(
+            gc,
+            arr_ty.clone(),
+            storage_val,
+            size,
+            size,
+            &format!("_to_bytes({})", self.number_name.to_string()),
+        )
+    }
+
+    fn name(&self) -> String {
+        format!("_to_bytes({})", self.number_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.number_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// The bytes holding a number of type `ty`, in the byte order of the target.
+/// Type: ty -> Array U8
+pub fn number_to_bytes_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const NUMBER_NAME: &str = "number";
+
+    let bytes_ty = type_tyapp(make_array_ty(), make_u8_ty());
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        vec![],
+        type_fun(ty, bytes_ty.clone()),
+    );
+    let expr = expr_abs(
+        vec![var_local(NUMBER_NAME)],
+        expr_builtin(
+            Box::new(NumberToBytesOp {
+                number_name: FullName::local(NUMBER_NAME),
+            }),
+            bytes_ty,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+/// Evaluates `Std::I64::_unsafe_from_bytes_size_unchecked`, and the same function of the other
+/// numeric types: the number the first bytes of a byte array hold, in the byte order of the target.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct NumberFromBytesOp {
+    /// The local binding holding the byte array. The caller must ensure that the array holds at
+    /// least as many bytes as the number takes.
+    bytes_name: FullName,
+}
+
+#[typetag::serde]
+impl BuiltinOp for NumberFromBytesOp {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
+        let bytes = gc.get_scoped_obj_noretain(&self.bytes_name);
+        let buf = get_array_storage_buf(gc, &bytes);
+        let number_ty = ty.get_struct_type(gc).get_field_type_at_index(0).unwrap();
+        let number = gc.build_load(MemoryRegion::Data, number_ty, buf, "number@from_bytes");
+        // The buffer is aligned only as far as the allocator aligns it, which can be less than the
+        // number's width, and the bytes of a string literal can start at any address.
+        number
+            .as_instruction_value()
+            .expect("a load is an instruction")
+            .set_alignment(1)
+            .unwrap();
+
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@from_bytes"));
+        obj.insert_field(gc, 0, number)
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "_unsafe_from_bytes_size_unchecked({})",
+            self.bytes_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.bytes_name]
+    }
+
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
+        i == 0
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// The number of type `ty` that the first bytes of a byte array hold, in the byte order of the
+/// target. The array is borrowed. The caller must ensure it holds at least as many bytes as the
+/// number takes.
+/// Type: Array U8 -> ty
+pub fn number_from_bytes_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const BYTES_NAME: &str = "bytes";
+
+    let bytes_ty = type_tyapp(make_array_ty(), make_u8_ty());
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        vec![],
+        type_fun(bytes_ty, ty.clone()),
+    );
+    let expr = expr_abs(
+        vec![var_local(BYTES_NAME)],
+        expr_builtin(
+            Box::new(NumberFromBytesOp {
+                bytes_name: FullName::local(BYTES_NAME),
+            }),
+            ty,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
 /// Evaluates `Std::Ptr::add_offset`: the address a signed number of bytes past the given pointer.
 ///
 /// A pointer is a number in Fix, and this is arithmetic on that number: every offset is defined,
@@ -2595,20 +2772,19 @@ impl BuiltinOp for ArrayUnsafeEmptyOp {
         // `{ storage, size = 0, cap }`.
         let elem_ty = arr_ty.field_types(gc.type_env())[0].clone();
         let storage = alloc_array_storage(gc, elem_ty, cap, CapacityCheck::Run);
-        let array = create_obj(
-            arr_ty.clone(),
-            &vec![],
-            None,
+        let storage_val = storage.value(gc);
+        let size = gc.context.i64_type().const_zero();
+        build_array_value(
             gc,
-            Some(&format!(
+            arr_ty.clone(),
+            storage_val,
+            size,
+            cap,
+            &format!(
                 "{ARRAY_NAME}::{ARRAY_UNSAFE_EMPTY_NAME}({})",
                 self.capacity_name.to_string()
-            )),
-        );
-        let storage_val = storage.value(gc);
-        let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
-        let array = array.insert_field(gc, ARRAY_SIZE_IDX, gc.context.i64_type().const_zero());
-        array.insert_field(gc, ARRAY_CAP_IDX, cap)
+            ),
+        )
     }
 
     fn name(&self) -> String {
@@ -5357,11 +5533,8 @@ impl BuiltinOp for ArrayLitOp {
             .const_int(self.elem_names.len() as u64, false);
         let elem_ty = ty.field_types(gc.type_env())[0].clone();
         let storage = alloc_array_storage(gc, elem_ty, len, CapacityCheck::Run);
-        let array = create_obj(ty.clone(), &vec![], None, gc, Some("array_literal"));
         let storage_val = storage.value(gc);
-        let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
-        let array = array.insert_field(gc, ARRAY_SIZE_IDX, len);
-        let array = array.insert_field(gc, ARRAY_CAP_IDX, len);
+        let array = build_array_value(gc, ty.clone(), storage_val, len, len, "array_literal");
         let buf = get_array_storage_buf(gc, &array);
         for (i, name) in self.elem_names.iter().enumerate() {
             let value = gc.get_scoped_obj_noretain(name);

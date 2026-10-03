@@ -515,3 +515,29 @@ pub fn test_no_function_takes_a_bare_128_bit_argument() {
     }
     assert!(checked > 0, "the IR defines no function");
 }
+
+/// Verifies that `to_bytes` of a 128-bit integer returns its 16 bytes in the byte order of the
+/// target: the bytes of its low and high 64 bits as `U64`s, with the two halves in the target's
+/// order, and that `from_bytes` reads them back.
+#[test]
+pub fn test_the_128_bit_types_bytes_are_in_the_byte_order_of_the_target() {
+    test_source(
+        r#"
+        module Main;
+        main : IO ();
+        main = (
+            let v = 0x0F0E0D0C0B0A09080706050403020100_U128;
+            let low = 0x0706050403020100_U64;
+            let high = 0x0F0E0D0C0B0A0908_U64;
+            let little_endian = 1_U16.to_bytes.@(0) == 1_U8;
+            let expected = if little_endian { low.to_bytes.append(high.to_bytes) } else { high.to_bytes.append(low.to_bytes) };
+            assert_eq(|_|"U128 to_bytes", v.to_bytes, expected);;
+            assert_eq(|_|"I128 to_bytes", v.i128.to_bytes, expected);;
+            assert_eq(|_|"U128 from_bytes", from_bytes(expected), Result::ok(v) : Result ErrMsg U128);;
+            assert_eq(|_|"I128 from_bytes", from_bytes(expected), Result::ok(v.i128) : Result ErrMsg I128);;
+            pure()
+        );
+    "#,
+        Configuration::develop_mode(),
+    );
+}
