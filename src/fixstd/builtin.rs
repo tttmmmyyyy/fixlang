@@ -2377,13 +2377,6 @@ pub fn unary_bit_function(
     (expr, scm)
 }
 
-/// The number of bytes a value of the numeric type `ty` takes, which is the size of the byte array
-/// `ToBytes` makes of it and `FromBytes` reads it from.
-fn number_byte_size<'c, 'm>(gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> u64 {
-    let number_ty = ty.get_struct_type(gc).get_field_type_at_index(0).unwrap();
-    gc.target_data.get_store_size(&number_ty)
-}
-
 /// Evaluates `Std::I64::_to_bytes`, and the same function of the other numeric types: a fresh byte
 /// array holding the operand in the byte order of the target.
 #[derive(Clone, Serialize, Deserialize)]
@@ -2395,12 +2388,9 @@ pub struct NumberToBytesOp {
 #[typetag::serde]
 impl BuiltinOp for NumberToBytesOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, arr_ty: &Arc<TypeNode>) -> Object<'c> {
-        let number_ty = gc.get_scoped_type(&self.number_name);
         let number = gc.get_scoped_obj_field(&self.number_name, 0);
-        let size = gc
-            .context
-            .i64_type()
-            .const_int(number_byte_size(gc, &number_ty), false);
+        let size = gc.sizeof(&number.get_type());
+        let size = gc.context.i64_type().const_int(size, false);
 
         // A capacity of a few bytes is far within the bound the check guards.
         let storage = alloc_array_storage(gc, make_u8_ty(), size, CapacityCheck::Skip);
