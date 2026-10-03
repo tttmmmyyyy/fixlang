@@ -3332,7 +3332,7 @@ Marks after `fix`, separated by spaces, change what `fix test` does with an exam
 | `fix no_run` | Compiles the example (including type checking) without running it. Use it for an example that reads the standard input, touches files or the network, or does not terminate. |
 | `fix ignore` | Does nothing. Use it for a fragment that does not compile on its own. |
 
-`fix test` runs the Fix examples of every comment in the files listed in the `build` and `build.test` sections of the project file, so the helpers a project writes for its tests can carry tested examples too. The examples in dependencies are not run. The examples are built with the same settings as `Test::test`, so they can use the test dependencies.
+`fix test` runs the Fix examples of every comment in the files listed in the `build` and `build.test` sections of the project file. The examples in dependencies are not run. The examples are built with the same settings as `Test::test`, so they can use the test dependencies.
 
 ## Generating documentation
 
