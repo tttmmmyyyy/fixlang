@@ -59,7 +59,7 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 /// `cp_lib_lsegtree` and 1.5% on `cp_lib_segtree`. **The three are one unit**: none of them earns
 /// that alone, and `pseudo-probe` on its own costs 0.48%. What they change is the shape of the
 /// code rather than the work it does, which is why the instruction count barely moves.
-const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", "pseudo-probe"];
+const LLVM_TAIL_PASSES: [&str; 2] = ["speculative-execution", "loop-vectorize"];
 
 /// The passes the optimization levels built for speed run over each generated module, in order:
 /// `LLVM_HEAD_PASSES`, `LLVM_O3_RUNS_FOR_SPEED` runs of `LLVM_O3_PIPELINE`, then
