@@ -148,22 +148,27 @@ pub fn test_examples(
         .iter()
         .filter_map(|example| example.task.source().cloned())
         .collect::<Vec<_>>();
-    if !sources.is_empty() {
+    let source_count = sources.len();
+    if source_count > 0 {
         let mut merged_config = config.clone();
-        merged_config.example_build = Some(ExampleBuild::merged(sources.clone())?);
+        merged_config.example_build = Some(ExampleBuild::merged(sources)?);
         let built = with_temporary_executable(merged_config, |merged_config, exec_path| {
             // The position in the program of the next example it holds.
             let mut position = 0;
             for example in examples {
-                let outcome = match example.task {
-                    ExampleTask::Ignore => ExampleOutcome::Ignored,
-                    ExampleTask::Run(_) | ExampleTask::Compile(_) => {
+                let outcome = match example.task.source() {
+                    None => ExampleOutcome::Ignored,
+                    Some(_) => {
                         position += 1;
                         outcome_in_program(merged_config, exec_path, position - 1, example)
                     }
                 };
                 report(example, outcome);
             }
+            assert_eq!(
+                position, source_count,
+                "each example the program holds is reported once"
+            );
             Ok(())
         });
         if built.is_ok() {
@@ -172,13 +177,12 @@ pub fn test_examples(
         let mut sources_config = config.clone();
         sources_config.example_build = Some(ExampleBuild::without_examples()?);
         build_executable(sources_config)?;
-        if sources.len() > 1 {
+        if source_count > 1 {
             eprintln!(
                 "The {} Fix examples do not build together into one program, which happens when \
                  one of them does not compile. Each of them is now built alone, which takes {} \
                  builds instead of one and is slower.",
-                sources.len(),
-                sources.len()
+                source_count, source_count
             );
         }
     }
