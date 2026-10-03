@@ -1,0 +1,8 @@
+module Main;
+
+// Renaming `Point` rewrites this whole statement, since it imports both an auto-method and a
+// user-defined item of `Point`. The empty item list under `Shapes` stays as it is written.
+import Lib::{Point::{act_x, user_helper}, Shapes::{}};
+
+main : IO ();
+main = pure();
