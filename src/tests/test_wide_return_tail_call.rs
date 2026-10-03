@@ -1,5 +1,5 @@
 use crate::{
-    configuration::Configuration,
+    configuration::{Configuration, FixOptimizationLevel},
     generator::OUT_POINTER_BUFFER_NAME,
     tests::test_util::{generated_llvm_ir, llvm_function_bodies, test_source},
 };
@@ -303,6 +303,60 @@ fn test_narrow_return_through_function_values_runs_in_constant_stack() {
     );
     "#;
     test_source(source, Configuration::develop_mode());
+}
+
+/// Two function values read out of structs call each other in tail position, once through a wide
+/// result and once through a narrow one, built at every optimization level and with debug
+/// information. Each level runs its own pipeline and debug information adds records beside every
+/// call, so each build is a separate chance for something to land between a tail call and its
+/// `ret`.
+#[test]
+fn test_tail_calls_through_function_values_run_in_constant_stack_at_every_level() {
+    let source = r#"
+    module Main;
+
+    type Nine = ((I64, I64, I64), (I64, I64, I64), (I64, I64, I64));
+
+    type W = box struct { f : W -> W -> I64 -> Nine };
+
+    call_w : W -> W -> I64 -> Nine;
+    call_w = |a, b, n| (a.@f)(a, b, n);
+
+    wide_by : I64 -> W;
+    wide_by = |k| W { f : |me, other, n|
+        if n <= 0 { ((n, 1, 2), (3, 4, 5), (6, 7, 8)) } else { call_w(other, me, n - k) }
+    };
+
+    type F = box struct { f : F -> F -> I64 -> I64 };
+
+    call_f : F -> F -> I64 -> I64;
+    call_f = |a, b, n| (a.@f)(a, b, n);
+
+    narrow_by : I64 -> F;
+    narrow_by = |k| F { f : |me, other, n| if n <= 0 { n } else { call_f(other, me, n - k) } };
+
+    main : IO ();
+    main = (
+        let k = (*IO::get_args).@size;
+        let ((a, _, _), _, (_, _, i)) = call_w(wide_by(k), wide_by(k), 1000000 * k);
+        assert_eq(|_|"unexpected wide result", a + i, 8);;
+        let r = call_f(narrow_by(k), narrow_by(k), 1000000 * k);
+        assert_eq(|_|"unexpected narrow result", r, 0);;
+        pure()
+    );
+    "#;
+    for opt_level in [
+        FixOptimizationLevel::None,
+        FixOptimizationLevel::Basic,
+        FixOptimizationLevel::Max,
+    ] {
+        let mut config = Configuration::develop_mode();
+        config.set_fix_opt_level(opt_level);
+        test_source(source, config);
+    }
+    let mut config = Configuration::develop_mode();
+    config.set_debug_info();
+    test_source(source, config);
 }
 
 /// Three arrays make nine leaves, above the largest return-register budget among supported targets,
