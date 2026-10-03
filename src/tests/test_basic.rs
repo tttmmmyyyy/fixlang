@@ -5703,6 +5703,29 @@ pub fn test129() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `from_bytes` reads a number out of bytes that lie at any address: the bytes of a string literal
+/// sit in the program's data, where the storage starts on no boundary a number's width asks for,
+/// and they read as the same number as an array built of those bytes.
+#[test]
+pub fn test_from_bytes_reads_the_bytes_of_a_string_literal() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            // Seven letters and the null that ends them make the eight bytes of a `U64`.
+            let literal : Result ErrMsg U64 = "abcdefg".get_bytes.from_bytes;
+            let built : Result ErrMsg U64 = [97_U8, 98_U8, 99_U8, 100_U8, 101_U8, 102_U8, 103_U8, 0_U8].from_bytes;
+            assert_eq(|_|"U64", literal.as_ok, built.as_ok);;
+            let literal : Result ErrMsg F32 = "xyz".get_bytes.from_bytes;
+            let built : Result ErrMsg F32 = [120_U8, 121_U8, 122_U8, 0_U8].from_bytes;
+            assert_eq(|_|"F32", literal.as_ok.to_bytes, built.as_ok.to_bytes);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// `to_bytes` and `from_bytes` of a signed integer narrower than 32 bits carry the value through the
 /// byte array and back, at both ends of the type's range; the bytes are the value's two's-complement
 /// representation; and `from_bytes` answers an error for a byte array that is not the type's width.

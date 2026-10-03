@@ -3868,20 +3868,6 @@ namespace U128 {
 
     minimum : U128;
     minimum = 0_U128;
-
-    // Returns the integer in the 16 bytes of `bs`, read in the byte order of the target.
-    //
-    // `bs` must hold 16 bytes. This function does not check it, and violating it causes undefined
-    // behavior.
-    //
-    // # Parameters
-    // * `bs` - The bytes to read.
-    _unsafe_from_bytes_size_unchecked : Array U8 -> U128;
-    _unsafe_from_bytes_size_unchecked = |bs| bs.borrow_elements(|ptr| (
-        let low = FFI_CALL[U64 fixruntime_u128_low_from_bytes(Ptr), ptr];
-        let high = FFI_CALL[U64 fixruntime_u128_high_from_bytes(Ptr), ptr];
-        high.u128.shift_left(64_U128).bit_or(low.u128)
-    ));
 }
 impl U128 : Zero {
     zero = 0_U128;
@@ -4239,18 +4225,14 @@ impl Ptr : ToString {
     to_string = |v| String::_from_address(v);
 }
 impl U8 : ToBytes {
-    to_bytes = |v| (
-        let data = Array::empty(1)._unsafe_grow_size(1);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, U8), ptr, v]);
-        data
-    );
+    to_bytes = U8::_to_bytes;
 }
 impl U8 : FromBytes {
     from_bytes = |bs| (
         if bs.@size != 1 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U8."
         };
-        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U8 fixruntime_u8_from_bytes(Ptr), ptr])
+        Result::ok $ U8::_unsafe_from_bytes_size_unchecked(bs)
     );
 }
 impl U8 : ToString {
@@ -4263,18 +4245,14 @@ impl U8 : FromString {
 }
 
 impl U16 : ToBytes {
-    to_bytes = |v| (
-        let data = Array::empty(2)._unsafe_grow_size(2);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u16_to_bytes(Ptr, U16), ptr, v]);
-        data
-    );
+    to_bytes = U16::_to_bytes;
 }
 impl U16 : FromBytes {
     from_bytes = |bs| (
         if bs.@size != 2 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U16."
         };
-        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U16 fixruntime_u16_from_bytes(Ptr), ptr])
+        Result::ok $ U16::_unsafe_from_bytes_size_unchecked(bs)
     );
 }
 impl U16 : ToString {
@@ -4287,18 +4265,14 @@ impl U16 : FromString {
 }
 
 impl U32 : ToBytes {
-    to_bytes = |v| (
-        let data = Array::empty(4)._unsafe_grow_size(4);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u32_to_bytes(Ptr, U32), ptr, v]);
-        data
-    );
+    to_bytes = U32::_to_bytes;
 }
 impl U32 : FromBytes {
     from_bytes = |bs| (
         if bs.@size != 4 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U32."
         };
-        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U32 fixruntime_u32_from_bytes(Ptr), ptr])
+        Result::ok $ U32::_unsafe_from_bytes_size_unchecked(bs)
     );
 }
 impl U32 : ToString {
@@ -4311,18 +4285,14 @@ impl U32 : FromString {
 }
 
 impl U64 : ToBytes {
-    to_bytes = |v| (
-        let data = Array::empty(8)._unsafe_grow_size(8);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u64_to_bytes(Ptr, U64), ptr, v]);
-        data
-    );
+    to_bytes = U64::_to_bytes;
 }
 impl U64 : FromBytes {
     from_bytes = |bs| (
         if bs.@size != 8 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as U64."
         };
-        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U64 fixruntime_u64_from_bytes(Ptr), ptr])
+        Result::ok $ U64::_unsafe_from_bytes_size_unchecked(bs)
     );
 }
 impl U64 : ToString {
@@ -4335,18 +4305,14 @@ impl U64 : FromString {
 }
 
 impl I8 : ToBytes {
-    to_bytes = |v| (
-        let data = Array::empty(1)._unsafe_grow_size(1);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u8_to_bytes(Ptr, U8), ptr, v.u8]);
-        data
-    );
+    to_bytes = I8::_to_bytes;
 }
 impl I8 : FromBytes {
     from_bytes = |bs| (
         if bs.@size != 1 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I8."
         };
-        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U8 fixruntime_u8_from_bytes(Ptr), ptr].i8)
+        Result::ok $ I8::_unsafe_from_bytes_size_unchecked(bs)
     );
 }
 impl I8 : ToString {
@@ -4359,18 +4325,14 @@ impl I8 : FromString {
 }
 
 impl I16 : ToBytes {
-    to_bytes = |v| (
-        let data = Array::empty(2)._unsafe_grow_size(2);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u16_to_bytes(Ptr, U16), ptr, v.u16]);
-        data
-    );
+    to_bytes = I16::_to_bytes;
 }
 impl I16 : FromBytes {
     from_bytes = |bs| (
         if bs.@size != 2 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I16."
         };
-        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U16 fixruntime_u16_from_bytes(Ptr), ptr].i16)
+        Result::ok $ I16::_unsafe_from_bytes_size_unchecked(bs)
     );
 }
 impl I16 : ToString {
@@ -4383,18 +4345,14 @@ impl I16 : FromString {
 }
 
 impl I32 : ToBytes {
-    to_bytes = |v| (
-        let data = Array::empty(4)._unsafe_grow_size(4);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u32_to_bytes(Ptr, U32), ptr, v.u32]);
-        data
-    );
+    to_bytes = I32::_to_bytes;
 }
 impl I32 : FromBytes {
     from_bytes = |bs| (
         if bs.@size != 4 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I32."
         };
-        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U32 fixruntime_u32_from_bytes(Ptr), ptr].i32)
+        Result::ok $ I32::_unsafe_from_bytes_size_unchecked(bs)
     );
 }
 impl I32 : ToString {
@@ -4407,18 +4365,14 @@ impl I32 : FromString {
 }
 
 impl I64 : ToBytes {
-    to_bytes = |v| (
-        let data = Array::empty(8)._unsafe_grow_size(8);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u64_to_bytes(Ptr, U64), ptr, v.u64]);
-        data
-    );
+    to_bytes = I64::_to_bytes;
 }
 impl I64 : FromBytes {
     from_bytes = |bs| (
         if bs.@size != 8 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I64."
         };
-        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[U64 fixruntime_u64_from_bytes(Ptr), ptr].i64)
+        Result::ok $ I64::_unsafe_from_bytes_size_unchecked(bs)
     );
 }
 impl I64 : ToString {
@@ -4431,11 +4385,7 @@ impl I64 : FromString {
 }
 
 impl U128 : ToBytes {
-    to_bytes = |v| (
-        let data = Array::empty(16)._unsafe_grow_size(16);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_u128_to_bytes(Ptr, U64, U64), ptr, v.u64, v.shift_right(64_U128).u64]);
-        data
-    );
+    to_bytes = U128::_to_bytes;
 }
 impl U128 : FromBytes {
     from_bytes = |bs| (
@@ -4455,14 +4405,14 @@ impl U128 : FromString {
 }
 
 impl I128 : ToBytes {
-    to_bytes = |v| v.u128.to_bytes;
+    to_bytes = I128::_to_bytes;
 }
 impl I128 : FromBytes {
     from_bytes = |bs| (
         if bs.@size != 16 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as I128."
         };
-        Result::ok $ U128::_unsafe_from_bytes_size_unchecked(bs).i128
+        Result::ok $ I128::_unsafe_from_bytes_size_unchecked(bs)
     );
 }
 impl I128 : ToString {
@@ -4483,18 +4433,14 @@ impl I128 : FromString {
 }
 
 impl F32 : ToBytes {
-    to_bytes = |v| (
-        let data = Array::empty(4)._unsafe_grow_size(4);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f32_to_bytes(Ptr, F32), ptr, v]);
-        data
-    );
+    to_bytes = F32::_to_bytes;
 }
 impl F32 : FromBytes {
     from_bytes = |bs| (
         if bs.@size != 4 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as F32."
         };
-        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[F32 fixruntime_f32_from_bytes(Ptr), ptr])
+        Result::ok $ F32::_unsafe_from_bytes_size_unchecked(bs)
     );
 }
 impl F32 : ToString {
@@ -4589,18 +4535,14 @@ impl F32 : FromString {
 }
 
 impl F64 : ToBytes {
-    to_bytes = |v| (
-        let data = Array::empty(8)._unsafe_grow_size(8);
-        let (data, _) = data.mutate_elements(|ptr| FFI_CALL_IO[() fixruntime_f64_to_bytes(Ptr, F64), ptr, v]);
-        data
-    );
+    to_bytes = F64::_to_bytes;
 }
 impl F64 : FromBytes {
     from_bytes = |bs| (
         if bs.@size != 8 {
             Result::err $ "Byte array of length " + bs.@size.to_string + " cannot be interpreted as F64."
         };
-        Result::ok $ bs.borrow_elements(|ptr| FFI_CALL[F64 fixruntime_f64_from_bytes(Ptr), ptr])
+        Result::ok $ F64::_unsafe_from_bytes_size_unchecked(bs)
     );
 }
 impl F64 : ToString {

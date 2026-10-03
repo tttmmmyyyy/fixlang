@@ -39,7 +39,7 @@ use crate::{
         make_integral_ty, make_iostate_unsafe_create, make_numeric_ty, make_ptr_ty,
         mark_threaded_function, multiply_trait_instance_float, multiply_trait_instance_int,
         negate_trait_instance_float, negate_trait_instance_int, not_trait_instance_bool,
-        offset_from_function, punched_array_plug, quiet_nan_value, remainder_trait_instance_int,
+        number_from_bytes_function, number_to_bytes_function, offset_from_function, punched_array_plug, quiet_nan_value, remainder_trait_instance_int,
         set_array, shift_function, subtract_trait_instance_float, subtract_trait_instance_int,
         swap_array, swap_bounds_unchecked_array, unary_bit_function, undefined_internal_function,
         unsafe_set_bounds_unchecked_array, with_retained_function, BitOperationType,
@@ -334,6 +334,25 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
                 to_type_c,
             );
         }
+    }
+    // The bytes holding a number, which `ToBytes` and `FromBytes` of each numeric type read and
+    // write through
+    for ty in integral_types.iter().chain(float_types) {
+        let ty_name = ty.toplevel_tycon().unwrap().name.name.clone();
+        errors.eat_err(fix_module.add_global_value(
+            FullName::from_strs(&[STD_NAME, &ty_name], "_to_bytes"),
+            number_to_bytes_function(ty.clone()),
+            None,
+            None,
+            None,
+        ));
+        errors.eat_err(fix_module.add_global_value(
+            FullName::from_strs(&[STD_NAME, &ty_name], "_unsafe_from_bytes_size_unchecked"),
+            number_from_bytes_function(ty.clone()),
+            None,
+            None,
+            None,
+        ));
     }
     // Bit operations
     for int_ty in integral_types {

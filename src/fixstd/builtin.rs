@@ -48,6 +48,7 @@ use crate::rc_ir::ast::{FieldPath, RcState, RcTarget, UniqueCheckOperand};
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::locality::{ExtCond, ExtShape, LeafCond};
 use crate::rc_ir::provenance::{sole_origin, LeafOrigin, Provenance};
+use crate::tbaa::MemoryRegion;
 use inkwell::module::Linkage;
 use inkwell::types::IntType;
 use inkwell::values::{BasicMetadataValueEnum, BasicValue, FloatValue, IntValue, PointerValue};
@@ -2367,6 +2368,194 @@ pub fn unary_bit_function(
             Box::new(UnaryBitOp {
                 operand_name: FullName::local(OPERAND_NAME),
                 operation,
+            }),
+            ty,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+/// The number of bytes a value of the numeric type `ty` takes, which is the size of the byte array
+/// `ToBytes` makes of it and `FromBytes` reads it from.
+fn number_byte_size<'c, 'm>(gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> u64 {
+    let number_ty = ty.get_struct_type(gc).get_field_type_at_index(0).unwrap();
+    gc.target_data.get_store_size(&number_ty)
+}
+
+/// Evaluates `Std::I64::_to_bytes`, and the same function of the other numeric types: a fresh byte
+/// array holding the operand in the byte order of the target.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct NumberToBytesOp {
+    /// The local binding holding the number.
+    number_name: FullName,
+}
+
+#[typetag::serde]
+impl BuiltinOp for NumberToBytesOp {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, arr_ty: &Arc<TypeNode>) -> Object<'c> {
+        let number_ty = gc.get_scoped_type(&self.number_name);
+        let number = gc.get_scoped_obj_field(&self.number_name, 0);
+        let size = gc
+            .context
+            .i64_type()
+            .const_int(number_byte_size(gc, &number_ty), false);
+
+        // A capacity of a few bytes is far within the bound the check guards.
+        let storage = alloc_array_storage(gc, make_u8_ty(), size, CapacityCheck::Skip);
+        let buf = storage.gep_boxed(gc, STORAGE_BUF_IDX);
+        // The buffer of a small array starts on no boundary wider than the allocator's.
+        gc.build_store(MemoryRegion::Data, buf, number)
+            .set_alignment(1)
+            .unwrap();
+
+        let array = create_obj(
+            arr_ty.clone(),
+            &vec![],
+            None,
+            gc,
+            Some(&format!("_to_bytes({})", self.number_name.to_string())),
+        );
+        let storage_val = storage.value(gc);
+        let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage_val);
+        let array = array.insert_field(gc, ARRAY_SIZE_IDX, size);
+        array.insert_field(gc, ARRAY_CAP_IDX, size)
+    }
+
+    fn name(&self) -> String {
+        format!("_to_bytes({})", self.number_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.number_name]
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Fresh)
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// The bytes holding a number of type `ty`, in the byte order of the target.
+/// Type: ty -> Array U8
+pub fn number_to_bytes_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const NUMBER_NAME: &str = "number";
+
+    let bytes_ty = type_tyapp(make_array_ty(), make_u8_ty());
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        vec![],
+        type_fun(ty, bytes_ty.clone()),
+    );
+    let expr = expr_abs(
+        vec![var_local(NUMBER_NAME)],
+        expr_builtin(
+            Box::new(NumberToBytesOp {
+                number_name: FullName::local(NUMBER_NAME),
+            }),
+            bytes_ty,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
+/// Evaluates `Std::I64::_unsafe_from_bytes_size_unchecked`, and the same function of the other
+/// numeric types: the number the first bytes of a byte array hold, in the byte order of the target.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct NumberFromBytesOp {
+    /// The local binding holding the byte array, which holds at least as many bytes as the number
+    /// takes. The caller of the primitive is what establishes it.
+    bytes_name: FullName,
+}
+
+#[typetag::serde]
+impl BuiltinOp for NumberFromBytesOp {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
+        let bytes = gc.get_scoped_obj_noretain(&self.bytes_name);
+        let buf = get_array_storage_buf(gc, &bytes);
+        let number_ty = ty.get_struct_type(gc).get_field_type_at_index(0).unwrap();
+        let number = gc.build_load(MemoryRegion::Data, number_ty, buf, "number@from_bytes");
+        // The buffer of a small array starts on no boundary wider than the allocator's, and a
+        // string literal's starts on none at all.
+        number
+            .as_instruction_value()
+            .expect("a load is an instruction")
+            .set_alignment(1)
+            .unwrap();
+
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@from_bytes"));
+        obj.insert_field(gc, 0, number)
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "_unsafe_from_bytes_size_unchecked({})",
+            self.bytes_name.to_string()
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.bytes_name]
+    }
+
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
+        i == 0
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// The number of type `ty` that the first bytes of a byte array hold, in the byte order of the
+/// target. The array is borrowed. The caller must ensure it holds at least as many bytes as the
+/// number takes.
+/// Type: Array U8 -> ty
+pub fn number_from_bytes_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const BYTES_NAME: &str = "bytes";
+
+    let bytes_ty = type_tyapp(make_array_ty(), make_u8_ty());
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        vec![],
+        type_fun(bytes_ty, ty.clone()),
+    );
+    let expr = expr_abs(
+        vec![var_local(BYTES_NAME)],
+        expr_builtin(
+            Box::new(NumberFromBytesOp {
+                bytes_name: FullName::local(BYTES_NAME),
             }),
             ty,
             None,
