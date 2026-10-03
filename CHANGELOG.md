@@ -40,7 +40,7 @@
 
 #### Tool
 
-- #785: When renaming a type rewrites a whole import statement, the language server now keeps an empty item list under a namespace, such as `Ns::{}`, instead of writing it as an import of a type or trait named `Ns`.
+- #785: Renaming the type `Point` to `Pixel` in the language server no longer rewrites `import Lib::{Point::{act_x, user_helper}, Shapes::{}};` into `import Lib::{Pixel::act_x, Point::user_helper, Shapes};`, which imports a type or trait named `Shapes` instead of nothing. The empty item list `Shapes::{}` is kept.
 - #790: The quick fix that adds the missing fields to a struct literal now writes them after the last field when a comment ends the field list, and at the right place on a line with characters such as emoji before the literal. It used to write them into the comment or a few characters off, which could break the code.
 - #780: A failed download in `install.sh` now leaves `~/.local/bin/fix` as it was. It used to leave an empty or partly written `fix` there, and later runs then took it for an installed one and installed nothing. `install.sh` can now also upgrade `fix` while it is running, for example as your editor's language server.
 

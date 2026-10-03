@@ -3260,8 +3260,7 @@ When you run `fix test`, it executes `Test::test : IO ()`, and then each Fix exa
 Also, at this time, the source files listed in the `build.test` section of the project file are compiled in addition to the source files listed in the `build` section.
 
 - `fix test --doc` runs the Fix examples alone, and `fix test --no-doc` runs `Test::test` alone.
-- A project that does not define `Test::test` has its Fix examples run alone.
-- The examples after a failing one still run. Once all of them have run, `fix test` lists the failed ones, and it exits with a non-zero status if `Test::test` or an example failed.
+- `fix test` exits with a non-zero status if `Test::test` or an example fails.
 
 ### Fix examples in comments
 
