@@ -579,27 +579,15 @@ fn build_object_files_cache_hash_or_warn(
 ///
 /// **LLVM ignores an option it does not know.** An option renamed between LLVM releases therefore
 /// stops taking effect while the build goes on succeeding, which is what
-/// `test_llvm_arg_reaches_llvm` is for. An option whose value LLVM cannot read goes the same way,
-/// with a message of LLVM's on the error stream and a build that succeeds.
+/// `test_llvm_arg_reaches_llvm` and `test_a_value_leaving_a_loop_is_copied_outside_it` are for.
+/// An option whose value LLVM cannot read goes the same way, with a message of LLVM's on the error
+/// stream and a build that succeeds.
 fn set_llvm_options(args: &[String]) {
     static PARSED: OnceLock<Vec<String>> = OnceLock::new();
-    if args.is_empty() {
-        // Nothing to set, and nothing to undo: LLVM holds what an earlier set gave it, so a build
-        // naming no option would generate its code under that set while its key says it named none.
-        if let Some(parsed) = PARSED.get() {
-            panic_with_msg(&format!(
-                "The options given to LLVM are set for the whole process, so one run takes one set \
-                 of them. This one was given {:?} and then none.",
-                parsed
-            ));
-        }
-        return;
-    }
     let parsed = PARSED.get_or_init(|| {
         // LLVM reads the first argument as the name of the program, the way a `main` does, and puts
-        // it in front of what it reports. Naming the option here is what marks such a report as
-        // LLVM's.
-        let argv: Vec<CString> = once("fix --llvm-arg")
+        // it in front of what it reports, which is what marks such a report as LLVM's.
+        let argv: Vec<CString> = once("LLVM")
             .chain(args.iter().map(String::as_str))
             .map(|arg| CString::new(arg).expect("no argument of a command line holds a NUL byte"))
             .collect();
@@ -632,7 +620,7 @@ pub(crate) fn get_target_machine(
 ) -> TargetMachine {
     Target::initialize_native(&InitializationConfig::default())
         .unwrap_or_else(|e| panic_with_msg(&format!("failed to initialize native: {}", e)));
-    set_llvm_options(&config.llvm_args);
+    set_llvm_options(&config.llvm_options());
     let triple = TargetMachine::get_default_triple();
     let target = Target::from_triple(&triple)
         .unwrap_or_else(|e| panic_with_msg(&format!("failed to create target: {}", e)));
