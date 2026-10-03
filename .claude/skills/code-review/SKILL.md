@@ -1013,9 +1013,8 @@ The test, for each sentence the diff adds: **would a user who never reads it wri
 - the parsing rules behind a syntax the user writes the ordinary way anyway;
 - a limitation that only an unusual layout or an unusual use reaches;
 - what happens when two features are combined in a way the document never suggests;
-- an error case whose diagnostic already tells the user what to do.
-
-A warning that steers a likely mistake passes the test: "marks are separated by spaces; `fix,no_run` is an error" stops the mistake a reader who knows another tool's convention would make.
+- an error case whose diagnostic already tells the user what to do, or which input is rejected;
+- the reason behind a rule the user follows anyway.
 
 **Rewrite**: remove the sentence. When the removed text is recorded nowhere else — no design document under `dev-docs/` states it — report it instead, so the author can move it there rather than lose it.
 
