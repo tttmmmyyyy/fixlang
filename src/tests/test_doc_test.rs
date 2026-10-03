@@ -1390,3 +1390,67 @@ double = |x| old_double(x);
         streams(&output)
     );
 }
+
+/// An example marked `ignore` takes no place in the program of the Fix examples: each example after
+/// it still runs as itself.
+#[test]
+fn test_examples_after_an_ignored_example_run_as_themselves() {
+    let lib = r#"module Lib;
+
+// ```fix ignore
+// double(undefined_name)
+// ```
+//
+// ```fix
+// assert_eq(|_|"", double(21), 42)
+// ```
+//
+// ```fix
+// assert_eq(|_|"the third example fails", double(2), 5)
+// ```
+double : I64 -> I64;
+double = |x| 2 * x;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &["--doc"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("doc test lib.fix:3 ... ignored")
+            && stderr.contains("doc test lib.fix:7 ... ok")
+            && stderr.contains("doc test lib.fix:11 ... FAILED")
+            && stderr.contains("the third example fails")
+            && stderr.contains("doc tests: 1 passed, 1 failed, 1 ignored."),
+        "each example after the ignored one runs as itself\n{}",
+        streams(&output)
+    );
+}
+
+/// Where the program of the Fix examples does not build and holds one example, `fix test` tests
+/// that example alone without saying that testing each example alone is slower, since it takes one
+/// build as the program does. An example marked `ignore` takes no build, so it is not counted.
+#[test]
+fn test_one_example_that_does_not_compile_is_tested_without_saying_it_is_slower() {
+    let lib = r#"module Lib;
+
+// ```fix
+// let x : I64 = "a string";
+// pure()
+// ```
+//
+// ```fix ignore
+// double(undefined_name)
+// ```
+double : I64 -> I64;
+double = |x| 2 * x;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &["--doc"]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("doc test lib.fix:3 ... FAILED")
+            && stderr.contains("doc tests: 0 passed, 1 failed, 1 ignored.")
+            && !stderr.contains("built alone"),
+        "the example fails, and `fix test` says nothing about building each example alone\n{}",
+        streams(&output)
+    );
+}
