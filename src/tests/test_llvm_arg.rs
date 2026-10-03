@@ -75,7 +75,7 @@ mod tests {
         total
     }
 
-    /// Builds `source` with `build_args` on the build command, and answers the bytes of object
+    /// Builds `source` with `build_args` on the build command, and returns the bytes of object
     /// code it wrote together with what the program prints. `description` names the program in a
     /// failure.
     fn build_and_run(source: &str, description: &str, build_args: &[&str]) -> (u64, String) {
@@ -334,7 +334,7 @@ mod tests {
     "#;
 
     /// An option `--llvm-arg` names is handed to LLVM after the ones every build hands it, so it
-    /// can set again what those set: turning `-no-phi-elim-live-out-early-exit` back off changes
+    /// overrides them: turning `-no-phi-elim-live-out-early-exit` back off changes
     /// the object code of a loop it acts on, and the program answers the same.
     #[cfg(target_arch = "x86_64")]
     #[test]
@@ -435,10 +435,10 @@ mod tests {
             .count()
     }
 
-    /// The copy of a value leaving a loop is made on the way out of the loop rather than on every
-    /// iteration: the loop of `VALUE_LEAVING_A_LOOP` keeps the two copies its `or` needs and no
-    /// third. This is what `LLVM_DEFAULT_OPTIONS` asks of LLVM, so it fails where LLVM renames the
-    /// option or drops it, which LLVM would otherwise do without a word.
+    /// The copy of a value leaving a loop is made once, on the edge out of the loop: the loop of
+    /// `VALUE_LEAVING_A_LOOP` keeps the two copies its `or` needs and no third. This is what
+    /// `LLVM_DEFAULT_OPTIONS` asks of LLVM, so the test fails where LLVM renames or drops the
+    /// option, which LLVM otherwise does silently.
     #[cfg(target_arch = "x86_64")]
     #[test]
     fn test_a_value_leaving_a_loop_is_copied_outside_it() {

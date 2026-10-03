@@ -61,8 +61,8 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 /// A pass here must leave a tail call followed directly by its `ret`, so that the backend can
 /// compile the call as a jump. `pseudo-probe` inserts a probe between such a call and its `ret`:
 /// an indirect tail call then becomes an ordinary call, and a recursion through a function value
-/// overflows the stack (fixlang issue #806). What it saved came from the probes keeping a loop's
-/// exit block alive, which `LLVM_DEFAULT_OPTIONS` gets directly.
+/// overflows the stack (fixlang issue #806). Its gain on instruction counts comes from the probes
+/// keeping a loop's exit block alive, and `LLVM_DEFAULT_OPTIONS` gets that gain without it.
 const LLVM_TAIL_PASSES: [&str; 2] = ["speculative-execution", "loop-vectorize"];
 
 /// The passes the optimization levels built for speed run over each generated module, in order:
@@ -81,16 +81,15 @@ fn llvm_passes_for_speed() -> Vec<String> {
         .collect()
 }
 
-/// Options every build hands LLVM's option parser, ahead of the ones `llvm_args` names, so that an
-/// option `llvm_args` names sets again what one of these set.
+/// Options every build hands LLVM's option parser, ahead of `llvm_args`, so that an option in
+/// `llvm_args` overrides them.
 ///
 /// `-no-phi-elim-live-out-early-exit` keeps the copy of a value leaving a loop out of the loop. The
 /// code generator deletes a block that holds nothing but a branch, which a loop's exit block often
 /// is, and the copy the exit edge needs then lands at the end of the loop's last block, where it
 /// runs on every iteration. LLVM's PHI elimination splits such an edge to give the copy a block of
-/// its own, but by default it first passes over every edge whose copy it expects the register
-/// coalescer to remove, and the coalescer does not always remove it. The option stops it passing
-/// over them. Over the 106 cases of `benchmark/speedtest` run with `--langarena`, it takes 0.22% off
+/// its own, but by default it skips every edge whose copy it expects the register coalescer to
+/// remove, and the coalescer does not always remove it. The option makes it split those edges too. Over the 106 cases of `benchmark/speedtest` run with `--langarena`, it takes 0.22% off
 /// the instruction counts — `Compress::HuffEncode` 7.4%, `Compress::ArithDecode` 4.4%, `Sort::Quick`
 /// 3.5%, `Maze::BFS` 3.2% — against 1.05% back on `Compress::ArithEncode`.
 /// `test_a_value_leaving_a_loop_is_copied_outside_it` checks that the option still has this effect.

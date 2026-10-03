@@ -579,8 +579,9 @@ fn build_object_files_cache_hash_or_warn(
 ///
 /// **LLVM ignores an option it does not know.** An option renamed between LLVM releases therefore
 /// stops taking effect while the build goes on succeeding, which is what
-/// `test_llvm_arg_reaches_llvm` and `test_a_value_leaving_a_loop_is_copied_outside_it` are for. An option whose value LLVM cannot read goes the same way,
-/// with a message of LLVM's on the error stream and a build that succeeds.
+/// `test_llvm_arg_reaches_llvm` and `test_a_value_leaving_a_loop_is_copied_outside_it` are for.
+/// An option whose value LLVM cannot read goes the same way, with a message of LLVM's on the error
+/// stream and a build that succeeds.
 fn set_llvm_options(args: &[String]) {
     static PARSED: OnceLock<Vec<String>> = OnceLock::new();
     let parsed = PARSED.get_or_init(|| {
