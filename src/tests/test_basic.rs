@@ -5726,6 +5726,35 @@ pub fn test_from_bytes_reads_the_bytes_of_a_string_literal() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// The byte array `to_bytes` makes of a number holds storage for as many bytes as it reports
+/// capacity for, so it grows past the number's width and takes writes like any other array, and the
+/// bytes it started with stay where they were.
+#[test]
+pub fn test_to_bytes_answers_an_array_that_grows() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let x = 0x0102030405060708_U64;
+            let bytes = x.to_bytes;
+            assert(|_|"U64 capacity", bytes.get_capacity >= bytes.get_size);;
+            let grown = bytes.push_back(9_U8).set(0, 0_U8);
+            assert_eq(|_|"U64 size", grown.get_size, 9);;
+            assert_eq(|_|"U64 pushed byte", grown.@(8), 9_U8);;
+            assert_eq(|_|"U64 written byte", grown.@(0), 0_U8);;
+            assert_eq(|_|"U64 bytes kept", grown.get_sub(1, 8), x.to_bytes.get_sub(1, 8));;
+
+            let bytes = 200_U8.to_bytes;
+            assert(|_|"U8 capacity", bytes.get_capacity >= bytes.get_size);;
+            let grown = bytes.push_back(7_U8);
+            assert_eq(|_|"U8 grown", grown, [200_U8, 7_U8]);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// `to_bytes` and `from_bytes` of a signed integer narrower than 32 bits carry the value through the
 /// byte array and back, at both ends of the type's range; the bytes are the value's two's-complement
 /// representation; and `from_bytes` answers an error for a byte array that is not the type's width.
