@@ -1,4 +1,4 @@
-//! The options `--llvm-arg` hands to LLVM, and whether they still reach it.
+//! The options the compiler and `--llvm-arg` hand to LLVM, and whether they still reach it.
 //!
 //! LLVM ignores an option it does not know. An option whose value LLVM cannot read gets a message
 //! on the error stream and nothing more. The build succeeds either way, with the setting unmade, so
@@ -8,9 +8,16 @@
 
 #[cfg(test)]
 mod tests {
+    use crate::build::build_object_files::get_target_machine;
+    use crate::configuration::Configuration;
+    use crate::misc::{Map, Set};
     use crate::tests::test_util::{
         build_program, fix_build_source_command, fix_command_at_opt_level,
     };
+    use inkwell::context::Context;
+    use inkwell::memory_buffer::MemoryBuffer;
+    use inkwell::targets::FileType;
+    use inkwell::OptimizationLevel;
     use std::fs;
     use std::path::Path;
     use std::process::Command;
@@ -68,11 +75,11 @@ mod tests {
         total
     }
 
-    /// Builds `ONE_LOOP` with `build_args` on the build command, and answers the bytes of object
-    /// code it wrote together with what the program prints.
-    fn build_and_run(build_args: &[&str]) -> (u64, String) {
-        let (temp_dir, program_path) =
-            build_program(ONE_LOOP, "max", build_args, None, "a program of one loop");
+    /// Builds `source` with `build_args` on the build command, and returns the bytes of object
+    /// code it wrote together with what the program prints. `description` names the program in a
+    /// failure.
+    fn build_and_run(source: &str, description: &str, build_args: &[&str]) -> (u64, String) {
+        let (temp_dir, program_path) = build_program(source, "max", build_args, None, description);
         let size = object_code_size(temp_dir.path());
         let output = Command::new(&program_path)
             .output()
@@ -127,14 +134,15 @@ mod tests {
     /// option are what make the difference in size the option's doing.
     #[test]
     fn test_llvm_arg_reaches_llvm() {
-        let (plain, plain_output) = build_and_run(&[]);
-        let (plain_again, _) = build_and_run(&[]);
+        let (plain, plain_output) = build_and_run(ONE_LOOP, "a program of one loop", &[]);
+        let (plain_again, _) = build_and_run(ONE_LOOP, "a program of one loop", &[]);
         assert_eq!(
             plain, plain_again,
             "two builds of one source should compile to the same bytes of object code"
         );
 
-        let (aligned, aligned_output) = build_and_run(&[ALIGN_ALL_BLOCKS_TO_64]);
+        let (aligned, aligned_output) =
+            build_and_run(ONE_LOOP, "a program of one loop", &[ALIGN_ALL_BLOCKS_TO_64]);
         assert!(
             aligned > plain,
             "asking for a 64-byte boundary at the head of every block should grow the object \
@@ -153,8 +161,12 @@ mod tests {
     /// what a renamed option does: LLVM says nothing about it, and the build succeeds.
     #[test]
     fn test_an_option_llvm_does_not_know_leaves_the_program_alone() {
-        let (plain, _) = build_and_run(&[]);
-        let (with_unknown, _) = build_and_run(&[OPTION_LLVM_DOES_NOT_HAVE]);
+        let (plain, _) = build_and_run(ONE_LOOP, "a program of one loop", &[]);
+        let (with_unknown, _) = build_and_run(
+            ONE_LOOP,
+            "a program of one loop",
+            &[OPTION_LLVM_DOES_NOT_HAVE],
+        );
         assert_eq!(
             plain, with_unknown,
             "an option LLVM does not know should leave the object code as it was"
@@ -232,8 +244,8 @@ mod tests {
     /// as it would have without the option. That is why the help of `--llvm-arg` tells a user to
     /// compare the programs.
     ///
-    /// The report opens with `fix --llvm-arg`, the name `set_llvm_options` hands LLVM for itself,
-    /// which is what marks the message as LLVM's.
+    /// The report opens with `LLVM`, the name `set_llvm_options` hands LLVM for itself, and names
+    /// the option the value was given to.
     #[test]
     fn test_an_option_whose_value_llvm_cannot_read_is_reported_and_the_build_goes_on() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
@@ -248,7 +260,7 @@ mod tests {
             "a value LLVM cannot read should leave the object code as it was"
         );
         assert!(
-            stderr.contains("fix --llvm-arg"),
+            stderr.contains("LLVM: for the --align-all-blocks option"),
             "LLVM's report should name the option the value came from, but the build said: {}",
             stderr
         );
@@ -297,6 +309,167 @@ mod tests {
         assert_eq!(
             plain_output, aligned_output,
             "`fix run` should answer the same with the option as without it"
+        );
+    }
+
+    /// A loop that packs three bits of each input byte into its output and leaves with the bits
+    /// still pending, which gives the loop values that leave it through its exit block.
+    const BIT_PACKING_LOOP: &str = r#"
+        module Main;
+
+        encode : Array U8 -> Array U8;
+        encode = |input| (
+            loop((0, 0, 0, Array::empty(0)), |(i, bits, nbits, out)|
+                if i >= input.@size { break $ if nbits > 0 { out.push_back(bits.u8) } else { out } };
+                let bits = bits.shift_left(3).bit_or(input.@(i).i64.bit_and(7));
+                let nbits = nbits + 3;
+                if nbits >= 8 {
+                    continue $ (i + 1, bits.shift_right(nbits - 8), nbits - 8, out.push_back(bits.shift_right(nbits - 8).u8))
+                };
+                continue $ (i + 1, bits, nbits, out)
+            )
+        );
+
+        main : IO ();
+        main = (
+            let n = (*IO::get_args).@size * 100000;
+            let input = Array::from_map(n, |i| (i * 31 % 251).u8);
+            println $ encode(input).@size.to_string
+        );
+    "#;
+
+    /// An option `--llvm-arg` names is handed to LLVM after the ones every build hands it, so it
+    /// overrides them: turning `-no-phi-elim-live-out-early-exit` back off changes
+    /// the object code of a loop it acts on, and the program answers the same.
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_llvm_arg_overrides_an_option_every_build_hands_llvm() {
+        let build = |build_args: &[&str]| {
+            build_and_run(BIT_PACKING_LOOP, "a loop packing bits", build_args)
+        };
+        let (default, default_output) = build(&[]);
+        let (overridden, overridden_output) =
+            build(&["--llvm-arg=-no-phi-elim-live-out-early-exit=false"]);
+        assert_ne!(
+            default, overridden,
+            "turning the option back off with `--llvm-arg` should change the object code"
+        );
+        assert_eq!(
+            default_output, overridden_output,
+            "the program should answer the same with the option turned off as with it on"
+        );
+    }
+
+    /// A loop whose length leaves it through a block holding nothing but a branch. The code
+    /// generator deletes that block, so the copy of the length the exit needs has to find another
+    /// place: on the edge out of the loop, or at the end of the loop's last block, where it runs
+    /// on every iteration.
+    const VALUE_LEAVING_A_LOOP: &str = r#"
+        define i64 @fill(i1 %flag) {
+        entry:
+          br i1 %flag, label %head, label %exit
+
+        head:
+          %len = phi i64 [ %len.next, %latch ], [ 0, %entry ]
+          %buf = phi ptr [ %buf.next, %latch ], [ null, %entry ]
+          br i1 %flag, label %append, label %latch
+
+        append:
+          %len.grown = or i64 %len, 1
+          %grows = icmp slt i64 0, %len.grown
+          br i1 %grows, label %reset, label %appended
+
+        reset:
+          br label %appended
+
+        appended:
+          %buf.appended = phi ptr [ null, %reset ], [ %buf, %append ]
+          %slot = getelementptr i8, ptr null, i64 %len
+          store i8 0, ptr %slot, align 1
+          br label %latch
+
+        latch:
+          %buf.next = phi ptr [ %buf.appended, %appended ], [ %buf, %head ]
+          %len.next = phi i64 [ %len.grown, %appended ], [ 0, %head ]
+          br i1 %flag, label %exit, label %head
+
+        exit:
+          %result = phi i64 [ 0, %entry ], [ %len.next, %latch ]
+          ret i64 %result
+        }
+    "#;
+
+    /// The register-to-register `mov` instructions of `assembly` that lie inside a loop, counting
+    /// as a loop the instructions from the label of a backward branch to the branch.
+    fn copies_inside_loops(assembly: &str) -> usize {
+        let mut labels = Map::default();
+        let mut instructions = vec![];
+        for line in assembly.lines() {
+            if let Some(label) = line.strip_suffix(':').filter(|l| l.starts_with(".LBB")) {
+                labels.insert(label.to_string(), instructions.len());
+            } else if line.starts_with('\t') && !line.starts_with("\t.") {
+                instructions.push(line.trim().split('#').next().unwrap().trim().to_string());
+            }
+        }
+        let mut inside = Set::default();
+        for (index, instruction) in instructions.iter().enumerate() {
+            if !instruction.starts_with('j') {
+                continue;
+            }
+            let target = instruction.split_whitespace().nth(1);
+            if let Some(&start) = target.and_then(|target| labels.get(target)) {
+                if start <= index {
+                    inside.extend(start..=index);
+                }
+            }
+        }
+        inside
+            .into_iter()
+            .filter(|&index| {
+                let mut parts = instructions[index].splitn(2, char::is_whitespace);
+                let opcode = parts.next().unwrap();
+                let operands: Vec<&str> = parts
+                    .next()
+                    .unwrap_or("")
+                    .split(',')
+                    .map(str::trim)
+                    .collect();
+                opcode.starts_with("mov")
+                    && operands.len() == 2
+                    && operands.iter().all(|operand| operand.starts_with('%'))
+            })
+            .count()
+    }
+
+    /// The copy of a value leaving a loop is made once, on the edge out of the loop: the loop of
+    /// `VALUE_LEAVING_A_LOOP` keeps the two copies its `or` needs and no third. This is what
+    /// `LLVM_OPTIONS_OF_EVERY_BUILD` asks of LLVM, so the test fails where LLVM renames or drops the
+    /// option, which LLVM otherwise does silently.
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn test_a_value_leaving_a_loop_is_copied_outside_it() {
+        let config = Configuration::develop_mode();
+        let target_machine = get_target_machine(OptimizationLevel::Aggressive, &config);
+        let context = Context::create();
+        let buffer = MemoryBuffer::create_from_memory_range_copy(
+            VALUE_LEAVING_A_LOOP.as_bytes(),
+            "value_leaving_a_loop",
+        );
+        let module = context
+            .create_module_from_ir(buffer)
+            .expect("the test's IR should parse");
+        module.set_triple(&target_machine.get_triple());
+        module.set_data_layout(&target_machine.get_target_data().get_data_layout());
+        let assembly = target_machine
+            .write_to_memory_buffer(&module, FileType::Assembly)
+            .expect("LLVM should compile the test's IR");
+        let assembly = String::from_utf8_lossy(assembly.as_slice()).to_string();
+        assert_eq!(
+            copies_inside_loops(&assembly),
+            2,
+            "the loop should copy only what its `or` needs, and leave the copy of the value it \
+             returns to the edge out of it:\n{}",
+            assembly
         );
     }
 }

@@ -37,6 +37,10 @@
 
 ### Fixed
 
+#### Language
+
+- #806, #808: At `-O max`, the default level, a recursion that calls itself through a function held in a struct, as `(w.@f)(w, n - 1)` does, now runs in constant stack. Since 1.5.0 it overflowed the stack when its result was wider than three integers.
+
 #### Tool
 
 - #790: The quick fix that adds the missing fields to a struct literal now writes them after the last field when a comment ends the field list, and at the right place on a line with characters such as emoji before the literal. It used to write them into the comment or a few characters off, which could break the code.

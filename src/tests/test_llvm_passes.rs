@@ -190,7 +190,7 @@ fn test_pass_pipeline_per_optimization_level() {
                 let mut passes = vec!["function(tailcallelim)".to_string()];
                 passes.extend(vec![full_pipeline; 3]);
                 passes.extend(
-                    ["speculative-execution", "loop-vectorize", "pseudo-probe"]
+                    ["speculative-execution", "loop-vectorize"]
                         .iter()
                         .map(|pass| pass.to_string()),
                 );
