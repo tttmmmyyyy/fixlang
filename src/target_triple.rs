@@ -9,6 +9,13 @@
 
 use inkwell::targets::{TargetMachine, TargetTriple};
 
+/// The target triple the compiler builds for: the default triple of the LLVM it links, which names
+/// the machine the compiler runs on. The code the compiler generates and the C numeric types the
+/// program is checked against both follow this triple.
+pub fn build_target_triple() -> TargetTriple {
+    TargetMachine::get_default_triple()
+}
+
 /// The architectures whose ABI the compiler knows.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Architecture {

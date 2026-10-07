@@ -36,6 +36,7 @@ use crate::{
         simplify::simplify,
         unique_check_elim, validate,
     },
+    target_triple::build_target_triple,
     tbaa::MemoryRegion,
     tool::stopwatch::StopWatch,
 };
@@ -621,7 +622,7 @@ pub(crate) fn get_target_machine(
     Target::initialize_native(&InitializationConfig::default())
         .unwrap_or_else(|e| panic_with_msg(&format!("failed to initialize native: {}", e)));
     set_llvm_options(&config.llvm_options());
-    let triple = TargetMachine::get_default_triple();
+    let triple = build_target_triple();
     let target = Target::from_triple(&triple)
         .unwrap_or_else(|e| panic_with_msg(&format!("failed to create target: {}", e)));
     let reloc_mode = if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {

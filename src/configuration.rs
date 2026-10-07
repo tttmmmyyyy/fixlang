@@ -17,8 +17,8 @@ use crate::misc::{
     Map, Set,
 };
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
+use crate::target_triple::build_target_triple;
 use build_time::build_time_utc;
-use inkwell::targets::TargetMachine;
 use inkwell::OptimizationLevel;
 use std::fmt;
 use std::iter;
@@ -675,9 +675,7 @@ impl Configuration {
             sanitizer: Sanitizer::None,
             library_search_paths: vec![],
             c_numeric_types: CNumericTypes::of_target(
-                &TargetMachine::get_default_triple()
-                    .as_str()
-                    .to_string_lossy(),
+                &build_target_triple().as_str().to_string_lossy(),
             ),
             host_cpu: HostCpu::of_this_machine(),
             disable_cpu_features_regex: vec![],

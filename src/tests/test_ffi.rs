@@ -12,16 +12,13 @@ use crate::{
     },
     generator::{enum_attribute_kind_id, Generator},
     misc::function_name,
+    target_triple::build_target_triple,
     tests::test_util::{
         compile_c_object, emitted_llvm_ir, fix_command, standalone_generator, test_source,
         test_source_fail, test_source_with_c, test_source_with_c_under, EmittedIr,
     },
 };
-use inkwell::{
-    attributes::AttributeLoc,
-    context::Context,
-    targets::{TargetMachine, TargetTriple},
-};
+use inkwell::{attributes::AttributeLoc, context::Context, targets::TargetTriple};
 use std::{
     fs::{self, File},
     io::Write,
@@ -213,7 +210,7 @@ pub fn test_narrow_integer_extension_attribute_follows_the_host_abi() {
     // `-O none` compiles the program as several modules, and the wrappers are spread over them.
     let ir = emitted_llvm_ir(&work_dir, EmittedIr::BeforeOptimization);
 
-    let host_triple = TargetMachine::get_default_triple();
+    let host_triple = build_target_triple();
     let (signext, zeroext) =
         if c_abi_extends_narrow_integers(&host_triple.as_str().to_string_lossy()) {
             (" signext", " zeroext")
