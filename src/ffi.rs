@@ -146,7 +146,7 @@ impl CNumericTypes {
     ///
     /// The compiler builds for targets with 64-bit pointers (`Generator::ptr_size` asserts it), and
     /// on those the C ABIs differ in two places only: the width of `long`
-    /// (`c_long_bits_of_target`) and the sign of plain `char` (`plain_char_is_signed_on_target`).
+    /// (`c_long_bits_of_target`) and the sign of plain `char` (`c_plain_char_is_signed`).
     /// Every other type has the same width on all of them.
     ///
     /// # Examples
@@ -155,7 +155,7 @@ impl CNumericTypes {
     /// `x86_64-pc-windows-msvc` a signed `char` and a 32-bit `long`.
     pub fn of_target(triple: &str) -> Self {
         CNumericTypes {
-            char_is_signed: plain_char_is_signed_on_target(triple),
+            char_is_signed: c_plain_char_is_signed(triple),
             char: 8,
             short: 16,
             int: 32,
@@ -210,28 +210,23 @@ impl fmt::Display for CNumericTypes {
 /// Whether plain `char` is signed on `triple`, by clang's rule.
 ///
 /// C leaves the sign to the ABI. Among the targets with 64-bit pointers, these make it unsigned:
-/// AArch64 of either byte order except on Apple's operating systems and on Windows, 64-bit PowerPC
-/// of either byte order, RISC-V 64 and SystemZ. Every other one makes it signed.
+/// AArch64 of either byte order and 64-bit big-endian PowerPC, except on Apple's operating systems
+/// and, for AArch64, on Windows; and on every operating system, 64-bit little-endian PowerPC,
+/// RISC-V 64 of either byte order and SystemZ. Every other one makes it signed.
 ///
 /// # Examples
 /// `x86_64-unknown-linux-gnu` and `arm64-apple-darwin23.0.0` have a signed `char`;
 /// `aarch64-unknown-linux-gnu` and `powerpc64le-unknown-linux-gnu` an unsigned one.
-fn plain_char_is_signed_on_target(triple: &str) -> bool {
-    match architecture_of_target(triple) {
-        Architecture::X86_64 => true,
-        Architecture::AArch64 => target_is_darwin(triple) || target_is_windows(triple),
-        Architecture::Other => !matches!(
-            architecture_name_of_target(triple).as_str(),
-            "aarch64_be"
-                | "powerpc64"
-                | "ppc64"
-                | "ppu"
-                | "powerpc64le"
-                | "ppc64le"
-                | "riscv64"
-                | "s390x"
-                | "systemz"
-        ),
+fn c_plain_char_is_signed(triple: &str) -> bool {
+    let architecture_name = architecture_name_of_target(triple);
+    if architecture_of_target(triple) == Architecture::AArch64 || architecture_name == "aarch64_be"
+    {
+        return target_is_darwin(triple) || target_is_windows(triple);
+    }
+    match architecture_name.as_str() {
+        "powerpc64" | "ppc64" | "ppu" => target_is_darwin(triple),
+        "powerpc64le" | "ppc64le" | "riscv64" | "riscv64be" | "s390x" | "systemz" => false,
+        _ => true,
     }
 }
 
