@@ -646,8 +646,8 @@ impl FixOptimizationLevel {
 
 impl Configuration {
     /// The configuration a run of `subcommand` starts from, which the command line and the project
-    /// file then override. The optimization level comes from the environment and the C type sizes
-    /// from the C compiler; every other setting takes its default.
+    /// file then override. The optimization level comes from the environment and the C numeric
+    /// types from the target triple; every other setting takes its default.
     fn new(subcommand: SubCommand) -> Result<Self, Errors> {
         Ok(Configuration {
             subcommand,

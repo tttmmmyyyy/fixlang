@@ -324,7 +324,7 @@ main = println((1, 2, 3, 4, 5, 6, 7).to_string + no_such_value);
     /// program again, while every test of what a build produces still passes.
     ///
     /// The program uses a tuple, whose implementations the compiler generates into a source of its
-    /// own, and a value whose type the C type sizes decide, so the entries cover what the key reads
+    /// own, and a value whose type the C numeric types decide, so the entries cover what the key reads
     /// beyond the program's own source.
     #[test]
     fn a_second_build_of_an_unedited_program_finds_the_entries_of_the_first() {
