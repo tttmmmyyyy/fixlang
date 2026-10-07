@@ -14,7 +14,7 @@ use crate::{
     misc::function_name,
     tests::test_util::{
         compile_c_object, emitted_llvm_ir, fix_command, standalone_generator, test_source,
-        test_source_fail, test_source_with_c, EmittedIr,
+        test_source_fail, test_source_with_c, test_source_with_c_under, EmittedIr,
     },
 };
 use inkwell::{
@@ -538,6 +538,80 @@ pub fn test_cchar_takes_the_sign_of_plain_char() {
         config.c_numeric_types = CNumericTypes::of_target(triple);
         test_source(&source, config);
     }
+}
+
+/// A `char` that a C function returns through `FFI_CALL[CChar ...]` is read with the sign of plain
+/// `char`: -56 stays -56 where it is signed, and 200 stays 200 where it is unsigned. The
+/// configuration is given each kind's C numeric types, and the C function returns a `signed char`
+/// or an `unsigned char` accordingly, so a host of either kind checks both.
+#[test]
+pub fn test_ffi_call_returning_cchar_takes_the_sign_of_plain_char() {
+    for (triple, c_function, value) in [
+        ("x86_64-unknown-linux-gnu", "c_signed_char", -56),
+        ("aarch64-unknown-linux-gnu", "c_unsigned_char", 200),
+    ] {
+        let source = format!(
+            r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let c = FFI_CALL[CChar {}()];
+                assert_eq(|_|"", c.i64, {});;
+                pure()
+            );
+            "#,
+            c_function, value
+        );
+        let c_source = r#"
+            signed char c_signed_char(void) { return (signed char)-56; }
+            unsigned char c_unsigned_char(void) { return (unsigned char)200; }
+        "#;
+        let mut config = Configuration::develop_mode();
+        config.c_numeric_types = CNumericTypes::of_target(triple);
+        test_source_with_c_under(
+            &source,
+            c_source,
+            &format!("{}_{}", function_name!(), triple),
+            config,
+        );
+    }
+}
+
+/// The C numeric types follow the target alone: a `.fixlang/c_types.json` left in the project by an
+/// earlier version of `fix`, recording a 64-bit `int`, leaves `CInt` 32 bits wide.
+#[test]
+pub fn test_c_numeric_types_ignore_a_c_types_json_left_in_the_project() {
+    let work_dir = PathBuf::from(format!(
+        "{}/{}",
+        COMPILER_TEST_WORKING_PATH,
+        function_name!()
+    ));
+    let _ = fs::remove_dir_all(&work_dir);
+    fs::create_dir_all(work_dir.join(".fixlang")).unwrap();
+    // `4294967296` is `2^32`, so what `c_int` answers with says how wide a C `int` is.
+    fs::write(
+        work_dir.join("main.fix"),
+        "module Main;\n\nmain : IO ();\nmain = println $ 4294967296.c_int.i64.to_string;\n",
+    )
+    .unwrap();
+    fs::write(
+        work_dir.join(".fixlang/c_types.json"),
+        r#"{"char": 8, "short": 16, "int": 64, "long": 64, "long_long": 64, "size_t": 64, "float": 32, "double": 64}"#,
+    )
+    .unwrap();
+
+    let output = fix_command()
+        .args(["run", "--file", "main.fix"])
+        .current_dir(&work_dir)
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "0",
+        "a 32-bit C `int` holds none of 2^32; stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 /// A boxed value returned to the foreign language arrives as an opaque pointer carrying one
