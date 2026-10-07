@@ -5,3 +5,4 @@ pub mod deps;
 pub mod docs;
 pub mod lsp;
 pub mod run;
+pub mod test;

@@ -10,6 +10,7 @@ use crate::ast::typedecl::TypeDeclValue;
 use crate::ast::types::TyCon;
 use crate::commands::docs::MarkdownSection;
 use crate::constants::chars_allowed_in_identifiers;
+use crate::doc_test::docstring_for_display;
 use crate::misc::{char_pos_to_utf16_pos, to_absolute_path, utf16_pos_to_utf8_byte_pos, Map};
 use crate::parse::sourcefile::{SourceFile, SourcePos, Span};
 use crate::write_log;
@@ -1038,7 +1039,7 @@ pub(super) fn document_from_endnode(node: &EndNode, program: &Program) -> Markup
     }
     let content = MarkupContent {
         kind: MarkupKind::Markdown,
-        value: docs,
+        value: docstring_for_display(&docs),
     };
     content
 }

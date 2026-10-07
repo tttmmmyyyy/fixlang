@@ -131,6 +131,14 @@ void fixruntime_clear_errno()
     errno = 0;
 }
 
+// The value of the environment variable `name`, or NULL where it is not set. The program `fix test`
+// builds from several Fix examples reads through it which example to run; a name of the runtime's
+// own leaves `getenv` to the program, to declare at whatever signature it likes.
+const char *fixruntime_getenv(const char *name)
+{
+    return getenv(name);
+}
+
 // Each of the four below prints what went wrong to standard error and stops the program: an index
 // fell outside its array, an array size was below zero, an array size was wider than the address
 // space, or a signed operation's result did not fit its type.

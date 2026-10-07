@@ -4,9 +4,9 @@ This function is used to release a pointer obtained by `boxed_to_retained_ptr`.
 Note that this function is requires a value of type `Lazy a`, not of `a`.
 So you can get release function for a boxed type `T` even when you don't have a value of type `T` -- you can just use `|_| undefined("") : T`:
 
-```
-module Main;
-
+```fix
+# module DocTest;
+#
 type VoidType = box struct {};
 // No constructor for `VoidType` is provided.
 

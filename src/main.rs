@@ -27,6 +27,7 @@ mod commands;
 mod configuration;
 mod constants;
 mod dependency;
+mod doc_test;
 mod edit;
 mod elaboration;
 mod env_vars;
@@ -55,7 +56,12 @@ mod type_size;
 use clap::{
     value_parser, App, AppSettings, Arg, ArgAction, ArgMatches, PossibleValue, ValueSource,
 };
-use commands::{check, clean, deps, docs, lsp::server::launch_language_server, run};
+use commands::{
+    check, clean, deps, docs,
+    lsp::server::launch_language_server,
+    run,
+    test::{self, TestSelection},
+};
 use configuration::{
     BuildConfigType, Configuration, DeprecationMode, FixOptimizationLevel, LinkType,
     OutputFileType, Sanitizer, SubCommand,
@@ -411,7 +417,20 @@ fn run_cli() {
     let test_subc = add_run_and_test_options(
         App::new("test")
             .trailing_var_arg(true)
-            .about("Tests a Fix program. Executes `Test::test : IO ()`."),
+            .about("Tests a Fix program. Executes `Test::test : IO ()`, and then the Fix examples (i.e., the code blocks marked `fix`) in the comments of the files listed in the `build` and `build.test` sections of the project file."),
+    )
+    .arg(
+        Arg::new("doc")
+            .long("doc")
+            .takes_value(false)
+            .conflicts_with("no-doc")
+            .help("Run the Fix examples in the comments alone."),
+    )
+    .arg(
+        Arg::new("no-doc")
+            .long("no-doc")
+            .takes_value(false)
+            .help("Run `Test::test` alone, leaving the Fix examples in the comments out."),
     );
 
     // "fix deps" subcommand
@@ -838,8 +857,10 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         Ok(())
     }
 
-    /// Create configuration from the command line arguments and the project file. The project
-    /// file's settings are laid down first, so an option on the command line overrides them.
+    /// Create configuration from the command line arguments and the project file, and run the
+    /// preliminary commands the project files list, so that every build the subcommand makes reads
+    /// what they write. The project file's settings are laid down first, so an option on the
+    /// command line overrides them.
     fn create_config(subcommand: SubCommand, args: &ArgMatches) -> Configuration {
         let mode = subcommand.build_mode();
         let mut config = panic_if_err(Configuration::release_mode(subcommand));
@@ -853,6 +874,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
 
         // Set up configuration from the command line arguments, to overwrite the configuration described in the project file.
         panic_if_err(set_config_from_args(&mut config, args));
+
+        panic_if_err(config.run_preliminary_commands());
         config
     }
 
@@ -889,7 +912,14 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             run::run_command(&create_config(SubCommand::Run, args));
         }
         Some(("test", args)) => {
-            run::run_command(&create_config(SubCommand::Test, args));
+            let selection = if args.contains_id("doc") {
+                TestSelection::DocTests
+            } else if args.contains_id("no-doc") {
+                TestSelection::TestFunction
+            } else {
+                TestSelection::All
+            };
+            test::test_command(create_config(SubCommand::Test, args), selection);
         }
         Some(("deps", args)) => match args.subcommand() {
             Some(("install", args)) => {

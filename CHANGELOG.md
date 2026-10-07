@@ -12,6 +12,7 @@
 
 #### Tool
 
+- #785: `fix test` now runs the Fix examples in comments, the code blocks whose info string begins with the word `fix`. An example passes when it exits with status 0. `fix test --doc` runs the examples alone, and `fix test --no-doc` runs `Test::test` alone. The module name `DocTest` and the module names beginning with `DocTest.` are now reserved for the examples: `fix test` rejects a module of such a name when it has an example to compile. See "Fix examples in comments" in `Document.md` for how to write an example.
 - #790: The language server offers two quick fixes for a struct pattern that leaves out fields without `_`: write each missing field as `name: _`, or write `_` after the fields.
 
 #### Std
@@ -43,6 +44,7 @@
 
 #### Tool
 
+- #785: Renaming the type `Point` to `Pixel` in the language server no longer rewrites `import Lib::{Point::{act_x, user_helper}, Shapes::{}};` into `import Lib::{Pixel::act_x, Point::user_helper, Shapes};`, which imports a type or trait named `Shapes` instead of nothing. The empty item list `Shapes::{}` is kept.
 - #790: The quick fix that adds the missing fields to a struct literal now writes them after the last field when a comment ends the field list, and at the right place on a line with characters such as emoji before the literal. It used to write them into the comment or a few characters off, which could break the code.
 - #780: A failed download in `install.sh` now leaves `~/.local/bin/fix` as it was. It used to leave an empty or partly written `fix` there, and later runs then took it for an installed one and installed nothing. `install.sh` can now also upgrade `fix` while it is running, for example as your editor's language server.
 

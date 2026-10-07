@@ -13,6 +13,7 @@ use crate::{
         UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
     },
     dependency::lockfile::LockFileType,
+    doc_test::{docstring_for_display, CodeFence},
     elaboration::elaborate_via_config,
     error::Errors,
     metafiles::project_file::ProjectFile,
@@ -140,18 +141,19 @@ impl MarkdownSection {
 
         // Add paragraphs until a heading line is found.
         let mut paragraph = String::new();
-        let mut in_code_block = false;
-        while let Some(line) = line_it.peek() {
-            // If the line starts with "```", toggle the code block state.
-            if line.trim().starts_with("```") {
-                in_code_block = !in_code_block;
+        let mut open_fence: Option<CodeFence> = None;
+        while let Some(&line) = line_it.peek() {
+            // A line of a code block, the fences included, belongs to the paragraph.
+            if let Some(fence) = &open_fence {
+                if fence.is_closed_by(line) {
+                    open_fence = None;
+                }
                 append_line(&mut paragraph, line);
                 line_it.next();
                 continue;
             }
-
-            // If in a code block, add the line to the paragraph.
-            if in_code_block {
+            if let Some(fence) = CodeFence::opening(line) {
+                open_fence = Some(fence);
                 append_line(&mut paragraph, line);
                 line_it.next();
                 continue;
@@ -194,6 +196,12 @@ impl MarkdownSection {
         }
 
         (ret, line_it.collect())
+    }
+
+    /// The sections of the docstring `docstring` as a reader is shown it: the Fix examples in it
+    /// pass through `docstring_for_display` before the sections are read.
+    pub fn parse_docstring(docstring: &str) -> Vec<Self> {
+        Self::parse_many(docstring_for_display(docstring).lines().collect())
     }
 
     pub fn parse_many(mut lines: Vec<&str>) -> Vec<Self> {
@@ -356,7 +364,7 @@ fn write_module(
 
     if let Some(mod_info) = program.modules.iter().find(|mi| mi.name == *mod_name) {
         let docstring = mod_info.source.get_document().ok().unwrap_or_default();
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         doc.concatenate_many(docstring);
     }
 
@@ -582,7 +590,7 @@ fn type_entries(
             .unwrap_or_default()
             .trim()
             .to_string();
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         doc.concatenate_many(docstring);
 
         if ty_info.variant == TyConVariant::Struct {
@@ -635,7 +643,7 @@ fn type_entries(
             .map(|src| src.get_document())
             .transpose()?
             .unwrap_or_default();
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         doc.concatenate_many(docstring);
 
         let entry = Entry {
@@ -661,7 +669,7 @@ fn field_subsection(
     field_sec.add_paragraph(format!("Type: `{}`", field.syn_ty.to_string()));
     if let Some(src) = &field.source {
         let docstring = src.get_document()?;
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         field_sec.concatenate_many(docstring);
     }
     Ok(field_sec)
@@ -711,7 +719,7 @@ fn trait_entries(
             .map(|src| src.get_document())
             .transpose()?
             .unwrap_or_default();
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         doc.concatenate_many(docstring);
 
         for (assoc_ty_name, assoc_ty_defn) in &info.assoc_types {
@@ -735,7 +743,7 @@ fn trait_entries(
                 .map(|src| src.get_document())
                 .transpose()?
                 .unwrap_or_default();
-            let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+            let docstring = MarkdownSection::parse_docstring(&docstring);
             subsection.concatenate_many(docstring);
             doc.add_subsection(subsection);
         }
@@ -744,7 +752,7 @@ fn trait_entries(
             let mut subsection = MarkdownSection::new(title);
             subsection.add_paragraph(format!("Type: `{}`", method.qual_ty.to_string()));
             let docstring = docstring_from_opt_span(&method.decl_src)?;
-            let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+            let docstring = MarkdownSection::parse_docstring(&docstring);
             subsection.concatenate_many(docstring);
             doc.add_subsection(subsection);
         }
@@ -784,7 +792,7 @@ fn trait_entries(
             .map(|src| src.get_document())
             .transpose()?
             .unwrap_or_default();
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         doc.concatenate_many(docstring);
 
         let entry = Entry {
@@ -816,7 +824,7 @@ fn trait_impl_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, 
             let mut doc = MarkdownSection::new(title);
 
             let docstring = docstring_from_opt_span(&impl_.source)?;
-            let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+            let docstring = MarkdownSection::parse_docstring(&docstring);
             doc.concatenate_many(docstring);
 
             let entry = Entry {
@@ -875,7 +883,7 @@ fn value_entries(
         }
 
         let docstring = gv.get_document().unwrap_or_default();
-        let docstring = MarkdownSection::parse_many(docstring.lines().collect());
+        let docstring = MarkdownSection::parse_docstring(&docstring);
         doc.concatenate_many(docstring);
 
         let entry = Entry {

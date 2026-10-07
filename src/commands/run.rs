@@ -25,9 +25,36 @@ use std::process::{self, Output, Stdio};
 /// The outer result reports what went wrong while building the program, and the inner one what
 /// went wrong while starting the built executable.
 pub fn run(
-    mut config: Configuration,
+    config: Configuration,
     inherit_streams: bool,
 ) -> Result<Result<Output, io::Error>, Errors> {
+    with_temporary_executable(config, |config, exec_path| {
+        let mut com = config.program_run_command(exec_path)?;
+        for arg in &config.run_program_args {
+            com.arg(arg);
+        }
+        if inherit_streams {
+            com.stdout(Stdio::inherit())
+                .stdin(Stdio::inherit())
+                .stderr(Stdio::inherit());
+        }
+        Ok(com.output())
+    })
+}
+
+/// Builds the program as `run` does, without running it. The executable is then moved to the path
+/// `config.out_file_path` names, and removed when the settings name no path.
+pub fn build_executable(config: Configuration) -> Result<(), Errors> {
+    with_temporary_executable(config, |_config, _exec_path| Ok(()))
+}
+
+/// Builds the program as an executable under `RUN_PATH` and hands `use_executable` the settings it
+/// was built with and its path. The executable is then moved to the path `config.out_file_path`
+/// names, and removed when the settings name no path.
+pub fn with_temporary_executable<T>(
+    mut config: Configuration,
+    use_executable: impl FnOnce(&Configuration, &str) -> Result<T, Errors>,
+) -> Result<T, Errors> {
     // The kind of the output file describes what `fix build` produces, so the settings that name a
     // dynamic library reach `fix build` alone (`ProjectFile::set_config`, `set_config_from_args`).
     // A shared object put here would be handed to the operating system as a program to execute.
@@ -53,17 +80,7 @@ pub fn run(
     // Build executable file.
     build(&mut config)?;
 
-    // Run the executable file.
-    let mut com = config.program_run_command(&exec_path)?;
-    for arg in &config.run_program_args {
-        com.arg(arg);
-    }
-    if inherit_streams {
-        com.stdout(Stdio::inherit())
-            .stdin(Stdio::inherit())
-            .stderr(Stdio::inherit());
-    }
-    let output = com.output();
+    let result = use_executable(&config, &exec_path);
 
     // Clean up the temporary executable file.
     match user_specified_out_path {
@@ -85,7 +102,7 @@ pub fn run(
         }
     }
 
-    Ok(output)
+    result
 }
 
 /// Builds the program, runs it with the terminal's streams attached, and exits the `fix` process

@@ -1,0 +1,14 @@
+module Main;
+
+// Doubles a number.
+//
+// ```fix no_run
+// # import Main;
+// let x = double(21);
+// #
+// assert_eq(|_|"", x, 42)
+// ```
+double : I64 -> I64;
+double = |x| 2 * x;
+
+main : IO () = println(double(1).to_string);
