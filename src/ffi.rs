@@ -233,14 +233,16 @@ fn c_plain_char_is_signed(triple: &str) -> bool {
 /// The width of `long` in bits on `triple`, a target with 64-bit pointers, by clang's rule.
 ///
 /// Windows and UEFI follow LLP64, where `long` is 32 bits wide. Every other target follows LP64,
-/// where it is 64 bits wide; Cygwin is one of them, though LLVM names its operating system
-/// `windows`.
+/// where it is 64 bits wide; Cygwin on x86-64 is one of them, though LLVM names its operating
+/// system `windows`.
 ///
 /// # Examples
 /// `x86_64-pc-windows-msvc` and `x86_64-unknown-uefi` give 32; `x86_64-unknown-linux-gnu` and
 /// `x86_64-pc-cygwin` give 64.
 fn c_long_bits_of_target(triple: &str) -> usize {
-    if (target_is_windows(triple) && !target_is_cygwin(triple)) || target_is_uefi(triple) {
+    let x86_64_cygwin =
+        architecture_of_target(triple) == Architecture::X86_64 && target_is_cygwin(triple);
+    if (target_is_windows(triple) && !x86_64_cygwin) || target_is_uefi(triple) {
         32
     } else {
         64

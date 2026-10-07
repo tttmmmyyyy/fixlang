@@ -78,7 +78,7 @@ pub fn target_is_windows(triple: &str) -> bool {
 /// # Examples
 /// `x86_64-pc-cygwin` and `x86_64-pc-windows-cygnus` do; `x86_64-w64-mingw32` does not.
 pub fn target_is_cygwin(triple: &str) -> bool {
-    normalized_part(triple, 3) == "cygnus"
+    normalized_part(triple, 3).starts_with("cygnus")
 }
 
 /// Whether a target triple names UEFI firmware as its operating system.
@@ -86,7 +86,7 @@ pub fn target_is_cygwin(triple: &str) -> bool {
 /// # Examples
 /// `x86_64-unknown-uefi` does; `x86_64-pc-windows-msvc` does not.
 pub fn target_is_uefi(triple: &str) -> bool {
-    normalized_part(triple, 2) == "uefi"
+    normalized_part(triple, 2).starts_with("uefi")
 }
 
 /// The architecture part of a target triple, spelled as the triple spells it, for a rule that tells
