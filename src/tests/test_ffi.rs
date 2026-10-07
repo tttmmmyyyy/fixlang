@@ -24,6 +24,7 @@ use std::{
     io::Write,
     path::PathBuf,
 };
+use tempfile::TempDir;
 
 // An exported function exchanges values with C through the C ABI, and the wrapper the compiler
 // generates for it passes every argument and the result by value in the LLVM type Fix uses
@@ -557,12 +558,8 @@ pub fn test_ffi_call_returning_cchar_takes_the_sign_of_plain_char() {
 /// earlier version of `fix`, recording a 64-bit `int`, leaves `CInt` 32 bits wide.
 #[test]
 pub fn test_c_numeric_types_ignore_a_c_types_json_left_in_the_project() {
-    let work_dir = PathBuf::from(format!(
-        "{}/{}",
-        COMPILER_TEST_WORKING_PATH,
-        function_name!()
-    ));
-    let _ = fs::remove_dir_all(&work_dir);
+    let temp = TempDir::new().expect("Failed to create temp directory");
+    let work_dir = temp.path();
     fs::create_dir_all(work_dir.join(".fixlang")).unwrap();
     // `4294967296` is `2^32`, so what `c_int` answers with says how wide a C `int` is.
     fs::write(
@@ -578,7 +575,7 @@ pub fn test_c_numeric_types_ignore_a_c_types_json_left_in_the_project() {
 
     let output = fix_command()
         .args(["run", "--file", "main.fix"])
-        .current_dir(&work_dir)
+        .current_dir(work_dir)
         .output()
         .unwrap();
     assert_eq!(
