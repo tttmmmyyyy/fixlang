@@ -31,7 +31,7 @@
 
 - #792: `F64::to_string` and `F32::to_string` now write a number with a single significant digit and a power of ten as `1.0e300`, where they wrote `1e300`. The text they write for a finite number is now always a valid floating point literal of Fix, with `_F32` after it for an `F32`.
 - #800: `to_string_exp` and `to_string_exp_precision` of `F64` and `F32` now write the power of ten with no `+` and no leading zero, as a floating point literal of Fix writes it: `100.0.to_string_exp` is `1.000000e2`, where it was `1.000000e+02`, and `0.0123.to_string_exp_precision(1_U8)` is `1.2e-2`, where it was `1.2e-02`.
-- #541: `CChar` is now `U8` on a target where C's `char` without `signed` or `unsigned` is unsigned, such as Linux on arm64. It used to be `I8` on every target, which read a `char` above 127 from a C function as a negative number there.
+- #541, #811: `CChar` is now `U8` on a target where C's `char` without `signed` or `unsigned` is unsigned, such as Linux on arm64. It used to be `I8` on every target, which read a `char` above 127 from a C function as a negative number there.
 
 #### Tool
 
@@ -48,7 +48,7 @@
 - #785: Renaming the type `Point` to `Pixel` in the language server no longer rewrites `import Lib::{Point::{act_x, user_helper}, Shapes::{}};` into `import Lib::{Pixel::act_x, Point::user_helper, Shapes};`, which imports a type or trait named `Shapes` instead of nothing. The empty item list `Shapes::{}` is kept.
 - #790: The quick fix that adds the missing fields to a struct literal now writes them after the last field when a comment ends the field list, and at the right place on a line with characters such as emoji before the literal. It used to write them into the comment or a few characters off, which could break the code.
 - #780: A failed download in `install.sh` now leaves `~/.local/bin/fix` as it was. It used to leave an empty or partly written `fix` there, and later runs then took it for an installed one and installed nothing. `install.sh` can now also upgrade `fix` while it is running, for example as your editor's language server.
-- #341: The compiler now takes the widths of the C numeric types, such as `CLong`, from the target it builds for. It used to measure them on the first build, save them in `.fixlang/c_types.json` and use them from then on, so a project directory shared with a machine whose C types differ silently kept that machine's widths. The file is no longer read and can be deleted.
+- #341, #811: The compiler now takes the widths of the C numeric types, such as `CLong`, from the target it builds for. It used to measure them on the first build, save them in `.fixlang/c_types.json` and use them from then on, so a project directory shared with a machine whose C types differ silently kept that machine's widths. The file is no longer read and can be deleted.
 
 ## [1.5.0] - 2026-09-27
 
