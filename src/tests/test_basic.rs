@@ -9,9 +9,9 @@ use crate::{
     misc::{function_name, number_to_varname},
     tests::test_util::{
         assert_grammar_accepts, assert_grammar_rejects, emitted_llvm_ir, fix_command,
-        run_source_assert_failed, run_source_capture, test_files_in_directory, test_source,
-        test_source_fail, test_source_fail_excludes, test_source_with_c, test_source_with_c_under,
-        EmittedIr,
+        generated_llvm_ir_modules, run_source_assert_failed, run_source_capture,
+        test_files_in_directory, test_source, test_source_fail, test_source_fail_excludes,
+        test_source_with_c, test_source_with_c_under, EmittedIr,
     },
 };
 use rand::{thread_rng, Rng};
@@ -5703,6 +5703,89 @@ pub fn test129() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Verifies that `to_bytes` and `from_bytes` access the number's bytes with no alignment assumed:
+/// the buffer of a byte array is aligned only as far as the allocator aligns it, and the bytes of a
+/// string literal can start at any address, so an access claiming the number's own alignment would
+/// be undefined. A target whose loads tolerate a misaligned address runs either version alike, which
+/// is why this reads the claim off the emitted IR.
+#[test]
+pub fn test_bytes_conversions_assume_no_alignment() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let n = *get_arg_count;
+            let x : U64 = from_bytes(n.u64.to_bytes).as_ok;
+            let y : I16 = from_bytes(n.i16.to_bytes).as_ok;
+            let z : F32 = from_bytes(n.f32.to_bytes).as_ok;
+            println((x, y, z).to_string)
+        );
+    "#;
+    let ir = generated_llvm_ir_modules(source, "none", &[]).join("\n");
+    for (ty, llvm_ty) in [("U64", "i64"), ("I16", "i16"), ("F32", "float")] {
+        // The body of the function that `to_bytes` of `ty` calls, which takes the number first.
+        let to_bytes = ir
+            .split("\ndefine ")
+            .find(|f| {
+                f.contains(&format!("@\"Std::{}::_to_bytes#", ty)) && f.contains("::closure#")
+            })
+            .unwrap_or_else(|| panic!("the IR defines no `Std::{}::_to_bytes`:\n{}", ty, ir));
+        let store = to_bytes
+            .lines()
+            .find(|line| {
+                line.trim_start()
+                    .starts_with(&format!("store {} %0,", llvm_ty))
+            })
+            .unwrap_or_else(|| panic!("`_to_bytes` of `{}` stores no number:\n{}", ty, to_bytes));
+        assert!(
+            store.contains(", align 1,"),
+            "`_to_bytes` of `{}` claims an alignment: {}",
+            ty,
+            store
+        );
+        let load = ir
+            .lines()
+            .find(|line| line.contains(&format!("\"number@from_bytes\" = load {},", llvm_ty)))
+            .unwrap_or_else(|| panic!("the IR loads no `{}` from bytes:\n{}", ty, ir));
+        assert!(
+            load.contains(", align 1,"),
+            "`from_bytes` of `{}` claims an alignment: {}",
+            ty,
+            load
+        );
+    }
+}
+
+/// Verifies that the byte array `to_bytes` returns has storage for the capacity it reports: it
+/// grows past the number's width and accepts writes like any other array, and its original bytes
+/// stay in place.
+#[test]
+pub fn test_to_bytes_answers_an_array_that_grows() {
+    let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let x = 0x0102030405060708_U64;
+            let bytes = x.to_bytes;
+            assert(|_|"U64 capacity", bytes.get_capacity >= bytes.get_size);;
+            let grown = bytes.push_back(9_U8).set(0, 0_U8);
+            assert_eq(|_|"U64 size", grown.get_size, 9);;
+            assert_eq(|_|"U64 pushed byte", grown.@(8), 9_U8);;
+            assert_eq(|_|"U64 written byte", grown.@(0), 0_U8);;
+            assert_eq(|_|"U64 bytes kept", grown.get_sub(1, 8), x.to_bytes.get_sub(1, 8));;
+
+            let bytes = 200_U8.to_bytes;
+            assert(|_|"U8 capacity", bytes.get_capacity >= bytes.get_size);;
+            let grown = bytes.push_back(7_U8);
+            assert_eq(|_|"U8 grown", grown, [200_U8, 7_U8]);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// `to_bytes` and `from_bytes` of a signed integer narrower than 32 bits carry the value through the
 /// byte array and back, at both ends of the type's range; the bytes are the value's two's-complement
 /// representation; and `from_bytes` answers an error for a byte array that is not the type's width.
@@ -5783,8 +5866,8 @@ pub fn test_wide_signed_integer_bytes_round_trip() {
 }
 
 /// `from_bytes` and `to_bytes` of `F32` and `F64` carry a signaling NaN's bits through unchanged:
-/// the value crosses the C runtime twice as a `float` or a `double`, and nothing on the way may
-/// quiet it or drop its payload. The payload is drawn from the argument count so that the optimizer
+/// the value is stored and loaded as a `float` or a `double`, and nothing on the way may quiet it
+/// or drop its payload. The payload is drawn from the argument count so that the optimizer
 /// cannot fold the round trip.
 #[test]
 pub fn test_float_bytes_round_trip_keeps_signaling_nan() {

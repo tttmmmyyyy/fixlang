@@ -67,6 +67,7 @@ use inkwell::values::BasicValueEnum;
 use inkwell::values::FunctionValue;
 use inkwell::values::GlobalValue;
 use inkwell::values::InstructionOpcode;
+use inkwell::values::InstructionValue;
 use inkwell::values::IntValue;
 use inkwell::values::PointerValue;
 use inkwell::values::ValueKind;
@@ -1179,15 +1180,16 @@ impl<'c, 'm> Generator<'c, 'm> {
         loaded
     }
 
-    /// Emit a store of `value` through `ptr`, an access into `region`.
+    /// Emit a store of `value` through `ptr`, an access into `region`, and return the store.
     pub fn build_store<V: BasicValue<'c>>(
         &self,
         region: MemoryRegion,
         ptr: PointerValue<'c>,
         value: V,
-    ) {
+    ) -> InstructionValue<'c> {
         let store = self.builder().build_store(ptr, value).unwrap();
         self.tbaa.tag_access(store, region);
+        store
     }
 
     /// Emit an atomic read-modify-write of `value` through `ptr` under `ordering`, an access into

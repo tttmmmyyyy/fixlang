@@ -38,6 +38,10 @@
 
 ### Fixed
 
+#### Language
+
+- #806, #808: At `-O max`, the default level, a recursion that calls itself through a function held in a struct, as `(w.@f)(w, n - 1)` does, now runs in constant stack. Since 1.5.0 it overflowed the stack when its result was wider than three integers.
+
 #### Tool
 
 - #785: Renaming the type `Point` to `Pixel` in the language server no longer rewrites `import Lib::{Point::{act_x, user_helper}, Shapes::{}};` into `import Lib::{Pixel::act_x, Point::user_helper, Shapes};`, which imports a type or trait named `Shapes` instead of nothing. The empty item list `Shapes::{}` is kept.

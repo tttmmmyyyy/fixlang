@@ -56,12 +56,16 @@ const LLVM_O3_RUNS_FOR_SPEED: usize = 3;
 
 /// Passes run after the `default<O3>` rounds at the optimization levels built for speed.
 ///
-/// The three together take 0.80% off the cycle counts of the fifteen benchmark cases —
-/// `get_sub` 4.4%, `fib` 4.4%, `cp_lib_dijkstra` 2.8%, `levenshtein` 2.2% — against 2.0% back on
-/// `cp_lib_lsegtree` and 1.5% on `cp_lib_segtree`. **The three are one unit**: none of them earns
-/// that alone, and `pseudo-probe` on its own costs 0.48%. What they change is the shape of the
-/// code rather than the work it does, which is why the instruction count barely moves.
-const LLVM_TAIL_PASSES: [&str; 3] = ["speculative-execution", "loop-vectorize", "pseudo-probe"];
+/// Over the 106 cases of `benchmark/speedtest` run with `--langarena`, the two take 0.51% off the
+/// instruction counts — `Graph::BFS` 15.1%, `Graph::DFS` 11.7%, `prime_table` 8.8%,
+/// `Compress::HuffDecode` 5.0% — against 1.75% back on `Hash::SHA256` and 1.57% on `sort`.
+///
+/// A pass here must leave a tail call followed directly by its `ret`, so that the backend can
+/// compile the call as a jump. `pseudo-probe` inserts a probe between such a call and its `ret`:
+/// an indirect tail call then becomes an ordinary call, and a recursion through a function value
+/// overflows the stack (fixlang issue #806). Its gain on instruction counts comes from the probes
+/// keeping a loop's exit block alive, and `LLVM_OPTIONS_OF_EVERY_BUILD` gets that gain without it.
+const LLVM_TAIL_PASSES: [&str; 2] = ["speculative-execution", "loop-vectorize"];
 
 /// The passes the optimization levels built for speed run over each generated module, in order:
 /// `LLVM_HEAD_PASSES`, `LLVM_O3_RUNS_FOR_SPEED` runs of `LLVM_O3_PIPELINE`, then
@@ -78,6 +82,21 @@ fn llvm_passes_for_speed() -> Vec<String> {
         .chain(LLVM_TAIL_PASSES.iter().map(|pass| pass.to_string()))
         .collect()
 }
+
+/// Options every build hands LLVM's option parser, ahead of `llvm_args`, so that an option in
+/// `llvm_args` overrides them.
+///
+/// `-no-phi-elim-live-out-early-exit` keeps the copy of a value leaving a loop out of the loop. The
+/// code generator deletes a block that holds nothing but a branch, which a loop's exit block often
+/// is, and the copy the exit edge needs then lands at the end of the loop's last block, where it
+/// runs on every iteration. LLVM's PHI elimination splits such an edge to give the copy a block of
+/// its own, but by default it skips every edge whose copy it expects the register coalescer to
+/// remove, and the coalescer does not always remove it. The option makes it split those edges too.
+/// Over the 106 cases of `benchmark/speedtest` run with `--langarena`, it takes 0.22% off the
+/// instruction counts — `Compress::HuffEncode` 7.4%, `Compress::ArithDecode` 4.4%, `Sort::Quick`
+/// 3.5%, `Maze::BFS` 3.2% — against 1.05% back on `Compress::ArithEncode`.
+/// `test_a_value_leaving_a_loop_is_copied_outside_it` checks that the option still has this effect.
+const LLVM_OPTIONS_OF_EVERY_BUILD: [&str; 1] = ["-no-phi-elim-live-out-early-exit"];
 
 /// How a linked library is bound to the program.
 #[derive(Clone, Copy)]
@@ -522,7 +541,8 @@ pub struct Configuration {
     /// Options handed to LLVM's own option parser before any code is generated, written as LLVM
     /// writes them. They reach settings the C API leaves out — among them the boundary a loop's
     /// code starts on, which moves how fast the CPU runs it. LLVM ignores an option it does not
-    /// know, so a build that gives one has to check that the setting was made.
+    /// know, so a build that gives one has to check that the setting was made. LLVM reads them after
+    /// `LLVM_OPTIONS_OF_EVERY_BUILD`, so they override those.
     pub llvm_args: Vec<String>,
     /// The subcommand of the `fix` command this configuration was assembled for, which decides
     /// what the build produces and how the entry point is implemented.
@@ -1018,6 +1038,15 @@ impl Configuration {
         self.backtrace && OS == "macos"
     }
 
+    /// The options handed to LLVM's option parser: `LLVM_OPTIONS_OF_EVERY_BUILD`, then `llvm_args`.
+    pub fn llvm_options(&self) -> Vec<String> {
+        LLVM_OPTIONS_OF_EVERY_BUILD
+            .iter()
+            .map(|option| option.to_string())
+            .chain(self.llvm_args.iter().cloned())
+            .collect()
+    }
+
     /// The LLVM passes to run over each generated module, in order. Each entry is a
     /// pass-pipeline string for LLVM's pass builder.
     pub fn llvm_passes(&self) -> Vec<String> {
@@ -1063,15 +1092,16 @@ impl Configuration {
             emit_symbols,
             max_split_scalars,
             output_file_type,
-            llvm_args,
 
             // Reach the generated code through what they decide, which is pushed in their place:
             // `llvm_passes` is the pipeline `llvm_passes_override` gives where it gives one and the
-            // optimization level implies otherwise, `entry_io_value_name` is what the
+            // optimization level implies otherwise, `llvm_options` is what LLVM is told, of which
+            // `llvm_args` is the part the user names, `entry_io_value_name` is what the
             // subcommand decides about the code, and `target_cpu_name` and `target_cpu_features`
             // are the CPU the code is generated for, which the host, the patterns and valgrind
             // decide.
             llvm_passes_override: _,
+            llvm_args: _,
             subcommand: _,
             host_cpu: _,
             disable_cpu_features_regex: _,
@@ -1174,7 +1204,7 @@ impl Configuration {
         object_generation.push_text(&self.target_cpu_name());
         object_generation.push_text(&self.target_cpu_features());
         // What LLVM was told before it generated the code.
-        object_generation.push_list(llvm_args);
+        object_generation.push_list(&self.llvm_options());
 
         // The LLVM passes. `--llvm-passes-file` replaces the passes the optimization level
         // implies, so the pipeline is hashed in full: were it left out, objects generated under

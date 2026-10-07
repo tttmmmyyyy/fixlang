@@ -1843,6 +1843,25 @@ pub fn alloc_array_storage<'c, 'm>(
     create_obj(storage_ty, &vec![], Some(cap), gc, Some("array_storage"))
 }
 
+/// The `Array` value of type `arr_ty` whose elements lie in `storage`, holding `size` elements in
+/// room for `cap`.
+///
+/// # Arguments
+/// * `storage` - the pointer to the `#ArrayStorage` object the array owns a reference to.
+pub fn build_array_value<'c, 'm>(
+    gc: &mut Generator<'c, 'm>,
+    arr_ty: Arc<TypeNode>,
+    storage: BasicValueEnum<'c>,
+    size: IntValue<'c>,
+    cap: IntValue<'c>,
+    name: &str,
+) -> Object<'c> {
+    let array = create_obj(arr_ty, &vec![], None, gc, Some(name));
+    let array = array.insert_field(gc, ARRAY_STORAGE_IDX, storage);
+    let array = array.insert_field(gc, ARRAY_SIZE_IDX, size);
+    array.insert_field(gc, ARRAY_CAP_IDX, cap)
+}
+
 /// Emit a call to `malloc(sizeof)`.
 ///
 /// We bypass inkwell's `build_malloc` / `build_array_malloc` because they declare `@malloc` with an

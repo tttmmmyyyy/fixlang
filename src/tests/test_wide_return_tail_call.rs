@@ -1,5 +1,5 @@
 use crate::{
-    configuration::Configuration,
+    configuration::{Configuration, FixOptimizationLevel},
     generator::OUT_POINTER_BUFFER_NAME,
     tests::test_util::{generated_llvm_ir, llvm_function_bodies, test_source},
 };
@@ -14,8 +14,10 @@ use crate::{
 // Each test below drives one such loop a million iterations deep and checks only that it finishes.
 // The outcome is binary — completes or overflows the stack — so machine load does not affect it.
 // They run at every optimization level: whether a tail call becomes a jump is decided by the
-// backend, which does it at `-O0` too, and by the `tail` marker, which code generation attaches to
-// every call in tail position.
+// backend, which does it at `-O0` too, by the `tail` marker, which code generation attaches to
+// every call in tail position, and by the passes the level runs, since a pass that puts anything
+// between a tail call and its `ret` keeps the backend from making the call a jump (fixlang issue
+// #806).
 //
 // AArch64 returns up to eight leaves in registers, which covers the four-leaf shapes; the shape that
 // exercises the return rule on every target is
@@ -243,6 +245,93 @@ fn test_dispatch_through_array_runs_in_constant_stack() {
     );
     "#;
     test_source(source, Configuration::develop_mode());
+}
+
+/// The callee of each tail call is a function read out of a struct, and the step it recurses by
+/// comes from the command line, so no pass can resolve the callee and the recursion reaches code
+/// generation as an indirect tail call. The nine-integer result crosses the return budget of every
+/// supported target, so the call forwards the caller's out-pointer.
+#[test]
+fn test_wide_return_through_a_function_value_runs_in_constant_stack() {
+    let source = r#"
+    module Main;
+
+    type Nine = ((I64, I64, I64), (I64, I64, I64), (I64, I64, I64));
+
+    type W = box struct { f : W -> I64 -> Nine };
+
+    call_w : W -> I64 -> Nine;
+    call_w = |w, n| (w.@f)(w, n);
+
+    count_down_by : I64 -> W;
+    count_down_by = |k| W { f : |me, n|
+        if n <= 0 { ((n, 1, 2), (3, 4, 5), (6, 7, 8)) } else { call_w(me, n - k) }
+    };
+
+    main : IO ();
+    main = (
+        let k = (*IO::get_args).@size;
+        let ((a, _, _), _, (_, _, i)) = call_w(count_down_by(k), 1000000 * k);
+        assert_eq(|_|"unexpected result", a + i, 8);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Two function values read out of structs call each other in tail position, once through a wide
+/// result and once through a narrow one, built at every optimization level and with debug
+/// information. Each level runs its own pipeline and debug information adds records beside every
+/// call, so each build is a separate chance for something to land between a tail call and its
+/// `ret`.
+#[test]
+fn test_tail_calls_through_function_values_run_in_constant_stack_at_every_level() {
+    let source = r#"
+    module Main;
+
+    type Nine = ((I64, I64, I64), (I64, I64, I64), (I64, I64, I64));
+
+    type W = box struct { f : W -> W -> I64 -> Nine };
+
+    call_w : W -> W -> I64 -> Nine;
+    call_w = |a, b, n| (a.@f)(a, b, n);
+
+    wide_by : I64 -> W;
+    wide_by = |k| W { f : |me, other, n|
+        if n <= 0 { ((n, 1, 2), (3, 4, 5), (6, 7, 8)) } else { call_w(other, me, n - k) }
+    };
+
+    type F = box struct { f : F -> F -> I64 -> I64 };
+
+    call_f : F -> F -> I64 -> I64;
+    call_f = |a, b, n| (a.@f)(a, b, n);
+
+    narrow_by : I64 -> F;
+    narrow_by = |k| F { f : |me, other, n| if n <= 0 { n } else { call_f(other, me, n - k) } };
+
+    main : IO ();
+    main = (
+        let k = (*IO::get_args).@size;
+        let ((a, _, _), _, (_, _, i)) = call_w(wide_by(k), wide_by(k), 1000000 * k);
+        assert_eq(|_|"unexpected wide result", a + i, 8);;
+        let r = call_f(narrow_by(k), narrow_by(k), 1000000 * k);
+        assert_eq(|_|"unexpected narrow result", r, 0);;
+        pure()
+    );
+    "#;
+    for opt_level in [
+        FixOptimizationLevel::None,
+        FixOptimizationLevel::Basic,
+        FixOptimizationLevel::Max,
+        FixOptimizationLevel::Experimental,
+    ] {
+        let mut config = Configuration::develop_mode();
+        config.set_fix_opt_level(opt_level);
+        test_source(source, config);
+    }
+    let mut config = Configuration::develop_mode();
+    config.set_debug_info();
+    test_source(source, config);
 }
 
 /// Three arrays make nine leaves, above the largest return-register budget among supported targets,

@@ -14,7 +14,7 @@ use std::{
     env,
     ffi::OsString,
     fs::{self, remove_file, File},
-    io::{self, Write},
+    io,
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Output, Stdio},
     sync::{Arc, Once},
@@ -841,44 +841,47 @@ pub fn test_source_with_c_under(
     test_name: &str,
     mut config: Configuration,
 ) {
-    // Create a working directory.
     let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
-
-    // Save `c_source` to a file.
-    let c_file_path = format!("{}/{}.c", COMPILER_TEST_WORKING_PATH, test_name);
-    let mut file = File::create(&c_file_path).unwrap();
-    file.write_all(c_src.as_bytes()).unwrap();
-
-    // Build `c_source` into an object file, optimized as a library a program links usually is. The
-    // bits a C function leaves above a narrow integer are what an optimized build leaves there: at
-    // `-O0`, gcc for AArch64 widens every narrow result and argument whether or not the ABI asks
-    // for it, which hides a Fix side that reads those bits.
-    let o_file_path = format!("{}/{}.o", COMPILER_TEST_WORKING_PATH, test_name);
-    let mut command = Command::new("gcc");
-    let output = command
-        .arg("-O2")
-        .arg("-c")
-        .arg("-o")
-        .arg(&o_file_path)
-        .arg(&c_file_path)
-        .output()
-        .expect("Failed to run gcc.");
-    if output.stderr.len() > 0 {
-        eprintln!(
-            "{}",
-            String::from_utf8(output.stderr)
-                .unwrap_or("(failed to parse stderr from gcc as UTF8.)".to_string())
-        );
-    }
+    let o_file_path = compile_c_object(
+        c_src,
+        &Path::new(COMPILER_TEST_WORKING_PATH).join(format!("{}.o", test_name)),
+    );
 
     // Link the object file to the Fix program.
-    config.object_files.push(PathBuf::from(&o_file_path));
+    config.object_files.push(o_file_path.clone());
 
     // Run the Fix program.
     test_source(&fix_src, config);
 
     // Remove the object file.
     let _ = fs::remove_file(o_file_path);
+}
+
+/// Compiles the C source `c_src` with `gcc` into the object file `object`, writing the source beside
+/// it with the extension `.c`, and answers the object's path.
+///
+/// The object is optimized as a library a program links usually is. The bits a C function leaves
+/// above a narrow integer are what an optimized build leaves there: at `-O0`, gcc for AArch64 widens
+/// every narrow result and argument whether or not the ABI asks for it, which hides a Fix side that
+/// reads those bits.
+pub fn compile_c_object(c_src: &str, object: &Path) -> PathBuf {
+    let c_file_path = object.with_extension("c");
+    fs::write(&c_file_path, c_src).unwrap();
+    let output = Command::new("gcc")
+        .arg("-O2")
+        .arg("-c")
+        .arg("-o")
+        .arg(object)
+        .arg(&c_file_path)
+        .output()
+        .expect("Failed to run gcc.");
+    assert!(
+        output.status.success(),
+        "gcc failed on {}:\n{}",
+        c_file_path.display(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    object.to_path_buf()
 }
 
 /// Copies the directory `src` into `dst`, recursing into subdirectories and creating `dst` and its

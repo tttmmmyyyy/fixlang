@@ -60,7 +60,7 @@ LLVM_PASSES_BEST_FILE = REPO / "llvm_passes_best.txt"
 # The pipeline the compiler ships, which the search starts from. Must spell out the same list as
 # `llvm_passes_for_speed` in `src/configuration.rs`.
 INITIAL_PASSES = ["function(tailcallelim)"] + ["default<O3>"] * 3 + [
-    "speculative-execution", "loop-vectorize", "pseudo-probe",
+    "speculative-execution", "loop-vectorize",
 ]
 
 # The cases the search optimizes. Each runs long enough that process start-up is lost in it, and
@@ -97,6 +97,8 @@ MEASUREMENT_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
 # Excluded because they may break the program: attributor, attributor-cgscc, unify-loop-exits.
 # `reg2mem` is excluded as well: the allocas it introduces escape into indirect tail calls, which
 # costs the program its guaranteed tail calls and overflows the stack.
+# `pseudo-probe` is excluded for the same outcome: the probe it inserts between a tail call and the
+# `ret` turns the call into an ordinary one (fixlang issue #806).
 PASSES = '''
 default<O3>
 aa-eval
