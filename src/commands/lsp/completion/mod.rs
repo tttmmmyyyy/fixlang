@@ -327,8 +327,7 @@ fn tiers_in_parallel(
 /// → Tier 0 unify promotion.
 ///
 /// `tc_template` may be `None` if the scratch `Configuration` couldn't
-/// be built — e.g. the host environment can't satisfy
-/// `CTypeSizes::load_or_check`. In that case the unify-based promotion
+/// be built — e.g. the current directory can't be read. In that case the unify-based promotion
 /// is silently skipped and `assign_tier_no_unify` is used, leaving the
 /// ranking at the bucket-only Tier 1/2/3 level.
 struct DotRanking {
@@ -442,8 +441,8 @@ fn run_completion_elaborate(
 /// first definition whose body span covers `cursor_byte`.
 fn find_enclosing_gv(abs_path: &PathBuf, content: &str, cursor_byte: usize) -> Option<FullName> {
     // `parse_source_file` requires a `Configuration` so that
-    // `parse_module` can inject FFI type aliases sized by
-    // `c_type_sizes`. That injection does not affect the discovered
+    // `parse_module` can inject the FFI type aliases that
+    // `c_numeric_types` decides. That injection does not affect the discovered
     // global-value names or source spans, so any successfully-built
     // configuration is fine here.
     let config = Configuration::release_mode(SubCommand::Build).ok()?;

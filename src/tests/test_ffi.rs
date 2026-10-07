@@ -5,28 +5,26 @@ use crate::{
     constants::{COMPILER_TEST_WORKING_PATH, C_ENTRY_POINT_NAME, I8_NAME, STD_NAME, U16_NAME},
     elaboration::elaborate_via_config,
     error::panic_if_err,
-    ffi::{c_abi_extends_narrow_integers, CSignature},
+    ffi::{c_abi_extends_narrow_integers, CNumericTypes, CSignature},
     fixstd::runtime::{
         build_runtime, compiler_defined_c_function_reason, BuildMode, RUNTIME_ABORT,
         RUNTIME_GET_ARGC,
     },
     generator::{enum_attribute_kind_id, Generator},
     misc::function_name,
+    target_triple::build_target_triple,
     tests::test_util::{
         compile_c_object, emitted_llvm_ir, fix_command, standalone_generator, test_source,
-        test_source_fail, test_source_with_c, EmittedIr,
+        test_source_fail, test_source_with_c, test_source_with_c_under, EmittedIr,
     },
 };
-use inkwell::{
-    attributes::AttributeLoc,
-    context::Context,
-    targets::{TargetMachine, TargetTriple},
-};
+use inkwell::{attributes::AttributeLoc, context::Context, targets::TargetTriple};
 use std::{
     fs::{self, File},
     io::Write,
     path::PathBuf,
 };
+use tempfile::TempDir;
 
 // An exported function exchanges values with C through the C ABI, and the wrapper the compiler
 // generates for it passes every argument and the result by value in the LLVM type Fix uses
@@ -212,7 +210,7 @@ pub fn test_narrow_integer_extension_attribute_follows_the_host_abi() {
     // `-O none` compiles the program as several modules, and the wrappers are spread over them.
     let ir = emitted_llvm_ir(&work_dir, EmittedIr::BeforeOptimization);
 
-    let host_triple = TargetMachine::get_default_triple();
+    let host_triple = build_target_triple();
     let (signext, zeroext) =
         if c_abi_extends_narrow_integers(&host_triple.as_str().to_string_lossy()) {
             (" signext", " zeroext")
@@ -394,6 +392,201 @@ pub fn test_c_abi_extends_narrow_integers_under_each_spelling() {
     ] {
         assert_eq!(c_abi_extends_narrow_integers(triple), extends, "{}", triple);
     }
+}
+
+/// `CNumericTypes::of_target` agrees with what clang 22 predefines on each triple:
+/// `__CHAR_UNSIGNED__` where plain `char` is listed as unsigned, and `__SIZEOF_LONG__` as the width
+/// of `long`. The triples cover each spelling LLVM gives the architectures with an unsigned `char`,
+/// each operating system that changes either answer, and architectures with a signed `char` beyond
+/// the two the compiler knows the ABI of.
+#[test]
+pub fn test_c_numeric_types_follow_clang_on_each_target() {
+    for (triple, char_is_signed, long_bits) in [
+        ("x86_64-unknown-linux-gnu", true, 64),
+        ("x86_64-unknown-freebsd", true, 64),
+        ("x86_64-apple-darwin", true, 64),
+        ("x86_64-pc-windows-msvc", true, 32),
+        ("x86_64-w64-mingw32", true, 32),
+        ("x86_64-pc-cygwin", true, 64),
+        ("x86_64-unknown-uefi", true, 32),
+        ("x86_64-pc-windows-cygnus1", true, 64),
+        ("x86_64-pc-uefi1", true, 32),
+        ("aarch64-unknown-linux-gnu", false, 64),
+        ("arm64-unknown-linux-gnu", false, 64),
+        ("aarch64_lfi-unknown-linux-gnu", false, 64),
+        ("aarch64_be-unknown-linux-gnu", false, 64),
+        ("aarch64_be-apple-darwin", true, 64),
+        ("aarch64-unknown-freebsd", false, 64),
+        ("aarch64-linux-android", false, 64),
+        ("aarch64-unknown-none", false, 64),
+        ("arm64-apple-darwin23.0.0", true, 64),
+        ("aarch64-apple-ios", true, 64),
+        ("aarch64-pc-windows-msvc", true, 32),
+        ("aarch64-pc-windows-cygnus", true, 32),
+        ("arm64ec-pc-windows-msvc", true, 32),
+        ("powerpc64-unknown-linux-gnu", false, 64),
+        ("ppc64-unknown-linux-gnu", false, 64),
+        ("ppu-unknown-linux-gnu", false, 64),
+        ("powerpc64-ibm-aix", false, 64),
+        ("powerpc64-unknown-freebsd", false, 64),
+        ("powerpc64le-unknown-linux-gnu", false, 64),
+        ("ppc64le-unknown-linux-gnu", false, 64),
+        ("riscv64-unknown-linux-gnu", false, 64),
+        ("s390x-unknown-linux-gnu", false, 64),
+        ("systemz-unknown-linux", false, 64),
+        ("loongarch64-unknown-linux-gnu", true, 64),
+        ("sparcv9-unknown-linux-gnu", true, 64),
+        ("mips64el-unknown-linux-gnuabi64", true, 64),
+        ("wasm64-unknown-unknown", true, 64),
+    ] {
+        let types = CNumericTypes::of_target(triple);
+        assert_eq!(
+            (types.char_is_signed, types.long_bits),
+            (char_is_signed, long_bits),
+            "the sign of plain `char` and the width of `long` on {}",
+            triple
+        );
+    }
+}
+
+/// The C numeric types the compiler gives the host agree with the ones the host's C compiler uses:
+/// converting -1 to each unsigned C type gives the largest value C gives that type, converting -1
+/// to `CChar` gives a negative number exactly where C's plain `char` is signed, and `CFloat` and
+/// `CDouble` are as wide as C's `float` and `double`.
+#[test]
+pub fn test_c_numeric_types_of_the_host_agree_with_its_c_compiler() {
+    let source = r##"
+        module Main;
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"char sign", (-1).c_char.i64 < 0, FFI_CALL[CInt c_char_is_signed()] != 0.c_int);;
+            assert_eq(|_|"unsigned char", (-1).c_unsigned_char.u64, FFI_CALL[U64 c_uchar_max()]);;
+            assert_eq(|_|"unsigned short", (-1).c_unsigned_short.u64, FFI_CALL[U64 c_ushort_max()]);;
+            assert_eq(|_|"unsigned int", (-1).c_unsigned_int.u64, FFI_CALL[U64 c_uint_max()]);;
+            assert_eq(|_|"unsigned long", (-1).c_unsigned_long.u64, FFI_CALL[U64 c_ulong_max()]);;
+            assert_eq(|_|"unsigned long long", (-1).c_unsigned_long_long.u64, FFI_CALL[U64 c_ullong_max()]);;
+            assert_eq(|_|"size_t", (-1).c_size_t.u64, FFI_CALL[U64 c_size_max()]);;
+            let _ : F32 = 0.0.c_float;
+            let _ : F64 = 0.0.c_double;
+            assert_eq(|_|"float", FFI_CALL[CInt c_float_bits()], 32.c_int);;
+            assert_eq(|_|"double", FFI_CALL[CInt c_double_bits()], 64.c_int);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        #include <limits.h>
+        #include <stdint.h>
+
+        int c_char_is_signed(void) { return (char)-1 < 0; }
+        unsigned long long c_uchar_max(void) { return UCHAR_MAX; }
+        unsigned long long c_ushort_max(void) { return USHRT_MAX; }
+        unsigned long long c_uint_max(void) { return UINT_MAX; }
+        unsigned long long c_ulong_max(void) { return ULONG_MAX; }
+        unsigned long long c_ullong_max(void) { return ULLONG_MAX; }
+        unsigned long long c_size_max(void) { return SIZE_MAX; }
+        int c_float_bits(void) { return sizeof(float) * CHAR_BIT; }
+        int c_double_bits(void) { return sizeof(double) * CHAR_BIT; }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
+}
+
+/// `Std::FFI::CChar` is an alias of `I8` where plain `char` is signed and of `U8` where it is
+/// unsigned, so converting -1 to it gives -1 on the first kind of target and 255 on the second.
+/// The configuration is given each kind's C numeric types, so a host of either kind checks both.
+#[test]
+pub fn test_cchar_takes_the_sign_of_plain_char() {
+    for (triple, fix_type, value) in [
+        ("x86_64-unknown-linux-gnu", "I8", -1),
+        ("aarch64-unknown-linux-gnu", "U8", 255),
+    ] {
+        let source = format!(
+            r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let c : {} = (-1).c_char;
+                assert_eq(|_|"", c.i64, {});;
+                pure()
+            );
+            "#,
+            fix_type, value
+        );
+        let mut config = Configuration::develop_mode();
+        config.c_numeric_types = CNumericTypes::of_target(triple);
+        test_source(&source, config);
+    }
+}
+
+/// A `char` that a C function returns through `FFI_CALL[CChar ...]` is read with the sign of plain
+/// `char`: -56 stays -56 where it is signed, and 200 stays 200 where it is unsigned. The
+/// configuration is given each kind's C numeric types, and the C function returns a `signed char`
+/// or an `unsigned char` accordingly, so a host of either kind checks both.
+#[test]
+pub fn test_ffi_call_returning_cchar_takes_the_sign_of_plain_char() {
+    for (triple, c_function, value) in [
+        ("x86_64-unknown-linux-gnu", "c_signed_char", -56),
+        ("aarch64-unknown-linux-gnu", "c_unsigned_char", 200),
+    ] {
+        let source = format!(
+            r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let c = FFI_CALL[CChar {}()];
+                assert_eq(|_|"", c.i64, {});;
+                pure()
+            );
+            "#,
+            c_function, value
+        );
+        let c_source = r#"
+            signed char c_signed_char(void) { return (signed char)-56; }
+            unsigned char c_unsigned_char(void) { return (unsigned char)200; }
+        "#;
+        let mut config = Configuration::develop_mode();
+        config.c_numeric_types = CNumericTypes::of_target(triple);
+        test_source_with_c_under(
+            &source,
+            c_source,
+            &format!("{}_{}", function_name!(), triple),
+            config,
+        );
+    }
+}
+
+/// The C numeric types follow the target alone: a `.fixlang/c_types.json` left in the project by an
+/// earlier version of `fix`, recording a 64-bit `int`, leaves `CInt` 32 bits wide.
+#[test]
+pub fn test_c_numeric_types_ignore_a_c_types_json_left_in_the_project() {
+    let temp = TempDir::new().expect("Failed to create temp directory");
+    let work_dir = temp.path();
+    fs::create_dir_all(work_dir.join(".fixlang")).unwrap();
+    // `4294967296` is `2^32`, so what `c_int` answers with says how wide a C `int` is.
+    fs::write(
+        work_dir.join("main.fix"),
+        "module Main;\n\nmain : IO ();\nmain = println $ 4294967296.c_int.i64.to_string;\n",
+    )
+    .unwrap();
+    fs::write(
+        work_dir.join(".fixlang/c_types.json"),
+        r#"{"char": 8, "short": 16, "int": 64, "long": 64, "long_long": 64, "size_t": 64, "float": 32, "double": 64}"#,
+    )
+    .unwrap();
+
+    let output = fix_command()
+        .args(["run", "--file", "main.fix"])
+        .current_dir(work_dir)
+        .output()
+        .unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "0",
+        "a 32-bit C `int` holds none of 2^32; stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 /// A boxed value returned to the foreign language arrives as an opaque pointer carrying one

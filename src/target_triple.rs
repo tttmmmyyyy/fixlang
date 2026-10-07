@@ -9,6 +9,13 @@
 
 use inkwell::targets::{TargetMachine, TargetTriple};
 
+/// The target triple the compiler builds for: the default triple of the LLVM it links, which names
+/// the machine the compiler runs on. The code the compiler generates and the C numeric types the
+/// program is checked against both follow this triple.
+pub fn build_target_triple() -> TargetTriple {
+    TargetMachine::get_default_triple()
+}
+
 /// The architectures whose ABI the compiler knows.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Architecture {
@@ -63,6 +70,32 @@ pub fn target_is_darwin(triple: &str) -> bool {
 pub fn target_is_windows(triple: &str) -> bool {
     let os = normalized_part(triple, 2);
     os.starts_with("windows") || os.starts_with("win32")
+}
+
+/// Whether a target triple names Cygwin, whose environment LLVM names `cygnus` under the operating
+/// system `windows`.
+///
+/// # Examples
+/// `x86_64-pc-cygwin` and `x86_64-pc-windows-cygnus` do; `x86_64-w64-mingw32` does not.
+pub fn target_is_cygwin(triple: &str) -> bool {
+    normalized_part(triple, 3).starts_with("cygnus")
+}
+
+/// Whether a target triple names UEFI firmware as its operating system.
+///
+/// # Examples
+/// `x86_64-unknown-uefi` does; `x86_64-pc-windows-msvc` does not.
+pub fn target_is_uefi(triple: &str) -> bool {
+    normalized_part(triple, 2).starts_with("uefi")
+}
+
+/// The architecture part of a target triple, spelled as the triple spells it, for a rule that tells
+/// apart architectures `Architecture` gathers into `Other`.
+///
+/// # Examples
+/// `powerpc64le-linux-gnu` gives `powerpc64le`, and `arm64-apple-darwin23.0.0` gives `arm64`.
+pub fn architecture_name_of_target(triple: &str) -> String {
+    normalized_part(triple, 0)
 }
 
 /// The part at `index` of a target triple after LLVM normalizes it, and the empty string where the

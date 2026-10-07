@@ -1,9 +1,6 @@
 use crate::ast::name::FullName;
 use crate::build::cpu_features::{CpuFeatures, HostCpu, ValgrindCpu};
 use crate::constants::{
-    CHECK_C_TYPES_PATH, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME,
-    C_LONG_NAME, C_SHORT_NAME, C_SIZE_T_NAME, C_TYPES_JSON_PATH, C_UNSIGNED_CHAR_NAME,
-    C_UNSIGNED_INT_NAME, C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME,
     DEFAULT_COMPILATION_UNIT_SIZE, MAIN_FUNCTION_NAME, MAIN_MODULE_NAME, MAX_SPLIT_SCALARS,
     OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX,
     OPTIMIZATION_LEVEL_NONE, TEST_FUNCTION_NAME, TEST_MODULE_NAME,
@@ -12,18 +9,18 @@ use crate::doc_test::ExampleBuild;
 use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
+use crate::ffi::CNumericTypes;
 use crate::hash::HashSource;
 use crate::metafiles::project_file::{ProjectName, ProjectOrigin};
 use crate::misc::{
     path_relative_to, platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg,
-    Finally, Map, Set,
+    Map, Set,
 };
 use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
+use crate::target_triple::build_target_triple;
 use build_time::build_time_utc;
 use inkwell::OptimizationLevel;
-use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::fs::{self, File};
 use std::iter;
 use std::process::Command;
 use std::sync::Arc;
@@ -527,9 +524,9 @@ pub struct Configuration {
     /// program that is built, so the project being built decides it, as it does the optimization
     /// level.
     pub sanitizer: Sanitizer,
-    /// The size of each C type on the target, read from the C compiler. The `Std::FFI` type
-    /// aliases such as `CChar` are defined from it.
-    pub c_type_sizes: CTypeSizes,
+    /// The C numeric types of the target, which the `Std::FFI` type aliases such as `CChar` are
+    /// defined from.
+    pub c_numeric_types: CNumericTypes,
     /// The CPU of the machine the compiler runs on. The build generates code for the CPU
     /// `target_cpu_name` and `target_cpu_features` derive from it, so the object files a build
     /// produces hold only instructions this CPU has.
@@ -649,8 +646,8 @@ impl FixOptimizationLevel {
 
 impl Configuration {
     /// The configuration a run of `subcommand` starts from, which the command line and the project
-    /// file then override. The optimization level comes from the environment and the C type sizes
-    /// from the C compiler; every other setting takes its default.
+    /// file then override. The optimization level comes from the environment and the C numeric
+    /// types from the target triple; every other setting takes its default.
     fn new(subcommand: SubCommand) -> Result<Self, Errors> {
         Ok(Configuration {
             subcommand,
@@ -677,7 +674,9 @@ impl Configuration {
             valgrind_tool: ValgrindTool::None,
             sanitizer: Sanitizer::None,
             library_search_paths: vec![],
-            c_type_sizes: CTypeSizes::load_or_check()?,
+            c_numeric_types: CNumericTypes::of_target(
+                &build_target_triple().as_str().to_string_lossy(),
+            ),
             host_cpu: HostCpu::of_this_machine(),
             disable_cpu_features_regex: vec![],
             llvm_args: vec![],
@@ -1078,7 +1077,7 @@ impl Configuration {
         let Configuration {
             // What the compiler makes the program out of. Each is pushed below, into the hash of
             // every cache that has to tell it apart.
-            c_type_sizes,
+            c_numeric_types,
             fix_opt_level,
             debug_info,
             compilation_directory,
@@ -1151,11 +1150,11 @@ impl Configuration {
         let mut object_generation = HashSource::default();
         let mut runtime_object = HashSource::default();
 
-        // The sizes of the C types decide the Fix type the parser gives a `CInt` in an `FFI_CALL`
+        // The C numeric types decide the Fix type the parser gives a `CInt` in an `FFI_CALL`
         // signature, and the compiler builds the trait implementations converting to a C type from
         // them as data, so they reach the elaborated program and the code generated from it alike.
-        elaboration.push_text(&c_type_sizes.to_string());
-        object_generation.push_text(&c_type_sizes.to_string());
+        elaboration.push_text(&c_numeric_types.to_string());
+        object_generation.push_text(&c_numeric_types.to_string());
 
         object_generation.push_text(&fix_opt_level.to_string());
         object_generation.push_text(&debug_info.to_string());
@@ -1441,254 +1440,6 @@ impl Configuration {
     }
 }
 
-/// The width of each C numeric type, in bits, on the machine the compiler runs on.
-///
-/// A width decides which Fix type the C type is an alias of, so it reaches the elaborated program
-/// without passing through any source; `Configuration::elaboration_hash` carries it for that reason.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct CTypeSizes {
-    /// The width of `char` and of `unsigned char`, which is also the unit C measures a type's size
-    /// in.
-    pub char: usize,
-    /// The width of `short` and of `unsigned short`.
-    pub short: usize,
-    /// The width of `int` and of `unsigned int`.
-    pub int: usize,
-    /// The width of `long` and of `unsigned long`.
-    pub long: usize,
-    /// The width of `long long` and of `unsigned long long`.
-    pub long_long: usize,
-    /// The width of `size_t`, which is unsigned.
-    pub size_t: usize,
-    /// The width of `float`.
-    pub float: usize,
-    /// The width of `double`.
-    pub double: usize,
-}
-
-impl CTypeSizes {
-    /// The C numeric types, each paired with the sign and the bit width of the Fix type it is an
-    /// alias of. The name built from those two must be one of `C_SCALAR_NAMES`, which is the set
-    /// `TyCon::get_c_type` can map.
-    pub fn get_c_types(&self) -> Vec<(&str, &str, usize)> {
-        vec![
-            (C_CHAR_NAME, "I", self.char),
-            (C_UNSIGNED_CHAR_NAME, "U", self.char),
-            (C_SHORT_NAME, "I", self.short),
-            (C_UNSIGNED_SHORT_NAME, "U", self.short),
-            (C_INT_NAME, "I", self.int),
-            (C_UNSIGNED_INT_NAME, "U", self.int),
-            (C_LONG_NAME, "I", self.long),
-            (C_UNSIGNED_LONG_NAME, "U", self.long),
-            (C_LONG_LONG_NAME, "I", self.long_long),
-            (C_UNSIGNED_LONG_LONG_NAME, "U", self.long_long),
-            (C_SIZE_T_NAME, "U", self.size_t),
-            (C_FLOAT_NAME, "F", self.float),
-            (C_DOUBLE_NAME, "F", self.double),
-        ]
-    }
-
-    /// The size of each C type, named and written out, so that sizes differing anywhere produce
-    /// different text.
-    fn to_string(&self) -> String {
-        vec![
-            format!("char: {}", self.char),
-            format!("short: {}", self.short),
-            format!("int: {}", self.int),
-            format!("long: {}", self.long),
-            format!("long long: {}", self.long_long),
-            format!("size_t: {}", self.size_t),
-            format!("float: {}", self.float),
-            format!("double: {}", self.double),
-        ]
-        .join(", ")
-    }
-
-    /// The widths of this machine's C types, measured by building a C program that prints each of
-    /// them with `gcc` and running it. The source and the executable are removed once the program
-    /// has run.
-    fn from_gcc() -> Result<Self, Errors> {
-        // First, create a C source file to check the size of each C types.
-        let c_source = r#"
-#include <stdio.h>
-#include <stddef.h>
-#include <limits.h>
-int main() {
-    printf("%lu\n", sizeof(char) * CHAR_BIT);
-    printf("%lu\n", sizeof(short) * CHAR_BIT);
-    printf("%lu\n", sizeof(int) * CHAR_BIT);
-    printf("%lu\n", sizeof(long) * CHAR_BIT);
-    printf("%lu\n", sizeof(long long) * CHAR_BIT);
-    printf("%lu\n", sizeof(size_t) * CHAR_BIT);
-    printf("%lu\n", sizeof(float) * CHAR_BIT);
-    printf("%lu\n", sizeof(double) * CHAR_BIT);
-    return 0;
-}
-        "#;
-        let mut finally = Finally::new();
-
-        // Then save it to a temporary file ".fixlang/check_c_types.{random_number}.c".
-        let check_c_types_path =
-            CHECK_C_TYPES_PATH.to_string() + &format!(".{}.c", rand::random::<u32>());
-        {
-            // Create parent folders
-            let check_c_types_path = PathBuf::from(check_c_types_path.clone());
-            let parent = check_c_types_path.parent().unwrap();
-            if let Err(e) = fs::create_dir_all(parent) {
-                return Err(Errors::from_msg(format!(
-                    "Failed to create directory \"{}\": {}",
-                    parent.to_string_lossy().to_string(),
-                    e
-                )));
-            }
-
-            let check_c_types_path_clone = check_c_types_path.clone();
-            finally.defer(move || {
-                let _ = fs::remove_file(&check_c_types_path_clone);
-            });
-
-            // Write the C source to the file.
-            if let Err(e) = fs::write(&check_c_types_path, c_source) {
-                return Err(Errors::from_msg(format!(
-                    "Failed to write file \"{}\": {}",
-                    check_c_types_path.to_string_lossy().to_string(),
-                    e
-                )));
-            }
-        }
-
-        // Build the program to an executable file ".fixlang/check_c_types.out.{random_number}".
-        let check_c_types_exec_path =
-            CHECK_C_TYPES_PATH.to_string() + &format!(".{}.out", rand::random::<u32>());
-
-        let check_c_types_exec_path_clone = check_c_types_exec_path.clone();
-        finally.defer(move || {
-            let _ = fs::remove_file(&check_c_types_exec_path_clone);
-        });
-
-        let compile_output = Command::new("gcc")
-            .arg(check_c_types_path.clone())
-            .arg("-o")
-            .arg(check_c_types_exec_path.clone())
-            .output();
-        if let Err(e) = compile_output {
-            return Err(Errors::from_msg(format!(
-                "Failed to compile \"{}\": {}.",
-                check_c_types_path, e
-            )));
-        }
-        let compile_output = compile_output.unwrap();
-
-        // Run the program and parse the result to create CTypeSizes.
-        if !compile_output.status.success() {
-            return Err(Errors::from_msg(format!(
-                "Failed to compile \"{}\": \"{}\".",
-                check_c_types_path,
-                String::from_utf8_lossy(&compile_output.stderr)
-            )));
-        }
-        let run_output = Command::new(check_c_types_exec_path.clone()).output();
-        if let Err(e) = run_output {
-            return Err(Errors::from_msg(format!(
-                "Failed to run \"{}\": {}.",
-                check_c_types_exec_path, e
-            )));
-        }
-        let run_output = run_output.unwrap();
-        if !run_output.status.success() {
-            return Err(Errors::from_msg(format!(
-                "Failed to run \"{}\": \"{}\".",
-                check_c_types_exec_path,
-                String::from_utf8_lossy(&run_output.stderr)
-            )));
-        }
-        let stdout = String::from_utf8_lossy(&run_output.stdout);
-        let mut lines = stdout.lines();
-        // The program prints one size per line, in the order the fields are read here.
-        let mut next_size = || -> usize { lines.next().unwrap().parse().unwrap() };
-        let char = next_size();
-        let short = next_size();
-        let int = next_size();
-        let long = next_size();
-        let long_long = next_size();
-        let size_t = next_size();
-        let float = next_size();
-        let double = next_size();
-        let sizes = CTypeSizes {
-            char,
-            short,
-            int,
-            long,
-            long_long,
-            size_t,
-            float,
-            double,
-        };
-        Ok(sizes)
-    }
-
-    /// Write these sizes as JSON to `C_TYPES_JSON_PATH`, from where a later compiler run reads them
-    /// back.
-    fn save_to_file(&self) -> Result<(), Errors> {
-        // Open json file.
-        let path = C_TYPES_JSON_PATH;
-        let file = File::create(path);
-        if let Err(e) = file {
-            return Err(Errors::from_msg(format!(
-                "Failed to create \"{}\": {}",
-                path, e
-            )));
-        }
-        let file = file.unwrap();
-
-        // Serialize and write to the file.
-        if let Err(e) = serde_json::to_writer_pretty(file, self) {
-            return Err(Errors::from_msg(format!(
-                "Failed to write \"{}\": {}",
-                path, e
-            )));
-        }
-        Ok(())
-    }
-
-    /// The widths saved at `C_TYPES_JSON_PATH`. A file that cannot be opened or parsed is reported
-    /// as a warning and answered as `None`, so a caller can measure the widths afresh.
-    fn load_file() -> Option<Self> {
-        let path = PathBuf::from(C_TYPES_JSON_PATH);
-        if !path.exists() {
-            return None;
-        }
-        let file = File::open(path);
-        if file.is_err() {
-            warn_msg(&format!("Failed to open \"{}\".", C_TYPES_JSON_PATH));
-            return None;
-        }
-        let file = file.unwrap();
-        let sizes = serde_json::from_reader(file);
-        if sizes.is_err() {
-            warn_msg(&format!(
-                "Failed to parse the content of \"{}\".",
-                C_TYPES_JSON_PATH
-            ));
-            return None;
-        }
-        Some(sizes.unwrap())
-    }
-
-    /// The widths of this machine's C types: the ones saved at `C_TYPES_JSON_PATH`, or, where none
-    /// are saved there, the ones measured and then saved for a later run.
-    fn load_or_check() -> Result<Self, Errors> {
-        match Self::load_file() {
-            Some(sizes) => Ok(sizes),
-            None => {
-                let sizes = Self::from_gcc()?;
-                sizes.save_to_file()?;
-                Ok(sizes)
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
@@ -1812,8 +1563,8 @@ mod tests {
             |config| config.elaboration_hash(),
             "the elaborated program",
             vec![(
-                "c_type_sizes",
-                Box::new(|config: &mut Configuration| config.c_type_sizes.long += 1),
+                "c_numeric_types",
+                Box::new(|config: &mut Configuration| config.c_numeric_types.long_bits += 1),
             )],
         );
     }
@@ -1892,8 +1643,8 @@ mod tests {
                 Box::new(|config: &mut Configuration| config.max_split_scalars += 1),
             ),
             (
-                "c_type_sizes",
-                Box::new(|config: &mut Configuration| config.c_type_sizes.long += 1),
+                "c_numeric_types",
+                Box::new(|config: &mut Configuration| config.c_numeric_types.long_bits += 1),
             ),
             (
                 "disable_cpu_features_regex",

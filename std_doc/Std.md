@@ -6680,53 +6680,79 @@ The type of 8-bit unsinged integers.
 
 Defined as: `type CChar = Std::I8`
 
+C's `char`, with the sign `char` has on the target: `I8` on x86-64 and on macOS, and `U8` on Linux on arm64.
+
 #### CDouble
 
 Defined as: `type CDouble = Std::F64`
+
+C's `double`.
 
 #### CFloat
 
 Defined as: `type CFloat = Std::F32`
 
+C's `float`.
+
 #### CInt
 
 Defined as: `type CInt = Std::I32`
+
+C's `int`.
 
 #### CLong
 
 Defined as: `type CLong = Std::I64`
 
+C's `long`, which is `I64` on Linux and macOS.
+
 #### CLongLong
 
 Defined as: `type CLongLong = Std::I64`
+
+C's `long long`.
 
 #### CShort
 
 Defined as: `type CShort = Std::I16`
 
+C's `short`.
+
 #### CSizeT
 
 Defined as: `type CSizeT = Std::U64`
+
+C's `size_t`.
 
 #### CUnsignedChar
 
 Defined as: `type CUnsignedChar = Std::U8`
 
+C's `unsigned char`.
+
 #### CUnsignedInt
 
 Defined as: `type CUnsignedInt = Std::U32`
+
+C's `unsigned int`.
 
 #### CUnsignedLong
 
 Defined as: `type CUnsignedLong = Std::U64`
 
+C's `unsigned long`, which is `U64` on Linux and macOS.
+
 #### CUnsignedLongLong
 
 Defined as: `type CUnsignedLongLong = Std::U64`
 
+C's `unsigned long long`.
+
 #### CUnsignedShort
 
 Defined as: `type CUnsignedShort = Std::U16`
+
+C's `unsigned short`.
 
 #### Destructor
 

@@ -2346,6 +2346,7 @@ consumed_time_while_io = |io| (
 - ポインタ：`Ptr`
 - 明示的なビット幅を持つ数値型：`I8`、`U8`、`I16`、`U16`、`I32`、`U32`、`I64`、`U64`、`F32`、`F64`
 - Cの数値型：`CChar`、`CUnsignedChar`、`CShort`、`CUnsignedShort`、`CInt`、`CUnsignedInt`、`CLong`、`CUnsignedLong`、`CLongLong`、`CUnsignedLongLong`、`CSizeT`、`CFloat`、`CDouble`
+    - それぞれ、ターゲット上で幅と符号が一致する、上に挙げた数値型の別名です。`CChar`の符号は、Cの（`signed`も`unsigned`も付かない）`char`と同じです。x86-64とmacOSでは`I8`、arm64のLinuxでは`U8`になります。`CLong`は、LinuxとmacOSでは`I64`です。
 - `void`の代わり：`()`。`<return_type>`に使えます。`<arg_type_i>`に与えるとエラーになります。
 
 FFIは128ビット整数型の`I128`と`U128`をサポートしないため、どちらの位置にも使えません。このような値は、下位64ビットと上位64ビットの2つの`U64`に分けて渡してください。
