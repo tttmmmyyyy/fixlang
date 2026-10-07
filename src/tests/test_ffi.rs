@@ -5,7 +5,7 @@ use crate::{
     constants::{COMPILER_TEST_WORKING_PATH, C_ENTRY_POINT_NAME, I8_NAME, STD_NAME, U16_NAME},
     elaboration::elaborate_via_config,
     error::panic_if_err,
-    ffi::{c_abi_extends_narrow_integers, CSignature},
+    ffi::{c_abi_extends_narrow_integers, CNumericTypes, CSignature},
     fixstd::runtime::{
         build_runtime, compiler_defined_c_function_reason, BuildMode, RUNTIME_ABORT,
         RUNTIME_GET_ARGC,
@@ -26,6 +26,7 @@ use std::{
     fs::{self, File},
     io::Write,
     path::PathBuf,
+    process::Command,
 };
 
 // An exported function exchanges values with C through the C ABI, and the wrapper the compiler
@@ -393,6 +394,149 @@ pub fn test_c_abi_extends_narrow_integers_under_each_spelling() {
         ("aarch64", false),
     ] {
         assert_eq!(c_abi_extends_narrow_integers(triple), extends, "{}", triple);
+    }
+}
+
+/// The answer agrees with what clang 22 predefines on each triple: `__CHAR_UNSIGNED__` where plain
+/// `char` is listed as unsigned, and `__SIZEOF_LONG__` as the width of `long`. The triples cover
+/// each spelling LLVM gives the architectures with an unsigned `char`, each operating system that
+/// changes either answer, and architectures with a signed `char` beyond the two the compiler knows
+/// the ABI of.
+#[test]
+pub fn test_c_numeric_types_follow_clang_on_each_target() {
+    for (triple, char_is_signed, long) in [
+        ("x86_64-unknown-linux-gnu", true, 64),
+        ("x86_64-unknown-freebsd", true, 64),
+        ("x86_64-apple-darwin", true, 64),
+        ("x86_64-pc-windows-msvc", true, 32),
+        ("x86_64-w64-mingw32", true, 32),
+        ("x86_64-pc-cygwin", true, 64),
+        ("x86_64-unknown-uefi", true, 32),
+        ("aarch64-unknown-linux-gnu", false, 64),
+        ("arm64-unknown-linux-gnu", false, 64),
+        ("aarch64_lfi-unknown-linux-gnu", false, 64),
+        ("aarch64_be-unknown-linux-gnu", false, 64),
+        ("aarch64-unknown-freebsd", false, 64),
+        ("aarch64-linux-android", false, 64),
+        ("aarch64-unknown-none", false, 64),
+        ("arm64-apple-darwin23.0.0", true, 64),
+        ("aarch64-apple-ios", true, 64),
+        ("aarch64-pc-windows-msvc", true, 32),
+        ("arm64ec-pc-windows-msvc", true, 32),
+        ("powerpc64-unknown-linux-gnu", false, 64),
+        ("ppc64-unknown-linux-gnu", false, 64),
+        ("ppu-unknown-linux-gnu", false, 64),
+        ("powerpc64-ibm-aix", false, 64),
+        ("powerpc64le-unknown-linux-gnu", false, 64),
+        ("ppc64le-unknown-linux-gnu", false, 64),
+        ("riscv64-unknown-linux-gnu", false, 64),
+        ("s390x-unknown-linux-gnu", false, 64),
+        ("systemz-unknown-linux", false, 64),
+        ("loongarch64-unknown-linux-gnu", true, 64),
+        ("sparcv9-unknown-linux-gnu", true, 64),
+        ("mips64el-unknown-linux-gnuabi64", true, 64),
+        ("wasm64-unknown-unknown", true, 64),
+    ] {
+        let types = CNumericTypes::of_target(triple);
+        assert_eq!(
+            (types.char_is_signed, types.long),
+            (char_is_signed, long),
+            "the sign of plain `char` and the width of `long` on {}",
+            triple
+        );
+    }
+}
+
+/// The C numeric types the compiler gives the host agree with the ones the host's C compiler uses.
+/// A C program built with `gcc` prints each width and the sign of plain `char`.
+#[test]
+pub fn test_c_numeric_types_of_the_host_agree_with_its_c_compiler() {
+    let work_dir = PathBuf::from(format!(
+        "{}/{}",
+        COMPILER_TEST_WORKING_PATH,
+        function_name!()
+    ));
+    let _ = fs::remove_dir_all(&work_dir);
+    fs::create_dir_all(&work_dir).unwrap();
+    let c_path = work_dir.join("c_numeric_types.c");
+    let exec_path = work_dir.join("c_numeric_types");
+    fs::write(
+        &c_path,
+        r#"
+#include <limits.h>
+#include <stddef.h>
+#include <stdio.h>
+int main(void) {
+    printf("%d %zu %zu %zu %zu %zu %zu %zu %zu\n", (char)-1 < 0,
+        sizeof(char) * CHAR_BIT, sizeof(short) * CHAR_BIT, sizeof(int) * CHAR_BIT,
+        sizeof(long) * CHAR_BIT, sizeof(long long) * CHAR_BIT, sizeof(size_t) * CHAR_BIT,
+        sizeof(float) * CHAR_BIT, sizeof(double) * CHAR_BIT);
+    return 0;
+}
+"#,
+    )
+    .unwrap();
+    let compiled = Command::new("gcc")
+        .arg(&c_path)
+        .arg("-o")
+        .arg(&exec_path)
+        .output()
+        .expect("Failed to run gcc.");
+    assert!(
+        compiled.status.success(),
+        "gcc failed:\n{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+    let run = Command::new(&exec_path)
+        .output()
+        .expect("Failed to run the C program.");
+    let printed = String::from_utf8_lossy(&run.stdout).trim().to_string();
+
+    let types = Configuration::develop_mode().c_numeric_types;
+    let expected = format!(
+        "{} {} {} {} {} {} {} {} {}",
+        types.char_is_signed as u8,
+        types.char,
+        types.short,
+        types.int,
+        types.long,
+        types.long_long,
+        types.size_t,
+        types.float,
+        types.double
+    );
+    assert_eq!(
+        printed, expected,
+        "the C compiler's sign of plain `char` and widths of `char`, `short`, `int`, `long`, \
+         `long long`, `size_t`, `float` and `double`, against the compiler's"
+    );
+}
+
+/// `Std::FFI::CChar` is an alias of `I8` where plain `char` is signed and of `U8` where it is
+/// unsigned, so converting -1 to it gives -1 on the first kind of target and 255 on the second.
+/// The configuration is given each kind's C numeric types, so a host of either kind checks both.
+#[test]
+pub fn test_cchar_takes_the_sign_of_plain_char() {
+    for (triple, fix_type, value) in [
+        ("x86_64-unknown-linux-gnu", "I8", -1),
+        ("aarch64-unknown-linux-gnu", "U8", 255),
+    ] {
+        let source = format!(
+            r#"
+            module Main;
+
+            main : IO ();
+            main = (
+                let c : {} = (-1).c_char;
+                assert_eq(|_|"", c.i64, {});;
+                pure()
+            );
+            "#,
+            fix_type, value
+        );
+        let mut config = Configuration::develop_mode();
+        config.c_numeric_types = CNumericTypes::of_target(triple);
+        test_source(&source, config);
     }
 }
 

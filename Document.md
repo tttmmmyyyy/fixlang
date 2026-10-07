@@ -2241,6 +2241,7 @@ The following types can be used for `{return_type}` or `{arg_type_i}`:
 * Pointers: `Ptr`
 * Numeric types with explicit bit widths: `I8`, `U8`, `I16`, `U16`, `I32`, `U32`, `I64`, `U64`, `F32`, `F64`
 * C numeric types: `CChar`, `CUnsignedChar`, `CShort`, `CUnsignedShort`, `CInt`, `CUnsignedInt`, `CLong`, `CUnsignedLong`, `CLongLong`, `CUnsignedLongLong`, `CSizeT`, `CFloat`, `CDouble`
+    - Each is an alias of the numeric type above of the same width and sign on the target. `CChar` has the sign of C's `char` written without `signed` or `unsigned`: it is `I8` on x86-64 and on macOS, and `U8` on Linux on arm64. `CLong` is `I64` on Linux and macOS.
 * Substitute for `void`: `()`, available as `{return_type}`. Giving it as an `{arg_type_i}` is an error.
 
 FFI does not support the 128-bit integer types `I128` and `U128`, so they are available in neither position. Pass such a value as two `U64`s, its low and its high 64 bits.

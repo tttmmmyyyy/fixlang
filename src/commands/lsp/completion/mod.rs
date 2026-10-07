@@ -327,8 +327,7 @@ fn tiers_in_parallel(
 /// → Tier 0 unify promotion.
 ///
 /// `tc_template` may be `None` if the scratch `Configuration` couldn't
-/// be built — e.g. the host environment can't satisfy
-/// `CTypeSizes::load_or_check`. In that case the unify-based promotion
+/// be built — e.g. the current directory can't be read. In that case the unify-based promotion
 /// is silently skipped and `assign_tier_no_unify` is used, leaving the
 /// ranking at the bucket-only Tier 1/2/3 level.
 struct DotRanking {

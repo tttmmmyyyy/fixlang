@@ -34,11 +34,12 @@ fn test_an_accessor_and_a_value_differing_only_in_punctuation_keep_their_own_bod
     test_source(&source, Configuration::develop_mode());
 }
 
-/// The size of a C type decides the Fix type the parser gives a `CInt` in an `FFI_CALL` signature,
+/// The C numeric types decide the Fix type the parser gives a `CInt` in an `FFI_CALL` signature,
 /// and the implementations converting to a C type that the compiler builds. Neither is written in
-/// any source, so the hash covers the sizes themselves.
+/// any source, so the hash covers the types themselves: the width of each, and the sign of plain
+/// `char`.
 #[test]
-fn test_the_module_dependency_hash_covers_the_c_type_sizes() {
+fn test_the_module_dependency_hash_covers_the_c_numeric_types() {
     let config = Configuration::develop_mode();
     let std_name = STD_NAME.to_string();
     let program = make_std_mod(&config)
@@ -50,20 +51,27 @@ fn test_the_module_dependency_hash_covers_the_c_type_sizes() {
     };
 
     let mut wider_int = config.clone();
-    wider_int.c_type_sizes.int = config.c_type_sizes.int * 2;
-
+    wider_int.c_numeric_types.int = config.c_numeric_types.int * 2;
     assert_ne!(
         hash_under(&config),
         hash_under(&wider_int),
         "a C `int` of another width gives the program other types, and the hash naming what the \
          program is checked from stayed where it was"
     );
+
+    let mut other_char_sign = config.clone();
+    other_char_sign.c_numeric_types.char_is_signed = !config.c_numeric_types.char_is_signed;
+    assert_ne!(
+        hash_under(&config),
+        hash_under(&other_char_sign),
+        "a plain `char` of the other sign gives the program other types, and the hash naming what \
+         the program is checked from stayed where it was"
+    );
 }
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::configuration::CTypeSizes;
-    use crate::constants::{C_TYPES_JSON_PATH, DOT_FIXLANG, TYPE_CHECK_CACHE_PATH};
+    use crate::constants::{DOT_FIXLANG, TYPE_CHECK_CACHE_PATH};
     use crate::tests::test_util::fix_command;
     use std::fs;
     use std::path::Path;
@@ -231,54 +239,6 @@ main = println("s");
                 stderr
             );
         }
-    }
-
-    /// The size of a C type reaches the checked program without passing through any source: the
-    /// parser gives an `FFI_CALL` signature the Fix type of the size recorded in
-    /// `.fixlang/c_types.json`, and the compiler builds the implementations converting to a C type
-    /// from that same record. A build that serves the entries of a build made under other sizes
-    /// therefore checks against a `CInt` the program no longer has, and the two disagree where the
-    /// conversion is applied.
-    #[test]
-    fn a_build_under_changed_c_type_sizes_rechecks_what_the_sizes_decide() {
-        let temp = TempDir::new().expect("Failed to create temp directory");
-        let dir = temp.path();
-        // `4294967296` is `2^32`, so what `c_int` answers with says how wide a C `int` is here.
-        fs::write(
-            dir.join("main.fix"),
-            r#"module Main;
-
-main : IO ();
-main = println $ 4294967296.c_int.i64.to_string;
-"#,
-        )
-        .expect("Failed to write main.fix");
-        let run = || {
-            let output = fix_command()
-                .args(["run", "--file", "main.fix"])
-                .current_dir(dir)
-                .output()
-                .expect("Failed to execute fix run");
-            String::from_utf8_lossy(&output.stdout).trim().to_string()
-        };
-        let set_c_int_size = |bits: usize| {
-            let path = dir.join(C_TYPES_JSON_PATH);
-            let file = fs::File::open(&path).expect("Failed to open the C type sizes");
-            let mut sizes: CTypeSizes =
-                serde_json::from_reader(file).expect("Failed to read the C type sizes");
-            sizes.int = bits;
-            let file = fs::File::create(&path).expect("Failed to create the C type sizes");
-            serde_json::to_writer_pretty(file, &sizes).expect("Failed to write the C type sizes");
-        };
-
-        assert_eq!(run(), "0", "a 32-bit C `int` holds none of 2^32");
-
-        set_c_int_size(64);
-        assert_eq!(
-            run(),
-            "4294967296",
-            "the run under a 64-bit C `int` was served a body checked against the 32-bit one"
-        );
     }
 
     /// Programs written one after another to a single file, each one a way a check can end: a

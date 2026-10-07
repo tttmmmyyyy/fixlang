@@ -2764,7 +2764,7 @@ fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Ty
         make_tuple_name_abs(0)
     } else {
         let mut name = pair.as_str().to_string();
-        for (c_type_name, sign, size) in ctx.config.c_type_sizes.get_c_types() {
+        for (c_type_name, sign, size) in ctx.config.c_numeric_types.get_c_types() {
             if c_type_name == pair.as_str() {
                 name = format!("{}{}", sign, size);
             }

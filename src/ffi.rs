@@ -10,13 +10,17 @@ use crate::ast::name::{FullName, Name};
 use crate::ast::program::TypeEnv;
 use crate::ast::types::{tycon, TyCon, TypeNode};
 use crate::constants::{
-    F32_NAME, F64_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME, PTR_NAME, STD_NAME, U16_NAME,
-    U32_NAME, U64_NAME, U8_NAME,
+    C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME, C_LONG_NAME,
+    C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
+    C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME, F32_NAME, F64_NAME,
+    I16_NAME, I32_NAME, I64_NAME, I8_NAME, PTR_NAME, STD_NAME, U16_NAME, U32_NAME, U64_NAME,
+    U8_NAME,
 };
 use crate::generator::Generator;
 use crate::object::int_type_of_bits;
 use crate::target_triple::{
-    architecture_of_target, target_is_darwin, target_is_windows, Architecture,
+    architecture_name_of_target, architecture_of_target, target_is_cygwin, target_is_darwin,
+    target_is_uefi, target_is_windows, Architecture,
 };
 use inkwell::attributes::AttributeLoc;
 use inkwell::context::Context;
@@ -107,6 +111,141 @@ pub fn c_abi_extends_narrow_integers(triple: &str) -> bool {
 /// The width holds for the targets Fix builds for; an ABI that extends a 32-bit integer to the width
 /// of a register — RISC-V 64 does — raises it.
 const C_INTEGER_UNIT_BITS: u32 = 32;
+
+/// The C numeric types of a target: the width of each in bits, and the sign of plain `char`.
+///
+/// They decide which Fix type each `Std::FFI` alias such as `CInt` is, so they reach the elaborated
+/// program without passing through any source; `Configuration::elaboration_hash` carries them for
+/// that reason.
+#[derive(Clone)]
+pub struct CNumericTypes {
+    /// Whether plain `char` is signed. `unsigned char` is unsigned on every target.
+    pub char_is_signed: bool,
+    /// The width of `char` and of `unsigned char`, which is also the unit C measures a type's size
+    /// in.
+    pub char: usize,
+    /// The width of `short` and of `unsigned short`.
+    pub short: usize,
+    /// The width of `int` and of `unsigned int`.
+    pub int: usize,
+    /// The width of `long` and of `unsigned long`.
+    pub long: usize,
+    /// The width of `long long` and of `unsigned long long`.
+    pub long_long: usize,
+    /// The width of `size_t`, which is unsigned.
+    pub size_t: usize,
+    /// The width of `float`.
+    pub float: usize,
+    /// The width of `double`.
+    pub double: usize,
+}
+
+impl CNumericTypes {
+    /// The C numeric types of `triple`, by clang's rules.
+    ///
+    /// The compiler builds for targets with 64-bit pointers (`Generator::ptr_size` asserts it), and
+    /// on those the C ABIs differ in two places only: the width of `long`
+    /// (`c_long_bits_of_target`) and the sign of plain `char` (`plain_char_is_signed_on_target`).
+    /// Every other type has the same width on all of them.
+    ///
+    /// # Examples
+    /// `x86_64-unknown-linux-gnu` has a signed `char` and a 64-bit `long`,
+    /// `aarch64-unknown-linux-gnu` an unsigned `char` and a 64-bit `long`, and
+    /// `x86_64-pc-windows-msvc` a signed `char` and a 32-bit `long`.
+    pub fn of_target(triple: &str) -> Self {
+        CNumericTypes {
+            char_is_signed: plain_char_is_signed_on_target(triple),
+            char: 8,
+            short: 16,
+            int: 32,
+            long: c_long_bits_of_target(triple),
+            long_long: 64,
+            size_t: 64,
+            float: 32,
+            double: 64,
+        }
+    }
+
+    /// The C numeric types, each paired with the sign and the bit width of the Fix type it is an
+    /// alias of. The name built from those two must be one of `C_SCALAR_NAMES`, which is the set
+    /// `TyCon::get_c_type` can map.
+    pub fn get_c_types(&self) -> Vec<(&str, &str, usize)> {
+        vec![
+            (
+                C_CHAR_NAME,
+                if self.char_is_signed { "I" } else { "U" },
+                self.char,
+            ),
+            (C_UNSIGNED_CHAR_NAME, "U", self.char),
+            (C_SHORT_NAME, "I", self.short),
+            (C_UNSIGNED_SHORT_NAME, "U", self.short),
+            (C_INT_NAME, "I", self.int),
+            (C_UNSIGNED_INT_NAME, "U", self.int),
+            (C_LONG_NAME, "I", self.long),
+            (C_UNSIGNED_LONG_NAME, "U", self.long),
+            (C_LONG_LONG_NAME, "I", self.long_long),
+            (C_UNSIGNED_LONG_LONG_NAME, "U", self.long_long),
+            (C_SIZE_T_NAME, "U", self.size_t),
+            (C_FLOAT_NAME, "F", self.float),
+            (C_DOUBLE_NAME, "F", self.double),
+        ]
+    }
+
+    /// Each C numeric type with the Fix type it is an alias of, written out, so that types
+    /// differing anywhere produce different text.
+    pub fn to_string(&self) -> String {
+        self.get_c_types()
+            .iter()
+            .map(|(name, sign, bits)| format!("{}: {}{}", name, sign, bits))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+/// Whether plain `char` is signed on `triple`, by clang's rule.
+///
+/// C leaves the sign to the ABI. Among the targets with 64-bit pointers, these make it unsigned:
+/// AArch64 of either byte order except on Apple's operating systems and on Windows, 64-bit PowerPC
+/// of either byte order, RISC-V 64 and SystemZ. Every other one makes it signed.
+///
+/// # Examples
+/// `x86_64-unknown-linux-gnu` and `arm64-apple-darwin23.0.0` have a signed `char`;
+/// `aarch64-unknown-linux-gnu` and `powerpc64le-unknown-linux-gnu` an unsigned one.
+pub fn plain_char_is_signed_on_target(triple: &str) -> bool {
+    match architecture_of_target(triple) {
+        Architecture::X86_64 => true,
+        Architecture::AArch64 => target_is_darwin(triple) || target_is_windows(triple),
+        Architecture::Other => !matches!(
+            architecture_name_of_target(triple).as_str(),
+            "aarch64_be"
+                | "powerpc64"
+                | "ppc64"
+                | "ppu"
+                | "powerpc64le"
+                | "ppc64le"
+                | "riscv64"
+                | "s390x"
+                | "systemz"
+        ),
+    }
+}
+
+/// The width of `long` in bits on `triple`, a target with 64-bit pointers, by clang's rule.
+///
+/// Windows and UEFI follow LLP64, where `long` is 32 bits wide. Every other target follows LP64,
+/// where it is 64 bits wide; Cygwin is one of them, though LLVM names its operating system
+/// `windows`.
+///
+/// # Examples
+/// `x86_64-pc-windows-msvc` and `x86_64-unknown-uefi` give 32; `x86_64-unknown-linux-gnu` and
+/// `x86_64-pc-cygwin` give 64.
+pub fn c_long_bits_of_target(triple: &str) -> usize {
+    if (target_is_windows(triple) && !target_is_cygwin(triple)) || target_is_uefi(triple) {
+        32
+    } else {
+        64
+    }
+}
 
 /// How a Fix type constructor crosses to C.
 impl TyCon {

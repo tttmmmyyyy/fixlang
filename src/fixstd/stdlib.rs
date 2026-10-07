@@ -126,7 +126,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     let mut errors = Errors::empty();
 
     // Add C types type aliases.
-    let c_types = config.c_type_sizes.get_c_types();
+    let c_types = config.c_numeric_types.get_c_types();
     for (name, sign, size) in &c_types {
         let fix_type = if *sign == "F" {
             make_floating_ty(&format!("{}{}", sign, size))
@@ -948,7 +948,7 @@ fn numeric_types_and_is_int() -> Vec<(Arc<TypeNode>, bool)> {
 /// warning.
 pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, Errors> {
     let numeric_types = numeric_types_and_is_int();
-    let c_types = config.c_type_sizes.get_c_types();
+    let c_types = config.c_numeric_types.get_c_types();
 
     // Source: trait declarations only. Each name carries whether the type it names is an integer
     // type, which decides whether the member's doc comment states how a floating-point value is

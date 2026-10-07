@@ -365,33 +365,6 @@ pub fn path_relative_to(target: &Path, base: &Path) -> PathBuf {
     relative
 }
 
-/// Works deferred to the moment this value is dropped, run latest first.
-pub struct Finally {
-    /// The works deferred so far, in the order they were deferred.
-    works: Vec<Box<dyn FnOnce()>>,
-}
-
-impl Finally {
-    /// A `Finally` with no work deferred.
-    pub fn new() -> Self {
-        Self { works: vec![] }
-    }
-
-    /// Defers `work` until this value is dropped.
-    pub fn defer<F: FnOnce() + 'static>(&mut self, work: F) {
-        self.works.push(Box::new(work));
-    }
-}
-
-impl Drop for Finally {
-    /// Runs the deferred works, latest first.
-    fn drop(&mut self) {
-        for work in self.works.drain(..).rev() {
-            work();
-        }
-    }
-}
-
 /// Turns off the color of every message the compiler prints, when its error output goes somewhere
 /// other than a terminal.
 pub fn disable_colored_no_tty() {
