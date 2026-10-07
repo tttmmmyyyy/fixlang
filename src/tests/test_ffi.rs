@@ -23,7 +23,6 @@ use std::{
     fs::{self, File},
     io::Write,
     path::PathBuf,
-    process::Command,
 };
 
 // An exported function exchanges values with C through the C ABI, and the wrapper the compiler
@@ -446,69 +445,46 @@ pub fn test_c_numeric_types_follow_clang_on_each_target() {
     }
 }
 
-/// The C numeric types the compiler gives the host agree with the ones the host's C compiler uses.
-/// A C program built with `gcc` prints each width and the sign of plain `char`.
+/// The C numeric types the compiler gives the host agree with the ones the host's C compiler uses:
+/// converting -1 to each unsigned C type gives the largest value C gives that type, converting -1
+/// to `CChar` gives a negative number exactly where C's plain `char` is signed, and `CFloat` and
+/// `CDouble` are as wide as C's `float` and `double`.
 #[test]
 pub fn test_c_numeric_types_of_the_host_agree_with_its_c_compiler() {
-    let work_dir = PathBuf::from(format!(
-        "{}/{}",
-        COMPILER_TEST_WORKING_PATH,
-        function_name!()
-    ));
-    let _ = fs::remove_dir_all(&work_dir);
-    fs::create_dir_all(&work_dir).unwrap();
-    let c_path = work_dir.join("c_numeric_types.c");
-    let exec_path = work_dir.join("c_numeric_types");
-    fs::write(
-        &c_path,
-        r#"
-#include <limits.h>
-#include <stddef.h>
-#include <stdio.h>
-int main(void) {
-    printf("%d %zu %zu %zu %zu %zu %zu %zu %zu\n", (char)-1 < 0,
-        sizeof(char) * CHAR_BIT, sizeof(short) * CHAR_BIT, sizeof(int) * CHAR_BIT,
-        sizeof(long) * CHAR_BIT, sizeof(long long) * CHAR_BIT, sizeof(size_t) * CHAR_BIT,
-        sizeof(float) * CHAR_BIT, sizeof(double) * CHAR_BIT);
-    return 0;
-}
-"#,
-    )
-    .unwrap();
-    let compiled = Command::new("gcc")
-        .arg(&c_path)
-        .arg("-o")
-        .arg(&exec_path)
-        .output()
-        .expect("Failed to run gcc.");
-    assert!(
-        compiled.status.success(),
-        "gcc failed:\n{}",
-        String::from_utf8_lossy(&compiled.stderr)
-    );
-    let run = Command::new(&exec_path)
-        .output()
-        .expect("Failed to run the C program.");
-    let printed = String::from_utf8_lossy(&run.stdout).trim().to_string();
+    let source = r##"
+        module Main;
 
-    let types = Configuration::develop_mode().c_numeric_types;
-    let expected = format!(
-        "{} {} {} {} {} {} {} {} {}",
-        types.char_is_signed as u8,
-        types.char_bits,
-        types.short_bits,
-        types.int_bits,
-        types.long_bits,
-        types.long_long_bits,
-        types.size_t_bits,
-        types.float_bits,
-        types.double_bits
-    );
-    assert_eq!(
-        printed, expected,
-        "the C compiler's sign of plain `char` and widths of `char`, `short`, `int`, `long`, \
-         `long long`, `size_t`, `float` and `double`, against the compiler's"
-    );
+        main : IO ();
+        main = (
+            assert_eq(|_|"char sign", (-1).c_char.i64 < 0, FFI_CALL[CInt c_char_is_signed()] != 0.c_int);;
+            assert_eq(|_|"unsigned char", (-1).c_unsigned_char.u64, FFI_CALL[U64 c_uchar_max()]);;
+            assert_eq(|_|"unsigned short", (-1).c_unsigned_short.u64, FFI_CALL[U64 c_ushort_max()]);;
+            assert_eq(|_|"unsigned int", (-1).c_unsigned_int.u64, FFI_CALL[U64 c_uint_max()]);;
+            assert_eq(|_|"unsigned long", (-1).c_unsigned_long.u64, FFI_CALL[U64 c_ulong_max()]);;
+            assert_eq(|_|"unsigned long long", (-1).c_unsigned_long_long.u64, FFI_CALL[U64 c_ullong_max()]);;
+            assert_eq(|_|"size_t", (-1).c_size_t.u64, FFI_CALL[U64 c_size_max()]);;
+            let _ : F32 = 0.0.c_float;
+            let _ : F64 = 0.0.c_double;
+            assert_eq(|_|"float", FFI_CALL[CInt c_float_bits()], 32.c_int);;
+            assert_eq(|_|"double", FFI_CALL[CInt c_double_bits()], 64.c_int);;
+            pure()
+        );
+    "##;
+    let c_source = r##"
+        #include <limits.h>
+        #include <stdint.h>
+
+        int c_char_is_signed(void) { return (char)-1 < 0; }
+        unsigned long long c_uchar_max(void) { return UCHAR_MAX; }
+        unsigned long long c_ushort_max(void) { return USHRT_MAX; }
+        unsigned long long c_uint_max(void) { return UINT_MAX; }
+        unsigned long long c_ulong_max(void) { return ULONG_MAX; }
+        unsigned long long c_ullong_max(void) { return ULLONG_MAX; }
+        unsigned long long c_size_max(void) { return SIZE_MAX; }
+        int c_float_bits(void) { return sizeof(float) * CHAR_BIT; }
+        int c_double_bits(void) { return sizeof(double) * CHAR_BIT; }
+    "##;
+    test_source_with_c(&source, &c_source, function_name!());
 }
 
 /// `Std::FFI::CChar` is an alias of `I8` where plain `char` is signed and of `U8` where it is
