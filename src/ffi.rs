@@ -27,6 +27,7 @@ use inkwell::context::Context;
 use inkwell::types::{BasicMetadataTypeEnum, BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue};
 use inkwell::AddressSpace;
+use std::fmt;
 use std::sync::Arc;
 
 /// How C carries a value: everything the declaration of a C function exchanging it says about it.
@@ -190,15 +191,19 @@ impl CNumericTypes {
             (C_DOUBLE_NAME, "F", self.double),
         ]
     }
+}
 
+impl fmt::Display for CNumericTypes {
     /// Each C numeric type with the Fix type it is an alias of, written out, so that types
     /// differing anywhere produce different text.
-    pub fn to_string(&self) -> String {
-        self.get_c_types()
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let text = self
+            .get_c_types()
             .iter()
             .map(|(name, sign, bits)| format!("{}: {}{}", name, sign, bits))
             .collect::<Vec<_>>()
-            .join(", ")
+            .join(", ");
+        write!(f, "{}", text)
     }
 }
 
@@ -211,7 +216,7 @@ impl CNumericTypes {
 /// # Examples
 /// `x86_64-unknown-linux-gnu` and `arm64-apple-darwin23.0.0` have a signed `char`;
 /// `aarch64-unknown-linux-gnu` and `powerpc64le-unknown-linux-gnu` an unsigned one.
-pub fn plain_char_is_signed_on_target(triple: &str) -> bool {
+fn plain_char_is_signed_on_target(triple: &str) -> bool {
     match architecture_of_target(triple) {
         Architecture::X86_64 => true,
         Architecture::AArch64 => target_is_darwin(triple) || target_is_windows(triple),
@@ -239,7 +244,7 @@ pub fn plain_char_is_signed_on_target(triple: &str) -> bool {
 /// # Examples
 /// `x86_64-pc-windows-msvc` and `x86_64-unknown-uefi` give 32; `x86_64-unknown-linux-gnu` and
 /// `x86_64-pc-cygwin` give 64.
-pub fn c_long_bits_of_target(triple: &str) -> usize {
+fn c_long_bits_of_target(triple: &str) -> usize {
     if (target_is_windows(triple) && !target_is_cygwin(triple)) || target_is_uefi(triple) {
         32
     } else {
