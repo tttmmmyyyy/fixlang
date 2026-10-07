@@ -1566,7 +1566,7 @@ mod tests {
             "the elaborated program",
             vec![(
                 "c_numeric_types",
-                Box::new(|config: &mut Configuration| config.c_numeric_types.long += 1),
+                Box::new(|config: &mut Configuration| config.c_numeric_types.long_bits += 1),
             )],
         );
     }
@@ -1646,7 +1646,7 @@ mod tests {
             ),
             (
                 "c_numeric_types",
-                Box::new(|config: &mut Configuration| config.c_numeric_types.long += 1),
+                Box::new(|config: &mut Configuration| config.c_numeric_types.long_bits += 1),
             ),
             (
                 "disable_cpu_features_regex",

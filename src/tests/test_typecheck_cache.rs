@@ -51,7 +51,7 @@ fn test_the_module_dependency_hash_covers_the_c_numeric_types() {
     };
 
     let mut wider_int = config.clone();
-    wider_int.c_numeric_types.int = config.c_numeric_types.int * 2;
+    wider_int.c_numeric_types.int_bits = config.c_numeric_types.int_bits * 2;
     assert_ne!(
         hash_under(&config),
         hash_under(&wider_int),

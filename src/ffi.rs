@@ -124,21 +124,21 @@ pub struct CNumericTypes {
     pub char_is_signed: bool,
     /// The width of `char` and of `unsigned char`, which is also the unit C measures a type's size
     /// in.
-    pub char: usize,
+    pub char_bits: usize,
     /// The width of `short` and of `unsigned short`.
-    pub short: usize,
+    pub short_bits: usize,
     /// The width of `int` and of `unsigned int`.
-    pub int: usize,
+    pub int_bits: usize,
     /// The width of `long` and of `unsigned long`.
-    pub long: usize,
+    pub long_bits: usize,
     /// The width of `long long` and of `unsigned long long`.
-    pub long_long: usize,
+    pub long_long_bits: usize,
     /// The width of `size_t`, which is unsigned.
-    pub size_t: usize,
+    pub size_t_bits: usize,
     /// The width of `float`.
-    pub float: usize,
+    pub float_bits: usize,
     /// The width of `double`.
-    pub double: usize,
+    pub double_bits: usize,
 }
 
 impl CNumericTypes {
@@ -156,14 +156,14 @@ impl CNumericTypes {
     pub fn of_target(triple: &str) -> Self {
         CNumericTypes {
             char_is_signed: c_plain_char_is_signed(triple),
-            char: 8,
-            short: 16,
-            int: 32,
-            long: c_long_bits_of_target(triple),
-            long_long: 64,
-            size_t: 64,
-            float: 32,
-            double: 64,
+            char_bits: 8,
+            short_bits: 16,
+            int_bits: 32,
+            long_bits: c_long_bits_of_target(triple),
+            long_long_bits: 64,
+            size_t_bits: 64,
+            float_bits: 32,
+            double_bits: 64,
         }
     }
 
@@ -175,20 +175,20 @@ impl CNumericTypes {
             (
                 C_CHAR_NAME,
                 if self.char_is_signed { "I" } else { "U" },
-                self.char,
+                self.char_bits,
             ),
-            (C_UNSIGNED_CHAR_NAME, "U", self.char),
-            (C_SHORT_NAME, "I", self.short),
-            (C_UNSIGNED_SHORT_NAME, "U", self.short),
-            (C_INT_NAME, "I", self.int),
-            (C_UNSIGNED_INT_NAME, "U", self.int),
-            (C_LONG_NAME, "I", self.long),
-            (C_UNSIGNED_LONG_NAME, "U", self.long),
-            (C_LONG_LONG_NAME, "I", self.long_long),
-            (C_UNSIGNED_LONG_LONG_NAME, "U", self.long_long),
-            (C_SIZE_T_NAME, "U", self.size_t),
-            (C_FLOAT_NAME, "F", self.float),
-            (C_DOUBLE_NAME, "F", self.double),
+            (C_UNSIGNED_CHAR_NAME, "U", self.char_bits),
+            (C_SHORT_NAME, "I", self.short_bits),
+            (C_UNSIGNED_SHORT_NAME, "U", self.short_bits),
+            (C_INT_NAME, "I", self.int_bits),
+            (C_UNSIGNED_INT_NAME, "U", self.int_bits),
+            (C_LONG_NAME, "I", self.long_bits),
+            (C_UNSIGNED_LONG_NAME, "U", self.long_bits),
+            (C_LONG_LONG_NAME, "I", self.long_long_bits),
+            (C_UNSIGNED_LONG_LONG_NAME, "U", self.long_long_bits),
+            (C_SIZE_T_NAME, "U", self.size_t_bits),
+            (C_FLOAT_NAME, "F", self.float_bits),
+            (C_DOUBLE_NAME, "F", self.double_bits),
         ]
     }
 }

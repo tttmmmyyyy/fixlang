@@ -404,7 +404,7 @@ pub fn test_c_abi_extends_narrow_integers_under_each_spelling() {
 /// the two the compiler knows the ABI of.
 #[test]
 pub fn test_c_numeric_types_follow_clang_on_each_target() {
-    for (triple, char_is_signed, long) in [
+    for (triple, char_is_signed, long_bits) in [
         ("x86_64-unknown-linux-gnu", true, 64),
         ("x86_64-unknown-freebsd", true, 64),
         ("x86_64-apple-darwin", true, 64),
@@ -441,8 +441,8 @@ pub fn test_c_numeric_types_follow_clang_on_each_target() {
     ] {
         let types = CNumericTypes::of_target(triple);
         assert_eq!(
-            (types.char_is_signed, types.long),
-            (char_is_signed, long),
+            (types.char_is_signed, types.long_bits),
+            (char_is_signed, long_bits),
             "the sign of plain `char` and the width of `long` on {}",
             triple
         );
@@ -498,14 +498,14 @@ int main(void) {
     let expected = format!(
         "{} {} {} {} {} {} {} {} {}",
         types.char_is_signed as u8,
-        types.char,
-        types.short,
-        types.int,
-        types.long,
-        types.long_long,
-        types.size_t,
-        types.float,
-        types.double
+        types.char_bits,
+        types.short_bits,
+        types.int_bits,
+        types.long_bits,
+        types.long_long_bits,
+        types.size_t_bits,
+        types.float_bits,
+        types.double_bits
     );
     assert_eq!(
         printed, expected,
