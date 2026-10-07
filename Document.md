@@ -99,7 +99,7 @@
     - [Registry file](#registry-file)
     - [Deprecation](#deprecation)
     - [Tests](#tests)
-        - [Fix examples in comments](#fix-examples-in-comments)
+        - [Fix examples in comments (Experimental)](#fix-examples-in-comments-experimental)
     - [Generating documentation](#generating-documentation)
     - [Language Server Protocol](#language-server-protocol)
         - [Specifying parameter list in the documentation comment as a hint to the language server](#specifying-parameter-list-in-the-documentation-comment-as-a-hint-to-the-language-server)
@@ -3256,13 +3256,15 @@ In the LSP, deprecation warnings are published with `DiagnosticSeverity.WARNING`
 
 ## Tests
 
-When you run `fix test`, it executes `Test::test : IO ()`, and then each Fix example (i.e., each code block marked `fix`) written in the comments (see [Fix examples in comments](#fix-examples-in-comments)).
+When you run `fix test`, it executes `Test::test : IO ()`, and then each Fix example (i.e., each code block marked `fix`) written in the comments (see [Fix examples in comments (Experimental)](#fix-examples-in-comments-experimental)).
 Also, at this time, the source files listed in the `build.test` section of the project file are compiled in addition to the source files listed in the `build` section.
 
 - `fix test --doc` runs the Fix examples alone, and `fix test --no-doc` runs `Test::test` alone.
 - `fix test` exits with a non-zero status if `Test::test` or an example fails.
 
-### Fix examples in comments
+### Fix examples in comments (Experimental)
+
+This feature is experimental, and its specification may change in a later version.
 
 A comment is read as Markdown, and a fenced code block in any comment whose info string begins with the word `fix` is a Fix example. `fix test` compiles and runs it. An example is usually written in the [documentation comment](#generating-documentation) of what it shows, where `fix docs` shows it too:
 
@@ -3341,7 +3343,7 @@ Marks after `fix`, separated by spaces, change what `fix test` does with an exam
 `fix docs` subcommand generates documentations (markdown files) for a Fix project.
 This command requires the project file to be present in the current directory.
 
-Consecutive line comments above declarations are recognized as documentations, and they are read as Markdown. A code block whose info string begins with the word `fix` is shown without its hidden lines (see [Fix examples in comments](#fix-examples-in-comments)):
+Consecutive line comments above declarations are recognized as documentations, and they are read as Markdown. A code block whose info string begins with the word `fix` is shown without its hidden lines (see [Fix examples in comments (Experimental)](#fix-examples-in-comments-experimental)):
 
 ```
 // This is a documentation comment for the module.

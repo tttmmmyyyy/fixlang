@@ -12,7 +12,7 @@
 
 #### Tool
 
-- #785: `fix test` now runs the Fix examples in comments, the code blocks whose info string begins with the word `fix`. An example passes when it exits with status 0. `fix test --doc` runs the examples alone, and `fix test --no-doc` runs `Test::test` alone. The module name `DocTest` and the module names beginning with `DocTest.` are now reserved for the examples: `fix test` rejects a module of such a name when it has an example to compile. See "Fix examples in comments" in `Document.md` for how to write an example.
+- #785: (Experimental) `fix test` now runs the Fix examples in comments, the code blocks whose info string begins with the word `fix`. An example passes when it exits with status 0. `fix test --doc` runs the examples alone, and `fix test --no-doc` runs `Test::test` alone. The module name `DocTest` and the module names beginning with `DocTest.` are now reserved for the examples: `fix test` rejects a module of such a name when it has an example to compile. See "Fix examples in comments (Experimental)" in `Document.md` for how to write an example.
 - #790: The language server offers two quick fixes for a struct pattern that leaves out fields without `_`: write each missing field as `name: _`, or write `_` after the fields.
 
 #### Std
