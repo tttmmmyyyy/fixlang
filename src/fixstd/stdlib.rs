@@ -6,16 +6,17 @@ use crate::{
         program::Program,
         qual_pred::QualPred,
         traits::{TraitId, TraitImpl},
-        typedecl::{TypeAlias, TypeDeclValue, TypeDefn},
         types::{type_fun, type_tycon, Scheme, TyCon, TypeNode},
     },
     configuration::Configuration,
     constants::{
         ARRAY_CHECK_RANGE, ARRAY_CHECK_SIZE, ARRAY_NAME, ARRAY_UNSAFE_EMPTY_NAME,
-        ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED, DESTRUCTOR_NAME, F32_NAME, F64_NAME, FFI_NAME,
-        HOLE_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME, IOSTATE_NAME, IO_NAME,
-        MARK_THREADED_NAME, PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME, U16_NAME, U32_NAME, U64_NAME,
-        U8_NAME, WITH_RETAINED_NAME,
+        ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED, C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME,
+        C_LONG_LONG_NAME, C_LONG_NAME, C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME,
+        C_UNSIGNED_INT_NAME, C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME,
+        C_UNSIGNED_SHORT_NAME, DESTRUCTOR_NAME, F32_NAME, F64_NAME, FFI_NAME, HOLE_NAME, I16_NAME,
+        I32_NAME, I64_NAME, I8_NAME, IOSTATE_NAME, IO_NAME, MARK_THREADED_NAME, PTR_NAME,
+        PUNCHED_ARRAY_NAME, STD_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME, WITH_RETAINED_NAME,
     },
     error::Errors,
     fixstd::builtin::{
@@ -125,28 +126,9 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
 
     let mut errors = Errors::empty();
 
-    // Add C types type aliases.
-    let c_types = config.c_numeric_types.get_c_types();
-    for (name, sign, size) in &c_types {
-        let fix_type = if *sign == "F" {
-            make_floating_ty(&format!("{}{}", sign, size))
-        } else {
-            make_integral_ty(&format!("{}{}", sign, size))
-        };
-        let fix_type = fix_type.unwrap_or_else(|| {
-            panic!(
-                "The C type `{}` is {} bits wide, which no Fix type has.",
-                name, size
-            )
-        });
-        fix_module.add_type_defns(vec![TypeDefn {
-            name: FullName::from_strs(&[STD_NAME, FFI_NAME], name),
-            value: TypeDeclValue::Alias(TypeAlias { value: fix_type }),
-            tyvars: vec![],
-            source: None,
-            name_src: None,
-        }]);
-    }
+    // Add the aliases of the C numeric types.
+    let c_numeric_type_aliases_mod = make_c_numeric_type_aliases_mod(config)?;
+    fix_module.link(c_numeric_type_aliases_mod, true)?;
 
     let integral_types = &integral_types();
     let float_types = &floating_types();
@@ -320,6 +302,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         }
     }
     // Fix → C alias: integer/float to any C numeric type.
+    let c_types = config.c_numeric_types.get_c_types();
     for from in &deprecated_cast_types {
         let from_name = from.toplevel_tycon().unwrap().name.name.clone();
         for (to_name_c, sign, size) in &c_types {
@@ -738,6 +721,52 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
 
     errors.to_result()?;
     Ok(fix_module)
+}
+
+/// Builds the module that defines the `Std::FFI` aliases of the C numeric types, such as
+/// `type CInt = I32;`. They are emitted as source, so that each carries a doc comment that the
+/// documentation of `Std` shows.
+///
+/// # Examples
+/// On `x86_64-unknown-linux-gnu`, the source holds `type CChar = I8;`, and on
+/// `aarch64-unknown-linux-gnu`, `type CChar = U8;`.
+fn make_c_numeric_type_aliases_mod(config: &Configuration) -> Result<Program, Errors> {
+    let mut src = "module Std;\n\nnamespace FFI {\n".to_string();
+    for (name, sign, bits) in config.c_numeric_types.get_c_types() {
+        src += &format!(
+            "// {}\ntype {} = {}{};\n\n",
+            c_numeric_type_document(name),
+            name,
+            sign,
+            bits
+        );
+    }
+    src += "}\n";
+    parse_and_save_to_temporary_file(&src, "std_c_numeric_type_aliases", config)
+}
+
+/// The doc comment of the `Std::FFI` alias `name` of a C numeric type, which names the C type it
+/// stands for and, where the Fix type differs between targets, which one it is where.
+fn c_numeric_type_document(name: &str) -> &'static str {
+    match name {
+        C_CHAR_NAME => {
+            "C's `char`, with the sign `char` has on the target: `I8` on x86-64 and on macOS, and \
+             `U8` on Linux on arm64."
+        }
+        C_UNSIGNED_CHAR_NAME => "C's `unsigned char`.",
+        C_SHORT_NAME => "C's `short`.",
+        C_UNSIGNED_SHORT_NAME => "C's `unsigned short`.",
+        C_INT_NAME => "C's `int`.",
+        C_UNSIGNED_INT_NAME => "C's `unsigned int`.",
+        C_LONG_NAME => "C's `long`, which is `I64` on Linux and macOS.",
+        C_UNSIGNED_LONG_NAME => "C's `unsigned long`, which is `U64` on Linux and macOS.",
+        C_LONG_LONG_NAME => "C's `long long`.",
+        C_UNSIGNED_LONG_LONG_NAME => "C's `unsigned long long`.",
+        C_SIZE_T_NAME => "C's `size_t`.",
+        C_FLOAT_NAME => "C's `float`.",
+        C_DOUBLE_NAME => "C's `double`.",
+        _ => unreachable!("`{}` names no C numeric type", name),
+    }
 }
 
 /// Creates source code to define traits such as ToString or Eq for tuples of the given sizes.
