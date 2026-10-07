@@ -397,11 +397,11 @@ pub fn test_c_abi_extends_narrow_integers_under_each_spelling() {
     }
 }
 
-/// The answer agrees with what clang 22 predefines on each triple: `__CHAR_UNSIGNED__` where plain
-/// `char` is listed as unsigned, and `__SIZEOF_LONG__` as the width of `long`. The triples cover
-/// each spelling LLVM gives the architectures with an unsigned `char`, each operating system that
-/// changes either answer, and architectures with a signed `char` beyond the two the compiler knows
-/// the ABI of.
+/// `CNumericTypes::of_target` agrees with what clang 22 predefines on each triple:
+/// `__CHAR_UNSIGNED__` where plain `char` is listed as unsigned, and `__SIZEOF_LONG__` as the width
+/// of `long`. The triples cover each spelling LLVM gives the architectures with an unsigned `char`,
+/// each operating system that changes either answer, and architectures with a signed `char` beyond
+/// the two the compiler knows the ABI of.
 #[test]
 pub fn test_c_numeric_types_follow_clang_on_each_target() {
     for (triple, char_is_signed, long) in [

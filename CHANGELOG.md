@@ -48,7 +48,7 @@
 - #785: Renaming the type `Point` to `Pixel` in the language server no longer rewrites `import Lib::{Point::{act_x, user_helper}, Shapes::{}};` into `import Lib::{Pixel::act_x, Point::user_helper, Shapes};`, which imports a type or trait named `Shapes` instead of nothing. The empty item list `Shapes::{}` is kept.
 - #790: The quick fix that adds the missing fields to a struct literal now writes them after the last field when a comment ends the field list, and at the right place on a line with characters such as emoji before the literal. It used to write them into the comment or a few characters off, which could break the code.
 - #780: A failed download in `install.sh` now leaves `~/.local/bin/fix` as it was. It used to leave an empty or partly written `fix` there, and later runs then took it for an installed one and installed nothing. `install.sh` can now also upgrade `fix` while it is running, for example as your editor's language server.
-- #341: The compiler now takes the widths of the C numeric types, such as `CLong`, from the target it builds for. It used to measure them once by compiling and running a C program, save them in `.fixlang/c_types.json`, and use the saved widths from then on, so a project directory shared with a machine whose C types differ built `FFI_CALL`s with that machine's widths, without any warning.
+- #341: The compiler now takes the widths of the C numeric types, such as `CLong`, from the target it builds for. It used to measure them on the first build, save them in `.fixlang/c_types.json` and use them from then on, so a project directory shared with a machine whose C types differ silently kept that machine's widths. The file is no longer read and can be deleted.
 
 ## [1.5.0] - 2026-09-27
 
