@@ -1046,7 +1046,8 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// The number of bytes a pointer occupies on the target. Fix supports 64-bit targets, so this
-    /// asserts the size is 8.
+    /// asserts the size is 8. `CNumericTypes::of_target` gives the widths of `size_t` and `long` on
+    /// such targets alone, and has to learn the other data models before this assertion is lifted.
     pub fn ptr_size(&mut self) -> u64 {
         let ptr_ty = self.context.ptr_type(AddressSpace::from(0));
         let ptr_size = self.target_data.get_bit_size(&ptr_ty) / 8;
