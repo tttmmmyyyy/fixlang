@@ -279,7 +279,8 @@ impl SourceOrigin {
                 inserted: Some(insertion),
                 ..
             } => {
-                let covered_end = (quoted.column + quoted.width).min(insertion.column + insertion.width);
+                let covered_end =
+                    (quoted.column + quoted.width).min(insertion.column + insertion.width);
                 let covered = covered_end.saturating_sub(quoted.column.max(insertion.column));
                 (quoted.width - covered).max(1)
             }

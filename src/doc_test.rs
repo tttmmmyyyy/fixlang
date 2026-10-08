@@ -482,10 +482,7 @@ fn comments_of(source: &SourceFile) -> Result<Vec<Vec<TextLine>>, Errors> {
 /// An error reports each info string carrying a mark other than `ignore` and `no_run` or carrying
 /// both of them, each example written as a module named other than `DocTest`, each example whose
 /// import statements are followed by no expression, and each example the text ends inside.
-pub fn examples_in_text(
-    lines: &[TextLine],
-    module: &Name,
-) -> Result<Vec<FixExample>, Errors> {
+pub fn examples_in_text(lines: &[TextLine], module: &Name) -> Result<Vec<FixExample>, Errors> {
     let texts = lines
         .iter()
         .map(|line| line.text.as_str())
@@ -648,7 +645,12 @@ fn assemble_example(
         let origin = SourceOrigin {
             file_path: lines[open].span.input.file_path.clone(),
             first_line,
-            lines: [vec![open_origin.clone()], body_origins, vec![close_origin.clone()]].concat(),
+            lines: [
+                vec![open_origin.clone()],
+                body_origins,
+                vec![close_origin.clone()],
+            ]
+            .concat(),
         };
         let source_lines = iter::once(header)
             .chain(body)
@@ -697,7 +699,9 @@ fn assemble_example(
         ));
     }
     let expression_line = code_text[..expression_start].matches('\n').count();
-    let line_start = code_text[..expression_start].rfind('\n').map_or(0, |at| at + 1);
+    let line_start = code_text[..expression_start]
+        .rfind('\n')
+        .map_or(0, |at| at + 1);
     save(
         module_header,
         Some((expression_line, expression_start - line_start, &main_head)),
