@@ -15,8 +15,8 @@ use crate::ast::program::{Symbol, TypeEnv};
 use crate::ast::types::{TyCon, TypeNode};
 use crate::constants::{BOOL_FALSE_TAG, BOOL_TRUE_TAG, CAP_NAME};
 use crate::fixstd::builtin::{
-    make_dynamic_object_ty, ArrayLitOp, CaptureProjectOp, ConstantArrayLitOp, FFICallOp,
-    MakeStructOp, NoStorageValueOp, NumberLiteral,
+    make_dynamic_object_ty, ArrayLitOp, CaptureProjectOp, FFICallOp,
+    MakeStructOp, NoStorageValueOp,
 };
 use crate::hash::md5_hex;
 use crate::misc::{grow_stack, Map, Set};
@@ -812,8 +812,7 @@ impl<'a> Lowerer<'a> {
     }
 
     /// Lower an array literal: the elements are lowered left to right, and the appended binding
-    /// builds an array holding them in that order. A literal of number literals is bound to the
-    /// array of them that sits in the program's data.
+    /// builds an array holding them in that order.
     fn lower_array_lit(
         &mut self,
         elems: &[Arc<ExprNode>],
@@ -821,24 +820,6 @@ impl<'a> Lowerer<'a> {
         source: Option<Span>,
         bindings: &mut Vec<PendingBinding>,
     ) -> RcVar {
-        // An empty literal allocates an empty array, which is what `Array::empty` does too.
-        let elements = elems
-            .iter()
-            .map(|e| match &*e.expr {
-                Expr::Builtin(builtin) => NumberLiteral::of_op(builtin.op.as_ref()),
-                _ => None,
-            })
-            .collect::<Option<Vec<_>>>()
-            .filter(|elements| !elements.is_empty());
-        if let Some(elements) = elements {
-            let result = self.fresh_var("array", ty, source.clone());
-            bindings.push(PendingBinding::Let(
-                result.clone(),
-                RcRhs::Builtin(Box::new(ConstantArrayLitOp { elements }), vec![]),
-                source,
-            ));
-            return result;
-        }
         let elem_vars: Vec<RcVar> = elems
             .iter()
             .map(|e| self.lower_to_var(e, bindings))

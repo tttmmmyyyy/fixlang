@@ -2,6 +2,7 @@ mod application_inlining;
 mod capture_struct;
 mod closure_specialization;
 mod collapse_constructions;
+mod constant_array_literals;
 mod dead_symbol_elimination;
 mod decapture_scope_functions;
 mod defunctionalize_fix;

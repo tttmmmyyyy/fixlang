@@ -21,6 +21,7 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, VisitState},
     },
     misc::{Map, Set},
+    rc_ir::locality::ExtShape,
     optimization::{
         inline_local, let_elimination::create_global_lambda_to_arity_map, uncurry::is_std_fix,
     },
@@ -198,12 +199,16 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
             let op = &expr.get_builtin().op;
             let is_free_to_duplicate = op.is_free_to_duplicate();
             // An operation whose result holds a boxed part allocates that part, so a copy of it
-            // allocates once more. The declaration and the operation agree only where the type of
-            // what it answers with is unboxed throughout.
+            // allocates once more, unless every boxed part is a constant in the program's data,
+            // which the operation declares non-local. The declaration and the operation agree only
+            // where the type of what it answers with is unboxed throughout or that holds.
             assert!(
-                !is_free_to_duplicate || sym.ty.is_fully_unboxed(&type_env),
+                !is_free_to_duplicate
+                    || sym.ty.is_fully_unboxed(&type_env)
+                    || op.result_locality(&sym.ty, &[], &type_env)
+                        == ExtShape::always(&sym.ty, &type_env),
                 "the builtin operation `{}` declares a copy of itself free while it answers \
-                 with `{}`, which holds a boxed part",
+                 with `{}`, which holds a boxed part it may allocate",
                 op.name(),
                 sym.ty.to_string()
             );

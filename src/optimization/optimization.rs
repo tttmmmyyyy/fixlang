@@ -1,5 +1,6 @@
 use super::{
-    application_inlining, closure_specialization, collapse_constructions, dead_symbol_elimination,
+    application_inlining, closure_specialization, collapse_constructions, constant_array_literals,
+    dead_symbol_elimination,
     decapture_scope_functions, defunctionalize_fix, inline, inline_local, optimize_act,
     remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args, uncurry, unwrap_newtype,
 };
@@ -19,6 +20,17 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     // instantiation are done by now, so whether the program compiles is already settled, and every
     // pass below sees the simplified tree.
     run_pass(prg, config, config.skip_eval, "skip_eval", skip_eval::run);
+
+    // Make each array literal of number literals a constant in the program's data, before the
+    // inliner, which puts a global holding one wherever the global is read. The pass runs at every
+    // level, since code generation builds the array element by element otherwise.
+    run_pass(
+        prg,
+        config,
+        true,
+        "constant_array_literals",
+        constant_array_literals::run,
+    );
 
     // Specialize `act_` on the functor it is used at. It runs before the pass that unwraps
     // newtypes, which is what lets it recognize what it specializes: it finds an `act_` by asking
