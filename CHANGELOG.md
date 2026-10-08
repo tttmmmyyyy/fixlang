@@ -50,7 +50,7 @@
 - #790: The quick fix that adds the missing fields to a struct literal now writes them after the last field when a comment ends the field list, and at the right place on a line with characters such as emoji before the literal. It used to write them into the comment or a few characters off, which could break the code.
 - #780: A failed download in `install.sh` now leaves `~/.local/bin/fix` as it was. It used to leave an empty or partly written `fix` there, and later runs then took it for an installed one and installed nothing. `install.sh` can now also upgrade `fix` while it is running, for example as your editor's language server.
 - #341, #811: The compiler now takes the widths of the C numeric types, such as `CLong`, from the target it builds for. It used to measure them on the first build, save them in `.fixlang/c_types.json` and use them from then on, so a project directory shared with a machine whose C types differ silently kept that machine's widths. The file is no longer read and can be deleted.
-- An array literal of tens of thousands of elements now compiles in seconds. The compiler took time that grew with the square of the number of elements: a literal of 13,071 numbers took 25 seconds to compile.
+- An array literal of tens of thousands of numbers now compiles in seconds. The compiler took time that grew with the square of the number of elements of an array literal: a literal of 13,071 numbers took 25 seconds to compile.
 
 ## [1.5.0] - 2026-09-27
 
