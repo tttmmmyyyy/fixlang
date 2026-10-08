@@ -6,7 +6,10 @@
 #[cfg(test)]
 mod tests {
     use crate::configuration::{Configuration, FixOptimizationLevel};
-    use crate::tests::test_util::{build_run_and_read_rc_ir, build_within_and_run, test_source};
+    use crate::tests::test_util::{
+        build_program, build_run_and_read_rc_ir, build_within_and_run, test_source,
+    };
+    use std::fs;
     use std::time::Duration;
 
     /// The levels a program writing into a constant is run at. A write into read-only memory faults
@@ -167,6 +170,61 @@ mod tests {
             dump.contains("constant_array_lit(int(1), int(10), int(100), int(1000))"),
             "the literal should stand where the global is read; the dump is:\n{}",
             dump
+        );
+    }
+
+    /// A table read from many compilation units is held once by the program. Each unit reading the
+    /// table defines its storage, so that the unit sees the elements, and the linker keeps one of
+    /// those definitions.
+    #[test]
+    fn test_a_table_read_from_many_compilation_units_is_held_once() {
+        const ELEMENT_COUNT: usize = 20000;
+        const READER_COUNT: usize = 12;
+        let elements = (0..ELEMENT_COUNT)
+            .map(|i| format!("{}_U64", i * 7919))
+            .collect::<Vec<_>>()
+            .join(", ");
+        // Each reader is exported, so that it keeps a unit of its own at `--cu-size 1`.
+        let readers = (0..READER_COUNT)
+            .map(|k| {
+                format!(
+                    "reader{k} : I64 -> I64;\n\
+                     reader{k} = |n| loop((n, 0_U64), |(i, s)| if i <= 0 {{ break $ s.i64 }} \
+                     else {{ continue $ (i - 1, s + table.@((i * {step}) % {count})) }});\n\
+                     FFI_EXPORT[reader{k}, fixtest_reader{k}];\n",
+                    k = k,
+                    step = k + 3,
+                    count = ELEMENT_COUNT
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        let source = format!(
+            "module Main;\n\
+             \n\
+             table : Array U64;\n\
+             table = [{elements}];\n\
+             \n\
+             {readers}\n\
+             main : IO ();\n\
+             main = println(reader0(10).to_string);\n"
+        );
+        let (_temp_dir, program) = build_program(
+            &source,
+            "max",
+            &["--cu-size", "1"],
+            None,
+            "a table read from many compilation units",
+        );
+        let table_bytes = (ELEMENT_COUNT * 8) as u64;
+        let program_bytes = fs::metadata(&program)
+            .expect("Failed to read the size of the program")
+            .len();
+        assert!(
+            program_bytes < 2 * table_bytes,
+            "the program takes {} bytes, which holds the {}-byte table more than once",
+            program_bytes,
+            table_bytes
         );
     }
 

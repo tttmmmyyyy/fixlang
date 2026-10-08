@@ -35,6 +35,7 @@ use crate::fixstd::runtime::{
     RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE, RUNTIME_SIGNED_OVERFLOW,
 };
 use crate::generator::{Generator, Object};
+use crate::hash::HashSource;
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
     alloc_array_storage, build_abort_if, build_array_storage_alloc_offset,
@@ -1120,12 +1121,15 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
 /// # Arguments
 /// * `elem_ty` - The type of the elements, which holds no boxed part.
 /// * `elements` - The elements, each of the type `elem_ty` is embedded as.
+/// * `contents` - What the elements are made from: two arrays of equal `elem_ty` and `contents` hold
+///   equal `elements`.
 pub fn make_array_of_global_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
     elem_ty: Arc<TypeNode>,
     elements: ArrayValue<'c>,
+    contents: &HashSource,
 ) -> Object<'c> {
-    let storage_ptr = gc.add_global_array_storage(&elem_ty, elements);
+    let storage_ptr = gc.add_global_array_storage(&elem_ty, elements, contents);
     let len = gc
         .context
         .i64_type()
@@ -1167,7 +1171,9 @@ impl BuiltinOp for StringBufOp {
         let mut bytes = self.string.as_bytes().to_vec();
         bytes.push(0);
         let elements = gc.context.const_string(&bytes, false);
-        make_array_of_global_storage(gc, make_u8_ty(), elements)
+        let mut contents = HashSource::default();
+        contents.push_bytes(&bytes);
+        make_array_of_global_storage(gc, make_u8_ty(), elements, &contents)
     }
 
     fn name(&self) -> String {
@@ -5596,7 +5602,10 @@ impl BuiltinOp for ConstantArrayLitOp {
             .collect::<Vec<_>>();
         // The values are all of `embedded_ty`, which the assertion above checks.
         let elements = unsafe { ArrayValue::new_const_array(&embedded_ty, &values) };
-        make_array_of_global_storage(gc, elem_ty, elements)
+        // A literal's name spells its value in full, so equal names make equal elements.
+        let mut contents = HashSource::default();
+        contents.push_list(self.elements.iter().map(|element| element.op().name()));
+        make_array_of_global_storage(gc, elem_ty, elements, &contents)
     }
 
     fn name(&self) -> String {

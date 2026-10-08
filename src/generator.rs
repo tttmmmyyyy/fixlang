@@ -27,6 +27,7 @@ use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
 use crate::fixstd::runtime::RUNTIME_ABORT;
 use crate::fixstd::runtime::RUNTIME_EPRINTLN;
+use crate::hash::HashSource;
 use crate::misc::flatten_opt;
 use crate::misc::Map;
 use crate::misc::Set;
@@ -53,6 +54,7 @@ use crate::return_abi::{
     lambda_calling_convention_of_target, return_registers_of_target, returns_through_out_pointer,
     ReturnRegisters,
 };
+use crate::target_triple::target_is_darwin;
 use crate::tbaa::{MemoryRegion, TbaaTags};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -644,8 +646,8 @@ pub struct Generator<'c, 'm> {
     /// so that one string is emitted once.
     global_strings: Map<String, GlobalValue<'c>>,
     /// The constant `#ArrayStorage` emitted for each array of elements a literal asks for, keyed by
-    /// the constant holding the elements, so that literals of equal elements name one storage.
-    global_array_storages: Map<ArrayValue<'c>, PointerValue<'c>>,
+    /// its name, with the elements it holds, so that literals of equal elements name one storage.
+    global_array_storages: Map<String, (ArrayValue<'c>, PointerValue<'c>)>,
     /// Debug type built for each Fix type, keyed by the type's canonical string, so a type is
     /// described once and shared across every reference to it.
     di_type_cache: Map<String, DIType<'c>>,
@@ -760,15 +762,21 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// too: the constant carries padding ahead of the control block, which puts the elements on the
     /// boundary.
     ///
-    /// Storages of equal elements are one storage.
+    /// The storage is named after `elem_ty` and `contents`, and the program keeps one storage of
+    /// each name: a compilation unit defines a name once, and the linker keeps one of the
+    /// definitions the units make of it. A unit therefore defines the storage it reads, so that
+    /// LLVM sees the elements, without the program carrying one copy per unit.
     ///
     /// # Arguments
     /// * `elem_ty` - The type of the elements, which holds no boxed part.
     /// * `elements` - The elements, each of the type `elem_ty` is embedded as.
+    /// * `contents` - What the elements are made from, such as the literals written: two calls with
+    ///   equal `elem_ty` and `contents` pass equal `elements`.
     pub fn add_global_array_storage(
         &mut self,
         elem_ty: &Arc<TypeNode>,
         elements: ArrayValue<'c>,
+        contents: &HashSource,
     ) -> PointerValue<'c> {
         // The field the storage itself sits in; the padding is the field ahead of it.
         const STORAGE_IDX: u32 = 1;
@@ -779,8 +787,16 @@ impl<'c, 'm> Generator<'c, 'm> {
              would never release",
             elem_ty.to_string()
         );
-        // LLVM keeps one constant of each value, so equal elements are one `ArrayValue`.
-        if let Some(ptr) = self.global_array_storages.get(&elements) {
+        let mut name_source = contents.clone();
+        name_source.push_text(&elem_ty.to_string());
+        let name = format!("GlobalArrayStorage#{}", name_source.finish());
+        if let Some((defined_elements, ptr)) = self.global_array_storages.get(&name) {
+            assert!(
+                *defined_elements == elements,
+                "two constant `#ArrayStorage`s of `{}` named `{}` hold different elements",
+                elem_ty.to_string(),
+                name
+            );
             return *ptr;
         }
         let context = self.context;
@@ -852,14 +868,19 @@ impl<'c, 'm> Generator<'c, 'm> {
                 ARRAY_BUF_ALIGNMENT
             );
         }
-        let global = self.module.add_global(
-            padded_storage.get_type(),
-            None,
-            &format!("GlobalArrayStorage#{}", self.global_array_storages.len()),
-        );
+        let global = self
+            .module
+            .add_global(padded_storage.get_type(), None, &name);
         global.set_initializer(&padded_storage);
         global.set_constant(true);
-        global.set_linkage(Linkage::Internal);
+        global.set_unnamed_addr(true);
+        // Every unit reading the storage defines it, and the linker keeps one definition of the
+        // name. A COMDAT group of its own lets the linker drop the others' bytes as well; Mach-O has
+        // no COMDAT, and its linker folds the weak definitions of one name by itself.
+        global.set_linkage(Linkage::LinkOnceODR);
+        if !target_is_darwin(&self.module.get_triple().as_str().to_string_lossy()) {
+            global.set_comdat(self.module.get_or_insert_comdat(&name));
+        }
         if is_aligned {
             global.set_alignment(ARRAY_BUF_ALIGNMENT as u32);
         }
@@ -875,7 +896,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 ],
             )
         };
-        self.global_array_storages.insert(elements, ptr);
+        self.global_array_storages.insert(name, (elements, ptr));
         ptr
     }
 
