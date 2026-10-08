@@ -1905,28 +1905,29 @@ impl Program {
                 let e = self.instantiate_expr(e)?;
                 expr.set_tyanno_expr(e)
             }
-            Expr::MakeStruct(_, fields) => {
-                let mut expr = expr.clone();
-                for (field_name, _, field_expr) in fields {
-                    let field_expr = self.instantiate_expr(field_expr)?;
-                    expr = expr.set_make_struct_field(field_name, field_expr);
-                }
-                expr
-            }
+            Expr::MakeStruct(_, fields) => expr.set_make_struct_fields(
+                fields
+                    .iter()
+                    .map(|(field_name, field_src, field_expr)| {
+                        Ok((
+                            field_name.clone(),
+                            field_src.clone(),
+                            self.instantiate_expr(field_expr)?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
             Expr::ArrayLit(elems) => expr.set_array_lit_elems(
                 elems
                     .iter()
                     .map(|e| self.instantiate_expr(e))
                     .collect::<Result<Vec<_>, _>>()?,
             ),
-            Expr::FFICall(_, _, _, _, args, _) => {
-                let mut expr = expr.clone();
-                for (i, e) in args.iter().enumerate() {
-                    let e = self.instantiate_expr(e)?;
-                    expr = expr.set_ffi_call_arg(e, i);
-                }
-                expr
-            }
+            Expr::FFICall(_, _, _, _, args, _) => expr.set_ffi_call_args(
+                args.iter()
+                    .map(|e| self.instantiate_expr(e))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
             Expr::Eval(side, main) => {
                 let side = self.instantiate_expr(side)?;
                 let main = self.instantiate_expr(main)?;

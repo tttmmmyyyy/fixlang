@@ -1604,7 +1604,7 @@ impl TypeCheckContext {
                 // inferred type even when the outer expected return
                 // type doesn't match the FFI signature.
                 self.unify_or_tolerated_mismatch(&ty, &ret_ty, &ei.source)?;
-                let mut ei = ei.clone();
+                let mut typed_args = Vec::with_capacity(args.len());
                 for (i, e) in args.iter().enumerate() {
                     let param_ty = if i < param_tys.len() {
                         // The explicitly given parameter type.
@@ -1619,10 +1619,9 @@ impl TypeCheckContext {
                         self.add_tyvar_source(tv.name.clone(), ei.source.clone());
                         type_from_tyvar(tv)
                     };
-                    let e = self.unify_type_of_expr(e, param_ty)?;
-                    ei = ei.set_ffi_call_arg(e, i);
+                    typed_args.push(self.unify_type_of_expr(e, param_ty)?);
                 }
-                Ok(ei)
+                Ok(ei.set_ffi_call_args(typed_args))
             }
             Expr::Eval(side, main) => {
                 let side_tv = self.new_tyvar_star();

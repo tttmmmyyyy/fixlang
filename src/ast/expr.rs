@@ -748,28 +748,6 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn set_ffi_call_arg(&self, arg: Arc<ExprNode>, idx: usize) -> Arc<ExprNode> {
-        let mut ret = self.clone_except_fvs();
-        match &*self.expr {
-            Expr::FFICall(fun_name, ret_ty, param_tys, is_va_args, args, is_io) => {
-                let mut args = args.clone();
-                args[idx] = arg;
-                ret.expr = Arc::new(Expr::FFICall(
-                    fun_name.clone(),
-                    ret_ty.clone(),
-                    param_tys.clone(),
-                    *is_va_args,
-                    args,
-                    *is_io,
-                ));
-            }
-            _ => {
-                panic!()
-            }
-        }
-        Arc::new(ret)
-    }
-
     pub fn set_ffi_call_args(&self, args: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
@@ -879,11 +857,17 @@ impl ExprNode {
                 let mut tc = tc.as_ref().clone();
                 tc.resolve_namespace(ctx, &self.source)?;
                 expr = expr.set_make_struct_tycon(Arc::new(tc));
-                for (field_name, _, field_expr) in fields {
-                    let field_expr = field_expr.resolve_namespace(ctx)?;
-                    expr = expr.set_make_struct_field(field_name, field_expr);
-                }
-                Ok(expr)
+                let fields = fields
+                    .iter()
+                    .map(|(field_name, field_src, field_expr)| {
+                        Ok((
+                            field_name.clone(),
+                            field_src.clone(),
+                            field_expr.resolve_namespace(ctx)?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(expr.set_make_struct_fields(fields))
             }
             Expr::ArrayLit(elems) => Ok(self.set_array_lit_elems(
                 elems
@@ -891,13 +875,11 @@ impl ExprNode {
                     .map(|elem| elem.resolve_namespace(ctx))
                     .collect::<Result<Vec<_>, _>>()?,
             )),
-            Expr::FFICall(_, _, _, _, args, _) => {
-                let mut expr = self.clone();
-                for (i, arg) in args.iter().enumerate() {
-                    expr = expr.set_ffi_call_arg(arg.resolve_namespace(ctx)?, i);
-                }
-                Ok(expr)
-            }
+            Expr::FFICall(_, _, _, _, args, _) => Ok(self.set_ffi_call_args(
+                args.iter()
+                    .map(|arg| arg.resolve_namespace(ctx))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )),
             Expr::Eval(side_expr, main_expr) => Ok(self
                 .clone()
                 .set_eval_side(side_expr.resolve_namespace(ctx)?)
@@ -956,7 +938,7 @@ impl ExprNode {
                 .set_tyanno_expr(expr.resolve_type_aliases(type_env)?)
                 .set_tyanno_ty(ty.resolve_type_aliases(type_env)?)),
             Expr::MakeStruct(tc, fields) => {
-                let mut expr = self.clone();
+                let expr = self.clone();
                 if type_env.aliases.contains_key(tc) {
                     return Err(Errors::from_msg_srcs(
                         "In struct construction, cannot use type alias instead of struct name."
@@ -964,11 +946,17 @@ impl ExprNode {
                         &[&self.source],
                     ));
                 }
-                for (field_name, _, field_expr) in fields {
-                    let field_expr = field_expr.resolve_type_aliases(type_env)?;
-                    expr = expr.set_make_struct_field(field_name, field_expr);
-                }
-                Ok(expr)
+                let fields = fields
+                    .iter()
+                    .map(|(field_name, field_src, field_expr)| {
+                        Ok((
+                            field_name.clone(),
+                            field_src.clone(),
+                            field_expr.resolve_type_aliases(type_env)?,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(expr.set_make_struct_fields(fields))
             }
             Expr::ArrayLit(elems) => Ok(self.set_array_lit_elems(
                 elems
@@ -976,13 +964,11 @@ impl ExprNode {
                     .map(|elem| elem.resolve_type_aliases(type_env))
                     .collect::<Result<Vec<_>, _>>()?,
             )),
-            Expr::FFICall(_, _, _, _, args, _) => {
-                let mut expr = self.clone();
-                for (i, arg) in args.iter().enumerate() {
-                    expr = expr.set_ffi_call_arg(arg.resolve_type_aliases(type_env)?, i);
-                }
-                Ok(expr)
-            }
+            Expr::FFICall(_, _, _, _, args, _) => Ok(self.set_ffi_call_args(
+                args.iter()
+                    .map(|arg| arg.resolve_type_aliases(type_env))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )),
             Expr::Eval(side, main) => Ok(self
                 .clone()
                 .set_eval_side(side.resolve_type_aliases(type_env)?)
