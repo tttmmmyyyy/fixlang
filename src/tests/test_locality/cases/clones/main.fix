@@ -3,8 +3,10 @@ module Main;
 // One pair of functions reached with three different input localities, so the pass clones them by
 // key and routes each call to its own clone. A forwarding function counts no reference itself, so
 // the gate has to reach it through its callee, and a global initializer calls the same pair.
+// Built at run time: a global holding an array literal of numbers is put wherever it is read, so
+// nothing would read the global itself.
 g : Array I64;
-g = [1, 2, 3];
+g = Array::from_map(3, |i| i + 1);
 
 gg : Array (Array I64);
 gg = [g, g];

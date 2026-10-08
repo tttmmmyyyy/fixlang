@@ -130,6 +130,46 @@ mod tests {
         );
     }
 
+    /// A global holding an array literal of numbers is put wherever it is read at `-O max`, so the
+    /// reader sees the array's length and elements as constants rather than reading the global.
+    #[test]
+    fn test_a_global_array_literal_of_numbers_is_put_where_it_is_read() {
+        let source = r#"
+        module Main;
+
+        powers : Array I64;
+        powers = [1, 10, 100, 1000];
+
+        main : IO ();
+        main = (
+            let args = *IO::get_args;
+            let i = args.@size;
+            println((powers.@(i) + powers.@size).to_string)
+        );
+        "#;
+        let dump = build_run_and_read_rc_ir(
+            source,
+            "max",
+            "14",
+            "a global array literal of numbers read from main",
+        );
+        let reads = dump
+            .lines()
+            .filter(|line| line.contains("Main::powers") && !line.starts_with("global "))
+            .collect::<Vec<_>>();
+        assert!(
+            reads.is_empty(),
+            "nothing should read the global `powers`, but these lines do:\n{}\nThe dump is:\n{}",
+            reads.join("\n"),
+            dump
+        );
+        assert!(
+            dump.contains("constant_array_lit(int(1), int(10), int(100), int(1000))"),
+            "the literal should stand where the global is read; the dump is:\n{}",
+            dump
+        );
+    }
+
     /// The number of elements of the literal `test_a_long_array_literal_compiles_in_reasonable_time`
     /// compiles. A literal this long builds in a few seconds where the compiler's work is linear in
     /// the elements, and in minutes where any one pass over the literal rebuilds the list of elements

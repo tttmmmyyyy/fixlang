@@ -3,8 +3,10 @@ module Main;
 // A global array. Its whole graph is marked global once the initializer finishes, so reading it —
 // directly, out of a container, or out of a global struct — yields an object no annotated
 // reference-counting operation may touch.
+// Built at run time: a global holding an array literal of numbers is put wherever it is read, so
+// nothing would read the global itself.
 g : Array I64;
-g = [10, 20, 30];
+g = Array::from_map(3, |i| 10 * (i + 1));
 
 gpair : (Array I64, Array I64);
 gpair = ([1, 2], [3, 4]);

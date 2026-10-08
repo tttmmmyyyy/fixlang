@@ -4,8 +4,10 @@ module Main;
 // other cases do not use: a trait dictionary, a destructor, and a clone the uniqueness pass made
 // first.
 
+// Built at run time: a global holding an array literal of numbers is put wherever it is read, so
+// nothing would read the global itself.
 g : Array I64;
-g = [1, 2, 3];
+g = Array::from_map(3, |i| i + 1);
 
 gtup : (Array I64, Array I64);
 gtup = ([4, 5], [6, 7]);
