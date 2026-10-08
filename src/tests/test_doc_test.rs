@@ -3,7 +3,7 @@
 
 use crate::commands::test::{test_examples, ExampleOutcome};
 use crate::configuration::Configuration;
-use crate::doc_test::{collect_examples, examples_in_text, ExampleScope, TextLine};
+use crate::doc_test::{collect_examples, examples_in_text, TextLine};
 use crate::error::panic_if_err;
 use crate::parse::parser::parse_file_path;
 use crate::parse::sourcefile::{SourceFile, Span};
@@ -31,11 +31,10 @@ fn test_std_doc_examples() {
     documents.sort();
     for document in documents {
         let doc_lines = markdown_file_lines(&document);
-        let scope = ExampleScope {
-            module: "Std".to_string(),
-            imports: vec![],
-        };
-        examples.extend(panic_if_err(examples_in_text(&doc_lines, &scope)));
+        examples.extend(panic_if_err(examples_in_text(
+            &doc_lines,
+            &"Std".to_string(),
+        )));
     }
 
     let mut failures = vec![];
@@ -358,8 +357,9 @@ fn test_error_on_the_wrapper_is_reported_at_the_fence() {
 }
 
 /// The info string of a Fix example carries `ignore`, `no_run` or neither, separated from `fix` by
-/// spaces, and a comment closes each example it opens. `fix test` rejects any other before it runs
-/// a test.
+/// spaces, the expression of an example written as statements begins on a line after its import
+/// statements, and a comment closes each example it opens. `fix test` rejects any other before it
+/// runs a test.
 #[test]
 fn test_malformed_examples_are_rejected() {
     let lib = r#"module Lib;
@@ -378,6 +378,15 @@ fn test_malformed_examples_are_rejected() {
 //
 // ```fix,no_run
 // pure()
+// ```
+//
+// ```fix
+// import Std; pure()
+// ```
+//
+// ```fix
+// import Std;
+//
 // ```
 //
 // ```fix
@@ -404,8 +413,16 @@ value = 1;
             "15 | // ```fix,no_run",
         ),
         (
+            "Begin the expression of a Fix example on a line after its import statements.",
+            "20 | // import Std; pure()",
+        ),
+        (
+            "A Fix example has import statements and no expression after them.",
+            "23 | // ```fix",
+        ),
+        (
             "The comment ends inside this Fix example. Close it by a line of ```.",
-            "19 | // ```fix",
+            "28 | // ```fix",
         ),
     ] {
         assert!(
@@ -954,20 +971,27 @@ fn test_error_in_an_empty_example_is_reported_at_the_closing_fence() {
     );
 }
 
-/// An example written as statements sees the names its module sees: the module's own, and those of
-/// the modules it imports, by the same short names, with the items an import statement lists and
-/// no others.
+/// An example written as statements sees the names its module defines, and the modules its
+/// module imports only through the import statements it begins with: an import statement written
+/// as a hidden line, and one listing some items, which leaves the others out.
 #[test]
-fn test_example_sees_the_imports_of_its_module() {
+fn test_example_sees_what_its_import_statements_name() {
     let util = "module Util;\ntriple : I64 -> I64;\ntriple = |x| 3 * x;\nquadruple : I64 -> I64;\nquadruple = |x| 4 * x;\n";
     let lib = r#"module Lib;
 import Util::{triple};
 
 // ```fix
+// # import Util::{triple};
 // assert_eq(|_|"", sextuple(1), triple(2))
 // ```
 //
 // ```fix no_run
+// assert_eq(|_|"", sextuple(1), triple(2))
+// ```
+//
+// ```fix no_run
+// import Util::{triple};
+//
 // assert_eq(|_|"", sextuple(1), quadruple(1))
 // ```
 sextuple : I64 -> I64;
@@ -978,12 +1002,19 @@ sextuple = |x| 2 * triple(x);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("doc test lib.fix:4 ... ok"),
-        "the example uses `triple`, which its module imports, by the short name\n{}",
+        "the example uses `triple`, which its hidden import statement names\n{}",
         streams(&output)
     );
     assert!(
-        stderr.contains("doc test lib.fix:8 ... FAILED") && stderr.contains("quadruple"),
-        "the example cannot use `quadruple`, which its module's import leaves out\n{}",
+        stderr.contains("doc test lib.fix:9 ... FAILED")
+            && stderr.contains("10 | // assert_eq(|_|\"\", sextuple(1), triple(2))"),
+        "the example cannot use `triple`, which only its module imports\n{}",
+        streams(&output)
+    );
+    assert!(
+        stderr.contains("doc test lib.fix:13 ... FAILED")
+            && stderr.contains("16 | // assert_eq(|_|\"\", sextuple(1), quadruple(1))"),
+        "the example cannot use `quadruple`, which its import statement leaves out\n{}",
         streams(&output)
     );
 }
@@ -1110,15 +1141,53 @@ fn test_examples_that_cannot_share_a_program_are_tested_alone() {
     );
 }
 
-/// An example written as statements sees `Std` as its module narrows it: a name the module hides
-/// from `Std` and declares itself is the module's own in the example, as it is in the module. The
-/// `main` the example is wrapped into is of type `IO ()` however the module narrows `Std`.
+/// An example written as statements sees the whole of `Std`, however its module narrows it, and
+/// it narrows `Std` by the import statements it begins with, as any module does. The `main` the
+/// example is wrapped into is of type `IO ()` however the example narrows `Std`.
 #[test]
-fn test_example_sees_std_as_its_module_narrows_it() {
+fn test_example_sees_std_as_its_import_statements_narrow_it() {
+    let lib = r#"module Lib;
+import Std::{I64, Monad::pure};
+
+// ```fix
+// assert_eq(|_|"", [value, value].get_size, 2)
+// ```
+//
+// ```fix
+// # import Std::{Monad::pure};
+// pure()
+// ```
+//
+// ```fix no_run
+// import Std::{Monad::pure};
+// assert_eq(|_|"", value, 1)
+// ```
+value : I64 = 1;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("doc test lib.fix:4 ... ok"),
+        "the example uses `assert_eq` and `get_size`, which its module does not import\n{}",
+        streams(&output)
+    );
+    assert!(
+        stderr.contains("doc test lib.fix:8 ... ok"),
+        "the example's `main` is of type `IO ()` where the example imports no `IO`\n{}",
+        streams(&output)
+    );
+    assert!(
+        stderr.contains("doc test lib.fix:13 ... FAILED") && stderr.contains("`assert_eq`"),
+        "the example cannot use `assert_eq`, which its import statement leaves out of `Std`\n{}",
+        streams(&output)
+    );
+
     let lib = r#"module Lib;
 import Std hiding Tuple2;
 
 // ```fix
+// # import Std hiding Tuple2;
 // let pair = Tuple2 { fst : 1, snd : 2 };
 // assert_eq(|_|"", pair.@snd, 2)
 // ```
@@ -1129,49 +1198,48 @@ type Tuple2 = struct { fst : I64, snd : I64 };
     assert!(
         output.status.success()
             && String::from_utf8_lossy(&output.stderr).contains("doc test lib.fix:4 ... ok"),
-        "the example's `Tuple2` is `Lib::Tuple2`, which its module declares in place of `Std`'s\n{}",
-        streams(&output)
-    );
-    let lib = r#"module Lib;
-import Std::{I64, Monad::pure};
-
-// ```fix
-// pure()
-// ```
-value : I64 = 1;
-"#;
-    let dir = project_dir(&[("lib.fix", lib)], &[]);
-    let output = fix_test(&dir, &[]);
-    assert!(
-        output.status.success()
-            && String::from_utf8_lossy(&output.stderr).contains("doc test lib.fix:4 ... ok"),
-        "the example's `main` is of type `IO ()` where its module imports no `IO`\n{}",
+        "the example's `Tuple2` is `Lib::Tuple2`, as the example hides `Std`'s\n{}",
         streams(&output)
     );
 }
 
-/// An example written as statements in a module whose import statement is too long for one line
-/// is reported at its place in the comment: the import statements the example is wrapped with are
-/// written on the line of its opening fence.
+/// A compile error of an example written as statements after import statements is reported at
+/// its place in the comment: on the line the expression begins on, in front of which the head of
+/// `main` is written, and on the lines after it.
 #[test]
-fn test_error_in_an_example_of_a_module_with_a_long_import_is_reported_at_its_place() {
-    let util = "module Util;\nfirst_long_function_name : I64 = 1;\nsecond_long_function_name : I64 = 2;\nthird_long_function_name : I64 = 3;\nfourth_long_function_name : I64 = 4;\n";
+fn test_error_in_an_example_after_import_statements_is_reported_at_its_place() {
     let lib = r#"module Lib;
-import Util::{first_long_function_name, second_long_function_name, third_long_function_name, fourth_long_function_name};
 
 // ```fix
+// import Std;
 // let x : I64 = "a string";
 // pure()
 // ```
-value : I64 = first_long_function_name;
+value : I64 = 1;
+
+// ```fix
+// # import Std;
+// let x = 1;
+// let y : I64 = "a string";
+// pure()
+// ```
+other : I64 = 1;
 "#;
-    let dir = project_dir(&[("lib.fix", lib), ("util.fix", util)], &[]);
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
     let output = fix_test(&dir, &[]);
-    assert!(
-        String::from_utf8_lossy(&output.stderr).contains("5 | // let x : I64 = \"a string\";"),
-        "the error of the example is reported at the line it is written on\n{}",
-        streams(&output)
-    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for (position, line) in [
+        ("5:18-5:28", "5 | // let x : I64 = \"a string\";"),
+        ("13:18-13:28", "13 | // let y : I64 = \"a string\";"),
+    ] {
+        assert!(
+            stderr.contains(&format!("{} in \"lib.fix\"", position)) && stderr.contains(line),
+            "the error is reported at \"{}\" of \"{}\"\n{}",
+            position,
+            line,
+            streams(&output)
+        );
+    }
 }
 
 /// A Fix example written as a module that defines no `main` fails as it does built alone. The

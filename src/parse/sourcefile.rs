@@ -176,8 +176,8 @@ impl SourceFile {
 ///
 /// The Fix example of a comment is compiled from such a source: line `k` of it is line
 /// `first_line + k - 1` of the file the comment is written in, with what precedes the comment's text
-/// taken off the front, and the lines the example is wrapped in are written on the lines of its
-/// fences.
+/// taken off the front, and the text the example is wrapped in is written on the lines of its
+/// fences, or in front of the line its expression begins on.
 ///
 /// # Examples
 /// The source `"main : IO () = (\npure()\n);\n"` assembled from lines 7 to 9 of
@@ -210,6 +210,11 @@ pub enum LineOrigin {
     /// on it is reported at the `width` characters beginning at `column` of the origin's line,
     /// which are what the text was written for.
     Written { column: usize, width: usize },
+    /// The line holds `prefix` characters the assembler wrote, followed by text of the origin's line
+    /// with `shift` characters taken off the front of it. A position in the written characters is
+    /// reported at the first character taken, and a character at column `c` after them stands at
+    /// column `c - prefix + shift` of the origin's line.
+    Prefixed { prefix: usize, shift: usize },
 }
 
 impl SourceOrigin {
@@ -220,6 +225,9 @@ impl SourceOrigin {
         match line_origin {
             LineOrigin::Taken { shift } => (origin_line, column + shift),
             LineOrigin::Written { column, .. } => (origin_line, *column),
+            LineOrigin::Prefixed { prefix, shift } => {
+                (origin_line, column.saturating_sub(*prefix).max(1) + shift)
+            }
         }
     }
 
@@ -251,6 +259,11 @@ impl SourceOrigin {
         let width = match self.origin_of_line(quoted.line).1 {
             LineOrigin::Written { width, .. } => *width,
             LineOrigin::Taken { .. } => quoted.width,
+            // The underline loses the written characters it covers.
+            LineOrigin::Prefixed { prefix, .. } => {
+                let written = (prefix + 1).saturating_sub(quoted.column);
+                quoted.width.saturating_sub(written).max(1)
+            }
         };
         match origin_lines.and_then(|lines| lines.get(line - 1)) {
             Some(text) => QuotedLine {

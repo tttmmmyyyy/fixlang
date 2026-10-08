@@ -9,7 +9,6 @@
 
 use crate::{
     ast::{
-        import::ImportStatement,
         name::{FullName, Name},
         program::Program,
     },
@@ -18,7 +17,10 @@ use crate::{
     hash::md5_hex,
     misc::{save_temporary_source, to_absolute_path, Set},
     parse::{
-        parser::{comment_ranges, parse_source_module_defn, ModuleRenaming},
+        parser::{
+            comment_ranges, leading_import_statements_end, parse_source_module_defn,
+            ModuleRenaming,
+        },
         sourcefile::{line_comment_text, LineOrigin, SourceFile, SourceOrigin, Span},
     },
 };
@@ -138,58 +140,6 @@ fn indent_width(indent: &str) -> usize {
         '\t' => width + 4 - width % 4,
         _ => width + 1,
     })
-}
-
-/// The module a comment is written in, as the Fix examples of the comment see it. An example
-/// written as statements is wrapped into the module `DocTest` importing `module` and each of
-/// `imports`, so its names are found as they are in the body of `module`.
-pub struct ExampleScope {
-    /// The name of the module.
-    pub module: Name,
-    /// The import statements the module's source writes.
-    pub imports: Vec<ImportStatement>,
-}
-
-impl ExampleScope {
-    /// The scope of the comments of the module `module` of `program`, with the import statements
-    /// its source writes.
-    pub fn of_module(program: &Program, module: &Name) -> Self {
-        let imports = program
-            .mod_to_import_stmts
-            .get(module)
-            .unwrap_or_else(|| {
-                panic!(
-                    "the module `{}` of the program has its import statements recorded",
-                    module
-                )
-            })
-            .iter()
-            .filter(|stmt| !stmt.implicit)
-            .cloned()
-            .collect();
-        ExampleScope {
-            module: module.clone(),
-            imports,
-        }
-    }
-
-    /// The line an example written as statements begins with: the declaration of the module
-    /// `DocTest`, its imports and the head of `DocTest::main`, all on one line.
-    ///
-    /// # Examples
-    /// For the module `Geometry` that writes `import Math::{sqrt};`, the line is
-    /// `module DocTest; import Geometry; import Math::sqrt; main : ::Std::IO () = (`.
-    fn statement_header(&self) -> String {
-        let imports = self
-            .imports
-            .iter()
-            .map(|stmt| format!(" {}", stmt.stringify_on_one_line()))
-            .collect::<String>();
-        format!(
-            "module {}; import {};{} {} : ::Std::IO () = (",
-            DOC_TEST_MODULE_NAME, self.module, imports, MAIN_FUNCTION_NAME
-        )
-    }
 }
 
 /// A Fix example of a comment or of a Markdown document.
@@ -453,9 +403,8 @@ pub fn collect_examples(program: &Program, files: &[PathBuf]) -> Result<Vec<FixE
         if !files.contains(&module.absolute_source_path()?) {
             continue;
         }
-        let scope = ExampleScope::of_module(program, &module.name);
         for comment in comments_of(&module.source.input)? {
-            errors.eat_err_or(examples_in_text(&comment, &scope), |found| {
+            errors.eat_err_or(examples_in_text(&comment, &module.name), |found| {
                 examples.extend(found)
             });
         }
@@ -531,11 +480,12 @@ fn comments_of(source: &SourceFile) -> Result<Vec<Vec<TextLine>>, Errors> {
 /// is the module it is written in, which an example written as statements imports.
 ///
 /// An error reports each info string carrying a mark other than `ignore` and `no_run` or carrying
-/// both of them, each example written as a module named other than `DocTest`, and each example the
-/// text ends inside.
+/// both of them, each example written as a module named other than `DocTest`, each example whose
+/// import statements are not followed by an expression on the lines after them, and each example
+/// the text ends inside.
 pub fn examples_in_text(
     lines: &[TextLine],
-    scope: &ExampleScope,
+    module: &Name,
 ) -> Result<Vec<FixExample>, Errors> {
     let texts = lines
         .iter()
@@ -544,7 +494,7 @@ pub fn examples_in_text(
     let mut examples = vec![];
     let mut errors = Errors::empty();
     for block in fix_example_blocks(&texts) {
-        errors.eat_err_or(example_of_block(lines, &block, scope), |example| {
+        errors.eat_err_or(example_of_block(lines, &block, module), |example| {
             examples.push(example)
         });
     }
@@ -556,7 +506,7 @@ pub fn examples_in_text(
 fn example_of_block(
     lines: &[TextLine],
     block: &FencedBlock,
-    scope: &ExampleScope,
+    module: &Name,
 ) -> Result<FixExample, Errors> {
     let opening = &lines[block.open];
     let fence = Some(opening.span.clone());
@@ -611,7 +561,7 @@ fn example_of_block(
     let task = if ignore {
         ExampleTask::Ignore
     } else {
-        let source = assemble_example(lines, block.open, close, scope)?;
+        let source = assemble_example(lines, block.open, close, module)?;
         if no_run {
             ExampleTask::Compile(source)
         } else {
@@ -625,16 +575,18 @@ fn example_of_block(
 }
 
 /// The source of the module `DocTest` the Fix example between the fences `open` and `close` of
-/// `lines` is compiled as.
+/// `lines` is compiled as. `module` is the module the comment is written in.
 ///
 /// An example that begins with a `module` declaration is the source of the module as it stands,
 /// and it has to declare the module `DocTest`. Any other example is an expression of type `IO ()`,
-/// which is wrapped into the module as the value `DocTest::main`, importing what `scope` gives: the
-/// module the comment is written in, and each module that module imports.
+/// which may be preceded by import statements. It is wrapped into the module as the value
+/// `DocTest::main`, and the module imports `module` and what the import statements name. As in any
+/// module, `Std` is imported whole unless an import statement names it.
 ///
-/// Each line of the example stays on the line of the comment it is written on, and the lines the
-/// example is wrapped in are written on the lines of its fences, so the positions in the source
-/// are reported where they stand in the comment (see `SourceOrigin`).
+/// Each line of the example stays on the line of the comment it is written on, and the text the
+/// example is wrapped in is written on the lines of its fences, or in front of the line its
+/// expression begins on when import statements precede it, so the positions in the source are
+/// reported where they stand in the comment (see `SourceOrigin`).
 ///
 /// # Examples
 /// The example `let x = 1;` / `assert_eq(|_|"", x, 1)` of a comment in the module
@@ -645,32 +597,57 @@ fn example_of_block(
 /// assert_eq(|_|"", x, 1)
 /// );
 /// ~~~
+/// and the example `import Math;` / `assert_eq(|_|"", sqrt(4.0), 2.0)` as
+/// ~~~text
+/// module DocTest; import Geometry;
+/// import Math;
+/// main : ::Std::IO () = (assert_eq(|_|"", sqrt(4.0), 2.0)
+/// );
+/// ~~~
 fn assemble_example(
     lines: &[TextLine],
     open: usize,
     close: usize,
-    scope: &ExampleScope,
+    module: &Name,
 ) -> Result<SourceFile, Errors> {
     let (first_line, open_origin) = fence_origin(&lines[open]);
     let (_, close_origin) = fence_origin(&lines[close]);
+    let code_lines = &lines[open + 1..close];
     let mut code = vec![];
-    let mut code_origins = vec![];
-    for line in &lines[open + 1..close] {
+    let mut shifts = vec![];
+    for line in code_lines {
         let (_, column) = line.span.start_line_col();
         let example_line = ExampleLine::classify(&line.text);
         code.push(example_line.compiled());
-        code_origins.push(LineOrigin::Taken {
-            shift: column - 1 + example_line.taken_off(),
-        });
+        shifts.push(column - 1 + example_line.taken_off());
     }
-    let origin = SourceOrigin {
-        file_path: lines[open].span.input.file_path.clone(),
-        first_line,
-        lines: [vec![open_origin], code_origins, vec![close_origin]].concat(),
-    };
-    let assemble = |header: &str, footer: &str| {
-        let source_lines = iter::once(header.to_string())
-            .chain(code.iter().cloned())
+
+    // Saves the source whose first line is `header`, whose last line is `footer`, and whose other
+    // lines are those of the example, with `prefix` written in front of the line of the example
+    // it is given with.
+    let save = |header: String,
+                prefix: Option<(usize, &str)>,
+                footer: &str|
+     -> Result<SourceFile, Errors> {
+        let mut body = code.clone();
+        let mut body_origins = shifts
+            .iter()
+            .map(|&shift| LineOrigin::Taken { shift })
+            .collect::<Vec<_>>();
+        if let Some((line, prefix)) = prefix {
+            body[line] = format!("{}{}", prefix, body[line]);
+            body_origins[line] = LineOrigin::Prefixed {
+                prefix: prefix.chars().count(),
+                shift: shifts[line],
+            };
+        }
+        let origin = SourceOrigin {
+            file_path: lines[open].span.input.file_path.clone(),
+            first_line,
+            lines: [vec![open_origin.clone()], body_origins, vec![close_origin.clone()]].concat(),
+        };
+        let source_lines = iter::once(header)
+            .chain(body)
             .chain(iter::once(footer.to_string()))
             .collect::<Vec<_>>();
         assert_eq!(
@@ -678,35 +655,56 @@ fn assemble_example(
             origin.lines.len(),
             "an assembled example has a line for each line its origin records"
         );
-        format!("{}\n", source_lines.join("\n"))
-    };
-
-    // The source is saved under a name the origin decides, so that a source read back from a
-    // cache, which carries its path, finds this content and this origin at that path.
-    let origin_text = serde_json::to_string(&origin).expect("a `SourceOrigin` is written as JSON");
-    let file_name = format!("doc_test.{}", md5_hex(&origin_text));
-    let save = |content: String| -> Result<SourceFile, Errors> {
-        Ok(save_temporary_source(&content, &file_name)?.with_origin(origin.clone()))
+        // The source is saved under a name the origin decides, so that a source read back from a
+        // cache, which carries its path, finds this content and this origin at that path.
+        let origin_text =
+            serde_json::to_string(&origin).expect("a `SourceOrigin` is written as JSON");
+        let file_name = format!("doc_test.{}", md5_hex(&origin_text));
+        let content = format!("{}\n", source_lines.join("\n"));
+        Ok(save_temporary_source(&content, &file_name)?.with_origin(origin))
     };
 
     // An example that begins with a `module` declaration is the source of the module.
-    let module_source = save(assemble("", ""))?;
-    match parse_source_module_defn(module_source.clone()) {
-        Ok(module_info) => {
-            if module_info.name != DOC_TEST_MODULE_NAME {
-                return Err(Errors::from_msg_srcs(
-                    format!(
-                        "A Fix example written as a module declares the module `{}`. The module \
-                         of a Fix example is `{}`.",
-                        module_info.name, DOC_TEST_MODULE_NAME
-                    ),
-                    &[&Some(module_info.source)],
-                ));
-            }
-            Ok(module_source)
+    let module_source = save(String::new(), None, "")?;
+    if let Ok(module_info) = parse_source_module_defn(module_source.clone()) {
+        if module_info.name != DOC_TEST_MODULE_NAME {
+            return Err(Errors::from_msg_srcs(
+                format!(
+                    "A Fix example written as a module declares the module `{}`. The module of a \
+                     Fix example is `{}`.",
+                    module_info.name, DOC_TEST_MODULE_NAME
+                ),
+                &[&Some(module_info.source)],
+            ));
         }
-        Err(_) => save(assemble(&scope.statement_header(), ");")),
+        return Ok(module_source);
     }
+
+    let module_header = format!("module {}; import {};", DOC_TEST_MODULE_NAME, module);
+    let main_head = format!("{} : ::Std::IO () = (", MAIN_FUNCTION_NAME);
+    let joined = code.join("\n");
+    let imports_end = leading_import_statements_end(&joined);
+    if imports_end == 0 {
+        return save(format!("{} {}", module_header, main_head), None, ");");
+    }
+    // The expression begins on the line after the one the last import statement ends on.
+    let last_import_line = joined[..imports_end].matches('\n').count();
+    let after_imports = joined[imports_end..].split('\n').next().unwrap().trim();
+    if !after_imports.is_empty() && !after_imports.starts_with("//") {
+        return Err(Errors::from_msg_srcs(
+            "Begin the expression of a Fix example on a line after its import statements."
+                .to_string(),
+            &[&Some(code_lines[last_import_line].span.clone())],
+        ));
+    }
+    let expression_line = last_import_line + 1;
+    if code[expression_line..].iter().all(|line| line.trim().is_empty()) {
+        return Err(Errors::from_msg_srcs(
+            "A Fix example has import statements and no expression after them.".to_string(),
+            &[&Some(lines[open].span.clone())],
+        ));
+    }
+    save(module_header, Some((expression_line, &main_head)), ");")
 }
 
 /// The line number of the fence `line` stands on, and how the line written on it in place of the

@@ -445,6 +445,8 @@ file_only_import_statements = { SOI ~ sep* ~ module_defn ~ sep* ~ (import_statem
 
 file_only_module_defn = { SOI ~ sep* ~ module_defn ~ ANY* ~ EOI }
 
+file_leading_import_statements = { SOI ~ (sep* ~ import_statement)* ~ ANY* ~ EOI }
+
 // === Lexer for semantic-token syntax highlighting ===
 //
 // An additive, never-failing token scanner used *only* by the LSP semantic
