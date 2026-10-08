@@ -3405,9 +3405,8 @@ main : ::Std::IO () = (
 
 ```
 // ```fix
-// # import Shapes::{Point};
-// let point = Point { x : 1, y : 2 };
-// assert_eq(|_|"", double(point.@x), 2)
+// # import Shapes::{square};
+// assert_eq(|_|"", double(square(3)), 18)
 // ```
 ```
 
