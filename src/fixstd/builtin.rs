@@ -1140,6 +1140,19 @@ pub fn make_array_of_global_storage<'c, 'm>(
     )
 }
 
+/// The provenance of an array `make_array_of_global_storage` builds. The storage is a constant the
+/// whole program shares, so its sharing is unknown wherever the array is read, and a write into its
+/// elements copies it first.
+fn global_storage_array_prov(array_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Provenance {
+    Provenance::uniform(array_ty, type_env, LeafOrigin::Unknown)
+}
+
+/// The locality of an array `make_array_of_global_storage` builds. The storage is
+/// `RefcntState::GLOBAL`, which reference counting reads as external.
+fn global_storage_array_locality(array_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> ExtShape {
+    ExtShape::always(array_ty, type_env)
+}
+
 /// Evaluates a string literal to the `Array U8` backing a `String`: the literal's bytes plus the
 /// null terminator, read out of a constant in the program's data.
 #[derive(Clone, Serialize, Deserialize)]
@@ -1171,9 +1184,7 @@ impl BuiltinOp for StringBufOp {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // The storage is a constant the whole program shares, so its sharing is unknown here and
-        // a write into its elements copies it first.
-        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
+        global_storage_array_prov(result_ty, type_env)
     }
 
     fn result_locality(
@@ -1182,8 +1193,7 @@ impl BuiltinOp for StringBufOp {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        // The storage is `RefcntState::GLOBAL`, which reference counting reads as external.
-        ExtShape::always(result_ty, type_env)
+        global_storage_array_locality(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -5616,9 +5626,7 @@ impl BuiltinOp for ConstantArrayLitOp {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // The storage is a constant the whole program shares, so its sharing is unknown here and
-        // a write into its elements copies it first.
-        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
+        global_storage_array_prov(result_ty, type_env)
     }
 
     fn result_locality(
@@ -5627,8 +5635,7 @@ impl BuiltinOp for ConstantArrayLitOp {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        // The storage is `RefcntState::GLOBAL`, which reference counting reads as external.
-        ExtShape::always(result_ty, type_env)
+        global_storage_array_locality(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
