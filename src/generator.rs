@@ -77,6 +77,7 @@ use inkwell::values::ValueKind;
 use inkwell::AddressSpace;
 use inkwell::AtomicOrdering;
 use inkwell::AtomicRMWBinOp;
+use inkwell::GlobalVisibility;
 use inkwell::IntPredicate;
 use inkwell::{
     attributes::{Attribute, AttributeLoc},
@@ -878,12 +879,19 @@ impl<'c, 'm> Generator<'c, 'm> {
         // name. A COMDAT group of its own lets the linker drop the others' bytes as well; Mach-O has
         // no COMDAT, and its linker folds the weak definitions of one name by itself.
         global.set_linkage(Linkage::LinkOnceODR);
+        // Hidden keeps the name inside the program, which lets the code address the storage as
+        // directly as it addresses an internal constant.
+        global.set_visibility(GlobalVisibility::Hidden);
         if !target_is_darwin(&self.module.get_triple().as_str().to_string_lossy()) {
             global.set_comdat(self.module.get_or_insert_comdat(&name));
         }
-        if is_aligned {
-            global.set_alignment(ARRAY_BUF_ALIGNMENT as u32);
-        }
+        // A definition the linker may replace from another unit keeps the alignment it is given,
+        // where LLVM raises an internal one to the type's preferred alignment, so it is given that.
+        global.set_alignment(if is_aligned {
+            ARRAY_BUF_ALIGNMENT as u32
+        } else {
+            self.target_data.get_preferred_alignment_of_global(&global)
+        });
         // A constant address, so that every place naming this storage names the same one without an
         // instruction of its own.
         let i32_ty = context.i32_type();
