@@ -133,15 +133,15 @@ mod tests {
 
     /// The number of elements of the literal `test_a_long_array_literal_compiles_in_reasonable_time`
     /// compiles. A literal this long builds in a few seconds where the compiler's work is linear in
-    /// the elements, and in minutes where it rebuilds the list of elements once per element.
-    const LONG_LITERAL_LENGTH: usize = 40000;
+    /// the elements, and in minutes where any one pass over the literal rebuilds the list of elements
+    /// once per element.
+    const LONG_LITERAL_LENGTH: usize = 120000;
 
     /// Generous next to the few seconds the build takes, and well short of the minutes it takes
-    /// once the work is quadratic in the elements.
+    /// once the work of one pass is quadratic in the elements.
     const LONG_LITERAL_TIMEOUT: Duration = Duration::from_secs(60);
 
-    /// A literal of tens of thousands of numbers, the size of a table of powers of ten, compiles in
-    /// time linear in its length.
+    /// A literal of over a hundred thousand numbers compiles in time linear in its length.
     #[test]
     fn test_a_long_array_literal_compiles_in_reasonable_time() {
         let elements = (0..LONG_LITERAL_LENGTH)
