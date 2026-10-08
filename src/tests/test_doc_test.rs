@@ -1244,6 +1244,73 @@ third : I64 = 1;
     }
 }
 
+/// A compile error of an import statement written on the line the expression of an example begins
+/// on is reported at its place in the comment: the head of `main` is written after it, and moves
+/// nothing in front of it.
+#[test]
+fn test_error_in_an_import_statement_before_the_expression_is_reported_at_its_place() {
+    let lib = r#"module Lib;
+
+// ```fix
+// import Nowhere; pure()
+// ```
+value : I64 = 1;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("4:11-4:18 in \"lib.fix\"")
+            && stderr.contains("4 | // import Nowhere; pure()"),
+        "the error is reported at `Nowhere` of the import statement\n{}",
+        streams(&output)
+    );
+}
+
+/// An example whose import statements are followed by comments alone has no expression, and
+/// `fix test` rejects it.
+#[test]
+fn test_example_with_import_statements_and_comments_alone_is_rejected() {
+    let lib = r#"module Lib;
+
+// ```fix
+// import Std;
+// // The expression is left out.
+// ```
+value : I64 = 1;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("A Fix example has import statements and no expression after them.")
+            && stderr.contains("3 | // ```fix"),
+        "the example is rejected at its opening fence\n{}",
+        streams(&output)
+    );
+}
+
+/// The import statements of an example may follow a comment, as those of a module may.
+#[test]
+fn test_example_import_statements_may_follow_a_comment() {
+    let lib = r#"module Lib;
+
+// ```fix
+// // The example imports `Std` itself.
+// import Std;
+// assert_eq(|_|"", value, 1)
+// ```
+value : I64 = 1;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &[]);
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("doc test lib.fix:3 ... ok"),
+        "the example's import statement after the comment is an import statement\n{}",
+        streams(&output)
+    );
+}
+
 /// A Fix example written as a module that defines no `main` fails as it does built alone. The
 /// program of the examples does not build, so `fix test` says that it tests each example alone,
 /// which is slower, and the other example passes.
