@@ -26,7 +26,7 @@
 
 - #790: A struct pattern that leaves out fields of its struct without writing `_` is now warned about. When you add a field to a struct, the warning points out each pattern that takes the struct apart. Add the missing fields to the pattern, or write `_` after its fields. A future version of Fix will report such a pattern as an error.
 - #790: `_` can no longer be the name of a struct field or a union variant. Names that start with `_`, such as `_x`, are still allowed.
-- #813: An array literal whose elements are all number literals, such as `[1, 2, 3]`, is now a constant in the program's data. Evaluating it no longer allocates the array or writes its elements, and a change to it, such as `set` or `push_back`, copies it first. `Debug::assert_unique_array` and `unsafe_is_unique` therefore no longer report it as unique, the same as the bytes of a string literal.
+- #813: An array literal whose elements are all number literals, such as `[1, 2, 3]`, is now a constant in the program's data. Evaluating it no longer allocates the array or writes its elements, and a change to it, such as `set` or `push_back`, copies it first. `Debug::assert_unique_array` therefore no longer reports it as unique, the same as the bytes of a string literal.
 
 #### Std
 
