@@ -153,8 +153,8 @@ fn streams(output: &Output) -> String {
     )
 }
 
-/// A module `Lib` whose comments hold a Fix example of each kind: one written as statements,
-/// one written as a module, one marked `no_run` whose run would fail, and one marked `ignore` that
+/// A module `Lib` whose comments hold a Fix example of each kind: one in the expression form,
+/// one in the source form, one marked `no_run` whose run would fail, and one marked `ignore` that
 /// does not compile.
 const LIB_WITH_PASSING_EXAMPLES: &str = r#"
 // A library.
@@ -199,8 +199,8 @@ test = (
 );
 "#;
 
-/// `fix test` runs `Test::test` and then each Fix example of the comments: an example written
-/// as statements and one written as a module run and pass, one marked `no_run` is compiled alone,
+/// `fix test` runs `Test::test` and then each Fix example of the comments: an example in the
+/// expression form and one in the source form run and pass, one marked `no_run` is compiled alone,
 /// and one marked `ignore` is left out.
 #[test]
 fn test_fix_test_runs_the_test_function_and_then_the_examples() {
@@ -384,7 +384,7 @@ fn test_error_on_the_wrapper_is_reported_at_the_fence() {
 }
 
 /// The info string of a Fix example carries `ignore`, `no_run` or neither, separated from `fix` by
-/// spaces, an example written as statements has an expression after its import statements, and a
+/// spaces, an example in the expression form has an expression after its import statements, and a
 /// comment closes each example it opens. `fix test` rejects any other before it runs a test.
 #[test]
 fn test_malformed_examples_are_rejected() {
@@ -563,7 +563,7 @@ fn test_the_module_name_doc_test_is_reserved() {
 }
 
 /// The Fix examples of the files the `build.test` section alone lists are tested as well: a helper
-/// module a project writes for its tests carries examples that run, and one written as statements
+/// module a project writes for its tests carries examples that run, and one in the expression form
 /// imports that module.
 #[test]
 fn test_examples_of_test_files_are_tested() {
@@ -695,7 +695,7 @@ fn fix_fence_lines(source: &str) -> Vec<usize> {
 }
 
 /// `fix test` runs the Fix example of every comment, each once, wherever the comment stands and
-/// whatever its kind, and an example written as statements imports the module of the file its
+/// whatever its kind, and an example in the expression form imports the module of the file its
 /// comment is written in.
 #[test]
 fn test_examples_of_every_comment_run_once() {
@@ -852,8 +852,8 @@ second = 2;
 }
 
 /// A compile error at the end of a Fix example's source is reported inside the comment, at the
-/// closing fence: an unterminated string swallows the end of an example written as statements, and
-/// an unclosed call ends an example written as a module.
+/// closing fence: an unterminated string swallows the end of an example in the expression form, and
+/// an unclosed call ends an example in the source form.
 #[test]
 fn test_error_at_the_end_of_an_example_is_reported_at_the_closing_fence() {
     let lib = r#"module Lib;
@@ -989,7 +989,7 @@ fn test_error_in_an_empty_example_is_reported_at_the_closing_fence() {
     );
 }
 
-/// An example written as statements sees the names its module defines, and the modules its
+/// An example in the expression form sees the names its module defines, and the modules its
 /// module imports only through the import statements it begins with: an import statement written
 /// as a hidden line, and one listing some items, which leaves the others out.
 #[test]
@@ -1159,7 +1159,7 @@ fn test_examples_that_cannot_share_a_program_are_tested_alone() {
     );
 }
 
-/// An example written as statements sees the whole of `Std`, however its module narrows it, and
+/// An example in the expression form sees the whole of `Std`, however its module narrows it, and
 /// it narrows `Std` by the import statements it begins with, as any module does. The `main` the
 /// example is wrapped into is of type `IO ()` however the example narrows `Std`.
 #[test]
@@ -1221,7 +1221,7 @@ type Tuple2 = struct { fst : I64, snd : I64 };
     );
 }
 
-/// A compile error of an example written as statements after import statements is reported at
+/// A compile error of an example in the expression form after import statements is reported at
 /// its place in the comment: on the line the expression begins on, into which the head of `main`
 /// is written, whether the expression begins the line or follows an import statement and a comment
 /// on it, and on the lines after it.
@@ -1338,7 +1338,7 @@ value : I64 = 1;
     );
 }
 
-/// A Fix example written as a module that defines no `main` fails as it does built alone. The
+/// A Fix example in the source form that defines no `main` fails as it does built alone. The
 /// program of the examples does not build, so `fix test` says that it tests each example alone,
 /// which is slower, and the other example passes.
 #[test]
@@ -1370,7 +1370,7 @@ double = |x| 2 * x;
     );
 }
 
-/// A Fix example written as a module whose `main` has a type more general than `IO ()` fails as it
+/// A Fix example in the source form whose `main` has a type more general than `IO ()` fails as it
 /// does built alone, though the program of the examples could run it as an `IO ()`.
 #[test]
 fn test_example_whose_main_is_of_a_more_general_type_fails() {
@@ -1464,7 +1464,7 @@ double = |x| 2 * x;
     );
 }
 
-/// A Fix example written as a module that declares a type and a trait of one name fails, and the
+/// A Fix example in the source form that declares a type and a trait of one name fails, and the
 /// error is reported at the two declarations in the comment.
 #[test]
 fn test_name_confliction_in_an_example_is_reported_at_the_declarations() {
@@ -1504,7 +1504,7 @@ double = |x| 2 * x;
     );
 }
 
-/// A Fix example written as a module whose `main` is declared through a type alias of `IO ()`
+/// A Fix example in the source form whose `main` is declared through a type alias of `IO ()`
 /// passes in the program of the examples, as it does built alone, and the examples are built
 /// together once.
 #[test]

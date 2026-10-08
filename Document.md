@@ -3280,7 +3280,14 @@ double : I64 -> I64;
 double = |x| 2 * x;
 ```
 
-An example is either an expression of type `IO ()`, which `import` statements may precede, or a Fix source that declares the module `DocTest` and defines `main : IO ()` in it. An example that begins with a `module` declaration is read as a source, and any other example as an expression. For an expression, `fix test` adds the module declaration, `import Lib;` and the declaration of `main` to it, and runs the following source, where `Lib` stands for the module the comment is written in. As in any module without an `import` statement for `Std`, the whole of `Std` is imported too, so the expression can use the names of `Lib` and of `Std`:
+An example is written in one of two forms:
+
+- **Source form**: the source of a module. It declares the module `DocTest`, imports what it uses, including the module the comment is written in, and defines `main : IO ()`.
+- **Expression form**: an expression of type `IO ()`, which `import` statements may precede.
+
+An example that begins with a `module` declaration is in the source form, and any other example is in the expression form.
+
+For an example in the expression form, `fix test` adds the module declaration, `import Lib;` and the declaration of `main`, and runs the following source, where `Lib` stands for the module the comment is written in. As in any module without an `import` statement for `Std`, the whole of `Std` is imported too, so the expression can use the names of `Lib` and of `Std`:
 
 ```
 module DocTest;
@@ -3293,7 +3300,7 @@ main : ::Std::IO () = (
 
 An example passes when its program exits with status 0. A failing `assert_eq`, `undefined` or an index out of range therefore makes the example fail.
 
-To use the names of another module, write `import` statements before the expression. They are added to the imports of the module `DocTest`, so an `import` statement for `Std` narrows `Std` as it does in any module (see [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)). Such lines are usually hidden (see below):
+To use the names of another module in an example in the expression form, write `import` statements before the expression. They are added to the imports of the module `DocTest`, so an `import` statement for `Std` narrows `Std` as it does in any module (see [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)). Such lines are usually hidden (see below):
 
 ```
 // ```fix
@@ -3302,7 +3309,7 @@ To use the names of another module, write `import` statements before the express
 // ```
 ```
 
-An example written as a source imports what it uses, including the module the comment is written in. Write an example in this form to define types or functions:
+Write an example in the source form to define types or functions:
 
 ```
 // ```fix

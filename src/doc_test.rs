@@ -477,10 +477,10 @@ fn comments_of(source: &SourceFile) -> Result<Vec<Vec<TextLine>>, Errors> {
 }
 
 /// The Fix examples of the comment or the document whose lines are `lines`, in order. `module`
-/// is the module it is written in, which an example written as statements imports.
+/// is the module it is written in, which an example in the expression form imports.
 ///
 /// An error reports each info string carrying a mark other than `ignore` and `no_run` or carrying
-/// both of them, each example written as a module named other than `DocTest`, each example whose
+/// both of them, each example in the source form named other than `DocTest`, each example whose
 /// import statements are followed by no expression, and each example the text ends inside.
 pub fn examples_in_text(lines: &[TextLine], module: &Name) -> Result<Vec<FixExample>, Errors> {
     let texts = lines
@@ -573,11 +573,12 @@ fn example_of_block(
 /// The source of the module `DocTest` the Fix example between the fences `open` and `close` of
 /// `lines` is compiled as. `module` is the module the comment is written in.
 ///
-/// An example that begins with a `module` declaration is the source of the module as it stands,
-/// and it has to declare the module `DocTest`. Any other example is an expression of type `IO ()`,
-/// which may be preceded by import statements. It is wrapped into the module as the value
-/// `DocTest::main`, and the module imports `module` and what the import statements name. As in any
-/// module, `Std` is imported whole unless an import statement names it.
+/// An example that begins with a `module` declaration is in the source form: it is the source of
+/// the module as it stands, and it has to declare the module `DocTest`. Any other example is in the
+/// expression form: an expression of type `IO ()`, which import statements may precede. The
+/// expression is wrapped into the module as the value `DocTest::main`, and the module imports
+/// `module` and what the import statements name. As in any module, `Std` is imported whole unless
+/// an import statement names it.
 ///
 /// Each line of the example stays on the line of the comment it is written on, and the text the
 /// example is wrapped in is written on the lines of its fences, or into the line where its
@@ -676,7 +677,7 @@ fn assemble_example(
         if module_info.name != DOC_TEST_MODULE_NAME {
             return Err(Errors::from_msg_srcs(
                 format!(
-                    "A Fix example written as a module declares the module `{}`. The module of a \
+                    "A Fix example in the source form declares the module `{}`. The module of a \
                      Fix example is `{}`.",
                     module_info.name, DOC_TEST_MODULE_NAME
                 ),
