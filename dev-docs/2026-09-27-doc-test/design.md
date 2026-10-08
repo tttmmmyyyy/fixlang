@@ -138,16 +138,15 @@ main : ::Std::IO () = (
 );
 ```
 
-例の中で使える名前は、ふつうの module と同じ規則で決まる。import 文を書かなければ、`<M>` の名前と、暗黙に import される Std の全部が使える。これは、利用者が新しい module に `import <M>;` とだけ書いたときと同じである。M が import している他の module の名前は、例の import 文に書いたものだけが使える。例の import 文が Std を名指せば、暗黙の import は無くなり、Std はその import 文のとおりに絞られる。
+例の中で使える名前は、ふつうの module と同じ規則で決まる。import 文を書かなければ、`<M>` の名前と、暗黙に import される Std の全部が使える。これは、利用者が新しい module に `import <M>;` とだけ書いたときと同じである。M が import している他の module の名前は、例の import 文に書いたものだけが使える。例の import 文が Std を名指せば、暗黙の import は無くなり、Std はその import 文のとおりに絞られる。M が Std のとき（std.fix のコメントと Std の文書の例）は `import <M>;` を書かない。Std は暗黙の import で入るので、ほかの例と同じく例の import 文で絞れる。
 
 `main` の型は `::Std::IO ()` と絶対パスで書く。例の import 文が Std から `IO` を外していても、包みの型の意味が変わらないようにするためである。
 
 import 文のある例は、次のように書く。import 文はふつう隠し行にする。
 
 ```fix
-# import Shapes::{Point};
-let point = Point { x : 1, y : 2 };
-assert_eq(|_|"", double(point.@x), 2)
+# import Shapes::{square};
+assert_eq(|_|"", double(square(3)), 18)
 ```
 
 import 文の後に式の無い例は、エラーにする。

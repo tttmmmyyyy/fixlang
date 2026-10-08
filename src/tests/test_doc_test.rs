@@ -59,6 +59,33 @@ fn test_std_doc_examples() {
     );
 }
 
+/// An example of `Std` imports `Std` by the rule of any module: its import statements narrow `Std`,
+/// as those of an example of another module do.
+#[test]
+fn test_example_of_std_narrows_std_by_its_import_statements() {
+    let config = Configuration::develop_mode();
+    let dir = TempDir::new().expect("Failed to create temp directory");
+    let document = dir.path().join("std_example.md");
+    fs::write(
+        &document,
+        "```fix\nimport Std::{IO, Monad::pure};\nassert_eq(|_|\"\", 1, 1)\n```\n",
+    )
+    .expect("Failed to write the document");
+    let examples = panic_if_err(examples_in_text(
+        &markdown_file_lines(&document),
+        &"Std".to_string(),
+    ));
+    let mut outcomes = vec![];
+    panic_if_err(test_examples(&config, &examples, |_, outcome| {
+        outcomes.push(matches!(outcome, ExampleOutcome::Failed(_)))
+    }));
+    assert_eq!(
+        outcomes,
+        vec![true],
+        "the example cannot use `assert_eq`, which its import statement leaves out of `Std`"
+    );
+}
+
 /// The lines of the Markdown file at `path`, each with the span it stands at, as the document of a
 /// declaration whose comment is that file.
 fn markdown_file_lines(path: &Path) -> Vec<TextLine> {

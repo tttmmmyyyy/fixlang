@@ -12,7 +12,7 @@ use crate::{
         name::{FullName, Name},
         program::Program,
     },
-    constants::{DOC_TEST_EXAMPLE_ENV_VAR, DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME},
+    constants::{DOC_TEST_EXAMPLE_ENV_VAR, DOC_TEST_MODULE_NAME, MAIN_FUNCTION_NAME, STD_NAME},
     error::{Error, Errors},
     hash::md5_hex,
     misc::{save_temporary_source, to_absolute_path, Set},
@@ -686,7 +686,13 @@ fn assemble_example(
         return Ok(module_source);
     }
 
-    let module_header = format!("module {}; import {};", DOC_TEST_MODULE_NAME, module);
+    // `Std` is imported by the rule of any module, so that the import statements of an example in
+    // `Std` narrow it.
+    let module_header = if module == STD_NAME {
+        format!("module {};", DOC_TEST_MODULE_NAME)
+    } else {
+        format!("module {}; import {};", DOC_TEST_MODULE_NAME, module)
+    };
     let main_head = format!("{} : ::Std::IO () = (", MAIN_FUNCTION_NAME);
     let code_text = code.join("\n");
     let Some(expression_start) = start_of_code_after_import_statements(&code_text) else {
