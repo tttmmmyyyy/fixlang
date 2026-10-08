@@ -583,6 +583,34 @@ pub fn parse_source_module_defn(source: SourceFile) -> Result<ModuleInfo, Errors
     })
 }
 
+/// The byte offset of `text` at which the code after the import statements it begins with starts,
+/// past the spaces and comments that follow them, or `None` where `text` begins with no import
+/// statement. The offset is the length of `text` where nothing follows them.
+///
+/// # Examples
+/// `start_of_code_after_import_statements("import A;\nimport B;\nfoo()")` is `Some(20)`, and
+/// `start_of_code_after_import_statements("foo()")` is `None`.
+pub fn start_of_code_after_import_statements(text: &str) -> Option<usize> {
+    let mut file = FixParser::parse(Rule::file_leading_import_statements, text)
+        .expect("any text begins with zero or more import statements");
+    let mut has_import = false;
+    for pair in file.next().unwrap().into_inner() {
+        match pair.as_rule() {
+            Rule::import_statement => has_import = true,
+            Rule::code_after_import_statements => {
+                return has_import.then(|| pair.as_span().start());
+            }
+            // A line comment that ends the text ends at `EOI`, which stands before the code after it.
+            Rule::EOI => {}
+            rule => unreachable!(
+                "the leading import statements of a text hold no rule `{:?}`",
+                rule
+            ),
+        }
+    }
+    unreachable!("the code after the import statements of a text is matched, if empty")
+}
+
 /// Parses the whole of `source` as `rule` and reads the result with `parser`, whose spans point
 /// into `source`.
 fn parse_source_as_rule<T>(

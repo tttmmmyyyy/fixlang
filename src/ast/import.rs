@@ -170,16 +170,11 @@ impl ImportStatement {
 
     /// The statement as it is written in source, such as `import Lib::{f, g};`.
     pub fn stringify(&self) -> String {
-        self.stringify_internal(FORMAT_LINE_LIMIT).to_string()
+        self.stringify_internal().to_string()
     }
 
-    /// The statement as `stringify` writes it, on a single line however long its list of items.
-    pub fn stringify_on_one_line(&self) -> String {
-        self.stringify_internal(usize::MAX).to_string()
-    }
-
-    /// The text of the statement, broken across lines where a list of items runs past `line_limit`.
-    fn stringify_internal(&self, line_limit: usize) -> Text {
+    /// The text of the statement, broken across lines where a long list of items needs it.
+    fn stringify_internal(&self) -> Text {
         let text = Text::from_str("import ");
         let text = text.append_to_last_line(&self.module_name);
         let text = if self.items.len() == 1 && matches!(self.items[0], ImportTreeNode::Any(_)) {
@@ -187,11 +182,11 @@ impl ImportStatement {
             text
         } else {
             text.append_to_last_line("::")
-                .append_nobreak(stringify_import_items(&self.items, line_limit))
+                .append_nobreak(stringify_import_items(&self.items))
         };
         let text = if self.hiding.len() >= 1 {
             text.append_to_last_line(" hiding ")
-                .append_nobreak(stringify_import_items(&self.hiding, line_limit))
+                .append_nobreak(stringify_import_items(&self.hiding))
         } else {
             text
         };
@@ -478,33 +473,33 @@ impl ImportTreeNode {
     }
 
     /// The node as it is written in an import path, such as `Ns::{f, g}`, broken across lines where
-    /// a list of items runs past `line_limit`.
-    fn stringify(&self, line_limit: usize) -> Text {
+    /// a long list of items needs it.
+    fn stringify(&self) -> Text {
         match self {
             ImportTreeNode::Any(_) => Text::from_str("*"),
             ImportTreeNode::Symbol(name, _) => Text::from_str(name),
             ImportTreeNode::TypeOrTrait(name, _) => Text::from_str(name),
             ImportTreeNode::NameSpace(name, items, _) => Text::from_str(name)
                 .append_to_last_line("::")
-                .append_nobreak(stringify_import_items(items, line_limit)),
+                .append_nobreak(stringify_import_items(items)),
         }
     }
 }
 
 /// The items `items` as an import statement lists them after `::` or `hiding`: one item alone, and
-/// none or several in braces, broken across lines where the list runs past `line_limit`.
+/// none or several in braces, broken across lines where a long list needs it.
 ///
 /// # Examples
 /// The items `f` and `g` are written `{f, g}`, the item `f` alone is written `f`, and no item is
 /// written `{}`.
-fn stringify_import_items(items: &[ImportTreeNode], line_limit: usize) -> Text {
+fn stringify_import_items(items: &[ImportTreeNode]) -> Text {
     let items_text = Text::join(
         items
             .iter()
-            .map(|item| item.stringify(line_limit))
+            .map(|item| item.stringify())
             .collect::<Vec<_>>(),
         ", ",
-        line_limit,
+        FORMAT_LINE_LIMIT,
     );
     if items.len() == 1 {
         items_text

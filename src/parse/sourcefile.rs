@@ -176,8 +176,8 @@ impl SourceFile {
 ///
 /// The Fix example of a comment is compiled from such a source: line `k` of it is line
 /// `first_line + k - 1` of the file the comment is written in, with what precedes the comment's text
-/// taken off the front, and the lines the example is wrapped in are written on the lines of its
-/// fences.
+/// taken off the front, and the text the example is wrapped in is written on the lines of its
+/// fences, or into the line its expression begins on.
 ///
 /// # Examples
 /// The source `"main : IO () = (\npure()\n);\n"` assembled from lines 7 to 9 of
@@ -186,8 +186,9 @@ impl SourceFile {
 /// // pure()
 /// // ```
 /// ~~~
-/// has the origin `{ first_line: 7, lines: [Written { column: 4, width: 6 }, Taken { shift: 3 },
-/// Written { column: 4, width: 3 }] }`, and the `p` of `pure` is reported at line 8, column 4.
+/// has the origin `{ first_line: 7, lines: [Written { column: 4, width: 6 }, Taken { shift: 3,
+/// inserted: None }, Written { column: 4, width: 3 }] }`, and the `p` of `pure` is reported at
+/// line 8, column 4.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
 pub struct SourceOrigin {
     /// The file the lines were taken from.
@@ -203,13 +204,27 @@ pub struct SourceOrigin {
 /// How a line of an assembled source relates to the line of the origin's file it stands for.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
 pub enum LineOrigin {
-    /// The line holds text of the origin's line with `shift` characters taken off the front of it:
-    /// a character at column `c` of the line stands at column `c + shift` of the origin's line.
-    Taken { shift: usize },
+    /// The line holds text of the origin's line with `shift` characters taken off the front of it,
+    /// and the text the assembler wrote into it at `inserted`, if any. A character taken stands at
+    /// its column on the line plus `shift`, less the width of the text inserted before it.
+    Taken {
+        shift: usize,
+        inserted: Option<Insertion>,
+    },
     /// The line holds text the assembler wrote, which the origin's line does not have. A position
     /// on it is reported at the `width` characters beginning at `column` of the origin's line,
     /// which are what the text was written for.
     Written { column: usize, width: usize },
+}
+
+/// Text the assembler wrote into a line of taken text. A position in it is reported at the
+/// character taken that follows it.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
+pub struct Insertion {
+    /// The column of the assembled line the text begins at, counting from 1.
+    pub column: usize,
+    /// The number of characters of the text.
+    pub width: usize,
 }
 
 impl SourceOrigin {
@@ -218,7 +233,15 @@ impl SourceOrigin {
     pub fn position(&self, (line, column): (usize, usize)) -> (usize, usize) {
         let (origin_line, line_origin) = self.origin_of_line(line);
         match line_origin {
-            LineOrigin::Taken { shift } => (origin_line, column + shift),
+            LineOrigin::Taken { shift, inserted } => {
+                let taken_column = match inserted {
+                    Some(insertion) if column >= insertion.column => {
+                        column.max(insertion.column + insertion.width) - insertion.width
+                    }
+                    _ => column,
+                };
+                (origin_line, taken_column + shift)
+            }
             LineOrigin::Written { column, .. } => (origin_line, *column),
         }
     }
@@ -250,7 +273,17 @@ impl SourceOrigin {
         let (line, column) = self.position((quoted.line, quoted.column));
         let width = match self.origin_of_line(quoted.line).1 {
             LineOrigin::Written { width, .. } => *width,
-            LineOrigin::Taken { .. } => quoted.width,
+            LineOrigin::Taken { inserted: None, .. } => quoted.width,
+            // The underline loses the inserted characters it covers.
+            LineOrigin::Taken {
+                inserted: Some(insertion),
+                ..
+            } => {
+                let covered_end =
+                    (quoted.column + quoted.width).min(insertion.column + insertion.width);
+                let covered = covered_end.saturating_sub(quoted.column.max(insertion.column));
+                (quoted.width - covered).max(1)
+            }
         };
         match origin_lines.and_then(|lines| lines.get(line - 1)) {
             Some(text) => QuotedLine {
