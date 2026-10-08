@@ -18,7 +18,7 @@ use crate::{
     misc::{save_temporary_source, to_absolute_path, Set},
     parse::{
         parser::{
-            comment_ranges, code_after_import_statements, parse_source_module_defn,
+            comment_ranges, parse_source_module_defn, start_of_code_after_import_statements,
             ModuleRenaming,
         },
         sourcefile::{line_comment_text, Insertion, LineOrigin, SourceFile, SourceOrigin, Span},
@@ -687,7 +687,7 @@ fn assemble_example(
     let module_header = format!("module {}; import {};", DOC_TEST_MODULE_NAME, module);
     let main_head = format!("{} : ::Std::IO () = (", MAIN_FUNCTION_NAME);
     let code_text = code.join("\n");
-    let Some(expression_start) = code_after_import_statements(&code_text) else {
+    let Some(expression_start) = start_of_code_after_import_statements(&code_text) else {
         return save(format!("{} {}", module_header, main_head), None, ");");
     };
     if expression_start == code_text.len() {

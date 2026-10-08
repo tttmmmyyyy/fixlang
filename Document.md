@@ -3280,7 +3280,7 @@ double : I64 -> I64;
 double = |x| 2 * x;
 ```
 
-An example is either an expression of type `IO ()`, or a Fix source that declares the module `DocTest` and defines `main : IO ()` in it. An example that begins with a `module` declaration is read as a source, and any other example as an expression. For an expression, `fix test` adds the module declaration, `import Lib;` and the declaration of `main` to it, and runs the following source, where `Lib` stands for the module the comment is written in. As in any module without an `import` statement for `Std`, the whole of `Std` is imported too, so the expression can use the names of `Lib` and of `Std`:
+An example is either an expression of type `IO ()`, which `import` statements may precede, or a Fix source that declares the module `DocTest` and defines `main : IO ()` in it. An example that begins with a `module` declaration is read as a source, and any other example as an expression. For an expression, `fix test` adds the module declaration, `import Lib;` and the declaration of `main` to it, and runs the following source, where `Lib` stands for the module the comment is written in. As in any module without an `import` statement for `Std`, the whole of `Std` is imported too, so the expression can use the names of `Lib` and of `Std`:
 
 ```
 module DocTest;

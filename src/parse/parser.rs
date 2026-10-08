@@ -588,9 +588,9 @@ pub fn parse_source_module_defn(source: SourceFile) -> Result<ModuleInfo, Errors
 /// statement. The offset is the length of `text` where nothing follows them.
 ///
 /// # Examples
-/// `code_after_import_statements("import A;\nimport B;\nfoo()")` is `Some(20)`, and
-/// `code_after_import_statements("foo()")` is `None`.
-pub fn code_after_import_statements(text: &str) -> Option<usize> {
+/// `start_of_code_after_import_statements("import A;\nimport B;\nfoo()")` is `Some(20)`, and
+/// `start_of_code_after_import_statements("foo()")` is `None`.
+pub fn start_of_code_after_import_statements(text: &str) -> Option<usize> {
     let mut file = FixParser::parse(Rule::file_leading_import_statements, text)
         .expect("any text begins with zero or more import statements");
     let mut has_import = false;
