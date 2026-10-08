@@ -18,10 +18,10 @@ use crate::{
     misc::{save_temporary_source, to_absolute_path, Set},
     parse::{
         parser::{
-            comment_ranges, leading_import_statements_end, parse_source_module_defn,
+            comment_ranges, code_after_import_statements, parse_source_module_defn,
             ModuleRenaming,
         },
-        sourcefile::{line_comment_text, LineOrigin, SourceFile, SourceOrigin, Span},
+        sourcefile::{line_comment_text, Insertion, LineOrigin, SourceFile, SourceOrigin, Span},
     },
 };
 use std::iter;
@@ -481,8 +481,7 @@ fn comments_of(source: &SourceFile) -> Result<Vec<Vec<TextLine>>, Errors> {
 ///
 /// An error reports each info string carrying a mark other than `ignore` and `no_run` or carrying
 /// both of them, each example written as a module named other than `DocTest`, each example whose
-/// import statements are not followed by an expression on the lines after them, and each example
-/// the text ends inside.
+/// import statements are followed by no expression, and each example the text ends inside.
 pub fn examples_in_text(
     lines: &[TextLine],
     module: &Name,
@@ -584,8 +583,8 @@ fn example_of_block(
 /// module, `Std` is imported whole unless an import statement names it.
 ///
 /// Each line of the example stays on the line of the comment it is written on, and the text the
-/// example is wrapped in is written on the lines of its fences, or in front of the line its
-/// expression begins on when import statements precede it, so the positions in the source are
+/// example is wrapped in is written on the lines of its fences, or into the line where its
+/// expression begins when import statements precede it, so the positions in the source are
 /// reported where they stand in the comment (see `SourceOrigin`).
 ///
 /// # Examples
@@ -612,10 +611,9 @@ fn assemble_example(
 ) -> Result<SourceFile, Errors> {
     let (first_line, open_origin) = fence_origin(&lines[open]);
     let (_, close_origin) = fence_origin(&lines[close]);
-    let code_lines = &lines[open + 1..close];
     let mut code = vec![];
     let mut shifts = vec![];
-    for line in code_lines {
+    for line in &lines[open + 1..close] {
         let (_, column) = line.span.start_line_col();
         let example_line = ExampleLine::classify(&line.text);
         code.push(example_line.compiled());
@@ -623,23 +621,29 @@ fn assemble_example(
     }
 
     // Saves the source whose first line is `header`, whose last line is `footer`, and whose other
-    // lines are those of the example, with `prefix` written in front of the line of the example
-    // it is given with.
+    // lines are those of the example, with `insertion`'s text written into the line of the example
+    // it names, at the byte offset it names.
     let save = |header: String,
-                prefix: Option<(usize, &str)>,
+                insertion: Option<(usize, usize, &str)>,
                 footer: &str|
      -> Result<SourceFile, Errors> {
         let mut body = code.clone();
         let mut body_origins = shifts
             .iter()
-            .map(|&shift| LineOrigin::Taken { shift })
+            .map(|&shift| LineOrigin::Taken {
+                shift,
+                inserted: None,
+            })
             .collect::<Vec<_>>();
-        if let Some((line, prefix)) = prefix {
-            body[line] = format!("{}{}", prefix, body[line]);
-            body_origins[line] = LineOrigin::Prefixed {
-                prefix: prefix.chars().count(),
+        if let Some((line, offset, text)) = insertion {
+            body_origins[line] = LineOrigin::Taken {
                 shift: shifts[line],
+                inserted: Some(Insertion {
+                    column: body[line][..offset].chars().count() + 1,
+                    width: text.chars().count(),
+                }),
             };
+            body[line].insert_str(offset, text);
         }
         let origin = SourceOrigin {
             file_path: lines[open].span.input.file_path.clone(),
@@ -683,28 +687,22 @@ fn assemble_example(
     let module_header = format!("module {}; import {};", DOC_TEST_MODULE_NAME, module);
     let main_head = format!("{} : ::Std::IO () = (", MAIN_FUNCTION_NAME);
     let joined = code.join("\n");
-    let imports_end = leading_import_statements_end(&joined);
-    if imports_end == 0 {
+    let Some(expression_start) = code_after_import_statements(&joined) else {
         return save(format!("{} {}", module_header, main_head), None, ");");
-    }
-    // The expression begins on the line after the one the last import statement ends on.
-    let last_import_line = joined[..imports_end].matches('\n').count();
-    let after_imports = joined[imports_end..].split('\n').next().unwrap().trim();
-    if !after_imports.is_empty() && !after_imports.starts_with("//") {
-        return Err(Errors::from_msg_srcs(
-            "Begin the expression of a Fix example on a line after its import statements."
-                .to_string(),
-            &[&Some(code_lines[last_import_line].span.clone())],
-        ));
-    }
-    let expression_line = last_import_line + 1;
-    if code[expression_line..].iter().all(|line| line.trim().is_empty()) {
+    };
+    if expression_start == joined.len() {
         return Err(Errors::from_msg_srcs(
             "A Fix example has import statements and no expression after them.".to_string(),
             &[&Some(lines[open].span.clone())],
         ));
     }
-    save(module_header, Some((expression_line, &main_head)), ");")
+    let expression_line = joined[..expression_start].matches('\n').count();
+    let line_start = joined[..expression_start].rfind('\n').map_or(0, |at| at + 1);
+    save(
+        module_header,
+        Some((expression_line, expression_start - line_start, &main_head)),
+        ");",
+    )
 }
 
 /// The line number of the fence `line` stands on, and how the line written on it in place of the

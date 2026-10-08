@@ -583,21 +583,27 @@ pub fn parse_source_module_defn(source: SourceFile) -> Result<ModuleInfo, Errors
     })
 }
 
-/// The byte offset of `text` at which the import statements it begins with end: the end of the last
-/// of them, or 0 where it begins with none. Spaces and comments may stand before and between them.
+/// The byte offset of `text` at which the code after the import statements it begins with starts,
+/// past the spaces and comments that follow them, or `None` where `text` begins with no import
+/// statement. The offset is the length of `text` where nothing follows them.
 ///
 /// # Examples
-/// `leading_import_statements_end("import A;\nimport B;\nfoo()")` is 19, and
-/// `leading_import_statements_end("foo()")` is 0.
-pub fn leading_import_statements_end(text: &str) -> usize {
+/// `code_after_import_statements("import A;\nimport B;\nfoo()")` is `Some(20)`, and
+/// `code_after_import_statements("foo()")` is `None`.
+pub fn code_after_import_statements(text: &str) -> Option<usize> {
     let mut file = FixParser::parse(Rule::file_leading_import_statements, text)
         .expect("any text begins with zero or more import statements");
-    file.next()
-        .unwrap()
-        .into_inner()
-        .filter(|pair| pair.as_rule() == Rule::import_statement)
-        .last()
-        .map_or(0, |last| last.as_span().end())
+    let mut has_import = false;
+    for pair in file.next().unwrap().into_inner() {
+        match pair.as_rule() {
+            Rule::import_statement => has_import = true,
+            Rule::code_after_import_statements => {
+                return has_import.then(|| pair.as_span().start());
+            }
+            _ => {}
+        }
+    }
+    unreachable!("the code after the import statements of a text is matched, if empty")
 }
 
 /// Parses the whole of `source` as `rule` and reads the result with `parser`, whose spans point

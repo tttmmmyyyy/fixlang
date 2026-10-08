@@ -357,9 +357,8 @@ fn test_error_on_the_wrapper_is_reported_at_the_fence() {
 }
 
 /// The info string of a Fix example carries `ignore`, `no_run` or neither, separated from `fix` by
-/// spaces, the expression of an example written as statements begins on a line after its import
-/// statements, and a comment closes each example it opens. `fix test` rejects any other before it
-/// runs a test.
+/// spaces, an example written as statements has an expression after its import statements, and a
+/// comment closes each example it opens. `fix test` rejects any other before it runs a test.
 #[test]
 fn test_malformed_examples_are_rejected() {
     let lib = r#"module Lib;
@@ -378,10 +377,6 @@ fn test_malformed_examples_are_rejected() {
 //
 // ```fix,no_run
 // pure()
-// ```
-//
-// ```fix
-// import Std; pure()
 // ```
 //
 // ```fix
@@ -413,16 +408,12 @@ value = 1;
             "15 | // ```fix,no_run",
         ),
         (
-            "Begin the expression of a Fix example on a line after its import statements.",
-            "20 | // import Std; pure()",
-        ),
-        (
             "A Fix example has import statements and no expression after them.",
-            "23 | // ```fix",
+            "19 | // ```fix",
         ),
         (
             "The comment ends inside this Fix example. Close it by a line of ```.",
-            "28 | // ```fix",
+            "24 | // ```fix",
         ),
     ] {
         assert!(
@@ -1204,8 +1195,9 @@ type Tuple2 = struct { fst : I64, snd : I64 };
 }
 
 /// A compile error of an example written as statements after import statements is reported at
-/// its place in the comment: on the line the expression begins on, in front of which the head of
-/// `main` is written, and on the lines after it.
+/// its place in the comment: on the line the expression begins on, into which the head of `main`
+/// is written, whether the expression begins the line or follows an import statement and a comment
+/// on it, and on the lines after it.
 #[test]
 fn test_error_in_an_example_after_import_statements_is_reported_at_its_place() {
     let lib = r#"module Lib;
@@ -1224,6 +1216,12 @@ value : I64 = 1;
 // pure()
 // ```
 other : I64 = 1;
+
+// ```fix
+// import Std; /* the types */ let z : I64 = "a string";
+// pure()
+// ```
+third : I64 = 1;
 "#;
     let dir = project_dir(&[("lib.fix", lib)], &[]);
     let output = fix_test(&dir, &[]);
@@ -1231,6 +1229,10 @@ other : I64 = 1;
     for (position, line) in [
         ("5:18-5:28", "5 | // let x : I64 = \"a string\";"),
         ("13:18-13:28", "13 | // let y : I64 = \"a string\";"),
+        (
+            "19:46-19:56",
+            "19 | // import Std; /* the types */ let z : I64 = \"a string\";",
+        ),
     ] {
         assert!(
             stderr.contains(&format!("{} in \"lib.fix\"", position)) && stderr.contains(line),
