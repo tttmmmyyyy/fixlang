@@ -5528,7 +5528,9 @@ impl BuiltinOp for MakeStructOp {
 /// A number literal standing as an element of `ConstantArrayLitOp`.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum NumberLiteral {
+    /// A literal of an integer type.
     Int(IntLitOp),
+    /// A literal of a floating-point type.
     Float(FloatLitOp),
 }
 

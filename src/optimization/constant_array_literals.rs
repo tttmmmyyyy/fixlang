@@ -14,6 +14,7 @@ use crate::ast::{
 };
 use crate::fixstd::builtin::{ConstantArrayLitOp, NumberLiteral};
 
+/// Replaces each array literal of number literals in the program's symbols with a `ConstantArrayLitOp`.
 pub fn run(prg: &mut Program) {
     for (_name, sym) in &mut prg.symbols {
         let res = ConstantArrayLiteralMaker {}.traverse(sym.expr.as_ref().unwrap());
@@ -23,6 +24,8 @@ pub fn run(prg: &mut Program) {
     }
 }
 
+/// Replaces an array literal of number literals with a `ConstantArrayLitOp`, and leaves every other
+/// expression as it is.
 struct ConstantArrayLiteralMaker {}
 
 impl ExprVisitor for ConstantArrayLiteralMaker {

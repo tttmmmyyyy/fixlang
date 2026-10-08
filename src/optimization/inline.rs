@@ -200,8 +200,8 @@ fn calculate_inline_costs(prg: &Program) -> InlineCosts {
             let is_free_to_duplicate = op.is_free_to_duplicate();
             // An operation whose result holds a boxed part allocates that part, so a copy of it
             // allocates once more, unless every boxed part is a constant in the program's data,
-            // which the operation declares non-local. The declaration and the operation agree only
-            // where the type of what it answers with is unboxed throughout or that holds.
+            // which the operation declares non-local. So an operation declared free to duplicate
+            // answers with a type unboxed throughout, or declares its whole result non-local.
             assert!(
                 !is_free_to_duplicate
                     || sym.ty.is_fully_unboxed(&type_env)
