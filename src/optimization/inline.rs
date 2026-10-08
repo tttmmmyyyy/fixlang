@@ -21,10 +21,10 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, VisitState},
     },
     misc::{Map, Set},
-    rc_ir::locality::ExtShape,
     optimization::{
         inline_local, let_elimination::create_global_lambda_to_arity_map, uncurry::is_std_fix,
     },
+    rc_ir::locality::ExtShape,
 };
 use std::{mem, sync::Arc};
 

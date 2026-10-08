@@ -5,9 +5,9 @@
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
     use crate::configuration::{Configuration, FixOptimizationLevel};
     use crate::tests::test_util::{build_run_and_read_rc_ir, build_within_and_run, test_source};
+    use std::time::Duration;
 
     /// The levels a program writing into a constant is run at. A write into read-only memory faults
     /// at `-O none` and `-O basic`; at `-O max`, LLVM may delete the store instead, so that level

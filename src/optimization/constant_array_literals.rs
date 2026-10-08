@@ -6,13 +6,13 @@ The operation is free to duplicate, so the inliner puts a global holding such a 
 global is read, and the reader sees the length and the elements of the array as constants.
 */
 
-use std::sync::Arc;
 use crate::ast::{
     expr::{expr_builtin, Expr, ExprNode},
     program::Program,
     traverse::{EndVisitResult, ExprVisitor, VisitState},
 };
 use crate::fixstd::builtin::{ConstantArrayLitOp, NumberLiteral};
+use std::sync::Arc;
 
 /// Replaces each array literal of number literals in the program's symbols with a `ConstantArrayLitOp`.
 pub fn run(prg: &mut Program) {

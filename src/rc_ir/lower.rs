@@ -15,8 +15,7 @@ use crate::ast::program::{Symbol, TypeEnv};
 use crate::ast::types::{TyCon, TypeNode};
 use crate::constants::{BOOL_FALSE_TAG, BOOL_TRUE_TAG, CAP_NAME};
 use crate::fixstd::builtin::{
-    make_dynamic_object_ty, ArrayLitOp, CaptureProjectOp, FFICallOp,
-    MakeStructOp, NoStorageValueOp,
+    make_dynamic_object_ty, ArrayLitOp, CaptureProjectOp, FFICallOp, MakeStructOp, NoStorageValueOp,
 };
 use crate::hash::md5_hex;
 use crate::misc::{grow_stack, Map, Set};

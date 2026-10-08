@@ -1,8 +1,8 @@
 use super::{
     application_inlining, closure_specialization, collapse_constructions, constant_array_literals,
-    dead_symbol_elimination,
-    decapture_scope_functions, defunctionalize_fix, inline, inline_local, optimize_act,
-    remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args, uncurry, unwrap_newtype,
+    dead_symbol_elimination, decapture_scope_functions, defunctionalize_fix, inline, inline_local,
+    optimize_act, remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args, uncurry,
+    unwrap_newtype,
 };
 use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
 
