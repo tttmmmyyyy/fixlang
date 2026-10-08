@@ -171,3 +171,27 @@ main = (
     config.set_threaded();
     test_source(source, config);
 }
+
+/// A mark walk leaves the storage of an array literal of numbers where it stands, as it leaves a
+/// string literal's.
+#[test]
+fn test_marking_leaves_the_storage_of_an_array_literal_of_numbers_alone() {
+    let source = r#"
+module Main;
+
+table : Array I64;
+table = [1, 2, 3];
+
+main : IO ();
+main = (
+    assert_eq(|_|"the global value holds the literal", table, [1, 2, 3]);;
+    let handed_over = [1, 2, 3].mark_threaded;
+    assert_eq(|_|"the marked value holds the literal", handed_over, [1, 2, 3]);;
+    assert_eq(|_|"the global value holds it still", table, [1, 2, 3]);;
+    pure()
+);
+"#;
+    let mut config = Configuration::develop_mode();
+    config.set_threaded();
+    test_source(source, config);
+}

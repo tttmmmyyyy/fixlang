@@ -1913,14 +1913,12 @@ impl Program {
                 }
                 expr
             }
-            Expr::ArrayLit(elems) => {
-                let mut expr = expr.clone();
-                for (i, e) in elems.iter().enumerate() {
-                    let e = self.instantiate_expr(e)?;
-                    expr = expr.set_array_lit_elem(e, i);
-                }
-                expr
-            }
+            Expr::ArrayLit(elems) => expr.set_array_lit_elems(
+                elems
+                    .iter()
+                    .map(|e| self.instantiate_expr(e))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
             Expr::FFICall(_, _, _, _, args, _) => {
                 let mut expr = expr.clone();
                 for (i, e) in args.iter().enumerate() {

@@ -11,6 +11,11 @@ gpair = Pair { head : [1, 2], tail : [3, 4] };
 gholder : Holder;
 gholder = Holder::some([5, 6]);
 
+// An array holding `elements`, built at run time. An array literal of numbers is a constant the
+// whole program shares, so the value a case means to build here passes through this.
+built_here : Array I64 -> Array I64;
+built_here = |elements| elements.to_iter.to_array;
+
 // Both fields are read, so the destructure hands out each one rather than dropping it.
 sum_pair : Pair -> I64;
 sum_pair = |pair| pair.@head.@(0) + pair.@tail.@(0);
@@ -45,8 +50,8 @@ plant_scalars = |arr| arr.mutate_elements(|_| pure()).@0;
 
 main : IO ();
 main = (
-    let local_pair = Pair { head : [10, 20], tail : [30, 40] };
-    let local_holder = Holder::some([50, 60]);
+    let local_pair = Pair { head : built_here([10, 20]), tail : built_here([30, 40]) };
+    let local_holder = Holder::some(built_here([50, 60]));
 
     let from_local = local_pair.sum_pair + local_holder.sum_holder
                    + local_pair.head_and_tail + local_holder.head_of_holder;
@@ -54,7 +59,7 @@ main = (
                     + gpair.head_and_tail + gholder.head_of_holder;
 
     // Every element is built here, so what the array holds turns on the write alone.
-    let planted = [[70], [80]].plant_global;
+    let planted = [built_here([70]), built_here([80])].plant_global;
     let from_planted = planted.@(0).@(0) + planted.@(1).@(0);
 
     // The same write over a payload of scalars, which holds no reference for the callback to

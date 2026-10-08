@@ -22,9 +22,9 @@ use crate::constants::SYMBOL_VERSION_SEPARATOR_SUBSTITUTE;
 use crate::constants::{ARRAY_BUF_ALIGNMENT, STORAGE_BUF_IDX};
 use crate::error::panic_with_msg;
 use crate::ffi::{c_abi_extends_narrow_integers, promote_through_ellipsis, CSignature};
+use crate::fixstd::builtin::make_array_storage_ty;
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
-use crate::fixstd::builtin::{make_array_storage_ty, make_u8_ty};
 use crate::fixstd::runtime::RUNTIME_ABORT;
 use crate::fixstd::runtime::RUNTIME_EPRINTLN;
 use crate::misc::flatten_opt;
@@ -61,6 +61,7 @@ use inkwell::llvm_sys::debuginfo::LLVMMetadataReplaceAllUsesWith;
 use inkwell::module::Module;
 use inkwell::types::BasicTypeEnum;
 use inkwell::types::StructType;
+use inkwell::values::ArrayValue;
 use inkwell::values::AsValueRef;
 use inkwell::values::BasicValue;
 use inkwell::values::BasicValueEnum;
@@ -642,9 +643,9 @@ pub struct Generator<'c, 'm> {
     /// The global constant emitted for each Rust string embedded in the module, keyed by the string,
     /// so that one string is emitted once.
     global_strings: Map<String, GlobalValue<'c>>,
-    /// The constant `#ArrayStorage` emitted for each byte string a literal asks for, keyed by the
-    /// bytes, so that literals of equal bytes name one storage.
-    global_byte_array_storages: Map<Vec<u8>, PointerValue<'c>>,
+    /// The constant `#ArrayStorage` emitted for each array of elements a literal asks for, keyed by
+    /// the constant holding the elements, so that literals of equal elements name one storage.
+    global_array_storages: Map<ArrayValue<'c>, PointerValue<'c>>,
     /// Debug type built for each Fix type, keyed by the type's canonical string, so a type is
     /// described once and shared across every reference to it.
     di_type_cache: Map<String, DIType<'c>>,
@@ -746,7 +747,8 @@ impl<'c> OutPointer<'c> {
 }
 
 impl<'c, 'm> Generator<'c, 'm> {
-    /// The `#ArrayStorage` holding `bytes`, emitted as a constant in the program's data.
+    /// The `#ArrayStorage` of elements of type `elem_ty` holding `elements`, emitted as a constant in
+    /// the program's data.
     ///
     /// Its control block says `RefcntState::GLOBAL`, which takes the object out of reference counting
     /// altogether: it is never retained, released nor freed, and every check of whether it is uniquely
@@ -758,25 +760,40 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// too: the constant carries padding ahead of the control block, which puts the elements on the
     /// boundary.
     ///
-    /// Storages of equal bytes are one storage.
-    pub fn add_global_byte_array_storage(&mut self, bytes: &[u8]) -> PointerValue<'c> {
+    /// Storages of equal elements are one storage.
+    ///
+    /// # Arguments
+    /// * `elem_ty` - The type of the elements, which holds no boxed part.
+    /// * `elements` - The elements, each of the type `elem_ty` is embedded as.
+    pub fn add_global_array_storage(
+        &mut self,
+        elem_ty: &Arc<TypeNode>,
+        elements: ArrayValue<'c>,
+    ) -> PointerValue<'c> {
         // The field the storage itself sits in; the padding is the field ahead of it.
         const STORAGE_IDX: u32 = 1;
 
-        if let Some(ptr) = self.global_byte_array_storages.get(bytes) {
+        assert!(
+            elem_ty.is_fully_unboxed(self.type_env()),
+            "a constant `#ArrayStorage` holds `{}`, which has a boxed part that reference counting \
+             would never release",
+            elem_ty.to_string()
+        );
+        // LLVM keeps one constant of each value, so equal elements are one `ArrayValue`.
+        if let Some(ptr) = self.global_array_storages.get(&elements) {
             return *ptr;
         }
         let context = self.context;
 
         // The bytes the heap lays ahead of the elements, read off the type the heap builds.
-        let storage_struct_ty = make_array_storage_ty(make_u8_ty())
+        let storage_struct_ty = make_array_storage_ty(elem_ty.clone())
             .get_object_type(&vec![], self.type_env())
             .to_struct_type(self);
         let header_size = self
             .target_data
             .offset_of_element(&storage_struct_ty, STORAGE_BUF_IDX)
             .expect("`#ArrayStorage` lays its elements out after its control block");
-        let sizeof = header_size + bytes.len() as u64;
+        let sizeof = header_size + self.target_data.get_abi_size(&elements.get_type());
         let is_aligned = array_storage_is_aligned(sizeof);
         let padding = if is_aligned {
             array_storage_buf_padding(header_size)
@@ -797,12 +814,15 @@ impl<'c, 'm> Generator<'c, 'm> {
                 })
                 .collect::<Vec<BasicValueEnum<'c>>>(),
         );
-        let storage = context.const_struct(
-            &[
-                control_block.into(),
-                context.const_string(bytes, false).into(),
-            ],
-            false,
+        let storage = context.const_struct(&[control_block.into(), elements.into()], false);
+        // The code reading the elements finds them `header_size` bytes into the storage, where the
+        // heap puts them.
+        assert_eq!(
+            self.target_data
+                .offset_of_element(&storage.get_type(), STORAGE_BUF_IDX),
+            Some(header_size),
+            "a constant `#ArrayStorage` of `{}` lays its elements out where the heap does not",
+            elem_ty.to_string()
         );
         let padded_storage = context.const_struct(
             &[
@@ -835,10 +855,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let global = self.module.add_global(
             padded_storage.get_type(),
             None,
-            &format!(
-                "GlobalArrayStorage#{}",
-                self.global_byte_array_storages.len()
-            ),
+            &format!("GlobalArrayStorage#{}", self.global_array_storages.len()),
         );
         global.set_initializer(&padded_storage);
         global.set_constant(true);
@@ -858,7 +875,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 ],
             )
         };
-        self.global_byte_array_storages.insert(bytes.to_vec(), ptr);
+        self.global_array_storages.insert(elements, ptr);
         ptr
     }
 
@@ -1111,7 +1128,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             c_abi_extends_narrow_integers: c_abi_extends_narrow_integers(&triple),
             config,
             global_strings: Map::default(),
-            global_byte_array_storages: Map::default(),
+            global_array_storages: Map::default(),
             di_type_cache: Map::default(),
             di_type_placeholders: Map::default(),
             struct_types: Map::default(),

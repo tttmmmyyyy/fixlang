@@ -9,6 +9,11 @@ g = [1, 2, 3];
 gg : Array (Array I64);
 gg = [g, g];
 
+// An array holding `elements`, built at run time. An array literal of numbers is a constant the
+// whole program shares, so the value a case means to build here passes through this.
+built_here : Array I64 -> Array I64;
+built_here = |elements| elements.to_iter.to_array;
+
 // Mutually recursive, so neither is inlined away and both are cloned.
 even_step : I64 -> Array (Array I64) -> I64;
 even_step = |i, a| (
@@ -36,7 +41,7 @@ gsum = even_step(0, gg);
 main : IO ();
 main = (
     // Built here, elements and all.
-    let deep = [[10, 20], [30, 40]];
+    let deep = [built_here([10, 20]), built_here([30, 40])];
     // Built here, holding the global: local at the root, not below it.
     let root = [g, g];
 

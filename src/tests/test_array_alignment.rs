@@ -77,6 +77,32 @@ mod tests {
         );
     }
 
+    /// An array literal of numbers starts its elements on the boundary too, as a string literal's
+    /// bytes do.
+    #[test]
+    fn test_the_element_buffer_of_an_array_literal_of_numbers_is_aligned() {
+        let count = ARRAY_ALIGNED_ALLOC_THRESHOLD / 8 + 1;
+        let elements = (0..count)
+            .map(|i| i.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let source = preamble()
+            + &format!(
+                r#"
+        main : IO ();
+        main = (
+            let long = [{elements}];
+            assert_aligned("array literal", long);;
+            assert_eq(|_|"the literal holds every element written", long.@size, i64_count);;
+            assert_eq(|_|"its last element", long.@(i64_count - 1), i64_count - 1);;
+            pure()
+        );
+        "#,
+                elements = elements,
+            );
+        test_source_with_c(&source, ADDR_MOD_ALIGNMENT, "array_alignment_array_literal");
+    }
+
     /// Every way of building an array over the threshold lands its elements on the boundary,
     /// whatever the element type.
     #[test]

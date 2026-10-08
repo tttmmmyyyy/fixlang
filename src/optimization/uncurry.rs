@@ -322,16 +322,12 @@ fn replace_closure_call_to_funptr_call_subexprs(
             }
             expr
         }
-        Expr::ArrayLit(elems) => {
-            let mut expr = expr.clone();
-            for (i, e) in elems.iter().enumerate() {
-                expr = expr.set_array_lit_elem(
-                    replace_closure_call_to_funptr_call_subexprs(e, symbol_names),
-                    i,
-                )
-            }
-            expr
-        }
+        Expr::ArrayLit(elems) => expr.set_array_lit_elems(
+            elems
+                .iter()
+                .map(|e| replace_closure_call_to_funptr_call_subexprs(e, symbol_names))
+                .collect(),
+        ),
         Expr::FFICall(_, _, _, _, args, _) => {
             let mut expr = expr.clone();
             for (i, e) in args.iter().enumerate() {

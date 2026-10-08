@@ -735,21 +735,6 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    pub fn set_array_lit_elem(&self, elem: Arc<ExprNode>, idx: usize) -> Arc<ExprNode> {
-        let mut ret = self.clone_except_fvs();
-        match &*self.expr {
-            Expr::ArrayLit(elems) => {
-                let mut elems = elems.clone();
-                elems[idx] = elem;
-                ret.expr = Arc::new(Expr::ArrayLit(elems));
-            }
-            _ => {
-                panic!()
-            }
-        }
-        Arc::new(ret)
-    }
-
     pub fn set_array_lit_elems(&self, elems: Vec<Arc<ExprNode>>) -> Arc<ExprNode> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
@@ -900,13 +885,12 @@ impl ExprNode {
                 }
                 Ok(expr)
             }
-            Expr::ArrayLit(elems) => {
-                let mut expr = self.clone();
-                for (i, elem) in elems.iter().enumerate() {
-                    expr = expr.set_array_lit_elem(elem.resolve_namespace(ctx)?, i);
-                }
-                Ok(expr)
-            }
+            Expr::ArrayLit(elems) => Ok(self.set_array_lit_elems(
+                elems
+                    .iter()
+                    .map(|elem| elem.resolve_namespace(ctx))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )),
             Expr::FFICall(_, _, _, _, args, _) => {
                 let mut expr = self.clone();
                 for (i, arg) in args.iter().enumerate() {
@@ -986,13 +970,12 @@ impl ExprNode {
                 }
                 Ok(expr)
             }
-            Expr::ArrayLit(elems) => {
-                let mut expr = self.clone();
-                for (i, elem) in elems.iter().enumerate() {
-                    expr = expr.set_array_lit_elem(elem.resolve_type_aliases(type_env)?, i);
-                }
-                Ok(expr)
-            }
+            Expr::ArrayLit(elems) => Ok(self.set_array_lit_elems(
+                elems
+                    .iter()
+                    .map(|elem| elem.resolve_type_aliases(type_env))
+                    .collect::<Result<Vec<_>, _>>()?,
+            )),
             Expr::FFICall(_, _, _, _, args, _) => {
                 let mut expr = self.clone();
                 for (i, arg) in args.iter().enumerate() {

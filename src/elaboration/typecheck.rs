@@ -1585,12 +1585,11 @@ impl TypeCheckContext {
                 // type even when the outer expected type isn't an
                 // array.
                 self.unify_or_tolerated_mismatch(&ty, &array_ty, &ei.source)?;
-                let mut ei = ei.clone();
-                for (i, e) in elems.iter().enumerate() {
-                    let e = self.unify_type_of_expr(e, elem_ty.clone())?;
-                    ei = ei.set_array_lit_elem(e, i);
-                }
-                Ok(ei)
+                let elems = elems
+                    .iter()
+                    .map(|e| self.unify_type_of_expr(e, elem_ty.clone()))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(ei.set_array_lit_elems(elems))
             }
             Expr::FFICall(_, ret_ty, param_tys, is_var_args, args, is_io) => {
                 let ret_ty = type_tycon(ret_ty);
