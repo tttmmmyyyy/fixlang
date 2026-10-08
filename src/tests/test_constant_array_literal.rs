@@ -6,7 +6,6 @@
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
-
     use crate::configuration::{Configuration, FixOptimizationLevel};
     use crate::tests::test_util::{build_run_and_read_rc_ir, build_within_and_run, test_source};
 

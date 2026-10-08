@@ -7,7 +7,6 @@ global is read, and the reader sees the length and the elements of the array as 
 */
 
 use std::sync::Arc;
-
 use crate::ast::{
     expr::{expr_builtin, Expr, ExprNode},
     program::Program,
