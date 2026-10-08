@@ -686,18 +686,18 @@ fn assemble_example(
 
     let module_header = format!("module {}; import {};", DOC_TEST_MODULE_NAME, module);
     let main_head = format!("{} : ::Std::IO () = (", MAIN_FUNCTION_NAME);
-    let joined = code.join("\n");
-    let Some(expression_start) = code_after_import_statements(&joined) else {
+    let code_text = code.join("\n");
+    let Some(expression_start) = code_after_import_statements(&code_text) else {
         return save(format!("{} {}", module_header, main_head), None, ");");
     };
-    if expression_start == joined.len() {
+    if expression_start == code_text.len() {
         return Err(Errors::from_msg_srcs(
             "A Fix example has import statements and no expression after them.".to_string(),
             &[&Some(lines[open].span.clone())],
         ));
     }
-    let expression_line = joined[..expression_start].matches('\n').count();
-    let line_start = joined[..expression_start].rfind('\n').map_or(0, |at| at + 1);
+    let expression_line = code_text[..expression_start].matches('\n').count();
+    let line_start = code_text[..expression_start].rfind('\n').map_or(0, |at| at + 1);
     save(
         module_header,
         Some((expression_line, expression_start - line_start, &main_head)),
