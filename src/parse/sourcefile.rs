@@ -217,11 +217,13 @@ pub enum LineOrigin {
     Written { column: usize, width: usize },
 }
 
-/// Text the assembler wrote into a line of taken text: `width` characters beginning at `column` of
-/// the assembled line. A position in it is reported at the character taken that follows it.
+/// Text the assembler wrote into a line of taken text. A position in it is reported at the
+/// character taken that follows it.
 #[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash, Debug)]
 pub struct Insertion {
+    /// The column of the assembled line the text begins at, counting from 1.
     pub column: usize,
+    /// The number of characters of the text.
     pub width: usize,
 }
 

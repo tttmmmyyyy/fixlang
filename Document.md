@@ -3293,7 +3293,7 @@ main : ::Std::IO () = (
 
 An example passes when its program exits with status 0. A failing `assert_eq`, `undefined` or an index out of range therefore makes the example fail.
 
-To use the names of another module, write `import` statements before the expression. They are added to the imports of the module, so an `import` statement for `Std` narrows `Std` as it does in any module (see [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)). Such lines are usually hidden (see below):
+To use the names of another module, write `import` statements before the expression. They are added to the imports of the module `DocTest`, so an `import` statement for `Std` narrows `Std` as it does in any module (see [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)). Such lines are usually hidden (see below):
 
 ```
 // ```fix
