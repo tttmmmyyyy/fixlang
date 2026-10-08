@@ -600,7 +600,12 @@ pub fn code_after_import_statements(text: &str) -> Option<usize> {
             Rule::code_after_import_statements => {
                 return has_import.then(|| pair.as_span().start());
             }
-            _ => {}
+            // A line comment that ends the text ends at `EOI`, which stands before the code after it.
+            Rule::EOI => {}
+            rule => unreachable!(
+                "the leading import statements of a text hold no rule `{:?}`",
+                rule
+            ),
         }
     }
     unreachable!("the code after the import statements of a text is matched, if empty")
