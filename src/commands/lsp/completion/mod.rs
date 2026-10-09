@@ -185,7 +185,8 @@ pub(super) fn handle_completion(
     // private item of a module outside the root project, which ranks below every other candidate.
     let expression_item = |symbol: CompletionSymbol, sort_text: Option<String>| {
         let label = symbol.name.to_string();
-        let sort_text = if symbol.name.is_private() && !root_modules.contains(&symbol.name.module())
+        let sort_text = if active_program.is_private_entity(&symbol.name)
+            && !root_modules.contains(&symbol.name.module())
         {
             Some(foreign_private_sort_text(sort_text, &label))
         } else {

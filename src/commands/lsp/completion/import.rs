@@ -329,7 +329,7 @@ fn member_items(
             None => continue,
         };
         if is_leaf {
-            let is_foreign_private = is_foreign && symbol.name.is_private();
+            let is_foreign_private = is_foreign && program.is_private_entity(&symbol.name);
             let mut item = build_completion_item(symbol, component.clone(), ResolveContext::Import);
             if is_foreign_private {
                 item.sort_text = Some(foreign_private_sort_text(None, &item.label));

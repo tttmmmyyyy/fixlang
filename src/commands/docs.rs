@@ -5,13 +5,9 @@ use crate::{
         program::Program,
         traits::KindSignature,
         typedecl::Field,
-        types::{kind_star, Kind, TyCon, TyConVariant, TyVar},
+        types::{kind_star, Kind, TyConVariant, TyVar},
     },
     configuration::{BuildConfigType, Configuration, DocsConfig, SubCommand},
-    constants::{
-        STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL, STRUCT_SETTER_SYMBOL,
-        UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
-    },
     dependency::lockfile::LockFileType,
     doc_test::{docstring_for_display, CodeFence},
     elaboration::elaborate_via_config,
@@ -443,50 +439,10 @@ fn is_entry_should_be_documented(
     if name.to_string().contains("#") {
         return false;
     }
-    if !config.include_private {
-        if name.is_private() {
-            return false;
-        }
-        if is_private_field_accessor(program, name) {
-            return false;
-        }
+    if !config.include_private && program.is_private_entity(name) {
+        return false;
     }
     true
-}
-
-// Returns true if `name` is a compiler-generated accessor function
-// for a private field/variant of a struct or union.
-// A field/variant is considered private when its name starts with an underscore.
-fn is_private_field_accessor(program: &Program, name: &FullName) -> bool {
-    if name.namespace.is_local() {
-        return false;
-    }
-    // The namespace of a field accessor is the full name of its owning struct/union.
-    let tycon = TyCon::new(name.namespace.clone().to_fullname());
-    let Some(ty_info) = program.type_env.tycons().get(&tycon) else {
-        return false;
-    };
-    let accessor_prefixes: &[&str] = match ty_info.variant {
-        TyConVariant::Struct => &[
-            STRUCT_GETTER_SYMBOL,
-            STRUCT_SETTER_SYMBOL,
-            STRUCT_MODIFIER_SYMBOL,
-            STRUCT_ACT_SYMBOL,
-        ],
-        TyConVariant::Union => &[UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL],
-        _ => return false,
-    };
-    for field in &ty_info.fields {
-        if !is_private_name(&field.name) {
-            continue;
-        }
-        for prefix in accessor_prefixes {
-            if name.name == format!("{}{}", prefix, &field.name) {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 // Creates string of kind signature with pre-space, e.e, " : * -> *".
