@@ -181,12 +181,12 @@ pub(super) fn handle_completion(
     // private item of a module outside the root project, which ranks below every other candidate.
     let expression_item = |symbol: CompletionSymbol, sort_text: Option<String>| {
         let label = symbol.name.to_string();
-        let sort_text =
-            if symbol.name.is_private() && !root_modules.contains(&symbol.name.module()) {
-                Some(foreign_private_sort_text(sort_text, &label))
-            } else {
-                sort_text
-            };
+        let sort_text = if symbol.name.is_private() && !root_modules.contains(&symbol.name.module())
+        {
+            Some(foreign_private_sort_text(sort_text, &label))
+        } else {
+            sort_text
+        };
         let context = ResolveContext::Expression {
             typing_text: typing_text.clone(),
             position: text_document_position.clone(),
@@ -625,7 +625,9 @@ fn is_dot_function(typing_text: &str) -> bool {
 /// set is empty when the project file or the path of a source file cannot be read.
 fn root_project_modules(program: &Program) -> Set<Name> {
     ProjectFile::read_root_file()
-        .and_then(|proj_file| program.modules_from_files(&proj_file.get_files(BuildConfigType::Test)))
+        .and_then(|proj_file| {
+            program.modules_from_files(&proj_file.get_files(BuildConfigType::Test))
+        })
         .map(|mod_names| mod_names.into_iter().collect())
         .unwrap_or_default()
 }
