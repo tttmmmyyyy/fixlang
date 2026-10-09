@@ -29,9 +29,16 @@ fullname = { double_colon? ~ (namespace_item ~ double_colon)* ~ name }
 // A value, a field or a variant named with "_" followed by a capital letter, which is the head of a
 // `capital_name`. The parser rejects every match with an error saying how to rename it. Each rule using
 // it tries it after every alternative a correct program takes, so it matches only where the program
-// fails to parse without it.
+// fails to parse without it. The rules below enter it only after a lookahead sees the "_" and the
+// capital letter. The lookahead is written with no named rule, since pest lists the rules that fail
+// inside a lookahead among the expected ones; so a parse error at a name that starts otherwise lists
+// the same expected rules as it would without this alternative.
 underscore_capital_value_name = { "_" ~ ASCII_ALPHA_UPPER ~ name_char* }
-underscore_capital_value_fullname = _{ double_colon? ~ (namespace_item ~ double_colon)* ~ underscore_capital_value_name }
+underscore_capital_value = _{ &("_" ~ ASCII_ALPHA_UPPER) ~ underscore_capital_value_name }
+underscore_capital_value_fullname = _{
+    &("::"? ~ ((ASCII_ALPHANUMERIC | "_" | ".")+ ~ "::")* ~ "_" ~ ASCII_ALPHA_UPPER) ~
+    double_colon? ~ (namespace_item ~ double_colon)* ~ underscore_capital_value_name
+}
 
 // The name of fields of tuple types with namespaces (e.g., `Std::Tuple1::0`).
 number_name = { ASCII_DIGIT+ }
@@ -149,7 +156,7 @@ expr_make_struct = {
 }
 
 // A field of a struct construction: `name : value`, or the name alone, which stands for `name : name`.
-expr_make_struct_field = { (type_field_name | underscore_capital_value_name) ~ (sep* ~ ":" ~ sep* ~ expr)? }
+expr_make_struct_field = { (type_field_name | underscore_capital_value) ~ (sep* ~ ":" ~ sep* ~ expr)? }
 
 // Non Left Recursive expressions
 expr_nlr = { expr_lit | expr_hole | expr_var | expr_let | expr_eval | expr_if | expr_match | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c | underscore_capital_value_fullname }
@@ -224,7 +231,7 @@ pattern_case = { pattern_union | pattern_var | pattern_tuple | pattern_struct | 
 
 pattern_var = { name ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
-pattern_underscore_capital_var = _{ underscore_capital_value_name ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
+pattern_underscore_capital_var = _{ underscore_capital_value ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ pattern_nounion)* ~ (sep* ~ ",")? ~ sep* ~ ")" }
 
@@ -239,9 +246,9 @@ pattern_struct = {
 pattern_struct_rest = { "_" ~ !name_char }
 
 // A field of a struct pattern: `name : pattern`, or the name alone, which stands for `name : name`.
-pattern_struct_field = { (type_field_name | underscore_capital_value_name) ~ (sep* ~ ":" ~ sep* ~ pattern_nounion)? }
+pattern_struct_field = { (type_field_name | underscore_capital_value) ~ (sep* ~ ":" ~ sep* ~ pattern_nounion)? }
 
-pattern_union = { (capital_name ~ "::")* ~ (type_field_name | underscore_capital_value_name) ~ sep* ~ "(" ~ sep* ~ pattern_nounion? ~ sep* ~ ")" }
+pattern_union = { (capital_name ~ "::")* ~ (type_field_name | underscore_capital_value) ~ sep* ~ "(" ~ sep* ~ pattern_nounion? ~ sep* ~ ")" }
 
 // === Types ===
 type_expr = { type_fun }
@@ -297,7 +304,7 @@ type_name = { capital_name }
 // A field or variant name. A lone `_` is excluded: in a struct pattern it leaves out the rest of the fields.
 type_field_name = { !keywords ~ !("_" ~ !name_char) ~ (name_head ~ !"@") ~ name_char* }
 
-type_field = { (type_field_name | underscore_capital_value_name) ~ sep* ~ ":" ~ sep* ~ type_expr }
+type_field = { (type_field_name | underscore_capital_value) ~ sep* ~ ":" ~ sep* ~ type_expr }
 
 type_defn = { "type" ~ sep+ ~ (constraints ~ sep+)? ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn | type_alias_defn) ~ sep* ~ semicolon }
 
@@ -325,7 +332,7 @@ trait_member_defn = { trait_member_value_defn | trait_member_type_defn | depreca
 
 trait_member_value_defn = { trait_member_value_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semicolon }
 
-trait_member_value_name = _{ name | underscore_capital_value_name }
+trait_member_value_name = _{ name | underscore_capital_value }
 
 trait_member_type_defn = { "type" ~ (sep+ ~ constraints)? ~ sep+ ~ type_expr ~ (sep* ~ ":" ~ sep* ~ kind)? ~ sep* ~ semicolon }
 
@@ -344,9 +351,9 @@ trait_member_type_impl = { "type" ~ sep+ ~ type_expr ~ sep* ~ "=" ~ sep* ~ type_
 trait_alias_defn = { "trait" ~ sep+ ~ trait_name ~ sep* ~ "=" ~ sep* ~ trait_fullname ~ (sep* ~ "+" ~ sep* ~ trait_fullname)* ~ sep* ~ semicolon }
 
 // === Global names ===
-global_name_type_sign = { (name | underscore_capital_value_name) ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ("=" ~ sep* ~ expr_or_hole ~ sep*)? ~ semicolon }
+global_name_type_sign = { (name | underscore_capital_value) ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ("=" ~ sep* ~ expr_or_hole ~ sep*)? ~ semicolon }
 
-global_name_defn = { (name | underscore_capital_value_name) ~ sep* ~ "=" ~ sep* ~ expr_or_hole ~ sep* ~ semicolon }
+global_name_defn = { (name | underscore_capital_value) ~ sep* ~ "=" ~ sep* ~ expr_or_hole ~ sep* ~ semicolon }
 
 // === Import statements ===
 // The LSP's import completion re-reads this syntax token by token; a

@@ -7,7 +7,8 @@ mod tests {
     use crate::{
         configuration::Configuration,
         tests::test_util::{
-            run_source_assert_failed, test_source, test_sources, test_sources_fail,
+            run_source_assert_failed, test_source, test_source_fail, test_sources,
+            test_sources_fail,
         },
     };
 
@@ -198,6 +199,33 @@ main : IO () = (
                 name,
                 message
             );
+        }
+    }
+
+    /// A parse error at a field name or at the name a pragma takes lists only the rules a correct
+    /// program takes there, leaving out the alternative that catches a value named with `_` and a
+    /// capital letter.
+    #[test]
+    pub fn test_parse_errors_at_value_names_list_the_rules_a_correct_program_takes() {
+        let cases = [
+            (
+                "type S = struct { 1x : I64 };",
+                "Expected field or variant name.",
+            ),
+            (
+                "f : I64 = S { x : 1, 2 };",
+                "Expected field or variant name.",
+            ),
+            (
+                "f : I64 = match x { S { 1 } => 0 };",
+                "Expected field or variant name.",
+            ),
+            ("DEPRECATED[1f, \"m\"];", "Expected fullname."),
+            ("FFI_EXPORT[1f, g];", "Expected fullname."),
+        ];
+        for (line, expected) in cases {
+            let source = format!("module Main;\n\n{}\n\nmain : IO () = pure();\n", line);
+            test_source_fail(&source, Configuration::develop_mode(), expected);
         }
     }
 }
