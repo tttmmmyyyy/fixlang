@@ -17,7 +17,7 @@ double_colon = { "::" }
 
 // Strings that can be used as names of values, fields or variants.
 // - "@" is used for getter function ("@x" for getter of field x)
-// - A leading "_" marks a name as internal. The character after it decides the kind of the name:
+// - A leading "_" marks a name as private. The character after it decides the kind of the name:
 //   "_" followed by a capital letter starts a `capital_name`, so it is excluded here.
 // 
 // If you change this, please also update `chars_allowed_in_identifiers` in `constants.rs`.
@@ -37,8 +37,8 @@ underscore_capital_value_fullname = _{ double_colon? ~ (namespace_item ~ double_
 number_name = { ASCII_DIGIT+ }
 number_fullname = { double_colon? ~ (namespace_item ~ double_colon)* ~ number_name }
 
-// Strings that can be used of types, traits, modules or namespaces. A leading "_" marks the name as
-// internal.
+// Strings that can be used as names of types, traits, modules or namespaces. A leading "_" marks the
+// name as private.
 capital_name = { "_"? ~ ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
 capital_fullname = { double_colon? ~ (namespace_item ~ double_colon)* ~ capital_name }
 

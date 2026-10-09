@@ -824,7 +824,7 @@ fn trait_impl_entries(
             if impl_ty_str.contains("#") {
                 continue;
             }
-            // Skip impls of internal traits and impls for internal types.
+            // Skip impls of private traits and impls for private types.
             if !config.include_private {
                 if impl_.qual_pred.predicate.trait_id.name.is_private() {
                     continue;

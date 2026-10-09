@@ -1384,14 +1384,14 @@ When adopting a style of importing only the necessary entities, the following to
 
 ## Names starting with an underscore
 
-A name starting with `_` marks the entity as internal to the module or the library that defines it. `fix docs` leaves out of the documentation every entity whose name, or the name of whose namespace or module, starts with `_`, unless `--with-private` is given. In completion, the language server ranks the internal entities of other projects (dependencies and `Std`) below the others. Other modules can still use internal entities.
+A name starting with `_` marks the entity as private to the module or the library that defines it. `fix docs` leaves out of the documentation every entity whose name, or the name of whose namespace or module, starts with `_`, unless `--with-private` is given. In completion, the language server ranks the private entities of other projects (dependencies and `Std`) below the others. Other modules can still use private entities.
 
 The character after the `_` decides the kind of the name, as the first character does for a name without `_`:
 
 - `_` followed by a capital letter starts the name of a type, a trait, a namespace or a module, such as `_Parser` or `RegExp._Impl`.
 - `_` followed by a lowercase letter or another `_` starts the name of a value, a field or a variant, such as `_helper` or `__MAX_SIZE`.
 
-So an internal constant written in capital letters starts with two underscores.
+So a private constant written in capital letters starts with two underscores.
 
 ## Recursion
 

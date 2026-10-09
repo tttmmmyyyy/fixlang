@@ -498,7 +498,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         ).arg(
             Arg::new("out-dir").long("out-dir").short('o').takes_value(true).help("Output directory for generated documents.").default_value("docs"),
         ).arg(
-            Arg::new("private").long("with-private").help("Include private values (i.e., values whose name starts with underscore) in the documentation."),
+            Arg::new("private").long("with-private").help("Include private entities (i.e., entities whose name, or the name of whose namespace or module, starts with an underscore) in the documentation."),
         ).arg(
             Arg::new("test").long("test").help("Include test modules in the documentation."));
 
