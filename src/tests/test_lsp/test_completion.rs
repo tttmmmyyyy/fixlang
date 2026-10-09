@@ -1446,4 +1446,80 @@ mod tests {
 
         ctx.shutdown();
     }
+
+    /// In a dot context, a private item of a dependency ranks below every other candidate, the
+    /// ones of the same tier included: `Lib::_bump` takes an `I64` as `Lib::bump` does, and its
+    /// sortText is greater than the sort key of every other item.
+    #[test]
+    fn test_dot_completion_ranks_private_items_of_dependencies_last() {
+        let mut ctx =
+            LspCompletionCtx::setup("underscore_names_ranking", &["local.fix", "main.fix"]);
+
+        // main.fix line 7 (0-indexed) is `    let n = 42.bump;`; the cursor stands after `.`.
+        let items = ctx.complete_with_timeout("main.fix", 7, 15, Duration::from_secs(60));
+        let private_sort = find_sort_text(&items, "Lib::_bump")
+            .expect("Lib::_bump should be a completion candidate");
+        assert!(
+            private_sort.starts_with("~~"),
+            "Lib::_bump should have a `~~`-prefixed sortText; got {:?}",
+            private_sort
+        );
+        for item in &items {
+            let label = item.get("label").and_then(|l| l.as_str()).unwrap();
+            if FullName::parse(label)
+                .is_some_and(|name| name.is_private() && name.module() != "Main")
+            {
+                continue;
+            }
+            let key = item
+                .get("sortText")
+                .and_then(|s| s.as_str())
+                .unwrap_or(label);
+            assert!(
+                key < private_sort.as_str(),
+                "`{}` (sort key {:?}) should rank above Lib::_bump ({:?})",
+                label,
+                key,
+                private_sort
+            );
+        }
+
+        ctx.shutdown();
+    }
+
+    /// At the module position of an import statement, a dependency's module with a part starting
+    /// with `_`, `Lib._Impl`, ranks last by a `~~`-prefixed sortText, while the dependency's
+    /// public module `Lib` and the project's own module `Main._Local` keep the client's default
+    /// ordering.
+    #[test]
+    fn test_import_completion_ranks_private_modules_of_dependencies_last() {
+        let mut ctx =
+            LspCompletionCtx::setup("underscore_names_ranking", &["local.fix", "main.fix"]);
+
+        // main.fix line 2 (0-indexed) is `import Lib._Impl;`; the cursor stands after `import `.
+        let items = ctx.complete("main.fix", 2, 7);
+        let sort = find_sort_text(&items, "Lib._Impl");
+        assert!(
+            sort.as_deref().is_some_and(|s| s.starts_with("~~")),
+            "`Lib._Impl` should have a `~~`-prefixed sortText; got {:?}",
+            sort
+        );
+        for label in ["Lib", "Main._Local"] {
+            assert!(
+                items
+                    .iter()
+                    .any(|it| it.get("label").and_then(|l| l.as_str()) == Some(label)),
+                "`{}` should be offered",
+                label
+            );
+            assert_eq!(
+                find_sort_text(&items, label),
+                None,
+                "`{}` should have no sortText",
+                label
+            );
+        }
+
+        ctx.shutdown();
+    }
 }

@@ -134,7 +134,8 @@ main : IO () = pure();
     /// struct field, a union variant, a trait member's declaration and implementation, a reference
     /// alone, under a namespace and before a period, a `let` variable, an annotated lambda parameter,
     /// a `match` variable, a variant of a union pattern, a field of a struct literal, a field of a
-    /// struct pattern, a field accessor of the index syntax and the name in a `DEPRECATED` pragma.
+    /// struct pattern, a field accessor of the index syntax, and the names in a `DEPRECATED` pragma
+    /// and an `FFI_EXPORT` statement.
     #[test]
     pub fn test_value_side_names_starting_with_an_underscore_and_a_capital_are_rejected() {
         let source = r##"
@@ -154,6 +155,7 @@ impl I64 : Tr {
 }
 
 DEPRECATED[_Dep, "deprecated"];
+FFI_EXPORT[_Exp, fix_exp];
 
 main : IO () = (
     let _Let = _Ref + Main::_Qualified + _Dot.to_string;
@@ -173,6 +175,7 @@ main : IO () = (
             "_Variant",
             "_Member",
             "_Dep",
+            "_Exp",
             "_Let",
             "_Ref",
             "_Qualified",
