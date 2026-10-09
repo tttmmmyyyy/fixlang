@@ -4886,7 +4886,8 @@ pub fn test_array_act_0() {
             pure();; // To make the `arr` defined below not global and therefore unique.
 
             // If the array and the element is both unique, the action should receive an unique value.
-            let arr = [[1,2,3], [4,5,6]];
+            // An array literal of numbers is a constant the whole program shares, so the element is built at run time.
+            let arr = [Array::from_map(3, |i| i + 1), [4,5,6]];
             let arr = arr.act(0, |arr| let arr = arr.assert_unique(|_|"the array is not unique!"); (arr.to_iter.sum, []));
             assert_eq(|_|"case 1", arr, (6, [[], [4,5,6]]));;
 
@@ -14824,7 +14825,8 @@ execute: Obj -> Obj = |obj| (
     )
 );
 main: IO () = (
-    let obj: Obj = Obj { arr: [1, 2, 3], f: add(10) };
+    // An array literal of numbers is a constant the whole program shares, so the array is built at run time.
+    let obj: Obj = Obj { arr: Array::from_map(3, |i| i + 1), f: add(10) };
     let obj = obj.execute;
     println(obj.@arr.to_string)
 );

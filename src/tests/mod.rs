@@ -22,6 +22,7 @@ mod test_closure_specialization;
 mod test_collapse_constructions;
 mod test_compilation_units;
 mod test_conditional_update_chain;
+mod test_constant_array_literal;
 mod test_contended_release;
 mod test_debug_info;
 mod test_deep_expression;

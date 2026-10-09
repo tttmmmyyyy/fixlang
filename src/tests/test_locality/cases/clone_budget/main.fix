@@ -4,8 +4,10 @@ module Main;
 // value per boxed leaf of every argument, so the reachable set is the product and a body of a few
 // lines names more clones than any program has use for. Without a bound on how many a function may
 // have, this does not finish compiling.
+// Built at run time: a global holding an array literal of numbers is put wherever it is read, so
+// nothing would read the global itself.
 g : Array I64;
-g = [1, 2, 3];
+g = Array::from_map(3, |i| i + 1);
 
 gg : Array (Array I64);
 gg = [g, g];

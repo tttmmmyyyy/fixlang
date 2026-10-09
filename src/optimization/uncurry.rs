@@ -312,36 +312,29 @@ fn replace_closure_call_to_funptr_call_subexprs(
             e,
             symbol_names,
         )),
-        Expr::MakeStruct(_, fields) => {
-            let fields = fields.clone();
-            let mut expr = expr;
-            for (field_name, _, field_expr) in fields {
-                let field_expr =
-                    replace_closure_call_to_funptr_call_subexprs(&field_expr, symbol_names);
-                expr = expr.set_make_struct_field(&field_name, field_expr);
-            }
-            expr
-        }
-        Expr::ArrayLit(elems) => {
-            let mut expr = expr.clone();
-            for (i, e) in elems.iter().enumerate() {
-                expr = expr.set_array_lit_elem(
-                    replace_closure_call_to_funptr_call_subexprs(e, symbol_names),
-                    i,
-                )
-            }
-            expr
-        }
-        Expr::FFICall(_, _, _, _, args, _) => {
-            let mut expr = expr.clone();
-            for (i, e) in args.iter().enumerate() {
-                expr = expr.set_ffi_call_arg(
-                    replace_closure_call_to_funptr_call_subexprs(e, symbol_names),
-                    i,
-                )
-            }
-            expr
-        }
+        Expr::MakeStruct(_, fields) => expr.set_make_struct_fields(
+            fields
+                .iter()
+                .map(|(field_name, field_src, field_expr)| {
+                    (
+                        field_name.clone(),
+                        field_src.clone(),
+                        replace_closure_call_to_funptr_call_subexprs(field_expr, symbol_names),
+                    )
+                })
+                .collect(),
+        ),
+        Expr::ArrayLit(elems) => expr.set_array_lit_elems(
+            elems
+                .iter()
+                .map(|e| replace_closure_call_to_funptr_call_subexprs(e, symbol_names))
+                .collect(),
+        ),
+        Expr::FFICall(_, _, _, _, args, _) => expr.set_ffi_call_args(
+            args.iter()
+                .map(|e| replace_closure_call_to_funptr_call_subexprs(e, symbol_names))
+                .collect(),
+        ),
         Expr::Eval(side, main) => expr
             .set_eval_side(replace_closure_call_to_funptr_call_subexprs(
                 side,

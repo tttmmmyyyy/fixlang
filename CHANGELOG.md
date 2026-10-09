@@ -28,6 +28,7 @@
 - #790: A struct pattern that leaves out fields of its struct without writing `_` is now warned about. When you add a field to a struct, the warning points out each pattern that takes the struct apart. Add the missing fields to the pattern, or write `_` after its fields. A future version of Fix will report such a pattern as an error.
 - #790: `_` can no longer be the name of a struct field or a union variant. Names that start with `_`, such as `_x`, are still allowed.
 - #812: A value, a field or a variant can no longer be named with `_` followed by a capital letter, such as `_NN` or `_NotMatch`, since such a name is now the name of a type, a trait, a namespace or a module. Write a lowercase letter or another `_` after the leading `_`, as in `__NN` or `_not_match`.
+- #813: An array literal whose elements are all number literals, such as `[1, 2, 3]`, is now a constant in the program's data. Evaluating it no longer allocates the array or writes its elements, and a change to it, such as `set` or `push_back`, copies it first. `Debug::assert_unique_array` therefore no longer reports it as unique, the same as the bytes of a string literal.
 
 #### Std
 
@@ -53,6 +54,7 @@
 - #790: The quick fix that adds the missing fields to a struct literal now writes them after the last field when a comment ends the field list, and at the right place on a line with characters such as emoji before the literal. It used to write them into the comment or a few characters off, which could break the code.
 - #780: A failed download in `install.sh` now leaves `~/.local/bin/fix` as it was. It used to leave an empty or partly written `fix` there, and later runs then took it for an installed one and installed nothing. `install.sh` can now also upgrade `fix` while it is running, for example as your editor's language server.
 - #341, #811: The compiler now takes the widths of the C numeric types, such as `CLong`, from the target it builds for. It used to measure them on the first build, save them in `.fixlang/c_types.json` and use them from then on, so a project directory shared with a machine whose C types differ silently kept that machine's widths. The file is no longer read and can be deleted.
+- #813: An array literal of tens of thousands of numbers now compiles in seconds. The compiler took time that grew with the square of the number of elements of an array literal: a literal of 13,071 numbers took 25 seconds to compile.
 
 ## [1.5.0] - 2026-09-27
 

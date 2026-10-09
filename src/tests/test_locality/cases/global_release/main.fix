@@ -1,7 +1,9 @@
 module Main;
 
+// Built at run time: a global holding an array literal of numbers is put wherever it is read, so
+// nothing would read the global itself.
 g : Array I64;
-g = [10, 20, 30];
+g = Array::from_map(3, |i| 10 * (i + 1));
 
 // Recursive, so it survives inlining and gets a borrow version. Passing the global to that version
 // makes borrow-ification leave a release naming the global itself in the caller.
