@@ -15,7 +15,7 @@ use self::score::{
 };
 use self::symbols::{build_completion_item, type_symbols, value_symbols, CompletionSymbol};
 use super::edit_import::create_text_edit_to_import;
-use super::server::{send_response, LatestContent};
+use super::server::{send_response, DiagnosticsResult, LatestContent};
 use super::util::{
     document_from_endnode, get_line_string_from_position, is_cursor_in_comment,
     parameters_of_global_value, position_to_bytes,
@@ -88,10 +88,11 @@ impl ResolveData {
 pub(super) fn handle_completion(
     id: u32,
     params: &CompletionParams,
-    program: Option<&Program>,
+    diag: Option<&DiagnosticsResult>,
     uri_to_content: &Map<Uri, LatestContent>,
     typecheck_cache: SharedTypeCheckCache,
 ) {
+    let program = diag.map(|d| &d.program);
     let text_document_position = &params.text_document_position;
 
     // Don't offer completions while the cursor is inside a comment
@@ -117,7 +118,7 @@ pub(super) fn handle_completion(
                     import_completion_items(
                         &import_ctx,
                         program,
-                        &root_project_modules(program),
+                        &root_project_modules(program, diag),
                         &latest.path,
                         text_document_position,
                     )
@@ -176,7 +177,7 @@ pub(super) fn handle_completion(
 
     let namespace = extract_namespace_from_typing_text(&typing_text);
     let is_in_namespace = |name: &FullName| namespace.is_suffix_of(&name.namespace);
-    let root_modules = root_project_modules(active_program);
+    let root_modules = root_project_modules(active_program, diag);
     // The item offering `symbol` in an expression, sorted by `sort_text` unless `symbol` is a
     // private item of a module outside the root project, which ranks below every other candidate.
     let expression_item = |symbol: CompletionSymbol, sort_text: Option<String>| {
@@ -620,16 +621,22 @@ fn is_dot_function(typing_text: &str) -> bool {
     false
 }
 
-/// The modules defined in the source files of the root project. Completion ranks the private items
-/// of the other modules, which belong to dependencies or to `Std`, below every other candidate. The
-/// set is empty when the project file or the path of a source file cannot be read.
-fn root_project_modules(program: &Program) -> Set<Name> {
-    ProjectFile::read_root_file()
-        .and_then(|proj_file| {
-            program.modules_from_files(&proj_file.get_files(BuildConfigType::Test))
+/// The modules of `program` defined in the source files of the root project, which `diag` lists.
+/// Completion ranks the private items of the other modules, which belong to dependencies or to
+/// `Std`, below every other candidate. The set is empty without a diagnostics result.
+fn root_project_modules(program: &Program, diag: Option<&DiagnosticsResult>) -> Set<Name> {
+    let Some(diag) = diag else {
+        return Set::default();
+    };
+    program
+        .modules
+        .iter()
+        .filter(|mi| {
+            mi.absolute_source_path()
+                .is_ok_and(|path| diag.user_source_contents.contains_key(&path))
         })
-        .map(|mod_names| mod_names.into_iter().collect())
-        .unwrap_or_default()
+        .map(|mi| mi.name.clone())
+        .collect()
 }
 
 /// Returns the trailing `Ns1::Ns2:`-shaped portion of the typing text as a
