@@ -1,7 +1,7 @@
 use crate::ast::program::SymbolExpr::Method;
 use crate::{
     ast::{
-        name::{FullName, Name, NameSpace},
+        name::{is_private_module_name, FullName, Name, NameSpace},
         program::Program,
         traits::KindSignature,
         typedecl::Field,
@@ -62,6 +62,9 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
             .map(|f| to_absolute_path(f))
             .collect::<Result<Vec<_>, Errors>>()?;
         for mi in program.modules.iter() {
+            if !docs_config.include_private && is_private_module_name(&mi.name) {
+                continue;
+            }
             let src_file = to_absolute_path(&mi.source.input.file_path)?;
             if abs_src_paths.iter().any(|f| f == &src_file) {
                 mod_names.push(mi.name.clone());
@@ -391,7 +394,7 @@ fn write_module(
 
     {
         let mut section = MarkdownSection::new("Trait implementations".to_string());
-        let entries = trait_impl_entries(program, mod_name)?;
+        let entries = trait_impl_entries(program, mod_name, config)?;
         write_entries(entries, &mut section);
         doc.add_subsection(section);
     }
@@ -452,7 +455,7 @@ fn is_entry_should_be_documented(
         return false;
     }
     if !config.include_private {
-        if name.name.starts_with("_") {
+        if name.is_private() {
             return false;
         }
         if is_private_field_accessor(program, name) {
@@ -723,6 +726,9 @@ fn trait_entries(
         doc.concatenate_many(docstring);
 
         for (assoc_ty_name, assoc_ty_defn) in &info.assoc_types {
+            if !config.include_private && assoc_ty_name.starts_with("_") {
+                continue;
+            }
             let mut params = vec![info.type_var.name.clone()];
             for param in assoc_ty_defn.params.iter().skip(1) {
                 params.push(param.name.clone());
@@ -748,6 +754,9 @@ fn trait_entries(
             doc.add_subsection(subsection);
         }
         for method in &info.members {
+            if !config.include_private && method.name.starts_with("_") {
+                continue;
+            }
             let title = format!("method `{}`", method.name);
             let mut subsection = MarkdownSection::new(title);
             subsection.add_paragraph(format!("Type: `{}`", method.qual_ty.to_string()));
@@ -806,7 +815,11 @@ fn trait_entries(
     Ok(entries)
 }
 
-fn trait_impl_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors> {
+fn trait_impl_entries(
+    program: &Program,
+    mod_name: &Name,
+    config: &DocsConfig,
+) -> Result<Vec<Entry>, Errors> {
     let mut entries = vec![];
 
     for (_id, impls) in &program.trait_env.impls {
@@ -818,6 +831,16 @@ fn trait_impl_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, 
             let impl_ty_str = impl_.impl_type().to_string_normalize();
             if impl_ty_str.contains("#") {
                 continue;
+            }
+            // Skip impls of internal traits and impls for internal types.
+            if !config.include_private {
+                if impl_.qual_pred.predicate.trait_id.name.is_private() {
+                    continue;
+                }
+                let impl_tycon = impl_.impl_type().toplevel_tycon();
+                if impl_tycon.is_some_and(|tc| tc.name.is_private()) {
+                    continue;
+                }
             }
 
             let title = format!("impl `{}`", impl_.qual_pred.to_string());

@@ -1371,4 +1371,37 @@ mod tests {
         );
         ctx.shutdown();
     }
+
+    /// Renaming a type whose name starts with `_` and a capital letter rewrites the item of the
+    /// import statement naming it, which the parser reads as a type: the declaration in lib.fix,
+    /// and the import item and the type signature in main.fix.
+    #[test]
+    fn test_rename_type_named_with_an_underscore() {
+        let mut ctx = LspTestCtx::setup("underscore_names", &["lib.fix", "main.fix"]);
+        // Cursor on `_Foo` at the struct declaration (line 2, col 5).
+        let we = ctx.rename("lib.fix", 2, 5, "_Bar");
+        assert_eq!(
+            changes_per_file(&we),
+            vec![("lib.fix".to_string(), 1), ("main.fix".to_string(), 2)],
+            "WorkspaceEdit: {:?}",
+            we
+        );
+        assert_all_edits_have_new_text(&we, "_Bar");
+        ctx.shutdown();
+    }
+
+    /// Renaming a value to a name starting with `_` and a capital letter is rejected, since such a
+    /// name is the name of a type, a trait, a namespace or a module.
+    #[test]
+    fn test_rename_reject_value_named_with_an_underscore_and_a_capital() {
+        let mut ctx = LspTestCtx::setup("underscore_names", &["lib.fix", "main.fix"]);
+        // Cursor on `outside` at its declaration (line 8, col 0).
+        let resp = ctx.rename_raw("lib.fix", 8, 0, "_Outside");
+        assert!(
+            resp.get("error").is_some(),
+            "rename of a value to `_Outside` should be rejected, got: {:?}",
+            resp
+        );
+        ctx.shutdown();
+    }
 }

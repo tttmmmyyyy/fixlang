@@ -8,6 +8,7 @@ mod tests {
         find_sort_text, wait_for_completion_items, LspCompletionCtx,
     };
     use super::super::lsp_client::LspClient;
+    use crate::ast::name::FullName;
     use serde_json::{json, Value};
     use std::{fs, path::Path, time::Duration};
 
@@ -990,12 +991,13 @@ mod tests {
     }
 
     /// Completion at a position that is NOT in dot context must NOT
-    /// attach `sortText` to non-deprecated items — the dot-context
-    /// ranker is type-specific and irrelevant here, and keeping the
-    /// field unset preserves the LSP client's default alphabetical
-    /// ordering for live symbols. Deprecated items are the one
-    /// exception: they get a `~`-prefixed sortText so they drop below
-    /// live siblings.
+    /// attach `sortText` to live items — the dot-context ranker is
+    /// type-specific and irrelevant here, and keeping the field unset
+    /// preserves the LSP client's default alphabetical ordering for
+    /// live symbols. Two kinds of items are the exceptions: deprecated
+    /// items get a `~`-prefixed sortText so they drop below live
+    /// siblings, and the private items of modules outside the project
+    /// (`Std::Tuple1::_act_0_const`, ...) get a `~~`-prefixed one.
     #[test]
     fn test_completion_dot_sort_no_dot_unchanged() {
         let mut ctx = LspCompletionCtx::setup("completion-dot-sort", &["main.fix"]);
@@ -1028,6 +1030,18 @@ mod tests {
                     .map(|a| a.iter().any(|t| t.as_i64() == Some(1)))
                     .unwrap_or(false);
                 let is_deprecated = deprecated_flag || tag_flag;
+                let is_foreign_private = FullName::parse(label)
+                    .is_some_and(|name| name.is_private() && name.module() != "Main");
+                if is_foreign_private {
+                    return match sort {
+                        Some(s) if s.starts_with("~~") => None,
+                        _ => Some(format!(
+                            "private `{}` of another module should have a `~~`-prefixed \
+                             sortText, got {:?}",
+                            label, sort
+                        )),
+                    };
+                }
                 match (is_deprecated, sort) {
                     (false, Some(s)) => Some(format!(
                         "live `{}` should have no sortText, got {:?}",
@@ -1348,5 +1362,88 @@ mod tests {
         );
 
         let _ = client.shutdown();
+    }
+
+    /// After a namespace whose name starts with `_` and a capital letter, the candidates are the
+    /// members of that namespace: `Lib::_Ns::helper` is offered and `Lib::outside` is not.
+    #[test]
+    fn test_completion_in_namespace_named_with_an_underscore() {
+        let mut ctx = LspCompletionCtx::setup("underscore_names", &["lib.fix", "main.fix"]);
+
+        // main.fix line 7 is `    let n = _Ns::helper;`; the cursor stands after `_Ns::`.
+        let items = ctx.complete("main.fix", 7, 17);
+        let labels: Vec<&str> = items
+            .iter()
+            .filter_map(|it| it.get("label").and_then(|l| l.as_str()))
+            .collect();
+        assert!(
+            labels.contains(&"Lib::_Ns::helper"),
+            "Lib::_Ns::helper should be offered; got {:?}",
+            labels
+        );
+        assert!(
+            !labels.contains(&"Lib::outside"),
+            "Lib::outside lies outside `_Ns` and should not be offered; got {:?}",
+            labels
+        );
+
+        ctx.shutdown();
+    }
+
+    /// The private items of a dependency rank below every other candidate, by a `~~`-prefixed
+    /// sortText: `Lib::_Ns::helper` and the type `Lib::_Foo`. A public item of the dependency,
+    /// `Lib::outside`, and a private item of the project, `Main::_local`, keep the client's default
+    /// ordering.
+    #[test]
+    fn test_completion_ranks_private_items_of_dependencies_last() {
+        let mut ctx = LspCompletionCtx::setup("underscore_names_dependency", &["main.fix"]);
+
+        // main.fix line 3 (0-indexed) is a blank line, a non-dot context.
+        let items = ctx.complete("main.fix", 3, 0);
+        for label in ["Lib::_Ns::helper", "Lib::_Foo"] {
+            let sort = find_sort_text(&items, label);
+            assert!(
+                sort.as_deref().is_some_and(|s| s.starts_with("~~")),
+                "`{}` should have a `~~`-prefixed sortText; got {:?}",
+                label,
+                sort
+            );
+        }
+        for label in ["Lib::outside", "Main::_local"] {
+            assert!(
+                items
+                    .iter()
+                    .any(|it| it.get("label").and_then(|l| l.as_str()) == Some(label)),
+                "`{}` should be offered",
+                label
+            );
+            let sort = find_sort_text(&items, label);
+            assert_eq!(sort, None, "`{}` should have no sortText", label);
+        }
+
+        ctx.shutdown();
+    }
+
+    /// Inside an import statement, the private items and namespaces of a dependency rank below its
+    /// public items: `_Foo`, `_Ns` and `__x` get a `~~`-prefixed sortText, and `outside` gets none.
+    #[test]
+    fn test_import_completion_ranks_private_items_of_dependencies_last() {
+        let mut ctx = LspCompletionCtx::setup("underscore_names_dependency", &["main.fix"]);
+
+        // main.fix line 2 (0-indexed) is `import Lib::{_Foo, _Ns::helper, outside, __x};`; the
+        // cursor stands after `{`.
+        let items = ctx.complete("main.fix", 2, 13);
+        for label in ["_Foo", "_Ns", "__x"] {
+            let sort = find_sort_text(&items, label);
+            assert!(
+                sort.as_deref().is_some_and(|s| s.starts_with("~~")),
+                "`{}` should have a `~~`-prefixed sortText; got {:?}",
+                label,
+                sort
+            );
+        }
+        assert_eq!(find_sort_text(&items, "outside"), None);
+
+        ctx.shutdown();
     }
 }

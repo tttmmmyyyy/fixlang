@@ -10,8 +10,8 @@ use self::import::{import_completion_items, import_context_at};
 use self::index::CompletionIndex;
 use self::repair::repair_for_completion;
 use self::score::{
-    assign_tier, assign_tier_no_unify, dot_context_low_priority_sort_text, namespace_match,
-    sort_text_for, PredMemo, Tier,
+    assign_tier, assign_tier_no_unify, dot_context_low_priority_sort_text,
+    foreign_private_sort_text, namespace_match, sort_text_for, PredMemo, Tier,
 };
 use self::symbols::{build_completion_item, type_symbols, value_symbols, CompletionSymbol};
 use super::edit_import::create_text_edit_to_import;
@@ -21,7 +21,7 @@ use super::util::{
     parameters_of_global_value, position_to_bytes,
 };
 use crate::ast::expr::{hole_full_name, Expr, ExprNode};
-use crate::ast::name::{FullName, NameSpace};
+use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::program::{EndNode, Program};
 use crate::ast::types::TypeNode;
 use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig, SubCommand};
@@ -32,7 +32,7 @@ use crate::elaboration::typecheck::TypeCheckContext;
 use crate::elaboration::typecheckcache::SharedTypeCheckCache;
 use crate::error::Errors;
 use crate::metafiles::project_file::ProjectFile;
-use crate::misc::{to_absolute_path, Map};
+use crate::misc::{to_absolute_path, Map, Set};
 use crate::parse::parser::parse_source_file;
 use crate::parse::sourcefile::{SourceFile, Span};
 use crate::write_log;
@@ -117,6 +117,7 @@ pub(super) fn handle_completion(
                     import_completion_items(
                         &import_ctx,
                         program,
+                        &root_project_modules(program),
                         &latest.path,
                         text_document_position,
                     )
@@ -175,6 +176,9 @@ pub(super) fn handle_completion(
 
     let namespace = extract_namespace_from_typing_text(&typing_text);
     let is_in_namespace = |name: &FullName| namespace.is_suffix_of(&name.namespace);
+    let root_modules = root_project_modules(active_program);
+    let is_foreign_private =
+        |name: &FullName| name.is_private() && !root_modules.contains(&name.module());
     let expression_context = || ResolveContext::Expression {
         typing_text: typing_text.clone(),
         position: text_document_position.clone(),
@@ -241,6 +245,11 @@ pub(super) fn handle_completion(
             None
         };
         let label = symbol.name.to_string();
+        let sort_text = if is_foreign_private(&symbol.name) {
+            Some(foreign_private_sort_text(sort_text, &label))
+        } else {
+            sort_text
+        };
         let mut item = build_completion_item(symbol, label, expression_context());
         item.sort_text = sort_text;
         items.push(item);
@@ -255,6 +264,11 @@ pub(super) fn handle_completion(
             .as_ref()
             .map(|_| dot_context_low_priority_sort_text(&symbol.name));
         let label = symbol.name.to_string();
+        let sort_text = if is_foreign_private(&symbol.name) {
+            Some(foreign_private_sort_text(sort_text, &label))
+        } else {
+            sort_text
+        };
         let mut item = build_completion_item(symbol, label, expression_context());
         item.sort_text = sort_text;
         items.push(item);
@@ -610,9 +624,25 @@ fn is_dot_function(typing_text: &str) -> bool {
     false
 }
 
+/// The modules defined in the source files of the root project. Completion ranks the private items
+/// of the other modules, which belong to dependencies or to `Std`, below every other candidate. The
+/// set is empty when the project file cannot be read.
+fn root_project_modules(program: &Program) -> Set<Name> {
+    let Ok(proj_file) = ProjectFile::read_root_file() else {
+        return Set::default();
+    };
+    proj_file
+        .get_files(BuildConfigType::Test)
+        .iter()
+        .filter_map(|file| program.module_of_file(file))
+        .map(|mi| mi.name.clone())
+        .collect()
+}
+
 /// Returns the trailing `Ns1::Ns2:`-shaped portion of the typing text as a
 /// `NameSpace`. A final component that does not start with an uppercase
-/// letter (a partially typed value name) is dropped.
+/// letter, optionally preceded by an underscore, (a partially typed value
+/// name) is dropped.
 fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
     // Get the suffix of `typing_text` that consists of characters allowed in identifiers and colons.
     // Example: input "let x = Std::Array:" -> "Std::Array:"
@@ -629,14 +659,13 @@ fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
     // Example: "Std::Array:" -> "Std::Array"
     let namespace_part = namespace_part.trim_end_matches(':').to_string();
 
-    // Split the text by "::". If the last component does not start with a uppercase letter, then drop it.
+    // Split the text by "::". If the last component does not start with a uppercase letter, optionally
+    // preceded by an underscore, then drop it.
     let mut components = namespace_part.split("::").collect::<Vec<_>>();
     if let Some(last_component) = components.last() {
-        let first_char = last_component.chars().nth(0);
-        if let Some(first_char) = first_char {
-            if !first_char.is_ascii_alphabetic() || !first_char.is_uppercase() {
-                components.pop();
-            }
+        let head = last_component.strip_prefix('_').unwrap_or(last_component);
+        if !last_component.is_empty() && !head.starts_with(|c: char| c.is_ascii_uppercase()) {
+            components.pop();
         }
     }
     let namespace_str = components
@@ -833,6 +862,18 @@ mod tests {
         // Test case: "Std::Array::get" - last component starts with lowercase, should be dropped
         let result = extract_namespace_from_typing_text("Std::Array::get");
         assert_eq!(result.names, vec!["Std".to_string(), "Array".to_string()]);
+    }
+
+    #[test]
+    fn test_extract_namespace_from_typing_text_underscore_capital() {
+        // A `_` followed by a capital letter starts a namespace; a `_` followed by anything else
+        // starts a value name, which is dropped.
+        let result = extract_namespace_from_typing_text("Lib::_Ns:");
+        assert_eq!(result.names, vec!["Lib".to_string(), "_Ns".to_string()]);
+        let result = extract_namespace_from_typing_text("Lib::_Ns::_va");
+        assert_eq!(result.names, vec!["Lib".to_string(), "_Ns".to_string()]);
+        let result = extract_namespace_from_typing_text("Lib::__V");
+        assert_eq!(result.names, vec!["Lib".to_string()]);
     }
 
     #[test]

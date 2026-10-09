@@ -8,6 +8,14 @@ use std::hash::{Hash, Hasher};
 /// source.
 pub type Name = String;
 
+/// Whether the module named `mod_name` is private: one of its period-separated parts starts with
+/// `_`.
+pub fn is_private_module_name(mod_name: &str) -> bool {
+    mod_name
+        .split(MODULE_SEPARATOR)
+        .any(|part| part.starts_with('_'))
+}
+
 /// The path of names an entity is written under: the `Std::Iterator` of `Std::Iterator::empty`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct NameSpace {
@@ -416,6 +424,22 @@ impl FullName {
             namespace,
             name: name.unwrap(),
         })
+    }
+
+    /// Whether the entity is private: its module is private, or a namespace under the module or the
+    /// entity's own name starts with `_`.
+    ///
+    /// # Examples
+    /// `Lib::_Ns::f`, `Lib::_Foo::@v` and `Lib._Impl::f` are private, and `Lib::Foo::f` is not.
+    pub fn is_private(&self) -> bool {
+        let mut names = self.namespace.names.iter();
+        if names
+            .next()
+            .is_some_and(|mod_name| is_private_module_name(mod_name))
+        {
+            return true;
+        }
+        names.any(|ns| ns.starts_with('_')) || self.name.starts_with('_')
     }
 
     /// Whether the name was written with a leading `::`.

@@ -17,19 +17,29 @@ double_colon = { "::" }
 
 // Strings that can be used as names of values, fields or variants.
 // - "@" is used for getter function ("@x" for getter of field x)
+// - A leading "_" marks a name as internal. The character after it decides the kind of the name:
+//   "_" followed by a capital letter starts a `capital_name`, so it is excluded here.
 // 
 // If you change this, please also update `chars_allowed_in_identifiers` in `constants.rs`.
-name_head = _{ ASCII_ALPHA_LOWER | "_" | "@" }
+name_head = _{ ASCII_ALPHA_LOWER | ("_" ~ !ASCII_ALPHA_UPPER) | "@" }
 name_char = _{ ASCII_ALPHA | ASCII_DIGIT | "_" }
 name = { !keywords ~ (name_head ~ name_char*) }
 fullname = { double_colon? ~ (namespace_item ~ double_colon)* ~ name }
+
+// A value, a field or a variant named with "_" followed by a capital letter, which is the head of a
+// `capital_name`. The parser rejects every match with an error saying how to rename it. Each rule using
+// it tries it after every alternative a correct program takes, so it matches only where the program
+// fails to parse without it.
+underscore_capital_value_name = { "_" ~ ASCII_ALPHA_UPPER ~ name_char* }
+underscore_capital_value_fullname = _{ double_colon? ~ (namespace_item ~ double_colon)* ~ underscore_capital_value_name }
 
 // The name of fields of tuple types with namespaces (e.g., `Std::Tuple1::0`).
 number_name = { ASCII_DIGIT+ }
 number_fullname = { double_colon? ~ (namespace_item ~ double_colon)* ~ number_name }
 
-// Strings that can be used of types, traits, modules or namespaces.
-capital_name = { ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
+// Strings that can be used of types, traits, modules or namespaces. A leading "_" marks the name as
+// internal.
+capital_name = { "_"? ~ ASCII_ALPHA_UPPER ~ (ASCII_ALPHA | ASCII_DIGIT)* }
 capital_fullname = { double_colon? ~ (namespace_item ~ double_colon)* ~ capital_name }
 
 // Namespace.
@@ -139,10 +149,10 @@ expr_make_struct = {
 }
 
 // A field of a struct construction: `name : value`, or the name alone, which stands for `name : name`.
-expr_make_struct_field = { type_field_name ~ (sep* ~ ":" ~ sep* ~ expr)? }
+expr_make_struct_field = { (type_field_name | underscore_capital_value_name) ~ (sep* ~ ":" ~ sep* ~ expr)? }
 
 // Non Left Recursive expressions
-expr_nlr = { expr_lit | expr_hole | expr_var | expr_let | expr_eval | expr_if | expr_match | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c }
+expr_nlr = { expr_lit | expr_hole | expr_var | expr_let | expr_eval | expr_if | expr_match | expr_do | expr_lam | expr_tuple | expr_make_struct | expr_call_c | underscore_capital_value_fullname }
 
 // List of arguments. Can be an empty list.
 arg_list = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ expr ~ (sep* ~ "," ~ sep* ~ expr)* ~ sep* ~ ")" }
@@ -154,7 +164,7 @@ expr_app = { expr_nlr ~ (sep* ~ arg_list)* }
 expr_index = { expr_app ~ (sep* ~ index_syntax)* }
 index_syntax = { "[" ~ sep* ~ index_accessor ~ sep* ~ "]" }
 index_accessor = { expr | field_accessor | tuple_accessor }
-field_accessor = { "^" ~ fullname }
+field_accessor = { "^" ~ (fullname | underscore_capital_value_fullname) }
 tuple_accessor = { "^" ~ number_fullname }
 
 // left to right application sequence, e.g., `x.f.g`. (left-associative)
@@ -208,11 +218,13 @@ expr = { expr_and_then_sequence }
 
 // === Patterns === 
 
-pattern_nounion = { pattern_var | pattern_tuple | pattern_struct }
+pattern_nounion = { pattern_var | pattern_tuple | pattern_struct | pattern_underscore_capital_var }
 
-pattern_case = { pattern_union | pattern_var | pattern_tuple | pattern_struct }
+pattern_case = { pattern_union | pattern_var | pattern_tuple | pattern_struct | pattern_underscore_capital_var }
 
 pattern_var = { name ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
+
+pattern_underscore_capital_var = _{ underscore_capital_value_name ~ (sep* ~ ":" ~ sep* ~ type_expr)? }
 
 pattern_tuple = { "(" ~ sep* ~ ")" | "(" ~ sep* ~ pattern_nounion ~ (sep* ~ "," ~ sep* ~ pattern_nounion)* ~ (sep* ~ ",")? ~ sep* ~ ")" }
 
@@ -227,9 +239,9 @@ pattern_struct = {
 pattern_struct_rest = { "_" ~ !name_char }
 
 // A field of a struct pattern: `name : pattern`, or the name alone, which stands for `name : name`.
-pattern_struct_field = { type_field_name ~ (sep* ~ ":" ~ sep* ~ pattern_nounion)? }
+pattern_struct_field = { (type_field_name | underscore_capital_value_name) ~ (sep* ~ ":" ~ sep* ~ pattern_nounion)? }
 
-pattern_union = { (capital_name ~ "::")* ~ type_field_name ~ sep* ~ "(" ~ sep* ~ pattern_nounion? ~ sep* ~ ")" }
+pattern_union = { (capital_name ~ "::")* ~ (type_field_name | underscore_capital_value_name) ~ sep* ~ "(" ~ sep* ~ pattern_nounion? ~ sep* ~ ")" }
 
 // === Types ===
 type_expr = { type_fun }
@@ -285,7 +297,7 @@ type_name = { capital_name }
 // A field or variant name. A lone `_` is excluded: in a struct pattern it leaves out the rest of the fields.
 type_field_name = { !keywords ~ !("_" ~ !name_char) ~ (name_head ~ !"@") ~ name_char* }
 
-type_field = { type_field_name ~ sep* ~ ":" ~ sep* ~ type_expr }
+type_field = { (type_field_name | underscore_capital_value_name) ~ sep* ~ ":" ~ sep* ~ type_expr }
 
 type_defn = { "type" ~ sep+ ~ (constraints ~ sep+)? ~ type_name ~ (sep+ ~ type_var)* ~ sep* ~ "=" ~ sep* ~ (struct_defn | union_defn | type_alias_defn) ~ sep* ~ semicolon }
 
@@ -313,7 +325,7 @@ trait_member_defn = { trait_member_value_defn | trait_member_type_defn | depreca
 
 trait_member_value_defn = { trait_member_value_name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ semicolon }
 
-trait_member_value_name = _{ name }
+trait_member_value_name = _{ name | underscore_capital_value_name }
 
 trait_member_type_defn = { "type" ~ (sep+ ~ constraints)? ~ sep+ ~ type_expr ~ (sep* ~ ":" ~ sep* ~ kind)? ~ sep* ~ semicolon }
 
@@ -332,9 +344,9 @@ trait_member_type_impl = { "type" ~ sep+ ~ type_expr ~ sep* ~ "=" ~ sep* ~ type_
 trait_alias_defn = { "trait" ~ sep+ ~ trait_name ~ sep* ~ "=" ~ sep* ~ trait_fullname ~ (sep* ~ "+" ~ sep* ~ trait_fullname)* ~ sep* ~ semicolon }
 
 // === Global names ===
-global_name_type_sign = { name ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ("=" ~ sep* ~ expr_or_hole ~ sep*)? ~ semicolon }
+global_name_type_sign = { (name | underscore_capital_value_name) ~ sep* ~ ":" ~ sep* ~ type_qualified ~ sep* ~ ("=" ~ sep* ~ expr_or_hole ~ sep*)? ~ semicolon }
 
-global_name_defn = { name ~ sep* ~ "=" ~ sep* ~ expr_or_hole ~ sep* ~ semicolon }
+global_name_defn = { (name | underscore_capital_value_name) ~ sep* ~ "=" ~ sep* ~ expr_or_hole ~ sep* ~ semicolon }
 
 // === Import statements ===
 // The LSP's import completion re-reads this syntax token by token; a
@@ -413,12 +425,12 @@ exported_c_function_char = _{ !"]" ~ ANY }
 
 exported_c_function_name = { exported_c_function_char+ }
 
-export_statement = { export_symbol ~ sep* ~ "[" ~ sep* ~ fullname ~ sep* ~ "," ~ sep* ~ exported_c_function_name ~ sep* ~ "]" ~ sep* ~ semicolon }
+export_statement = { export_symbol ~ sep* ~ "[" ~ sep* ~ (fullname | underscore_capital_value_fullname) ~ sep* ~ "," ~ sep* ~ exported_c_function_name ~ sep* ~ "]" ~ sep* ~ semicolon }
 
 // === Deprecation pragma ===
 deprecated_symbol = { "DEPRECATED" }
 
-deprecated_statement = { deprecated_symbol ~ sep* ~ "[" ~ sep* ~ fullname ~ sep* ~ "," ~ sep* ~ expr_string_lit ~ sep* ~ "]" ~ sep* ~ semicolon }
+deprecated_statement = { deprecated_symbol ~ sep* ~ "[" ~ sep* ~ (fullname | underscore_capital_value_fullname) ~ sep* ~ "," ~ sep* ~ expr_string_lit ~ sep* ~ "]" ~ sep* ~ semicolon }
 
 // === Comments ===
 block_comment = _{ "/*"  ~ block_commented_character*  ~ "*/" }
