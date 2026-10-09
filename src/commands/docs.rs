@@ -1,7 +1,7 @@
 use crate::ast::program::SymbolExpr::Method;
 use crate::{
     ast::{
-        name::{is_private_module_name, FullName, Name, NameSpace},
+        name::{is_private_module_name, is_private_name, FullName, Name, NameSpace},
         program::Program,
         traits::KindSignature,
         typedecl::Field,
@@ -17,7 +17,7 @@ use crate::{
     elaboration::elaborate_via_config,
     error::Errors,
     metafiles::project_file::ProjectFile,
-    misc::{info_msg, to_absolute_path},
+    misc::info_msg,
     parse::sourcefile::Span,
 };
 use std::sync::Arc;
@@ -54,23 +54,12 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
         // In case modules are given in the command line arguments, use them.
         docs_config.modules.clone()
     } else {
-        let mut mod_names = vec![];
         // Use all modules defined in the root project file.
-        let src_files = proj_file.get_files(mode);
-        let abs_src_paths = src_files
-            .iter()
-            .map(|f| to_absolute_path(f))
-            .collect::<Result<Vec<_>, Errors>>()?;
-        for mi in program.modules.iter() {
-            if !docs_config.include_private && is_private_module_name(&mi.name) {
-                continue;
-            }
-            let src_file = to_absolute_path(&mi.source.input.file_path)?;
-            if abs_src_paths.iter().any(|f| f == &src_file) {
-                mod_names.push(mi.name.clone());
-            }
-        }
-        mod_names
+        program
+            .modules_from_files(&proj_file.get_files(mode))?
+            .into_iter()
+            .filter(|mod_name| docs_config.include_private || !is_private_module_name(mod_name))
+            .collect()
     };
 
     for mod_name in mod_names {
@@ -488,7 +477,7 @@ fn is_private_field_accessor(program: &Program, name: &FullName) -> bool {
         _ => return false,
     };
     for field in &ty_info.fields {
-        if !field.name.starts_with("_") {
+        if !is_private_name(&field.name) {
             continue;
         }
         for prefix in accessor_prefixes {
@@ -598,7 +587,7 @@ fn type_entries(
 
         if ty_info.variant == TyConVariant::Struct {
             for field in ty_info.fields.iter() {
-                if !config.include_private && field.name.starts_with("_") {
+                if !config.include_private && is_private_name(&field.name) {
                     continue;
                 }
                 let field_sec = field_subsection(TyConVariant::Struct, field)?;
@@ -607,7 +596,7 @@ fn type_entries(
         }
         if ty_info.variant == TyConVariant::Union {
             for variant in ty_info.fields.iter() {
-                if !config.include_private && variant.name.starts_with("_") {
+                if !config.include_private && is_private_name(&variant.name) {
                     continue;
                 }
                 let variant_sec = field_subsection(TyConVariant::Union, variant)?;
@@ -726,7 +715,7 @@ fn trait_entries(
         doc.concatenate_many(docstring);
 
         for (assoc_ty_name, assoc_ty_defn) in &info.assoc_types {
-            if !config.include_private && assoc_ty_name.starts_with("_") {
+            if !config.include_private && is_private_name(assoc_ty_name) {
                 continue;
             }
             let mut params = vec![info.type_var.name.clone()];
@@ -754,7 +743,7 @@ fn trait_entries(
             doc.add_subsection(subsection);
         }
         for method in &info.members {
-            if !config.include_private && method.name.starts_with("_") {
+            if !config.include_private && is_private_name(&method.name) {
                 continue;
             }
             let title = format!("method `{}`", method.name);

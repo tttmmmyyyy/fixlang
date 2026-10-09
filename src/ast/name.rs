@@ -8,12 +8,16 @@ use std::hash::{Hash, Hasher};
 /// source.
 pub type Name = String;
 
+/// Whether `name`, a single name as written in source, marks what it names as private: it starts
+/// with `_`.
+pub fn is_private_name(name: &str) -> bool {
+    name.starts_with('_')
+}
+
 /// Whether the module named `mod_name` is private: one of its period-separated parts starts with
 /// `_`.
 pub fn is_private_module_name(mod_name: &str) -> bool {
-    mod_name
-        .split(MODULE_SEPARATOR)
-        .any(|part| part.starts_with('_'))
+    mod_name.split(MODULE_SEPARATOR).any(is_private_name)
 }
 
 /// The path of names an entity is written under: the `Std::Iterator` of `Std::Iterator::empty`.
@@ -439,7 +443,7 @@ impl FullName {
         {
             return true;
         }
-        names.any(|ns| ns.starts_with('_')) || self.name.starts_with('_')
+        names.any(|ns| is_private_name(ns)) || is_private_name(&self.name)
     }
 
     /// Whether the name was written with a leading `::`.
