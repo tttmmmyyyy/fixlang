@@ -38,10 +38,7 @@ impl ExprVisitor for ConstantArrayLiteralMaker {
         let elements = expr
             .get_array_lit_elements()
             .iter()
-            .map(|elem| match &*elem.expr {
-                Expr::Builtin(builtin) => NumberLiteral::of_op(builtin.op.as_ref()),
-                _ => None,
-            })
+            .map(number_literal_of)
             .collect::<Option<Vec<_>>>()
             .filter(|elements| !elements.is_empty());
         let Some(elements) = elements else {
@@ -59,5 +56,18 @@ impl ExprVisitor for ConstantArrayLiteralMaker {
             )
             .set_type(ty),
         )
+    }
+}
+
+/// The number literal `expr` is, looking through the type annotations around it, and `None` where
+/// it is anything else.
+///
+/// # Examples
+/// `1`, `(1 : I64)` and `((1 : I64) : I64)` are the literal `1`; `1 + 2` is `None`.
+fn number_literal_of(expr: &Arc<ExprNode>) -> Option<NumberLiteral> {
+    match &*expr.expr {
+        Expr::Builtin(builtin) => NumberLiteral::of_op(builtin.op.as_ref()),
+        Expr::TyAnno(annotated, _) => number_literal_of(annotated),
+        _ => None,
     }
 }

@@ -97,8 +97,8 @@ mod tests {
         }
     }
 
-    /// A literal of number literals is not built at run time, and a literal holding anything else, or
-    /// nothing, is.
+    /// A literal of number literals, written with type annotations or without, is not built at run
+    /// time, and a literal holding anything else, or nothing, is.
     #[test]
     fn test_only_an_array_literal_of_number_literals_is_a_constant() {
         let source = r#"
@@ -109,15 +109,16 @@ mod tests {
             let args = *IO::get_args;
             let n = args.@size;
             let numbers = [5, 6, 7];
+            let annotated = [(8 : I64), 9];
             let computed = [n, 6, 7];
             let empty = [] : Array I64;
-            println((numbers.@(0) + computed.@(0) + empty.@size).to_string)
+            println((numbers.@(0) + annotated.@(0) + computed.@(0) + empty.@size).to_string)
         );
         "#;
         let dump = build_run_and_read_rc_ir(
             source,
             "none",
-            "6",
+            "14",
             "a literal of numbers beside one holding a computed element",
         );
         assert!(
@@ -125,10 +126,15 @@ mod tests {
             "the literal of number literals should be a constant; the dump is:\n{}",
             dump
         );
+        assert!(
+            dump.contains("constant_array_lit(int(8), int(9))"),
+            "the literal of annotated number literals should be a constant; the dump is:\n{}",
+            dump
+        );
         assert_eq!(
             dump.matches("constant_array_lit(").count(),
-            1,
-            "only the literal of number literals should be a constant; the dump is:\n{}",
+            2,
+            "only the literals of number literals should be constants; the dump is:\n{}",
             dump
         );
     }
