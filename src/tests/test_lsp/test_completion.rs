@@ -997,7 +997,8 @@ mod tests {
     /// live symbols. Two kinds of items are the exceptions: deprecated
     /// items get a `~`-prefixed sortText so they drop below live
     /// siblings, and the private items of modules outside the project
-    /// (`Std::Tuple1::_act_0_const`, ...) get a `~~`-prefixed one.
+    /// (`Std::Tuple1::_act_0_const`, `Std::IO::IOHandle::set__data`, ...) get a
+    /// `~~`-prefixed one.
     #[test]
     fn test_completion_dot_sort_no_dot_unchanged() {
         let mut ctx = LspCompletionCtx::setup("completion-dot-sort", &["main.fix"]);
@@ -1030,8 +1031,14 @@ mod tests {
                     .map(|a| a.iter().any(|t| t.as_i64() == Some(1)))
                     .unwrap_or(false);
                 let is_deprecated = deprecated_flag || tag_flag;
-                let is_foreign_private = FullName::parse(label)
-                    .is_some_and(|name| name.is_private() && name.module() != "Main");
+                // A private item, or an accessor of a field or variant whose name starts with `_`.
+                let is_foreign_private = FullName::parse(label).is_some_and(|name| {
+                    let accessor_of_private_field =
+                        ["@_", "set__", "mod__", "act__", "as__", "is__"]
+                            .iter()
+                            .any(|prefix| name.name.starts_with(prefix));
+                    (name.is_private() || accessor_of_private_field) && name.module() != "Main"
+                });
                 if is_foreign_private {
                     return match sort {
                         Some(s) if s.starts_with("~~") => None,
@@ -1466,15 +1473,14 @@ mod tests {
         );
         for item in &items {
             let label = item.get("label").and_then(|l| l.as_str()).unwrap();
-            if FullName::parse(label)
-                .is_some_and(|name| name.is_private() && name.module() != "Main")
-            {
-                continue;
-            }
             let key = item
                 .get("sortText")
                 .and_then(|s| s.as_str())
                 .unwrap_or(label);
+            // The other private items of dependencies and `Std` rank last as `Lib::_bump` does.
+            if key.starts_with("~~") {
+                continue;
+            }
             assert!(
                 key < private_sort.as_str(),
                 "`{}` (sort key {:?}) should rank above Lib::_bump ({:?})",
@@ -1579,5 +1585,38 @@ mod tests {
         );
 
         let _ = client.shutdown();
+    }
+
+    /// The accessors the compiler defines for a private field or variant of a dependency's type
+    /// rank below every other candidate, as the private items of the dependency do: `@_x`,
+    /// `set__x`, `mod__x` and `act__x` of `Lib::Pub`, and `as__v`, `is__v` and `mod__v` of
+    /// `Lib::PubU`, get a `~~`-prefixed sortText, and `Lib::Pub::@y` of the public field `y` gets
+    /// none.
+    #[test]
+    fn test_completion_ranks_accessors_of_private_fields_of_dependencies_last() {
+        let mut ctx = LspCompletionCtx::setup("underscore_names_dependency", &["main.fix"]);
+
+        // main.fix line 3 (0-indexed) is a blank line, a non-dot context.
+        let items = ctx.complete("main.fix", 3, 0);
+        for label in [
+            "Lib::Pub::@_x",
+            "Lib::Pub::set__x",
+            "Lib::Pub::mod__x",
+            "Lib::Pub::act__x",
+            "Lib::PubU::as__v",
+            "Lib::PubU::is__v",
+            "Lib::PubU::mod__v",
+        ] {
+            let sort = find_sort_text(&items, label);
+            assert!(
+                sort.as_deref().is_some_and(|s| s.starts_with("~~")),
+                "`{}` should have a `~~`-prefixed sortText; got {:?}",
+                label,
+                sort
+            );
+        }
+        assert_eq!(find_sort_text(&items, "Lib::Pub::@y"), None);
+
+        ctx.shutdown();
     }
 }
