@@ -1522,4 +1522,62 @@ mod tests {
 
         ctx.shutdown();
     }
+
+    /// A dot completion answered while no diagnostics pass has produced a program — the saved
+    /// `main.fix` imports a module that does not exist, so every pass fails — still tells the
+    /// project's own private items from a dependency's: `Main::_local` gets no `~~`-prefixed
+    /// sortText, while `Lib::_Ns::helper` gets one.
+    #[test]
+    fn test_dot_completion_without_a_diagnostics_result_ranks_own_private_items_as_own() {
+        let (_temp_dir, project_dir) = setup_test_env("underscore_names_dependency");
+        let path = project_dir.join("main.fix");
+        let original = fs::read_to_string(&path).unwrap();
+        fs::write(
+            &path,
+            original.replace("module Main;\n", "module Main;\nimport Nowhere;\n"),
+        )
+        .unwrap();
+        let mut client = LspClient::new(&project_dir).expect("Failed to start LSP");
+        client
+            .initialize(&project_dir, Duration::from_secs(5))
+            .expect("Failed to initialize LSP");
+        client
+            .open_document(Path::new("main.fix"))
+            .expect("Failed to open main.fix");
+        client.save_and_wait_for_the_program(Path::new("main.fix"));
+
+        // The buffer drops the broken import and adds a dot completion site, unsaved.
+        let live = format!(
+            "{}\nprobe : IO () = (\n    let _ = 42.\n    pure()\n);\n",
+            original
+        );
+        fs::write(&path, &live).unwrap();
+        client.change_document(Path::new("main.fix")).unwrap();
+        let line = live.lines().position(|l| l.ends_with("42.")).unwrap() as u32;
+        let uri = client.file_uri(Path::new("main.fix"));
+        let id = client
+            .send_request(
+                "textDocument/completion",
+                json!({"textDocument": {"uri": uri}, "position": {"line": line, "character": 15}}),
+            )
+            .unwrap();
+        let items = wait_for_completion_items(&mut client, id, Duration::from_secs(60))
+            .expect("completion should respond");
+
+        let own = find_sort_text(&items, "Main::_local").expect("Main::_local should be offered");
+        assert!(
+            !own.starts_with("~~"),
+            "Main::_local is the project's own; got {:?}",
+            own
+        );
+        let foreign =
+            find_sort_text(&items, "Lib::_Ns::helper").expect("Lib::_Ns::helper should be offered");
+        assert!(
+            foreign.starts_with("~~"),
+            "Lib::_Ns::helper is a dependency's; got {:?}",
+            foreign
+        );
+
+        let _ = client.shutdown();
+    }
 }
