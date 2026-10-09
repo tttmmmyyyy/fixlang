@@ -632,8 +632,8 @@ fn root_project_modules(program: &Program) -> Set<Name> {
 
 /// Returns the trailing `Ns1::Ns2:`-shaped portion of the typing text as a
 /// `NameSpace`. A final component that does not start with an uppercase
-/// letter, optionally preceded by an underscore, (a partially typed value
-/// name) is dropped.
+/// letter, or with `_` and an uppercase letter, is a partially typed
+/// value name and is dropped.
 fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
     // Get the suffix of `typing_text` that consists of characters allowed in identifiers and colons.
     // Example: input "let x = Std::Array:" -> "Std::Array:"
@@ -650,8 +650,8 @@ fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
     // Example: "Std::Array:" -> "Std::Array"
     let namespace_part = namespace_part.trim_end_matches(':').to_string();
 
-    // Split the text by "::". If the last component does not start with a uppercase letter, optionally
-    // preceded by an underscore, then drop it.
+    // Split the text by "::". If the last component does not start with an uppercase letter, or with
+    // `_` and an uppercase letter, then drop it.
     let mut components = namespace_part.split("::").collect::<Vec<_>>();
     if let Some(last_component) = components.last() {
         let head = last_component.strip_prefix('_').unwrap_or(last_component);
@@ -855,10 +855,10 @@ mod tests {
         assert_eq!(result.names, vec!["Std".to_string(), "Array".to_string()]);
     }
 
+    /// Verifies that a final component starting with `_` and a capital letter is kept as a
+    /// namespace, and one starting with `_` and anything else is dropped as a value name.
     #[test]
     fn test_extract_namespace_from_typing_text_underscore_capital() {
-        // A `_` followed by a capital letter starts a namespace; a `_` followed by anything else
-        // starts a value name, which is dropped.
         let result = extract_namespace_from_typing_text("Lib::_Ns:");
         assert_eq!(result.names, vec!["Lib".to_string(), "_Ns".to_string()]);
         let result = extract_namespace_from_typing_text("Lib::_Ns::_va");

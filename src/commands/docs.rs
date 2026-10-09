@@ -815,6 +815,9 @@ fn trait_entries(
     Ok(entries)
 }
 
+/// The entries of the trait implementations defined in the module `mod_name`. Unless
+/// `config.include_private` is set, it leaves out the implementations of a private trait and those
+/// for a private type.
 fn trait_impl_entries(
     program: &Program,
     mod_name: &Name,

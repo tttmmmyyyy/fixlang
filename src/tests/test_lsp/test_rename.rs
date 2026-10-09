@@ -1372,9 +1372,9 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// Renaming a type whose name starts with `_` and a capital letter rewrites the item of the
-    /// import statement naming it, which the parser reads as a type: the declaration in lib.fix,
-    /// and the import item and the type signature in main.fix.
+    /// Renaming a type whose name starts with `_` and a capital letter rewrites its declaration in
+    /// lib.fix and, in main.fix, its type signature and the import item naming it, which the parser
+    /// reads as a type.
     #[test]
     fn test_rename_type_named_with_an_underscore() {
         let mut ctx = LspTestCtx::setup("underscore_names", &["lib.fix", "main.fix"]);

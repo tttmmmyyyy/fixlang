@@ -38,8 +38,8 @@
 #### Tool
 
 - #780: `install.sh` now lists the releases newest first and offers the newest full release as the default. The default used to be whichever release GitHub listed first, which could be a pre-release such as `v1.5.0-rc.1`. Pre-releases are marked `(pre-release)` in the list, and you can install one by typing its name.
-- #812: `fix docs` now leaves out, unless `--with-private` is given, the entities in a namespace or a module whose name starts with `_`, the members and the associated types of a trait whose names start with `_`, and the implementations of a trait or for a type whose name starts with `_`.
-- #812: The language server ranks the entities of dependencies and `Std` whose names, or the names of whose namespaces or modules, start with `_` last in completion.
+- #812: Unless `--with-private` is given, `fix docs` now leaves out the entities in a namespace or a module whose name starts with `_`, the members and the associated types of a trait whose names start with `_`, and the implementations of a trait or for a type whose name starts with `_`.
+- #812: In completion, the language server ranks an entity of a dependency or of `Std` last when its name, or the name of its namespace or module, starts with `_`.
 
 ### Fixed
 

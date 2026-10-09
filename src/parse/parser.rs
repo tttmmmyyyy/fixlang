@@ -286,7 +286,7 @@ pub enum TokenCategory {
     /// Value names: locals, global values, lambda parameters. A lowercase letter, `@`, or a `_`
     /// not followed by a capital letter starts them.
     Name,
-    /// Struct field names and union variant names: the names of `Name` that start with no `@`.
+    /// Struct field names and union variant names: the names of `Name` that do not start with `@`.
     TypeFieldName,
     /// Names of types, type aliases, traits, trait aliases, associated types, modules and
     /// namespaces. A capital letter, optionally preceded by a `_`, starts them.

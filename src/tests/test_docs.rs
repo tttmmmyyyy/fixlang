@@ -603,8 +603,8 @@ mod integration_tests {
         assert!(!internal_written, "Main._Internal.md should NOT be written");
     }
 
-    /// `--with-private` documents the items that an underscore at the start of their names, or
-    /// of the names of their namespaces or modules, keeps out.
+    /// With `--with-private`, `fix docs` documents the items it otherwise leaves out because their
+    /// names, or the names of their namespaces or modules, start with an underscore.
     #[test]
     fn test_docs_with_private_document_items_named_with_an_underscore() {
         let (content, internal_written) = document_private_names(&["--with-private"]);
