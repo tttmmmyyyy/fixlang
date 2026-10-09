@@ -4,11 +4,18 @@ module Main;
 // other cases do not use: a trait dictionary, a destructor, and a clone the uniqueness pass made
 // first.
 
+// Built at run time: a global holding an array literal of numbers is put wherever it is read, so
+// nothing would read the global itself.
 g : Array I64;
-g = [1, 2, 3];
+g = Array::from_map(3, |i| i + 1);
 
 gtup : (Array I64, Array I64);
 gtup = ([4, 5], [6, 7]);
+
+// An array holding `elements`, built at run time. An array literal of numbers is a constant the
+// whole program shares, so the value a case means to build here passes through this.
+built_here : Array I64 -> Array I64;
+built_here = |elements| elements.to_iter.to_array;
 
 // One parameter with two boxed leaves, read field by field so that the pair reaches the body as one
 // value. A caller can make one leaf local and leave the other on the global, so the two leaves of
@@ -63,7 +70,7 @@ impl FromGlobal : Source {
 }
 
 impl FromLocal : Source {
-    values = |_| [8, 9];
+    values = |_| built_here([8, 9]);
 }
 
 total : [a : Source] a -> I64;
@@ -80,15 +87,15 @@ hold = |a| (
 
 main : IO ();
 main = (
-    let local : Array I64 = [10, 20];
-    let localtup = ([30, 40], [50, 60]);
+    let local : Array I64 = built_here([10, 20]);
+    let localtup = (built_here([30, 40]), built_here([50, 60]));
     // One leaf built here, the other the global.
-    let mixedtup = ([70, 80], g);
+    let mixedtup = (built_here([70, 80]), g);
 
     let a = walk_tup(2, localtup) + walk_tup(2, gtup) + walk_tup(2, mixedtup);
     let ap = walk_pat(2, localtup) + walk_pat(2, gtup) + walk_pat(2, mixedtup);
     let b = walk_opt(2, Option::some(local)) + walk_opt(2, Option::some(g));
-    let c = overwrite(2, [[90], [100]]) + overwrite(2, [g, g]);
+    let c = overwrite(2, [built_here([90]), built_here([100])]) + overwrite(2, [g, g]);
     let d = FromGlobal { tag : 0 }.total + FromLocal { tag : 0 }.total;
     let e = *g.hold + *local.hold;
 

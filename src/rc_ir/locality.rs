@@ -2,14 +2,15 @@
 //! certainly in the `RefcntState::LOCAL` state, so that the operation can drop the runtime state
 //! dispatch and increment or decrement the count directly.
 //!
-//! Exactly four operations take an object out of the local state: reading a global (whose initializer
-//! marks its whole result graph global), evaluating a string literal (whose storage is a constant
-//! the program's data holds, marked global where it stands), `Std::mark_threaded`, and
-//! `Std::boxed_from_retained_ptr`. Everything else — allocating, updating in place, cloning a
-//! shared container — leaves the state byte alone. A forward may-analysis over the value flow
-//! therefore decides the question, provided it distinguishes two facts about a value, because
-//! reference counting is *shallow*: a retain touches only the root object, a release recurses into
-//! children only at zero and through a dispatching traverser, and `is_unique` reads only the root.
+//! Exactly five operations take an object out of the local state: reading a global (whose initializer
+//! marks its whole result graph global), evaluating a string literal or an array literal of numbers
+//! (whose storage is a constant the program's data holds, marked global where it stands),
+//! `Std::mark_threaded`, and `Std::boxed_from_retained_ptr`. Everything else — allocating, updating
+//! in place, cloning a shared container — leaves the state byte alone. A forward may-analysis over
+//! the value flow therefore decides the question, provided it distinguishes two facts about a
+//! value, because reference counting is *shallow*: a retain touches only the root object, a release
+//! recurses into children only at zero and through a dispatching traverser, and `is_unique` reads
+//! only the root.
 //! So `DeepLocal ⊑ RootLocal ⊑ MayExt`: the root fact is what an annotation needs, and the deep
 //! fact is what reading out of a container needs.
 //!

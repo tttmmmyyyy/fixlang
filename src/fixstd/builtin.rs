@@ -35,6 +35,7 @@ use crate::fixstd::runtime::{
     RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE, RUNTIME_SIGNED_OVERFLOW,
 };
 use crate::generator::{Generator, Object};
+use crate::hash::HashSource;
 use crate::misc::{make_map, Map, Set};
 use crate::object::{
     alloc_array_storage, build_abort_if, build_array_storage_alloc_offset,
@@ -52,7 +53,9 @@ use crate::rc_ir::provenance::{sole_origin, LeafOrigin, Provenance};
 use crate::tbaa::MemoryRegion;
 use inkwell::module::Linkage;
 use inkwell::types::IntType;
-use inkwell::values::{BasicMetadataValueEnum, BasicValue, FloatValue, IntValue, PointerValue};
+use inkwell::values::{
+    ArrayValue, BasicMetadataValueEnum, BasicValue, FloatValue, IntValue, PointerValue,
+};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate};
 use num_bigint::{BigInt, Sign};
 use serde::{Deserialize, Serialize};
@@ -1112,23 +1115,46 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     expr_app(expr_var(ctor, source.clone()), vec![unit], source)
 }
 
-/// An `Array U8` of `bytes`, whose storage is a constant in the program's data. Arrays of equal
-/// bytes name one storage.
-pub fn make_byte_array_of_global_storage<'c, 'm>(
+/// An `Array` of `elements`, whose storage is a constant in the program's data. Arrays of equal
+/// elements name one storage.
+///
+/// # Arguments
+/// * `elem_ty` - The type of the elements, which holds no boxed part.
+/// * `elements` - The elements, each of the type `elem_ty` is embedded as.
+/// * `contents` - What the elements are made from: two arrays of equal `elem_ty` and `contents` hold
+///   equal `elements`.
+pub fn make_array_of_global_storage<'c, 'm>(
     gc: &mut Generator<'c, 'm>,
-    bytes: &[u8],
+    elem_ty: Arc<TypeNode>,
+    elements: ArrayValue<'c>,
+    contents: &HashSource,
 ) -> Object<'c> {
-    let array_ty = type_tyapp(make_array_ty(), make_u8_ty());
-    let storage_ptr = gc.add_global_byte_array_storage(bytes);
-    let len = gc.context.i64_type().const_int(bytes.len() as u64, false);
+    let storage_ptr = gc.add_global_array_storage(&elem_ty, elements, contents);
+    let len = gc
+        .context
+        .i64_type()
+        .const_int(elements.get_type().len() as u64, false);
     build_array_value(
         gc,
-        array_ty,
+        type_tyapp(make_array_ty(), elem_ty),
         storage_ptr.as_basic_value_enum(),
         len,
         len,
-        "array@make_byte_array_of_global_storage",
+        "array@make_array_of_global_storage",
     )
+}
+
+/// The provenance of an array `make_array_of_global_storage` builds. The storage is a constant the
+/// whole program shares, so its sharing is unknown wherever the array is read, and a write into its
+/// elements copies it first.
+fn global_storage_array_prov(array_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Provenance {
+    Provenance::uniform(array_ty, type_env, LeafOrigin::Unknown)
+}
+
+/// The locality of an array `make_array_of_global_storage` builds. The storage is
+/// `RefcntState::GLOBAL`, which reference counting reads as external.
+fn global_storage_array_locality(array_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> ExtShape {
+    ExtShape::always(array_ty, type_env)
 }
 
 /// Evaluates a string literal to the `Array U8` backing a `String`: the literal's bytes plus the
@@ -1144,7 +1170,10 @@ impl BuiltinOp for StringBufOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, _ty: &Arc<TypeNode>) -> Object<'c> {
         let mut bytes = self.string.as_bytes().to_vec();
         bytes.push(0);
-        make_byte_array_of_global_storage(gc, &bytes)
+        let elements = gc.context.const_string(&bytes, false);
+        let mut contents = HashSource::default();
+        contents.push_bytes(&bytes);
+        make_array_of_global_storage(gc, make_u8_ty(), elements, &contents)
     }
 
     fn name(&self) -> String {
@@ -1161,9 +1190,7 @@ impl BuiltinOp for StringBufOp {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // The storage is a constant the whole program shares, so its sharing is unknown here and
-        // a write into its elements copies it first.
-        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
+        global_storage_array_prov(result_ty, type_env)
     }
 
     fn result_locality(
@@ -1172,8 +1199,7 @@ impl BuiltinOp for StringBufOp {
         _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> ExtShape {
-        // The storage is `RefcntState::GLOBAL`, which reference counting reads as external.
-        ExtShape::always(result_ty, type_env)
+        global_storage_array_locality(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -5508,6 +5534,117 @@ impl BuiltinOp for MakeStructOp {
                 .expect("a boxed leaf of an unboxed struct has a non-empty path");
             LeafCond::input_leaf(*i, rest.to_vec())
         })
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// A number literal standing as an element of `ConstantArrayLitOp`.
+#[derive(Clone, Serialize, Deserialize)]
+pub enum NumberLiteral {
+    /// A literal of an integer type.
+    Int(IntLitOp),
+    /// A literal of a floating-point type.
+    Float(FloatLitOp),
+}
+
+impl NumberLiteral {
+    /// The literal `op` is, and `None` where `op` is not a number literal.
+    pub fn of_op(op: &dyn BuiltinOp) -> Option<NumberLiteral> {
+        let op = op.as_any();
+        if let Some(op) = op.downcast_ref::<IntLitOp>() {
+            return Some(NumberLiteral::Int(op.clone()));
+        }
+        op.downcast_ref::<FloatLitOp>()
+            .map(|op| NumberLiteral::Float(op.clone()))
+    }
+
+    /// The literal as an operation, for evaluating and naming it.
+    fn op(&self) -> &dyn BuiltinOp {
+        match self {
+            NumberLiteral::Int(op) => op,
+            NumberLiteral::Float(op) => op,
+        }
+    }
+}
+
+/// Evaluates an array literal whose elements are all number literals: an array whose storage is a
+/// constant in the program's data, which no evaluation allocates or fills.
+///
+/// The storage is shared by every evaluation of the literal, so a write into its elements copies it
+/// first, as a write into the bytes of a string literal does.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ConstantArrayLitOp {
+    /// The elements, in order. There is at least one.
+    pub elements: Vec<NumberLiteral>,
+}
+
+#[typetag::serde]
+impl BuiltinOp for ConstantArrayLitOp {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
+        let elem_ty = ty.field_types(gc.type_env())[0].clone();
+        let embedded_ty = elem_ty.get_embedded_type(gc);
+        let values = self
+            .elements
+            .iter()
+            .map(|element| {
+                let value = element.op().generate(gc, &elem_ty).value(gc);
+                assert!(
+                    value.is_const() && value.get_type() == embedded_ty,
+                    "the literal `{}` of `{}` is not a constant of the type the type is embedded as",
+                    element.op().name(),
+                    elem_ty.to_string()
+                );
+                value
+            })
+            .collect::<Vec<_>>();
+        // The values are all of `embedded_ty`, which the assertion above checks.
+        let elements = unsafe { ArrayValue::new_const_array(&embedded_ty, &values) };
+        // A literal's name spells its value in full, so equal names make equal elements.
+        let mut contents = HashSource::default();
+        contents.push_list(self.elements.iter().map(|element| element.op().name()));
+        make_array_of_global_storage(gc, elem_ty, elements, &contents)
+    }
+
+    fn name(&self) -> String {
+        format!(
+            "constant_array_lit({})",
+            self.elements
+                .iter()
+                .map(|element| element.op().name())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![]
+    }
+
+    /// The array is a constant in the program's data, so a copy of the literal where the value is
+    /// named costs what naming it costs.
+    fn is_free_to_duplicate(&self) -> bool {
+        true
+    }
+
+    fn result_prov(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> Provenance {
+        global_storage_array_prov(result_ty, type_env)
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        _arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        global_storage_array_locality(result_ty, type_env)
     }
 
     fn as_any(&self) -> &dyn Any {

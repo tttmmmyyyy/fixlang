@@ -7,8 +7,10 @@ module Main;
 // rests on. Each case here reaches a first read from inside such a computation.
 
 // A chain of initializers: reading `deep` runs `mid`'s, which runs `base`'s.
+// Built at run time: a global holding an array literal of numbers is put wherever it is read, so
+// nothing would read the global itself.
 base : Array I64;
-base = [1, 2, 3];
+base = Array::from_map(3, |i| i + 1);
 
 mid : Array (Array I64);
 mid = [base, [4, 5]];
@@ -28,8 +30,10 @@ wide : Array (Array I64);
 wide = Iterator::range(0, 64).map(|i| [i, i + 1, i + 2]).to_array;
 
 // A global first read from inside a destructor's action, so the initializer runs during a release.
+// Built at run time: a global holding an array literal of numbers is put wherever it is read, so
+// nothing would read the global itself.
 in_dtor : Array I64;
-in_dtor = [100, 200];
+in_dtor = Array::from_map(2, |i| 100 * (i + 1));
 
 type Res = box struct { own : Array I64 };
 
