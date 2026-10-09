@@ -177,11 +177,23 @@ pub(super) fn handle_completion(
     let namespace = extract_namespace_from_typing_text(&typing_text);
     let is_in_namespace = |name: &FullName| namespace.is_suffix_of(&name.namespace);
     let root_modules = root_project_modules(active_program);
-    let is_foreign_private =
-        |name: &FullName| name.is_private() && !root_modules.contains(&name.module());
-    let expression_context = || ResolveContext::Expression {
-        typing_text: typing_text.clone(),
-        position: text_document_position.clone(),
+    // The item offering `symbol` in an expression, sorted by `sort_text` unless `symbol` is a
+    // private item of a module outside the root project, which ranks below every other candidate.
+    let expression_item = |symbol: CompletionSymbol, sort_text: Option<String>| {
+        let label = symbol.name.to_string();
+        let sort_text =
+            if symbol.name.is_private() && !root_modules.contains(&symbol.name.module()) {
+                Some(foreign_private_sort_text(sort_text, &label))
+            } else {
+                sort_text
+            };
+        let context = ResolveContext::Expression {
+            typing_text: typing_text.clone(),
+            position: text_document_position.clone(),
+        };
+        let mut item = build_completion_item(symbol, label, context);
+        item.sort_text = sort_text;
+        item
     };
 
     let mut items = vec![];
@@ -244,15 +256,7 @@ pub(super) fn handle_completion(
         } else {
             None
         };
-        let label = symbol.name.to_string();
-        let sort_text = if is_foreign_private(&symbol.name) {
-            Some(foreign_private_sort_text(sort_text, &label))
-        } else {
-            sort_text
-        };
-        let mut item = build_completion_item(symbol, label, expression_context());
-        item.sort_text = sort_text;
-        items.push(item);
+        items.push(expression_item(symbol, sort_text));
     }
     for symbol in type_symbols(active_program) {
         if !is_in_namespace(&symbol.name) {
@@ -263,15 +267,7 @@ pub(super) fn handle_completion(
         let sort_text = dot_ranking
             .as_ref()
             .map(|_| dot_context_low_priority_sort_text(&symbol.name));
-        let label = symbol.name.to_string();
-        let sort_text = if is_foreign_private(&symbol.name) {
-            Some(foreign_private_sort_text(sort_text, &label))
-        } else {
-            sort_text
-        };
-        let mut item = build_completion_item(symbol, label, expression_context());
-        item.sort_text = sort_text;
-        items.push(item);
+        items.push(expression_item(symbol, sort_text));
     }
     send_response(id, Ok::<_, ()>(items));
 }
@@ -626,17 +622,12 @@ fn is_dot_function(typing_text: &str) -> bool {
 
 /// The modules defined in the source files of the root project. Completion ranks the private items
 /// of the other modules, which belong to dependencies or to `Std`, below every other candidate. The
-/// set is empty when the project file cannot be read.
+/// set is empty when the project file or the path of a source file cannot be read.
 fn root_project_modules(program: &Program) -> Set<Name> {
-    let Ok(proj_file) = ProjectFile::read_root_file() else {
-        return Set::default();
-    };
-    proj_file
-        .get_files(BuildConfigType::Test)
-        .iter()
-        .filter_map(|file| program.module_of_file(file))
-        .map(|mi| mi.name.clone())
-        .collect()
+    ProjectFile::read_root_file()
+        .and_then(|proj_file| program.modules_from_files(&proj_file.get_files(BuildConfigType::Test)))
+        .map(|mod_names| mod_names.into_iter().collect())
+        .unwrap_or_default()
 }
 
 /// Returns the trailing `Ns1::Ns2:`-shaped portion of the typing text as a
