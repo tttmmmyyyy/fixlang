@@ -92,7 +92,6 @@ pub(super) fn handle_completion(
     uri_to_content: &Map<Uri, LatestContent>,
     typecheck_cache: SharedTypeCheckCache,
 ) {
-    let program = diag.map(|d| &d.program);
     let text_document_position = &params.text_document_position;
 
     // Don't offer completions while the cursor is inside a comment
@@ -113,12 +112,12 @@ pub(super) fn handle_completion(
             // Without a diagnostics snapshot there is nothing to
             // enumerate modules or entities from; reply empty and let
             // the next diagnostics run restore the candidates.
-            let items = program
-                .map(|program| {
+            let items = diag
+                .map(|diag| {
                     import_completion_items(
                         &import_ctx,
-                        program,
-                        &root_project_modules(program, diag),
+                        &diag.program,
+                        &root_project_modules(&diag.program, &diagnosed_root_files(diag)),
                         &latest.path,
                         text_document_position,
                     )
@@ -152,7 +151,11 @@ pub(super) fn handle_completion(
     // buffer, so it can still produce candidates; for non-dot contexts
     // without a snapshot we reply with an empty list and let the next
     // diagnostics run restore the full list.
-    let Some(active_program) = dot_extract.as_ref().map(|d| &d.program).or(program) else {
+    let active = match &dot_extract {
+        Some(d) => Some((&d.program, d.root_files.clone())),
+        None => diag.map(|diag| (&diag.program, diagnosed_root_files(diag))),
+    };
+    let Some((active_program, root_files)) = active else {
         send_response(id, Ok::<_, ()>(Vec::<CompletionItem>::new()));
         return;
     };
@@ -177,7 +180,7 @@ pub(super) fn handle_completion(
 
     let namespace = extract_namespace_from_typing_text(&typing_text);
     let is_in_namespace = |name: &FullName| namespace.is_suffix_of(&name.namespace);
-    let root_modules = root_project_modules(active_program, diag);
+    let root_modules = root_project_modules(active_program, &root_files);
     // The item offering `symbol` in an expression, sorted by `sort_text` unless `symbol` is a
     // private item of a module outside the root project, which ranks below every other candidate.
     let expression_item = |symbol: CompletionSymbol, sort_text: Option<String>| {
@@ -356,6 +359,8 @@ struct DotRanking {
 pub(super) struct DotExtraction {
     pub receiver_type: Arc<TypeNode>,
     pub program: Program,
+    /// The source files of the root project that `program` was elaborated from.
+    pub root_files: Vec<PathBuf>,
 }
 
 /// Run the dot-completion type-extraction pipeline for a single
@@ -379,7 +384,7 @@ pub(super) fn extract_receiver_type_and_program_for_dot_completion(
     let cursor_byte = position_to_bytes(live_buffer, text_document_position.position);
     let repaired = repair_for_completion(live_buffer, cursor_byte)?;
     let abs_path = to_absolute_path(&latest.path).ok()?;
-    let program = run_completion_elaborate(
+    let (program, root_files) = run_completion_elaborate(
         &abs_path,
         repaired.source,
         typecheck_cache,
@@ -397,6 +402,7 @@ pub(super) fn extract_receiver_type_and_program_for_dot_completion(
     Some(DotExtraction {
         receiver_type,
         program,
+        root_files,
     })
 }
 
@@ -411,12 +417,15 @@ pub(super) fn extract_receiver_type_and_program_for_dot_completion(
 /// of paying disk I/O via the default `FileCache`. Only the cursor's
 /// file's dependency hash changes per request (the live override only
 /// touches that one path), so every other module is a cache hit.
+///
+/// Returns the program together with the source files of the root
+/// project it was elaborated from.
 fn run_completion_elaborate(
     path: &PathBuf,
     repaired_content: String,
     typecheck_cache: SharedTypeCheckCache,
     cursor_byte: usize,
-) -> Result<Program, Errors> {
+) -> Result<(Program, Vec<PathBuf>), Errors> {
     let proj_file = ProjectFile::read_root_file()?;
     let files = proj_file.get_files(BuildConfigType::Test);
 
@@ -430,7 +439,7 @@ fn run_completion_elaborate(
     let mut overrides = Map::default();
     overrides.insert(path.clone(), repaired_content);
     let diag_config = DiagnosticsConfig {
-        files,
+        files: files.clone(),
         live_source_overrides: Arc::new(overrides),
         target_symbols,
         error_tolerant: true,
@@ -442,7 +451,7 @@ fn run_completion_elaborate(
         .open_or_auto_update_lock_file(LockFileType::Lsp)?
         .set_config(&mut config)?;
 
-    elaborate_via_config(&config)
+    Ok((elaborate_via_config(&config)?, files))
 }
 
 /// Locate the global value whose body contains the cursor.
@@ -621,22 +630,28 @@ fn is_dot_function(typing_text: &str) -> bool {
     false
 }
 
-/// The modules of `program` defined in the source files of the root project, which `diag` lists.
-/// Completion ranks the private items of the other modules, which belong to dependencies or to
-/// `Std`, below every other candidate. The set is empty without a diagnostics result.
-fn root_project_modules(program: &Program, diag: Option<&DiagnosticsResult>) -> Set<Name> {
-    let Some(diag) = diag else {
-        return Set::default();
-    };
+/// The modules of `program` defined in `root_files`, the source files of the root project that
+/// `program` was elaborated from. Completion ranks the private items of the other modules, which
+/// belong to dependencies or to `Std`, below every other candidate.
+fn root_project_modules(program: &Program, root_files: &[PathBuf]) -> Set<Name> {
+    let root_files: Set<PathBuf> = root_files
+        .iter()
+        .filter_map(|file| to_absolute_path(file).ok())
+        .collect();
     program
         .modules
         .iter()
         .filter(|mi| {
             mi.absolute_source_path()
-                .is_ok_and(|path| diag.user_source_contents.contains_key(&path))
+                .is_ok_and(|path| root_files.contains(&path))
         })
         .map(|mi| mi.name.clone())
         .collect()
+}
+
+/// The source files of the root project that the program of `diag` was elaborated from.
+fn diagnosed_root_files(diag: &DiagnosticsResult) -> Vec<PathBuf> {
+    diag.user_source_contents.keys().cloned().collect()
 }
 
 /// Returns the trailing `Ns1::Ns2:`-shaped portion of the typing text as a
