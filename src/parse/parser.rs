@@ -378,13 +378,19 @@ pub fn validate_token_str(s: &str, category: TokenCategory) -> Result<(), String
     }
 }
 
-/// Run only the pest-level parse against the grammar. Returns `Ok`
-/// if the grammar accepts `source`, regardless of any later
-/// `Program`-build validation. Test-only — for acceptance / rejection
-/// assertions that should not depend on later semantic checks.
+/// Run only the syntactic checks against `source`: the pest-level parse against the grammar, and
+/// the rejection of the values, fields and variants named with `_` and a capital letter that follows
+/// it. Returns `Ok` if both accept `source`, regardless of any later `Program`-build validation,
+/// and the error text otherwise. Test-only — for acceptance / rejection assertions that should not
+/// depend on later semantic checks.
 #[cfg(test)]
-pub fn check_grammar_accepts(source: &str) -> Result<(), Error<Rule>> {
-    FixParser::parse(Rule::file, source).map(|_| ())
+pub fn check_grammar_accepts(source: &str) -> Result<(), String> {
+    let file = FixParser::parse(Rule::file, source).map_err(|e| e.to_string())?;
+    let source_file = SourceFile::from_file_path_and_content(
+        PathBuf::from("grammar_check.fix"),
+        source.to_string(),
+    );
+    reject_underscore_capital_value_names(file, &source_file).map_err(|errs| errs.to_string())
 }
 
 /// What kind of token the parser was looking for when it failed.

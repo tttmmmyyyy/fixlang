@@ -702,10 +702,11 @@ pub fn run_source_capture(source: &str, config: Configuration) -> Output {
     panic_if_err(run_source(source, config)).unwrap()
 }
 
-/// Verify that the pest grammar rejects `source` (parse-level
-/// rejection). Use this for negative tests that want to assert "the
-/// parser rejects this construct" without going through later
-/// elaboration / typecheck stages.
+/// Verify that the parser rejects `source` (parse-level rejection: the
+/// pest grammar, and the names it rejects right after the parse). Use
+/// this for negative tests that want to assert "the parser rejects this
+/// construct" without going through later elaboration / typecheck
+/// stages.
 pub fn assert_grammar_rejects(source: &str) {
     if check_grammar_accepts(source).is_ok() {
         panic_with_msg(&format!(
@@ -715,8 +716,9 @@ pub fn assert_grammar_rejects(source: &str) {
     }
 }
 
-/// Verify that the pest grammar accepts `source`. Use this for a positive parser regression
-/// test that only needs the source to parse, without compiling or running it.
+/// Verify that the parser accepts `source`: the pest grammar, and the names it rejects right after
+/// the parse. Use this for a positive parser regression test that only needs the source to parse,
+/// without compiling or running it.
 pub fn assert_grammar_accepts(source: &str) {
     if let Err(e) = check_grammar_accepts(source) {
         panic_with_msg(&format!(

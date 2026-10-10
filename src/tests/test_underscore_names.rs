@@ -228,4 +228,12 @@ main : IO () = (
             test_source_fail(&source, Configuration::develop_mode(), expected);
         }
     }
+
+    /// The parser's acceptance check used by the grammar tests counts a value named with `_` and a
+    /// capital letter as rejected, as building the program does.
+    #[test]
+    pub fn test_grammar_check_rejects_a_value_named_with_an_underscore_and_a_capital() {
+        assert_grammar_rejects("module Main;\nmain : IO () = let _X = 1; pure();\n");
+        assert_grammar_accepts("module Main;\nmain : IO () = let __X = 1; pure();\n");
+    }
 }
