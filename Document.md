@@ -1388,7 +1388,7 @@ Fix treats a name starting with `_` as private. When any part of a namespace or 
 
 `fix docs` leaves private names out of the documentation unless `--with-private` is given. In completion, the language server ranks private names defined outside the project (in `Std` and in dependencies) below the others.
 
-Unlike in many languages, a private name can still be used from outside. Being private in Fix only states that the name is not part of the public API of its module or library.
+Unlike in many languages, a private name can still be used from outside. Being private in Fix only states that the name is not part of the public API of its library.
 
 The character after the `_` decides the kind of the name, as the first character does for a name without `_`:
 
