@@ -9,7 +9,7 @@ mod float_text_buffer_tests {
     use crate::{
         configuration::{Configuration, ValgrindTool},
         misc::{function_name, platform_valgrind_supported},
-        tests::test_util::test_source,
+        tests::test_util::{test_source, test_source_fail},
     };
 
     /// Writes the widest text each of the functions can produce -- the least value of each
@@ -61,5 +61,25 @@ main : IO () = (
         let mut config = Configuration::develop_mode();
         config.set_valgrind(ValgrindTool::MemCheck);
         test_source(source, config);
+    }
+
+    /// A buffer shorter than the most bytes a writer of a number's text can write stops the program
+    /// with the sizes, before anything is written, even where the text of the number written would
+    /// fit.
+    #[test]
+    pub fn test_buffer_short_of_the_widest_text_stops_the_program() {
+        let source = r#"
+module Main;
+
+main : IO () = (
+    let (end, _) = Array::fill(23, 0_U8).F64::_write_shortest_text(0, 1.0);
+    println("wrote " + end.to_string + " bytes")
+);
+"#;
+        test_source_fail(
+            source,
+            Configuration::develop_mode(),
+            "A number's text takes up to 24 bytes from index 0, and its buffer holds 23 bytes.",
+        );
     }
 }

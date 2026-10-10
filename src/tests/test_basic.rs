@@ -6937,7 +6937,8 @@ pub fn test_float_text_writers_write_from_the_index_given() {
         module Main;
         main : IO ();
         main = (
-            // Each text is written after a `9`, which a carry running past the text would change.
+            // Each text is written after a `9`, which a carry running past the text would change. The
+            // array holds the most bytes each writer can write after the texts before it.
             let writers : Array (I64 -> Array U8 -> (I64, Array U8)) = [
                 |at, bytes| F64::_write_fixed_text(at, 1, 9.96, bytes),
                 |at, bytes| F64::_write_exp_text(at, 0, 9.7, bytes),
@@ -6947,7 +6948,7 @@ pub fn test_float_text_writers_write_from_the_index_given() {
                 |at, bytes| F64::_write_shortest_text(at, -F64::infinity, bytes),
                 |at, bytes| F64::_write_fixed_text(at, 2, -0.0, bytes)
             ];
-            let (end, bytes) = writers.to_iter.fold((0, Array::fill(128, 0_U8)), |write, (at, bytes)|
+            let (end, bytes) = writers.to_iter.fold((0, Array::fill(512, 0_U8)), |write, (at, bytes)|
                 write(at + 1, bytes.set(at, '9'))
             );
             assert_eq(|_|"the texts written one after another",

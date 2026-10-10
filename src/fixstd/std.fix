@@ -2994,13 +2994,8 @@ namespace String {
     // * `bytes` - The array to write into.
     _write_text_at : I64 -> String -> Array U8 -> (I64, Array U8);
     _write_text_at = |at, text, bytes| (
-        let data = text.@_data;
         let size = text.get_size;
-        let bytes = loop((0, bytes), |(i, bytes)| (
-            if i >= size { break $ bytes };
-            continue $ (i + 1, bytes.unsafe_set_bounds_unchecked(at + i, data._unsafe_get_bounds_unchecked(i)))
-        ));
-        (at + size, bytes)
+        (at + size, bytes._unsafe_copy_range_bounds_unchecked(text.@_data, 0, size, at))
     );
 
     // The text `to_string` writes for an infinity, a NaN or a zero: `inf`, `-inf`, `nan`, `0.0` or
@@ -3032,6 +3027,49 @@ namespace String {
     _write_special_float : I64 -> Bool -> Bool -> Bool -> Array U8 -> (I64, Array U8);
     _write_special_float = |at, is_zero, is_nan, negative, bytes| (
         bytes._write_text_at(at, _special_float_text(is_zero, is_nan, negative))
+    );
+
+    // Writes `e` and the power of ten `power` into `bytes` from `at`, as a floating point literal of
+    // Fix writes them: `e300`, `e-5`, `e0`. Answers with the index after them and the array.
+    //
+    // `bytes` must be unshared and hold the text from `at`. This function does not check it, and
+    // violating it causes undefined behavior.
+    //
+    // # Parameters
+    // * `at` - The index of the `e`.
+    // * `power` - The power of ten.
+    // * `bytes` - The array to write into.
+    _write_power_of_ten : I64 -> I64 -> Array U8 -> (I64, Array U8);
+    _write_power_of_ten = |at, power, bytes| (
+        let bytes = bytes.unsafe_set_bounds_unchecked(at, 'e');
+        let end = at + 1 + _decimal_integer_length(power < 0, power.abs.u64);
+        (end, bytes._write_decimal_integer(end, power < 0, power.abs.u64))
+    );
+
+    // Stops the program where `bytes` holds fewer than `at + max_length` bytes, naming the sizes.
+    // A function writing the text of a number calls this with the most bytes it writes, so that a
+    // buffer sized short of its text stops the program before the text is written past it.
+    //
+    // # Parameters
+    // * `at` - The index the text starts at.
+    // * `max_length` - The most bytes the text takes.
+    // * `bytes` - The array the text is written into.
+    _check_text_fits : I64 -> I64 -> Array U8 -> Array U8;
+    _check_text_fits = |at, max_length, bytes| (
+        if at + max_length <= bytes.@size { bytes };
+        _stop_on_text_past_buffer(at, max_length, bytes.@size)
+    );
+
+    // Stops the program, naming the sizes `_check_text_fits` found short.
+    //
+    // # Parameters
+    // * `at` - The index the text starts at.
+    // * `max_length` - The most bytes the text takes.
+    // * `size` - The bytes the array holds.
+    _stop_on_text_past_buffer : I64 -> I64 -> I64 -> Array U8;
+    _stop_on_text_past_buffer = |at, max_length, size| (
+        undefined("A number's text takes up to " + max_length.to_string + " bytes from index " + at.to_string
+            + ", and its buffer holds " + size.to_string + " bytes.")
     );
 
     // Writes the text of a finite number other than zero from its shortest decimal digits into
@@ -3074,9 +3112,7 @@ namespace String {
             let bytes = bytes._write_decimal_with_point(start, digit_count, mantissa);
             let after_digits = start + digit_count + 1;
             let (after_digits, bytes) = if digit_count == 1 { (after_digits + 1, bytes.unsafe_set_bounds_unchecked(after_digits, '0')) } else { (after_digits, bytes) };
-            let bytes = bytes.unsafe_set_bounds_unchecked(after_digits, 'e');
-            let end = after_digits + 1 + _decimal_integer_length(power < 0, power.abs.u64);
-            (end, bytes._write_decimal_integer(end, power < 0, power.abs.u64))
+            bytes._write_power_of_ten(after_digits, power)
         };
         if point >= digit_count {
             // 1234e3 -> 1234000.0
@@ -4658,11 +4694,9 @@ impl F32 : ToString {
     // `9.99e-7`.
     to_string = |v| (
         // An infinity, a NaN and a zero are string literals, which need no buffer.
-        let bits = v.to_bits;
-        let ieee_exponent = bits.shift_right(23_U32).bit_and(0xFF_U32);
-        let ieee_mantissa = bits.bit_and(0x7FFFFF_U32);
-        let is_zero = ieee_exponent == 0_U32 && ieee_mantissa == 0_U32;
-        if ieee_exponent == 0xFF_U32 || is_zero { String::_special_float_text(is_zero, ieee_mantissa != 0_U32, bits.shift_right(31_U32) == 1_U32) };
+        let (negative, ieee_exponent, ieee_mantissa) = F32::_decode_bits(v.to_bits);
+        let is_zero = ieee_exponent == 0 && ieee_mantissa == 0_U32;
+        if ieee_exponent == 0xFF || is_zero { String::_special_float_text(is_zero, ieee_mantissa != 0_U32, negative) };
         let size = F32::_shortest_text_max_length + 1;
         String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F32::_write_shortest_text(0, v)
     );
@@ -4688,11 +4722,10 @@ namespace F32 {
     // * `v` - The number to write.
     to_string_exp_precision : U8 -> F32 -> String;
     to_string_exp_precision = |prec, v| (
-        let v = v.f64;
         // An infinity and a NaN are string literals, which need no buffer.
-        if !v.F64::_is_finite { v.F64::_non_finite_text };
+        if !v.f64.F64::_is_finite { v.f64.F64::_non_finite_text };
         let size = F32::_exp_text_max_length(prec.i64) + 1;
-        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size)._write_exp_text(0, prec.i64, v)
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F32::_write_exp_text(0, prec.i64, v)
     );
 
     // Writes this number positionally with `prec` digits after the point. The last digit is
@@ -4709,26 +4742,25 @@ namespace F32 {
     // * `v` - The number to write.
     to_string_precision : U8 -> F32 -> String;
     to_string_precision = |prec, v| (
-        let v = v.f64;
         // An infinity and a NaN are string literals, which need no buffer.
-        if !v.F64::_is_finite { v.F64::_non_finite_text };
+        if !v.f64.F64::_is_finite { v.f64.F64::_non_finite_text };
         let size = F32::_fixed_text_max_length(prec.i64) + 1;
-        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size)._write_fixed_text(0, prec.i64, v)
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F32::_write_fixed_text(0, prec.i64, v)
     );
 
     // The most bytes `_write_shortest_text` writes. Two shapes reach it: a sign, `0.` and the five
-    // zeros the window's lower edge allows before the eight digits an `F32` needs at that scale,
-    // and the same with four zeros and nine digits. Nine digits never meet five zeros, since no
-    // `F32` between `1e-6` and `1e-5` needs that many. Widening the window `_write_shortest_text`
-    // writes positionally widens this.
+    // zeros the lower edge of the window allows before the eight digits an `F32` needs at that
+    // scale, and the same with four zeros and nine digits. Nine digits never meet five zeros, since
+    // no `F32` between `1e-6` and `1e-5` needs that many. Widening the window of `_positional_low`
+    // and `_positional_high` widens this.
     _shortest_text_max_length : I64;
     _shortest_text_max_length = 16;
 
     // Writes `v` into `bytes` from `at` the way `to_string` writes it, and answers with the index
     // after the text and the array.
     //
-    // `bytes` must be unshared and hold at least `at + _shortest_text_max_length` bytes. This
-    // function does not check it, and violating it causes undefined behavior.
+    // `bytes` must be unshared. Where it holds fewer than `at + _shortest_text_max_length` bytes, the
+    // program stops before the text is written.
     //
     // # Parameters
     // * `at` - The index of the first byte.
@@ -4736,14 +4768,32 @@ namespace F32 {
     // * `bytes` - The array to write into.
     _write_shortest_text : I64 -> F32 -> Array U8 -> (I64, Array U8);
     _write_shortest_text = |at, v, bytes| (
-        let bits = v.to_bits;
-        let negative = bits.shift_right(31_U32) == 1_U32;
-        let ieee_exponent = bits.shift_right(23_U32).bit_and(0xFF_U32).i64;
-        let ieee_mantissa = bits.bit_and(0x7FFFFF_U32);
+        let bytes = bytes._check_text_fits(at, F32::_shortest_text_max_length);
+        let (negative, ieee_exponent, ieee_mantissa) = F32::_decode_bits(v.to_bits);
         let is_zero = ieee_exponent == 0 && ieee_mantissa == 0_U32;
         if ieee_exponent == 0xFF || is_zero { bytes._write_special_float(at, is_zero, ieee_mantissa != 0_U32, negative) };
-        bytes._write_float_decimal(at, -6, 13, negative, F32::_find_shortest_decimal(ieee_exponent, ieee_mantissa))
+        let decimal = F32::_find_shortest_decimal(ieee_exponent, ieee_mantissa);
+        bytes._write_float_decimal(at, F32::_positional_low, F32::_positional_high, negative, decimal)
     );
+
+    // Answers with the sign, the biased exponent and the stored significand of the `F32` whose bits
+    // are `bits`.
+    //
+    // # Parameters
+    // * `bits` - The bits of the number.
+    _decode_bits : U32 -> (Bool, I64, U32);
+    _decode_bits = |bits| (bits.shift_right(31_U32) == 1_U32, bits.shift_right(23_U32).bit_and(0xFF_U32).i64, bits.bit_and(0x7FFFFF_U32));
+
+    // The window `to_string` writes an `F32` positionally in: the number is written positionally
+    // where `_positional_low < point <= _positional_high`, and the first of its shortest digits
+    // carries `10 ^ (point - 1)`. The window is drawn around the digits an `F32` carries, since a
+    // wider one costs zeros.
+    _positional_low : I64;
+    _positional_low = -6;
+
+    // The upper edge of the window `_positional_low` describes.
+    _positional_high : I64;
+    _positional_high = 13;
 
     // The most bytes `to_string_precision` writes for an `F32` with `precision` digits after the
     // point: a sign, the 39 digits the greatest `F32` takes in its whole part, a point and the
@@ -4763,6 +4813,40 @@ namespace F32 {
     // * `precision` - The number of digits after the point.
     _exp_text_max_length : I64 -> I64;
     _exp_text_max_length = |precision| 7 + precision;
+
+    // Writes `v` into `bytes` from `at` the way `to_string_precision` writes it, and answers with the
+    // index after the text and the array.
+    //
+    // `bytes` must be unshared. Where it holds fewer than `at + _fixed_text_max_length(precision)`
+    // bytes, the program stops before the text is written.
+    //
+    // # Parameters
+    // * `at` - The index of the first byte.
+    // * `precision` - The number of digits after the point.
+    // * `v` - The number to write.
+    // * `bytes` - The array to write into.
+    _write_fixed_text : I64 -> I64 -> F32 -> Array U8 -> (I64, Array U8);
+    _write_fixed_text = |at, precision, v, bytes| (
+        let bytes = bytes._check_text_fits(at, F32::_fixed_text_max_length(precision));
+        bytes.F64::_write_fixed_text_unchecked(at, precision, v.f64)
+    );
+
+    // Writes `v` into `bytes` from `at` the way `to_string_exp_precision` writes it, and answers with
+    // the index after the text and the array.
+    //
+    // `bytes` must be unshared. Where it holds fewer than `at + _exp_text_max_length(precision)`
+    // bytes, the program stops before the text is written.
+    //
+    // # Parameters
+    // * `at` - The index of the first byte.
+    // * `precision` - The number of digits after the point.
+    // * `v` - The number to write.
+    // * `bytes` - The array to write into.
+    _write_exp_text : I64 -> I64 -> F32 -> Array U8 -> (I64, Array U8);
+    _write_exp_text = |at, precision, v, bytes| (
+        let bytes = bytes._check_text_fits(at, F32::_exp_text_max_length(precision));
+        bytes.F64::_write_exp_text_unchecked(at, precision, v.f64)
+    );
 }
 impl F32 : FromString {
     // Reads a decimal number: an optional `+` or `-`, digits with an optional point among them, and
@@ -4983,7 +5067,7 @@ namespace F64 {
         // An infinity and a NaN are string literals, which need no buffer.
         if !v.F64::_is_finite { v.F64::_non_finite_text };
         let size = F64::_exp_text_max_length(prec.i64) + 1;
-        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size)._write_exp_text(0, prec.i64, v)
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F64::_write_exp_text(0, prec.i64, v)
     );
 
     // Writes this number positionally with `prec` digits after the point. The last digit is
@@ -5002,7 +5086,7 @@ namespace F64 {
         // An infinity and a NaN are string literals, which need no buffer.
         if !v.F64::_is_finite { v.F64::_non_finite_text };
         let size = F64::_fixed_text_max_length(prec.i64) + 1;
-        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size)._write_fixed_text(0, prec.i64, v)
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F64::_write_fixed_text(0, prec.i64, v)
     );
 
     // Answers whether `v` is neither an infinity nor a NaN.
@@ -5018,22 +5102,22 @@ namespace F64 {
     // * `v` - The infinity or the NaN.
     _non_finite_text : F64 -> String;
     _non_finite_text = |v| (
-        let (negative, _, mantissa) = _decode_bits(v.to_bits);
+        let (negative, _, mantissa) = F64::_decode_bits(v.to_bits);
         String::_special_float_text(false, mantissa != 0_U64, negative)
     );
 
     // The most bytes `_write_shortest_text` writes. Two shapes reach it: a sign, `0.` and the four
-    // zeros the window's lower edge allows before the 17 digits an `F64` takes, and a sign, one
-    // digit, a point, sixteen digits and a four byte power of ten. Widening the window
-    // `_write_shortest_text` writes positionally widens this.
+    // zeros the lower edge of the window allows before the 17 digits an `F64` takes, and a sign, one
+    // digit, a point, sixteen digits and a four byte power of ten. Widening the window of
+    // `_positional_low` and `_positional_high` widens this.
     _shortest_text_max_length : I64;
     _shortest_text_max_length = 24;
 
     // Writes `v` into `bytes` from `at` the way `to_string` writes it, and answers with the index
     // after the text and the array.
     //
-    // `bytes` must be unshared and hold at least `at + _shortest_text_max_length` bytes. This
-    // function does not check it, and violating it causes undefined behavior.
+    // `bytes` must be unshared. Where it holds fewer than `at + _shortest_text_max_length` bytes, the
+    // program stops before the text is written.
     //
     // # Parameters
     // * `at` - The index of the first byte.
@@ -5041,11 +5125,24 @@ namespace F64 {
     // * `bytes` - The array to write into.
     _write_shortest_text : I64 -> F64 -> Array U8 -> (I64, Array U8);
     _write_shortest_text = |at, v, bytes| (
-        let (negative, ieee_exponent, ieee_mantissa) = _decode_bits(v.to_bits);
+        let bytes = bytes._check_text_fits(at, F64::_shortest_text_max_length);
+        let (negative, ieee_exponent, ieee_mantissa) = F64::_decode_bits(v.to_bits);
         let is_zero = ieee_exponent == 0 && ieee_mantissa == 0_U64;
         if ieee_exponent == 0x7FF || is_zero { bytes._write_special_float(at, is_zero, ieee_mantissa != 0_U64, negative) };
-        bytes._write_float_decimal(at, -5, 16, negative, F64::_find_shortest_decimal(ieee_exponent, ieee_mantissa))
+        let decimal = F64::_find_shortest_decimal(ieee_exponent, ieee_mantissa);
+        bytes._write_float_decimal(at, F64::_positional_low, F64::_positional_high, negative, decimal)
     );
+
+    // The window `to_string` writes an `F64` positionally in: the number is written positionally
+    // where `_positional_low < point <= _positional_high`, and the first of its shortest digits
+    // carries `10 ^ (point - 1)`. The window is drawn around the digits an `F64` carries, since a
+    // wider one costs zeros.
+    _positional_low : I64;
+    _positional_low = -5;
+
+    // The upper edge of the window `_positional_low` describes.
+    _positional_high : I64;
+    _positional_high = 16;
 
     // The most bytes `to_string_precision` writes for an `F64` with `precision` digits after the
     // point: a sign, the 309 digits the greatest `F64` takes in its whole part, a point and the
@@ -5065,6 +5162,40 @@ namespace F64 {
     // * `precision` - The number of digits after the point.
     _exp_text_max_length : I64 -> I64;
     _exp_text_max_length = |precision| 8 + precision;
+
+    // Writes `v` into `bytes` from `at` the way `to_string_precision` writes it, and answers with the
+    // index after the text and the array.
+    //
+    // `bytes` must be unshared. Where it holds fewer than `at + _fixed_text_max_length(precision)`
+    // bytes, the program stops before the text is written.
+    //
+    // # Parameters
+    // * `at` - The index of the first byte.
+    // * `precision` - The number of digits after the point.
+    // * `v` - The number to write.
+    // * `bytes` - The array to write into.
+    _write_fixed_text : I64 -> I64 -> F64 -> Array U8 -> (I64, Array U8);
+    _write_fixed_text = |at, precision, v, bytes| (
+        let bytes = bytes._check_text_fits(at, F64::_fixed_text_max_length(precision));
+        bytes.F64::_write_fixed_text_unchecked(at, precision, v)
+    );
+
+    // Writes `v` into `bytes` from `at` the way `to_string_exp_precision` writes it, and answers with
+    // the index after the text and the array.
+    //
+    // `bytes` must be unshared. Where it holds fewer than `at + _exp_text_max_length(precision)`
+    // bytes, the program stops before the text is written.
+    //
+    // # Parameters
+    // * `at` - The index of the first byte.
+    // * `precision` - The number of digits after the point.
+    // * `v` - The number to write.
+    // * `bytes` - The array to write into.
+    _write_exp_text : I64 -> I64 -> F64 -> Array U8 -> (I64, Array U8);
+    _write_exp_text = |at, precision, v, bytes| (
+        let bytes = bytes._check_text_fits(at, F64::_exp_text_max_length(precision));
+        bytes.F64::_write_exp_text_unchecked(at, precision, v)
+    );
 }
 impl F64 : FromString {
     // Reads a decimal number: an optional `+` or `-`, digits with an optional point among them, and
@@ -5238,8 +5369,8 @@ namespace F64 {
     // # Parameters
     // * `ieee_exponent` - The biased exponent.
     // * `ieee_mantissa` - The stored significand.
-    _find_shortest_decimal_digits : I64 -> U64 -> (U64, I64);
-    _find_shortest_decimal_digits = |ieee_exponent, ieee_mantissa| (
+    _find_shortest_decimal_general : I64 -> U64 -> (U64, I64);
+    _find_shortest_decimal_general = |ieee_exponent, ieee_mantissa| (
         let (e2, m2) = _decode_finite(ieee_exponent, ieee_mantissa);
         // Two more bits below the significand leave room for the bounds of the interval.
         let e2 = e2 - 2;
@@ -5353,7 +5484,7 @@ namespace F64 {
                 continue $ (q, e + 1)
             ))
         } else {
-            _find_shortest_decimal_digits(ieee_exponent, ieee_mantissa)
+            _find_shortest_decimal_general(ieee_exponent, ieee_mantissa)
         };
         (mantissa, exponent, mantissa._count_decimal_digits_17)
     );
@@ -5409,17 +5540,18 @@ namespace F64 {
     // `d2fixed_buffered_n` for a finite `v`. The last digit is rounded to the nearest, a tie to the
     // even one, and a precision of 0 writes no point.
     //
-    // `bytes` must be unshared and hold at least `at + _fixed_text_max_length(precision)` bytes. This
-    // function does not check it, and violating it causes undefined behavior.
+    // `bytes` must be unshared and hold at least `at` and the most bytes the text of a number of the
+    // type `v` was converted from takes, which `_write_fixed_text` of the type checks. This function
+    // does not check it, and violating it causes undefined behavior.
     //
     // # Parameters
     // * `at` - The index of the first byte.
     // * `precision` - The number of digits after the point.
     // * `v` - The number to write.
     // * `bytes` - The array to write into.
-    _write_fixed_text : I64 -> I64 -> F64 -> Array U8 -> (I64, Array U8);
-    _write_fixed_text = |at, precision, v, bytes| (
-        let (negative, ieee_exponent, ieee_mantissa) = _decode_bits(v.to_bits);
+    _write_fixed_text_unchecked : I64 -> I64 -> F64 -> Array U8 -> (I64, Array U8);
+    _write_fixed_text_unchecked = |at, precision, v, bytes| (
+        let (negative, ieee_exponent, ieee_mantissa) = F64::_decode_bits(v.to_bits);
         if ieee_exponent == 0x7FF { bytes._write_special_float(at, false, ieee_mantissa != 0_U64, negative) };
         let (index, bytes) = if negative { (at + 1, bytes.unsafe_set_bounds_unchecked(at, '-')) } else { (at, bytes) };
         if ieee_exponent == 0 && ieee_mantissa == 0_U64 {
@@ -5502,17 +5634,18 @@ namespace F64 {
     // of ten is written as Fix writes it, with `-` for a negative one and no padding: `1.50e2`,
     // `1.50e-2`.
     //
-    // `bytes` must be unshared and hold at least `at + _exp_text_max_length(precision)` bytes. This
-    // function does not check it, and violating it causes undefined behavior.
+    // `bytes` must be unshared and hold at least `at` and the most bytes the text of a number of the
+    // type `v` was converted from takes, which `_write_exp_text` of the type checks. This function
+    // does not check it, and violating it causes undefined behavior.
     //
     // # Parameters
     // * `at` - The index of the first byte.
     // * `precision` - The number of digits after the point.
     // * `v` - The number to write.
     // * `bytes` - The array to write into.
-    _write_exp_text : I64 -> I64 -> F64 -> Array U8 -> (I64, Array U8);
-    _write_exp_text = |at, precision, v, bytes| (
-        let (negative, ieee_exponent, ieee_mantissa) = _decode_bits(v.to_bits);
+    _write_exp_text_unchecked : I64 -> I64 -> F64 -> Array U8 -> (I64, Array U8);
+    _write_exp_text_unchecked = |at, precision, v, bytes| (
+        let (negative, ieee_exponent, ieee_mantissa) = F64::_decode_bits(v.to_bits);
         if ieee_exponent == 0x7FF { bytes._write_special_float(at, false, ieee_mantissa != 0_U64, negative) };
         let (index, bytes) = if negative { (at + 1, bytes.unsafe_set_bounds_unchecked(at, '-')) } else { (at, bytes) };
         if ieee_exponent == 0 && ieee_mantissa == 0_U64 {
@@ -5521,7 +5654,7 @@ namespace F64 {
                 let bytes = bytes.unsafe_set_bounds_unchecked(index + 1, '.');
                 (index + 2 + precision, bytes._fill_bytes(index + 2, precision, '0'))
             };
-            (index + 2, bytes.unsafe_set_bounds_unchecked(index, 'e').unsafe_set_bounds_unchecked(index + 1, '0'))
+            bytes._write_power_of_ten(index, 0)
         };
         let (e2, m2) = _decode_finite(ieee_exponent, ieee_mantissa);
         let m = m2.shift_left(8_U64);
@@ -5614,9 +5747,7 @@ namespace F64 {
             let (carried, bytes) = bytes._round_up_decimal_text(at, index, round_up);
             (if carried { power + 1 } else { power }, bytes)
         };
-        let bytes = bytes.unsafe_set_bounds_unchecked(index, 'e');
-        let end = index + 1 + _decimal_integer_length(power < 0, power.abs.u64);
-        (end, bytes._write_decimal_integer(end, power < 0, power.abs.u64))
+        bytes._write_power_of_ten(index, power)
     );
 
     // The bits by which Ryu's multipliers for `5 ^ -q` exceed the size of the power: Ryu's
