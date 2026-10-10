@@ -590,8 +590,8 @@ impl<'a> Overlay<'a> {
         }
     }
 
-    /// Emit a token for a value name — one headed by a lowercase letter, `_` or `@`. Field
-    /// accessors are skipped: the base layer already colors them.
+    /// Emit a token for a value name — one headed by a lowercase letter, `@`, or a `_` not followed
+    /// by a capital letter. Field accessors are skipped: the base layer already colors them.
     fn push_value(&mut self, span: &Span, token_type: u32) {
         self.push_value_range(span.start, span.end, token_type);
     }

@@ -1,0 +1,3 @@
+module Main._Local;
+
+local_value : I64 = 1;

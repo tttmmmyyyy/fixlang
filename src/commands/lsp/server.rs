@@ -395,7 +395,7 @@ pub fn launch_language_server() {
                 completion::handle_completion(
                     id,
                     &params,
-                    last_diag.as_ref().map(|d| &d.program),
+                    last_diag.as_ref(),
                     &uri_to_latest_content,
                     typecheck_cache.clone(),
                 );

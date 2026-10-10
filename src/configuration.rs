@@ -370,7 +370,9 @@ pub struct DocsConfig {
     /// Whether the documentation also covers the methods the compiler defines, such as a struct's
     /// field accessors.
     pub include_compiler_defined_methods: bool,
-    /// Whether the documentation also covers the private items, those whose names begin with `_`.
+    /// Whether the documentation also covers the private items: those whose names, or the names of
+    /// whose namespaces or modules, begin with `_`, and the implementations of private traits or for
+    /// private types.
     pub include_private: bool,
     /// The directory the documentation is written into, as one `<module>.md` file per module.
     pub out_dir: PathBuf,

@@ -1,0 +1,15 @@
+module Lib;
+
+type _Foo = struct { v : I64 };
+
+namespace _Ns {
+    helper : I64 = 1;
+}
+
+outside : I64 = 2;
+
+__x : I64 = 3;
+
+type Pub = struct { _x : I64, y : I64 };
+
+type PubU = union { _v : I64, w : I64 };

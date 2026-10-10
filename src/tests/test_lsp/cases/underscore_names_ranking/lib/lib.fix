@@ -1,0 +1,5 @@
+module Lib;
+
+bump : I64 -> I64 = |x| x + 1;
+
+_bump : I64 -> I64 = |x| x + 1;

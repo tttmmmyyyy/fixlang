@@ -10,18 +10,18 @@ use self::import::{import_completion_items, import_context_at};
 use self::index::CompletionIndex;
 use self::repair::repair_for_completion;
 use self::score::{
-    assign_tier, assign_tier_no_unify, dot_context_low_priority_sort_text, namespace_match,
-    sort_text_for, PredMemo, Tier,
+    assign_tier, assign_tier_no_unify, dot_context_low_priority_sort_text,
+    foreign_private_sort_text, namespace_match, sort_text_for, PredMemo, Tier,
 };
 use self::symbols::{build_completion_item, type_symbols, value_symbols, CompletionSymbol};
 use super::edit_import::create_text_edit_to_import;
-use super::server::{send_response, LatestContent};
+use super::server::{send_response, DiagnosticsResult, LatestContent};
 use super::util::{
     document_from_endnode, get_line_string_from_position, is_cursor_in_comment,
     parameters_of_global_value, position_to_bytes,
 };
 use crate::ast::expr::{hole_full_name, Expr, ExprNode};
-use crate::ast::name::{FullName, NameSpace};
+use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::program::{EndNode, Program};
 use crate::ast::types::TypeNode;
 use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig, SubCommand};
@@ -32,7 +32,7 @@ use crate::elaboration::typecheck::TypeCheckContext;
 use crate::elaboration::typecheckcache::SharedTypeCheckCache;
 use crate::error::Errors;
 use crate::metafiles::project_file::ProjectFile;
-use crate::misc::{to_absolute_path, Map};
+use crate::misc::{to_absolute_path, Map, Set};
 use crate::parse::parser::parse_source_file;
 use crate::parse::sourcefile::{SourceFile, Span};
 use crate::write_log;
@@ -88,7 +88,7 @@ impl ResolveData {
 pub(super) fn handle_completion(
     id: u32,
     params: &CompletionParams,
-    program: Option<&Program>,
+    diag: Option<&DiagnosticsResult>,
     uri_to_content: &Map<Uri, LatestContent>,
     typecheck_cache: SharedTypeCheckCache,
 ) {
@@ -112,11 +112,12 @@ pub(super) fn handle_completion(
             // Without a diagnostics snapshot there is nothing to
             // enumerate modules or entities from; reply empty and let
             // the next diagnostics run restore the candidates.
-            let items = program
-                .map(|program| {
+            let items = diag
+                .map(|diag| {
                     import_completion_items(
                         &import_ctx,
-                        program,
+                        &diag.program,
+                        &root_project_modules(&diag.program, &diagnosed_root_files(diag)),
                         &latest.path,
                         text_document_position,
                     )
@@ -150,7 +151,11 @@ pub(super) fn handle_completion(
     // buffer, so it can still produce candidates; for non-dot contexts
     // without a snapshot we reply with an empty list and let the next
     // diagnostics run restore the full list.
-    let Some(active_program) = dot_extract.as_ref().map(|d| &d.program).or(program) else {
+    let active = match &dot_extract {
+        Some(d) => Some((&d.program, d.root_files.clone())),
+        None => diag.map(|diag| (&diag.program, diagnosed_root_files(diag))),
+    };
+    let Some((active_program, root_files)) = active else {
         send_response(id, Ok::<_, ()>(Vec::<CompletionItem>::new()));
         return;
     };
@@ -175,9 +180,25 @@ pub(super) fn handle_completion(
 
     let namespace = extract_namespace_from_typing_text(&typing_text);
     let is_in_namespace = |name: &FullName| namespace.is_suffix_of(&name.namespace);
-    let expression_context = || ResolveContext::Expression {
-        typing_text: typing_text.clone(),
-        position: text_document_position.clone(),
+    let root_modules = root_project_modules(active_program, &root_files);
+    // The item offering `symbol` in an expression, sorted by `sort_text` unless `symbol` is a
+    // private item of a module outside the root project, which ranks below every other candidate.
+    let expression_item = |symbol: CompletionSymbol, sort_text: Option<String>| {
+        let label = symbol.name.to_string();
+        let sort_text = if active_program.is_private_entity(&symbol.name)
+            && !root_modules.contains(&symbol.name.module())
+        {
+            Some(foreign_private_sort_text(sort_text, &label))
+        } else {
+            sort_text
+        };
+        let context = ResolveContext::Expression {
+            typing_text: typing_text.clone(),
+            position: text_document_position.clone(),
+        };
+        let mut item = build_completion_item(symbol, label, context);
+        item.sort_text = sort_text;
+        item
     };
 
     let mut items = vec![];
@@ -240,10 +261,7 @@ pub(super) fn handle_completion(
         } else {
             None
         };
-        let label = symbol.name.to_string();
-        let mut item = build_completion_item(symbol, label, expression_context());
-        item.sort_text = sort_text;
-        items.push(item);
+        items.push(expression_item(symbol, sort_text));
     }
     for symbol in type_symbols(active_program) {
         if !is_in_namespace(&symbol.name) {
@@ -254,10 +272,7 @@ pub(super) fn handle_completion(
         let sort_text = dot_ranking
             .as_ref()
             .map(|_| dot_context_low_priority_sort_text(&symbol.name));
-        let label = symbol.name.to_string();
-        let mut item = build_completion_item(symbol, label, expression_context());
-        item.sort_text = sort_text;
-        items.push(item);
+        items.push(expression_item(symbol, sort_text));
     }
     send_response(id, Ok::<_, ()>(items));
 }
@@ -345,6 +360,8 @@ struct DotRanking {
 pub(super) struct DotExtraction {
     pub receiver_type: Arc<TypeNode>,
     pub program: Program,
+    /// The source files of the root project that `program` was elaborated from.
+    pub root_files: Vec<PathBuf>,
 }
 
 /// Run the dot-completion type-extraction pipeline for a single
@@ -368,7 +385,7 @@ pub(super) fn extract_receiver_type_and_program_for_dot_completion(
     let cursor_byte = position_to_bytes(live_buffer, text_document_position.position);
     let repaired = repair_for_completion(live_buffer, cursor_byte)?;
     let abs_path = to_absolute_path(&latest.path).ok()?;
-    let program = run_completion_elaborate(
+    let (program, root_files) = run_completion_elaborate(
         &abs_path,
         repaired.source,
         typecheck_cache,
@@ -386,6 +403,7 @@ pub(super) fn extract_receiver_type_and_program_for_dot_completion(
     Some(DotExtraction {
         receiver_type,
         program,
+        root_files,
     })
 }
 
@@ -400,12 +418,15 @@ pub(super) fn extract_receiver_type_and_program_for_dot_completion(
 /// of paying disk I/O via the default `FileCache`. Only the cursor's
 /// file's dependency hash changes per request (the live override only
 /// touches that one path), so every other module is a cache hit.
+///
+/// Returns the program together with the source files of the root
+/// project it was elaborated from.
 fn run_completion_elaborate(
     path: &PathBuf,
     repaired_content: String,
     typecheck_cache: SharedTypeCheckCache,
     cursor_byte: usize,
-) -> Result<Program, Errors> {
+) -> Result<(Program, Vec<PathBuf>), Errors> {
     let proj_file = ProjectFile::read_root_file()?;
     let files = proj_file.get_files(BuildConfigType::Test);
 
@@ -419,7 +440,7 @@ fn run_completion_elaborate(
     let mut overrides = Map::default();
     overrides.insert(path.clone(), repaired_content);
     let diag_config = DiagnosticsConfig {
-        files,
+        files: files.clone(),
         live_source_overrides: Arc::new(overrides),
         target_symbols,
         error_tolerant: true,
@@ -431,7 +452,7 @@ fn run_completion_elaborate(
         .open_or_auto_update_lock_file(LockFileType::Lsp)?
         .set_config(&mut config)?;
 
-    elaborate_via_config(&config)
+    Ok((elaborate_via_config(&config)?, files))
 }
 
 /// Locate the global value whose body contains the cursor.
@@ -610,9 +631,34 @@ fn is_dot_function(typing_text: &str) -> bool {
     false
 }
 
+/// The modules of `program` defined in `root_files`, the source files of the root project that
+/// `program` was elaborated from. Completion ranks the private items of the other modules, which
+/// belong to dependencies or to `Std`, below every other candidate.
+fn root_project_modules(program: &Program, root_files: &[PathBuf]) -> Set<Name> {
+    let root_files: Set<PathBuf> = root_files
+        .iter()
+        .filter_map(|file| to_absolute_path(file).ok())
+        .collect();
+    program
+        .modules
+        .iter()
+        .filter(|mi| {
+            mi.absolute_source_path()
+                .is_ok_and(|path| root_files.contains(&path))
+        })
+        .map(|mi| mi.name.clone())
+        .collect()
+}
+
+/// The source files of the root project that the program of `diag` was elaborated from.
+fn diagnosed_root_files(diag: &DiagnosticsResult) -> Vec<PathBuf> {
+    diag.user_source_contents.keys().cloned().collect()
+}
+
 /// Returns the trailing `Ns1::Ns2:`-shaped portion of the typing text as a
 /// `NameSpace`. A final component that does not start with an uppercase
-/// letter (a partially typed value name) is dropped.
+/// letter, or with `_` and an uppercase letter, is a partially typed
+/// value name and is dropped.
 fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
     // Get the suffix of `typing_text` that consists of characters allowed in identifiers and colons.
     // Example: input "let x = Std::Array:" -> "Std::Array:"
@@ -629,14 +675,13 @@ fn extract_namespace_from_typing_text(typing_text: &str) -> NameSpace {
     // Example: "Std::Array:" -> "Std::Array"
     let namespace_part = namespace_part.trim_end_matches(':').to_string();
 
-    // Split the text by "::". If the last component does not start with a uppercase letter, then drop it.
+    // Split the text by "::". If the last component does not start with an uppercase letter, or with
+    // `_` and an uppercase letter, then drop it.
     let mut components = namespace_part.split("::").collect::<Vec<_>>();
     if let Some(last_component) = components.last() {
-        let first_char = last_component.chars().nth(0);
-        if let Some(first_char) = first_char {
-            if !first_char.is_ascii_alphabetic() || !first_char.is_uppercase() {
-                components.pop();
-            }
+        let head = last_component.strip_prefix('_').unwrap_or(last_component);
+        if !last_component.is_empty() && !head.starts_with(|c: char| c.is_ascii_uppercase()) {
+            components.pop();
         }
     }
     let namespace_str = components
@@ -833,6 +878,18 @@ mod tests {
         // Test case: "Std::Array::get" - last component starts with lowercase, should be dropped
         let result = extract_namespace_from_typing_text("Std::Array::get");
         assert_eq!(result.names, vec!["Std".to_string(), "Array".to_string()]);
+    }
+
+    /// Verifies that a final component starting with `_` and a capital letter is kept as a
+    /// namespace, and one starting with `_` and anything else is dropped as a value name.
+    #[test]
+    fn test_extract_namespace_from_typing_text_underscore_capital() {
+        let result = extract_namespace_from_typing_text("Lib::_Ns:");
+        assert_eq!(result.names, vec!["Lib".to_string(), "_Ns".to_string()]);
+        let result = extract_namespace_from_typing_text("Lib::_Ns::_va");
+        assert_eq!(result.names, vec!["Lib".to_string(), "_Ns".to_string()]);
+        let result = extract_namespace_from_typing_text("Lib::__V");
+        assert_eq!(result.names, vec!["Lib".to_string()]);
     }
 
     #[test]

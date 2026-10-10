@@ -114,12 +114,6 @@ A trait alias
 
 A trait inside namespace
 
-##### method `_inner_method`
-
-Type: `a -> Std::String`
-
-Private method (starts with underscore)
-
 #### trait `InnerTraitAlias = Std::ToString`
 
 Kind: `*`

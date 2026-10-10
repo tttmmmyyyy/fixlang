@@ -527,4 +527,98 @@ mod integration_tests {
             );
         }
     }
+    /// The output of `fix docs` with the flags `flags` over a copy of the project `private_names`:
+    /// the text of `docs/Main.md`, and whether `docs/Main._Internal.md` was written.
+    fn document_private_names(flags: &[&str]) -> (String, bool) {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let test_case_src = get_test_project_dir().join("cases/private_names");
+        let test_case_dst = temp_dir.path().join("private_names");
+        copy_dir_recursive(&test_case_src, &test_case_dst).expect("Failed to copy test case");
+
+        let output = fix_command()
+            .arg("docs")
+            .args(flags)
+            .current_dir(&test_case_dst)
+            .output()
+            .expect("Failed to execute fix docs");
+        assert!(
+            output.status.success(),
+            "fix docs {:?} failed.\nstdout: {}\nstderr: {}",
+            flags,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+
+        let main_md =
+            fs::read_to_string(test_case_dst.join("docs/Main.md")).expect("Failed to read Main.md");
+        let internal_written = test_case_dst.join("docs/Main._Internal.md").exists();
+        (main_md, internal_written)
+    }
+
+    /// The headings `fix docs` writes for the items of `private_names` whose names, or the names
+    /// of whose namespaces, start with an underscore.
+    const PRIVATE_NAME_HEADINGS: &[&str] = &[
+        "### namespace Main::_Cache",
+        "#### clear",
+        "#### _Cache",
+        "### namespace Main::_Detail",
+        "#### limit",
+        "#### _scale",
+        "##### method `_scale`",
+        "##### type `_Unit`",
+        "#### trait `a : _Hidden`",
+        "### namespace Main::_Hidden",
+        "### impl `Main::Point : Main::_Hidden`",
+        "### impl `Main::_Cache : Std::Eq`",
+    ];
+
+    /// `fix docs` leaves out an item whose name starts with an underscore, whichever kind of name
+    /// it is, and every item in a namespace or a module whose name starts with one: a type and the
+    /// functions of its namespace, a value of a namespace, a trait and its member, a member and an
+    /// associated type of a public trait, the implementations of a trait and those for a type, and
+    /// the module `Main._Internal`.
+    #[test]
+    fn test_docs_leave_out_items_named_with_an_underscore() {
+        let (content, internal_written) = document_private_names(&[]);
+        for heading in PRIVATE_NAME_HEADINGS {
+            assert!(
+                !content.contains(heading),
+                "`{}` should NOT appear in docs:\n{}",
+                heading,
+                content
+            );
+        }
+        for heading in &[
+            "#### Point",
+            "#### area",
+            "### impl `Main::Point : Main::Shape`",
+        ] {
+            assert!(
+                content.contains(heading),
+                "`{}` should appear in docs:\n{}",
+                heading,
+                content
+            );
+        }
+        assert!(!internal_written, "Main._Internal.md should NOT be written");
+    }
+
+    /// With `--with-private`, `fix docs` documents the items it otherwise leaves out because their
+    /// names, or the names of their namespaces or modules, start with an underscore.
+    #[test]
+    fn test_docs_with_private_document_items_named_with_an_underscore() {
+        let (content, internal_written) = document_private_names(&["--with-private"]);
+        for heading in PRIVATE_NAME_HEADINGS {
+            assert!(
+                content.contains(heading),
+                "`{}` should appear in docs with --with-private:\n{}",
+                heading,
+                content
+            );
+        }
+        assert!(
+            internal_written,
+            "Main._Internal.md should be written with --with-private"
+        );
+    }
 }

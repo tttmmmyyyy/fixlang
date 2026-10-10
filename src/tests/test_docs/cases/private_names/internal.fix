@@ -1,0 +1,4 @@
+module Main._Internal;
+
+// A value in a module whose name has a part starting with an underscore.
+internal_value : I64 = 1;

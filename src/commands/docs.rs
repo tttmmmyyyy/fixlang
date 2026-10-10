@@ -1,23 +1,19 @@
 use crate::ast::program::SymbolExpr::Method;
 use crate::{
     ast::{
-        name::{FullName, Name, NameSpace},
+        name::{is_private_module_name, is_private_name, FullName, Name, NameSpace},
         program::Program,
         traits::KindSignature,
         typedecl::Field,
-        types::{kind_star, Kind, TyCon, TyConVariant, TyVar},
+        types::{kind_star, Kind, TyConVariant, TyVar},
     },
     configuration::{BuildConfigType, Configuration, DocsConfig, SubCommand},
-    constants::{
-        STRUCT_ACT_SYMBOL, STRUCT_GETTER_SYMBOL, STRUCT_MODIFIER_SYMBOL, STRUCT_SETTER_SYMBOL,
-        UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL,
-    },
     dependency::lockfile::LockFileType,
     doc_test::{docstring_for_display, CodeFence},
     elaboration::elaborate_via_config,
     error::Errors,
     metafiles::project_file::ProjectFile,
-    misc::{info_msg, to_absolute_path},
+    misc::info_msg,
     parse::sourcefile::Span,
 };
 use std::sync::Arc;
@@ -54,20 +50,12 @@ pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> 
         // In case modules are given in the command line arguments, use them.
         docs_config.modules.clone()
     } else {
-        let mut mod_names = vec![];
         // Use all modules defined in the root project file.
-        let src_files = proj_file.get_files(mode);
-        let abs_src_paths = src_files
-            .iter()
-            .map(|f| to_absolute_path(f))
-            .collect::<Result<Vec<_>, Errors>>()?;
-        for mi in program.modules.iter() {
-            let src_file = to_absolute_path(&mi.source.input.file_path)?;
-            if abs_src_paths.iter().any(|f| f == &src_file) {
-                mod_names.push(mi.name.clone());
-            }
-        }
-        mod_names
+        program
+            .modules_from_files(&proj_file.get_files(mode))?
+            .into_iter()
+            .filter(|mod_name| docs_config.include_private || !is_private_module_name(mod_name))
+            .collect()
     };
 
     for mod_name in mod_names {
@@ -391,7 +379,7 @@ fn write_module(
 
     {
         let mut section = MarkdownSection::new("Trait implementations".to_string());
-        let entries = trait_impl_entries(program, mod_name)?;
+        let entries = trait_impl_entries(program, mod_name, config)?;
         write_entries(entries, &mut section);
         doc.add_subsection(section);
     }
@@ -451,50 +439,10 @@ fn is_entry_should_be_documented(
     if name.to_string().contains("#") {
         return false;
     }
-    if !config.include_private {
-        if name.name.starts_with("_") {
-            return false;
-        }
-        if is_private_field_accessor(program, name) {
-            return false;
-        }
+    if !config.include_private && program.is_private_entity(name) {
+        return false;
     }
     true
-}
-
-// Returns true if `name` is a compiler-generated accessor function
-// for a private field/variant of a struct or union.
-// A field/variant is considered private when its name starts with an underscore.
-fn is_private_field_accessor(program: &Program, name: &FullName) -> bool {
-    if name.namespace.is_local() {
-        return false;
-    }
-    // The namespace of a field accessor is the full name of its owning struct/union.
-    let tycon = TyCon::new(name.namespace.clone().to_fullname());
-    let Some(ty_info) = program.type_env.tycons().get(&tycon) else {
-        return false;
-    };
-    let accessor_prefixes: &[&str] = match ty_info.variant {
-        TyConVariant::Struct => &[
-            STRUCT_GETTER_SYMBOL,
-            STRUCT_SETTER_SYMBOL,
-            STRUCT_MODIFIER_SYMBOL,
-            STRUCT_ACT_SYMBOL,
-        ],
-        TyConVariant::Union => &[UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL],
-        _ => return false,
-    };
-    for field in &ty_info.fields {
-        if !field.name.starts_with("_") {
-            continue;
-        }
-        for prefix in accessor_prefixes {
-            if name.name == format!("{}{}", prefix, &field.name) {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 // Creates string of kind signature with pre-space, e.e, " : * -> *".
@@ -595,7 +543,7 @@ fn type_entries(
 
         if ty_info.variant == TyConVariant::Struct {
             for field in ty_info.fields.iter() {
-                if !config.include_private && field.name.starts_with("_") {
+                if !config.include_private && is_private_name(&field.name) {
                     continue;
                 }
                 let field_sec = field_subsection(TyConVariant::Struct, field)?;
@@ -604,7 +552,7 @@ fn type_entries(
         }
         if ty_info.variant == TyConVariant::Union {
             for variant in ty_info.fields.iter() {
-                if !config.include_private && variant.name.starts_with("_") {
+                if !config.include_private && is_private_name(&variant.name) {
                     continue;
                 }
                 let variant_sec = field_subsection(TyConVariant::Union, variant)?;
@@ -723,6 +671,9 @@ fn trait_entries(
         doc.concatenate_many(docstring);
 
         for (assoc_ty_name, assoc_ty_defn) in &info.assoc_types {
+            if !config.include_private && is_private_name(assoc_ty_name) {
+                continue;
+            }
             let mut params = vec![info.type_var.name.clone()];
             for param in assoc_ty_defn.params.iter().skip(1) {
                 params.push(param.name.clone());
@@ -748,6 +699,9 @@ fn trait_entries(
             doc.add_subsection(subsection);
         }
         for method in &info.members {
+            if !config.include_private && is_private_name(&method.name) {
+                continue;
+            }
             let title = format!("method `{}`", method.name);
             let mut subsection = MarkdownSection::new(title);
             subsection.add_paragraph(format!("Type: `{}`", method.qual_ty.to_string()));
@@ -806,7 +760,14 @@ fn trait_entries(
     Ok(entries)
 }
 
-fn trait_impl_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, Errors> {
+/// The entries of the trait implementations defined in the module `mod_name`. Unless
+/// `config.include_private` is set, it leaves out the implementations of a private trait and those
+/// for a private type.
+fn trait_impl_entries(
+    program: &Program,
+    mod_name: &Name,
+    config: &DocsConfig,
+) -> Result<Vec<Entry>, Errors> {
     let mut entries = vec![];
 
     for (_id, impls) in &program.trait_env.impls {
@@ -818,6 +779,16 @@ fn trait_impl_entries(program: &Program, mod_name: &Name) -> Result<Vec<Entry>, 
             let impl_ty_str = impl_.impl_type().to_string_normalize();
             if impl_ty_str.contains("#") {
                 continue;
+            }
+            // Skip impls of private traits and impls for private types.
+            if !config.include_private {
+                if impl_.qual_pred.predicate.trait_id.name.is_private() {
+                    continue;
+                }
+                let impl_tycon = impl_.impl_type().toplevel_tycon();
+                if impl_tycon.is_some_and(|tc| tc.name.is_private()) {
+                    continue;
+                }
             }
 
             let title = format!("impl `{}`", impl_.qual_pred.to_string());
