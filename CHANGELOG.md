@@ -21,7 +21,6 @@
 - #791, #798: `count_leading_zeros`, `count_trailing_zeros` and `count_ones` count the bits of an integer, for every integer type: `1_U8.count_leading_zeros` is `7_U8`. The count has the type of the integer counted. An integer of zero has as many leading and trailing zeros as its type has bits.
 - #820: `Array::unsafe_get_bounds_unchecked` reads the element at an index like `@`, but skips the bounds check, so the caller has to make sure the index is in range. Use it in loops that read elements at indices known to be in range, when the compiler cannot prove that they are.
 
-
 ### Changed
 
 #### Language
