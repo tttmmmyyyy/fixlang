@@ -9,7 +9,7 @@
 - #787: A field of a struct literal or of a struct pattern can be written by its name alone. `S { x, y: 2 }` means `S { x: x, y: 2 }`, where the second `x` is the value named `x`. `let S { x, y: y2 } = s;` binds `x` to the field `x` of `s`, as `let S { x: x, y: y2 } = s;` does.
 - #790: A struct pattern can write `_` after its fields to leave out the other fields of the struct: `let S { x, _ } = s;`.
 - #791, #798: 128-bit integer types `I128` and `U128`. A literal is written with the suffix `_I128` or `_U128`, as in `340282366920938463463374607431768211455_U128`. FFI does not support them.
-- #812, #818: A type, a type alias, a trait, a trait alias, an associated type, a namespace and a module can be named with `_` followed by a capital letter, such as `_Parser`, to mark it as private. See "Names starting with an underscore" in `Document.md`.
+- #812, #818: A type, a type alias, a trait, a trait alias, an associated type, a namespace and a module can be named with `_` followed by a capital letter, such as `_Parser`, to mark it as private. See "Private entities (names starting with an underscore)" in `Document.md`.
 
 #### Tool
 
@@ -40,7 +40,7 @@
 
 - #780: `install.sh` now lists the releases newest first and offers the newest full release as the default. The default used to be whichever release GitHub listed first, which could be a pre-release such as `v1.5.0-rc.1`. Pre-releases are marked `(pre-release)` in the list, and you can install one by typing its name.
 - #812, #818: Unless `--with-private` is given, `fix docs` now leaves out the entities in a namespace or a module whose name starts with `_`, the members and the associated types of a trait whose names start with `_`, and the implementations of a trait or for a type whose name starts with `_`.
-- #812, #818: In completion, the language server ranks an entity of a dependency or of `Std` last when its name, or the name of its namespace or module, starts with `_`.
+- #812, #818: In completion, the language server ranks an entity of a dependency or of `Std` last when its name, or any part of its namespace or module name, starts with `_`.
 
 ### Fixed
 
