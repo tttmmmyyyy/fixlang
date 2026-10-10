@@ -1,7 +1,7 @@
 use crate::{
     ast::program::TypeEnv,
     commands::run::run,
-    configuration::Configuration,
+    configuration::{Configuration, DeprecationMode},
     constants::COMPILER_TEST_WORKING_PATH,
     env_vars::MAX_OPT_LEVEL_VAR,
     error::{panic_if_err, panic_with_msg, Errors},
@@ -730,6 +730,14 @@ pub fn assert_grammar_accepts(source: &str) {
 /// the failure. Asserts that compilation and execution did not succeed; panics if they did.
 pub fn run_source_assert_failed(source: &str, config: Configuration) -> String {
     run_sources_assert_failed(&[source], config)
+}
+
+/// Compiles `source` in development mode with every use of a deprecated value made an error, and
+/// returns the report. Asserts that the compilation failed.
+pub fn deprecation_report(source: &str) -> String {
+    let mut config = Configuration::develop_mode();
+    config.deprecation_mode = DeprecationMode::Deny;
+    run_source_assert_failed(source, config)
 }
 
 /// Compiles the modules `sources` into one program under `config`, runs it, and returns the

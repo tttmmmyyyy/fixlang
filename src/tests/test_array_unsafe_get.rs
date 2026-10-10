@@ -4,8 +4,8 @@
 #[cfg(test)]
 mod array_unsafe_get_tests {
     use crate::{
-        configuration::{Configuration, DeprecationMode},
-        tests::test_util::{run_source_assert_failed, test_source},
+        configuration::Configuration,
+        tests::test_util::{deprecation_report, test_source},
     };
 
     #[test]
@@ -45,9 +45,7 @@ main = (
     pure()
 );
 "#;
-        let mut config = Configuration::develop_mode();
-        config.deprecation_mode = DeprecationMode::Deny;
-        let report = run_source_assert_failed(source, config);
+        let report = deprecation_report(source);
         assert!(
             report.contains("Use `Std::Array::unsafe_get_bounds_unchecked` instead."),
             "naming `_unsafe_get_bounds_unchecked` should be reported with the message its pragma carries:\n{}",

@@ -1,8 +1,8 @@
-use crate::configuration::{Configuration, DeprecationMode};
+use crate::configuration::Configuration;
 use crate::fixstd::runtime::{RUNTIME_MALLOC, RUNTIME_REALLOC};
 use crate::tests::test_util::{
     build_run_and_read_rc_ir, first_local_value, generated_llvm_ir, llvm_function_bodies,
-    names_local_value, rc_ir_function_bodies, run_source_assert_failed, test_source,
+    deprecation_report, names_local_value, rc_ir_function_bodies, test_source,
 };
 use std::sync::OnceLock;
 
@@ -349,9 +349,7 @@ pub fn test_the_deprecated_name_of_the_pointer_difference_answers_the_same() {
     "#;
     test_source(SOURCE, Configuration::develop_mode());
 
-    let mut config = Configuration::develop_mode();
-    config.deprecation_mode = DeprecationMode::Deny;
-    let report = run_source_assert_failed(SOURCE, config);
+    let report = deprecation_report(SOURCE);
     assert!(
         report.contains("Use `Std::Ptr::offset_from` instead."),
         "naming `subtract_ptr` should be reported with the message its pragma carries:\n{}",
