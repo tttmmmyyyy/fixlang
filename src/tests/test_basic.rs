@@ -6861,6 +6861,103 @@ pub fn test_float_to_string_precision_of_nan_of_either_sign() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Pins the digits `F32::to_string` writes where two texts of the shortest length both read back as
+/// the number: the one nearer the number, as `1.4e-45_F32` is written `1.0e-45`. Each of these
+/// numbers has a neighbour text one unit lower in the last digit that reads back as it too.
+#[test]
+pub fn test_float_to_string_of_f32_writes_the_nearest_of_the_shortest_texts() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            assert_eq(|_|"F32 texts",
+                      [578789570.0_F32, 6.7386187e24_F32, 0.89382905_F32, 5.7179215e-37_F32].map(to_string),
+                      ["578789570.0", "6.7386187e24", "0.89382905", "5.7179215e-37"]);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Pins that `to_string` writes the shortest text that reads back as the number where that text
+/// lies on the edge of the numbers reading back as it: halfway to the number below, which reads
+/// back as this one because its significand is the even one.
+#[test]
+pub fn test_float_to_string_takes_the_shortest_text_on_the_edge_of_the_number() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            // `18014398509481990` lies halfway between this number and the one below it.
+            assert_eq(|_|"F64", 1.8014398509481992e16.to_string, "1.801439850948199e16");;
+            let back : Result ErrMsg F64 = "1.801439850948199e16".from_string;
+            assert_eq(|_|"F64 reads back", back.as_ok, 1.8014398509481992e16);;
+            // `36175870` lies halfway between this number and the one below it.
+            assert_eq(|_|"F32", 36175872.0_F32.to_string, "36175870.0");;
+            let back : Result ErrMsg F32 = "36175870.0".from_string;
+            assert_eq(|_|"F32 reads back", back.as_ok, 36175872.0_F32);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Pins that the functions writing a given number of places round up where the removed digits
+/// begin with a 5 and go on past it: the number lies above the halfway point, so it is no tie,
+/// whatever the parity of the digit kept. With a power of ten the removed digits may lie in the
+/// whole part, where a number exactly halfway still rounds to the even digit.
+#[test]
+pub fn test_float_to_string_precision_rounds_up_past_a_half() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            assert_eq(|_|"positionally",
+                      [0.5625.to_string_precision(0_U8), 0.0546875.to_string_precision(1_U8), 0.005859375.to_string_precision(2_U8)],
+                      ["1", "0.1", "0.01"]);;
+            // `2 ^ -60`, whose digits run on far past the places written.
+            assert_eq(|_|"positionally, far below one",
+                      8.673617379884035e-19.to_string_precision(38_U8), "0.00000000000000000086736173798840354721");;
+            assert_eq(|_|"with a power of ten, past a half in the whole part",
+                      [256.0.to_string_exp_precision(0_U8), 65536.0.to_string_exp_precision(0_U8), 6656.0.to_string_exp_precision(1_U8)],
+                      ["3e2", "7e4", "6.7e3"]);;
+            assert_eq(|_|"with a power of ten, a tie in the whole part", 250.0.to_string_exp_precision(0_U8), "2e2");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Pins that the functions writing the text of a floating point number into a byte array write it
+/// from the index given, answer with the index after it, and leave the bytes before it alone, a
+/// rounding that carries past the first digit included.
+#[test]
+pub fn test_float_text_writers_write_from_the_index_given() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            // Each text is written after a `9`, which a carry running past the text would change.
+            let writers : Array (I64 -> Array U8 -> (I64, Array U8)) = [
+                |at, bytes| F64::_write_fixed_text(at, 1, 9.96, bytes),
+                |at, bytes| F64::_write_exp_text(at, 0, 9.7, bytes),
+                |at, bytes| F64::_write_exp_text(at, 1, -9.96, bytes),
+                |at, bytes| F64::_write_shortest_text(at, -0.00012, bytes),
+                |at, bytes| F32::_write_shortest_text(at, 1.0e13_F32, bytes),
+                |at, bytes| F64::_write_shortest_text(at, -F64::infinity, bytes),
+                |at, bytes| F64::_write_fixed_text(at, 2, -0.0, bytes)
+            ];
+            let (end, bytes) = writers.to_iter.fold((0, Array::fill(128, 0_U8)), |write, (at, bytes)|
+                write(at + 1, bytes.set(at, '9'))
+            );
+            assert_eq(|_|"the texts written one after another",
+                      String::_from_written_bytes((end, bytes)), "910.091e19-1.0e19-0.0001291.0e139-inf9-0.00");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// Verifies that `loop_lines` reads a file line by line and that `break` ends the loop early:
 /// the sum stops at the first line that does not parse as an integer, and an empty file gives
 /// the initial value.
