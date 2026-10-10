@@ -15057,7 +15057,7 @@ execute: I64 -> Obj -> (Obj, I64) = |i, obj| (
 );
 
 main: IO () = (
-    let obj = Obj { arr: [ 42 ] };
+    let obj = Obj { arr: Array::from_map(1, |_| 42) };
     let (obj, val) = obj.execute(0);
     println(val.to_string)
 );
