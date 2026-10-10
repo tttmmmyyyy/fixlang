@@ -4660,10 +4660,10 @@ impl F32 : ToString {
     to_string = |v| (
         // An infinity, a NaN and a zero are texts of the program, which need no buffer.
         let bits = v.to_bits;
-        let exponent = bits.shift_right(23_U32).bit_and(0xFF_U32);
-        let mantissa = bits.bit_and(0x7FFFFF_U32);
-        let is_zero = exponent == 0_U32 && mantissa == 0_U32;
-        if exponent == 0xFF_U32 || is_zero { String::_special_float_text(is_zero, mantissa != 0_U32, bits.shift_right(31_U32) == 1_U32) };
+        let ieee_exponent = bits.shift_right(23_U32).bit_and(0xFF_U32);
+        let ieee_mantissa = bits.bit_and(0x7FFFFF_U32);
+        let is_zero = ieee_exponent == 0_U32 && ieee_mantissa == 0_U32;
+        if ieee_exponent == 0xFF_U32 || is_zero { String::_special_float_text(is_zero, ieee_mantissa != 0_U32, bits.shift_right(31_U32) == 1_U32) };
         let size = F32::_shortest_text_max_length + 1;
         String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F32::_write_shortest_text(0, v)
     );
@@ -4739,11 +4739,11 @@ namespace F32 {
     _write_shortest_text = |at, v, bytes| (
         let bits = v.to_bits;
         let negative = bits.shift_right(31_U32) == 1_U32;
-        let exponent = bits.shift_right(23_U32).bit_and(0xFF_U32).i64;
-        let mantissa = bits.bit_and(0x7FFFFF_U32);
-        let is_zero = exponent == 0 && mantissa == 0_U32;
-        if exponent == 0xFF || is_zero { bytes._write_special_float(at, is_zero, mantissa != 0_U32, negative) };
-        bytes._write_float_decimal(at, -6, 13, negative, F32::_find_shortest_decimal(exponent, mantissa))
+        let ieee_exponent = bits.shift_right(23_U32).bit_and(0xFF_U32).i64;
+        let ieee_mantissa = bits.bit_and(0x7FFFFF_U32);
+        let is_zero = ieee_exponent == 0 && ieee_mantissa == 0_U32;
+        if ieee_exponent == 0xFF || is_zero { bytes._write_special_float(at, is_zero, ieee_mantissa != 0_U32, negative) };
+        bytes._write_float_decimal(at, -6, 13, negative, F32::_find_shortest_decimal(ieee_exponent, ieee_mantissa))
     );
 
     // The most bytes `to_string_precision` writes for an `F32` with `precision` digits after the
@@ -4862,7 +4862,7 @@ namespace F32 {
         let mm = mv - 1_U32 - mm_shift;
         // The decimal numbers below the number, at it and above it, at the power of ten `e10`, and
         // the digit removed from `vr` last where it was found.
-        let (vr, vp, vm, e10, vm_is_trailing_zeros, vr_is_trailing_zeros, last) = if e2 >= 0 {
+        let (vr, vp, vm, e10, vm_is_trailing_zeros, vr_is_trailing_zeros, last_removed_digit) = if e2 >= 0 {
             let q = F64::_compute_log10_pow2(e2);
             let i = -e2 + q + F32::_pow5_bitcount + F64::_compute_pow5_bits(q) - 1;
             let vr = _multiply_pow5_inv_shift(mv, q, i);
@@ -4870,16 +4870,16 @@ namespace F32 {
             let vm = _multiply_pow5_inv_shift(mm, q, i);
             // Where the digits from `vr` are about to be removed, the first of them is found from
             // one power of ten less.
-            let last = if q != 0 && (vp - 1_U32) / 10_U32 <= vm / 10_U32 {
+            let last_removed_digit = if q != 0 && (vp - 1_U32) / 10_U32 <= vm / 10_U32 {
                 let l = F32::_pow5_bitcount + F64::_compute_pow5_bits(q - 1) - 1;
                 _multiply_pow5_inv_shift(mv, q - 1, -e2 + q - 1 + l) % 10_U32
             } else { 0_U32 };
-            if q > 9 { (vr, vp, vm, q, false, false, last) };
+            if q > 9 { (vr, vp, vm, q, false, false, last_removed_digit) };
             // Only one of `mv`, `mp` and `mm` can be a multiple of 5, if any.
-            if mv % 5_U32 == 0_U32 { (vr, vp, vm, q, false, F32::_count_factors_of_5(mv) >= q, last) };
-            if accept_bounds { (vr, vp, vm, q, F32::_count_factors_of_5(mm) >= q, false, last) };
+            if mv % 5_U32 == 0_U32 { (vr, vp, vm, q, false, F32::_count_factors_of_5(mv) >= q, last_removed_digit) };
+            if accept_bounds { (vr, vp, vm, q, F32::_count_factors_of_5(mm) >= q, false, last_removed_digit) };
             let vp = vp - (if F32::_count_factors_of_5(mp) >= q { 1_U32 } else { 0_U32 });
-            (vr, vp, vm, q, false, false, last)
+            (vr, vp, vm, q, false, false, last_removed_digit)
         } else {
             let q = F64::_compute_log10_pow5(-e2);
             let e10 = q + e2;
@@ -4888,48 +4888,48 @@ namespace F32 {
             let vr = _multiply_pow5_shift(mv, i, j);
             let vp = _multiply_pow5_shift(mp, i, j);
             let vm = _multiply_pow5_shift(mm, i, j);
-            let last = if q != 0 && (vp - 1_U32) / 10_U32 <= vm / 10_U32 {
+            let last_removed_digit = if q != 0 && (vp - 1_U32) / 10_U32 <= vm / 10_U32 {
                 let j = q - 1 - (F64::_compute_pow5_bits(i + 1) - F32::_pow5_bitcount);
                 _multiply_pow5_shift(mv, i + 1, j) % 10_U32
             } else { 0_U32 };
             if q <= 1 {
                 // `mv` has at least two trailing zero bits, and `mm` has one where `mm_shift` is 1.
-                if accept_bounds { (vr, vp, vm, e10, mm_shift == 1_U32, true, last) };
+                if accept_bounds { (vr, vp, vm, e10, mm_shift == 1_U32, true, last_removed_digit) };
                 // `mp` has at least one trailing zero bit.
-                (vr, vp - 1_U32, vm, e10, false, true, last)
+                (vr, vp - 1_U32, vm, e10, false, true, last_removed_digit)
             };
-            if q < 31 { (vr, vp, vm, e10, false, mv.bit_and(1_U32.shift_left((q - 1).u32) - 1_U32) == 0_U32, last) };
-            (vr, vp, vm, e10, false, false, last)
+            if q < 31 { (vr, vp, vm, e10, false, mv.bit_and(1_U32.shift_left((q - 1).u32) - 1_U32) == 0_U32, last_removed_digit) };
+            (vr, vp, vm, e10, false, false, last_removed_digit)
         };
         let (mantissa, exponent) = if vm_is_trailing_zeros || vr_is_trailing_zeros {
             // The general case, which needs the digits removed from `vr` and whether those of `vm`
             // are zeros.
-            let (vr, vp, vm, removed, last, vm_is_trailing_zeros, vr_is_trailing_zeros) = loop(
-                (vr, vp, vm, 0, last, vm_is_trailing_zeros, vr_is_trailing_zeros),
-                |(vr, vp, vm, removed, last, vm_zeros, vr_zeros)| (
-                    if vp / 10_U32 <= vm / 10_U32 { break $ (vr, vp, vm, removed, last, vm_zeros, vr_zeros) };
-                    continue $ (vr / 10_U32, vp / 10_U32, vm / 10_U32, removed + 1, vr % 10_U32, vm_zeros && vm % 10_U32 == 0_U32, vr_zeros && last == 0_U32)
+            let (vr, vp, vm, removed, last_removed_digit, vm_is_trailing_zeros, vr_is_trailing_zeros) = loop(
+                (vr, vp, vm, 0, last_removed_digit, vm_is_trailing_zeros, vr_is_trailing_zeros),
+                |(vr, vp, vm, removed, last_removed_digit, vm_zeros, vr_zeros)| (
+                    if vp / 10_U32 <= vm / 10_U32 { break $ (vr, vp, vm, removed, last_removed_digit, vm_zeros, vr_zeros) };
+                    continue $ (vr / 10_U32, vp / 10_U32, vm / 10_U32, removed + 1, vr % 10_U32, vm_zeros && vm % 10_U32 == 0_U32, vr_zeros && last_removed_digit == 0_U32)
                 )
             );
-            let (vr, vm, removed, last, vr_is_trailing_zeros) = if vm_is_trailing_zeros {
-                loop((vr, vp, vm, removed, last, vr_is_trailing_zeros), |(vr, vp, vm, removed, last, vr_zeros)| (
-                    if vm % 10_U32 != 0_U32 { break $ (vr, vm, removed, last, vr_zeros) };
-                    continue $ (vr / 10_U32, vp / 10_U32, vm / 10_U32, removed + 1, vr % 10_U32, vr_zeros && last == 0_U32)
+            let (vr, vm, removed, last_removed_digit, vr_is_trailing_zeros) = if vm_is_trailing_zeros {
+                loop((vr, vp, vm, removed, last_removed_digit, vr_is_trailing_zeros), |(vr, vp, vm, removed, last_removed_digit, vr_zeros)| (
+                    if vm % 10_U32 != 0_U32 { break $ (vr, vm, removed, last_removed_digit, vr_zeros) };
+                    continue $ (vr / 10_U32, vp / 10_U32, vm / 10_U32, removed + 1, vr % 10_U32, vr_zeros && last_removed_digit == 0_U32)
                 ))
             } else {
-                (vr, vm, removed, last, vr_is_trailing_zeros)
+                (vr, vm, removed, last_removed_digit, vr_is_trailing_zeros)
             };
             // An exact `...50...0` rounds to the even digit.
-            let last = if vr_is_trailing_zeros && last == 5_U32 && vr % 2_U32 == 0_U32 { 4_U32 } else { last };
+            let last_removed_digit = if vr_is_trailing_zeros && last_removed_digit == 5_U32 && vr % 2_U32 == 0_U32 { 4_U32 } else { last_removed_digit };
             // `vr + 1` is taken where `vr` is outside the bounds or the removed digits round up.
-            let round_up = (vr == vm && (!accept_bounds || !vm_is_trailing_zeros)) || last >= 5_U32;
+            let round_up = (vr == vm && (!accept_bounds || !vm_is_trailing_zeros)) || last_removed_digit >= 5_U32;
             (vr + (if round_up { 1_U32 } else { 0_U32 }), e10 + removed)
         } else {
-            let (vr, vm, removed, last) = loop((vr, vp, vm, 0, last), |(vr, vp, vm, removed, last)| (
-                if vp / 10_U32 <= vm / 10_U32 { break $ (vr, vm, removed, last) };
+            let (vr, vm, removed, last_removed_digit) = loop((vr, vp, vm, 0, last_removed_digit), |(vr, vp, vm, removed, last_removed_digit)| (
+                if vp / 10_U32 <= vm / 10_U32 { break $ (vr, vm, removed, last_removed_digit) };
                 continue $ (vr / 10_U32, vp / 10_U32, vm / 10_U32, removed + 1, vr % 10_U32)
             ));
-            (vr + (if vr == vm || last >= 5_U32 { 1_U32 } else { 0_U32 }), e10 + removed)
+            (vr + (if vr == vm || last_removed_digit >= 5_U32 { 1_U32 } else { 0_U32 }), e10 + removed)
         };
         (mantissa.u64, exponent, F64::_count_decimal_digits_9(mantissa))
     );
@@ -4954,9 +4954,9 @@ impl F64 : ToString {
     // `9.99e-6`, `1.0e300`.
     to_string = |v| (
         // An infinity, a NaN and a zero are texts of the program, which need no buffer.
-        let (negative, exponent, mantissa) = F64::_decode_bits(v.to_bits);
-        let is_zero = exponent == 0 && mantissa == 0_U64;
-        if exponent == 0x7FF || is_zero { String::_special_float_text(is_zero, mantissa != 0_U64, negative) };
+        let (negative, ieee_exponent, ieee_mantissa) = F64::_decode_bits(v.to_bits);
+        let is_zero = ieee_exponent == 0 && ieee_mantissa == 0_U64;
+        if ieee_exponent == 0x7FF || is_zero { String::_special_float_text(is_zero, ieee_mantissa != 0_U64, negative) };
         let size = F64::_shortest_text_max_length + 1;
         String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F64::_write_shortest_text(0, v)
     );
@@ -5042,10 +5042,10 @@ namespace F64 {
     // * `bytes` - The array to write into.
     _write_shortest_text : I64 -> F64 -> Array U8 -> (I64, Array U8);
     _write_shortest_text = |at, v, bytes| (
-        let (negative, exponent, mantissa) = _decode_bits(v.to_bits);
-        let is_zero = exponent == 0 && mantissa == 0_U64;
-        if exponent == 0x7FF || is_zero { bytes._write_special_float(at, is_zero, mantissa != 0_U64, negative) };
-        bytes._write_float_decimal(at, -5, 16, negative, F64::_find_shortest_decimal(exponent, mantissa))
+        let (negative, ieee_exponent, ieee_mantissa) = _decode_bits(v.to_bits);
+        let is_zero = ieee_exponent == 0 && ieee_mantissa == 0_U64;
+        if ieee_exponent == 0x7FF || is_zero { bytes._write_special_float(at, is_zero, ieee_mantissa != 0_U64, negative) };
+        bytes._write_float_decimal(at, -5, 16, negative, F64::_find_shortest_decimal(ieee_exponent, ieee_mantissa))
     );
 
     // The most bytes `to_string_precision` writes for an `F64` with `precision` digits after the
@@ -5112,16 +5112,16 @@ namespace F64 {
     );
 
     // Answers with the significand and the power of two of the finite number other than zero whose
-    // biased exponent is `exponent` and whose stored significand is `mantissa`: the number is
-    // `m2 * 2 ^ e2`.
+    // biased exponent is `ieee_exponent` and whose stored significand is `ieee_mantissa`: the number
+    // is `m2 * 2 ^ e2`.
     //
     // # Parameters
-    // * `exponent` - The biased exponent.
-    // * `mantissa` - The stored significand.
+    // * `ieee_exponent` - The biased exponent.
+    // * `ieee_mantissa` - The stored significand.
     _decode_finite : I64 -> U64 -> (I64, U64);
-    _decode_finite = |exponent, mantissa| (
-        if exponent == 0 { (1 - _exponent_bias - _mantissa_bits, mantissa) };
-        (exponent - _exponent_bias - _mantissa_bits, 1_U64.shift_left(_mantissa_bits.u64).bit_or(mantissa))
+    _decode_finite = |ieee_exponent, ieee_mantissa| (
+        if ieee_exponent == 0 { (1 - _exponent_bias - _mantissa_bits, ieee_mantissa) };
+        (ieee_exponent - _exponent_bias - _mantissa_bits, 1_U64.shift_left(_mantissa_bits.u64).bit_or(ieee_mantissa))
     );
 
     // Counts the decimal digits of `v`, which has at most 17: Ryu's `decimalLength17`.
@@ -5285,34 +5285,34 @@ namespace F64 {
         if vm_is_trailing_zeros || vr_is_trailing_zeros {
             // The general case, which needs the digits removed from `vr` and whether those of `vm`
             // are zeros.
-            let (vr, vp, vm, removed, last, vm_is_trailing_zeros, vr_is_trailing_zeros) = loop(
+            let (vr, vp, vm, removed, last_removed_digit, vm_is_trailing_zeros, vr_is_trailing_zeros) = loop(
                 (vr, vp, vm, 0, 0_U64, vm_is_trailing_zeros, vr_is_trailing_zeros),
-                |(vr, vp, vm, removed, last, vm_zeros, vr_zeros)| (
+                |(vr, vp, vm, removed, last_removed_digit, vm_zeros, vr_zeros)| (
                     let vp_div10 = vp / 10_U64;
                     let vm_div10 = vm / 10_U64;
-                    if vp_div10 <= vm_div10 { break $ (vr, vp, vm, removed, last, vm_zeros, vr_zeros) };
+                    if vp_div10 <= vm_div10 { break $ (vr, vp, vm, removed, last_removed_digit, vm_zeros, vr_zeros) };
                     let vm_mod10 = vm - 10_U64 * vm_div10;
                     let vr_div10 = vr / 10_U64;
                     let vr_mod10 = vr - 10_U64 * vr_div10;
-                    continue $ (vr_div10, vp_div10, vm_div10, removed + 1, vr_mod10, vm_zeros && vm_mod10 == 0_U64, vr_zeros && last == 0_U64)
+                    continue $ (vr_div10, vp_div10, vm_div10, removed + 1, vr_mod10, vm_zeros && vm_mod10 == 0_U64, vr_zeros && last_removed_digit == 0_U64)
                 )
             );
-            let (vr, vm, removed, last, vr_is_trailing_zeros) = if vm_is_trailing_zeros {
-                loop((vr, vp, vm, removed, last, vr_is_trailing_zeros), |(vr, vp, vm, removed, last, vr_zeros)| (
+            let (vr, vm, removed, last_removed_digit, vr_is_trailing_zeros) = if vm_is_trailing_zeros {
+                loop((vr, vp, vm, removed, last_removed_digit, vr_is_trailing_zeros), |(vr, vp, vm, removed, last_removed_digit, vr_zeros)| (
                     let vm_div10 = vm / 10_U64;
                     let vm_mod10 = vm - 10_U64 * vm_div10;
-                    if vm_mod10 != 0_U64 { break $ (vr, vm, removed, last, vr_zeros) };
+                    if vm_mod10 != 0_U64 { break $ (vr, vm, removed, last_removed_digit, vr_zeros) };
                     let vr_div10 = vr / 10_U64;
                     let vr_mod10 = vr - 10_U64 * vr_div10;
-                    continue $ (vr_div10, vp / 10_U64, vm_div10, removed + 1, vr_mod10, vr_zeros && last == 0_U64)
+                    continue $ (vr_div10, vp / 10_U64, vm_div10, removed + 1, vr_mod10, vr_zeros && last_removed_digit == 0_U64)
                 ))
             } else {
-                (vr, vm, removed, last, vr_is_trailing_zeros)
+                (vr, vm, removed, last_removed_digit, vr_is_trailing_zeros)
             };
             // An exact `...50...0` rounds to the even digit.
-            let last = if vr_is_trailing_zeros && last == 5_U64 && vr % 2_U64 == 0_U64 { 4_U64 } else { last };
+            let last_removed_digit = if vr_is_trailing_zeros && last_removed_digit == 5_U64 && vr % 2_U64 == 0_U64 { 4_U64 } else { last_removed_digit };
             // `vr + 1` is taken where `vr` is outside the bounds or the removed digits round up.
-            let round_up = (vr == vm && (!accept_bounds || !vm_is_trailing_zeros)) || last >= 5_U64;
+            let round_up = (vr == vm && (!accept_bounds || !vm_is_trailing_zeros)) || last_removed_digit >= 5_U64;
             (vr + (if round_up { 1_U64 } else { 0_U64 }), e10 + removed)
         };
         // The common case, which removes two digits at once where it can.

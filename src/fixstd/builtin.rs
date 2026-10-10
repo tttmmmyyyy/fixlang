@@ -2564,12 +2564,12 @@ impl BuiltinOp for BitCastOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         let operand = gc.get_scoped_obj_field(&self.operand_name, 0);
         let to_ty = ty.get_struct_type(gc).get_field_type_at_index(0).unwrap();
-        let from_bits = gc.target_data.get_bit_size(&operand.get_type());
-        let to_bits = gc.target_data.get_bit_size(&to_ty);
+        let from_width = gc.target_data.get_bit_size(&operand.get_type());
+        let to_width = gc.target_data.get_bit_size(&to_ty);
         assert_eq!(
-            from_bits, to_bits,
+            from_width, to_width,
             "a bit cast must keep the width: {} bits to {} bits",
-            from_bits, to_bits
+            from_width, to_width
         );
         let val = gc
             .builder()
