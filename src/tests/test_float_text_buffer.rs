@@ -1,26 +1,18 @@
-// The eight values that write a `F32` or a `F64` as text hand a buffer to the C runtime. Each
-// buffer's size is derived from the widest text the value can be asked for, and the derivation
-// holds only if the widest digits, the widest exponent and the null terminator were all counted.
-//
-// A buffer short of that text stops the program: the runtime knows the length of every text
-// before it writes the text into the buffer, and aborts where the text and its null do not fit.
-// So what this file does is write the widest text each of the eight can produce, which is what
-// proves the check never fires — and an undersized buffer is caught by the abort wherever the
-// tests run, with Valgrind or without it.
-//
-// The run is under Valgrind all the same, because the check answers for the write into the buffer
-// and Valgrind answers for everything around it: the `Array` the buffer lives in, the write into
-// it, and the `String` built from it.
+// The precision functions of `F32` and `F64` write their text into a buffer whose size is derived
+// from the widest text they can be asked for, and the derivation holds only if the widest digits,
+// the widest exponent and the null terminator were all counted. The writes are not checked against
+// the buffer, so this file writes the widest text each function can produce under Valgrind, which
+// reports a write past the buffer's allocation.
 
 #[cfg(test)]
 mod float_text_buffer_tests {
     use crate::{
         configuration::{Configuration, ValgrindTool},
         misc::{function_name, platform_valgrind_supported},
-        tests::test_util::{test_source, test_source_fail},
+        tests::test_util::test_source,
     };
 
-    /// Writes the widest text each of the eight functions can produce -- the least value of each
+    /// Writes the widest text each of the functions can produce -- the least value of each
     /// type, whose whole part is the widest, and the greatest negative one, whose exponent is the
     /// widest, at every precision the functions accept -- under Valgrind, so that a buffer sized
     /// short of that text shows up as a write past its allocation.
@@ -69,29 +61,5 @@ main : IO () = (
         let mut config = Configuration::develop_mode();
         config.set_valgrind(ValgrindTool::MemCheck);
         test_source(source, config);
-    }
-
-    /// A buffer one byte short of a text and its null stops the program with the two sizes, before
-    /// the text is written. `-2.2250738585072014e-308` is written in 24 bytes, so a buffer of 24
-    /// bytes is one short of what it needs.
-    #[test]
-    pub fn test_text_one_byte_past_its_buffer_stops_the_program() {
-        let source = r#"
-module Main;
-
-main : IO () = (
-    let size = 24;
-    let data = Array::fill(size, 0_U8);
-    let (data, length) = data.mutate_elements(|ptr|
-        FFI_CALL_IO[I64 fixruntime_f64_to_str_shortest(Ptr, I64, F64), ptr, size, -2.2250738585072014e-308]
-    );
-    println("wrote " + length.to_string + " bytes into " + data.@size.to_string)
-);
-"#;
-        test_source_fail(
-            source,
-            Configuration::develop_mode(),
-            "A number's text takes 25 bytes and its buffer holds 24",
-        );
     }
 }

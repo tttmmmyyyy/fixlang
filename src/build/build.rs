@@ -95,55 +95,15 @@ struct RuntimeHeader {
     text: &'static str,
 }
 
-/// The headers of the libraries under `src/fixstd/` that the runtime carries — Ryu in `ryu/` and
-/// fast_float in `ffc/` — written beside the sources that include them.
+/// The headers of the libraries under `src/fixstd/` that the runtime carries — fast_float in
+/// `ffc/` — written beside the sources that include them.
 ///
 /// Every header those directories hold is carried, whatever one configuration of the libraries
-/// reaches: `d2s.c` and `f2s_intrinsics.h` choose between a tabulated and a computed table by a
-/// macro, so which headers a build reads depends on the macros it is given.
-/// `test_vendored_headers_are_all_carried` holds this list to the directories.
-const RUNTIME_HEADERS: [RuntimeHeader; 10] = [
-    RuntimeHeader {
-        path: "ryu/ryu.h",
-        text: include_str!("../fixstd/ryu/ryu.h"),
-    },
-    RuntimeHeader {
-        path: "ryu/common.h",
-        text: include_str!("../fixstd/ryu/common.h"),
-    },
-    RuntimeHeader {
-        path: "ryu/digit_table.h",
-        text: include_str!("../fixstd/ryu/digit_table.h"),
-    },
-    RuntimeHeader {
-        path: "ryu/d2s_intrinsics.h",
-        text: include_str!("../fixstd/ryu/d2s_intrinsics.h"),
-    },
-    RuntimeHeader {
-        path: "ryu/d2s_full_table.h",
-        text: include_str!("../fixstd/ryu/d2s_full_table.h"),
-    },
-    RuntimeHeader {
-        path: "ryu/d2s_small_table.h",
-        text: include_str!("../fixstd/ryu/d2s_small_table.h"),
-    },
-    RuntimeHeader {
-        path: "ryu/f2s_intrinsics.h",
-        text: include_str!("../fixstd/ryu/f2s_intrinsics.h"),
-    },
-    RuntimeHeader {
-        path: "ryu/f2s_full_table.h",
-        text: include_str!("../fixstd/ryu/f2s_full_table.h"),
-    },
-    RuntimeHeader {
-        path: "ryu/d2fixed_full_table.h",
-        text: include_str!("../fixstd/ryu/d2fixed_full_table.h"),
-    },
-    RuntimeHeader {
-        path: "ffc/ffc.h",
-        text: include_str!("../fixstd/ffc/ffc.h"),
-    },
-];
+/// reaches. `test_vendored_headers_are_all_carried` holds this list to the directories.
+const RUNTIME_HEADERS: [RuntimeHeader; 1] = [RuntimeHeader {
+    path: "ffc/ffc.h",
+    text: include_str!("../fixstd/ffc/ffc.h"),
+}];
 
 /// One of the C sources the runtime is built from.
 struct RuntimeSource {
@@ -157,7 +117,7 @@ struct RuntimeSource {
 }
 
 /// The C sources the runtime is built from, each compiled to an object of its own.
-const RUNTIME_SOURCES: [RuntimeSource; 5] = [
+const RUNTIME_SOURCES: [RuntimeSource; 2] = [
     RuntimeSource {
         object_name: "runtime",
         path: "runtime.c",
@@ -167,21 +127,6 @@ const RUNTIME_SOURCES: [RuntimeSource; 5] = [
         object_name: "float-text",
         path: "float_text.c",
         text: include_str!("../fixstd/float_text.c"),
-    },
-    RuntimeSource {
-        object_name: "ryu-d2s",
-        path: "ryu/d2s.c",
-        text: include_str!("../fixstd/ryu/d2s.c"),
-    },
-    RuntimeSource {
-        object_name: "ryu-f2s",
-        path: "ryu/f2s.c",
-        text: include_str!("../fixstd/ryu/f2s.c"),
-    },
-    RuntimeSource {
-        object_name: "ryu-d2fixed",
-        path: "ryu/d2fixed.c",
-        text: include_str!("../fixstd/ryu/d2fixed.c"),
     },
 ];
 
@@ -242,11 +187,9 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
         // A source reaches the headers beside it by the path it includes them under, which is the
         // one it carries in the compiler's tree.
         com.current_dir(&build_dir).arg("-I.");
-        // Writing a number as text is arithmetic, and unoptimized arithmetic costs several times
-        // what optimized arithmetic costs: Ryu takes 214 ns to write a floating point number
-        // unoptimized against 88 ns optimized, and one integer takes 188 instructions against 97.
-        // The whole runtime compiles in a few milliseconds, and a build reuses the objects a
-        // previous build of the same compiler wrote.
+        // Reading a floating point number from text is arithmetic, and unoptimized arithmetic costs
+        // several times what optimized arithmetic costs. The whole runtime compiles in a few
+        // milliseconds, and a build reuses the objects a previous build of the same compiler wrote.
         com.arg("-O2")
             .arg("-ffunction-sections")
             .arg("-fdata-sections");
@@ -370,10 +313,10 @@ mod tests {
     use std::process::Command;
 
     /// The directories under `src/fixstd/` that hold a library the runtime carries.
-    const VENDORED_DIRS: [&str; 2] = ["ryu", "ffc"];
+    const VENDORED_DIRS: [&str; 1] = ["ffc"];
 
     /// The files in the directories of `VENDORED_DIRS` whose name ends in `extension`, each named
-    /// by its path under `src/fixstd/`, such as `ryu/d2s.c`.
+    /// by its path under `src/fixstd/`, such as `ffc/ffc.h`.
     fn vendored_files(extension: &str) -> Set<String> {
         let mut files = Set::default();
         for dir in VENDORED_DIRS {
@@ -440,8 +383,8 @@ mod tests {
 
     /// Every name the runtime's objects define for the linker begins with `fixruntime_`, a prefix
     /// `FFI_EXPORT` rejects. So the runtime's names never meet a name a program or a library it
-    /// links defines, although a program may carry Ryu or fast_float on its own: the runtime's
-    /// copy of Ryu renames its functions, and its copy of fast_float defines them as `static`.
+    /// links defines, although a program may carry fast_float on its own: the runtime's copy of
+    /// fast_float defines its functions as `static`.
     #[test]
     fn test_runtime_defines_only_fixruntime_names() {
         let build_dir = tempfile::tempdir().expect("failed to create a temporary directory");

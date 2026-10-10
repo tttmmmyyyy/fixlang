@@ -131,12 +131,18 @@ mod tests {
             "the literal of annotated number literals should be a constant; the dump is:\n{}",
             dump
         );
-        assert_eq!(
-            dump.matches("constant_array_lit(").count(),
-            2,
-            "only the literals of number literals should be constants; the dump is:\n{}",
-            dump
-        );
+        for name in ["computed", "empty"] {
+            let binding = dump
+                .lines()
+                .find(|line| line.contains(&format!("(as {})", name)))
+                .unwrap_or_else(|| panic!("the dump should bind `{}`; the dump is:\n{}", name, dump));
+            assert!(
+                binding.contains(" = array_lit("),
+                "the literal bound to `{}` should be built at run time; the dump is:\n{}",
+                name,
+                dump
+            );
+        }
     }
 
     /// A global holding an array literal of numbers is put wherever it is read at `-O max`, so the

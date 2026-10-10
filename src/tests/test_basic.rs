@@ -6004,6 +6004,45 @@ pub fn test_signed_integral_abs() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Pins `to_bits` and `from_bits` of `F64` and `F32`: the bits of the IEEE 754 encoding, and the
+/// number read back from them unchanged for every kind of number, a NaN's sign and payload
+/// included.
+#[test]
+pub fn test_float_to_bits_and_from_bits() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            assert_eq(|_|"1.0", 1.0.to_bits, 0x3FF0000000000000_U64);;
+            assert_eq(|_|"-0.0", (-0.0).to_bits, 0x8000000000000000_U64);;
+            assert_eq(|_|"the least subnormal", 5.0e-324.to_bits, 1_U64);;
+            assert_eq(|_|"infinity", F64::infinity.to_bits, 0x7FF0000000000000_U64);;
+            assert_eq(|_|"F32 1.0", 1.0_F32.to_bits, 0x3F800000_U32);;
+            assert_eq(|_|"F32 -infinity", (-F32::infinity).to_bits, 0xFF800000_U32);;
+            assert_eq(|_|"from the bits of 1.0", F64::from_bits(0x3FF0000000000000_U64), 1.0);;
+            assert_eq(|_|"from the bits of -2.0", F64::from_bits(0xC000000000000000_U64), -2.0);;
+            assert_eq(|_|"F32 from the bits of 1.5", F32::from_bits(0x3FC00000_U32), 1.5_F32);;
+
+            // Every kind of number comes back with its bits: zeros, a subnormal, the greatest
+            // finite number, the infinities, and NaNs signaling and quiet, with a sign and a
+            // payload.
+            let bits_f64 = [
+                0_U64, 0x8000000000000000_U64, 1_U64, 0x7FEFFFFFFFFFFFFF_U64, 0x7FF0000000000000_U64,
+                0xFFF0000000000000_U64, 0x7FF0000000000001_U64, 0xFFF8000000000123_U64, 0x7FFFFFFFFFFFFFFF_U64
+            ];
+            assert_eq(|_|"F64 bits read back", bits_f64.map(|b| F64::from_bits(b).to_bits), bits_f64);;
+            let bits_f32 = [
+                0_U32, 0x80000000_U32, 1_U32, 0x7F7FFFFF_U32, 0x7F800000_U32, 0xFF800000_U32,
+                0x7F800001_U32, 0xFFC00123_U32, 0x7FFFFFFF_U32
+            ];
+            assert_eq(|_|"F32 bits read back", bits_f32.map(|b| F32::from_bits(b).to_bits), bits_f32);;
+            assert_eq(|_|"a NaN from its bits", F64::from_bits(0x7FF0000000000001_U64).to_string, "nan");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// Pins the text `to_string` writes: the shortest digits that read back as the number, spelled
 /// positionally where the point falls within the window the type's digits justify and as a power
 /// of ten outside it, and the widest text an `F64` reaches, which is what its buffer holds.

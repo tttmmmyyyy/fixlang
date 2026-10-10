@@ -2982,27 +2982,75 @@ namespace String {
         Result::ok((negative, magnitude.as_some))
     );
 
-    // Creates the text of an infinity or a NaN the way `to_string` writes it: `inf`, `-inf` or
-    // `nan`, a NaN being `nan` whatever its sign.
+    // Writes the bytes of `text` into `bytes` from `at`, and answers with the index after them and
+    // the array.
+    //
+    // `bytes` must be unshared and hold at least `at + text.get_size` bytes. This function does not
+    // check it, and violating it causes undefined behavior.
     //
     // # Parameters
-    // * `is_nan` - Whether the number is a NaN.
-    // * `negative` - Whether the number is below zero, which decides between `inf` and `-inf`.
-    _from_non_finite_float : Bool -> Bool -> String;
-    _from_non_finite_float = |is_nan, negative| if is_nan { "nan" } else if negative { "-inf" } else { "inf" };
+    // * `at` - The index of the first byte.
+    // * `text` - The text to write.
+    // * `bytes` - The array to write into.
+    _write_text_at : I64 -> String -> Array U8 -> (I64, Array U8);
+    _write_text_at = |at, text, bytes| (
+        let data = text.@_data;
+        let size = text.get_size;
+        let bytes = loop((0, bytes), |(i, bytes)| (
+            if i >= size { break $ bytes };
+            continue $ (i + 1, bytes.unsafe_set_bounds_unchecked(at + i, data._unsafe_get_bounds_unchecked(i)))
+        ));
+        (at + size, bytes)
+    );
 
-    // Creates the text of a finite number other than zero from its shortest decimal digits, the way
-    // `to_string` writes it.
+    // The text `to_string` writes for an infinity, a NaN or a zero: `inf`, `-inf`, `nan`, `0.0` or
+    // `-0.0`. A NaN is `nan` whatever its sign.
+    //
+    // # Parameters
+    // * `is_zero` - Whether the number is a zero, where it is not an infinity or a NaN.
+    // * `is_nan` - Whether the number is a NaN.
+    // * `negative` - Whether the sign of the number is negative.
+    _special_float_text : Bool -> Bool -> Bool -> String;
+    _special_float_text = |is_zero, is_nan, negative| (
+        if is_zero { if negative { "-0.0" } else { "0.0" } };
+        if is_nan { "nan" };
+        if negative { "-inf" } else { "inf" }
+    );
+
+    // Writes `_special_float_text(is_zero, is_nan, negative)` into `bytes` from `at`, and answers
+    // with the index after it and the array.
+    //
+    // `bytes` must be unshared and hold at least `at + 4` bytes. This function does not check it,
+    // and violating it causes undefined behavior.
+    //
+    // # Parameters
+    // * `at` - The index of the first byte.
+    // * `is_zero` - Whether the number is a zero, where it is not an infinity or a NaN.
+    // * `is_nan` - Whether the number is a NaN.
+    // * `negative` - Whether the sign of the number is negative.
+    // * `bytes` - The array to write into.
+    _write_special_float : I64 -> Bool -> Bool -> Bool -> Array U8 -> (I64, Array U8);
+    _write_special_float = |at, is_zero, is_nan, negative, bytes| (
+        bytes._write_text_at(at, _special_float_text(is_zero, is_nan, negative))
+    );
+
+    // Writes the text of a finite number other than zero from its shortest decimal digits into
+    // `bytes` from `at`, the way `to_string` writes it, and answers with the index after it and the
+    // array.
     //
     // The digits are written positionally where the point falls inside or near them, and with a
     // power of ten otherwise, so that the text stays about as wide as the digits it carries:
     // `1e300` is written `1.0e300`. Either way the text has a point and a digit on each side of it.
+    //
+    // `bytes` must be unshared and hold the text from `at`. This function does not check it, and
+    // violating it causes undefined behavior.
     //
     // # Examples
     // With the window of an `F64`, a mantissa of 1234 with 4 digits is written `12.34` at the
     // exponent -2, `123400.0` at 2, `0.00001234` at -8, and `1.234e300` at 297.
     //
     // # Parameters
+    // * `at` - The index of the first byte.
     // * `positional_low`, `positional_high` - The window the point is written positionally in:
     //   `positional_low < point <= positional_high`, where `point - 1` is the power of ten the first
     //   digit carries. A wider window costs zeros, so it is drawn around the digits the type
@@ -3010,44 +3058,34 @@ namespace String {
     // * `negative` - Whether the number is below zero.
     // * `(mantissa, exponent, digit_count)` - The number's magnitude, `mantissa * 10 ^ exponent`,
     //   where `mantissa` has `digit_count` digits.
-    _from_float_decimal : I64 -> I64 -> Bool -> (U64, I64, I64) -> String;
-    _from_float_decimal = |positional_low, positional_high, negative, (mantissa, exponent, digit_count)| (
+    // * `bytes` - The array to write into.
+    _write_float_decimal : I64 -> I64 -> I64 -> Bool -> (U64, I64, I64) -> Array U8 -> (I64, Array U8);
+    _write_float_decimal = |at, positional_low, positional_high, negative, (mantissa, exponent, digit_count), bytes| (
         // Where the point falls among the digits: the first digit carries `10 ^ (point - 1)`.
         let point = exponent + digit_count;
         let positional = point > positional_low && point <= positional_high;
         // The power of ten written after the digits when the text is not positional.
         let power = point - 1;
         // Where the magnitude starts, after the sign.
-        let start = if negative { 1 } else { 0 };
-        // The length is decided before anything is written, so that the text is written straight
-        // into a buffer of that length. Each shape below writes exactly the bytes the matching
-        // shape here counts.
-        let length = start + (
-            // A digit, a point, the other digits or a `0`, `e`, and the power.
-            if !positional { 2 + (if digit_count == 1 { 1 } else { digit_count - 1 }) + 1 + _decimal_integer_length(power < 0, power.abs.u64) }
-            // The digits, the zeros up to the point, and `.0`.
-            else if point >= digit_count { point + 2 }
-            // The digits with a point among them.
-            else if point > 0 { digit_count + 1 }
-            // `0.`, the zeros after the point, and the digits.
-            else { 2 - point + digit_count }
-        );
-        let bytes = Array::empty(length + 1)._unsafe_grow_size(length + 1);
-        let bytes = if negative { bytes.unsafe_set_bounds_unchecked(0, '-') } else { bytes };
-        let bytes = if !positional {
+        let start = if negative { at + 1 } else { at };
+        let bytes = if negative { bytes.unsafe_set_bounds_unchecked(at, '-') } else { bytes };
+        if !positional {
             // 1234e30 -> 1.234e33, and 1e30 -> 1.0e30.
             let bytes = bytes._write_decimal_with_point(start, digit_count, mantissa);
-            let end = start + digit_count + 1;
-            let (end, bytes) = if digit_count == 1 { (end + 1, bytes.unsafe_set_bounds_unchecked(end, '0')) } else { (end, bytes) };
-            let bytes = bytes.unsafe_set_bounds_unchecked(end, 'e');
-            bytes._write_decimal_integer(length, power < 0, power.abs.u64)
-        } else if point >= digit_count {
+            let after_digits = start + digit_count + 1;
+            let (after_digits, bytes) = if digit_count == 1 { (after_digits + 1, bytes.unsafe_set_bounds_unchecked(after_digits, '0')) } else { (after_digits, bytes) };
+            let bytes = bytes.unsafe_set_bounds_unchecked(after_digits, 'e');
+            let end = after_digits + 1 + _decimal_integer_length(power < 0, power.abs.u64);
+            (end, bytes._write_decimal_integer(end, power < 0, power.abs.u64))
+        };
+        if point >= digit_count {
             // 1234e3 -> 1234000.0
             let bytes = bytes._write_decimal_integer(start + digit_count, false, mantissa);
             let bytes = bytes._fill_bytes(start + digit_count, point - digit_count, '0');
             let bytes = bytes.unsafe_set_bounds_unchecked(start + point, '.');
-            bytes.unsafe_set_bounds_unchecked(start + point + 1, '0')
-        } else if point > 0 {
+            (start + point + 2, bytes.unsafe_set_bounds_unchecked(start + point + 1, '0'))
+        };
+        if point > 0 {
             // 1234e-2 -> 12.34. The digits are written one place to the right, and those before the
             // point are moved back in front of it.
             let bytes = bytes._write_decimal_integer(start + 1 + digit_count, false, mantissa);
@@ -3055,15 +3093,14 @@ namespace String {
                 if i >= start + point { break $ bytes };
                 continue $ (i + 1, bytes.unsafe_set_bounds_unchecked(i, bytes._unsafe_get_bounds_unchecked(i + 1)))
             ));
-            bytes.unsafe_set_bounds_unchecked(start + point, '.')
-        } else {
-            // 1234e-6 -> 0.001234
-            let bytes = bytes.unsafe_set_bounds_unchecked(start, '0');
-            let bytes = bytes.unsafe_set_bounds_unchecked(start + 1, '.');
-            let bytes = bytes._fill_bytes(start + 2, -point, '0');
-            bytes._write_decimal_integer(length, false, mantissa)
+            (start + digit_count + 1, bytes.unsafe_set_bounds_unchecked(start + point, '.'))
         };
-        String { _data : bytes.unsafe_set_bounds_unchecked(length, 0_U8) }
+        // 1234e-6 -> 0.001234
+        let bytes = bytes.unsafe_set_bounds_unchecked(start, '0');
+        let bytes = bytes.unsafe_set_bounds_unchecked(start + 1, '.');
+        let bytes = bytes._fill_bytes(start + 2, -point, '0');
+        let end = start + 2 - point + digit_count;
+        (end, bytes._write_decimal_integer(end, false, mantissa))
     );
 
     // Writes the `count` decimal digits of `value` into `bytes` from `at`, with a point after the
@@ -3103,20 +3140,21 @@ namespace String {
         continue $ (i + 1, bytes.unsafe_set_bounds_unchecked(i, byte))
     ));
 
-    // Adds one to the last digit of the decimal text written in `bytes` before `end`, carrying into
-    // the digits before it, and answers whether the carry ran past the first digit.
+    // Adds one to the last digit of the decimal text written in `bytes` from `start` to `end`,
+    // carrying into the digits before it, and answers whether the carry ran past the first digit.
     //
     // A carry past the first digit turns the digits into a `1` followed by zeros: `-99.9` becomes
     // `-10.0` with the point left where it was, and the caller moves the point or the power of ten.
     // With `round_up` 2, nothing is added where the last digit is even.
     //
     // # Parameters
+    // * `start` - The index of the first byte of the text.
     // * `end` - The index just after the last digit.
     // * `round_up` - 1 to add one, 2 to add one only where the last digit is odd.
     // * `bytes` - The text, which is an optional `-`, then digits with at most one `.` among them.
-    _round_up_decimal_text : I64 -> I64 -> Array U8 -> (Bool, Array U8);
-    _round_up_decimal_text = |end, round_up, bytes| loop((end - 1, round_up, bytes), |(i, round_up, bytes)| (
-        let c = if i < 0 { '-' } else { bytes._unsafe_get_bounds_unchecked(i) };
+    _round_up_decimal_text : I64 -> I64 -> I64 -> Array U8 -> (Bool, Array U8);
+    _round_up_decimal_text = |start, end, round_up, bytes| loop((end - 1, round_up, bytes), |(i, round_up, bytes)| (
+        let c = if i < start { '-' } else { bytes._unsafe_get_bounds_unchecked(i) };
         if c == '-' { break $ (true, bytes.unsafe_set_bounds_unchecked(i + 1, '1')) };
         if c == '.' { continue $ (i - 1, round_up, bytes) };
         if c == '9' { continue $ (i - 1, 1, bytes.unsafe_set_bounds_unchecked(i, '0')) };
@@ -3126,7 +3164,8 @@ namespace String {
 
     // Creates a string from the first `length` bytes written into `bytes`.
     //
-    // `bytes` must be unshared and hold more than `length` bytes. This function does not check it,
+    // `bytes` must be unshared and hold more than `length` bytes, which the null after the text
+    // takes. This function does not check it,
     // and violating it causes undefined behavior.
     //
     // # Parameters
@@ -4619,13 +4658,14 @@ impl F32 : ToString {
     // `1.0`, `0.1`, `3.14159`, `0.000001`. Any other is written with a power of ten: `1.0e13`,
     // `9.99e-7`.
     to_string = |v| (
+        // An infinity, a NaN and a zero are texts of the program, which need no buffer.
         let bits = v.to_bits;
-        let negative = bits.shift_right(31_U32) == 1_U32;
-        let exponent = bits.shift_right(23_U32).bit_and(0xFF_U32).i64;
+        let exponent = bits.shift_right(23_U32).bit_and(0xFF_U32);
         let mantissa = bits.bit_and(0x7FFFFF_U32);
-        if exponent == 0xFF { String::_from_non_finite_float(mantissa != 0_U32, negative) };
-        if exponent == 0 && mantissa == 0_U32 { if negative { "-0.0" } else { "0.0" } };
-        String::_from_float_decimal(-6, 13, negative, F32::_find_shortest_decimal(exponent, mantissa))
+        let is_zero = exponent == 0_U32 && mantissa == 0_U32;
+        if exponent == 0xFF_U32 || is_zero { String::_special_float_text(is_zero, mantissa != 0_U32, bits.shift_right(31_U32) == 1_U32) };
+        let size = F32::_shortest_text_max_length + 1;
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F32::_write_shortest_text(0, v)
     );
 }
 namespace F32 {
@@ -4649,10 +4689,11 @@ namespace F32 {
     // * `v` - The number to write.
     to_string_exp_precision : U8 -> F32 -> String;
     to_string_exp_precision = |prec, v| (
-        // A sign, a digit, a point, `prec` digits, `e`, the `-` of a negative exponent, the 2
-        // digits an `F32` exponent reaches and a null. The point is counted at `prec` 0 too, where
-        // none is written.
-        v.f64._to_exp_text(8 + prec.i64, prec)
+        let v = v.f64;
+        // An infinity and a NaN are texts of the program, which need no buffer.
+        if !v.F64::_is_finite { v.F64::_non_finite_text };
+        let size = F32::_exp_text_max_length(prec.i64) + 1;
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size)._write_exp_text(0, prec.i64, v)
     );
 
     // Writes this number positionally with `prec` digits after the point. The last digit is
@@ -4669,10 +4710,60 @@ namespace F32 {
     // * `v` - The number to write.
     to_string_precision : U8 -> F32 -> String;
     to_string_precision = |prec, v| (
-        // A sign, the 39 digits the greatest `F32` takes in its whole part, a point, `prec`
-        // digits and a null. The point is counted at `prec` 0 too, where none is written.
-        v.f64._to_fixed_text(42 + prec.i64, prec)
+        let v = v.f64;
+        // An infinity and a NaN are texts of the program, which need no buffer.
+        if !v.F64::_is_finite { v.F64::_non_finite_text };
+        let size = F32::_fixed_text_max_length(prec.i64) + 1;
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size)._write_fixed_text(0, prec.i64, v)
     );
+
+    // The most bytes `_write_shortest_text` writes. Two shapes reach it: a sign, `0.` and the five
+    // zeros the window's lower edge allows before the eight digits an `F32` needs at that scale,
+    // and the same with four zeros and nine digits. Nine digits never meet five zeros, since no
+    // `F32` between `1e-6` and `1e-5` needs that many. Widening the window `_write_shortest_text`
+    // writes positionally widens this.
+    _shortest_text_max_length : I64;
+    _shortest_text_max_length = 16;
+
+    // Writes `v` into `bytes` from `at` the way `to_string` writes it, and answers with the index
+    // after the text and the array.
+    //
+    // `bytes` must be unshared and hold at least `at + _shortest_text_max_length` bytes. This
+    // function does not check it, and violating it causes undefined behavior.
+    //
+    // # Parameters
+    // * `at` - The index of the first byte.
+    // * `v` - The number to write.
+    // * `bytes` - The array to write into.
+    _write_shortest_text : I64 -> F32 -> Array U8 -> (I64, Array U8);
+    _write_shortest_text = |at, v, bytes| (
+        let bits = v.to_bits;
+        let negative = bits.shift_right(31_U32) == 1_U32;
+        let exponent = bits.shift_right(23_U32).bit_and(0xFF_U32).i64;
+        let mantissa = bits.bit_and(0x7FFFFF_U32);
+        let is_zero = exponent == 0 && mantissa == 0_U32;
+        if exponent == 0xFF || is_zero { bytes._write_special_float(at, is_zero, mantissa != 0_U32, negative) };
+        bytes._write_float_decimal(at, -6, 13, negative, F32::_find_shortest_decimal(exponent, mantissa))
+    );
+
+    // The most bytes `to_string_precision` writes for an `F32` with `precision` digits after the
+    // point: a sign, the 39 digits the greatest `F32` takes in its whole part, a point and the
+    // digits after it. The point is counted at a precision of 0 too, where none is written.
+    //
+    // # Parameters
+    // * `precision` - The number of digits after the point.
+    _fixed_text_max_length : I64 -> I64;
+    _fixed_text_max_length = |precision| 41 + precision;
+
+    // The most bytes `to_string_exp_precision` writes for an `F32` with `precision` digits after the
+    // point: a sign, a digit, a point, the digits after it, `e`, the `-` of a negative power and the
+    // 2 digits an `F32` power reaches. The point is counted at a precision of 0 too, where none is
+    // written.
+    //
+    // # Parameters
+    // * `precision` - The number of digits after the point.
+    _exp_text_max_length : I64 -> I64;
+    _exp_text_max_length = |precision| 7 + precision;
 }
 impl F32 : FromString {
     // Reads a decimal number: an optional `+` or `-`, digits with an optional point among them, and
@@ -4862,10 +4953,12 @@ impl F64 : ToString {
     // `1.0`, `0.1`, `123456.789`, `0.00001`. Any other is written with a power of ten: `1.0e16`,
     // `9.99e-6`, `1.0e300`.
     to_string = |v| (
+        // An infinity, a NaN and a zero are texts of the program, which need no buffer.
         let (negative, exponent, mantissa) = F64::_decode_bits(v.to_bits);
-        if exponent == 0x7FF { String::_from_non_finite_float(mantissa != 0_U64, negative) };
-        if exponent == 0 && mantissa == 0_U64 { if negative { "-0.0" } else { "0.0" } };
-        String::_from_float_decimal(-5, 16, negative, F64::_find_shortest_decimal(exponent, mantissa))
+        let is_zero = exponent == 0 && mantissa == 0_U64;
+        if exponent == 0x7FF || is_zero { String::_special_float_text(is_zero, mantissa != 0_U64, negative) };
+        let size = F64::_shortest_text_max_length + 1;
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F64::_write_shortest_text(0, v)
     );
 }
 namespace F64 {
@@ -4888,10 +4981,10 @@ namespace F64 {
     // * `v` - The number to write.
     to_string_exp_precision : U8 -> F64 -> String;
     to_string_exp_precision = |prec, v| (
-        // A sign, a digit, a point, `prec` digits, `e`, the `-` of a negative exponent, the 3
-        // digits an `F64` exponent reaches and a null. The point is counted at `prec` 0 too, where
-        // none is written.
-        v._to_exp_text(9 + prec.i64, prec)
+        // An infinity and a NaN are texts of the program, which need no buffer.
+        if !v.F64::_is_finite { v.F64::_non_finite_text };
+        let size = F64::_exp_text_max_length(prec.i64) + 1;
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size)._write_exp_text(0, prec.i64, v)
     );
 
     // Writes this number positionally with `prec` digits after the point. The last digit is
@@ -4907,42 +5000,72 @@ namespace F64 {
     // * `v` - The number to write.
     to_string_precision : U8 -> F64 -> String;
     to_string_precision = |prec, v| (
-        // A sign, the 309 digits the greatest `F64` takes in its whole part, a point, `prec`
-        // digits and a null. The point is counted at `prec` 0 too, where none is written.
-        v._to_fixed_text(312 + prec.i64, prec)
+        // An infinity and a NaN are texts of the program, which need no buffer.
+        if !v.F64::_is_finite { v.F64::_non_finite_text };
+        let size = F64::_fixed_text_max_length(prec.i64) + 1;
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size)._write_fixed_text(0, prec.i64, v)
     );
 
-    // Creates the text `_write_fixed_text` writes for `v`, or that of an infinity or a NaN.
+    // Answers whether `v` is neither an infinity nor a NaN.
     //
     // # Parameters
-    // * `size` - The bytes of the buffer the text is written in, which must exceed the length of
-    //   the text. A smaller one causes undefined behavior.
-    // * `prec` - The number of digits after the point.
-    // * `v` - The number to write.
-    _to_fixed_text : I64 -> U8 -> F64 -> String;
-    _to_fixed_text = |size, prec, v| (
-        let bits = v.to_bits;
-        let (negative, exponent, mantissa) = _decode_bits(bits);
-        if exponent == 0x7FF { String::_from_non_finite_float(mantissa != 0_U64, negative) };
-        let bytes = Array::empty(size)._unsafe_grow_size(size);
-        String::_from_written_bytes $ bytes._write_fixed_text(bits, prec.i64)
+    // * `v` - The number to test.
+    _is_finite : F64 -> Bool;
+    _is_finite = |v| v.to_bits.bit_and(0x7FF0000000000000_U64) != 0x7FF0000000000000_U64;
+
+    // The text `to_string` writes for `v`, which is an infinity or a NaN.
+    //
+    // # Parameters
+    // * `v` - The infinity or the NaN.
+    _non_finite_text : F64 -> String;
+    _non_finite_text = |v| (
+        let (negative, _, mantissa) = _decode_bits(v.to_bits);
+        String::_special_float_text(false, mantissa != 0_U64, negative)
     );
 
-    // Creates the text `_write_exp_text` writes for `v`, or that of an infinity or a NaN.
+    // The most bytes `_write_shortest_text` writes. Two shapes reach it: a sign, `0.` and the four
+    // zeros the window's lower edge allows before the 17 digits an `F64` takes, and a sign, one
+    // digit, a point, sixteen digits and a four byte power of ten. Widening the window
+    // `_write_shortest_text` writes positionally widens this.
+    _shortest_text_max_length : I64;
+    _shortest_text_max_length = 24;
+
+    // Writes `v` into `bytes` from `at` the way `to_string` writes it, and answers with the index
+    // after the text and the array.
+    //
+    // `bytes` must be unshared and hold at least `at + _shortest_text_max_length` bytes. This
+    // function does not check it, and violating it causes undefined behavior.
     //
     // # Parameters
-    // * `size` - The bytes of the buffer the text is written in, which must exceed the length of
-    //   the text. A smaller one causes undefined behavior.
-    // * `prec` - The number of digits after the point.
+    // * `at` - The index of the first byte.
     // * `v` - The number to write.
-    _to_exp_text : I64 -> U8 -> F64 -> String;
-    _to_exp_text = |size, prec, v| (
-        let bits = v.to_bits;
-        let (negative, exponent, mantissa) = _decode_bits(bits);
-        if exponent == 0x7FF { String::_from_non_finite_float(mantissa != 0_U64, negative) };
-        let bytes = Array::empty(size)._unsafe_grow_size(size);
-        String::_from_written_bytes $ bytes._write_exp_text(bits, prec.i64)
+    // * `bytes` - The array to write into.
+    _write_shortest_text : I64 -> F64 -> Array U8 -> (I64, Array U8);
+    _write_shortest_text = |at, v, bytes| (
+        let (negative, exponent, mantissa) = _decode_bits(v.to_bits);
+        let is_zero = exponent == 0 && mantissa == 0_U64;
+        if exponent == 0x7FF || is_zero { bytes._write_special_float(at, is_zero, mantissa != 0_U64, negative) };
+        bytes._write_float_decimal(at, -5, 16, negative, F64::_find_shortest_decimal(exponent, mantissa))
     );
+
+    // The most bytes `to_string_precision` writes for an `F64` with `precision` digits after the
+    // point: a sign, the 309 digits the greatest `F64` takes in its whole part, a point and the
+    // digits after it. The point is counted at a precision of 0 too, where none is written.
+    //
+    // # Parameters
+    // * `precision` - The number of digits after the point.
+    _fixed_text_max_length : I64 -> I64;
+    _fixed_text_max_length = |precision| 311 + precision;
+
+    // The most bytes `to_string_exp_precision` writes for an `F64` with `precision` digits after the
+    // point: a sign, a digit, a point, the digits after it, `e`, the `-` of a negative power and the
+    // 3 digits an `F64` power reaches. The point is counted at a precision of 0 too, where none is
+    // written.
+    //
+    // # Parameters
+    // * `precision` - The number of digits after the point.
+    _exp_text_max_length : I64 -> I64;
+    _exp_text_max_length = |precision| 8 + precision;
 }
 impl F64 : FromString {
     // Reads a decimal number: an optional `+` or `-`, digits with an optional point among them, and
@@ -5282,22 +5405,24 @@ namespace F64 {
     _count_pow10_blocks : I64 -> I64;
     _count_pow10_blocks = |idx| (_compute_log10_pow2(16 * idx) + 1 + 16 + 8) / 9;
 
-    // Writes the finite number whose bits are `bits` into `bytes` with `precision` digits after the
-    // point, and answers with the length of the text and the array: Ryu's `d2fixed_buffered_n`.
-    // The last digit is rounded to the nearest, a tie to the even one, and a precision of 0 writes
-    // no point.
+    // Writes `v` into `bytes` from `at` with `precision` digits after the point, the way
+    // `to_string_precision` writes it, and answers with the index after the text and the array: Ryu's
+    // `d2fixed_buffered_n` for a finite `v`. The last digit is rounded to the nearest, a tie to the
+    // even one, and a precision of 0 writes no point.
     //
-    // `bytes` must be unshared and hold at least `312 + precision` bytes. This function does not
-    // check it, and violating it causes undefined behavior.
+    // `bytes` must be unshared and hold at least `at + _fixed_text_max_length(precision)` bytes. This
+    // function does not check it, and violating it causes undefined behavior.
     //
     // # Parameters
-    // * `bits` - The bits of the number.
+    // * `at` - The index of the first byte.
     // * `precision` - The number of digits after the point.
+    // * `v` - The number to write.
     // * `bytes` - The array to write into.
-    _write_fixed_text : U64 -> I64 -> Array U8 -> (I64, Array U8);
-    _write_fixed_text = |bits, precision, bytes| (
-        let (negative, ieee_exponent, ieee_mantissa) = _decode_bits(bits);
-        let (index, bytes) = if negative { (1, bytes.unsafe_set_bounds_unchecked(0, '-')) } else { (0, bytes) };
+    _write_fixed_text : I64 -> I64 -> F64 -> Array U8 -> (I64, Array U8);
+    _write_fixed_text = |at, precision, v, bytes| (
+        let (negative, ieee_exponent, ieee_mantissa) = _decode_bits(v.to_bits);
+        if ieee_exponent == 0x7FF { bytes._write_special_float(at, false, ieee_mantissa != 0_U64, negative) };
+        let (index, bytes) = if negative { (at + 1, bytes.unsafe_set_bounds_unchecked(at, '-')) } else { (at, bytes) };
         if ieee_exponent == 0 && ieee_mantissa == 0_U64 {
             let bytes = bytes.unsafe_set_bounds_unchecked(index, '0');
             if precision == 0 { (index + 1, bytes) };
@@ -5360,7 +5485,7 @@ namespace F64 {
             break $ (index + count, round_up, bytes._write_padded_decimal_digits(index + count, count, digits.u64))
         ));
         if round_up == 0 { (index, bytes) };
-        let (carried, bytes) = bytes._round_up_decimal_text(index, round_up);
+        let (carried, bytes) = bytes._round_up_decimal_text(at, index, round_up);
         if !carried { (index, bytes) };
         // The digits became a `1` and zeros, and the whole part gains a digit: the point moves one
         // place to the right, and a zero is added at the end.
@@ -5371,23 +5496,26 @@ namespace F64 {
         (index + 1, bytes.unsafe_set_bounds_unchecked(index, '0'))
     );
 
-    // Writes the finite number whose bits are `bits` into `bytes` with one digit before the point,
-    // `precision` digits after it and a power of ten, and answers with the length of the text and
-    // the array: Ryu's `d2exp_buffered_n`. The last digit is rounded to the nearest, a tie to the
-    // even one, and a precision of 0 writes no point. The power of ten is written as Fix writes it,
-    // with `-` for a negative one and no padding: `1.50e2`, `1.50e-2`.
+    // Writes `v` into `bytes` from `at` with one digit before the point, `precision` digits after it
+    // and a power of ten, the way `to_string_exp_precision` writes it, and answers with the index
+    // after the text and the array: Ryu's `d2exp_buffered_n` for a finite `v`. The last digit is
+    // rounded to the nearest, a tie to the even one, and a precision of 0 writes no point. The power
+    // of ten is written as Fix writes it, with `-` for a negative one and no padding: `1.50e2`,
+    // `1.50e-2`.
     //
-    // `bytes` must be unshared and hold at least `9 + precision` bytes. This function does not
-    // check it, and violating it causes undefined behavior.
+    // `bytes` must be unshared and hold at least `at + _exp_text_max_length(precision)` bytes. This
+    // function does not check it, and violating it causes undefined behavior.
     //
     // # Parameters
-    // * `bits` - The bits of the number.
+    // * `at` - The index of the first byte.
     // * `precision` - The number of digits after the point.
+    // * `v` - The number to write.
     // * `bytes` - The array to write into.
-    _write_exp_text : U64 -> I64 -> Array U8 -> (I64, Array U8);
-    _write_exp_text = |bits, precision, bytes| (
-        let (negative, ieee_exponent, ieee_mantissa) = _decode_bits(bits);
-        let (index, bytes) = if negative { (1, bytes.unsafe_set_bounds_unchecked(0, '-')) } else { (0, bytes) };
+    _write_exp_text : I64 -> I64 -> F64 -> Array U8 -> (I64, Array U8);
+    _write_exp_text = |at, precision, v, bytes| (
+        let (negative, ieee_exponent, ieee_mantissa) = _decode_bits(v.to_bits);
+        if ieee_exponent == 0x7FF { bytes._write_special_float(at, false, ieee_mantissa != 0_U64, negative) };
+        let (index, bytes) = if negative { (at + 1, bytes.unsafe_set_bounds_unchecked(at, '-')) } else { (at, bytes) };
         if ieee_exponent == 0 && ieee_mantissa == 0_U64 {
             let bytes = bytes.unsafe_set_bounds_unchecked(index, '0');
             let (index, bytes) = if precision == 0 { (index + 1, bytes) } else {
@@ -5484,7 +5612,7 @@ namespace F64 {
         };
         let (power, bytes) = if round_up == 0 { (power, bytes) } else {
             // A carry past the first digit leaves `1` and zeros, one power of ten higher.
-            let (carried, bytes) = bytes._round_up_decimal_text(index, round_up);
+            let (carried, bytes) = bytes._round_up_decimal_text(at, index, round_up);
             (if carried { power + 1 } else { power }, bytes)
         };
         let bytes = bytes.unsafe_set_bounds_unchecked(index, 'e');

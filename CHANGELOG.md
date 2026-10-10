@@ -19,6 +19,7 @@
 
 - #791, #798: `I128` and `U128` have what the other integer types have: arithmetic, comparison, the bit operations, conversions to and from the other numeric types (`x.i128`, `x.u128`), `maximum`, `minimum`, `Zero`, `One`, `ToString`, `FromString`, `ToBytes` and `FromBytes`, and `I128::abs`.
 - #791, #798: `count_leading_zeros`, `count_trailing_zeros` and `count_ones` count the bits of an integer, for every integer type: `1_U8.count_leading_zeros` is `7_U8`. The count has the type of the integer counted. An integer of zero has as many leading and trailing zeros as its type has bits.
+- `F64::to_bits` and `F32::to_bits` answer with the bits of a floating point number in the IEEE 754 binary format, as a `U64` and a `U32`, and `F64::from_bits` and `F32::from_bits` make the number from such bits: `1.0.to_bits` is `0x3FF0000000000000_U64`. Every value of the bits makes a number, and a NaN keeps its sign and the rest of its bits from `from_bits` to `to_bits`.
 
 ### Changed
 

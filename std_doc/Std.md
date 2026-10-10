@@ -919,6 +919,18 @@ Checks equality of two values. An expression `x == y` is translated to `eq(x, y)
 
 Type: `Std::F32 -> Std::F32`
 
+#### from_bits
+
+Type: `Std::U32 -> Std::F32`
+
+The number whose bits in the IEEE 754 binary format are `bits`: an `F64` from a `U64`, and an `F32` from a `U32`. `F64::from_bits(0x3FF0000000000000_U64)` is `1.0`.
+
+Every value of `bits` is the bits of a number: a finite number, an infinity or a NaN. `bits.from_bits.to_bits` is `bits`, including the sign and the other bits of a NaN. An arithmetic operation on a NaN may change those bits, so they are kept only while the NaN passes through no operation.
+
+##### Parameters
+
+* `bits` - The bits of the number.
+
 #### infinity
 
 Type: `Std::F32`
@@ -1115,6 +1127,18 @@ Type: `Std::F32 -> Std::U8`
 
 Casts a value of `F32` into a value of `U8`.
 
+#### to_bits
+
+Type: `Std::F32 -> Std::U32`
+
+The bits of `v` in the IEEE 754 binary format, as an unsigned integer of the same width: a `U64` for an `F64`, and a `U32` for an `F32`. `1.0.to_bits` is `0x3FF0000000000000_U64`, and `-0.0.to_bits` is `0x8000000000000000_U64`.
+
+`from_bits` reads the bits back: `v.to_bits.from_bits` has the bits of `v`.
+
+##### Parameters
+
+* `v` - The number whose bits are read.
+
 #### to_string_exp
 
 Type: `Std::F32 -> Std::String`
@@ -1166,6 +1190,18 @@ is `2`.
 #### abs
 
 Type: `Std::F64 -> Std::F64`
+
+#### from_bits
+
+Type: `Std::U64 -> Std::F64`
+
+The number whose bits in the IEEE 754 binary format are `bits`: an `F64` from a `U64`, and an `F32` from a `U32`. `F64::from_bits(0x3FF0000000000000_U64)` is `1.0`.
+
+Every value of `bits` is the bits of a number: a finite number, an infinity or a NaN. `bits.from_bits.to_bits` is `bits`, including the sign and the other bits of a NaN. An arithmetic operation on a NaN may change those bits, so they are kept only while the NaN passes through no operation.
+
+##### Parameters
+
+* `bits` - The bits of the number.
 
 #### infinity
 
@@ -1362,6 +1398,18 @@ Casts a value of `F64` into a value of `U64`.
 Type: `Std::F64 -> Std::U8`
 
 Casts a value of `F64` into a value of `U8`.
+
+#### to_bits
+
+Type: `Std::F64 -> Std::U64`
+
+The bits of `v` in the IEEE 754 binary format, as an unsigned integer of the same width: a `U64` for an `F64`, and a `U32` for an `F32`. `1.0.to_bits` is `0x3FF0000000000000_U64`, and `-0.0.to_bits` is `0x8000000000000000_U64`.
+
+`from_bits` reads the bits back: `v.to_bits.from_bits` has the bits of `v`.
+
+##### Parameters
+
+* `v` - The number whose bits are read.
 
 #### to_string_exp
 
@@ -6644,6 +6692,110 @@ Type: `t1`
 
 Type: `t2`
 
+#### Tuple4
+
+Defined as: `type Tuple4 t0 t1 t2 t3 = unbox struct { ...fields... }`
+
+##### field `0`
+
+Type: `t0`
+
+##### field `1`
+
+Type: `t1`
+
+##### field `2`
+
+Type: `t2`
+
+##### field `3`
+
+Type: `t3`
+
+#### Tuple5
+
+Defined as: `type Tuple5 t0 t1 t2 t3 t4 = unbox struct { ...fields... }`
+
+##### field `0`
+
+Type: `t0`
+
+##### field `1`
+
+Type: `t1`
+
+##### field `2`
+
+Type: `t2`
+
+##### field `3`
+
+Type: `t3`
+
+##### field `4`
+
+Type: `t4`
+
+#### Tuple6
+
+Defined as: `type Tuple6 t0 t1 t2 t3 t4 t5 = unbox struct { ...fields... }`
+
+##### field `0`
+
+Type: `t0`
+
+##### field `1`
+
+Type: `t1`
+
+##### field `2`
+
+Type: `t2`
+
+##### field `3`
+
+Type: `t3`
+
+##### field `4`
+
+Type: `t4`
+
+##### field `5`
+
+Type: `t5`
+
+#### Tuple7
+
+Defined as: `type Tuple7 t0 t1 t2 t3 t4 t5 t6 = unbox struct { ...fields... }`
+
+##### field `0`
+
+Type: `t0`
+
+##### field `1`
+
+Type: `t1`
+
+##### field `2`
+
+Type: `t2`
+
+##### field `3`
+
+Type: `t3`
+
+##### field `4`
+
+Type: `t4`
+
+##### field `5`
+
+Type: `t5`
+
+##### field `6`
+
+Type: `t6`
+
 #### U128
 
 Defined as: `type U128 = unbox { built-in }`
@@ -7710,6 +7862,38 @@ Returns "()".
 
 ### impl `[t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString] (t0, t1, t2) : Std::ToString`
 
+### impl `[t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq, t3 : Std::Eq] (t0, t1, t2, t3) : Std::Eq`
+
+### impl `[t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan, t3 : Std::Eq, t3 : Std::LessThan] (t0, t1, t2, t3) : Std::LessThan`
+
+### impl `[t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq, t2 : Std::Eq, t2 : Std::LessThanOrEq, t3 : Std::Eq, t3 : Std::LessThanOrEq] (t0, t1, t2, t3) : Std::LessThanOrEq`
+
+### impl `[t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString, t3 : Std::ToString] (t0, t1, t2, t3) : Std::ToString`
+
+### impl `[t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq, t3 : Std::Eq, t4 : Std::Eq] (t0, t1, t2, t3, t4) : Std::Eq`
+
+### impl `[t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan, t3 : Std::Eq, t3 : Std::LessThan, t4 : Std::Eq, t4 : Std::LessThan] (t0, t1, t2, t3, t4) : Std::LessThan`
+
+### impl `[t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq, t2 : Std::Eq, t2 : Std::LessThanOrEq, t3 : Std::Eq, t3 : Std::LessThanOrEq, t4 : Std::Eq, t4 : Std::LessThanOrEq] (t0, t1, t2, t3, t4) : Std::LessThanOrEq`
+
+### impl `[t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString, t3 : Std::ToString, t4 : Std::ToString] (t0, t1, t2, t3, t4) : Std::ToString`
+
+### impl `[t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq, t3 : Std::Eq, t4 : Std::Eq, t5 : Std::Eq] (t0, t1, t2, t3, t4, t5) : Std::Eq`
+
+### impl `[t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan, t3 : Std::Eq, t3 : Std::LessThan, t4 : Std::Eq, t4 : Std::LessThan, t5 : Std::Eq, t5 : Std::LessThan] (t0, t1, t2, t3, t4, t5) : Std::LessThan`
+
+### impl `[t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq, t2 : Std::Eq, t2 : Std::LessThanOrEq, t3 : Std::Eq, t3 : Std::LessThanOrEq, t4 : Std::Eq, t4 : Std::LessThanOrEq, t5 : Std::Eq, t5 : Std::LessThanOrEq] (t0, t1, t2, t3, t4, t5) : Std::LessThanOrEq`
+
+### impl `[t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString, t3 : Std::ToString, t4 : Std::ToString, t5 : Std::ToString] (t0, t1, t2, t3, t4, t5) : Std::ToString`
+
+### impl `[t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq, t3 : Std::Eq, t4 : Std::Eq, t5 : Std::Eq, t6 : Std::Eq] (t0, t1, t2, t3, t4, t5, t6) : Std::Eq`
+
+### impl `[t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan, t3 : Std::Eq, t3 : Std::LessThan, t4 : Std::Eq, t4 : Std::LessThan, t5 : Std::Eq, t5 : Std::LessThan, t6 : Std::Eq, t6 : Std::LessThan] (t0, t1, t2, t3, t4, t5, t6) : Std::LessThan`
+
+### impl `[t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq, t2 : Std::Eq, t2 : Std::LessThanOrEq, t3 : Std::Eq, t3 : Std::LessThanOrEq, t4 : Std::Eq, t4 : Std::LessThanOrEq, t5 : Std::Eq, t5 : Std::LessThanOrEq, t6 : Std::Eq, t6 : Std::LessThanOrEq] (t0, t1, t2, t3, t4, t5, t6) : Std::LessThanOrEq`
+
+### impl `[t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString, t3 : Std::ToString, t4 : Std::ToString, t5 : Std::ToString, t6 : Std::ToString] (t0, t1, t2, t3, t4, t5, t6) : Std::ToString`
+
 ### impl `[t0 : Std::Eq] (t0,) : Std::Eq`
 
 ### impl `[t0 : Std::Eq, t0 : Std::LessThan] (t0,) : Std::LessThan`
@@ -8451,6 +8635,14 @@ The empty string.
 ### impl `Std::Tuple2 t0 : Std::Functor`
 
 ### impl `Std::Tuple3 t0 t1 : Std::Functor`
+
+### impl `Std::Tuple4 t0 t1 t2 : Std::Functor`
+
+### impl `Std::Tuple5 t0 t1 t2 t3 : Std::Functor`
+
+### impl `Std::Tuple6 t0 t1 t2 t3 t4 : Std::Functor`
+
+### impl `Std::Tuple7 t0 t1 t2 t3 t4 t5 : Std::Functor`
 
 ### impl `Std::U128 : Std::Add`
 
