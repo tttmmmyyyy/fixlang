@@ -765,7 +765,7 @@ Type: `Std::I64 -> Std::Array a -> a`
 
 Gets the element of an array at the specified index, omitting the bounds check.
 
-The caller must ensure `idx` is in range `[0, size)`; an out-of-range index causes undefined behavior. Use it in read loops whose indices are known to be in range but which the compiler cannot prove so.
+The caller must ensure `idx` is in range `[0, size)`; an out-of-range index causes undefined behavior. Use it in a loop that reads elements at indices known to be in range, when the compiler cannot prove that they are.
 
 ##### Parameters
 

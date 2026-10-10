@@ -8,6 +8,9 @@ mod array_unsafe_get_tests {
         tests::test_util::{deprecation_report, test_source},
     };
 
+    /// Verifies that `unsafe_get_bounds_unchecked` and its deprecated alias read the element at the
+    /// index, for unboxed elements at both ends and for a boxed element, and that reading a boxed
+    /// element leaves the array intact.
     #[test]
     pub fn test_unsafe_get_bounds_unchecked() {
         let source = r#"
