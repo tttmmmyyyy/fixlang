@@ -3721,7 +3721,7 @@ NOTE: Since this function is designed so that `iter1.append(iter2)` appends `ite
 ##### Examples
 
 ```fix
-assert_eq(|_|"", [1, 2].from_array.append([3, 4].from_array).to_array, [1, 2, 3, 4])
+assert_eq(|_|"", [1, 2].to_iter.append([3, 4].to_iter).to_array, [1, 2, 3, 4])
 ```
 
 #### bang
@@ -3772,8 +3772,8 @@ Executes monadic actions and collects the results into an array.
 ##### Examples
 
 ```fix
-assert_eq(|_|"", [some(1), some(2)].from_array.collect_m, some([1, 2]));;
-assert_eq(|_|"", [some(1), none()].from_array.collect_m, none())
+assert_eq(|_|"", [some(1), some(2)].to_iter.collect_m, some([1, 2]));;
+assert_eq(|_|"", [some(1), none()].to_iter.collect_m, none())
 ```
 
 #### count_up
@@ -3870,7 +3870,7 @@ Conceptually, `[a0, a1, a2, ...].to_iter.fold(s, op) = s.op(a0).op(a1).op(a2)...
 ##### Examples
 
 ```fix
-assert_eq(|_|"", ["a", "b", "c"].from_array.fold("", |x, acc| acc + x), "abc")
+assert_eq(|_|"", ["a", "b", "c"].to_iter.fold("", |x, acc| acc + x), "abc")
 ```
 
 #### fold_m
@@ -3984,7 +3984,7 @@ Intersperse an element between elements of an iterator.
 
 Example:
 ```fix
-assert_eq(|_|"", [1, 2, 3].from_array.intersperse(0).to_array, [1, 0, 2, 0, 3])
+assert_eq(|_|"", [1, 2, 3].to_iter.intersperse(0).to_array, [1, 0, 2, 0, 3])
 ```
 
 ##### Parameters
@@ -4081,7 +4081,7 @@ This allows you to return different types for `break` and `continue`.
 
 ```fix
 // Find the index of the first even element.
-let res = [3, 5, 8, 9].from_array.loop_iter_s(0, |x, i| if x % 2 == 0 { break $ i } else { continue $ i + 1 });
+let res = [3, 5, 8, 9].to_iter.loop_iter_s(0, |x, i| if x % 2 == 0 { break $ i } else { continue $ i + 1 });
 assert_eq(|_|"", res.as_break, 2)
 ```
 
@@ -4120,7 +4120,7 @@ NOTE: Since this function is designed so that `iter1.product(iter2)` yields the 
 
 Example:
 ```fix
-assert_eq(|_|"", range(1, 4).product(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')])
+assert_eq(|_|"", range(1, 4).product(['a', 'b'].to_iter).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')])
 ```
 
 ##### Parameters
@@ -4256,7 +4256,7 @@ NOTE: Since this function is designed so that `iter1.zip(iter2)` zips `iter1` an
 ##### Examples
 
 ```fix
-assert_eq(|_|"", [1, 2].from_array.zip(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'b')])
+assert_eq(|_|"", [1, 2].to_iter.zip(['a', 'b'].to_iter).to_array, [(1, 'a'), (2, 'b')])
 ```
 
 ### namespace Std::Iterator::DynIterator

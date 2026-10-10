@@ -1854,7 +1854,7 @@ namespace Iterator {
     //
     // # Examples
     // ```fix
-    // assert_eq(|_|"", ["a", "b", "c"].from_array.fold("", |x, acc| acc + x), "abc")
+    // assert_eq(|_|"", ["a", "b", "c"].to_iter.fold("", |x, acc| acc + x), "abc")
     // ```
     fold : [iter : Iterator, Item iter = a] s -> (a -> s -> s) -> iter -> s;
     fold = |s, op, iter| (
@@ -1920,7 +1920,7 @@ namespace Iterator {
     // # Examples
     // ```fix
     // // Find the index of the first even element.
-    // let res = [3, 5, 8, 9].from_array.loop_iter_s(0, |x, i| if x % 2 == 0 { break $ i } else { continue $ i + 1 });
+    // let res = [3, 5, 8, 9].to_iter.loop_iter_s(0, |x, i| if x % 2 == 0 { break $ i } else { continue $ i + 1 });
     // assert_eq(|_|"", res.as_break, 2)
     // ```
     loop_iter_s : [iter : Iterator, Item iter = a] s -> (a -> s -> LoopState s b) -> iter -> LoopState s b;
@@ -1981,8 +1981,8 @@ namespace Iterator {
     //
     // # Examples
     // ```fix
-    // assert_eq(|_|"", [some(1), some(2)].from_array.collect_m, some([1, 2]));;
-    // assert_eq(|_|"", [some(1), none()].from_array.collect_m, none())
+    // assert_eq(|_|"", [some(1), some(2)].to_iter.collect_m, some([1, 2]));;
+    // assert_eq(|_|"", [some(1), none()].to_iter.collect_m, none())
     // ```
     collect_m : [m : Monad, iter : Iterator, Item iter = m a] iter -> m (Array a);
     collect_m = |iter| iter.fold_m([], |act, acm| pure $ acm.push_back(*act));
@@ -2456,7 +2456,7 @@ namespace Iterator {
     // 
     // Example:
     // ```fix
-    // assert_eq(|_|"", range(1, 4).product(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')])
+    // assert_eq(|_|"", range(1, 4).product(['a', 'b'].to_iter).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')])
     // ```
     //
     // # Parameters
@@ -2499,7 +2499,7 @@ namespace Iterator {
     //
     // # Examples
     // ```fix
-    // assert_eq(|_|"", [1, 2].from_array.append([3, 4].from_array).to_array, [1, 2, 3, 4])
+    // assert_eq(|_|"", [1, 2].to_iter.append([3, 4].to_iter).to_array, [1, 2, 3, 4])
     // ```
     append : [?out : Iterator, Item ?out = a, input1 : Iterator, input2 : Iterator, Item input1 = a, Item input2 = a] input2 -> input1 -> ?out;
     append = |iter2, iter1| AppendIterator { iter1 : some(iter1), iter2 : iter2 };
@@ -2524,7 +2524,7 @@ namespace Iterator {
     //
     // Example:
     // ```fix
-    // assert_eq(|_|"", [1, 2, 3].from_array.intersperse(0).to_array, [1, 0, 2, 0, 3])
+    // assert_eq(|_|"", [1, 2, 3].to_iter.intersperse(0).to_array, [1, 0, 2, 0, 3])
     // ```
     //
     // # Parameters
@@ -2651,7 +2651,7 @@ namespace Iterator {
     //
     // # Examples
     // ```fix
-    // assert_eq(|_|"", [1, 2].from_array.zip(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'b')])
+    // assert_eq(|_|"", [1, 2].to_iter.zip(['a', 'b'].to_iter).to_array, [(1, 'a'), (2, 'b')])
     // ```
     zip : [?out : Iterator, Item ?out = (Item input1, Item input2), input1 : Iterator, input2 : Iterator] input2 -> input1 -> ?out;
     zip = |iter2, iter1| ZipIterator { iter1: iter1, iter2: iter2 };
