@@ -84,7 +84,7 @@ pub const INDEXABLE_TRAIT_NAME: &str = "Indexable";
 pub const INDEXABLE_TRAIT_ACT_NAME: &str = "act_at_index";
 
 // Array methods.
-pub const ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED: &str = "_unsafe_get_bounds_unchecked";
+pub const ARRAY_UNSAFE_GET_BOUNDS_UNCHECKED: &str = "unsafe_get_bounds_unchecked";
 pub const ARRAY_CHECK_RANGE: &str = "_check_range";
 pub const ARRAY_CHECK_SIZE: &str = "_check_size";
 pub const ARRAY_UNSAFE_EMPTY_NAME: &str = "_unsafe_empty_capacity_unchecked";

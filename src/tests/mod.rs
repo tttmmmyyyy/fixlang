@@ -6,6 +6,7 @@ mod test_array_builder;
 mod test_array_element_size;
 mod test_array_rmw;
 mod test_array_swap;
+mod test_array_unsafe_get;
 mod test_assert;
 mod test_associated_type;
 mod test_basic;

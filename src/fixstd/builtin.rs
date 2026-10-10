@@ -2869,7 +2869,7 @@ pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The builtin operation of `Array::_unsafe_get_bounds_unchecked`, which reads the element at an
+/// The builtin operation of `Array::unsafe_get_bounds_unchecked`, which reads the element at an
 /// index out of an array and retains it, leaving the array borrowed.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ArrayUnsafeGetBoundsUncheckedOp {
