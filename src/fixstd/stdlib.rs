@@ -26,7 +26,7 @@ use crate::{
         array_copy_capacity_bounds_unchecked, array_get_capacity, array_get_size,
         array_is_storage_unique_function, array_mutate_elements_ios_internal, array_punch,
         array_set_capacity_bounds_unchecked, array_truncate_bounds_unchecked, array_unsafe_empty,
-        array_unsafe_get_bounds_unchecked, bitwise_operation_function, borrow_boxed_function,
+        array_unsafe_get_bounds_unchecked, bit_cast_function, bitwise_operation_function, borrow_boxed_function,
         boxed_from_retained_ptr_ios, boxed_to_retained_ptr_ios, boxed_trait_instance,
         cast_between_float_function, cast_between_integral_function, cast_float_to_int_function,
         cast_int_to_float_function, destructor_make, divide_trait_instance_float,
@@ -36,8 +36,8 @@ use crate::{
         get_retain_function_of_boxed_value, grow_size_array, hole_function, infinity_value,
         integral_types, is_unique_function, less_than_or_equal_to_trait_instance_float,
         less_than_or_equal_to_trait_instance_int, less_than_trait_instance_float,
-        less_than_trait_instance_int, make_bool_ty, make_dynamic_object_ty, make_floating_ty,
-        make_integral_ty, make_iostate_unsafe_create, make_numeric_ty, make_ptr_ty,
+        less_than_trait_instance_int, make_bool_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_floating_ty,
+        make_integral_ty, make_iostate_unsafe_create, make_numeric_ty, make_ptr_ty, make_u32_ty, make_u64_ty,
         mark_threaded_function, multiply_trait_instance_float, multiply_trait_instance_int,
         negate_trait_instance_float, negate_trait_instance_int, not_trait_instance_bool,
         number_from_bytes_function, number_to_bytes_function, offset_from_function,
@@ -336,6 +336,24 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
             None,
             None,
             None,
+        ));
+    }
+    // Conversions between a floating point number and its bits.
+    for (float_ty, bits_ty) in [(make_f64_ty(), make_u64_ty()), (make_f32_ty(), make_u32_ty())] {
+        let ty_name = float_ty.toplevel_tycon().unwrap().name.name.clone();
+        errors.eat_err(fix_module.add_global_value(
+            FullName::from_strs(&[STD_NAME, &ty_name], "to_bits"),
+            bit_cast_function(float_ty.clone(), bits_ty.clone()),
+            None,
+            None,
+            Some(include_str!("../docs/std_float_to_bits.md").to_string()),
+        ));
+        errors.eat_err(fix_module.add_global_value(
+            FullName::from_strs(&[STD_NAME, &ty_name], "from_bits"),
+            bit_cast_function(bits_ty, float_ty),
+            None,
+            None,
+            Some(include_str!("../docs/std_float_from_bits.md").to_string()),
         ));
     }
     // Bit operations

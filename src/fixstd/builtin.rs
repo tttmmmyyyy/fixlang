@@ -2551,6 +2551,74 @@ impl BuiltinOp for NumberFromBytesOp {
     }
 }
 
+/// Evaluates `Std::F64::to_bits`, `Std::F64::from_bits` and the same functions of `F32`: the
+/// operand's bits read as a number of the other type of the same width.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct BitCastOp {
+    /// The local binding holding the operand.
+    operand_name: FullName,
+}
+
+#[typetag::serde]
+impl BuiltinOp for BitCastOp {
+    fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
+        let operand = gc.get_scoped_obj_field(&self.operand_name, 0);
+        let to_ty = ty.get_struct_type(gc).get_field_type_at_index(0).unwrap();
+        let val = gc
+            .builder()
+            .build_bit_cast(operand, to_ty, "bit_cast")
+            .unwrap();
+        let obj = create_obj(ty.clone(), &vec![], None, gc, Some("alloca@bit_cast"));
+        obj.insert_field(gc, 0, val)
+    }
+
+    fn name(&self) -> String {
+        format!("bit_cast({})", self.operand_name.to_string())
+    }
+
+    fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
+        vec![&mut self.operand_name]
+    }
+
+    fn result_locality(
+        &self,
+        result_ty: &Arc<TypeNode>,
+        arg_tys: &[Arc<TypeNode>],
+        type_env: &TypeEnv,
+    ) -> ExtShape {
+        ExtShape::fresh_holding(result_ty, arg_tys, type_env)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// The bits of a `from` read as a `to` of the same width.
+///
+/// Type: `from -> to`
+pub fn bit_cast_function(from: Arc<TypeNode>, to: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme>) {
+    const OPERAND_NAME: &str = "operand";
+    let scm = Scheme::generalize(
+        Default::default(),
+        vec![],
+        vec![],
+        type_fun(from, to.clone()),
+    );
+    let expr = expr_abs(
+        vec![var_local(OPERAND_NAME)],
+        expr_builtin(
+            Box::new(BitCastOp {
+                operand_name: FullName::local(OPERAND_NAME),
+            }),
+            to,
+            None,
+        ),
+        None,
+    );
+    (expr, scm)
+}
+
 /// The number of type `ty` that the first bytes of a byte array hold, in the byte order of the
 /// target. The array is borrowed. The caller must ensure it holds at least as many bytes as the
 /// number takes.
