@@ -61,24 +61,19 @@ type LoopState s r = unbox union { continue : s, break : r };
 // If `body` returns `break(r)`, then the loop ends and returns `r` as the result. 
 // If `body` returns `continue(s)`, then the loop calls again `body` on `s`.
 // 
-// Example:
-// ```fix
-// # module DocTest;
-// #
-// main : IO ();
-// main = (
-//     let sum = loop((0, 0), |(i, sum)|
-//         if i == 100 { break $ sum };
-//         continue $ (i + 1, sum + i)
-//     );
-//     println $ sum.to_string
-// ); // evaluates to 0 + 1 + ... + 99 
-// ```
-// 
 // # Parameters
 // 
 // * `s0` - The initial state of the loop.
 // * `body` - The loop body function. It takes the current state of the loop and returns either `continue(s)` or `break(r)`.
+//
+// # Examples
+// ```fix
+// let sum = loop((0, 0), |(i, sum)|
+//     if i == 100 { break $ sum };
+//     continue $ (i + 1, sum + i)
+// );
+// assert_eq(|_|"", sum, 4950) // 0 + 1 + ... + 99
+// ```
 loop : s -> (s -> LoopState s r) -> r;
 loop = |s, body| (
     match body(s) {
@@ -146,12 +141,15 @@ namespace Array {
     // 
     // The capacity is set to the same value as the size.
     // 
-    // Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
-    // 
     // # Parameters
     // 
     // * `size` - The number of elements in the array. If negative, or so large that the elements exceed the address space, the program will abort.
     // * `value` - The value to fill the array with.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", fill(3, 'a'), ['a', 'a', 'a'])
+    // ```
     fill : I64 -> a -> Array a;
     fill = |size, value| (
         let size = Array::_check_size(size);
@@ -218,6 +216,13 @@ namespace Array {
     // * `i` - The index of the element to be acted on.
     // * `action` - The functorial action to be performed on the element at index `i`.
     // * `array` - The array.
+    //
+    // # Examples
+    // ```fix
+    // let halve = |x| if x % 2 == 0 { some(x / 2) } else { none() };
+    // assert_eq(|_|"", [4, 6, 8].act(1, halve), some([4, 3, 8]));;
+    // assert_eq(|_|"", [4, 5, 8].act(1, halve), none()) // the action failed on the element
+    // ```
     act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
     act = |idx, fun, arr| (
         let idx = _check_range(idx, arr.@size);
@@ -305,6 +310,11 @@ namespace Array {
     // 
     // * `second` - The array to be appended.
     // * `first` - The array to which `second` is appended.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", [1, 2].append([3, 4]), [1, 2, 3, 4])
+    // ```
     append : Array a -> Array a -> Array a;
     append = |second, first| (
         let first_len = first.@size;
@@ -462,6 +472,11 @@ namespace Array {
     // - `less_than`: A function that takes two elements and returns true if the first is
     //   less than the second.
     // - `arr`: An array of elements to be sorted.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", [3, 1, 2].sort_by(|(lhs, rhs)| lhs > rhs), [3, 2, 1]) // descending
+    // ```
     sort_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_by = |less_than, arr| (
         let depth = loop((arr.@size, 0_U8), |(n, depth)| if n == 0 { break $ depth } else { continue $ (n/2, depth+1_U8) } );
@@ -648,6 +663,13 @@ namespace Array {
     // 
     // * `less_than` - The comparator function.
     // * `array` - The array to be sorted.
+    //
+    // # Examples
+    // ```fix
+    // let pairs = [(2, "a"), (1, "b"), (2, "c"), (1, "d")];
+    // let sorted = pairs.sort_stable_by(|(lhs, rhs)| lhs.@0 < rhs.@0);
+    // assert_eq(|_|"", sorted, [(1, "b"), (1, "d"), (2, "a"), (2, "c")]) // equal keys keep their order
+    // ```
     sort_stable_by : ((a, a) -> Bool) -> Array a -> Array a;
     sort_stable_by = |less_than, arr| (
         let n = arr.@size;
@@ -751,7 +773,7 @@ namespace Array {
 
     // Truncates an array, keeping the given number of first elements.
     // 
-    // `truncante(len, arr)` does nothing if `len >= arr.@size`.
+    // `truncate(len, arr)` does nothing if `len >= arr.@size`.
     // 
     // # Parameters
     // 
@@ -788,6 +810,11 @@ namespace Array {
     // 
     // * `predicate` - The predicate function.
     // * `array` - The array to be searched.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", [1, 3, 5, 7].search_partition_point(|x| x < 5), 2) // the index of the first element not less than 5
+    // ```
     search_partition_point : (a -> Bool) -> Array a -> I64;
     search_partition_point = |pred, arr| (
         let n = arr.@size;
@@ -1120,6 +1147,13 @@ namespace FFI {
         // 
         // * `value` - The value to be wrapped.
         // * `dtor` - The destructor function to be called on the value.
+        //
+        // # Examples
+        // ```fix
+        // let ptr = *FFI_CALL_IO[Ptr malloc(CSizeT), 8.c_size_t];
+        // let buffer = *make(ptr, |ptr| FFI_CALL_IO[() free(Ptr), ptr];; pure(nullptr));
+        // assert(|_|"", buffer.borrow(|ptr| ptr != nullptr))
+        // ```
         make : a -> (a -> IO a) -> IO (Destructor a);
         make = |val, dtor| (
             let dtor : a -> IOState -> (IOState, a) = |val, ios| (dtor(val).@runner)(ios);
@@ -1702,6 +1736,22 @@ namespace IO::IOHandle {
 
 namespace IO {
     // The type for I/O actions which may fail.
+    //
+    // In an `IOFail` action, `*` on an `IOFail` value stops the action at the first error.
+    // `throw` fails with an error message, `from_result` turns a `Result` into an `IOFail` value, and
+    // `lift` turns an `IO` action into one. `try` turns an `IOFail` action back into an `IO` action
+    // by handling the error.
+    //
+    // # Examples
+    // ```fix
+    // let parse_positive = |text : String| (
+    //     let n : I64 = *from_result(text.from_string);
+    //     if n <= 0 { throw("not positive: " + text) };
+    //     pure(n)
+    // );
+    // assert_eq(|_|"", *parse_positive("42").try(|_| pure(0)), 42);;
+    // assert_eq(|_|"", *parse_positive("-1").try(|_| pure(0)), 0)
+    // ```
     type IOFail a = unbox struct { _data : IO (Result ErrMsg a) };
 }
 
@@ -1801,6 +1851,11 @@ namespace Iterator {
     // * `s` - The initial state.
     // * `body` - The function to be called on the pair of an element and the current state.
     // * `iter` - The iterator to be folded.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", ["a", "b", "c"].to_iter.fold("", |x, acc| acc + x), "abc")
+    // ```
     fold : [iter : Iterator, Item iter = a] s -> (a -> s -> s) -> iter -> s;
     fold = |s, op, iter| (
         match iter.advance {
@@ -1833,6 +1888,13 @@ namespace Iterator {
     // * `s` - The initial state.
     // * `body` - The function to be called on the pair of an element and the current state.
     // * `iter` - The iterator to be looped.
+    //
+    // # Examples
+    // ```fix
+    // // Sum the elements until the sum would exceed 10.
+    // let sum = range(1, 100).loop_iter(0, |i, acc| if acc + i > 10 { break $ acc } else { continue $ acc + i });
+    // assert_eq(|_|"", sum, 10)
+    // ```
     loop_iter : [iter : Iterator, Item iter = a] s -> (a -> s -> LoopState s s) -> iter -> s;
     loop_iter = |s, body, iter| (
         match iter.advance {
@@ -1854,6 +1916,13 @@ namespace Iterator {
     // * `s` - The initial state.
     // * `body` - The function to be called on the pair of an element and the current state.
     // * `iter` - The iterator to be looped.
+    //
+    // # Examples
+    // ```fix
+    // // Find the index of the first even element.
+    // let res = [3, 5, 8, 9].to_iter.loop_iter_s(0, |x, i| if x % 2 == 0 { break $ i } else { continue $ i + 1 });
+    // assert_eq(|_|"", res.as_break, 2)
+    // ```
     loop_iter_s : [iter : Iterator, Item iter = a] s -> (a -> s -> LoopState s b) -> iter -> LoopState s b;
     loop_iter_s = |s, body, iter| (
         match iter.advance {
@@ -1909,10 +1978,16 @@ namespace Iterator {
     // # Parameters
     //
     // * `iter` - The iterator of monads to be collected.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", [some(1), some(2)].to_iter.collect_m, some([1, 2]));;
+    // assert_eq(|_|"", [some(1), none()].to_iter.collect_m, none())
+    // ```
     collect_m : [m : Monad, iter : Iterator, Item iter = m a] iter -> m (Array a);
     collect_m = |iter| iter.fold_m([], |act, acm| pure $ acm.push_back(*act));
 
-    // Calcculate sum of the elements of an iterator.
+    // Calculate the sum of the elements of an iterator.
     //
     // # Parameters
     //
@@ -2003,7 +2078,7 @@ namespace Iterator {
     empty : [?it : Iterator, Item ?it = a] ?it;
     empty = EmptyIterator {};
 
-    // Iterators that yields reversed elements of an iterator.
+    // The iterator over the integers from `next` up to `end`, excluding `end`.
     type RangeIterator = unbox struct { next : I64, end : I64 };
 
     impl RangeIterator : Iterator {
@@ -2062,6 +2137,11 @@ namespace Iterator {
     // * `start` - The start of the range.
     // * `end` - The end of the range.
     // * `step` - The step of the range.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", range_step(10, 0, -3).to_array, [10, 7, 4, 1])
+    // ```
     range_step : [?it : Iterator, Item ?it = I64] I64 -> I64 -> I64 -> ?it;
     range_step = |start, end, step| (
         if step == 0 { undefined("[range_step] step must not be 0!") };
@@ -2109,6 +2189,13 @@ namespace Iterator {
     //
     // * `state` - The initial state.
     // * `transition` - The state transition function that takes the current state and returns the next state and the next element.
+    //
+    // # Examples
+    // ```fix
+    // // The powers of 2 up to 100.
+    // let powers = generate(1, |n| if n > 100 { none() } else { some((n * 2, n)) });
+    // assert_eq(|_|"", powers.to_array, [1, 2, 4, 8, 16, 32, 64])
+    // ```
     generate : [?it : Iterator, Item ?it = a] s -> (s -> Option (s, a)) -> ?it;
     generate = |state, transit| StateIterator { state: some(state), transit: transit };
 
@@ -2117,6 +2204,11 @@ namespace Iterator {
     // # Parameters
     //
     // * `map` - The function that takes an index and returns the element at that index.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", Iterator::from_map(|i| i * i).take(4).to_array, [0, 1, 4, 9])
+    // ```
     from_map : [?it : Iterator, Item ?it = a] (I64 -> a) -> ?it;
     from_map = |f| count_up(0).map(f);
 
@@ -2364,7 +2456,7 @@ namespace Iterator {
     // 
     // Example:
     // ```fix
-    // assert_eq(|_|"", range(1, 4).product(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')])
+    // assert_eq(|_|"", range(1, 4).product(['a', 'b'].to_iter).to_array, [(1, 'a'), (2, 'a'), (3, 'a'), (1, 'b'), (2, 'b'), (3, 'b')])
     // ```
     //
     // # Parameters
@@ -2404,6 +2496,11 @@ namespace Iterator {
     //
     // * `second` - The second iterator.
     // * `first` - The first iterator.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", [1, 2].to_iter.append([3, 4].to_iter).to_array, [1, 2, 3, 4])
+    // ```
     append : [?out : Iterator, Item ?out = a, input1 : Iterator, input2 : Iterator, Item input1 = a, Item input2 = a] input2 -> input1 -> ?out;
     append = |iter2, iter1| AppendIterator { iter1 : some(iter1), iter2 : iter2 };
 
@@ -2427,7 +2524,7 @@ namespace Iterator {
     //
     // Example:
     // ```fix
-    // assert_eq(|_|"", [1, 2, 3].from_array.intersperse(0).to_array, [1, 0, 2, 0, 3])
+    // assert_eq(|_|"", [1, 2, 3].to_iter.intersperse(0).to_array, [1, 0, 2, 0, 3])
     // ```
     //
     // # Parameters
@@ -2551,6 +2648,11 @@ namespace Iterator {
     //
     // * `second` - The second iterator.
     // * `first` - The first iterator.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", [1, 2].to_iter.zip(['a', 'b'].to_iter).to_array, [(1, 'a'), (2, 'b')])
+    // ```
     zip : [?out : Iterator, Item ?out = (Item input1, Item input2), input1 : Iterator, input2 : Iterator] input2 -> input1 -> ?out;
     zip = |iter2, iter1| ZipIterator { iter1: iter1, iter2: iter2 };
 
@@ -2617,6 +2719,16 @@ namespace Iterator {
     // Therefore, if performance is important, you should avoid using `DynIterator`.
     // In particular, if you iterate over the same `DynIterator` multiple times,
     // consider converting it to an `ArrayIterator` using `bang` before iterating.
+    //
+    // # Examples
+    // ```fix
+    // // Two branches return iterators built differently, as one type.
+    // let evens_or_all = |only_evens| (
+    //     if only_evens { range(0, 5).filter(|i| i % 2 == 0).to_dyn } else { range(0, 5).to_dyn }
+    // );
+    // assert_eq(|_|"", evens_or_all(true).to_array, [0, 2, 4]);;
+    // assert_eq(|_|"", evens_or_all(false).to_array, [0, 1, 2, 3, 4])
+    // ```
     type DynIterator a = unbox struct { next: () -> Option (DynIterator a, a) };
 
     // Convert an iterator into a dynamic iterator.
@@ -3246,6 +3358,11 @@ namespace String {
     //
     // * `rhs` - The string that goes second.
     // * `lhs` - The string that goes first.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", "ab".concat("cd"), "abcd")
+    // ```
     concat : String -> String -> String;
     concat = |rhs, lhs| (
         // Remove null terminator from lhs and append rhs.
@@ -3285,6 +3402,12 @@ namespace String {
     // * `token` - The token to be searched.
     // * `start_idx` - The index to start searching from.
     // * `str` - The string to be searched.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", "abcabc".find("bc", 0), some(1));;
+    // assert_eq(|_|"", "abcabc".find("bc", 2), some(4))
+    // ```
     find : String -> I64 -> String -> Option I64;
     find = |token, start_idx, str| (
         str.borrow_c_str(|c_str|
@@ -3413,6 +3536,11 @@ namespace String {
     // * `start` - The start index of the substring.
     // * `end` - The end index of the substring.
     // * `str` - The string to be sliced.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", "hello".get_sub(1, 3), "el")
+    // ```
     get_sub : I64 -> I64 -> String -> String;
     get_sub = |start, end, str| (
         let len = str.@size;
@@ -3433,6 +3561,11 @@ namespace String {
     //
     // * `sep` - The separator to be used for joining.
     // * `iter` - The iterator of strings to be joined.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", ["a", "b", "c"].to_iter.join(", "), "a, b, c")
+    // ```
     join : [ss : Iterator, Item ss = String] String -> ss -> String;
     join = |sep, iter| (
         iter.intersperse(sep).concat_iter
@@ -3572,19 +3705,19 @@ namespace String {
     //
     // i-th "{}" in the template string is replaced by i-th string.
     //
-    // Example:
-    // `"{}, {}!".populate(["Hello", "world"])` => "Hello, world!"
-    //
     //  "{{" and "}}" are escaped to "{" and "}".
-    // 
-    // Example:
-    // `"{{ x = {}, y = {} }}".populate([1.to_string, 2.to_string])` => "{ x = 1, y = 2 }",
-    // 
+    //
     // If the number of placeholders does not match with the number of strings, this function halts the program.
-    // 
+    //
     // # Parameters
     // - `vs`: The array of strings ("values") to be inserted into the template string.
     // - `template`: The template string.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", "{}, {}!".populate(["Hello", "world"]), "Hello, world!");;
+    // assert_eq(|_|"", "{{ x = {}, y = {} }}".populate([1.to_string, 2.to_string]), "{ x = 1, y = 2 }")
+    // ```
     populate : Array String -> String -> String;
     populate = |vs, template| (
         let template = template.get_bytes;
@@ -3701,6 +3834,13 @@ impl String : ToBytes {
 //
 // * `first` - The first function to be composed.
 // * `second` - The second function to be composed.
+//
+// # Examples
+// ```fix
+// let add_then_double = add(1) >> mul(2);
+// assert_eq(|_|"", add_then_double(3), 8);;
+// assert_eq(|_|"", compose(add(1), mul(2))(3), 8)
+// ```
 compose : (a -> b) -> (b -> c) -> a -> c;
 compose = |f, g, a| g(f(a));
 
@@ -4013,6 +4153,12 @@ trait a : FromString {
     // # Parameters
     //
     // * `str` - The string to be converted.
+    //
+    // # Examples
+    // ```fix
+    // let n : Result ErrMsg I64 = "-42".from_string;
+    // assert_eq(|_|"", n, ok(-42))
+    // ```
     from_string : String -> Result ErrMsg a;
 }
 
@@ -4472,14 +4618,16 @@ namespace F32 {
     //
     // With `prec` 0, no point is written.
     //
-    // # Examples
-    // `123.456_F32.to_string_exp_precision(2_U8)` is `1.23e2`,
-    // `0.0123_F32.to_string_exp_precision(1_U8)` is `1.2e-2`, and
-    // `123.456_F32.to_string_exp_precision(0_U8)` is `1e2`.
-    //
     // # Parameters
     // * `prec` - The number of digits after the point.
     // * `v` - The number to write.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", 123.456_F32.to_string_exp_precision(2_U8), "1.23e2");;
+    // assert_eq(|_|"", 0.0123_F32.to_string_exp_precision(1_U8), "1.2e-2");;
+    // assert_eq(|_|"", 123.456_F32.to_string_exp_precision(0_U8), "1e2")
+    // ```
     to_string_exp_precision : U8 -> F32 -> String;
     to_string_exp_precision = |prec, v| (
         // A sign, a digit, a point, `prec` digits, `e`, the `-` of a negative exponent, the 2
@@ -4497,13 +4645,15 @@ namespace F32 {
     //
     // With `prec` 0, no point is written.
     //
-    // # Examples
-    // `3.14159_F32.to_string_precision(2_U8)` is `3.14`, and `2.5_F32.to_string_precision(0_U8)`
-    // is `2`.
-    //
     // # Parameters
     // * `prec` - The number of digits after the point.
     // * `v` - The number to write.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", 3.14159_F32.to_string_precision(2_U8), "3.14");;
+    // assert_eq(|_|"", 2.5_F32.to_string_precision(0_U8), "2")
+    // ```
     to_string_precision : U8 -> F32 -> String;
     to_string_precision = |prec, v| (
         // A sign, the 39 digits the greatest `F32` takes in its whole part, a point, `prec`
@@ -4573,13 +4723,16 @@ namespace F64 {
     //
     // With `prec` 0, no point is written.
     //
-    // # Examples
-    // `123.456.to_string_exp_precision(2_U8)` is `1.23e2`, `0.0123.to_string_exp_precision(1_U8)`
-    // is `1.2e-2`, and `123.456.to_string_exp_precision(0_U8)` is `1e2`.
-    //
     // # Parameters
     // * `prec` - The number of digits after the point.
     // * `v` - The number to write.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", 123.456.to_string_exp_precision(2_U8), "1.23e2");;
+    // assert_eq(|_|"", 0.0123.to_string_exp_precision(1_U8), "1.2e-2");;
+    // assert_eq(|_|"", 123.456.to_string_exp_precision(0_U8), "1e2")
+    // ```
     to_string_exp_precision : U8 -> F64 -> String;
     to_string_exp_precision = |prec, v| (
         // A sign, a digit, a point, `prec` digits, `e`, the `-` of a negative exponent, the 3
@@ -4597,12 +4750,15 @@ namespace F64 {
     //
     // With `prec` 0, no point is written.
     //
-    // # Examples
-    // `3.14159.to_string_precision(2_U8)` is `3.14`, and `2.5.to_string_precision(0_U8)` is `2`.
-    //
     // # Parameters
     // * `prec` - The number of digits after the point.
     // * `v` - The number to write.
+    //
+    // # Examples
+    // ```fix
+    // assert_eq(|_|"", 3.14159.to_string_precision(2_U8), "3.14");;
+    // assert_eq(|_|"", 2.5.to_string_precision(0_U8), "2")
+    // ```
     to_string_precision : U8 -> F64 -> String;
     to_string_precision = |prec, v| (
         // A sign, the 309 digits the greatest `F64` takes in its whole part, a point, `prec`
