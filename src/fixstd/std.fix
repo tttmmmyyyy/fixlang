@@ -3046,7 +3046,8 @@ namespace String {
         (end, bytes._write_decimal_integer(end, power < 0, power.abs.u64))
     );
 
-    // Stops the program where `bytes` holds fewer than `at + max_length` bytes, naming the sizes.
+    // Stops the program where `at` is negative or `bytes` holds fewer than `at + max_length` bytes,
+    // naming the sizes.
     // A function writing the text of a number calls this with the most bytes it writes, so that a
     // buffer sized short of its text stops the program before the text is written past it.
     //
@@ -3056,7 +3057,7 @@ namespace String {
     // * `bytes` - The array the text is written into.
     _check_text_fits : I64 -> I64 -> Array U8 -> Array U8;
     _check_text_fits = |at, max_length, bytes| (
-        if at + max_length <= bytes.@size { bytes };
+        if at >= 0 && bytes.@size - at >= max_length { bytes };
         _stop_on_text_past_buffer(at, max_length, bytes.@size)
     );
 
@@ -4724,8 +4725,8 @@ namespace F32 {
     to_string_exp_precision = |prec, v| (
         // An infinity and a NaN are string literals, which need no buffer.
         if !v.f64.F64::_is_finite { v.f64.F64::_non_finite_text };
-        let size = F32::_exp_text_max_length(prec.i64) + 1;
-        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F32::_write_exp_text(0, prec.i64, v)
+        let size = F32::_exp_text_max_length(prec) + 1;
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F32::_write_exp_text(0, prec, v)
     );
 
     // Writes this number positionally with `prec` digits after the point. The last digit is
@@ -4744,8 +4745,8 @@ namespace F32 {
     to_string_precision = |prec, v| (
         // An infinity and a NaN are string literals, which need no buffer.
         if !v.f64.F64::_is_finite { v.f64.F64::_non_finite_text };
-        let size = F32::_fixed_text_max_length(prec.i64) + 1;
-        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F32::_write_fixed_text(0, prec.i64, v)
+        let size = F32::_fixed_text_max_length(prec) + 1;
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F32::_write_fixed_text(0, prec, v)
     );
 
     // The most bytes `_write_shortest_text` writes. Two shapes reach it: a sign, `0.` and the five
@@ -4759,8 +4760,9 @@ namespace F32 {
     // Writes `v` into `bytes` from `at` the way `to_string` writes it, and answers with the index
     // after the text and the array.
     //
-    // `bytes` must be unshared. Where it holds fewer than `at + _shortest_text_max_length` bytes, the
-    // program stops before the text is written.
+    // `bytes` must be unshared. Where it holds fewer than `at + _shortest_text_max_length` bytes, or
+    // `at` is negative, the program stops before the text is written, unless it is built with
+    // `--no-runtime-check`.
     //
     // # Parameters
     // * `at` - The index of the first byte.
@@ -4801,8 +4803,8 @@ namespace F32 {
     //
     // # Parameters
     // * `precision` - The number of digits after the point.
-    _fixed_text_max_length : I64 -> I64;
-    _fixed_text_max_length = |precision| 41 + precision;
+    _fixed_text_max_length : U8 -> I64;
+    _fixed_text_max_length = |precision| 41 + precision.i64;
 
     // The most bytes `to_string_exp_precision` writes for an `F32` with `precision` digits after the
     // point: a sign, a digit, a point, the digits after it, `e`, the `-` of a negative power and the
@@ -4811,41 +4813,43 @@ namespace F32 {
     //
     // # Parameters
     // * `precision` - The number of digits after the point.
-    _exp_text_max_length : I64 -> I64;
-    _exp_text_max_length = |precision| 7 + precision;
+    _exp_text_max_length : U8 -> I64;
+    _exp_text_max_length = |precision| 7 + precision.i64;
 
     // Writes `v` into `bytes` from `at` the way `to_string_precision` writes it, and answers with the
     // index after the text and the array.
     //
     // `bytes` must be unshared. Where it holds fewer than `at + _fixed_text_max_length(precision)`
-    // bytes, the program stops before the text is written.
+    // bytes, or `at` is negative, the program stops before the text is written, unless it is built
+    // with `--no-runtime-check`.
     //
     // # Parameters
     // * `at` - The index of the first byte.
     // * `precision` - The number of digits after the point.
     // * `v` - The number to write.
     // * `bytes` - The array to write into.
-    _write_fixed_text : I64 -> I64 -> F32 -> Array U8 -> (I64, Array U8);
+    _write_fixed_text : I64 -> U8 -> F32 -> Array U8 -> (I64, Array U8);
     _write_fixed_text = |at, precision, v, bytes| (
         let bytes = bytes._check_text_fits(at, F32::_fixed_text_max_length(precision));
-        bytes.F64::_write_fixed_text_unchecked(at, precision, v.f64)
+        bytes.F64::_write_fixed_text_unchecked(at, precision.i64, v.f64)
     );
 
     // Writes `v` into `bytes` from `at` the way `to_string_exp_precision` writes it, and answers with
     // the index after the text and the array.
     //
     // `bytes` must be unshared. Where it holds fewer than `at + _exp_text_max_length(precision)`
-    // bytes, the program stops before the text is written.
+    // bytes, or `at` is negative, the program stops before the text is written, unless it is built
+    // with `--no-runtime-check`.
     //
     // # Parameters
     // * `at` - The index of the first byte.
     // * `precision` - The number of digits after the point.
     // * `v` - The number to write.
     // * `bytes` - The array to write into.
-    _write_exp_text : I64 -> I64 -> F32 -> Array U8 -> (I64, Array U8);
+    _write_exp_text : I64 -> U8 -> F32 -> Array U8 -> (I64, Array U8);
     _write_exp_text = |at, precision, v, bytes| (
         let bytes = bytes._check_text_fits(at, F32::_exp_text_max_length(precision));
-        bytes.F64::_write_exp_text_unchecked(at, precision, v.f64)
+        bytes.F64::_write_exp_text_unchecked(at, precision.i64, v.f64)
     );
 }
 impl F32 : FromString {
@@ -5066,8 +5070,8 @@ namespace F64 {
     to_string_exp_precision = |prec, v| (
         // An infinity and a NaN are string literals, which need no buffer.
         if !v.F64::_is_finite { v.F64::_non_finite_text };
-        let size = F64::_exp_text_max_length(prec.i64) + 1;
-        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F64::_write_exp_text(0, prec.i64, v)
+        let size = F64::_exp_text_max_length(prec) + 1;
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F64::_write_exp_text(0, prec, v)
     );
 
     // Writes this number positionally with `prec` digits after the point. The last digit is
@@ -5085,8 +5089,8 @@ namespace F64 {
     to_string_precision = |prec, v| (
         // An infinity and a NaN are string literals, which need no buffer.
         if !v.F64::_is_finite { v.F64::_non_finite_text };
-        let size = F64::_fixed_text_max_length(prec.i64) + 1;
-        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F64::_write_fixed_text(0, prec.i64, v)
+        let size = F64::_fixed_text_max_length(prec) + 1;
+        String::_from_written_bytes $ Array::empty(size)._unsafe_grow_size(size).F64::_write_fixed_text(0, prec, v)
     );
 
     // Answers whether `v` is neither an infinity nor a NaN.
@@ -5116,8 +5120,9 @@ namespace F64 {
     // Writes `v` into `bytes` from `at` the way `to_string` writes it, and answers with the index
     // after the text and the array.
     //
-    // `bytes` must be unshared. Where it holds fewer than `at + _shortest_text_max_length` bytes, the
-    // program stops before the text is written.
+    // `bytes` must be unshared. Where it holds fewer than `at + _shortest_text_max_length` bytes, or
+    // `at` is negative, the program stops before the text is written, unless it is built with
+    // `--no-runtime-check`.
     //
     // # Parameters
     // * `at` - The index of the first byte.
@@ -5150,8 +5155,8 @@ namespace F64 {
     //
     // # Parameters
     // * `precision` - The number of digits after the point.
-    _fixed_text_max_length : I64 -> I64;
-    _fixed_text_max_length = |precision| 311 + precision;
+    _fixed_text_max_length : U8 -> I64;
+    _fixed_text_max_length = |precision| 311 + precision.i64;
 
     // The most bytes `to_string_exp_precision` writes for an `F64` with `precision` digits after the
     // point: a sign, a digit, a point, the digits after it, `e`, the `-` of a negative power and the
@@ -5160,41 +5165,43 @@ namespace F64 {
     //
     // # Parameters
     // * `precision` - The number of digits after the point.
-    _exp_text_max_length : I64 -> I64;
-    _exp_text_max_length = |precision| 8 + precision;
+    _exp_text_max_length : U8 -> I64;
+    _exp_text_max_length = |precision| 8 + precision.i64;
 
     // Writes `v` into `bytes` from `at` the way `to_string_precision` writes it, and answers with the
     // index after the text and the array.
     //
     // `bytes` must be unshared. Where it holds fewer than `at + _fixed_text_max_length(precision)`
-    // bytes, the program stops before the text is written.
+    // bytes, or `at` is negative, the program stops before the text is written, unless it is built
+    // with `--no-runtime-check`.
     //
     // # Parameters
     // * `at` - The index of the first byte.
     // * `precision` - The number of digits after the point.
     // * `v` - The number to write.
     // * `bytes` - The array to write into.
-    _write_fixed_text : I64 -> I64 -> F64 -> Array U8 -> (I64, Array U8);
+    _write_fixed_text : I64 -> U8 -> F64 -> Array U8 -> (I64, Array U8);
     _write_fixed_text = |at, precision, v, bytes| (
         let bytes = bytes._check_text_fits(at, F64::_fixed_text_max_length(precision));
-        bytes.F64::_write_fixed_text_unchecked(at, precision, v)
+        bytes.F64::_write_fixed_text_unchecked(at, precision.i64, v)
     );
 
     // Writes `v` into `bytes` from `at` the way `to_string_exp_precision` writes it, and answers with
     // the index after the text and the array.
     //
     // `bytes` must be unshared. Where it holds fewer than `at + _exp_text_max_length(precision)`
-    // bytes, the program stops before the text is written.
+    // bytes, or `at` is negative, the program stops before the text is written, unless it is built
+    // with `--no-runtime-check`.
     //
     // # Parameters
     // * `at` - The index of the first byte.
     // * `precision` - The number of digits after the point.
     // * `v` - The number to write.
     // * `bytes` - The array to write into.
-    _write_exp_text : I64 -> I64 -> F64 -> Array U8 -> (I64, Array U8);
+    _write_exp_text : I64 -> U8 -> F64 -> Array U8 -> (I64, Array U8);
     _write_exp_text = |at, precision, v, bytes| (
         let bytes = bytes._check_text_fits(at, F64::_exp_text_max_length(precision));
-        bytes.F64::_write_exp_text_unchecked(at, precision, v)
+        bytes.F64::_write_exp_text_unchecked(at, precision.i64, v)
     );
 }
 impl F64 : FromString {

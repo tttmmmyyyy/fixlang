@@ -1,8 +1,9 @@
 // `to_string` and the precision functions of `F32` and `F64` write their text into a buffer whose
 // size is derived from the widest text they can be asked for, and the derivation holds only if the
-// widest digits, the widest exponent and the null terminator were all counted. The writes are not
-// checked against the buffer, so this file writes the widest text each function can produce under
-// Valgrind, which reports a write past the buffer's allocation.
+// widest digits, the widest exponent and the null terminator were all counted. A writer checks the
+// buffer against that size before it writes, and nothing checks the size against the text the
+// writer then writes, so this file writes the widest text each function can produce under Valgrind,
+// which reports a write past the buffer's allocation.
 
 #[cfg(test)]
 mod float_text_buffer_tests {
@@ -80,6 +81,25 @@ main : IO () = (
             source,
             Configuration::develop_mode(),
             "A number's text takes up to 24 bytes from index 0, and its buffer holds 23 bytes.",
+        );
+    }
+
+    /// A writer handed a negative index stops the program before it writes in front of the array,
+    /// however many bytes the array holds.
+    #[test]
+    pub fn test_text_from_a_negative_index_stops_the_program() {
+        let source = r#"
+module Main;
+
+main : IO () = (
+    let (end, _) = Array::fill(64, 0_U8).F64::_write_shortest_text(-1, 1.0);
+    println("wrote up to " + end.to_string)
+);
+"#;
+        test_source_fail(
+            source,
+            Configuration::develop_mode(),
+            "A number's text takes up to 24 bytes from index -1, and its buffer holds 64 bytes.",
         );
     }
 }
