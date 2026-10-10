@@ -7,8 +7,8 @@ mod tests {
     use crate::{
         configuration::Configuration,
         tests::test_util::{
-            run_source_assert_failed, test_source, test_source_fail, test_sources,
-            test_sources_fail,
+            assert_grammar_accepts, assert_grammar_rejects, run_source_assert_failed, test_source,
+            test_source_fail, test_sources, test_sources_fail,
         },
     };
 
