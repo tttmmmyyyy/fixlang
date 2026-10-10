@@ -135,7 +135,9 @@ mod tests {
             let binding = dump
                 .lines()
                 .find(|line| line.contains(&format!("(as {})", name)))
-                .unwrap_or_else(|| panic!("the dump should bind `{}`; the dump is:\n{}", name, dump));
+                .unwrap_or_else(|| {
+                    panic!("the dump should bind `{}`; the dump is:\n{}", name, dump)
+                });
             assert!(
                 binding.contains(" = array_lit("),
                 "the literal bound to `{}` should be built at run time; the dump is:\n{}",
