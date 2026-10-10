@@ -148,7 +148,7 @@ namespace Array {
     //
     // # Examples
     // ```fix
-    // assert_eq(|_|"", Array::fill(3, 'a'), ['a', 'a', 'a'])
+    // assert_eq(|_|"", fill(3, 'a'), ['a', 'a', 'a'])
     // ```
     fill : I64 -> a -> Array a;
     fill = |size, value| (
@@ -219,9 +219,9 @@ namespace Array {
     //
     // # Examples
     // ```fix
-    // let halve = |x| if x % 2 == 0 { Option::some(x / 2) } else { Option::none() };
-    // assert_eq(|_|"", [4, 6, 8].act(1, halve), Option::some([4, 3, 8]));;
-    // assert_eq(|_|"", [4, 5, 8].act(1, halve), Option::none()) // the action failed on the element
+    // let halve = |x| if x % 2 == 0 { some(x / 2) } else { none() };
+    // assert_eq(|_|"", [4, 6, 8].act(1, halve), some([4, 3, 8]));;
+    // assert_eq(|_|"", [4, 5, 8].act(1, halve), none()) // the action failed on the element
     // ```
     act : [f : Functor] I64 -> (a -> f a) -> Array a -> f (Array a);
     act = |idx, fun, arr| (
@@ -1151,7 +1151,7 @@ namespace FFI {
         // # Examples
         // ```fix
         // let ptr = *FFI_CALL_IO[Ptr malloc(CSizeT), 8.c_size_t];
-        // let buffer = *Destructor::make(ptr, |ptr| FFI_CALL_IO[() free(Ptr), ptr];; pure(nullptr));
+        // let buffer = *make(ptr, |ptr| FFI_CALL_IO[() free(Ptr), ptr];; pure(nullptr));
         // assert(|_|"", buffer.borrow(|ptr| ptr != nullptr))
         // ```
         make : a -> (a -> IO a) -> IO (Destructor a);
@@ -1745,8 +1745,8 @@ namespace IO {
     // # Examples
     // ```fix
     // let parse_positive = |text : String| (
-    //     let n : I64 = *IOFail::from_result(text.from_string);
-    //     if n <= 0 { IOFail::throw("not positive: " + text) };
+    //     let n : I64 = *from_result(text.from_string);
+    //     if n <= 0 { throw("not positive: " + text) };
     //     pure(n)
     // );
     // assert_eq(|_|"", *parse_positive("42").try(|_| pure(0)), 42);;
@@ -2193,7 +2193,7 @@ namespace Iterator {
     // # Examples
     // ```fix
     // // The powers of 2 up to 100.
-    // let powers = Iterator::generate(1, |n| if n > 100 { none() } else { some((n * 2, n)) });
+    // let powers = generate(1, |n| if n > 100 { none() } else { some((n * 2, n)) });
     // assert_eq(|_|"", powers.to_array, [1, 2, 4, 8, 16, 32, 64])
     // ```
     generate : [?it : Iterator, Item ?it = a] s -> (s -> Option (s, a)) -> ?it;
@@ -3405,8 +3405,8 @@ namespace String {
     //
     // # Examples
     // ```fix
-    // assert_eq(|_|"", "abcabc".find("bc", 0), Option::some(1));;
-    // assert_eq(|_|"", "abcabc".find("bc", 2), Option::some(4))
+    // assert_eq(|_|"", "abcabc".find("bc", 0), some(1));;
+    // assert_eq(|_|"", "abcabc".find("bc", 2), some(4))
     // ```
     find : String -> I64 -> String -> Option I64;
     find = |token, start_idx, str| (

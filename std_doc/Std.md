@@ -314,9 +314,9 @@ This means that you don't need to pay cloning cost when your action failed, as e
 ##### Examples
 
 ```fix
-let halve = |x| if x % 2 == 0 { Option::some(x / 2) } else { Option::none() };
-assert_eq(|_|"", [4, 6, 8].act(1, halve), Option::some([4, 3, 8]));;
-assert_eq(|_|"", [4, 5, 8].act(1, halve), Option::none()) // the action failed on the element
+let halve = |x| if x % 2 == 0 { some(x / 2) } else { none() };
+assert_eq(|_|"", [4, 6, 8].act(1, halve), some([4, 3, 8]));;
+assert_eq(|_|"", [4, 5, 8].act(1, halve), none()) // the action failed on the element
 ```
 
 #### append
@@ -408,7 +408,7 @@ The capacity is set to the same value as the size.
 ##### Examples
 
 ```fix
-assert_eq(|_|"", Array::fill(3, 'a'), ['a', 'a', 'a'])
+assert_eq(|_|"", fill(3, 'a'), ['a', 'a', 'a'])
 ```
 
 #### find_by
@@ -1686,7 +1686,7 @@ If resource creation is done with `FFI_CALL`, it will be treated as a pure funct
 
 ```fix
 let ptr = *FFI_CALL_IO[Ptr malloc(CSizeT), 8.c_size_t];
-let buffer = *Destructor::make(ptr, |ptr| FFI_CALL_IO[() free(Ptr), ptr];; pure(nullptr));
+let buffer = *make(ptr, |ptr| FFI_CALL_IO[() free(Ptr), ptr];; pure(nullptr));
 assert(|_|"", buffer.borrow(|ptr| ptr != nullptr))
 ```
 
@@ -3926,7 +3926,7 @@ Create an iterator that generates elements by the state transition function.
 
 ```fix
 // The powers of 2 up to 100.
-let powers = Iterator::generate(1, |n| if n > 100 { none() } else { some((n * 2, n)) });
+let powers = generate(1, |n| if n > 100 { none() } else { some((n * 2, n)) });
 assert_eq(|_|"", powers.to_array, [1, 2, 4, 8, 16, 32, 64])
 ```
 
@@ -4646,8 +4646,8 @@ The index it answers with is at least `start_idx`, with one exception:
 ##### Examples
 
 ```fix
-assert_eq(|_|"", "abcabc".find("bc", 0), Option::some(1));;
-assert_eq(|_|"", "abcabc".find("bc", 2), Option::some(4))
+assert_eq(|_|"", "abcabc".find("bc", 0), some(1));;
+assert_eq(|_|"", "abcabc".find("bc", 2), some(4))
 ```
 
 #### from_U8
@@ -6959,8 +6959,8 @@ by handling the error.
 
 ```fix
 let parse_positive = |text : String| (
-    let n : I64 = *IOFail::from_result(text.from_string);
-    if n <= 0 { IOFail::throw("not positive: " + text) };
+    let n : I64 = *from_result(text.from_string);
+    if n <= 0 { throw("not positive: " + text) };
     pure(n)
 );
 assert_eq(|_|"", *parse_positive("42").try(|_| pure(0)), 42);;
