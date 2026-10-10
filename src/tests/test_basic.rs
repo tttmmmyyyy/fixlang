@@ -9,9 +9,9 @@ use crate::{
     misc::{function_name, number_to_varname},
     tests::test_util::{
         assert_grammar_accepts, assert_grammar_rejects, emitted_llvm_ir, fix_command,
-        generated_llvm_ir_modules, run_source_assert_failed, run_source_capture,
-        test_files_in_directory, test_source, test_source_fail, test_source_fail_excludes,
-        test_source_with_c, test_source_with_c_under, EmittedIr,
+        generated_llvm_ir_modules, integer_operations_checked_config, run_source_assert_failed,
+        run_source_capture, test_files_in_directory, test_source, test_source_fail,
+        test_source_fail_excludes, test_source_with_c, test_source_with_c_under, EmittedIr,
     },
 };
 use rand::{thread_rng, Rng};
@@ -6859,6 +6859,71 @@ pub fn test_float_to_string_precision_of_nan_of_either_sign() {
         );
     "#;
     test_source(&source, Configuration::develop_mode());
+}
+
+/// Under `--check-integer-operations`, `to_string`, `to_string_precision` and
+/// `to_string_exp_precision` write every scale of `F64` and `F32` without stopping the program.
+/// The shift amounts and the signed arithmetic of the writers depend on the biased exponent alone,
+/// so every biased exponent is written, with the least and the greatest stored significand, at the
+/// least and the greatest precision. The shortest text and the text with a power of ten at
+/// precision 255 read back as the number.
+#[test]
+pub fn test_float_texts_of_every_exponent_pass_the_integer_operation_checks() {
+    let source = r#"
+        module Main;
+
+        // Asserts that the texts of `v` can be written, and that the shortest text and the text
+        // with a power of ten at precision 255 read back as `v`.
+        //
+        // # Parameters
+        // * `v` - The number to write.
+        check_f64 : F64 -> IO ();
+        check_f64 = |v| (
+            let bits = v.to_bits;
+            let back : Result ErrMsg F64 = v.to_string.from_string;
+            assert_eq(|_| "shortest of " + bits.to_string, back.as_ok.to_bits, bits);;
+            let back : Result ErrMsg F64 = v.to_string_exp_precision(255_U8).from_string;
+            assert_eq(|_| "exp of " + bits.to_string, back.as_ok.to_bits, bits);;
+            assert(|_| "exp of " + bits.to_string, v.to_string_exp_precision(0_U8).@size > 0);;
+            assert(|_| "fixed of " + bits.to_string, v.to_string_precision(0_U8).@size > 0);;
+            assert(|_| "fixed of " + bits.to_string, v.to_string_precision(255_U8).@size > 255)
+        );
+
+        // Asserts what `check_f64` asserts, for an `F32`.
+        //
+        // # Parameters
+        // * `v` - The number to write.
+        check_f32 : F32 -> IO ();
+        check_f32 = |v| (
+            let bits = v.to_bits;
+            let back : Result ErrMsg F32 = v.to_string.from_string;
+            assert_eq(|_| "shortest of " + bits.to_string, back.as_ok.to_bits, bits);;
+            let back : Result ErrMsg F32 = v.to_string_exp_precision(255_U8).from_string;
+            assert_eq(|_| "exp of " + bits.to_string, back.as_ok.to_bits, bits);;
+            assert(|_| "exp of " + bits.to_string, v.to_string_exp_precision(0_U8).@size > 0);;
+            assert(|_| "fixed of " + bits.to_string, v.to_string_precision(0_U8).@size > 0);;
+            assert(|_| "fixed of " + bits.to_string, v.to_string_precision(255_U8).@size > 255)
+        );
+
+        main : IO ();
+        main = (
+            let greatest_64 = 1_U64.shift_left(52_U64) - 1_U64;
+            Iterator::range(0, 2047).fold_m((), |e, _| (
+                let high = e.u64.shift_left(52_U64);
+                // At the biased exponent 0, the significand 0 is a zero, which has no scale.
+                let significands = if e == 0 { [1_U64, greatest_64] } else { [0_U64, 1_U64, greatest_64] };
+                significands.to_iter.fold_m((), |m, _| check_f64(F64::from_bits(high.bit_or(m))))
+            ));;
+            let greatest_32 = 1_U32.shift_left(23_U32) - 1_U32;
+            Iterator::range(0, 255).fold_m((), |e, _| (
+                let high = e.u32.shift_left(23_U32);
+                let significands = if e == 0 { [1_U32, greatest_32] } else { [0_U32, 1_U32, greatest_32] };
+                significands.to_iter.fold_m((), |m, _| check_f32(F32::from_bits(high.bit_or(m))))
+            ));;
+            pure()
+        );
+    "#;
+    test_source(source, integer_operations_checked_config());
 }
 
 /// Pins the digits `F32::to_string` writes where two texts of the shortest length both read back as
