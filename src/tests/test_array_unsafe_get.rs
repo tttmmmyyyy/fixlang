@@ -3,7 +3,10 @@
 
 #[cfg(test)]
 mod array_unsafe_get_tests {
-    use crate::{configuration::Configuration, tests::test_util::test_source};
+    use crate::{
+        configuration::{Configuration, DeprecationMode},
+        tests::test_util::{run_source_assert_failed, test_source},
+    };
 
     #[test]
     pub fn test_unsafe_get_bounds_unchecked() {
@@ -27,5 +30,28 @@ main = (
 );
 "#;
         test_source(source, Configuration::develop_mode());
+    }
+
+    /// Naming `Array::_unsafe_get_bounds_unchecked` is reported as deprecated, with the message its
+    /// `DEPRECATED` pragma carries pointing at the public name.
+    #[test]
+    pub fn test_unsafe_get_bounds_unchecked_private_name_is_deprecated() {
+        let source = r#"
+module Main;
+
+main : IO ();
+main = (
+    assert_eq(|_|"deprecated alias", [10, 20, 30]._unsafe_get_bounds_unchecked(1), 20);;
+    pure()
+);
+"#;
+        let mut config = Configuration::develop_mode();
+        config.deprecation_mode = DeprecationMode::Deny;
+        let report = run_source_assert_failed(source, config);
+        assert!(
+            report.contains("Use `Std::Array::unsafe_get_bounds_unchecked` instead."),
+            "naming `_unsafe_get_bounds_unchecked` should be reported with the message its pragma carries:\n{}",
+            report,
+        );
     }
 }
