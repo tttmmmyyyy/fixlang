@@ -1,8 +1,8 @@
 use crate::configuration::Configuration;
 use crate::fixstd::runtime::{RUNTIME_MALLOC, RUNTIME_REALLOC};
 use crate::tests::test_util::{
-    build_run_and_read_rc_ir, first_local_value, generated_llvm_ir, llvm_function_bodies,
-    deprecation_report, names_local_value, rc_ir_function_bodies, test_source,
+    build_run_and_read_rc_ir, deprecation_report, first_local_value, generated_llvm_ir,
+    llvm_function_bodies, names_local_value, rc_ir_function_bodies, test_source,
 };
 use std::sync::OnceLock;
 
