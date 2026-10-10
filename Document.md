@@ -54,7 +54,7 @@
     - [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)
     - [Absolute Namespace and Imports](#absolute-namespace-and-imports)
     - [Which is better: importing whole module or only necessary entities?](#which-is-better-importing-whole-module-or-only-necessary-entities)
-    - [Names starting with an underscore](#names-starting-with-an-underscore)
+    - [Private entities (names starting with an underscore)](#private-entities-names-starting-with-an-underscore)
     - [Recursion](#recursion)
     - [Type annotation](#type-annotation)
     - [Pattern matching](#pattern-matching)
@@ -243,7 +243,7 @@ In Fix, values, functions, types, and traits defined in a source file are groupe
 
 When a Fix program is executed, the `main` function defined in the `Main` module is called.
 
-Module names must begin with a capital letter, optionally preceded by `_` (see [Names starting with an underscore](#names-starting-with-an-underscore)). Additionally, you can use a string of these names concatenated with a period (e.g., `Main.Model.Impl`) as a module name, which is useful for representing a hierarchical module structure.
+Module names must begin with a capital letter, optionally preceded by `_` (see [Private entities (names starting with an underscore)](#private-entities-names-starting-with-an-underscore)). Additionally, you can use a string of these names concatenated with a period (e.g., `Main.Model.Impl`) as a module name, which is useful for representing a hierarchical module structure.
 
 ## Global values
 
@@ -302,7 +302,7 @@ The followings are examples of types:
 - `IO ()`: the type of I/O actions which returns no value. It is the type of `main` function of Fix program.
 - `I64 -> Bool -> Array Bool`: this is equivalent to `I64 -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from its length and initial value has this type. In Fix, there is no concept of "two-variable functions". The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
 
-In Fix, the name of a specific type (such as `I64` or `Bool`) or a type constructor (such as `Array`) must start with a capital letter, optionally preceded by `_` (see [Names starting with an underscore](#names-starting-with-an-underscore)).
+In Fix, the name of a specific type (such as `I64` or `Bool`) or a type constructor (such as `Array`) must start with a capital letter, optionally preceded by `_` (see [Private entities (names starting with an underscore)](#private-entities-names-starting-with-an-underscore)).
 A type that starts with a lowercase letter is interpreted as a type parameter. 
 Each type parameter will be instanciated to a specific type when the program is compiled.
 
@@ -1382,9 +1382,9 @@ When adopting a style of importing only the necessary entities, the following to
 - The Language Server Protocol support of the Fix compiler can automatically update `import` statements through entity name completion operations or Quick Fix for "Unknown name" errors.
 - Using the `fix edit explicit-import` command, you can automatically rewrite `import` statements to import only the necessary entities based on the entities used in the source file.
 
-## Names starting with an underscore
+## Private entities (names starting with an underscore)
 
-A name starting with `_` marks the entity as private to the module or the library that defines it. `fix docs` leaves out of the documentation every entity whose name, or the name of whose namespace or module, starts with `_`, unless `--with-private` is given. In completion, the language server ranks the private entities of other projects (dependencies and `Std`) below the others. Other modules can still use private entities.
+A name starting with `_` marks the entity as private to the module or the library that defines it. `fix docs` leaves out of the documentation every entity whose name, or any part of whose namespace or module name, starts with `_`, unless `--with-private` is given. In completion, the language server ranks the private entities of other projects (dependencies and `Std`) below the others. Other modules can still use private entities.
 
 The character after the `_` decides the kind of the name, as the first character does for a name without `_`:
 
