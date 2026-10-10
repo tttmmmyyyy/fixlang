@@ -98,8 +98,8 @@ struct RuntimeHeader {
 /// The headers of the libraries under `src/fixstd/` that the runtime carries — fast_float in
 /// `ffc/` — written beside the sources that include them.
 ///
-/// Every header those directories hold is carried, whatever one configuration of the libraries
-/// reaches. `test_vendored_headers_are_all_carried` holds this list to the directories.
+/// Every header those directories hold is carried. `test_vendored_headers_are_all_carried` holds
+/// this list to the directories.
 const RUNTIME_HEADERS: [RuntimeHeader; 1] = [RuntimeHeader {
     path: "ffc/ffc.h",
     text: include_str!("../fixstd/ffc/ffc.h"),

@@ -2551,8 +2551,8 @@ impl BuiltinOp for NumberFromBytesOp {
     }
 }
 
-/// Evaluates `Std::F64::to_bits`, `Std::F64::from_bits` and the same functions of `F32`: the
-/// operand's bits read as a number of the other type of the same width.
+/// Reads the operand's bits as a number of another type of the same width, such as the bits of an
+/// `F64` as a `U64`.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BitCastOp {
     /// The local binding holding the operand.

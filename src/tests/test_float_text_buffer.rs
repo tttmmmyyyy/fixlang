@@ -1,8 +1,8 @@
-// The precision functions of `F32` and `F64` write their text into a buffer whose size is derived
-// from the widest text they can be asked for, and the derivation holds only if the widest digits,
-// the widest exponent and the null terminator were all counted. The writes are not checked against
-// the buffer, so this file writes the widest text each function can produce under Valgrind, which
-// reports a write past the buffer's allocation.
+// `to_string` and the precision functions of `F32` and `F64` write their text into a buffer whose
+// size is derived from the widest text they can be asked for, and the derivation holds only if the
+// widest digits, the widest exponent and the null terminator were all counted. The writes are not
+// checked against the buffer, so this file writes the widest text each function can produce under
+// Valgrind, which reports a write past the buffer's allocation.
 
 #[cfg(test)]
 mod float_text_buffer_tests {

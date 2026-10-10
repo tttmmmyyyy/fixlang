@@ -35,12 +35,12 @@ program.
 The translation changes Ryu in these ways.
 
 - The shortest digits are answered as a number, its power of ten and its digit count, and
-  `String::_from_float_decimal` writes Fix's text from them: `0.25`, `1.0e300`. Upstream's
+  `String::_write_float_decimal` writes Fix's text from them: `0.25`, `1.0e300`. Upstream's
   `to_chars` writes `2.5E-1` and `1E300`.
 - `F64::_write_exp_text` writes the power of ten as Fix writes it, `1.50e2` where upstream writes
   `1.50e+02`.
-- The functions take a finite number. `to_string` and the precision functions write an infinity, a
-  NaN and a zero themselves, as `inf`, `-inf`, `nan`, `0.0` and `-0.0`.
+- An infinity and a NaN are written as `inf`, `-inf` and `nan`, and `to_string` writes a zero as
+  `0.0` and `-0.0`. The shortest digits are found for a finite number other than zero.
 - Ryu's `RYU_OPTIMIZE_SIZE` and `RYU_FLOAT_FULL_TABLE` configurations are left out: the tables are
   the full ones, and `F32` reads those of `F64`, as Ryu does without `RYU_FLOAT_FULL_TABLE`.
 
