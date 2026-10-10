@@ -29,6 +29,14 @@ Composes two functions. Composition operators `<<` and `>>` is translated to use
 * `first` - The first function to be composed.
 * `second` - The second function to be composed.
 
+##### Examples
+
+```fix
+let add_then_double = add(1) >> mul(2);
+assert_eq(|_|"", add_then_double(3), 8);;
+assert_eq(|_|"", compose(add(1), mul(2))(3), 8)
+```
+
 #### fix
 
 Type: `((a -> b) -> a -> b) -> a -> b`
@@ -61,22 +69,20 @@ It first calls `body` on `s0`.
 If `body` returns `break(r)`, then the loop ends and returns `r` as the result.
 If `body` returns `continue(s)`, then the loop calls again `body` on `s`.
 
-Example:
-```fix
-main : IO ();
-main = (
-    let sum = loop((0, 0), |(i, sum)|
-        if i == 100 { break $ sum };
-        continue $ (i + 1, sum + i)
-    );
-    println $ sum.to_string
-); // evaluates to 0 + 1 + ... + 99
-```
-
 ##### Parameters
 
 * `s0` - The initial state of the loop.
 * `body` - The loop body function. It takes the current state of the loop and returns either `continue(s)` or `break(r)`.
+
+##### Examples
+
+```fix
+let sum = loop((0, 0), |(i, sum)|
+    if i == 100 { break $ sum };
+    continue $ (i + 1, sum + i)
+);
+assert_eq(|_|"", sum, 4950) // 0 + 1 + ... + 99
+```
 
 #### loop_m
 
@@ -305,6 +311,14 @@ This means that you don't need to pay cloning cost when your action failed, as e
 * `action` - The functorial action to be performed on the element at index `i`.
 * `array` - The array.
 
+##### Examples
+
+```fix
+let halve = |x| if x % 2 == 0 { Option::some(x / 2) } else { Option::none() };
+assert_eq(|_|"", [4, 6, 8].act(1, halve), Option::some([4, 3, 8]));;
+assert_eq(|_|"", [4, 5, 8].act(1, halve), Option::none()) // the action failed on the element
+```
+
 #### append
 
 Type: `Std::Array a -> Std::Array a -> Std::Array a`
@@ -317,6 +331,12 @@ Note: Since `a1.append(a2)` puts `a2` after `a1`, `append(lhs, rhs)` puts `lhs` 
 
 * `second` - The array to be appended.
 * `first` - The array to which `second` is appended.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", [1, 2].append([3, 4]), [1, 2, 3, 4])
+```
 
 #### borrow_elements
 
@@ -380,12 +400,16 @@ Creates an array of the specified size filled with the initial value.
 
 The capacity is set to the same value as the size.
 
-Example: `fill(n, x) == [x, x, x, ..., x]` (of length `n`).
-
 ##### Parameters
 
 * `size` - The number of elements in the array. If negative, or so large that the elements exceed the address space, the program will abort.
 * `value` - The value to fill the array with.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", Array::fill(3, 'a'), ['a', 'a', 'a'])
+```
 
 #### find_by
 
@@ -613,6 +637,12 @@ The returned value x satisfies 0 <= x <= `arr.@size`. If `arr` is empty, it retu
 * `predicate` - The predicate function.
 * `array` - The array to be searched.
 
+##### Examples
+
+```fix
+assert_eq(|_|"", [1, 3, 5, 7].search_partition_point(|x| x < 5), 2) // the index of the first element not less than 5
+```
+
 #### set
 
 Type: `Std::I64 -> a -> Std::Array a -> Std::Array a`
@@ -653,6 +683,12 @@ Note: this can be an unstable sort.
   less than the second.
 - `arr`: An array of elements to be sorted.
 
+##### Examples
+
+```fix
+assert_eq(|_|"", [3, 1, 2].sort_by(|(lhs, rhs)| lhs > rhs), [3, 2, 1]) // descending
+```
+
 #### sort_stable
 
 Type: `[a : Std::LessThan] Std::Array a -> Std::Array a`
@@ -677,6 +713,14 @@ Implemented by merge sort, which allocates an array as large as the one being so
 
 * `less_than` - The comparator function.
 * `array` - The array to be sorted.
+
+##### Examples
+
+```fix
+let pairs = [(2, "a"), (1, "b"), (2, "c"), (1, "d")];
+let sorted = pairs.sort_stable_by(|(lhs, rhs)| lhs.@0 < rhs.@0);
+assert_eq(|_|"", sorted, [(1, "b"), (1, "d"), (2, "a"), (2, "c")]) // equal keys keep their order
+```
 
 #### swap
 
@@ -708,7 +752,7 @@ Type: `Std::I64 -> Std::Array a -> Std::Array a`
 
 Truncates an array, keeping the given number of first elements.
 
-`truncante(len, arr)` does nothing if `len >= arr.@size`.
+`truncate(len, arr)` does nothing if `len >= arr.@size`.
 
 ##### Parameters
 
@@ -1131,16 +1175,18 @@ ten. The last digit is rounded to the nearest, a tie to the even one.
 
 With `prec` 0, no point is written.
 
-##### Examples
-
-`123.456_F32.to_string_exp_precision(2_U8)` is `1.23e2`,
-`0.0123_F32.to_string_exp_precision(1_U8)` is `1.2e-2`, and
-`123.456_F32.to_string_exp_precision(0_U8)` is `1e2`.
-
 ##### Parameters
 
 * `prec` - The number of digits after the point.
 * `v` - The number to write.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", 123.456_F32.to_string_exp_precision(2_U8), "1.23e2");;
+assert_eq(|_|"", 0.0123_F32.to_string_exp_precision(1_U8), "1.2e-2");;
+assert_eq(|_|"", 123.456_F32.to_string_exp_precision(0_U8), "1e2")
+```
 
 #### to_string_precision
 
@@ -1151,15 +1197,17 @@ rounded to the nearest, a tie to the even one.
 
 With `prec` 0, no point is written.
 
-##### Examples
-
-`3.14159_F32.to_string_precision(2_U8)` is `3.14`, and `2.5_F32.to_string_precision(0_U8)`
-is `2`.
-
 ##### Parameters
 
 * `prec` - The number of digits after the point.
 * `v` - The number to write.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", 3.14159_F32.to_string_precision(2_U8), "3.14");;
+assert_eq(|_|"", 2.5_F32.to_string_precision(0_U8), "2")
+```
 
 ### namespace Std::F64
 
@@ -1379,15 +1427,18 @@ ten. The last digit is rounded to the nearest, a tie to the even one.
 
 With `prec` 0, no point is written.
 
-##### Examples
-
-`123.456.to_string_exp_precision(2_U8)` is `1.23e2`, `0.0123.to_string_exp_precision(1_U8)`
-is `1.2e-2`, and `123.456.to_string_exp_precision(0_U8)` is `1e2`.
-
 ##### Parameters
 
 * `prec` - The number of digits after the point.
 * `v` - The number to write.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", 123.456.to_string_exp_precision(2_U8), "1.23e2");;
+assert_eq(|_|"", 0.0123.to_string_exp_precision(1_U8), "1.2e-2");;
+assert_eq(|_|"", 123.456.to_string_exp_precision(0_U8), "1e2")
+```
 
 #### to_string_precision
 
@@ -1398,14 +1449,17 @@ rounded to the nearest, a tie to the even one.
 
 With `prec` 0, no point is written.
 
-##### Examples
-
-`3.14159.to_string_precision(2_U8)` is `3.14`, and `2.5.to_string_precision(0_U8)` is `2`.
-
 ##### Parameters
 
 * `prec` - The number of digits after the point.
 * `v` - The number to write.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", 3.14159.to_string_precision(2_U8), "3.14");;
+assert_eq(|_|"", 2.5.to_string_precision(0_U8), "2")
+```
 
 ### namespace Std::FFI
 
@@ -1628,6 +1682,14 @@ If resource creation is done with `FFI_CALL`, it will be treated as a pure funct
 * `value` - The value to be wrapped.
 * `dtor` - The destructor function to be called on the value.
 
+##### Examples
+
+```fix
+let ptr = *FFI_CALL_IO[Ptr malloc(CSizeT), 8.c_size_t];
+let buffer = *Destructor::make(ptr, |ptr| FFI_CALL_IO[() free(Ptr), ptr];; pure(nullptr));
+assert(|_|"", buffer.borrow(|ptr| ptr != nullptr))
+```
+
 #### mutate_unique
 
 Type: `(a -> Std::IO a) -> (a -> Std::IO b) -> Std::FFI::Destructor a -> (Std::FFI::Destructor a, b)`
@@ -1691,6 +1753,13 @@ Converts a string into a value by parsing it.
 ##### Parameters
 
 * `str` - The string to be converted.
+
+##### Examples
+
+```fix
+let n : Result ErrMsg I64 = "-42".from_string;
+assert_eq(|_|"", n, ok(-42))
+```
 
 ### namespace Std::Functor
 
@@ -3649,6 +3718,12 @@ NOTE: Since this function is designed so that `iter1.append(iter2)` appends `ite
 * `second` - The second iterator.
 * `first` - The first iterator.
 
+##### Examples
+
+```fix
+assert_eq(|_|"", [1, 2].from_array.append([3, 4].from_array).to_array, [1, 2, 3, 4])
+```
+
 #### bang
 
 Type: `[?out : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = a, Std::Iterator::Item input = a] input -> ?out`
@@ -3693,6 +3768,13 @@ Executes monadic actions and collects the results into an array.
 ##### Parameters
 
 * `iter` - The iterator of monads to be collected.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", [some(1), some(2)].from_array.collect_m, some([1, 2]));;
+assert_eq(|_|"", [some(1), none()].from_array.collect_m, none())
+```
 
 #### count_up
 
@@ -3785,6 +3867,12 @@ Conceptually, `[a0, a1, a2, ...].to_iter.fold(s, op) = s.op(a0).op(a1).op(a2)...
 * `body` - The function to be called on the pair of an element and the current state.
 * `iter` - The iterator to be folded.
 
+##### Examples
+
+```fix
+assert_eq(|_|"", ["a", "b", "c"].from_array.fold("", |x, acc| acc + x), "abc")
+```
+
 #### fold_m
 
 Type: `[iter : Std::Iterator, m : Std::Monad, Std::Iterator::Item iter = a] s -> (a -> s -> m s) -> iter -> m s`
@@ -3817,6 +3905,12 @@ Create an iterator by a function that returns element at each index.
 
 * `map` - The function that takes an index and returns the element at that index.
 
+##### Examples
+
+```fix
+assert_eq(|_|"", Iterator::from_map(|i| i * i).take(4).to_array, [0, 1, 4, 9])
+```
+
 #### generate
 
 Type: `[?it : Std::Iterator, Std::Iterator::Item ?it = a] s -> (s -> Std::Option (s, a)) -> ?it`
@@ -3827,6 +3921,14 @@ Create an iterator that generates elements by the state transition function.
 
 * `state` - The initial state.
 * `transition` - The state transition function that takes the current state and returns the next state and the next element.
+
+##### Examples
+
+```fix
+// The powers of 2 up to 100.
+let powers = Iterator::generate(1, |n| if n > 100 { none() } else { some((n * 2, n)) });
+assert_eq(|_|"", powers.to_array, [1, 2, 4, 8, 16, 32, 64])
+```
 
 #### get_first
 
@@ -3925,6 +4027,14 @@ This function is similar to `fold` but a more general version of it. It allows t
 * `body` - The function to be called on the pair of an element and the current state.
 * `iter` - The iterator to be looped.
 
+##### Examples
+
+```fix
+// Sum the elements until the sum would exceed 10.
+let sum = range(1, 100).loop_iter(0, |i, acc| if acc + i > 10 { break $ acc } else { continue $ acc + i });
+assert_eq(|_|"", sum, 10)
+```
+
 #### loop_iter_m
 
 Type: `[iter : Std::Iterator, m : Std::Monad, Std::Iterator::Item iter = a] s -> (a -> s -> m (Std::LoopState s s)) -> iter -> m s`
@@ -3966,6 +4076,14 @@ This allows you to return different types for `break` and `continue`.
 * `s` - The initial state.
 * `body` - The function to be called on the pair of an element and the current state.
 * `iter` - The iterator to be looped.
+
+##### Examples
+
+```fix
+// Find the index of the first even element.
+let res = [3, 5, 8, 9].from_array.loop_iter_s(0, |x, i| if x % 2 == 0 { break $ i } else { continue $ i + 1 });
+assert_eq(|_|"", res.as_break, 2)
+```
 
 #### map
 
@@ -4052,6 +4170,12 @@ away from `b`. `s` must not be 0.
 * `end` - The end of the range.
 * `step` - The step of the range.
 
+##### Examples
+
+```fix
+assert_eq(|_|"", range_step(10, 0, -3).to_array, [10, 7, 4, 1])
+```
+
 #### reverse
 
 Type: `[?out : Std::Iterator, input : Std::Iterator, Std::Iterator::Item ?out = a, Std::Iterator::Item input = a] input -> ?out`
@@ -4068,7 +4192,7 @@ NOTE: This function puts all elements of the iterator into an array, so it may c
 
 Type: `[a : Std::Additive, iter : Std::Iterator, Std::Iterator::Item iter = a] iter -> a`
 
-Calcculate sum of the elements of an iterator.
+Calculate the sum of the elements of an iterator.
 
 ##### Parameters
 
@@ -4128,6 +4252,12 @@ NOTE: Since this function is designed so that `iter1.zip(iter2)` zips `iter1` an
 
 * `second` - The second iterator.
 * `first` - The first iterator.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", [1, 2].from_array.zip(['a', 'b'].from_array).to_array, [(1, 'a'), (2, 'b')])
+```
 
 ### namespace Std::Iterator::DynIterator
 
@@ -4449,6 +4579,12 @@ goes second in the result.
 * `rhs` - The string that goes second.
 * `lhs` - The string that goes first.
 
+##### Examples
+
+```fix
+assert_eq(|_|"", "ab".concat("cd"), "abcd")
+```
+
 #### concat_iter
 
 Type: `[strs : Std::Iterator, Std::Iterator::Item strs = Std::String] strs -> Std::String`
@@ -4506,6 +4642,13 @@ The index it answers with is at least `start_idx`, with one exception:
 * `token` - The token to be searched.
 * `start_idx` - The index to start searching from.
 * `str` - The string to be searched.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", "abcabc".find("bc", 0), Option::some(1));;
+assert_eq(|_|"", "abcabc".find("bc", 2), Option::some(4))
+```
 
 #### from_U8
 
@@ -4577,6 +4720,12 @@ Type: `Std::I64 -> Std::I64 -> Std::String -> Std::String`
 * `end` - The end index of the substring.
 * `str` - The string to be sliced.
 
+##### Examples
+
+```fix
+assert_eq(|_|"", "hello".get_sub(1, 3), "el")
+```
+
 #### is_empty
 
 Type: `Std::String -> Std::Bool`
@@ -4598,6 +4747,12 @@ Joins (an iterator of) strings by a separator.
 * `sep` - The separator to be used for joining.
 * `iter` - The iterator of strings to be joined.
 
+##### Examples
+
+```fix
+assert_eq(|_|"", ["a", "b", "c"].to_iter.join(", "), "a, b, c")
+```
+
 #### pop_back_byte
 
 Type: `Std::String -> Std::String`
@@ -4618,13 +4773,7 @@ Populate strings into a template string, similar to "format" function in other l
 
 i-th "{}" in the template string is replaced by i-th string.
 
-Example:
-`"{}, {}!".populate(["Hello", "world"])` => "Hello, world!"
-
  "{{" and "}}" are escaped to "{" and "}".
-
-Example:
-`"{{ x = {}, y = {} }}".populate([1.to_string, 2.to_string])` => "{ x = 1, y = 2 }",
 
 If the number of placeholders does not match with the number of strings, this function halts the program.
 
@@ -4632,6 +4781,13 @@ If the number of placeholders does not match with the number of strings, this fu
 
 - `vs`: The array of strings ("values") to be inserted into the template string.
 - `template`: The template string.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", "{}, {}!".populate(["Hello", "world"]), "Hello, world!");;
+assert_eq(|_|"", "{{ x = {}, y = {} }}".populate([1.to_string, 2.to_string]), "{ x = 1, y = 2 }")
+```
 
 #### split
 
@@ -6794,6 +6950,23 @@ Defined as: `type IOFail a = unbox struct { ...fields... }`
 
 The type for I/O actions which may fail.
 
+In an `IOFail` action, `*` on an `IOFail` value stops the action at the first error.
+`throw` fails with an error message, `from_result` turns a `Result` into an `IOFail` value, and
+`lift` turns an `IO` action into one. `try` turns an `IOFail` action back into an `IO` action
+by handling the error.
+
+##### Examples
+
+```fix
+let parse_positive = |text : String| (
+    let n : I64 = *IOFail::from_result(text.from_string);
+    if n <= 0 { IOFail::throw("not positive: " + text) };
+    pure(n)
+);
+assert_eq(|_|"", *parse_positive("42").try(|_| pure(0)), 42);;
+assert_eq(|_|"", *parse_positive("-1").try(|_| pure(0)), 0)
+```
+
 #### IOHandle
 
 Defined as: `type IOHandle = unbox struct { ...fields... }`
@@ -6890,6 +7063,17 @@ However, iterating over `DynIterator` are much slower than iterating over other 
 Therefore, if performance is important, you should avoid using `DynIterator`.
 In particular, if you iterate over the same `DynIterator` multiple times,
 consider converting it to an `ArrayIterator` using `bang` before iterating.
+
+##### Examples
+
+```fix
+// Two branches return iterators built differently, as one type.
+let evens_or_all = |only_evens| (
+    if only_evens { range(0, 5).filter(|i| i % 2 == 0).to_dyn } else { range(0, 5).to_dyn }
+);
+assert_eq(|_|"", evens_or_all(true).to_array, [0, 2, 4]);;
+assert_eq(|_|"", evens_or_all(false).to_array, [0, 1, 2, 3, 4])
+```
 
 ##### field `next`
 
@@ -7005,7 +7189,7 @@ Type: `i1`
 
 Defined as: `type RangeIterator = unbox struct { ...fields... }`
 
-Iterators that yields reversed elements of an iterator.
+The iterator over the integers from `next` up to `end`, excluding `end`.
 
 ##### field `next`
 
@@ -7220,6 +7404,13 @@ Converts a string into a value by parsing it.
 ###### Parameters
 
 * `str` - The string to be converted.
+
+###### Examples
+
+```fix
+let n : Result ErrMsg I64 = "-42".from_string;
+assert_eq(|_|"", n, ok(-42))
+```
 
 #### trait `[f : *->*] f : Functor`
 
