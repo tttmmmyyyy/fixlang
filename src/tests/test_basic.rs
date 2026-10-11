@@ -6525,16 +6525,10 @@ pub fn test_float_from_string_reads_decimal_texts() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// `from_string` into `F64` and `F32` rounds a text by all of its digits where the first 19 do not
-/// decide the answer. Each pair of texts lies just below and just above the midpoint between two
-/// neighbouring numbers, written with 25 digits, at powers of ten whose fifth powers the reading
-/// multiplies by `5 ^ 135` once or twice. Then come the midpoint between two subnormal `F64`s, whose
-/// 768 digits tie to the even neighbour, and the same text with a 1 at its 800th digit, past the 769
-/// digits the reading compares one by one; and texts whose fractional part ends inside or after a
-/// group of eight or four digits, which the reading takes at once.
-#[test]
-pub fn test_float_from_string_rounds_by_every_digit() {
-    let source = r#"
+/// The head of a test source: the `Main` module declaration followed by assertions on what
+/// `from_string` reads from a text into `F64` and `F32`. `expect_f64` and `expect_f32` compare the
+/// bits of the number read, and `expect_out_of_range` and `expect_malformed` the error reported.
+const MAIN_MODULE_WITH_FLOAT_READING_ASSERTIONS: &str = r#"
         module Main;
 
         expect_f64 : String -> U64 -> IO ();
@@ -6549,6 +6543,32 @@ pub fn test_float_from_string_rounds_by_every_digit() {
             assert_eq(|_|"reading \"" + text + "\"", read.as_ok.to_bits, bits)
         );
 
+        // Asserts that reading `text` as the type of the first argument reports it out of range.
+        expect_out_of_range : [a : FromString] a -> String -> IO ();
+        expect_out_of_range = |_, text| (
+            let read : Result ErrMsg a = text.from_string;
+            assert_eq(|_|"reading \"" + text + "\"", read.as_err, "Failed to convert string to number (out of range): " + text)
+        );
+
+        // Asserts that reading `text` as the type of the first argument reports it malformed.
+        expect_malformed : [a : FromString] a -> String -> IO ();
+        expect_malformed = |_, text| (
+            let read : Result ErrMsg a = text.from_string;
+            assert_eq(|_|"reading \"" + text + "\"", read.as_err, "Failed to convert string to number (invalid format): " + text)
+        );
+"#;
+
+/// `from_string` into `F64` and `F32` rounds a text by all of its digits where the first 19 do not
+/// decide the answer. Each pair of texts lies just below and just above the midpoint between two
+/// neighbouring numbers, written with 25 digits, at powers of ten whose fifth powers the reading
+/// multiplies by `5 ^ 135` once or twice. Then come the midpoint between two subnormal `F64`s, whose
+/// 768 digits tie to the even neighbour, and the same text with a 1 at its 800th digit, past the 769
+/// digits the reading compares one by one; and texts whose fractional part ends inside or after a
+/// group of eight or four digits, which the reading takes at once.
+#[test]
+pub fn test_float_from_string_rounds_by_every_digit() {
+    let source = MAIN_MODULE_WITH_FLOAT_READING_ASSERTIONS.to_string()
+        + r#"
         main : IO ();
         main = (
             expect_f64("1.000000000000000054715201e200", 7598952565167317594_U64);;
@@ -6589,28 +6609,8 @@ pub fn test_float_from_string_rounds_by_every_digit() {
 /// which is out of range.
 #[test]
 pub fn test_float_from_string_rounds_a_long_integer_part_by_every_digit() {
-    let source = r#"
-        module Main;
-
-        expect_f64 : String -> U64 -> IO ();
-        expect_f64 = |text, bits| (
-            let read : Result ErrMsg F64 = text.from_string;
-            assert_eq(|_|"reading \"" + text + "\"", read.as_ok.to_bits, bits)
-        );
-
-        expect_f32 : String -> U32 -> IO ();
-        expect_f32 = |text, bits| (
-            let read : Result ErrMsg F32 = text.from_string;
-            assert_eq(|_|"reading \"" + text + "\"", read.as_ok.to_bits, bits)
-        );
-
-        // Asserts that reading `text` as the type of the first argument reports it out of range.
-        expect_out_of_range : [a : FromString] a -> String -> IO ();
-        expect_out_of_range = |_, text| (
-            let read : Result ErrMsg a = text.from_string;
-            assert_eq(|_|"reading \"" + text + "\"", read.as_err, "Failed to convert string to number (out of range): " + text)
-        );
-
+    let source = MAIN_MODULE_WITH_FLOAT_READING_ASSERTIONS.to_string()
+        + r#"
         main : IO ();
         main = (
             expect_f64("1180591620717411434496", 4922434392715952128_U64);;
@@ -6635,16 +6635,8 @@ pub fn test_float_from_string_rounds_a_long_integer_part_by_every_digit() {
 /// precede and follow them, and a byte of a character other than ASCII.
 #[test]
 pub fn test_float_from_string_rejects_a_byte_next_to_the_digits_in_a_group() {
-    let source = r#"
-        module Main;
-
-        // Asserts that reading `text` as the type of the first argument reports it malformed.
-        expect_malformed : [a : FromString] a -> String -> IO ();
-        expect_malformed = |_, text| (
-            let read : Result ErrMsg a = text.from_string;
-            assert_eq(|_|"reading \"" + text + "\"", read.as_err, "Failed to convert string to number (invalid format): " + text)
-        );
-
+    let source = MAIN_MODULE_WITH_FLOAT_READING_ASSERTIONS.to_string()
+        + r#"
         main : IO ();
         main = (
             expect_malformed(0.0, "0.1234567:");;
@@ -6663,16 +6655,8 @@ pub fn test_float_from_string_rejects_a_byte_next_to_the_digits_in_a_group() {
 /// ten too large for `I64`, `2 ^ 64 + 5`, as out of range whichever its sign.
 #[test]
 pub fn test_float_from_string_reads_a_power_of_ten_of_any_length() {
-    let source = r#"
-        module Main;
-
-        // Asserts that reading `text` as the type of the first argument reports it out of range.
-        expect_out_of_range : [a : FromString] a -> String -> IO ();
-        expect_out_of_range = |_, text| (
-            let read : Result ErrMsg a = text.from_string;
-            assert_eq(|_|"reading \"" + text + "\"", read.as_err, "Failed to convert string to number (out of range): " + text)
-        );
-
+    let source = MAIN_MODULE_WITH_FLOAT_READING_ASSERTIONS.to_string()
+        + r#"
         main : IO ();
         main = (
             let read : Result ErrMsg F64 = "1e+5".from_string;
