@@ -5275,6 +5275,16 @@ impl StructGetOp {
         self.field_idx
     }
 
+    /// Whether reading this field out of a container of type `container_ty` takes the container
+    /// apart: the field holds a reference and the container is unboxed. Such a read hands out a leaf
+    /// of the container itself and leaves the container's other leaves with no owner, so RC IR
+    /// lowering turns it into a `Destructure` of the whole container, and this operation never reads
+    /// it.
+    pub fn takes_container_apart(&self, container_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
+        let field_ty = &container_ty.field_types(type_env)[self.field_idx];
+        !container_ty.is_box(type_env) && !field_ty.is_fully_unboxed(type_env)
+    }
+
     /// How a field getter takes its field out of its container.
     fn field_read(
         container_ty: &Arc<TypeNode>,
@@ -5282,12 +5292,15 @@ impl StructGetOp {
         type_env: &TypeEnv,
     ) -> FieldRead {
         if field_ty.is_fully_unboxed(type_env) {
-            FieldRead::Moved
-        } else if container_ty.is_box(type_env) {
-            FieldRead::Retained
-        } else {
-            FieldRead::TakenWithContainer
+            return FieldRead::Moved;
         }
+        assert!(
+            container_ty.is_box(type_env),
+            "a field getter reading a field that holds a reference out of the unboxed `{}` is lowered \
+             to a `Destructure`",
+            container_ty.to_string()
+        );
+        FieldRead::Retained
     }
 
     /// How this getter reads its field out of its container. A field getter takes exactly the
@@ -5299,20 +5312,16 @@ impl StructGetOp {
     }
 }
 
-/// How a field getter takes its field out of its container, which decides what it counts.
-///
-/// A boxed container hands out a field it goes on holding, so the read needs the container alive
-/// for as long as it takes to read it and nothing more. An unboxed container is the exception: its
-/// fields *are* its references, and a field left behind has no other owner, so the read takes the
-/// container over and drops what it did not ask for.
+/// How a field getter takes its field out of its container, which decides what it counts. Either
+/// way the read needs the container alive for as long as it takes to read it and nothing more.
+/// A read that would take an unboxed container apart is not among these: lowering turns it into a
+/// `Destructure` (see `StructGetOp::takes_container_apart`).
 enum FieldRead {
     /// The field holds no reference, so it is moved out and nothing is counted.
     Moved,
     /// The field is moved out of a boxed container and retained, so the reader holds a reference of
     /// its own and the container keeps the one it holds.
     Retained,
-    /// The field is taken together with the unboxed container, whose other fields are released.
-    TakenWithContainer,
 }
 
 #[typetag::serde]
@@ -5341,16 +5350,6 @@ impl BuiltinOp for StructGetOp {
                 gc.retain(field.clone(), assumed_state(self.assume_local));
                 field
             }
-            FieldRead::TakenWithContainer => {
-                let struct_obj = gc.get_scoped_obj(&self.var_name);
-                ObjectFieldType::get_struct_fields(
-                    gc,
-                    &struct_obj,
-                    &[self.field_idx as u32],
-                    assumed_state(self.assume_local),
-                )[0]
-                .clone()
-            }
         }
     }
 
@@ -5366,35 +5365,20 @@ impl BuiltinOp for StructGetOp {
         vec![&mut self.var_name]
     }
 
-    fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         // A field getter takes exactly the container, so operand 0 is it.
         i == 0
-            && !matches!(
-                self.field_read_of(arg_tys, type_env),
-                FieldRead::TakenWithContainer
-            )
     }
 
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
-        arg_tys: &[Arc<TypeNode>],
+        _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // From a boxed container the field is `Unknown` (contents not tracked); from an unboxed
-        // container it is a pure projection carrying the container's leaf at that field. A field
-        // getter takes exactly the container, so `arg_tys[0]` is it.
-        let container_boxed = arg_tys[0].is_box(type_env);
-        if container_boxed {
-            Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
-        } else {
-            let field_idx = self.field_index();
-            Provenance::build_shape(result_ty, type_env, &|path: &FieldPath| {
-                let mut arg_path = vec![field_idx];
-                arg_path.extend_from_slice(path);
-                sole_origin(LeafOrigin::Arg(0, arg_path))
-            })
-        }
+        // A field holding a reference comes out of a boxed container, whose contents are not
+        // tracked, and a field holding none has no leaf to say anything about.
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
     fn result_locality(
@@ -5419,14 +5403,10 @@ impl BuiltinOp for StructGetOp {
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
         // A read that moves the field out counts nothing; one out of a boxed container retains the
-        // field alone; one that takes the unboxed container over releases the fields nobody asked
-        // for, which the whole operand covers.
+        // field alone.
         match self.field_read_of(arg_tys, type_env) {
             FieldRead::Moved => vec![],
             FieldRead::Retained => vec![RcTarget::Result(vec![])],
-            FieldRead::TakenWithContainer => {
-                vec![RcTarget::Result(vec![]), RcTarget::Operand(0, vec![])]
-            }
         }
     }
 

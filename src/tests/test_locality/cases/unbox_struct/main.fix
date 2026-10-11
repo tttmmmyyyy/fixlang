@@ -1,7 +1,7 @@
 module Main;
 
-// Reading one field out of an unboxed struct drops the fields nobody named, so a field left behind
-// decides whether that drop may skip the state dispatch. The struct itself is built here; the field
+// Reading one field out of an unboxed struct takes it apart and drops the fields nobody named, so a
+// field left behind decides whether that drop may skip the state dispatch. The struct itself is built here; the field
 // nobody reads is the global.
 // Built at run time: a global holding an array literal of numbers is put wherever it is read, so
 // nothing would read the global itself.

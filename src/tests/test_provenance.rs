@@ -821,6 +821,44 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that reading a field out of an unboxed struct that is updated afterwards retains
+    /// nothing, so every field reaches its update with its uniqueness intact. The read takes the
+    /// struct apart and releases the field it leaves behind by a node of its own, which cancels
+    /// against the retain that keeps the struct for the update. A release inside the read would
+    /// leave that retain standing, and the retain would make the field left behind of unknown
+    /// sharing, so its update would keep its check.
+    #[test]
+    fn test_unique_check_elim_after_field_read() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim_read_field");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let add_edges = func_block(&dump, "fn Main::add_edges", |_| true);
+        assert!(
+            add_edges
+                .iter()
+                .all(|l| !l.trim_start().starts_with("retain ")),
+            "reading a field of the struct before updating it should retain nothing:\n{}",
+            add_edges.join("\n")
+        );
+        let appends: Vec<&&str> = add_edges
+            .iter()
+            .filter(|l| l.contains("= array_append_value"))
+            .collect();
+        assert_eq!(
+            appends.len(),
+            2,
+            "`add_edges` should append to each of its two arrays once:\n{}",
+            add_edges.join("\n")
+        );
+        assert!(
+            appends
+                .iter()
+                .all(|l| l.contains("array_append_value[unique]")),
+            "both appends should drop their checks:\n{}",
+            add_edges.join("\n")
+        );
+    }
+
     /// Verifies that a loop entered with a shared array pays its uniqueness check on the first
     /// iteration alone.
     ///

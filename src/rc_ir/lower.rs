@@ -2,7 +2,8 @@
 //!
 //! This is the structural pass: it produces the RC IR skeleton — an A-normal form
 //! with fresh, globally-unique names, every lambda lifted to a top-level function, `If` and union
-//! patterns desugared to `Match`, and struct/tuple `let`-patterns desugared to a `Destructure` node.
+//! patterns desugared to `Match`, and struct/tuple `let`-patterns — and reads of a field holding a
+//! reference out of an unboxed struct — desugared to a `Destructure` node.
 //! Every argument is owned and there are NO explicit `Retain`/`Release` nodes yet; reference-counting
 //! insertion is a separate backward pass. The one reference-counting effect already present is the
 //! retain baked into the boxed capture getter, per the retain-getter model.
@@ -15,7 +16,8 @@ use crate::ast::program::{Symbol, TypeEnv};
 use crate::ast::types::{TyCon, TypeNode};
 use crate::constants::{BOOL_FALSE_TAG, BOOL_TRUE_TAG, CAP_NAME};
 use crate::fixstd::builtin::{
-    make_dynamic_object_ty, ArrayLitOp, CaptureProjectOp, FFICallOp, MakeStructOp, NoStorageValueOp,
+    make_dynamic_object_ty, ArrayLitOp, CaptureProjectOp, FFICallOp, MakeStructOp,
+    NoStorageValueOp, StructGetOp,
 };
 use crate::hash::md5_hex;
 use crate::misc::{grow_stack, Map, Set};
@@ -504,6 +506,17 @@ impl<'a> Lowerer<'a> {
                 }
             })
             .collect();
+        if let Some(get) = op.as_any().downcast_ref::<StructGetOp>() {
+            let container = &operand_vars[0];
+            if get.takes_container_apart(&container.ty, self.type_env) {
+                return self.lower_field_read_by_destructure(
+                    container,
+                    get.field_index(),
+                    source,
+                    bindings,
+                );
+            }
+        }
         // Rewrite the op's embedded operand names to the fresh local names, so code generation
         // resolves them from scope.
         let slots = op.free_vars_mut();
@@ -525,6 +538,36 @@ impl<'a> Lowerer<'a> {
             source,
         ));
         result
+    }
+
+    /// Lower a read of field `field_idx` out of the unboxed `container` as a `Destructure` binding
+    /// every field, and return the variable bound to the one read.
+    ///
+    /// The field read is a leaf of the container itself, so the read leaves the container's other
+    /// leaves with no owner. Bound to variables nothing reads, they are released by `Release` nodes
+    /// of their own, which cancellation pairs with the retain RC insertion puts before the
+    /// `Destructure` where the container is used afterwards.
+    fn lower_field_read_by_destructure(
+        &mut self,
+        container: &RcVar,
+        field_idx: usize,
+        source: Option<Span>,
+        bindings: &mut Vec<PendingBinding>,
+    ) -> RcVar {
+        let fields: Vec<(usize, RcVar)> = container
+            .ty
+            .field_types(self.type_env)
+            .into_iter()
+            .enumerate()
+            .map(|(i, field_ty)| (i, self.fresh_var("field", field_ty, source.clone())))
+            .collect();
+        let read = fields[field_idx].1.clone();
+        bindings.push(PendingBinding::Destructure(
+            container.clone(),
+            fields,
+            source,
+        ));
+        read
     }
 
     /// Lower a function application: the callee and then the arguments become variables, and the
