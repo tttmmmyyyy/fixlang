@@ -5384,8 +5384,8 @@ type _BinaryFormat a = struct {
     // The power of ten above which every number whose significand is other than zero rounds to an
     // infinity.
     _largest_power_of_10 : I64,
-    // The powers of ten from which to which a number whose significand is below `2 ^ 64` can lie
-    // halfway between two numbers of `a`.
+    // The least and the greatest power of ten at which a number whose significand is below `2 ^ 64`
+    // can lie halfway between two numbers of `a`.
     _min_exponent_round_to_even : I64,
     _max_exponent_round_to_even : I64,
     // The powers of ten whose absolute values `a` holds exactly: Clinger's fast path multiplies or
@@ -5483,9 +5483,9 @@ impl F32 : _BinaryFloat {
 type _DecimalText = struct {
     // Whether the text begins with `-`.
     _negative : Bool,
-    // The significant digits as a number, or the first 19 of them where `too_many_digits` is true.
+    // The significant digits as a number, or the first 19 of them where `_too_many_digits` is true.
     _mantissa : U64,
-    // The power of ten that `mantissa` is multiplied by.
+    // The power of ten that `_mantissa` is multiplied by.
     _exponent : I64,
     // Whether the text holds more than 19 significant digits.
     _too_many_digits : Bool,
@@ -5503,11 +5503,11 @@ type _DecimalText = struct {
 type _Rounding = union {
     // Toward zero.
     _down : (),
-    // To the nearest, ties to even, where `true` says the digits of the number go on, other than
-    // zero, below the bits the significand is rounded from.
+    // To the nearest, ties to even. `true` says that the number has a digit other than zero below
+    // the bits the significand is rounded from.
     _nearest_with_truncated : Bool,
-    // To the nearest, ties to even, where comparing the digits of the number with the point halfway
-    // up to the next number found it below, at or above that point: -1, 0 or 1.
+    // To the nearest, ties to even. The value is -1, 0 or 1 where comparing the digits of the number
+    // found it below, at or above the point halfway up to the next number.
     _nearest_by_comparison : I64,
 };
 
@@ -5735,8 +5735,8 @@ namespace String {
 
     // Reads the first 19 significant digits of `text` again, where `text` holds more than 19 digits
     // that `_accumulate_decimal_digits` let wrap around, and answers with `text` holding them and
-    // the power of ten they are multiplied by. Answers with `text` as it is where all but at most 19
-    // of the digits are the zeros before the first other digit. Part of ffc.h's
+    // the power of ten they are multiplied by. Answers with `text` unchanged where at most 19 digits
+    // follow the leading zeros. Part of ffc.h's
     // `ffc_parse_number_string`.
     //
     // # Parameters
@@ -5816,7 +5816,7 @@ namespace String {
     );
 
     // Answers with the byte of `bytes` at `i`, turned to lowercase where it is an uppercase letter.
-    // Turns some bytes other than letters into other bytes than they are, none of them a letter.
+    // A byte other than a letter may change as well, but never into a letter.
     //
     // # Parameters
     // * `i` - The index of the byte.
@@ -5881,8 +5881,8 @@ namespace String {
         _FloatTextReading::_read $ _from_bits_u64(bits)
     );
 
-    // The bias `_compute_error` adds to the power of two it answers with, which makes it negative to
-    // say that the answer is not rounded yet: ffc.h's `FFC_INVALID_AM_BIAS`.
+    // The bias `_compute_error` adds to the power of two it answers with. It makes the power negative,
+    // which marks the answer as not rounded yet. ffc.h's `FFC_INVALID_AM_BIAS`.
     _invalid_power2_bias : I64;
     _invalid_power2_bias = -0x8000;
 
@@ -5933,9 +5933,9 @@ namespace String {
         (mantissa, power2)
     );
 
-    // Answers with the high and the low 64 bits of `w * 5 ^ q` in the form the 128 bits of `5 ^ q`
-    // that `_powers_of_five_128` holds give it: the bits past those the format needs are exact,
-    // or all ones. ffc.h's `ffc_compute_product_approximation`.
+    // Answers with the high and the low 64 bits of `w * 5 ^ q`, computed from the 128 bits of `5 ^ q`
+    // in `_powers_of_five_128`. The bits past those the format needs are exact, or all ones. ffc.h's
+    // `ffc_compute_product_approximation`.
     //
     // # Parameters
     // * `format` - The binary format.

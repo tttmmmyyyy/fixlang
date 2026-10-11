@@ -6560,8 +6560,8 @@ const MAIN_MODULE_WITH_FLOAT_READING_ASSERTIONS: &str = r#"
 
 /// `from_string` into `F64` and `F32` rounds a text by all of its digits where the first 19 do not
 /// decide the answer. Each pair of texts lies just below and just above the midpoint between two
-/// neighbouring numbers, written with 25 digits, at powers of ten whose fifth powers the reading
-/// multiplies by `5 ^ 135` once or twice. Then come the midpoint between two subnormal `F64`s, whose
+/// neighbouring numbers, written with 25 digits, at powers of ten for which the reading multiplies
+/// by `5 ^ 135` once or twice. Then come the midpoint between two subnormal `F64`s, whose
 /// 768 digits tie to the even neighbour, and the same text with a 1 at its 800th digit, past the 769
 /// digits the reading compares one by one; and texts whose fractional part ends inside or after a
 /// group of eight or four digits, which the reading takes at once.
