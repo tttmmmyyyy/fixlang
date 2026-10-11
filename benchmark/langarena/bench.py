@@ -47,7 +47,7 @@ import sys
 # behind it. Raise the revision deliberately, and say in `../speedtest/history.md` which rows sit on
 # which side.
 REPO_URL = "https://github.com/tttmmmyyyy/LangArena.git"
-PINNED_REVISION = "123412b4b0ee1f7df1b12740d966329f6d6807cd"
+PINNED_REVISION = "8dc7019fb1164724086832235620095ea5d035b3"
 
 # Where the clone lives. Outside the fixlang tree, so that a benchmark run leaves nothing behind in
 # it and so that the build output a measured project accumulates sits somewhere a user expects to
