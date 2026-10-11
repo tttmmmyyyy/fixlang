@@ -520,15 +520,9 @@ pub(crate) fn names_every_field(
     fields: &[(usize, RcVar)],
     type_env: &TypeEnv,
 ) -> bool {
-    let mut named: Vec<usize> = fields.iter().map(|(i, _)| *i).collect();
-    named.sort();
-    let all: Vec<usize> = container
+    container
         .ty
-        .unpunched_field_types(type_env)
-        .into_iter()
-        .map(|(i, _)| i)
-        .collect();
-    named == all
+        .lists_every_unpunched_field(fields.iter().map(|(i, _)| *i), type_env)
 }
 
 /// The leaves an `App`, `Builtin`, or `Closure` right-hand side consumes: an owning argument

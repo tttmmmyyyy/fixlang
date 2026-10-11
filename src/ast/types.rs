@@ -1161,6 +1161,22 @@ impl TypeNode {
             .collect()
     }
 
+    /// Whether `indices` lists each unpunched field of this struct type exactly once, in any order.
+    pub fn lists_every_unpunched_field(
+        &self,
+        indices: impl Iterator<Item = usize>,
+        type_env: &TypeEnv,
+    ) -> bool {
+        let mut listed: Vec<usize> = indices.collect();
+        listed.sort();
+        let all: Vec<usize> = self
+            .unpunched_field_types(type_env)
+            .into_iter()
+            .map(|(i, _)| i)
+            .collect();
+        listed == all
+    }
+
     /// The index of the struct field or the union variant named `field_name`, which is the index it
     /// sits at in the layout.
     pub fn field_index(&self, type_env: &TypeEnv, field_name: &str) -> Option<usize> {

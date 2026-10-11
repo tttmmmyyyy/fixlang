@@ -174,9 +174,12 @@ impl ExportStatement {
                 fix_value = run_io(gc, &fix_value);
             }
             IOType::IOState => {
+                // The result is `(IOState, a)`; the state holds no reference, so taking it out and
+                // leaving it unused drops nothing.
                 fix_value =
-                    ObjectFieldType::get_struct_fields(gc, &fix_value, &[1], RcState::Unknown)[0]
-                        .clone();
+                    ObjectFieldType::get_struct_fields(gc, &fix_value, &[0, 1], RcState::Unknown)
+                        [1]
+                    .clone();
             }
         }
 
