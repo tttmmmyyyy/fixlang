@@ -5271,7 +5271,7 @@ pub struct StructGetOp {
 
 impl StructGetOp {
     /// The index of the field this operation reads.
-    pub fn field_index(&self) -> usize {
+    fn field_index(&self) -> usize {
         self.field_idx
     }
 
@@ -5394,21 +5394,6 @@ impl BuiltinOp for StructGetOp {
     }
 }
 
-/// The body of the field getter of a boxed struct: reads the field at `field_idx` out of the struct
-/// bound to `var_name`.
-pub fn struct_get_body(var_name: &str, field_idx: usize, field_ty: Arc<TypeNode>) -> Arc<ExprNode> {
-    let var_name_clone = FullName::local(var_name);
-    expr_builtin(
-        Box::new(StructGetOp {
-            assume_local: false,
-            var_name: var_name_clone,
-            field_idx,
-        }),
-        field_ty,
-        None,
-    )
-}
-
 /// The field getter `@f` of a struct: a function of type `S -> F` returning the field `f`.
 ///
 /// The getter of a boxed struct reads the field with `StructGetOp`, which borrows the struct. An
@@ -5422,9 +5407,16 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
     const VAR_NAME: &str = "str_obj";
     const FIELD_NAME: &str = "field";
     let body = if definition.as_struct().is_boxed() {
-        struct_get_body(VAR_NAME, field_idx as usize, field.ty.clone())
+        expr_builtin(
+            Box::new(StructGetOp {
+                assume_local: false,
+                var_name: FullName::local(VAR_NAME),
+                field_idx: field_idx as usize,
+            }),
+            field.ty.clone(),
+            None,
+        )
     } else {
-        let has_rest = definition.fields().len() > 1;
         let pattern = PatternNode::make_struct_with_srcs(
             Arc::new(definition.tycon()),
             vec![(
@@ -5432,7 +5424,7 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
                 None,
                 PatternNode::make_var(var_local(FIELD_NAME), None),
             )],
-            has_rest,
+            true,
         );
         expr_let(
             pattern,
@@ -6610,11 +6602,7 @@ pub fn struct_act(
     // and the shared branch is dead: emit the unique branch directly. This also keeps the generated
     // code off `unsafe_is_unique`, whose `[a : Boxed]` bound a struct value need not satisfy. A boxed
     // struct keeps the runtime check that selects the branch.
-    let is_boxed_struct = match &definition.value {
-        TypeDeclValue::Struct(s) => s.is_boxed(),
-        _ => panic!("`struct_act` was given a non-struct type definition."),
-    };
-    let body = if is_boxed_struct {
+    let body = if definition.as_struct().is_boxed() {
         expr_let(
             PatternNode::make_struct(
                 tycon(make_tuple_name_abs(2)),
