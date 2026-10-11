@@ -86,25 +86,6 @@ fn run_c_compiler(com: &mut Command, step: &str) -> Result<(), Errors> {
     Ok(())
 }
 
-/// A header the build writes beside the sources, which include it by `path`.
-struct RuntimeHeader {
-    /// Where the header is written, relative to the directory the sources are compiled in, which
-    /// is the path it carries in the compiler's tree.
-    path: &'static str,
-    /// The header's text.
-    text: &'static str,
-}
-
-/// The headers of the libraries under `src/fixstd/` that the runtime carries — fast_float in
-/// `ffc/` — written beside the sources that include them.
-///
-/// Every header those directories hold is carried. `test_vendored_headers_are_all_carried` holds
-/// this list to the directories.
-const RUNTIME_HEADERS: [RuntimeHeader; 1] = [RuntimeHeader {
-    path: "ffc/ffc.h",
-    text: include_str!("../fixstd/ffc/ffc.h"),
-}];
-
 /// One of the C sources the runtime is built from.
 struct RuntimeSource {
     /// Names the object this source compiles to, both in the build directory and in the cache.
@@ -117,18 +98,11 @@ struct RuntimeSource {
 }
 
 /// The C sources the runtime is built from, each compiled to an object of its own.
-const RUNTIME_SOURCES: [RuntimeSource; 2] = [
-    RuntimeSource {
-        object_name: "runtime",
-        path: "runtime.c",
-        text: include_str!("../fixstd/runtime.c"),
-    },
-    RuntimeSource {
-        object_name: "float-text",
-        path: "float_text.c",
-        text: include_str!("../fixstd/float_text.c"),
-    },
-];
+const RUNTIME_SOURCES: [RuntimeSource; 1] = [RuntimeSource {
+    object_name: "runtime",
+    path: "runtime.c",
+    text: include_str!("../fixstd/runtime.c"),
+}];
 
 /// Removes the directory a runtime build wrote its copies of the sources into.
 fn remove_build_dir(build_dir: &Path) {
@@ -172,9 +146,6 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
             path.to_string_lossy().to_string()
         ));
     };
-    for header in RUNTIME_HEADERS {
-        write_file(header.path, header.text);
-    }
     for source in &RUNTIME_SOURCES {
         write_file(source.path, source.text);
     }
@@ -184,12 +155,9 @@ fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors>
         // object it writes.
         let compiled_name = format!("{}.o", source.object_name);
         let mut com = c_compiler_command(&config)?;
-        // A source reaches the headers beside it by the path it includes them under, which is the
-        // one it carries in the compiler's tree.
-        com.current_dir(&build_dir).arg("-I.");
-        // Reading a floating point number from text is arithmetic, and unoptimized arithmetic costs
-        // several times what optimized arithmetic costs. The whole runtime compiles in a few
-        // milliseconds, and a build reuses the objects a previous build of the same compiler wrote.
+        com.current_dir(&build_dir);
+        // The runtime is compiled optimized: it compiles in a few milliseconds, and a build reuses
+        // the objects a previous build of the same compiler wrote.
         com.arg("-O2")
             .arg("-ffunction-sections")
             .arg("-fdata-sections");
@@ -306,93 +274,16 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
 
 #[cfg(test)]
 mod tests {
-    use super::{RUNTIME_HEADERS, RUNTIME_SOURCES};
-    use crate::misc::Set;
+    use super::RUNTIME_SOURCES;
     use std::fs;
-    use std::path::Path;
     use std::process::Command;
-
-    /// The directories under `src/fixstd/` that hold a library the runtime carries.
-    const VENDORED_DIRS: [&str; 1] = ["ffc"];
-
-    /// The files in the directories of `VENDORED_DIRS` whose name ends in `extension`, each named
-    /// by its path under `src/fixstd/`, such as `ffc/ffc.h`.
-    fn vendored_files(extension: &str) -> Set<String> {
-        let mut files = Set::default();
-        for dir in VENDORED_DIRS {
-            let vendored_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("src/fixstd")
-                .join(dir);
-            for entry in fs::read_dir(&vendored_dir)
-                .unwrap_or_else(|e| panic!("failed to read {}: {}", vendored_dir.display(), e))
-            {
-                let name = entry
-                    .expect("failed to read a directory entry")
-                    .file_name()
-                    .to_string_lossy()
-                    .to_string();
-                if name.ends_with(extension) {
-                    files.insert(format!("{}/{}", dir, name));
-                }
-            }
-        }
-        files
-    }
-
-    /// Whether `path`, a path under `src/fixstd/`, lies in one of `VENDORED_DIRS`.
-    fn is_vendored(path: &str) -> bool {
-        VENDORED_DIRS
-            .iter()
-            .any(|dir| path.starts_with(&format!("{}/", dir)))
-    }
-
-    /// Every header of the vendored libraries is carried into the directory a build compiles the
-    /// runtime in. Taking a newer version of one is a matter of replacing its directory's files,
-    /// and a header it gained that nothing carried would leave the C compiler with nothing to
-    /// include — at the user's build rather than at ours.
-    #[test]
-    fn test_vendored_headers_are_all_carried() {
-        let carried: Set<String> = RUNTIME_HEADERS
-            .iter()
-            .map(|header| header.path.to_string())
-            .filter(|path| is_vendored(path))
-            .collect();
-        assert_eq!(
-            vendored_files(".h"),
-            carried,
-            "the headers of the vendored libraries and the ones RUNTIME_HEADERS carries"
-        );
-    }
-
-    /// Every source of the vendored libraries is compiled into the runtime. Taking a newer version
-    /// of one is a matter of replacing its directory's files, and a source it gained that nothing
-    /// compiled would be missing from the link.
-    #[test]
-    fn test_vendored_sources_are_all_compiled() {
-        let compiled: Set<String> = RUNTIME_SOURCES
-            .iter()
-            .map(|source| source.path.to_string())
-            .filter(|path| is_vendored(path))
-            .collect();
-        assert_eq!(
-            vendored_files(".c"),
-            compiled,
-            "the sources of the vendored libraries and the ones RUNTIME_SOURCES compiles"
-        );
-    }
 
     /// Every name the runtime's objects define for the linker begins with `fixruntime_`, a prefix
     /// `FFI_EXPORT` rejects. So the runtime's names never meet a name a program or a library it
-    /// links defines, although a program may carry fast_float on its own: the runtime's copy of
-    /// fast_float defines its functions as `static`.
+    /// links defines.
     #[test]
     fn test_runtime_defines_only_fixruntime_names() {
         let build_dir = tempfile::tempdir().expect("failed to create a temporary directory");
-        for header in RUNTIME_HEADERS.iter() {
-            let path = build_dir.path().join(header.path);
-            fs::create_dir_all(path.parent().unwrap()).unwrap();
-            fs::write(&path, header.text).unwrap();
-        }
         for source in RUNTIME_SOURCES.iter() {
             let path = build_dir.path().join(source.path);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -402,7 +293,7 @@ mod tests {
             let object = format!("{}.o", source.object_name);
             let output = Command::new("gcc")
                 .current_dir(build_dir.path())
-                .args(["-I.", "-O2", "-c", "-o", &object, source.path])
+                .args(["-O2", "-c", "-o", &object, source.path])
                 .output()
                 .expect("failed to run gcc");
             assert!(

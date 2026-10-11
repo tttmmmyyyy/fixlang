@@ -3328,21 +3328,6 @@ namespace String {
         String { _data : bytes._unsafe_truncate_bounds_unchecked(length + 1) }
     );
 
-    // Turns what the reader in `float_text.c` answered for `str` into the result of `from_string`.
-    // The literals below must stay in sync with the `FLOAT_TEXT_*` values there.
-    //
-    // # Parameters
-    // * `outcome` - The `FLOAT_TEXT_*` value the reader recorded.
-    // * `v` - The number the reader answered with.
-    // * `str` - The text the reader read.
-    _float_text_result : U8 -> a -> String -> Result ErrMsg a;
-    _float_text_result = |outcome, v, str| (
-        if outcome == 0_U8 { Result::ok(v) };
-        if outcome == 1_U8 { Result::err("Failed to convert string to number (invalid format): " + str) };
-        if outcome == 2_U8 { Result::err("Failed to convert string to number (out of range): " + str) };
-        undefined("[Std::String::_float_text_result] The reader recorded an outcome it does not define: " + outcome.to_string)
-    );
-
     // Answers with the index of the first byte at or after `i` that is not a decimal digit.
     //
     // # Parameters
@@ -5015,12 +5000,7 @@ impl F32 : FromString {
     // The number is rounded to the nearest `F32`. A text naming a number too large for `F32`, or a
     // number other than zero too small for it to hold at all, is an error.
     from_string = |str| (
-        let (v, outcome) = str.borrow_c_str_io(|c_str| (
-            let v = *FFI_CALL_IO[F32 fixruntime_read_f32(Ptr), c_str];
-            let outcome = *FFI_CALL_IO[U8 fixruntime_float_text_outcome()];
-            (v, outcome).pure
-        )).unsafe_perform;
-        str._float_text_result(outcome, v)
+        String::_read_float_text(0, str.get_size, str.@_data)._float_text_result(str)
     );
 }
 
@@ -5373,13 +5353,1779 @@ impl F64 : FromString {
     // The number is rounded to the nearest `F64`. A text naming a number too large for `F64`, or a
     // number other than zero too small for it to hold at all, is an error.
     from_string = |str| (
-        let (v, outcome) = str.borrow_c_str_io(|c_str| (
-            let v = *FFI_CALL_IO[F64 fixruntime_read_f64(Ptr), c_str];
-            let outcome = *FFI_CALL_IO[U8 fixruntime_float_text_outcome()];
-            (v, outcome).pure
-        )).unsafe_perform;
-        str._float_text_result(outcome, v)
+        String::_read_float_text(0, str.get_size, str.@_data)._float_text_result(str)
     );
+}
+
+// What reading a floating point number of the type `a` from text came to.
+type _FloatTextReading a = union {
+    // The text names a number, and this is the number of `a` nearest to it.
+    read : a,
+    // The text is not a number.
+    malformed : (),
+    // The text names a finite number whose nearest number of `a` is an infinity, or a number other
+    // than zero whose nearest number of `a` is zero.
+    out_of_range : (),
+};
+
+// The constants of the binary format of the floating point type `a` that reading a number from
+// decimal text depends on: fast_float's `binary_format`.
+type _BinaryFormat a = struct {
+    // The bits of the significand that the encoding stores.
+    mantissa_explicit_bits : I64,
+    // The bias of the exponent, negated.
+    minimum_exponent : I64,
+    // The biased exponent of an infinity and of a NaN.
+    infinite_power : I64,
+    // The index of the sign bit.
+    sign_index : I64,
+    // The power of ten below which every number whose significand is below `2 ^ 64` rounds to zero.
+    smallest_power_of_10 : I64,
+    // The power of ten above which every number whose significand is other than zero rounds to an
+    // infinity.
+    largest_power_of_10 : I64,
+    // The powers of ten from which to which a number whose significand is below `2 ^ 64` can lie
+    // halfway between two numbers of `a`.
+    min_exponent_round_to_even : I64,
+    max_exponent_round_to_even : I64,
+    // The powers of ten whose absolute values `a` holds exactly: Clinger's fast path multiplies or
+    // divides by them.
+    min_exponent_fast_path : I64,
+    max_exponent_fast_path : I64,
+    // The number of significant digits that decide which of two numbers of `a` a decimal number lies
+    // nearer to.
+    max_digits : I64,
+};
+
+// A floating point type that `String::_read_float_text` reads from decimal text: the constants of
+// its binary format, and the operations on its numbers that the reading needs.
+trait a : _BinaryFloat {
+    // Answers with the constants of the binary format of `a`.
+    _get_binary_format : () -> _BinaryFormat a;
+
+    // Answers with the number whose bits are `bits`, which has no bit set above the width of `a`.
+    //
+    // # Parameters
+    // * `bits` - The bits of the number.
+    _from_bits_u64 : U64 -> a;
+
+    // Answers with the number equal to `n`, which is at most
+    // `2 ^ (_BinaryFormat::@mantissa_explicit_bits + 1)`, so that `a` holds it exactly.
+    //
+    // # Parameters
+    // * `n` - The number.
+    _from_exact_u64 : U64 -> a;
+
+    // Multiplies `v` by `10 ^ e`, or divides it by `10 ^ -e` where `e` is negative, rounding once.
+    // `e` is within `_BinaryFormat::@min_exponent_fast_path` and
+    // `_BinaryFormat::@max_exponent_fast_path`.
+    //
+    // # Parameters
+    // * `e` - The power of ten.
+    // * `v` - The number to scale.
+    _scale_by_power_of_ten : I64 -> a -> a;
+}
+
+impl F64 : _BinaryFloat {
+    _get_binary_format = |_| _BinaryFormat {
+        mantissa_explicit_bits : 52,
+        minimum_exponent : -1023,
+        infinite_power : 0x7FF,
+        sign_index : 63,
+        smallest_power_of_10 : -342,
+        largest_power_of_10 : 308,
+        min_exponent_round_to_even : -4,
+        max_exponent_round_to_even : 23,
+        min_exponent_fast_path : -22,
+        max_exponent_fast_path : 22,
+        max_digits : 769,
+    };
+    _from_bits_u64 = from_bits;
+    _from_exact_u64 = to_F64;
+    _scale_by_power_of_ten = |e, v| (
+        let powers = [
+            1.0e0, 1.0e1, 1.0e2, 1.0e3, 1.0e4, 1.0e5, 1.0e6, 1.0e7, 1.0e8, 1.0e9, 1.0e10, 1.0e11,
+            1.0e12, 1.0e13, 1.0e14, 1.0e15, 1.0e16, 1.0e17, 1.0e18, 1.0e19, 1.0e20, 1.0e21, 1.0e22
+        ];
+        if e < 0 { v / powers.unsafe_get_bounds_unchecked(-e) };
+        v * powers.unsafe_get_bounds_unchecked(e)
+    );
+}
+
+impl F32 : _BinaryFloat {
+    _get_binary_format = |_| _BinaryFormat {
+        mantissa_explicit_bits : 23,
+        minimum_exponent : -127,
+        infinite_power : 0xFF,
+        sign_index : 31,
+        smallest_power_of_10 : -64,
+        largest_power_of_10 : 38,
+        min_exponent_round_to_even : -17,
+        max_exponent_round_to_even : 10,
+        min_exponent_fast_path : -10,
+        max_exponent_fast_path : 10,
+        max_digits : 114,
+    };
+    _from_bits_u64 = |bits| F32::from_bits(bits.u32);
+    _from_exact_u64 = to_F32;
+    _scale_by_power_of_ten = |e, v| (
+        let powers = [
+            1.0e0_F32, 1.0e1_F32, 1.0e2_F32, 1.0e3_F32, 1.0e4_F32, 1.0e5_F32, 1.0e6_F32, 1.0e7_F32,
+            1.0e8_F32, 1.0e9_F32, 1.0e10_F32
+        ];
+        if e < 0 { v / powers.unsafe_get_bounds_unchecked(-e) };
+        v * powers.unsafe_get_bounds_unchecked(e)
+    );
+}
+
+// A decimal number that a text names, as `String::_parse_decimal_text` finds it: fast_float's
+// `parsed_number_string`.
+type _DecimalText = struct {
+    // Whether the text begins with `-`.
+    negative : Bool,
+    // The significant digits as a number, or the first 19 of them where `too_many_digits` is true.
+    mantissa : U64,
+    // The power of ten that `mantissa` is multiplied by.
+    exponent : I64,
+    // Whether the text holds more than 19 significant digits.
+    too_many_digits : Bool,
+    // The index of the first digit of the integer part and the index past its last.
+    integer_start : I64,
+    integer_end : I64,
+    // The index of the first digit of the fractional part and the index past its last. The
+    // fractional part of a number written without a point is empty, starting where the integer
+    // part ends.
+    fraction_start : I64,
+    fraction_end : I64,
+};
+
+// How `String::_round_adjusted_mantissa` rounds away the bits below the significand.
+type _Rounding = union {
+    // Toward zero.
+    down : (),
+    // To the nearest, ties to even, where `true` says the digits of the number go on, other than
+    // zero, below the bits the significand is rounded from.
+    nearest_with_truncated : Bool,
+    // To the nearest, ties to even, where comparing the digits of the number with the point halfway
+    // up to the next number found it below, at or above that point: -1, 0 or 1.
+    nearest_by_comparison : I64,
+};
+
+// The functions of this namespace whose names begin with `_` and that read a floating point number
+// from decimal text, and the tables they read, are translated from fast_float by Daniel Lemire and
+// João Paulo Magalhaes (https://github.com/fastfloat/fast_float), in the C port ffc.h by Koleman Nix
+// (https://github.com/kolemannix/ffc.h), licensed under the MIT License, a copy of which is in
+// `src/fixstd/ffc/LICENSE-MIT`. Each function names the function of ffc.h it translates, and
+// `src/fixstd/ffc/README.md` lists what the translation changes.
+namespace String {
+    // Reads a floating point number from the bytes of `bytes` from `start` to `end`, which are the
+    // whole of the text: a decimal number, `inf`, `infinity` or `nan`, as `F64::from_string`
+    // describes. ffc.h's `ffc_from_chars`, with the requirement that the text ends where the
+    // number does.
+    //
+    // # Parameters
+    // * `start` - The index of the first byte of the text.
+    // * `end` - The index past the last byte of the text, at most the size of `bytes`.
+    // * `bytes` - The bytes holding the text.
+    _read_float_text : [a : _BinaryFloat, a : Neg] I64 -> I64 -> Array U8 -> _FloatTextReading a;
+    _read_float_text = |start, end, bytes| (
+        if start == end { _FloatTextReading::malformed() };
+        match bytes._parse_decimal_text(start, end) {
+            some(text) => bytes._round_decimal_text(text),
+            none() => bytes._read_infinity_or_nan(start, end)
+        }
+    );
+
+    // Turns what `_read_float_text` came to for `str` into the result of `from_string`.
+    //
+    // # Parameters
+    // * `str` - The text read.
+    // * `reading` - What reading `str` came to.
+    _float_text_result : String -> _FloatTextReading a -> Result ErrMsg a;
+    _float_text_result = |str, reading| (
+        match reading {
+            read(v) => Result::ok(v),
+            malformed() => Result::err("Failed to convert string to number (invalid format): " + str),
+            out_of_range() => Result::err("Failed to convert string to number (out of range): " + str)
+        }
+    );
+
+    // Finds the decimal number that the bytes of `bytes` from `start` to `end` write, and answers
+    // with none where they are not one: an optional `+` or `-`, digits with an optional point among
+    // them, and an optional power of ten, `e` or `E` followed by an optional sign and digits.
+    // ffc.h's `ffc_parse_number_string`, with the requirement that the text ends where the number
+    // does.
+    //
+    // # Parameters
+    // * `start` - The index of the first byte of the text, before `end`.
+    // * `end` - The index past the last byte of the text.
+    // * `bytes` - The bytes holding the text.
+    _parse_decimal_text : I64 -> I64 -> Array U8 -> Option _DecimalText;
+    _parse_decimal_text = |start, end, bytes| (
+        let first = bytes.unsafe_get_bounds_unchecked(start);
+        let negative = first == '-';
+        let integer_start = if negative || first == '+' { start + 1 } else { start };
+        let (integer_end, mantissa) = bytes._accumulate_decimal_digits(integer_start, end, 0_U64);
+        let has_point = integer_end < end && bytes.unsafe_get_bounds_unchecked(integer_end) == '.';
+        let fraction_start = if has_point { integer_end + 1 } else { integer_end };
+        let (fraction_end, mantissa) = if has_point {
+            let (i, mantissa) = bytes._accumulate_eight_digit_groups(fraction_start, end, mantissa);
+            bytes._accumulate_decimal_digits(i, end, mantissa)
+        } else {
+            (fraction_start, mantissa)
+        };
+        let digit_count = integer_end - integer_start + (fraction_end - fraction_start);
+        if digit_count == 0 { Option::none() };
+        let (exponent_end, explicit_exponent) = bytes._parse_explicit_exponent(fraction_end, end);
+        if exponent_end != end { Option::none() };
+        let text = _DecimalText {
+            negative : negative,
+            mantissa : mantissa,
+            exponent : fraction_start - fraction_end + explicit_exponent,
+            too_many_digits : false,
+            integer_start : integer_start,
+            integer_end : integer_end,
+            fraction_start : fraction_start,
+            fraction_end : fraction_end,
+        };
+        if digit_count <= 19 { Option::some(text) };
+        Option::some(bytes._reread_first_19_digits(digit_count, explicit_exponent, text))
+    );
+
+    // Reads the decimal digits of `bytes` from `i` up to `end` or the first byte that is not a
+    // digit, appending each to `value`, and answers with the index past the last digit and the
+    // value. The value wraps around past `2 ^ 64`.
+    //
+    // # Parameters
+    // * `i` - The index of the first byte to read.
+    // * `end` - The index past the last byte that may be read.
+    // * `value` - The number the digits before `i` make.
+    // * `bytes` - The bytes holding the digits.
+    _accumulate_decimal_digits : I64 -> I64 -> U64 -> Array U8 -> (I64, U64);
+    _accumulate_decimal_digits = |i, end, value, bytes| loop((i, value), |(i, value)| (
+        if i == end { break $ (i, value) };
+        let digit = bytes.unsafe_get_bounds_unchecked(i) - '0';
+        if digit > 9_U8 { break $ (i, value) };
+        continue $ (i + 1, value * 10_U64 + digit.u64)
+    ));
+
+    // Reads the decimal digits of `bytes` from `i` eight at a time while the eight bytes from there
+    // are all digits and end at or before `end`, and then four where the four bytes from there are,
+    // appending them to `value`, and answers with the index past the last digit read and the value.
+    // The value wraps around past `2 ^ 64`. ffc.h's `ffc_loop_parse_if_eight_digits`.
+    //
+    // # Parameters
+    // * `i` - The index of the first byte to read.
+    // * `end` - The index past the last byte that may be read.
+    // * `value` - The number the digits before `i` make.
+    // * `bytes` - The bytes holding the digits.
+    _accumulate_eight_digit_groups : I64 -> I64 -> U64 -> Array U8 -> (I64, U64);
+    _accumulate_eight_digit_groups = |i, end, value, bytes| (
+        let (i, value) = loop((i, value), |(i, value)| (
+            if end - i < 8 { break $ (i, value) };
+            let word = bytes._load_little_endian_u64(i);
+            if !_is_eight_digits(word) { break $ (i, value) };
+            continue $ (i + 8, value * 100000000_U64 + _parse_eight_digits(word))
+        ));
+        if end - i < 4 { (i, value) };
+        let word = bytes._load_little_endian_u32(i);
+        if !_is_four_digits(word) { (i, value) };
+        (i + 4, value * 10000_U64 + _parse_four_digits(word))
+    );
+
+    // Answers with the number whose bytes, the least significant first, are the eight bytes of
+    // `bytes` from `i`.
+    //
+    // # Parameters
+    // * `i` - The index of the first byte, at least eight before the size of `bytes`.
+    // * `bytes` - The bytes.
+    _load_little_endian_u64 : I64 -> Array U8 -> U64;
+    _load_little_endian_u64 = |i, bytes| (
+        bytes._load_little_endian_u32(i).bit_or(bytes._load_little_endian_u32(i + 4).shift_left(32_U64))
+    );
+
+    // Answers with the number whose bytes, the least significant first, are the four bytes of `bytes`
+    // from `i`.
+    //
+    // # Parameters
+    // * `i` - The index of the first byte, at least four before the size of `bytes`.
+    // * `bytes` - The bytes.
+    _load_little_endian_u32 : I64 -> Array U8 -> U64;
+    _load_little_endian_u32 = |i, bytes| (
+        bytes.unsafe_get_bounds_unchecked(i).u64
+            .bit_or(bytes.unsafe_get_bounds_unchecked(i + 1).u64.shift_left(8_U64))
+            .bit_or(bytes.unsafe_get_bounds_unchecked(i + 2).u64.shift_left(16_U64))
+            .bit_or(bytes.unsafe_get_bounds_unchecked(i + 3).u64.shift_left(24_U64))
+    );
+
+    // Answers whether the eight bytes of `word`, the least significant first, are all decimal digits.
+    // ffc.h's `ffc_is_made_of_eight_digits_fast`.
+    //
+    // # Parameters
+    // * `word` - The bytes.
+    _is_eight_digits : U64 -> Bool;
+    _is_eight_digits = |word| (
+        (word + 0x4646464646464646_U64).bit_or(word - 0x3030303030303030_U64).bit_and(0x8080808080808080_U64) == 0_U64
+    );
+
+    // Answers with the number the eight decimal digits of `word` write, the least significant byte
+    // first. ffc.h's `ffc_parse_eight_digits_unrolled_swar`.
+    //
+    // # Parameters
+    // * `word` - The digits.
+    _parse_eight_digits : U64 -> U64;
+    _parse_eight_digits = |word| (
+        let mask = 0x000000FF000000FF_U64;
+        // 100 + 1000000 * 2 ^ 32 and 1 + 10000 * 2 ^ 32.
+        let multiplier1 = 0x000F424000000064_U64;
+        let multiplier2 = 0x0000271000000001_U64;
+        let word = word - 0x3030303030303030_U64;
+        // Each byte now holds its digit plus ten times the digit before it.
+        let word = word * 10_U64 + word.shift_right(8_U64);
+        (word.bit_and(mask) * multiplier1 + word.shift_right(16_U64).bit_and(mask) * multiplier2).shift_right(32_U64).bit_and(0xFFFFFFFF_U64)
+    );
+
+    // Answers whether the four low bytes of `word` are all decimal digits. ffc.h's
+    // `ffc_is_made_of_four_digits_fast`.
+    //
+    // # Parameters
+    // * `word` - The bytes, with the four high bytes zero.
+    _is_four_digits : U64 -> Bool;
+    _is_four_digits = |word| (
+        (word + 0x46464646_U64).bit_or(word - 0x30303030_U64).bit_and(0x80808080_U64) == 0_U64
+    );
+
+    // Answers with the number the four decimal digits in the low bytes of `word` write, the least
+    // significant byte first. ffc.h's `ffc_parse_four_digits_unrolled`.
+    //
+    // # Parameters
+    // * `word` - The digits, with the four high bytes zero.
+    _parse_four_digits : U64 -> U64;
+    _parse_four_digits = |word| (
+        let word = word - 0x30303030_U64;
+        let word = word * 10_U64 + word.shift_right(8_U64);
+        (word.bit_and(0x00FF00FF_U64) * 0x00640001_U64).shift_right(16_U64).bit_and(0xFFFF_U64)
+    );
+
+    // Reads the power of ten that `bytes` write at `i`: `e` or `E`, an optional sign and digits.
+    // Answers with the index past it and the power, or with `i` and 0 where `bytes` write no power of
+    // ten there. A power of ten above `2 ^ 28` is read as a power of at least that much.
+    //
+    // # Parameters
+    // * `i` - The index where the power of ten may begin.
+    // * `end` - The index past the last byte that may be read.
+    // * `bytes` - The bytes holding the text.
+    _parse_explicit_exponent : I64 -> I64 -> Array U8 -> (I64, I64);
+    _parse_explicit_exponent = |i, end, bytes| (
+        if i == end { (i, 0) };
+        let letter = bytes.unsafe_get_bounds_unchecked(i);
+        if letter != 'e' && letter != 'E' { (i, 0) };
+        let sign = if i + 1 < end { bytes.unsafe_get_bounds_unchecked(i + 1) } else { 0_U8 };
+        let negative = sign == '-';
+        let digits_start = if negative || sign == '+' { i + 2 } else { i + 1 };
+        if digits_start == end || bytes.unsafe_get_bounds_unchecked(digits_start) - '0' > 9_U8 { (i, 0) };
+        let (digits_end, power) = loop((digits_start, 0), |(j, power)| (
+            if j == end { break $ (j, power) };
+            let digit = bytes.unsafe_get_bounds_unchecked(j) - '0';
+            if digit > 9_U8 { break $ (j, power) };
+            continue $ (j + 1, if power < 0x10000000 { power * 10 + digit.i64 } else { power })
+        ));
+        (digits_end, if negative { -power } else { power })
+    );
+
+    // Reads the first 19 significant digits of `text` again, where `text` holds more than 19 digits
+    // that `_accumulate_decimal_digits` let wrap around, and answers with `text` holding them and
+    // the power of ten they are multiplied by. Answers with `text` as it is where all but at most 19
+    // of the digits are the zeros before the first other digit. Part of ffc.h's
+    // `ffc_parse_number_string`.
+    //
+    // # Parameters
+    // * `digit_count` - The number of digits of `text`.
+    // * `explicit_exponent` - The power of ten written after the digits.
+    // * `text` - The number.
+    // * `bytes` - The bytes holding the text.
+    _reread_first_19_digits : I64 -> I64 -> _DecimalText -> Array U8 -> _DecimalText;
+    _reread_first_19_digits = |digit_count, explicit_exponent, text, bytes| (
+        // The zeros before the first other digit, and the point among them, are not significant.
+        let digit_count = loop((text.@integer_start, digit_count), |(i, count)| (
+            if i == text.@fraction_end { break $ count };
+            let byte = bytes.unsafe_get_bounds_unchecked(i);
+            if byte == '0' { continue $ (i + 1, count - 1) };
+            if byte == '.' { continue $ (i + 1, count) };
+            break $ count
+        ));
+        if digit_count <= 19 { text };
+        let text = text.set_too_many_digits(true);
+        let minimal_nineteen_digit_integer = 1000000000000000000_U64;
+        let (i, mantissa) = loop((text.@integer_start, 0_U64), |(i, mantissa)| (
+            if mantissa >= minimal_nineteen_digit_integer || i == text.@integer_end { break $ (i, mantissa) };
+            continue $ (i + 1, mantissa * 10_U64 + (bytes.unsafe_get_bounds_unchecked(i) - '0').u64)
+        ));
+        if mantissa >= minimal_nineteen_digit_integer {
+            text.set_mantissa(mantissa).set_exponent(text.@integer_end - i + explicit_exponent)
+        };
+        let (i, mantissa) = loop((text.@fraction_start, mantissa), |(i, mantissa)| (
+            if mantissa >= minimal_nineteen_digit_integer || i == text.@fraction_end { break $ (i, mantissa) };
+            continue $ (i + 1, mantissa * 10_U64 + (bytes.unsafe_get_bounds_unchecked(i) - '0').u64)
+        ));
+        text.set_mantissa(mantissa).set_exponent(text.@fraction_start - i + explicit_exponent)
+    );
+
+    // Reads `inf`, `infinity` or `nan` in any case, with an optional `+` or `-`, from the bytes of
+    // `bytes` from `start` to `end`, which are the whole of the text, and `nan` followed by letters,
+    // digits and underscores in parentheses. A NaN read is the quiet NaN of the sign written. ffc.h's
+    // `ffc_parse_infnan`, with the requirement that the text ends where the word does.
+    //
+    // # Parameters
+    // * `start` - The index of the first byte of the text, before `end`.
+    // * `end` - The index past the last byte of the text.
+    // * `bytes` - The bytes holding the text.
+    _read_infinity_or_nan : [a : _BinaryFloat] I64 -> I64 -> Array U8 -> _FloatTextReading a;
+    _read_infinity_or_nan = |start, end, bytes| (
+        let format : _BinaryFormat a = _get_binary_format();
+        let first = bytes.unsafe_get_bounds_unchecked(start);
+        let negative = first == '-';
+        let i = if negative || first == '+' { start + 1 } else { start };
+        let length = end - i;
+        let infinity_bits = format.@infinite_power.u64.shift_left(format.@mantissa_explicit_bits.u64);
+        let sign_bit = if negative { 1_U64.shift_left(format.@sign_index.u64) } else { 0_U64 };
+        let is_nan = length >= 3
+            && bytes._get_lowercase_byte(i) == 'n'
+            && bytes._get_lowercase_byte(i + 1) == 'a'
+            && bytes._get_lowercase_byte(i + 2) == 'n'
+            && (length == 3 || (length >= 5
+                && bytes.unsafe_get_bounds_unchecked(i + 3) == '('
+                && bytes.unsafe_get_bounds_unchecked(end - 1) == ')'
+                && bytes._is_nan_payload(i + 4, end - 1)));
+        if is_nan {
+            let quiet_bit = 1_U64.shift_left((format.@mantissa_explicit_bits - 1).u64);
+            _FloatTextReading::read $ _from_bits_u64(infinity_bits.bit_or(quiet_bit).bit_or(sign_bit))
+        };
+        let is_infinity = length >= 3
+            && bytes._get_lowercase_byte(i) == 'i'
+            && bytes._get_lowercase_byte(i + 1) == 'n'
+            && bytes._get_lowercase_byte(i + 2) == 'f'
+            && (length == 3 || (length == 8
+                && bytes._get_lowercase_byte(i + 3) == 'i'
+                && bytes._get_lowercase_byte(i + 4) == 'n'
+                && bytes._get_lowercase_byte(i + 5) == 'i'
+                && bytes._get_lowercase_byte(i + 6) == 't'
+                && bytes._get_lowercase_byte(i + 7) == 'y'));
+        if is_infinity { _FloatTextReading::read $ _from_bits_u64(infinity_bits.bit_or(sign_bit)) };
+        _FloatTextReading::malformed()
+    );
+
+    // Answers with the byte of `bytes` at `i`, turned to lowercase where it is an uppercase letter.
+    // Turns some bytes other than letters into other bytes than they are, none of them a letter.
+    //
+    // # Parameters
+    // * `i` - The index of the byte.
+    // * `bytes` - The bytes.
+    _get_lowercase_byte : I64 -> Array U8 -> U8;
+    _get_lowercase_byte = |i, bytes| bytes.unsafe_get_bounds_unchecked(i).bit_or(0x20_U8);
+
+    // Answers whether the bytes of `bytes` from `i` to `end` are all letters, digits and
+    // underscores, which `nan` may be followed by in parentheses.
+    //
+    // # Parameters
+    // * `i` - The index of the first byte.
+    // * `end` - The index past the last byte.
+    // * `bytes` - The bytes.
+    _is_nan_payload : I64 -> I64 -> Array U8 -> Bool;
+    _is_nan_payload = |i, end, bytes| loop(i, |i| (
+        if i == end { break $ true };
+        let byte = bytes.unsafe_get_bounds_unchecked(i);
+        let lower = byte.bit_or(0x20_U8);
+        if ('a' <= lower && lower <= 'z') || ('0' <= byte && byte <= '9') || byte == '_' { continue $ i + 1 };
+        break $ false
+    ));
+
+    // Rounds the decimal number `text` names to the nearest number of `a`, ties to even. ffc.h's
+    // `ffc_from_chars_advanced`.
+    //
+    // # Parameters
+    // * `text` - The number.
+    // * `bytes` - The bytes holding the text.
+    _round_decimal_text : [a : _BinaryFloat, a : Neg] _DecimalText -> Array U8 -> _FloatTextReading a;
+    _round_decimal_text = |text, bytes| (
+        let format : _BinaryFormat a = _get_binary_format();
+        let mantissa_bits = format.@mantissa_explicit_bits;
+        let negative = text.@negative;
+        let mantissa = text.@mantissa;
+        let exponent = text.@exponent;
+        // Clinger's fast path: the significand and the power of ten are both exact in `a`, so one
+        // multiplication or division rounds the number once.
+        if !text.@too_many_digits
+            && format.@min_exponent_fast_path <= exponent && exponent <= format.@max_exponent_fast_path
+            && mantissa <= 2_U64.shift_left(mantissa_bits.u64) {
+            let v = _from_exact_u64(mantissa);
+            let v = if exponent == 0 { v } else { _scale_by_power_of_ten(exponent, v) };
+            _FloatTextReading::read $ if negative { -v } else { v }
+        };
+        let (result_mantissa, power2) = _compute_float(format, exponent, mantissa);
+        let (result_mantissa, power2) = if !text.@too_many_digits || power2 < 0 { (result_mantissa, power2) } else {
+            // The digits past the first 19 put the number between `mantissa` and `mantissa + 1`,
+            // and where those two round alike, so does the number.
+            let (next_mantissa, next_power2) = _compute_float(format, exponent, mantissa + 1_U64);
+            if result_mantissa == next_mantissa && power2 == next_power2 { (result_mantissa, power2) };
+            _compute_error(format, exponent, mantissa)
+        };
+        let (result_mantissa, power2) = if power2 >= 0 { (result_mantissa, power2) } else {
+            bytes._round_by_digit_comparison(format, text, (result_mantissa, power2))
+        };
+        if (mantissa != 0_U64 && result_mantissa == 0_U64 && power2 == 0) || power2 == format.@infinite_power {
+            _FloatTextReading::out_of_range()
+        };
+        let sign_bit = if negative { 1_U64.shift_left(format.@sign_index.u64) } else { 0_U64 };
+        let bits = result_mantissa.bit_or(power2.u64.shift_left(mantissa_bits.u64)).bit_or(sign_bit);
+        _FloatTextReading::read $ _from_bits_u64(bits)
+    );
+
+    // The bias `_compute_error` adds to the power of two it answers with, which makes it negative to
+    // say that the answer is not rounded yet: ffc.h's `FFC_INVALID_AM_BIAS`.
+    _invalid_power2_bias : I64;
+    _invalid_power2_bias = -0x8000;
+
+    // Rounds `w * 10 ^ q` to the nearest number of the format, ties to even, by the Eisel-Lemire
+    // algorithm, and answers with the stored significand and the biased exponent of that number.
+    // Answers with a negative exponent where the product of `w` and the 128 bits of `5 ^ q` it reads
+    // cannot decide the rounding. ffc.h's `ffc_compute_float`.
+    //
+    // # Parameters
+    // * `format` - The binary format.
+    // * `q` - The power of ten.
+    // * `w` - The significand.
+    _compute_float : _BinaryFormat a -> I64 -> U64 -> (U64, I64);
+    _compute_float = |format, q, w| (
+        let mantissa_bits = format.@mantissa_explicit_bits;
+        if w == 0_U64 || q < format.@smallest_power_of_10 { (0_U64, 0) };
+        if q > format.@largest_power_of_10 { (0_U64, format.@infinite_power) };
+        let lz = w.count_leading_zeros;
+        let w = w.shift_left(lz);
+        let (high, low) = _compute_product_approximation(format, q, w);
+        let upper_bit = high.shift_right(63_U64).i64;
+        let shift = upper_bit + 64 - mantissa_bits - 3;
+        let mantissa = high.shift_right(shift.u64);
+        let power2 = _convert_power_of_10_to_power_of_2(q) + upper_bit - lz.i64 - format.@minimum_exponent;
+        if power2 <= 0 {
+            // A subnormal number, or zero.
+            if -power2 + 1 >= 64 { (0_U64, 0) };
+            let mantissa = mantissa.shift_right((-power2 + 1).u64);
+            let mantissa = (mantissa + mantissa.bit_and(1_U64)).shift_right(1_U64);
+            // Rounding up may reach the smallest normal number.
+            (mantissa, if mantissa < 1_U64.shift_left(mantissa_bits.u64) { 0 } else { 1 })
+        };
+        // A product whose bits below the significand are all zero is a tie, which rounds to even
+        // where `5 ^ q` fits in 64 bits and the product is exact.
+        let is_tie = low <= 1_U64
+            && format.@min_exponent_round_to_even <= q && q <= format.@max_exponent_round_to_even
+            && mantissa.bit_and(3_U64) == 1_U64
+            && mantissa.shift_left(shift.u64) == high;
+        let mantissa = if is_tie { mantissa.bit_and(1_U64.bit_not) } else { mantissa };
+        let mantissa = (mantissa + mantissa.bit_and(1_U64)).shift_right(1_U64);
+        let (mantissa, power2) = if mantissa >= 2_U64.shift_left(mantissa_bits.u64) {
+            (1_U64.shift_left(mantissa_bits.u64), power2 + 1)
+        } else {
+            (mantissa, power2)
+        };
+        let mantissa = mantissa.bit_and(1_U64.shift_left(mantissa_bits.u64).bit_not);
+        if power2 >= format.@infinite_power { (0_U64, format.@infinite_power) };
+        (mantissa, power2)
+    );
+
+    // Answers with the high and the low 64 bits of `w * 5 ^ q` in the form the 128 bits of `5 ^ q`
+    // that `_powers_of_five_128` holds give it: the bits past those the format needs are exact,
+    // or all ones. ffc.h's `ffc_compute_product_approximation`.
+    //
+    // # Parameters
+    // * `format` - The binary format.
+    // * `q` - The power of five, from -342 to 308.
+    // * `w` - The number to multiply, whose most significant bit is one.
+    _compute_product_approximation : _BinaryFormat a -> I64 -> U64 -> (U64, U64);
+    _compute_product_approximation = |format, q, w| (
+        let index = 2 * (q + 342);
+        let first = w.u128 * _powers_of_five_128.unsafe_get_bounds_unchecked(index).u128;
+        let high = first.shift_right(64_U128).u64;
+        let low = first.u64;
+        let precision_mask = U64::maximum.shift_right((format.@mantissa_explicit_bits + 3).u64);
+        if high.bit_and(precision_mask) != precision_mask { (high, low) };
+        let second_high = (w.u128 * _powers_of_five_128.unsafe_get_bounds_unchecked(index + 1).u128).shift_right(64_U128).u64;
+        let low = low + second_high;
+        (if second_high > low { high + 1_U64 } else { high }, low)
+    );
+
+    // Computes `floor(log2(5 ^ q)) + q + 63` for `q` from 0 to 349, and `-ceil(log2(5 ^ -q)) + q + 63`
+    // for `q` from -399 to -1. ffc.h's `ffc_b10_to_b2`.
+    //
+    // # Parameters
+    // * `q` - The power of ten.
+    _convert_power_of_10_to_power_of_2 : I64 -> I64;
+    _convert_power_of_10_to_power_of_2 = |q| (217706 * q).shift_right(16) + 63;
+
+    // Answers with `w * 10 ^ q` truncated to the significand `_round_by_digit_comparison` starts from,
+    // with its biased exponent plus `_invalid_power2_bias`. ffc.h's `ffc_compute_error`.
+    //
+    // # Parameters
+    // * `format` - The binary format.
+    // * `q` - The power of ten, within the range `_compute_float` reads the table for.
+    // * `w` - The significand, other than zero.
+    _compute_error : _BinaryFormat a -> I64 -> U64 -> (U64, I64);
+    _compute_error = |format, q, w| (
+        let lz = w.count_leading_zeros;
+        let (high, _) = _compute_product_approximation(format, q, w.shift_left(lz));
+        let high_zeros = high.shift_right(63_U64).bit_xor(1_U64);
+        let bias = format.@mantissa_explicit_bits - format.@minimum_exponent;
+        let power2 = _convert_power_of_10_to_power_of_2(q) + bias - high_zeros.i64 - lz.i64 - 62 + _invalid_power2_bias;
+        (high.shift_left(high_zeros), power2)
+    );
+
+    // Rounds the decimal number `text` names to the nearest number of the format, ties to even, by
+    // reading its digits into a big integer, where `adjusted` is what `_compute_error` answers for
+    // it. ffc.h's `ffc_digit_comp`.
+    //
+    // # Parameters
+    // * `format` - The binary format.
+    // * `text` - The number.
+    // * `adjusted` - The significand and the biased exponent plus `_invalid_power2_bias` of the number,
+    // truncated.
+    // * `bytes` - The bytes holding the text.
+    _round_by_digit_comparison : _BinaryFormat a -> _DecimalText -> (U64, I64) -> Array U8 -> (U64, I64);
+    _round_by_digit_comparison = |format, text, (mantissa, power2), bytes| (
+        let adjusted = (mantissa, power2 - _invalid_power2_bias);
+        let scientific_exponent = _find_scientific_exponent(text.@mantissa, text.@exponent);
+        let (digits, digit_count) = bytes._parse_significant_digits(format.@max_digits, text);
+        let exponent = scientific_exponent + 1 - digit_count;
+        if exponent >= 0 { _round_positive_digit_comparison(format, digits, exponent) };
+        _round_negative_digit_comparison(format, digits, adjusted, exponent)
+    );
+
+    // Answers with `exponent` plus the number of decimal digits of `mantissa` less one: the power of
+    // ten of the number `mantissa * 10 ^ exponent` written with one digit before the point. ffc.h's
+    // `ffc_scientific_exponent`.
+    //
+    // # Parameters
+    // * `mantissa` - The significand.
+    // * `exponent` - The power of ten.
+    _find_scientific_exponent : U64 -> I64 -> I64;
+    _find_scientific_exponent = |mantissa, exponent| loop((mantissa, exponent), |(mantissa, exponent)| (
+        if mantissa >= 10000_U64 { continue $ (mantissa / 10000_U64, exponent + 4) };
+        if mantissa >= 100_U64 { continue $ (mantissa / 100_U64, exponent + 2) };
+        if mantissa >= 10_U64 { continue $ (mantissa / 10_U64, exponent + 1) };
+        break $ exponent
+    ));
+
+    // Reads the significant digits of `text`, at most `max_digits` of them, into a big integer, and
+    // answers with it and the number of digits it holds. Where the digits past `max_digits` are not
+    // all zero, appends a digit 1 to the big integer, which then holds `max_digits + 1` digits.
+    // ffc.h's `ffc_parse_mantissa`.
+    //
+    // # Parameters
+    // * `max_digits` - The number of digits to read.
+    // * `text` - The number.
+    // * `bytes` - The bytes holding the text.
+    _parse_significant_digits : I64 -> _DecimalText -> Array U8 -> (Array U64, I64);
+    _parse_significant_digits = |max_digits, text, bytes| (
+        let integer_start = bytes._skip_zero_digits(text.@integer_start, text.@integer_end);
+        let (i, digits, digit_count) = bytes._accumulate_significant_digits(integer_start, text.@integer_end, max_digits, (_make_bigint(0_U64), 0));
+        if digit_count == max_digits {
+            let truncated = bytes._has_nonzero_digit(i, text.@integer_end) || bytes._has_nonzero_digit(text.@fraction_start, text.@fraction_end);
+            if truncated { (digits._multiply_add_bigint(10_U64, 1_U64), digit_count + 1) } else { (digits, digit_count) }
+        };
+        let fraction_start = if digit_count == 0 {
+            bytes._skip_zero_digits(text.@fraction_start, text.@fraction_end)
+        } else {
+            text.@fraction_start
+        };
+        let (i, digits, digit_count) = bytes._accumulate_significant_digits(fraction_start, text.@fraction_end, max_digits, (digits, digit_count));
+        if digit_count == max_digits && bytes._has_nonzero_digit(i, text.@fraction_end) {
+            (digits._multiply_add_bigint(10_U64, 1_U64), digit_count + 1)
+        };
+        (digits, digit_count)
+    );
+
+    // Appends the digits of `bytes` from `i` to `end` to the big integer `digits`, until it holds
+    // `max_digits` digits, and answers with the index past the last digit appended, the big integer
+    // and the number of its digits.
+    //
+    // # Parameters
+    // * `i` - The index of the first digit.
+    // * `end` - The index past the last digit.
+    // * `max_digits` - The number of digits at which to stop.
+    // * `digits`, `digit_count` - The big integer, and the number of digits it holds.
+    // * `bytes` - The bytes holding the digits.
+    _accumulate_significant_digits : I64 -> I64 -> I64 -> (Array U64, I64) -> Array U8 -> (I64, Array U64, I64);
+    _accumulate_significant_digits = |i, end, max_digits, (digits, digit_count), bytes| (
+        // The digits are gathered 19 at a time into `value`, eight at a time where eight remain, and
+        // a big integer operation then appends the 19 to `digits`.
+        let (i, digits, digit_count, group_length, value) = loop((i, digits, digit_count, 0, 0_U64), |(i, digits, digit_count, group_length, value)| (
+            if i == end || digit_count == max_digits { break $ (i, digits, digit_count, group_length, value) };
+            let (i, digit_count, group_length, value) = if end - i >= 8 && group_length <= 11 && max_digits - digit_count >= 8 {
+                (i + 8, digit_count + 8, group_length + 8, value * 100000000_U64 + _parse_eight_digits(bytes._load_little_endian_u64(i)))
+            } else {
+                (i + 1, digit_count + 1, group_length + 1, value * 10_U64 + (bytes.unsafe_get_bounds_unchecked(i) - '0').u64)
+            };
+            if group_length < 19 { continue $ (i, digits, digit_count, group_length, value) };
+            continue $ (i, digits._multiply_add_bigint(10000000000000000000_U64, value), digit_count, 0, 0_U64)
+        ));
+        if group_length == 0 { (i, digits, digit_count) };
+        (i, digits._multiply_add_bigint(_powers_of_ten_u64.unsafe_get_bounds_unchecked(group_length), value), digit_count)
+    );
+
+    // `10 ^ k` for `k` from 0 to 19.
+    _powers_of_ten_u64 : Array U64;
+    _powers_of_ten_u64 = [
+        1_U64, 10_U64, 100_U64, 1000_U64, 10000_U64, 100000_U64, 1000000_U64, 10000000_U64,
+        100000000_U64, 1000000000_U64, 10000000000_U64, 100000000000_U64, 1000000000000_U64,
+        10000000000000_U64, 100000000000000_U64, 1000000000000000_U64, 10000000000000000_U64,
+        100000000000000000_U64, 1000000000000000000_U64, 10000000000000000000_U64
+    ];
+
+    // Answers with the index of the first byte of `bytes` at or after `i` and before `end` that is not
+    // `0`, or `end`. ffc.h's `ffc_skip_zeros`.
+    //
+    // # Parameters
+    // * `i` - The index of the first byte.
+    // * `end` - The index past the last byte.
+    // * `bytes` - The bytes.
+    _skip_zero_digits : I64 -> I64 -> Array U8 -> I64;
+    _skip_zero_digits = |i, end, bytes| loop(i, |i| (
+        if i == end || bytes.unsafe_get_bounds_unchecked(i) != '0' { break $ i };
+        continue $ i + 1
+    ));
+
+    // Answers whether a byte of `bytes` from `i` to `end` is other than `0`. ffc.h's
+    // `ffc_is_truncated`.
+    //
+    // # Parameters
+    // * `i` - The index of the first byte.
+    // * `end` - The index past the last byte.
+    // * `bytes` - The bytes.
+    _has_nonzero_digit : I64 -> I64 -> Array U8 -> Bool;
+    _has_nonzero_digit = |i, end, bytes| bytes._skip_zero_digits(i, end) != end;
+
+    // Rounds `digits * 10 ^ exponent`, where `exponent` is at least zero, to the nearest number of the
+    // format, ties to even. ffc.h's `ffc_positive_digit_comp`.
+    //
+    // # Parameters
+    // * `format` - The binary format.
+    // * `digits` - The significant digits, as a big integer.
+    // * `exponent` - The power of ten.
+    _round_positive_digit_comparison : _BinaryFormat a -> Array U64 -> I64 -> (U64, I64);
+    _round_positive_digit_comparison = |format, digits, exponent| (
+        let digits = digits._multiply_bigint_by_power_of_10(exponent);
+        let (mantissa, truncated) = digits._get_high_64_bits_of_bigint;
+        let bias = format.@mantissa_explicit_bits - format.@minimum_exponent;
+        let power2 = digits._count_bits_of_bigint - 64 + bias;
+        _round_adjusted_mantissa(format, _Rounding::nearest_with_truncated(truncated), (mantissa, power2))
+    );
+
+    // Rounds `digits * 10 ^ exponent`, where `exponent` is negative, to the nearest number of the
+    // format, ties to even, by comparing it with the point halfway between the number `adjusted`
+    // truncates to and the number above that. ffc.h's `ffc_negative_digit_comp`.
+    //
+    // # Parameters
+    // * `format` - The binary format.
+    // * `digits` - The significant digits, as a big integer.
+    // * `adjusted` - The significand and the biased exponent of the number, truncated.
+    // * `exponent` - The power of ten.
+    _round_negative_digit_comparison : _BinaryFormat a -> Array U64 -> (U64, I64) -> I64 -> (U64, I64);
+    _round_negative_digit_comparison = |format, digits, adjusted, exponent| (
+        let mantissa_bits = format.@mantissa_explicit_bits;
+        let (below_mantissa, below_power2) = _round_adjusted_mantissa(format, _Rounding::down(), adjusted);
+        // The number below, decoded from its bits as ffc.h's `ffc_to_extended` does, and the point
+        // halfway up to the next number.
+        let bits = below_mantissa.bit_or(below_power2.u64.shift_left(mantissa_bits.u64));
+        let mantissa_mask = 1_U64.shift_left(mantissa_bits.u64) - 1_U64;
+        let biased_exponent = bits.shift_right(mantissa_bits.u64).bit_and(format.@infinite_power.u64).i64;
+        let bias = mantissa_bits - format.@minimum_exponent;
+        let (halfway_mantissa, halfway_power2) = if biased_exponent == 0 {
+            (bits.bit_and(mantissa_mask), 1 - bias)
+        } else {
+            (bits.bit_and(mantissa_mask).bit_or(1_U64.shift_left(mantissa_bits.u64)), biased_exponent - bias)
+        };
+        let halfway = _make_bigint(halfway_mantissa * 2_U64 + 1_U64);
+        let halfway_power2 = halfway_power2 - 1;
+        // Both sides are scaled to integers of one power of two: `digits * 5 ^ -exponent * 2 ^
+        // exponent` against `halfway * 2 ^ halfway_power2`, multiplied through by `5 ^ -exponent`.
+        let halfway = halfway._multiply_bigint_by_power_of_5(-exponent);
+        let power2_difference = halfway_power2 - exponent;
+        let (digits, halfway) = if power2_difference > 0 {
+            (digits, halfway._shift_bigint_left(power2_difference))
+        } else if power2_difference < 0 {
+            (digits._shift_bigint_left(-power2_difference), halfway)
+        } else {
+            (digits, halfway)
+        };
+        let order = _compare_bigints(digits, halfway);
+        _round_adjusted_mantissa(format, _Rounding::nearest_by_comparison(order), adjusted)
+    );
+
+    // Shifts the significand of `adjusted` right to the bits the format stores, rounding as
+    // `rounding` says, and answers with the stored significand and the biased exponent. ffc.h's
+    // `ffc_round_core` with `ffc_round_finish`.
+    //
+    // # Parameters
+    // * `format` - The binary format.
+    // * `rounding` - How to round.
+    // * `adjusted` - The significand, and the power of two it is multiplied by, biased.
+    _round_adjusted_mantissa : _BinaryFormat a -> _Rounding -> (U64, I64) -> (U64, I64);
+    _round_adjusted_mantissa = |format, rounding, (mantissa, power2)| (
+        let mantissa_bits = format.@mantissa_explicit_bits;
+        let mantissa_shift = 64 - mantissa_bits - 1;
+        if -power2 >= mantissa_shift {
+            // A subnormal number, or zero.
+            let shift = if -power2 + 1 > 64 { 64 } else { -power2 + 1 };
+            let (mantissa, _) = rounding._shift_rounding(shift, (mantissa, power2));
+            (mantissa, if mantissa < 1_U64.shift_left(mantissa_bits.u64) { 0 } else { 1 })
+        };
+        let (mantissa, power2) = rounding._shift_rounding(mantissa_shift, (mantissa, power2));
+        let (mantissa, power2) = if mantissa >= 2_U64.shift_left(mantissa_bits.u64) {
+            (1_U64.shift_left(mantissa_bits.u64), power2 + 1)
+        } else {
+            (mantissa, power2)
+        };
+        let mantissa = mantissa.bit_and(1_U64.shift_left(mantissa_bits.u64).bit_not);
+        if power2 >= format.@infinite_power { (0_U64, format.@infinite_power) };
+        (mantissa, power2)
+    );
+
+    // Shifts `mantissa` right by `shift` bits, from 1 to 64, rounding as `rounding` says, and adds
+    // `shift` to `power2`. ffc.h's `ffc_round_down_impl`, `ffc_round_nearest_tie_even_truncated`
+    // and `ffc_round_nearest_tie_even_cmp`.
+    //
+    // # Parameters
+    // * `shift` - The number of bits to shift away.
+    // * `adjusted` - The significand, and the power of two it is multiplied by.
+    // * `rounding` - How to round.
+    _shift_rounding : I64 -> (U64, I64) -> _Rounding -> (U64, I64);
+    _shift_rounding = |shift, (mantissa, power2), rounding| (
+        let shifted = if shift == 64 { 0_U64 } else { mantissa.shift_right(shift.u64) };
+        let power2 = power2 + shift;
+        let is_odd = shifted.bit_and(1_U64) == 1_U64;
+        match rounding {
+            down() => (shifted, power2),
+            nearest_with_truncated(truncated) => (
+                let mask = if shift == 64 { U64::maximum } else { 1_U64.shift_left(shift.u64) - 1_U64 };
+                let halfway = 1_U64.shift_left((shift - 1).u64);
+                let truncated_bits = mantissa.bit_and(mask);
+                let is_above = truncated_bits > halfway;
+                let is_halfway = truncated_bits == halfway;
+                let round_up = is_above || (is_halfway && truncated) || (is_odd && is_halfway);
+                (shifted + (if round_up { 1_U64 } else { 0_U64 }), power2)
+            ),
+            nearest_by_comparison(order) => (
+                let round_up = order > 0 || (order == 0 && is_odd);
+                (shifted + (if round_up { 1_U64 } else { 0_U64 }), power2)
+            )
+        }
+    );
+
+    // The big integers below are arrays of 64-bit limbs, the least significant first, with no zero
+    // limb at the most significant end: zero is the empty array. They implement ffc.h's `ffc_bigint`.
+
+    // Answers with the big integer equal to `value`. ffc.h's `ffc_bigint_make`.
+    //
+    // # Parameters
+    // * `value` - The number.
+    _make_bigint : U64 -> Array U64;
+    _make_bigint = |value| (
+        let digits = Array::empty(_bigint_capacity);
+        if value == 0_U64 { digits } else { digits.push_back(value) }
+    );
+
+    // The number of limbs a big integer is allocated room for: enough for the largest that reading a
+    // number makes, `10 ^ (769 + 342)` with a few bits to spare, so that it is never reallocated.
+    _bigint_capacity : I64;
+    _bigint_capacity = 64;
+
+    // Answers with `digits * multiplier + addend`. ffc.h's `ffc_add_native`.
+    //
+    // # Parameters
+    // * `multiplier` - The number to multiply by.
+    // * `addend` - The number to add.
+    // * `digits` - The big integer.
+    _multiply_add_bigint : U64 -> U64 -> Array U64 -> Array U64;
+    _multiply_add_bigint = |multiplier, addend, digits| digits._multiply_bigint_by_limb(multiplier)._add_limb_to_bigint(0, addend);
+
+    // Answers with `digits * multiplier`. ffc.h's `ffc_bigint_small_mul`.
+    //
+    // # Parameters
+    // * `multiplier` - The number to multiply by.
+    // * `digits` - The big integer.
+    _multiply_bigint_by_limb : U64 -> Array U64 -> Array U64;
+    _multiply_bigint_by_limb = |multiplier, digits| (
+        let size = digits.get_size;
+        let (carry, digits) = loop((0, 0_U64, digits), |(i, carry, digits)| (
+            if i == size { break $ (carry, digits) };
+            let product = digits.unsafe_get_bounds_unchecked(i).u128 * multiplier.u128 + carry.u128;
+            continue $ (i + 1, product.shift_right(64_U128).u64, digits.unsafe_set_bounds_unchecked(i, product.u64))
+        ));
+        if carry == 0_U64 { digits };
+        digits.push_back(carry)
+    );
+
+    // Answers with `digits + addend * 2 ^ (64 * start)`, where `start` is at most the number of limbs
+    // of `digits`. ffc.h's `ffc_bigint_small_add_from`.
+    //
+    // # Parameters
+    // * `start` - The limb to add at.
+    // * `addend` - The number to add.
+    // * `digits` - The big integer.
+    _add_limb_to_bigint : I64 -> U64 -> Array U64 -> Array U64;
+    _add_limb_to_bigint = |start, addend, digits| (
+        let size = digits.get_size;
+        let (carry, digits) = loop((start, addend, digits), |(i, carry, digits)| (
+            if carry == 0_U64 || i == size { break $ (carry, digits) };
+            let sum = digits.unsafe_get_bounds_unchecked(i) + carry;
+            continue $ (i + 1, if sum < carry { 1_U64 } else { 0_U64 }, digits.unsafe_set_bounds_unchecked(i, sum))
+        ));
+        if carry == 0_U64 { digits };
+        digits.push_back(carry)
+    );
+
+    // Answers with `digits + addend * 2 ^ (64 * start)`, where `addend` is a big integer. ffc.h's
+    // `ffc_bigint_large_add_from`.
+    //
+    // # Parameters
+    // * `start` - The limb to add at.
+    // * `addend` - The big integer to add.
+    // * `digits` - The big integer.
+    _add_bigint_to_bigint : I64 -> Array U64 -> Array U64 -> Array U64;
+    _add_bigint_to_bigint = |start, addend, digits| (
+        let addend_size = addend.get_size;
+        let digits = if digits.get_size >= addend_size + start { digits } else {
+            digits.resize(addend_size + start, 0_U64)
+        };
+        let (carry, digits) = loop((0, false, digits), |(i, carry, digits)| (
+            if i == addend_size { break $ (carry, digits) };
+            let x = digits.unsafe_get_bounds_unchecked(i + start);
+            let sum = x + addend.unsafe_get_bounds_unchecked(i);
+            let carried = sum < x;
+            let (sum, carried) = if carry { (sum + 1_U64, carried || sum + 1_U64 == 0_U64) } else { (sum, carried) };
+            continue $ (i + 1, carried, digits.unsafe_set_bounds_unchecked(i + start, sum))
+        ));
+        if !carry { digits };
+        digits._add_limb_to_bigint(addend_size + start, 1_U64)
+    );
+
+    // Answers with `digits * multiplier`, where `multiplier` is a big integer. ffc.h's
+    // `ffc_bigint_long_mul`, computing the product in one array by long multiplication.
+    //
+    // # Parameters
+    // * `multiplier` - The big integer to multiply by.
+    // * `digits` - The big integer.
+    _multiply_bigint_by_bigint : Array U64 -> Array U64 -> Array U64;
+    _multiply_bigint_by_bigint = |multiplier, digits| (
+        let size = digits.get_size;
+        let multiplier_size = multiplier.get_size;
+        let product = Array::fill(max(_bigint_capacity, size + multiplier_size), 0_U64)._unsafe_truncate_bounds_unchecked(size + multiplier_size);
+        let product = loop((0, product), |(j, product)| (
+            if j == multiplier_size { break $ product };
+            let limb = multiplier.unsafe_get_bounds_unchecked(j);
+            let (carry, product) = loop((0, 0_U64, product), |(i, carry, product)| (
+                if i == size { break $ (carry, product) };
+                let sum = digits.unsafe_get_bounds_unchecked(i).u128 * limb.u128
+                    + product.unsafe_get_bounds_unchecked(i + j).u128 + carry.u128;
+                continue $ (i + 1, sum.shift_right(64_U128).u64, product.unsafe_set_bounds_unchecked(i + j, sum.u64))
+            ));
+            continue $ (j + 1, product.unsafe_set_bounds_unchecked(size + j, carry))
+        ));
+        product._normalize_bigint
+    );
+
+    // Removes the zero limbs at the most significant end of `digits`. ffc.h's `ffc_sv_normalize`.
+    //
+    // # Parameters
+    // * `digits` - The limbs.
+    _normalize_bigint : Array U64 -> Array U64;
+    _normalize_bigint = |digits| loop(digits, |digits| (
+        let size = digits.get_size;
+        if size == 0 || digits.unsafe_get_bounds_unchecked(size - 1) != 0_U64 { break $ digits };
+        continue $ digits.pop_back
+    ));
+
+    // Answers with `digits * 5 ^ power`. ffc.h's `ffc_bigint_pow5`.
+    //
+    // # Parameters
+    // * `power` - The power of five, at least zero.
+    // * `digits` - The big integer.
+    _multiply_bigint_by_power_of_5 : I64 -> Array U64 -> Array U64;
+    _multiply_bigint_by_power_of_5 = |power, digits| (
+        let (power, digits) = loop((power, digits), |(power, digits)| (
+            if power < 135 { break $ (power, digits) };
+            continue $ (power - 135, digits._multiply_bigint_by_bigint(_large_power_of_5))
+        ));
+        let (power, digits) = loop((power, digits), |(power, digits)| (
+            if power < 27 { break $ (power, digits) };
+            continue $ (power - 27, digits._multiply_bigint_by_limb(7450580596923828125_U64))
+        ));
+        if power == 0 { digits };
+        digits._multiply_bigint_by_limb(_small_powers_of_5.unsafe_get_bounds_unchecked(power))
+    );
+
+    // `5 ^ 135`, as a big integer. ffc.h's `ffc_large_power_of_5`.
+    _large_power_of_5 : Array U64;
+    _large_power_of_5 = [
+        1414648277510068013_U64, 9180637584431281687_U64, 4539964771860779200_U64,
+        10482974169319127550_U64, 198276706040285095_U64
+    ];
+
+    // `5 ^ k` for `k` from 0 to 27. ffc.h's `pow5_tables_small_powers`.
+    _small_powers_of_5 : Array U64;
+    _small_powers_of_5 = [
+        1_U64, 5_U64, 25_U64, 125_U64, 625_U64, 3125_U64, 15625_U64, 78125_U64, 390625_U64,
+        1953125_U64, 9765625_U64, 48828125_U64, 244140625_U64, 1220703125_U64, 6103515625_U64,
+        30517578125_U64, 152587890625_U64, 762939453125_U64, 3814697265625_U64,
+        19073486328125_U64, 95367431640625_U64, 476837158203125_U64, 2384185791015625_U64,
+        11920928955078125_U64, 59604644775390625_U64, 298023223876953125_U64,
+        1490116119384765625_U64, 7450580596923828125_U64
+    ];
+
+    // Answers with `digits * 10 ^ power`. ffc.h's `ffc_bigint_pow10`.
+    //
+    // # Parameters
+    // * `power` - The power of ten, at least zero.
+    // * `digits` - The big integer.
+    _multiply_bigint_by_power_of_10 : I64 -> Array U64 -> Array U64;
+    _multiply_bigint_by_power_of_10 = |power, digits| digits._multiply_bigint_by_power_of_5(power)._shift_bigint_left(power);
+
+    // Answers with `digits * 2 ^ shift`. ffc.h's `ffc_bigint_shl`.
+    //
+    // # Parameters
+    // * `shift` - The number of bits to shift by, at least zero.
+    // * `digits` - The big integer.
+    _shift_bigint_left : I64 -> Array U64 -> Array U64;
+    _shift_bigint_left = |shift, digits| (
+        let bits = shift % 64;
+        let digits = if bits == 0 { digits } else {
+            let size = digits.get_size;
+            let (carry, digits) = loop((0, 0_U64, digits), |(i, previous, digits)| (
+                if i == size { break $ (previous.shift_right((64 - bits).u64), digits) };
+                let limb = digits.unsafe_get_bounds_unchecked(i);
+                let shifted = limb.shift_left(bits.u64).bit_or(previous.shift_right((64 - bits).u64));
+                continue $ (i + 1, limb, digits.unsafe_set_bounds_unchecked(i, shifted))
+            ));
+            if carry == 0_U64 { digits } else { digits.push_back(carry) }
+        };
+        let limbs = shift / 64;
+        if limbs == 0 || digits.get_size == 0 { digits };
+        let size = digits.get_size;
+        Array::fill(max(_bigint_capacity, limbs + size), 0_U64)._unsafe_truncate_bounds_unchecked(limbs).append(digits)
+    );
+
+    // Answers with the 64 most significant bits of `digits`, shifted up so that the highest is one,
+    // and whether any bit below them is one. ffc.h's `ffc_bigint_hi64`.
+    //
+    // # Parameters
+    // * `digits` - The big integer.
+    _get_high_64_bits_of_bigint : Array U64 -> (U64, Bool);
+    _get_high_64_bits_of_bigint = |digits| (
+        let size = digits.get_size;
+        if size == 0 { (0_U64, false) };
+        let top = digits.unsafe_get_bounds_unchecked(size - 1);
+        let shift = top.count_leading_zeros;
+        if size == 1 { (top.shift_left(shift), false) };
+        let next = digits.unsafe_get_bounds_unchecked(size - 2);
+        let (high, truncated) = if shift == 0_U64 { (top, next != 0_U64) } else {
+            (top.shift_left(shift).bit_or(next.shift_right(64_U64 - shift)), next.shift_left(shift) != 0_U64)
+        };
+        let truncated = truncated || loop(0, |i| (
+            if i == size - 2 { break $ false };
+            if digits.unsafe_get_bounds_unchecked(i) != 0_U64 { break $ true };
+            continue $ i + 1
+        ));
+        (high, truncated)
+    );
+
+    // Answers with the number of bits of `digits` up to its most significant one. ffc.h's
+    // `ffc_bigint_bit_length`.
+    //
+    // # Parameters
+    // * `digits` - The big integer.
+    _count_bits_of_bigint : Array U64 -> I64;
+    _count_bits_of_bigint = |digits| (
+        let size = digits.get_size;
+        if size == 0 { 0 };
+        64 * size - digits.unsafe_get_bounds_unchecked(size - 1).count_leading_zeros.i64
+    );
+
+    // Answers with 1 where `x` is greater than `y`, -1 where it is less and 0 where they are equal.
+    // ffc.h's `ffc_bigint_compare`.
+    //
+    // # Parameters
+    // * `x`, `y` - The big integers to compare.
+    _compare_bigints : Array U64 -> Array U64 -> I64;
+    _compare_bigints = |x, y| (
+        let size = x.get_size;
+        if size > y.get_size { 1 };
+        if size < y.get_size { -1 };
+        loop(size - 1, |i| (
+            if i < 0 { break $ 0 };
+            let x_limb = x.unsafe_get_bounds_unchecked(i);
+            let y_limb = y.unsafe_get_bounds_unchecked(i);
+            if x_limb > y_limb { break $ 1 };
+            if x_limb < y_limb { break $ -1 };
+            continue $ i - 1
+        ))
+    );
+
+    // The 128 bits of `5 ^ q` for `q` from -342 to 308, the high word first, normalized so that the
+    // highest bit is one, and rounded toward zero, so that `w * 5 ^ q` can be read as the product of
+    // `w` and two words. ffc.h's `FFC_POWERS_OF_FIVE`.
+    _powers_of_five_128 : Array U64;
+    _powers_of_five_128 = [
+        17218479456385750618_U64, 1242899115359157055_U64,
+        10761549660241094136_U64, 5388497965526861063_U64,
+        13451937075301367670_U64, 6735622456908576329_U64,
+        16814921344126709587_U64, 17642900107990496220_U64,
+        10509325840079193492_U64, 8720969558280366185_U64,
+        13136657300098991865_U64, 10901211947850457732_U64,
+        16420821625123739831_U64, 18238200953240460069_U64,
+        10263013515702337394_U64, 18316404623416369399_U64,
+        12828766894627921743_U64, 13672133742415685941_U64,
+        16035958618284902179_U64, 12478481159592219522_U64,
+        10022474136428063862_U64, 5493207715531443249_U64,
+        12528092670535079827_U64, 16089881681269079869_U64,
+        15660115838168849784_U64, 15500666083158961933_U64,
+        9787572398855531115_U64, 9687916301974351208_U64,
+        12234465498569413894_U64, 7498209359040551106_U64,
+        15293081873211767368_U64, 149389661945913074_U64,
+        9558176170757354605_U64, 93368538716195671_U64,
+        11947720213446693256_U64, 4728396691822632493_U64,
+        14934650266808366570_U64, 5910495864778290617_U64,
+        9334156416755229106_U64, 8305745933913819539_U64,
+        11667695520944036383_U64, 1158810380537498616_U64,
+        14584619401180045478_U64, 15283571030954036982_U64,
+        18230774251475056848_U64, 9881091751837770420_U64,
+        11394233907171910530_U64, 6175682344898606512_U64,
+        14242792383964888162_U64, 16942974967978033949_U64,
+        17803490479956110203_U64, 11955346673117766628_U64,
+        11127181549972568877_U64, 5166248661484910190_U64,
+        13908976937465711096_U64, 11069496845283525642_U64,
+        17386221171832138870_U64, 13836871056604407053_U64,
+        10866388232395086794_U64, 4036358391950366504_U64,
+        13582985290493858492_U64, 14268820026792733938_U64,
+        16978731613117323115_U64, 17836025033490917422_U64,
+        10611707258198326947_U64, 8841672636718129437_U64,
+        13264634072747908684_U64, 6440404777470273892_U64,
+        16580792590934885855_U64, 8050505971837842365_U64,
+        10362995369334303659_U64, 11949095260039733334_U64,
+        12953744211667879574_U64, 10324683056622278764_U64,
+        16192180264584849468_U64, 3682481783923072647_U64,
+        10120112665365530917_U64, 11524923151806696212_U64,
+        12650140831706913647_U64, 571095884476206553_U64,
+        15812676039633642058_U64, 14548927910877421904_U64,
+        9882922524771026286_U64, 13704765962725776594_U64,
+        12353653155963782858_U64, 7907585416552444934_U64,
+        15442066444954728573_U64, 661109733835780360_U64,
+        9651291528096705358_U64, 2719036592861056677_U64,
+        12064114410120881697_U64, 12622167777931096654_U64,
+        15080143012651102122_U64, 1942651667131707105_U64,
+        9425089382906938826_U64, 5825843310384704845_U64,
+        11781361728633673532_U64, 16505676174835656864_U64,
+        14726702160792091916_U64, 2185351144835019464_U64,
+        18408377700990114895_U64, 2731688931043774330_U64,
+        11505236063118821809_U64, 8624834609543440812_U64,
+        14381545078898527261_U64, 15392729280356688919_U64,
+        17976931348623159077_U64, 5405853545163697437_U64,
+        11235582092889474423_U64, 5684501474941004850_U64,
+        14044477616111843029_U64, 2493940825248868159_U64,
+        17555597020139803786_U64, 7729112049988473103_U64,
+        10972248137587377366_U64, 9442381049670183593_U64,
+        13715310171984221708_U64, 2579604275232953683_U64,
+        17144137714980277135_U64, 3224505344041192104_U64,
+        10715086071862673209_U64, 8932844867666826921_U64,
+        13393857589828341511_U64, 15777742103010921555_U64,
+        16742321987285426889_U64, 15110491610336264040_U64,
+        10463951242053391806_U64, 2526528228819083169_U64,
+        13079939052566739757_U64, 12381532322878629770_U64,
+        16349923815708424697_U64, 1641857348316123500_U64,
+        10218702384817765435_U64, 12555375888766046947_U64,
+        12773377981022206794_U64, 11082533842530170780_U64,
+        15966722476277758493_U64, 4629795266307937667_U64,
+        9979201547673599058_U64, 5199465050656154994_U64,
+        12474001934591998822_U64, 15722703350174969551_U64,
+        15592502418239998528_U64, 10430007150863936130_U64,
+        9745314011399999080_U64, 6518754469289960081_U64,
+        12181642514249998850_U64, 8148443086612450102_U64,
+        15227053142812498563_U64, 962181821410786819_U64,
+        9516908214257811601_U64, 16742264702877599426_U64,
+        11896135267822264502_U64, 7092772823314835570_U64,
+        14870169084777830627_U64, 18089338065998320271_U64,
+        9293855677986144142_U64, 8999993282035256217_U64,
+        11617319597482680178_U64, 2026619565689294464_U64,
+        14521649496853350222_U64, 11756646493966393888_U64,
+        18152061871066687778_U64, 5472436080603216552_U64,
+        11345038669416679861_U64, 8031958568804398249_U64,
+        14181298336770849826_U64, 14651634229432885715_U64,
+        17726622920963562283_U64, 9091170749936331336_U64,
+        11079139325602226427_U64, 3376138709496513133_U64,
+        13848924157002783033_U64, 18055231442152805128_U64,
+        17311155196253478792_U64, 8733981247408842698_U64,
+        10819471997658424245_U64, 5458738279630526686_U64,
+        13524339997073030306_U64, 11435108867965546262_U64,
+        16905424996341287883_U64, 5070514048102157020_U64,
+        10565890622713304927_U64, 863228270850154185_U64,
+        13207363278391631158_U64, 14914093393844856443_U64,
+        16509204097989538948_U64, 9419244705451294746_U64,
+        10318252561243461842_U64, 15110399977761835024_U64,
+        12897815701554327303_U64, 9664627935347517973_U64,
+        16122269626942909129_U64, 7469098900757009562_U64,
+        10076418516839318205_U64, 16197401859041600736_U64,
+        12595523146049147757_U64, 6411694268519837208_U64,
+        15744403932561434696_U64, 12626303854077184414_U64,
+        9840252457850896685_U64, 7891439908798240259_U64,
+        12300315572313620856_U64, 14475985904425188227_U64,
+        15375394465392026070_U64, 18094982380531485284_U64,
+        9609621540870016294_U64, 6697677969404790399_U64,
+        12012026926087520367_U64, 17595469498610763806_U64,
+        15015033657609400459_U64, 17382650854836066854_U64,
+        9384396036005875287_U64, 8558313775058847832_U64,
+        11730495045007344109_U64, 6086206200396171886_U64,
+        14663118806259180136_U64, 12219443768922602761_U64,
+        18328898507823975170_U64, 15274304711153253452_U64,
+        11455561567389984481_U64, 14158126462898171311_U64,
+        14319451959237480602_U64, 3862600023340550427_U64,
+        17899314949046850752_U64, 14051622066030463842_U64,
+        11187071843154281720_U64, 8782263791269039901_U64,
+        13983839803942852150_U64, 10977829739086299876_U64,
+        17479799754928565188_U64, 4498915137003099037_U64,
+        10924874846830353242_U64, 12035193997481712706_U64,
+        13656093558537941553_U64, 5820620459997365075_U64,
+        17070116948172426941_U64, 11887461593424094248_U64,
+        10668823092607766838_U64, 9735506505103752857_U64,
+        13336028865759708548_U64, 2946011094524915263_U64,
+        16670036082199635685_U64, 3682513868156144079_U64,
+        10418772551374772303_U64, 4607414176811284001_U64,
+        13023465689218465379_U64, 1147581702586717097_U64,
+        16279332111523081723_U64, 15269535183515560084_U64,
+        10174582569701926077_U64, 7237616480483531100_U64,
+        12718228212127407596_U64, 13658706619031801779_U64,
+        15897785265159259495_U64, 17073383273789752224_U64,
+        9936115790724537184_U64, 17588393573759676996_U64,
+        12420144738405671481_U64, 3538747893490044629_U64,
+        15525180923007089351_U64, 9035120885289943691_U64,
+        9703238076879430844_U64, 12564479580947296663_U64,
+        12129047596099288555_U64, 15705599476184120828_U64,
+        15161309495124110694_U64, 15020313326802763131_U64,
+        9475818434452569184_U64, 4776009810824339053_U64,
+        11844773043065711480_U64, 5970012263530423816_U64,
+        14805966303832139350_U64, 7462515329413029771_U64,
+        9253728939895087094_U64, 52386062455755702_U64,
+        11567161174868858867_U64, 9288854614924470436_U64,
+        14458951468586073584_U64, 6999382250228200141_U64,
+        18073689335732591980_U64, 8749227812785250177_U64,
+        11296055834832869987_U64, 14691639419845557168_U64,
+        14120069793541087484_U64, 13752863256379558556_U64,
+        17650087241926359355_U64, 17191079070474448196_U64,
+        11031304526203974597_U64, 8438581409832836170_U64,
+        13789130657754968246_U64, 15159912780718433117_U64,
+        17236413322193710308_U64, 9726518939043265588_U64,
+        10772758326371068942_U64, 15302446373756816800_U64,
+        13465947907963836178_U64, 9904685930341245193_U64,
+        16832434884954795223_U64, 3157485376071780683_U64,
+        10520271803096747014_U64, 8890957387685944783_U64,
+        13150339753870933768_U64, 1890324697752655170_U64,
+        16437924692338667210_U64, 2362905872190818963_U64,
+        10273702932711667006_U64, 6088502188546649756_U64,
+        12842128665889583757_U64, 16833999772538088003_U64,
+        16052660832361979697_U64, 7207441660390446292_U64,
+        10032913020226237310_U64, 16033866083812498692_U64,
+        12541141275282796638_U64, 10818960567910847557_U64,
+        15676426594103495798_U64, 4300328673033783639_U64,
+        9797766621314684873_U64, 16522763475928278486_U64,
+        12247208276643356092_U64, 6818396289628184396_U64,
+        15309010345804195115_U64, 8522995362035230495_U64,
+        9568131466127621947_U64, 3021029092058325107_U64,
+        11960164332659527433_U64, 17611344420355070096_U64,
+        14950205415824409292_U64, 8179122470161673908_U64,
+        9343878384890255807_U64, 14335323580705822000_U64,
+        11679847981112819759_U64, 13307468457454889596_U64,
+        14599809976391024699_U64, 12022649553391224092_U64,
+        18249762470488780874_U64, 10416625923311642211_U64,
+        11406101544055488046_U64, 11122077220497164286_U64,
+        14257626930069360058_U64, 4679224488766679549_U64,
+        17822033662586700072_U64, 15072402647813125244_U64,
+        11138771039116687545_U64, 9420251654883203278_U64,
+        13923463798895859431_U64, 16387000587031392001_U64,
+        17404329748619824289_U64, 15872064715361852097_U64,
+        10877706092887390181_U64, 3002511419460075705_U64,
+        13597132616109237726_U64, 8364825292752482535_U64,
+        16996415770136547158_U64, 1232659579085827361_U64,
+        10622759856335341973_U64, 14605470292210805812_U64,
+        13278449820419177467_U64, 4421779809981343554_U64,
+        16598062275523971834_U64, 915538744049291538_U64,
+        10373788922202482396_U64, 5183897733458195115_U64,
+        12967236152753102995_U64, 6479872166822743894_U64,
+        16209045190941378744_U64, 3488154190101041964_U64,
+        10130653244338361715_U64, 2180096368813151227_U64,
+        12663316555422952143_U64, 16560178516298602746_U64,
+        15829145694278690179_U64, 16088537126945865529_U64,
+        9893216058924181362_U64, 7749492695127472003_U64,
+        12366520073655226703_U64, 463493832054564196_U64,
+        15458150092069033378_U64, 14414425345350368957_U64,
+        9661343807543145861_U64, 13620701859271368502_U64,
+        12076679759428932327_U64, 3190819268807046916_U64,
+        15095849699286165408_U64, 17823582141290972357_U64,
+        9434906062053853380_U64, 11139738838306857723_U64,
+        11793632577567316725_U64, 13924673547883572154_U64,
+        14742040721959145907_U64, 3570783879572301480_U64,
+        18427550902448932383_U64, 18298537904747540562_U64,
+        11517219314030582739_U64, 18354115218108294707_U64,
+        14396524142538228424_U64, 18330958004207980480_U64,
+        17995655178172785531_U64, 4466953431550423984_U64,
+        11247284486357990957_U64, 486002885505321038_U64,
+        14059105607947488696_U64, 5219189625309039202_U64,
+        17573882009934360870_U64, 6523987031636299002_U64,
+        10983676256208975543_U64, 17912549950054850588_U64,
+        13729595320261219429_U64, 17779001419141175331_U64,
+        17161994150326524287_U64, 8388693718644305452_U64,
+        10726246343954077679_U64, 12160462601793772764_U64,
+        13407807929942597099_U64, 10588892233814828051_U64,
+        16759759912428246374_U64, 8624429273841147159_U64,
+        10474849945267653984_U64, 778582277723329070_U64,
+        13093562431584567480_U64, 973227847154161338_U64,
+        16366953039480709350_U64, 1216534808942701673_U64,
+        10229345649675443343_U64, 14595392310871352257_U64,
+        12786682062094304179_U64, 13632554370161802418_U64,
+        15983352577617880224_U64, 12429006944274865118_U64,
+        9989595361011175140_U64, 7768129340171790699_U64,
+        12486994201263968925_U64, 9710161675214738374_U64,
+        15608742751579961156_U64, 16749388112445810871_U64,
+        9755464219737475723_U64, 1244995533423855986_U64,
+        12194330274671844653_U64, 15391302472061983695_U64,
+        15242912843339805817_U64, 5404070034795315907_U64,
+        9526820527087378635_U64, 14906758817815542202_U64,
+        11908525658859223294_U64, 14021762503842039848_U64,
+        14885657073574029118_U64, 8303831092947774002_U64,
+        9303535670983768199_U64, 578208414664970847_U64,
+        11629419588729710248_U64, 14557818573613377271_U64,
+        14536774485912137810_U64, 18197273217016721589_U64,
+        18170968107390172263_U64, 13523219484416126178_U64,
+        11356855067118857664_U64, 15369541205401160717_U64,
+        14196068833898572081_U64, 765182433041899281_U64,
+        17745086042373215101_U64, 5568164059729762005_U64,
+        11090678776483259438_U64, 5785945546544795205_U64,
+        13863348470604074297_U64, 16455803970035769814_U64,
+        17329185588255092872_U64, 6734696907262548556_U64,
+        10830740992659433045_U64, 4209185567039092847_U64,
+        13538426240824291306_U64, 9873167977226253963_U64,
+        16923032801030364133_U64, 3118087934678041646_U64,
+        10576895500643977583_U64, 4254647968387469981_U64,
+        13221119375804971979_U64, 706623942056949572_U64,
+        16526399219756214973_U64, 14718337982853350677_U64,
+        10328999512347634358_U64, 11504804248497038125_U64,
+        12911249390434542948_U64, 5157633273766521849_U64,
+        16139061738043178685_U64, 6447041592208152311_U64,
+        10086913586276986678_U64, 6335244004343789146_U64,
+        12608641982846233347_U64, 17142427042284512241_U64,
+        15760802478557791684_U64, 16816347784428252397_U64,
+        9850501549098619803_U64, 1286845328412881940_U64,
+        12313126936373274753_U64, 15443614715798266137_U64,
+        15391408670466593442_U64, 5469460339465668959_U64,
+        9619630419041620901_U64, 8030098730593431003_U64,
+        12024538023802026126_U64, 14649309431669176658_U64,
+        15030672529752532658_U64, 9088264752731695015_U64,
+        9394170331095332911_U64, 10291851488884697288_U64,
+        11742712913869166139_U64, 8253128342678483706_U64,
+        14678391142336457674_U64, 5704724409920716729_U64,
+        18347988927920572092_U64, 16354277549255671720_U64,
+        11467493079950357558_U64, 998051431430019017_U64,
+        14334366349937946947_U64, 10470936326142299579_U64,
+        17917957937422433684_U64, 8476984389250486570_U64,
+        11198723710889021052_U64, 14521487280136329914_U64,
+        13998404638611276315_U64, 18151859100170412392_U64,
+        17498005798264095394_U64, 18078137856785627587_U64,
+        10936253623915059621_U64, 15910522178918405146_U64,
+        13670317029893824527_U64, 6053094668365842720_U64,
+        17087896287367280659_U64, 2954682317029915496_U64,
+        10679935179604550411_U64, 17987577512639554849_U64,
+        13349918974505688014_U64, 17872785872372055657_U64,
+        16687398718132110018_U64, 13117610303610293764_U64,
+        10429624198832568761_U64, 12810192458183821506_U64,
+        13037030248540710952_U64, 2177682517447613171_U64,
+        16296287810675888690_U64, 2722103146809516464_U64,
+        10185179881672430431_U64, 6313000485183335694_U64,
+        12731474852090538039_U64, 3279564588051781713_U64,
+        15914343565113172548_U64, 17934513790346890853_U64,
+        9946464728195732843_U64, 1985699082112030975_U64,
+        12433080910244666053_U64, 16317181907922202431_U64,
+        15541351137805832567_U64, 6561419329620589327_U64,
+        9713344461128645354_U64, 11018416108653950185_U64,
+        12141680576410806693_U64, 4549648098962661924_U64,
+        15177100720513508366_U64, 10298746142130715309_U64,
+        9485687950320942729_U64, 1825030320404309164_U64,
+        11857109937901178411_U64, 6892973918932774359_U64,
+        14821387422376473014_U64, 4004531380238580045_U64,
+        9263367138985295633_U64, 16337890167931276240_U64,
+        11579208923731619542_U64, 6587304654631931588_U64,
+        14474011154664524427_U64, 17457502855144690293_U64,
+        18092513943330655534_U64, 17210192550503474962_U64,
+        11307821214581659709_U64, 6144684325637283947_U64,
+        14134776518227074636_U64, 12292541425473992838_U64,
+        17668470647783843295_U64, 15365676781842491048_U64,
+        11042794154864902059_U64, 16521077016292638761_U64,
+        13803492693581127574_U64, 16039660251938410547_U64,
+        17254365866976409468_U64, 10826203278068237376_U64,
+        10783978666860255917_U64, 15989749085647424168_U64,
+        13479973333575319897_U64, 6152128301777116498_U64,
+        16849966666969149871_U64, 12301846395648783526_U64,
+        10531229166855718669_U64, 14606183024921571560_U64,
+        13164036458569648337_U64, 4422670725869800738_U64,
+        16455045573212060421_U64, 10140024425764638826_U64,
+        10284403483257537763_U64, 8643358275316593218_U64,
+        12855504354071922204_U64, 6192511825718353619_U64,
+        16069380442589902755_U64, 7740639782147942024_U64,
+        10043362776618689222_U64, 2532056854628769813_U64,
+        12554203470773361527_U64, 12388443105140738074_U64,
+        15692754338466701909_U64, 10873867862998534689_U64,
+        9807971461541688693_U64, 9102010423587778132_U64,
+        12259964326927110866_U64, 15989199047912110569_U64,
+        15324955408658888583_U64, 10763126773035362404_U64,
+        9578097130411805364_U64, 13644483260788183358_U64,
+        11972621413014756705_U64, 17055604075985229198_U64,
+        14965776766268445882_U64, 7484447039699372786_U64,
+        9353610478917778676_U64, 9289465418239495895_U64,
+        11692013098647223345_U64, 11611831772799369869_U64,
+        14615016373309029182_U64, 679731660717048624_U64,
+        18268770466636286477_U64, 10073036612751086588_U64,
+        11417981541647679048_U64, 8601490892183123070_U64,
+        14272476927059598810_U64, 10751863615228903838_U64,
+        17840596158824498513_U64, 4216457482181353989_U64,
+        11150372599265311570_U64, 14164500972431816003_U64,
+        13937965749081639463_U64, 8482254178684994196_U64,
+        17422457186352049329_U64, 5991131704928854841_U64,
+        10889035741470030830_U64, 15273672361649004036_U64,
+        13611294676837538538_U64, 9868718415206479237_U64,
+        17014118346046923173_U64, 3112525982153323238_U64,
+        10633823966279326983_U64, 4251171748059520976_U64,
+        13292279957849158729_U64, 702278666647013315_U64,
+        16615349947311448411_U64, 5489534351736154548_U64,
+        10384593717069655257_U64, 1125115960621402641_U64,
+        12980742146337069071_U64, 6018080969204141205_U64,
+        16225927682921336339_U64, 2910915193077788602_U64,
+        10141204801825835211_U64, 17960223060169475540_U64,
+        12676506002282294014_U64, 17838592806784456521_U64,
+        15845632502852867518_U64, 13074868971625794844_U64,
+        9903520314283042199_U64, 3560107088838733873_U64,
+        12379400392853802748_U64, 18285191916330581054_U64,
+        15474250491067253436_U64, 4409745821703674701_U64,
+        9671406556917033397_U64, 11979463175419572496_U64,
+        12089258196146291747_U64, 1139270913992301908_U64,
+        15111572745182864683_U64, 15259146697772541097_U64,
+        9444732965739290427_U64, 7231123676894144234_U64,
+        11805916207174113034_U64, 4427218577690292388_U64,
+        14757395258967641292_U64, 14757395258967641293_U64,
+        9223372036854775808_U64, 0_U64,
+        11529215046068469760_U64, 0_U64,
+        14411518807585587200_U64, 0_U64,
+        18014398509481984000_U64, 0_U64,
+        11258999068426240000_U64, 0_U64,
+        14073748835532800000_U64, 0_U64,
+        17592186044416000000_U64, 0_U64,
+        10995116277760000000_U64, 0_U64,
+        13743895347200000000_U64, 0_U64,
+        17179869184000000000_U64, 0_U64,
+        10737418240000000000_U64, 0_U64,
+        13421772800000000000_U64, 0_U64,
+        16777216000000000000_U64, 0_U64,
+        10485760000000000000_U64, 0_U64,
+        13107200000000000000_U64, 0_U64,
+        16384000000000000000_U64, 0_U64,
+        10240000000000000000_U64, 0_U64,
+        12800000000000000000_U64, 0_U64,
+        16000000000000000000_U64, 0_U64,
+        10000000000000000000_U64, 0_U64,
+        12500000000000000000_U64, 0_U64,
+        15625000000000000000_U64, 0_U64,
+        9765625000000000000_U64, 0_U64,
+        12207031250000000000_U64, 0_U64,
+        15258789062500000000_U64, 0_U64,
+        9536743164062500000_U64, 0_U64,
+        11920928955078125000_U64, 0_U64,
+        14901161193847656250_U64, 0_U64,
+        9313225746154785156_U64, 4611686018427387904_U64,
+        11641532182693481445_U64, 5764607523034234880_U64,
+        14551915228366851806_U64, 11817445422220181504_U64,
+        18189894035458564758_U64, 5548434740920451072_U64,
+        11368683772161602973_U64, 17302829768357445632_U64,
+        14210854715202003717_U64, 7793479155164643328_U64,
+        17763568394002504646_U64, 14353534962383192064_U64,
+        11102230246251565404_U64, 4359273333062107136_U64,
+        13877787807814456755_U64, 5449091666327633920_U64,
+        17347234759768070944_U64, 2199678564482154496_U64,
+        10842021724855044340_U64, 1374799102801346560_U64,
+        13552527156068805425_U64, 1718498878501683200_U64,
+        16940658945086006781_U64, 6759809616554491904_U64,
+        10587911840678754238_U64, 6530724019560251392_U64,
+        13234889800848442797_U64, 17386777061305090048_U64,
+        16543612251060553497_U64, 7898413271349198848_U64,
+        10339757656912845935_U64, 16465723340661719040_U64,
+        12924697071141057419_U64, 15970468157399760896_U64,
+        16155871338926321774_U64, 15351399178322313216_U64,
+        10097419586828951109_U64, 4982938468024057856_U64,
+        12621774483536188886_U64, 10840359103457460224_U64,
+        15777218104420236108_U64, 4327076842467049472_U64,
+        9860761315262647567_U64, 11927795063396681728_U64,
+        12325951644078309459_U64, 10298057810818464256_U64,
+        15407439555097886824_U64, 8260886245095692416_U64,
+        9629649721936179265_U64, 5163053903184807760_U64,
+        12037062152420224081_U64, 11065503397408397604_U64,
+        15046327690525280101_U64, 18443565265187884909_U64,
+        9403954806578300063_U64, 13833071299956122020_U64,
+        11754943508222875079_U64, 12679653106517764621_U64,
+        14693679385278593849_U64, 11237880364719817872_U64,
+        18367099231598242312_U64, 212292400617608628_U64,
+        11479437019748901445_U64, 132682750386005392_U64,
+        14349296274686126806_U64, 4777539456409894645_U64,
+        17936620343357658507_U64, 15195296357367144114_U64,
+        11210387714598536567_U64, 7191217214140771119_U64,
+        14012984643248170709_U64, 4377335499248575995_U64,
+        17516230804060213386_U64, 10083355392488107898_U64,
+        10947644252537633366_U64, 10913783138732455340_U64,
+        13684555315672041708_U64, 4418856886560793367_U64,
+        17105694144590052135_U64, 5523571108200991709_U64,
+        10691058840368782584_U64, 10369760970266701674_U64,
+        13363823550460978230_U64, 12962201212833377092_U64,
+        16704779438076222788_U64, 6979379479186945558_U64,
+        10440487148797639242_U64, 13585484211346616781_U64,
+        13050608935997049053_U64, 7758483227328495169_U64,
+        16313261169996311316_U64, 14309790052588006865_U64,
+        10195788231247694572_U64, 18166990819722280098_U64,
+        12744735289059618216_U64, 4261994450943298507_U64,
+        15930919111324522770_U64, 5327493063679123134_U64,
+        9956824444577826731_U64, 7941369183226839863_U64,
+        12446030555722283414_U64, 5315025460606161924_U64,
+        15557538194652854267_U64, 15867153862612478214_U64,
+        9723461371658033917_U64, 7611128154919104931_U64,
+        12154326714572542396_U64, 14125596212076269068_U64,
+        15192908393215677995_U64, 17656995265095336336_U64,
+        9495567745759798747_U64, 8729779031470891258_U64,
+        11869459682199748434_U64, 6300537770911226168_U64,
+        14836824602749685542_U64, 17099044250493808518_U64,
+        9273015376718553464_U64, 6075216638131242420_U64,
+        11591269220898191830_U64, 7594020797664053025_U64,
+        14489086526122739788_U64, 269153960225290473_U64,
+        18111358157653424735_U64, 336442450281613091_U64,
+        11319598848533390459_U64, 7127805559067090038_U64,
+        14149498560666738074_U64, 4298070930406474644_U64,
+        17686873200833422592_U64, 14595960699862869113_U64,
+        11054295750520889120_U64, 9122475437414293195_U64,
+        13817869688151111400_U64, 11403094296767866494_U64,
+        17272337110188889250_U64, 14253867870959833118_U64,
+        10795210693868055781_U64, 13520353437777283602_U64,
+        13494013367335069727_U64, 3065383741939440791_U64,
+        16867516709168837158_U64, 17666787732706464701_U64,
+        10542197943230523224_U64, 6430056314514152534_U64,
+        13177747429038154030_U64, 8037570393142690668_U64,
+        16472184286297692538_U64, 823590954573587527_U64,
+        10295115178936057836_U64, 5126430365035880108_U64,
+        12868893973670072295_U64, 6408037956294850135_U64,
+        16086117467087590369_U64, 3398361426941174765_U64,
+        10053823416929743980_U64, 13653190937906703988_U64,
+        12567279271162179975_U64, 17066488672383379985_U64,
+        15709099088952724969_U64, 16721424822051837077_U64,
+        9818186930595453106_U64, 3533361486141316317_U64,
+        12272733663244316382_U64, 13640073894531421205_U64,
+        15340917079055395478_U64, 7826720331309500698_U64,
+        9588073174409622174_U64, 280014188641050032_U64,
+        11985091468012027717_U64, 9573389772656088348_U64,
+        14981364335015034646_U64, 16578423234247498339_U64,
+        9363352709384396654_U64, 5749828502977298558_U64,
+        11704190886730495817_U64, 16410657665576399005_U64,
+        14630238608413119772_U64, 6678264026688335045_U64,
+        18287798260516399715_U64, 8347830033360418806_U64,
+        11429873912822749822_U64, 2911550761636567802_U64,
+        14287342391028437277_U64, 12862810488900485560_U64,
+        17859177988785546597_U64, 2243455055843443238_U64,
+        11161986242990966623_U64, 3708002419115845976_U64,
+        13952482803738708279_U64, 23317005467419566_U64,
+        17440603504673385348_U64, 13864204312116438170_U64,
+        10900377190420865842_U64, 17888499731927549664_U64,
+        13625471488026082303_U64, 13137252628054661272_U64,
+        17031839360032602879_U64, 11809879766640938686_U64,
+        10644899600020376799_U64, 14298703881791668535_U64,
+        13306124500025470999_U64, 13261693833812197764_U64,
+        16632655625031838749_U64, 11965431273837859301_U64,
+        10395409765644899218_U64, 9784237555362356015_U64,
+        12994262207056124023_U64, 3006924907348169211_U64,
+        16242827758820155028_U64, 17593714189467375226_U64,
+        10151767349262596893_U64, 1772699331562333708_U64,
+        12689709186578246116_U64, 6827560182880305039_U64,
+        15862136483222807645_U64, 8534450228600381299_U64,
+        9913835302014254778_U64, 7639874402088932264_U64,
+        12392294127517818473_U64, 326470965756389522_U64,
+        15490367659397273091_U64, 5019774725622874806_U64,
+        9681479787123295682_U64, 831516194300602802_U64,
+        12101849733904119602_U64, 10262767279730529310_U64,
+        15127312167380149503_U64, 3605087062808385830_U64,
+        9454570104612593439_U64, 9170708441896323000_U64,
+        11818212630765741799_U64, 6851699533943015846_U64,
+        14772765788457177249_U64, 3952938399001381903_U64,
+        9232978617785735780_U64, 13999801545444333449_U64,
+        11541223272232169725_U64, 17499751931805416812_U64,
+        14426529090290212157_U64, 8039631859474607303_U64,
+        18033161362862765196_U64, 14661225842770647033_U64,
+        11270725851789228247_U64, 18386638188586430203_U64,
+        14088407314736535309_U64, 18371611717305649850_U64,
+        17610509143420669137_U64, 9129456591349898601_U64,
+        11006568214637918210_U64, 17235125415662156385_U64,
+        13758210268297397763_U64, 12320534732722919674_U64,
+        17197762835371747204_U64, 10788982397476261688_U64,
+        10748601772107342002_U64, 15966486035277439363_U64,
+        13435752215134177503_U64, 10734735507242023396_U64,
+        16794690268917721879_U64, 8806733365625141341_U64,
+        10496681418073576174_U64, 12421737381156795194_U64,
+        13120851772591970218_U64, 6303799689591218185_U64,
+        16401064715739962772_U64, 17103121648843798539_U64,
+        10250665447337476733_U64, 1466078993672598279_U64,
+        12813331809171845916_U64, 6444284760518135752_U64,
+        16016664761464807395_U64, 8055355950647669691_U64,
+        10010415475915504622_U64, 2728754459941099604_U64,
+        12513019344894380777_U64, 12634315111781150314_U64,
+        15641274181117975972_U64, 1957835834444274180_U64,
+        9775796363198734982_U64, 10447019433382447170_U64,
+        12219745453998418728_U64, 3835402254873283155_U64,
+        15274681817498023410_U64, 4794252818591603944_U64,
+        9546676135936264631_U64, 7608094030047140369_U64,
+        11933345169920330789_U64, 4898431519131537557_U64,
+        14916681462400413486_U64, 10734725417341809851_U64,
+        9322925914000258429_U64, 2097517367411243253_U64,
+        11653657392500323036_U64, 7233582727691441970_U64,
+        14567071740625403795_U64, 9041978409614302462_U64,
+        18208839675781754744_U64, 6690786993590490174_U64,
+        11380524797363596715_U64, 4181741870994056359_U64,
+        14225655996704495894_U64, 615491320315182544_U64,
+        17782069995880619867_U64, 9992736187248753989_U64,
+        11113793747425387417_U64, 3939617107816777291_U64,
+        13892242184281734271_U64, 9536207403198359517_U64,
+        17365302730352167839_U64, 7308573235570561493_U64,
+        10853314206470104899_U64, 11485387299872682789_U64,
+        13566642758087631124_U64, 9745048106413465582_U64,
+        16958303447609538905_U64, 12181310133016831978_U64,
+        10598939654755961816_U64, 695789805494438130_U64,
+        13248674568444952270_U64, 869737256868047663_U64,
+        16560843210556190337_U64, 10310543607939835386_U64,
+        10350527006597618960_U64, 17973304801030866876_U64,
+        12938158758247023701_U64, 4019886927579031980_U64,
+        16172698447808779626_U64, 9636544677901177879_U64,
+        10107936529880487266_U64, 10634526442115624078_U64,
+        12634920662350609083_U64, 4069786015789754290_U64,
+        15793650827938261354_U64, 475546501309804958_U64,
+        9871031767461413346_U64, 4908902581746016003_U64,
+        12338789709326766682_U64, 15359500264037295811_U64,
+        15423487136658458353_U64, 9976003293191843956_U64,
+        9639679460411536470_U64, 17764217104313372233_U64,
+        12049599325514420588_U64, 12981899343536939483_U64,
+        15061999156893025735_U64, 16227374179421174354_U64,
+        9413749473058141084_U64, 17059637889779315827_U64,
+        11767186841322676356_U64, 2877803288514593168_U64,
+        14708983551653345445_U64, 3597254110643241460_U64,
+        18386229439566681806_U64, 9108253656731439729_U64,
+        11491393399729176129_U64, 1080972517029761926_U64,
+        14364241749661470161_U64, 5962901664714590312_U64,
+        17955302187076837701_U64, 12065313099320625794_U64,
+        11222063866923023563_U64, 9846663696289085073_U64,
+        14027579833653779454_U64, 7696643601933968437_U64,
+        17534474792067224318_U64, 397432465562684739_U64,
+        10959046745042015198_U64, 14083453346258841674_U64,
+        13698808431302518998_U64, 8380944645968776284_U64,
+        17123510539128148748_U64, 1252808770606194547_U64,
+        10702194086955092967_U64, 10006377518483647400_U64,
+        13377742608693866209_U64, 7896285879677171346_U64,
+        16722178260867332761_U64, 14482043368023852087_U64,
+        10451361413042082976_U64, 2133748077373825698_U64,
+        13064201766302603720_U64, 2667185096717282123_U64,
+        16330252207878254650_U64, 3333981370896602653_U64,
+        10206407629923909156_U64, 6695424375237764562_U64,
+        12758009537404886445_U64, 8369280469047205703_U64,
+        15947511921756108056_U64, 15073286604736395033_U64,
+        9967194951097567535_U64, 9420804127960246895_U64,
+        12458993688871959419_U64, 7164319141522920715_U64,
+        15573742111089949274_U64, 4343712908476262990_U64,
+        9733588819431218296_U64, 7326506586225052273_U64,
+        12166986024289022870_U64, 9158133232781315341_U64,
+        15208732530361278588_U64, 2224294504121868368_U64,
+        9505457831475799117_U64, 10613556101930943538_U64,
+        11881822289344748896_U64, 17878631145841067327_U64,
+        14852277861680936121_U64, 3901544858591782542_U64,
+        9282673663550585075_U64, 13967680582688333849_U64,
+        11603342079438231344_U64, 12847914709933029407_U64,
+        14504177599297789180_U64, 16059893387416286759_U64,
+        18130221999122236476_U64, 1628122660560806833_U64,
+        11331388749451397797_U64, 10240948699705280078_U64,
+        14164235936814247246_U64, 17412871893058988002_U64,
+        17705294921017809058_U64, 12542717829468959195_U64,
+        11065809325636130661_U64, 12450884661845487401_U64,
+        13832261657045163327_U64, 1728547772024695539_U64,
+        17290327071306454158_U64, 15995742770313033136_U64,
+        10806454419566533849_U64, 5385653213018257806_U64,
+        13508068024458167311_U64, 11343752534700210161_U64,
+        16885085030572709139_U64, 9568004649947874797_U64,
+        10553178144107943212_U64, 3674159897003727796_U64,
+        13191472680134929015_U64, 4592699871254659745_U64,
+        16489340850168661269_U64, 1129188820640936778_U64,
+        10305838031355413293_U64, 3011586022114279438_U64,
+        12882297539194266616_U64, 8376168546070237202_U64,
+        16102871923992833270_U64, 10470210682587796502_U64,
+        10064294952495520794_U64, 1932195658189984910_U64,
+        12580368690619400992_U64, 11638616609592256945_U64,
+        15725460863274251240_U64, 14548270761990321182_U64,
+        9828413039546407025_U64, 9092669226243950738_U64,
+        12285516299433008781_U64, 15977522551232326327_U64,
+        15356895374291260977_U64, 6136845133758244197_U64,
+        9598059608932038110_U64, 15364743254667372383_U64,
+        11997574511165047638_U64, 9982557031479439671_U64,
+        14996968138956309548_U64, 3254824252494523781_U64,
+        9373105086847693467_U64, 11257637194663853171_U64,
+        11716381358559616834_U64, 9460360474902428559_U64,
+        14645476698199521043_U64, 2602078556773259891_U64,
+        18306845872749401303_U64, 17087656251248738576_U64,
+        11441778670468375814_U64, 17597314184671543466_U64,
+        14302223338085469768_U64, 12773270693984653525_U64,
+        17877779172606837210_U64, 15966588367480816906_U64,
+        11173611982879273256_U64, 14590803748102898470_U64,
+        13967014978599091570_U64, 18238504685128623088_U64,
+        17458768723248864463_U64, 13574758819556003052_U64,
+        10911730452030540289_U64, 15401753289863583763_U64,
+        13639663065038175362_U64, 5417133557047315992_U64,
+        17049578831297719202_U64, 15994788983163920798_U64,
+        10655986769561074501_U64, 14608429132904838403_U64,
+        13319983461951343127_U64, 4425478360848884291_U64,
+        16649979327439178909_U64, 920161932633717460_U64,
+        10406237079649486818_U64, 2880944217109767365_U64,
+        13007796349561858522_U64, 12824552308241985014_U64,
+        16259745436952323153_U64, 6807318348447705459_U64,
+        10162340898095201970_U64, 15783789013848285672_U64,
+        12702926122619002463_U64, 10506364230455581282_U64,
+        15878657653273753079_U64, 8521269269642088699_U64,
+        9924161033296095674_U64, 12243322321167387293_U64,
+        12405201291620119593_U64, 6080780864604458308_U64,
+        15506501614525149491_U64, 12212662099182960789_U64,
+        9691563509078218432_U64, 5327070802775656541_U64,
+        12114454386347773040_U64, 6658838503469570676_U64,
+        15143067982934716300_U64, 8323548129336963345_U64,
+        9464417489334197687_U64, 14425589617690377899_U64,
+        11830521861667747109_U64, 13420301003685584469_U64,
+        14788152327084683887_U64, 2940318199324816875_U64,
+        9242595204427927429_U64, 8755227902219092403_U64,
+        11553244005534909286_U64, 15555720896201253407_U64,
+        14441555006918636608_U64, 10221279083396790951_U64,
+        18051943758648295760_U64, 12776598854245988689_U64,
+        11282464849155184850_U64, 7985374283903742931_U64,
+        14103081061443981063_U64, 758345818024902856_U64,
+        17628851326804976328_U64, 14782990327813292282_U64,
+        11018032079253110205_U64, 9239368954883307676_U64,
+        13772540099066387756_U64, 16160897212031522499_U64,
+        17215675123832984696_U64, 1754377441329851508_U64,
+        10759796952395615435_U64, 1096485900831157192_U64,
+        13449746190494519293_U64, 15205665431321110202_U64,
+        16812182738118149117_U64, 5172023733869224041_U64,
+        10507614211323843198_U64, 5538357842881958977_U64,
+        13134517764154803997_U64, 16146319340457224530_U64,
+        16418147205193504997_U64, 6347841120289366950_U64,
+        10261342003245940623_U64, 6273243709394548296_U64
+    ];
 }
 
 // The functions of this namespace whose names begin with `_` and that find or write the decimal
