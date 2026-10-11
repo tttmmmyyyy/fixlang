@@ -31,7 +31,7 @@ array literal of `Std::U64`, where it is a constant of the program.
 | `ffc_parse_number_string` | `String::_parse_decimal_text`, `String::_parse_explicit_exponent`, `String::_reread_first_19_digits` |
 | `ffc_parse_infnan` | `String::_read_infinity_or_nan` |
 | `ffc_from_chars_advanced`, `ffc_clinger_fast_path_impl` | `String::_round_decimal_text` |
-| `ffc_compute_float`, `ffc_compute_error` | `String::_compute_float`, `String::_compute_error` |
+| `ffc_compute_float`, `ffc_compute_error` | `String::_compute_float`, `String::_compute_float_truncated` |
 | `ffc_digit_comp`, `ffc_parse_mantissa` | `String::_round_by_digit_comparison`, `String::_parse_significant_digits` |
 | `ffc_bigint` | the functions of `String` whose names contain `bigint` |
 

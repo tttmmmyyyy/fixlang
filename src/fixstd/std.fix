@@ -5000,7 +5000,7 @@ impl F32 : FromString {
     // The number is rounded to the nearest `F32`. A text naming a number too large for `F32`, or a
     // number other than zero too small for it to hold at all, is an error.
     from_string = |str| (
-        String::_read_float_text(0, str.get_size, str.@_data)._float_text_result(str)
+        String::_read_float_text(0, str.@size, str.@_data)._float_text_result(str)
     );
 }
 
@@ -5353,7 +5353,7 @@ impl F64 : FromString {
     // The number is rounded to the nearest `F64`. A text naming a number too large for `F64`, or a
     // number other than zero too small for it to hold at all, is an error.
     from_string = |str| (
-        String::_read_float_text(0, str.get_size, str.@_data)._float_text_result(str)
+        String::_read_float_text(0, str.@size, str.@_data)._float_text_result(str)
     );
 }
 
@@ -5569,7 +5569,7 @@ namespace String {
         let has_point = integer_end < end && bytes.unsafe_get_bounds_unchecked(integer_end) == '.';
         let fraction_start = if has_point { integer_end + 1 } else { integer_end };
         let (fraction_end, mantissa) = if has_point {
-            let (i, mantissa) = bytes._accumulate_eight_digit_groups(fraction_start, end, mantissa);
+            let (i, mantissa) = bytes._accumulate_digit_groups(fraction_start, end, mantissa);
             bytes._accumulate_decimal_digits(i, end, mantissa)
         } else {
             (fraction_start, mantissa)
@@ -5619,16 +5619,16 @@ namespace String {
     // * `end` - The index past the last byte that may be read.
     // * `value` - The number the digits before `i` make.
     // * `bytes` - The bytes holding the digits.
-    _accumulate_eight_digit_groups : I64 -> I64 -> U64 -> Array U8 -> (I64, U64);
-    _accumulate_eight_digit_groups = |i, end, value, bytes| (
+    _accumulate_digit_groups : I64 -> I64 -> U64 -> Array U8 -> (I64, U64);
+    _accumulate_digit_groups = |i, end, value, bytes| (
         let (i, value) = loop((i, value), |(i, value)| (
             if end - i < 8 { break $ (i, value) };
-            let word = bytes._load_little_endian_u64(i);
+            let word = bytes._load_8_bytes_little_endian(i);
             if !_is_eight_digits(word) { break $ (i, value) };
             continue $ (i + 8, value * 100000000_U64 + _parse_eight_digits(word))
         ));
         if end - i < 4 { (i, value) };
-        let word = bytes._load_little_endian_u32(i);
+        let word = bytes._load_4_bytes_little_endian(i);
         if !_is_four_digits(word) { (i, value) };
         (i + 4, value * 10000_U64 + _parse_four_digits(word))
     );
@@ -5639,9 +5639,9 @@ namespace String {
     // # Parameters
     // * `i` - The index of the first byte, at least eight before the size of `bytes`.
     // * `bytes` - The bytes.
-    _load_little_endian_u64 : I64 -> Array U8 -> U64;
-    _load_little_endian_u64 = |i, bytes| (
-        bytes._load_little_endian_u32(i).bit_or(bytes._load_little_endian_u32(i + 4).shift_left(32_U64))
+    _load_8_bytes_little_endian : I64 -> Array U8 -> U64;
+    _load_8_bytes_little_endian = |i, bytes| (
+        bytes._load_4_bytes_little_endian(i).bit_or(bytes._load_4_bytes_little_endian(i + 4).shift_left(32_U64))
     );
 
     // Answers with the number whose bytes, the least significant first, are the four bytes of `bytes`
@@ -5650,8 +5650,8 @@ namespace String {
     // # Parameters
     // * `i` - The index of the first byte, at least four before the size of `bytes`.
     // * `bytes` - The bytes.
-    _load_little_endian_u32 : I64 -> Array U8 -> U64;
-    _load_little_endian_u32 = |i, bytes| (
+    _load_4_bytes_little_endian : I64 -> Array U8 -> U64;
+    _load_4_bytes_little_endian = |i, bytes| (
         bytes.unsafe_get_bounds_unchecked(i).u64
             .bit_or(bytes.unsafe_get_bounds_unchecked(i + 1).u64.shift_left(8_U64))
             .bit_or(bytes.unsafe_get_bounds_unchecked(i + 2).u64.shift_left(16_U64))
@@ -5868,7 +5868,7 @@ namespace String {
             // and where those two round alike, so does the number.
             let (next_mantissa, next_power2) = _compute_float(format, exponent, mantissa + 1_U64);
             if result_mantissa == next_mantissa && power2 == next_power2 { (result_mantissa, power2) };
-            _compute_error(format, exponent, mantissa)
+            _compute_float_truncated(format, exponent, mantissa)
         };
         let (result_mantissa, power2) = if power2 >= 0 { (result_mantissa, power2) } else {
             bytes._round_by_digit_comparison(format, text, (result_mantissa, power2))
@@ -5881,8 +5881,8 @@ namespace String {
         _FloatTextReading::_read $ _from_bits_u64(bits)
     );
 
-    // The bias `_compute_error` adds to the power of two it answers with. It makes the power negative,
-    // which marks the answer as not rounded yet. ffc.h's `FFC_INVALID_AM_BIAS`.
+    // The bias `_compute_float_truncated` adds to the power of two it answers with. It makes the
+    // power negative, which marks the answer as not rounded yet. ffc.h's `FFC_INVALID_AM_BIAS`.
     _invalid_power2_bias : I64;
     _invalid_power2_bias = -0x8000;
 
@@ -5969,8 +5969,8 @@ namespace String {
     // * `format` - The binary format.
     // * `q` - The power of ten, within the range `_compute_float` reads the table for.
     // * `w` - The significand, other than zero.
-    _compute_error : _BinaryFormat a -> I64 -> U64 -> (U64, I64);
-    _compute_error = |format, q, w| (
+    _compute_float_truncated : _BinaryFormat a -> I64 -> U64 -> (U64, I64);
+    _compute_float_truncated = |format, q, w| (
         let lz = w.count_leading_zeros;
         let (high, _) = _compute_product_approximation(format, q, w.shift_left(lz));
         let high_zeros = high.shift_right(63_U64).bit_xor(1_U64);
@@ -5980,8 +5980,8 @@ namespace String {
     );
 
     // Rounds the decimal number `text` names to the nearest number of the format, ties to even, by
-    // reading its digits into a big integer, where `adjusted` is what `_compute_error` answers for
-    // it. ffc.h's `ffc_digit_comp`.
+    // reading its digits into a big integer, where `adjusted` is what `_compute_float_truncated`
+    // answers for it. ffc.h's `ffc_digit_comp`.
     //
     // # Parameters
     // * `format` - The binary format.
@@ -5992,27 +5992,14 @@ namespace String {
     _round_by_digit_comparison : _BinaryFormat a -> _DecimalText -> (U64, I64) -> Array U8 -> (U64, I64);
     _round_by_digit_comparison = |format, text, (mantissa, power2), bytes| (
         let adjusted = (mantissa, power2 - _invalid_power2_bias);
-        let scientific_exponent = _find_scientific_exponent(text.@_mantissa, text.@_exponent);
+        // The power of ten of the number written with one digit before the point: ffc.h's
+        // `ffc_scientific_exponent`.
+        let scientific_exponent = text.@_exponent + _decimal_integer_length(false, text.@_mantissa) - 1;
         let (digits, digit_count) = bytes._parse_significant_digits(format.@_max_digits, text);
         let exponent = scientific_exponent + 1 - digit_count;
         if exponent >= 0 { _round_positive_digit_comparison(format, digits, exponent) };
         _round_negative_digit_comparison(format, digits, adjusted, exponent)
     );
-
-    // Answers with `exponent` plus the number of decimal digits of `mantissa` less one: the power of
-    // ten of the number `mantissa * 10 ^ exponent` written with one digit before the point. ffc.h's
-    // `ffc_scientific_exponent`.
-    //
-    // # Parameters
-    // * `mantissa` - The significand.
-    // * `exponent` - The power of ten.
-    _find_scientific_exponent : U64 -> I64 -> I64;
-    _find_scientific_exponent = |mantissa, exponent| loop((mantissa, exponent), |(mantissa, exponent)| (
-        if mantissa >= 10000_U64 { continue $ (mantissa / 10000_U64, exponent + 4) };
-        if mantissa >= 100_U64 { continue $ (mantissa / 100_U64, exponent + 2) };
-        if mantissa >= 10_U64 { continue $ (mantissa / 10_U64, exponent + 1) };
-        break $ exponent
-    ));
 
     // Reads the significant digits of `text`, at most `max_digits` of them, into a big integer, and
     // answers with it and the number of digits it holds. Where the digits past `max_digits` are not
@@ -6060,7 +6047,7 @@ namespace String {
         let (i, digits, digit_count, group_length, value) = loop((i, digits, digit_count, 0, 0_U64), |(i, digits, digit_count, group_length, value)| (
             if i == end || digit_count == max_digits { break $ (i, digits, digit_count, group_length, value) };
             let (i, digit_count, group_length, value) = if end - i >= 8 && group_length <= 11 && max_digits - digit_count >= 8 {
-                (i + 8, digit_count + 8, group_length + 8, value * 100000000_U64 + _parse_eight_digits(bytes._load_little_endian_u64(i)))
+                (i + 8, digit_count + 8, group_length + 8, value * 100000000_U64 + _parse_eight_digits(bytes._load_8_bytes_little_endian(i)))
             } else {
                 (i + 1, digit_count + 1, group_length + 1, value * 10_U64 + (bytes.unsafe_get_bounds_unchecked(i) - '0').u64)
             };
@@ -6175,10 +6162,10 @@ namespace String {
         if -power2 >= mantissa_shift {
             // A subnormal number, or zero.
             let shift = if -power2 + 1 > 64 { 64 } else { -power2 + 1 };
-            let (mantissa, _) = rounding._shift_rounding(shift, (mantissa, power2));
+            let (mantissa, _) = rounding._shift_right_rounding(shift, (mantissa, power2));
             (mantissa, if mantissa < 1_U64.shift_left(mantissa_bits.u64) { 0 } else { 1 })
         };
-        let (mantissa, power2) = rounding._shift_rounding(mantissa_shift, (mantissa, power2));
+        let (mantissa, power2) = rounding._shift_right_rounding(mantissa_shift, (mantissa, power2));
         let (mantissa, power2) = if mantissa >= 2_U64.shift_left(mantissa_bits.u64) {
             (1_U64.shift_left(mantissa_bits.u64), power2 + 1)
         } else {
@@ -6197,8 +6184,8 @@ namespace String {
     // * `shift` - The number of bits to shift away.
     // * `adjusted` - The significand, and the power of two it is multiplied by.
     // * `rounding` - How to round.
-    _shift_rounding : I64 -> (U64, I64) -> _Rounding -> (U64, I64);
-    _shift_rounding = |shift, (mantissa, power2), rounding| (
+    _shift_right_rounding : I64 -> (U64, I64) -> _Rounding -> (U64, I64);
+    _shift_right_rounding = |shift, (mantissa, power2), rounding| (
         let shifted = if shift == 64 { 0_U64 } else { mantissa.shift_right(shift.u64) };
         let power2 = power2 + shift;
         let is_odd = shifted.bit_and(1_U64) == 1_U64;
@@ -6281,31 +6268,6 @@ namespace String {
         ));
         if carry == 0_U64 { limbs };
         limbs.push_back(carry)
-    );
-
-    // Answers with `limbs + addend * 2 ^ (64 * start)`, where `addend` is a big integer. ffc.h's
-    // `ffc_bigint_large_add_from`.
-    //
-    // # Parameters
-    // * `start` - The limb to add at.
-    // * `addend` - The big integer to add.
-    // * `limbs` - The big integer.
-    _add_bigint_to_bigint : I64 -> Array U64 -> Array U64 -> Array U64;
-    _add_bigint_to_bigint = |start, addend, limbs| (
-        let addend_size = addend.get_size;
-        let limbs = if limbs.get_size >= addend_size + start { limbs } else {
-            limbs.resize(addend_size + start, 0_U64)
-        };
-        let (carry, limbs) = loop((0, false, limbs), |(i, carry, limbs)| (
-            if i == addend_size { break $ (carry, limbs) };
-            let x = limbs.unsafe_get_bounds_unchecked(i + start);
-            let sum = x + addend.unsafe_get_bounds_unchecked(i);
-            let carried = sum < x;
-            let (sum, carried) = if carry { (sum + 1_U64, carried || sum + 1_U64 == 0_U64) } else { (sum, carried) };
-            continue $ (i + 1, carried, limbs.unsafe_set_bounds_unchecked(i + start, sum))
-        ));
-        if !carry { limbs };
-        limbs._add_limb_to_bigint(addend_size + start, 1_U64)
     );
 
     // Answers with `limbs * multiplier`, where `multiplier` is a big integer. ffc.h's
