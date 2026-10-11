@@ -520,16 +520,48 @@ impl<'a> Validator<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::types::{type_fun, type_funptr};
+    use crate::ast::typedecl::Field;
+    use crate::ast::types::{
+        kind_star, tycon, type_fun, type_funptr, type_tyapp, type_tycon, TyCon, TyConInfo,
+        TyConVariant,
+    };
     use crate::fixstd::builtin::{
-        bulitin_tycons, make_dynamic_object_ty, make_i64_ty, make_ptr_ty, NullPtrLitOp,
+        bulitin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty, make_ptr_ty,
+        NullPtrLitOp,
     };
     use crate::rc_ir::ast::{MatchArm, RcState};
 
     /// A type environment holding the built-in type constructors, which a check consults to tell a
-    /// boxed type from an unboxed one.
+    /// boxed type from an unboxed one, and `Test::Pair`, an unboxed struct of an `Array I64` and an
+    /// `I64`.
     fn type_env() -> TypeEnv {
-        TypeEnv::new(bulitin_tycons(), Map::default())
+        let mut tycons = bulitin_tycons();
+        tycons.insert(
+            TyCon::new(FullName::from_strs(&["Test"], "Pair")),
+            TyConInfo {
+                kind: kind_star(),
+                variant: TyConVariant::Struct,
+                is_unbox: true,
+                tyvars: vec![],
+                fields: vec![
+                    Field::make(
+                        "fst".to_string(),
+                        type_tyapp(make_array_ty(), make_i64_ty()),
+                        None,
+                    ),
+                    Field::make("snd".to_string(), make_i64_ty(), None),
+                ],
+                source: None,
+                document: None,
+                punched_from: None,
+            },
+        );
+        TypeEnv::new(tycons, Map::default())
+    }
+
+    /// `Test::Pair`, the unboxed struct `type_env` declares.
+    fn pair_ty() -> Arc<TypeNode> {
+        type_tycon(&tycon(FullName::from_strs(&["Test"], "Pair")))
     }
 
     /// A local variable of type `I64`, which is unboxed and so holds no reference-counting unit.
@@ -895,5 +927,20 @@ mod tests {
         // The projection reads slot 1 of a capture object laid out with one slot.
         let capture = var_of("cap", make_dynamic_object_ty());
         validate_prog(vec![projecting_func(&capture, 1, vec![make_i64_ty()])]);
+    }
+
+    /// A `Destructure` of an unboxed container that leaves one of its fields out is caught: code
+    /// generation would drop that field inside the node, where no cancellation reaches the release.
+    #[test]
+    #[should_panic(expected = "a `Destructure` of the unboxed")]
+    fn rejects_destructure_of_an_unboxed_container_leaving_a_field_out() {
+        // destructure p { 1 -> s }; ret s   (p : Test::Pair; field 0 is left out)
+        let body = node(RcExpr::Destructure(
+            var_of("p", pair_ty()),
+            vec![(1, var("s"))],
+            RcState::Unknown,
+            node(RcExpr::Ret(var("s"))),
+        ));
+        check(&body, &["p"]);
     }
 }
