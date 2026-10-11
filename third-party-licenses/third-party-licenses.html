@@ -50,10 +50,11 @@
                 Note that, in addition to the listed licenses, the prebuilt binary of the fix compiler includes LLVM,
                 which is licensed under the <a href="https://llvm.org/LICENSE.txt">Apache
                     License v2.0 with LLVM Exceptions</a>.</p>
-            <p>Every program the fix compiler builds links <a href="https://github.com/ulfjack/ryu">Ryu</a> by Ulf
-                Adams, which writes a floating point number as the shortest decimal text that reads back as it. Its
-                sources are carried under <code>src/fixstd/ryu/</code> and are licensed under the <a
-                    href="https://www.apache.org/licenses/LICENSE-2.0">Apache License v2.0</a>.</p>
+            <p>The standard library of Fix carries a translation of <a href="https://github.com/ulfjack/ryu">Ryu</a>
+                by Ulf Adams, which writes a floating point number as decimal text, and every program the fix compiler
+                builds contains the parts of it the program uses. The translation is in <code>src/fixstd/std.fix</code>,
+                and is licensed, as Ryu is, under the <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache
+                    License v2.0</a>.</p>
             <p>Every program the fix compiler builds also links <a href="https://github.com/kolemannix/ffc.h">ffc.h</a>,
                 Koleman Nix's C port of <a href="https://github.com/fastfloat/fast_float">fast_float</a> by Daniel
                 Lemire and João Paulo Magalhaes, which reads a floating point number from decimal text. Its source is

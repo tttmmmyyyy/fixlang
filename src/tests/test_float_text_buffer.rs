@@ -1,16 +1,9 @@
-// The eight values that write a `F32` or a `F64` as text hand a buffer to the C runtime. Each
-// buffer's size is derived from the widest text the value can be asked for, and the derivation
-// holds only if the widest digits, the widest exponent and the null terminator were all counted.
-//
-// A buffer short of that text stops the program: the runtime knows the length of every text
-// before it writes the text into the buffer, and aborts where the text and its null do not fit.
-// So what this file does is write the widest text each of the eight can produce, which is what
-// proves the check never fires — and an undersized buffer is caught by the abort wherever the
-// tests run, with Valgrind or without it.
-//
-// The run is under Valgrind all the same, because the check answers for the write into the buffer
-// and Valgrind answers for everything around it: the `Array` the buffer lives in, the write into
-// it, and the `String` built from it.
+// `to_string` and the precision functions of `F32` and `F64` write their text into a buffer whose
+// size is derived from the widest text they can be asked for, and the derivation holds only if the
+// widest digits, the widest exponent and the null terminator were all counted. A writer checks the
+// buffer against that size before it writes, and nothing checks the size against the text the
+// writer then writes, so this file writes the widest text each function can produce under Valgrind,
+// which reports a write past the buffer's allocation.
 
 #[cfg(test)]
 mod float_text_buffer_tests {
@@ -20,7 +13,7 @@ mod float_text_buffer_tests {
         tests::test_util::{test_source, test_source_fail},
     };
 
-    /// Writes the widest text each of the eight functions can produce -- the least value of each
+    /// Writes the widest text each of the functions can produce -- the least value of each
     /// type, whose whole part is the widest, and the greatest negative one, whose exponent is the
     /// widest, at every precision the functions accept -- under Valgrind, so that a buffer sized
     /// short of that text shows up as a write past its allocation.
@@ -71,27 +64,42 @@ main : IO () = (
         test_source(source, config);
     }
 
-    /// A buffer one byte short of a text and its null stops the program with the two sizes, before
-    /// the text is written. `-2.2250738585072014e-308` is written in 24 bytes, so a buffer of 24
-    /// bytes is one short of what it needs.
+    /// A buffer shorter than the most bytes a writer of a number's text can write stops the program
+    /// with the sizes, before anything is written, even where the text of the number written would
+    /// fit.
     #[test]
-    pub fn test_text_one_byte_past_its_buffer_stops_the_program() {
+    pub fn test_buffer_short_of_the_widest_text_stops_the_program() {
         let source = r#"
 module Main;
 
 main : IO () = (
-    let size = 24;
-    let data = Array::fill(size, 0_U8);
-    let (data, length) = data.mutate_elements(|ptr|
-        FFI_CALL_IO[I64 fixruntime_f64_to_str_shortest(Ptr, I64, F64), ptr, size, -2.2250738585072014e-308]
-    );
-    println("wrote " + length.to_string + " bytes into " + data.@size.to_string)
+    let (end, _) = Array::fill(23, 0_U8).F64::_write_shortest_text(0, 1.0);
+    println("wrote " + end.to_string + " bytes")
 );
 "#;
         test_source_fail(
             source,
             Configuration::develop_mode(),
-            "A number's text takes 25 bytes and its buffer holds 24",
+            "A number's text takes up to 24 bytes from index 0, and its buffer holds 23 bytes.",
+        );
+    }
+
+    /// A writer handed a negative index stops the program before it writes in front of the array,
+    /// however many bytes the array holds.
+    #[test]
+    pub fn test_text_from_a_negative_index_stops_the_program() {
+        let source = r#"
+module Main;
+
+main : IO () = (
+    let (end, _) = Array::fill(64, 0_U8).F64::_write_shortest_text(-1, 1.0);
+    println("wrote up to " + end.to_string)
+);
+"#;
+        test_source_fail(
+            source,
+            Configuration::develop_mode(),
+            "A number's text takes up to 24 bytes from index -1, and its buffer holds 64 bytes.",
         );
     }
 }

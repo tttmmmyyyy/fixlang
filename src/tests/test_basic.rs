@@ -9,9 +9,9 @@ use crate::{
     misc::{function_name, number_to_varname},
     tests::test_util::{
         assert_grammar_accepts, assert_grammar_rejects, emitted_llvm_ir, fix_command,
-        generated_llvm_ir_modules, run_source_assert_failed, run_source_capture,
-        test_files_in_directory, test_source, test_source_fail, test_source_fail_excludes,
-        test_source_with_c, test_source_with_c_under, EmittedIr,
+        generated_llvm_ir_modules, integer_operations_checked_config, run_source_assert_failed,
+        run_source_capture, test_files_in_directory, test_source, test_source_fail,
+        test_source_fail_excludes, test_source_with_c, test_source_with_c_under, EmittedIr,
     },
 };
 use rand::{thread_rng, Rng};
@@ -6004,6 +6004,45 @@ pub fn test_signed_integral_abs() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// Pins `to_bits` and `from_bits` of `F64` and `F32`: the bits of the IEEE 754 encoding, and the
+/// number read back from them unchanged for every kind of number, a NaN's sign and payload
+/// included.
+#[test]
+pub fn test_float_to_bits_and_from_bits() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            assert_eq(|_|"1.0", 1.0.to_bits, 0x3FF0000000000000_U64);;
+            assert_eq(|_|"-0.0", (-0.0).to_bits, 0x8000000000000000_U64);;
+            assert_eq(|_|"the least subnormal", 5.0e-324.to_bits, 1_U64);;
+            assert_eq(|_|"infinity", F64::infinity.to_bits, 0x7FF0000000000000_U64);;
+            assert_eq(|_|"F32 1.0", 1.0_F32.to_bits, 0x3F800000_U32);;
+            assert_eq(|_|"F32 -infinity", (-F32::infinity).to_bits, 0xFF800000_U32);;
+            assert_eq(|_|"from the bits of 1.0", F64::from_bits(0x3FF0000000000000_U64), 1.0);;
+            assert_eq(|_|"from the bits of -2.0", F64::from_bits(0xC000000000000000_U64), -2.0);;
+            assert_eq(|_|"F32 from the bits of 1.5", F32::from_bits(0x3FC00000_U32), 1.5_F32);;
+
+            // Every kind of number comes back with its bits: zeros, a subnormal, the greatest
+            // finite number, the infinities, and NaNs signaling and quiet, with a sign and a
+            // payload.
+            let bits_f64 = [
+                0_U64, 0x8000000000000000_U64, 1_U64, 0x7FEFFFFFFFFFFFFF_U64, 0x7FF0000000000000_U64,
+                0xFFF0000000000000_U64, 0x7FF0000000000001_U64, 0xFFF8000000000123_U64, 0x7FFFFFFFFFFFFFFF_U64
+            ];
+            assert_eq(|_|"F64 bits read back", bits_f64.map(|b| F64::from_bits(b).to_bits), bits_f64);;
+            let bits_f32 = [
+                0_U32, 0x80000000_U32, 1_U32, 0x7F7FFFFF_U32, 0x7F800000_U32, 0xFF800000_U32,
+                0x7F800001_U32, 0xFFC00123_U32, 0x7FFFFFFF_U32
+            ];
+            assert_eq(|_|"F32 bits read back", bits_f32.map(|b| F32::from_bits(b).to_bits), bits_f32);;
+            assert_eq(|_|"a NaN from its bits", F64::from_bits(0x7FF0000000000001_U64).to_string, "nan");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// Pins the text `to_string` writes: the shortest digits that read back as the number, spelled
 /// positionally where the point falls within the window the type's digits justify and as a power
 /// of ten outside it, and the widest text an `F64` reaches, which is what its buffer holds.
@@ -6816,6 +6855,169 @@ pub fn test_float_to_string_precision_of_nan_of_either_sign() {
                 neg.to_string_precision(2_U8), neg.to_string_exp, neg.to_string_exp_precision(2_U8)
             ];
             assert_eq(|_|"F32", texts, ["nan", "nan", "nan", "nan", "nan", "nan"]);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Under `--check-integer-operations`, `to_string`, `to_string_precision` and
+/// `to_string_exp_precision` write every scale of `F64` and `F32` without stopping the program.
+/// The shift amounts and the signed arithmetic of the writers depend on the biased exponent alone,
+/// so every biased exponent is written, with the least and the greatest stored significand, at the
+/// least and the greatest precision. The shortest text and the text with a power of ten at
+/// precision 255 read back as the number.
+#[test]
+pub fn test_float_texts_of_every_exponent_pass_the_integer_operation_checks() {
+    let source = r#"
+        module Main;
+
+        // Asserts that the texts of `v` can be written, and that the shortest text and the text
+        // with a power of ten at precision 255 read back as `v`.
+        //
+        // # Parameters
+        // * `v` - The number to write.
+        check_f64 : F64 -> IO ();
+        check_f64 = |v| (
+            let bits = v.to_bits;
+            let back : Result ErrMsg F64 = v.to_string.from_string;
+            assert_eq(|_| "shortest of " + bits.to_string, back.as_ok.to_bits, bits);;
+            let back : Result ErrMsg F64 = v.to_string_exp_precision(255_U8).from_string;
+            assert_eq(|_| "exp of " + bits.to_string, back.as_ok.to_bits, bits);;
+            assert(|_| "exp of " + bits.to_string, v.to_string_exp_precision(0_U8).@size > 0);;
+            assert(|_| "fixed of " + bits.to_string, v.to_string_precision(0_U8).@size > 0);;
+            assert(|_| "fixed of " + bits.to_string, v.to_string_precision(255_U8).@size > 255)
+        );
+
+        // Asserts what `check_f64` asserts, for an `F32`.
+        //
+        // # Parameters
+        // * `v` - The number to write.
+        check_f32 : F32 -> IO ();
+        check_f32 = |v| (
+            let bits = v.to_bits;
+            let back : Result ErrMsg F32 = v.to_string.from_string;
+            assert_eq(|_| "shortest of " + bits.to_string, back.as_ok.to_bits, bits);;
+            let back : Result ErrMsg F32 = v.to_string_exp_precision(255_U8).from_string;
+            assert_eq(|_| "exp of " + bits.to_string, back.as_ok.to_bits, bits);;
+            assert(|_| "exp of " + bits.to_string, v.to_string_exp_precision(0_U8).@size > 0);;
+            assert(|_| "fixed of " + bits.to_string, v.to_string_precision(0_U8).@size > 0);;
+            assert(|_| "fixed of " + bits.to_string, v.to_string_precision(255_U8).@size > 255)
+        );
+
+        main : IO ();
+        main = (
+            let greatest_64 = 1_U64.shift_left(52_U64) - 1_U64;
+            Iterator::range(0, 2047).fold_m((), |e, _| (
+                let high = e.u64.shift_left(52_U64);
+                // At the biased exponent 0, the significand 0 is a zero, which has no scale.
+                let significands = if e == 0 { [1_U64, greatest_64] } else { [0_U64, 1_U64, greatest_64] };
+                significands.to_iter.fold_m((), |m, _| check_f64(F64::from_bits(high.bit_or(m))))
+            ));;
+            let greatest_32 = 1_U32.shift_left(23_U32) - 1_U32;
+            Iterator::range(0, 255).fold_m((), |e, _| (
+                let high = e.u32.shift_left(23_U32);
+                let significands = if e == 0 { [1_U32, greatest_32] } else { [0_U32, 1_U32, greatest_32] };
+                significands.to_iter.fold_m((), |m, _| check_f32(F32::from_bits(high.bit_or(m))))
+            ));;
+            pure()
+        );
+    "#;
+    test_source(source, integer_operations_checked_config());
+}
+
+/// Pins the digits `F32::to_string` writes where two texts of the shortest length both read back as
+/// the number: the one nearer the number, as `1.4e-45_F32` is written `1.0e-45`. Each of these
+/// numbers has a neighbour text one unit lower in the last digit that reads back as it too.
+#[test]
+pub fn test_float_to_string_of_f32_writes_the_nearest_of_the_shortest_texts() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            assert_eq(|_|"F32 texts",
+                      [578789570.0_F32, 6.7386187e24_F32, 0.89382905_F32, 5.7179215e-37_F32].map(to_string),
+                      ["578789570.0", "6.7386187e24", "0.89382905", "5.7179215e-37"]);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Pins that `to_string` writes the shortest text that reads back as the number where that text
+/// lies on the edge of the numbers reading back as it: halfway to the number below, which reads
+/// back as this one because its significand is the even one.
+#[test]
+pub fn test_float_to_string_takes_the_shortest_text_on_the_edge_of_the_number() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            // `18014398509481990` lies halfway between this number and the one below it.
+            assert_eq(|_|"F64", 1.8014398509481992e16.to_string, "1.801439850948199e16");;
+            let back : Result ErrMsg F64 = "1.801439850948199e16".from_string;
+            assert_eq(|_|"F64 reads back", back.as_ok, 1.8014398509481992e16);;
+            // `36175870` lies halfway between this number and the one below it.
+            assert_eq(|_|"F32", 36175872.0_F32.to_string, "36175870.0");;
+            let back : Result ErrMsg F32 = "36175870.0".from_string;
+            assert_eq(|_|"F32 reads back", back.as_ok, 36175872.0_F32);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Pins that the functions writing a given number of places round up where the removed digits
+/// begin with a 5 and go on past it: the number lies above the halfway point, so it is no tie,
+/// whatever the parity of the digit kept. With a power of ten the removed digits may lie in the
+/// whole part, where a number exactly halfway still rounds to the even digit.
+#[test]
+pub fn test_float_to_string_precision_rounds_up_past_a_half() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            assert_eq(|_|"positionally",
+                      [0.5625.to_string_precision(0_U8), 0.0546875.to_string_precision(1_U8), 0.005859375.to_string_precision(2_U8)],
+                      ["1", "0.1", "0.01"]);;
+            // `2 ^ -60`, whose digits run on far past the places written.
+            assert_eq(|_|"positionally, far below one",
+                      8.673617379884035e-19.to_string_precision(38_U8), "0.00000000000000000086736173798840354721");;
+            assert_eq(|_|"with a power of ten, past a half in the whole part",
+                      [256.0.to_string_exp_precision(0_U8), 65536.0.to_string_exp_precision(0_U8), 6656.0.to_string_exp_precision(1_U8)],
+                      ["3e2", "7e4", "6.7e3"]);;
+            assert_eq(|_|"with a power of ten, a tie in the whole part", 250.0.to_string_exp_precision(0_U8), "2e2");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// Pins that the functions writing the text of a floating point number into a byte array write it
+/// from the index given, answer with the index after it, and leave the bytes before it alone, a
+/// rounding that carries past the first digit included.
+#[test]
+pub fn test_float_text_writers_write_from_the_index_given() {
+    let source = r#"
+        module Main;
+        main : IO ();
+        main = (
+            // Each text is written after a `9`, which a carry running past the text would change. The
+            // array holds the most bytes each writer can write after the texts before it.
+            let writers : Array (I64 -> Array U8 -> (I64, Array U8)) = [
+                |at, bytes| F64::_write_fixed_text(at, 1_U8, 9.96, bytes),
+                |at, bytes| F64::_write_exp_text(at, 0_U8, 9.7, bytes),
+                |at, bytes| F64::_write_exp_text(at, 1_U8, -9.96, bytes),
+                |at, bytes| F64::_write_shortest_text(at, -0.00012, bytes),
+                |at, bytes| F32::_write_shortest_text(at, 1.0e13_F32, bytes),
+                |at, bytes| F64::_write_shortest_text(at, -F64::infinity, bytes),
+                |at, bytes| F64::_write_fixed_text(at, 2_U8, -0.0, bytes)
+            ];
+            let (end, bytes) = writers.to_iter.fold((0, Array::fill(512, 0_U8)), |write, (at, bytes)|
+                write(at + 1, bytes.set(at, '9'))
+            );
+            assert_eq(|_|"the texts written one after another",
+                      String::_from_written_bytes((end, bytes)), "910.091e19-1.0e19-0.0001291.0e139-inf9-0.00");;
             pure()
         );
     "#;
