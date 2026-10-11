@@ -342,15 +342,17 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("unbox_struct");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let holds_global = binding_vars(&dump, "holds_global");
-        let dropped = destructure_field_vars(&dump, &holds_global[0], 1);
+        let dropped: Vec<String> = vars_of_type(&dump, "Main::Both")
+            .iter()
+            .flat_map(|both| destructure_field_vars(&dump, both, 1))
+            .collect();
         let releases: Vec<&str> = rc_lines(&dump, &dropped)
             .into_iter()
             .filter(|line| line.trim_start().starts_with("release "))
             .collect();
         assert!(
             !releases.is_empty(),
-            "no `release` of the field `dropped` taken out of `holds_global`, so this case asserts \
+            "no `release` of the field `dropped` taken out of a `Both`, so this case asserts \
              nothing:\n{}",
             dump
         );
@@ -362,6 +364,21 @@ mod integration_tests {
                 line
             );
         }
+    }
+
+    /// Every variable the dump gives the type `ty`, as a parameter or a binding: the token before
+    /// ` : <ty> ` wherever that is written.
+    fn vars_of_type(dump: &str, ty: &str) -> Vec<String> {
+        let marker = format!(" : {} ", ty);
+        let mut vars = vec![];
+        for line in dump.lines() {
+            for (at, _) in line.match_indices(&marker) {
+                if let Some(var) = line[..at].split(|c: char| c == ' ' || c == '(').last() {
+                    vars.push(var.to_string());
+                }
+            }
+        }
+        vars
     }
 
     /// The variables every `destructure` of `container` binds to field `field_idx`.

@@ -5258,8 +5258,8 @@ pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// Reads the field at `field_idx` out of the struct `var_name` names: the body of a struct's field
-/// getter `@f`.
+/// Reads the field at `field_idx` out of the boxed struct `var_name` names: the body of the field
+/// getter `@f` of a boxed struct.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StructGetOp {
     pub var_name: FullName,
@@ -5275,20 +5275,12 @@ impl StructGetOp {
         self.field_idx
     }
 
-    /// Whether reading this field out of a container of type `container_ty` takes the container
-    /// apart: the field holds a reference and the container is unboxed. Such a read hands out a leaf
-    /// of the container itself and leaves the container's other leaves with no owner, so RC IR
-    /// lowering turns it into a `Destructure` of the whole container in place of this operation.
-    pub fn takes_container_apart(&self, container_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
-        let field_ty = &container_ty.field_types(type_env)[self.field_idx];
-        !container_ty.is_box(type_env) && !field_ty.is_fully_unboxed(type_env)
-    }
-
     /// How this getter takes its field out of a container of type `container_ty`.
     fn field_read(&self, container_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> FieldRead {
         assert!(
-            !self.takes_container_apart(container_ty, type_env),
-            "a getter of field {} of the unboxed `{}` is lowered to a `Destructure`",
+            container_ty.is_box(type_env),
+            "a getter of field {} reads a boxed struct, and the getter of the unboxed `{}` takes it \
+             apart with a struct pattern",
             self.field_idx,
             container_ty.to_string()
         );
@@ -5301,10 +5293,8 @@ impl StructGetOp {
     }
 }
 
-/// How a field getter takes its field out of its container, which decides what it counts. Either
-/// way the read needs the container alive for as long as it takes to read it and nothing more.
-/// A read that takes an unboxed container apart is lowered to a `Destructure` instead (see
-/// `StructGetOp::takes_container_apart`).
+/// How a field getter takes its field out of the boxed struct it reads, which decides what it counts.
+/// Either way the read needs the struct alive for as long as it takes to read it and nothing more.
 enum FieldRead {
     /// The field holds no reference, so it is moved out and nothing is counted.
     Moved,
@@ -5404,7 +5394,8 @@ impl BuiltinOp for StructGetOp {
     }
 }
 
-// `get` built-in function for a given struct.
+/// The body of the field getter of a boxed struct: reads the field at `field_idx` out of the struct
+/// bound to `var_name`.
 pub fn struct_get_body(var_name: &str, field_idx: usize, field_ty: Arc<TypeNode>) -> Arc<ExprNode> {
     let var_name_clone = FullName::local(var_name);
     expr_builtin(
@@ -5418,18 +5409,43 @@ pub fn struct_get_body(var_name: &str, field_idx: usize, field_ty: Arc<TypeNode>
     )
 }
 
-// field getter function for a given struct.
+/// The field getter `@f` of a struct: a function of type `S -> F` returning the field `f`.
+///
+/// A boxed struct is read by `StructGetOp`, which borrows it. The fields of an unboxed struct are its
+/// references, so its getter takes it apart with the struct pattern `S { f : v, _ }`, as source code
+/// destructuring it does.
 pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
     let str_ty = definition.applied_type();
     const VAR_NAME: &str = "str_obj";
-    let expr = expr_abs(
-        vec![var_local(VAR_NAME)],
-        struct_get_body(VAR_NAME, field_idx as usize, field.ty.clone()),
-        None,
-    );
+    const FIELD_NAME: &str = "field";
+    let is_boxed_struct = match &definition.value {
+        TypeDeclValue::Struct(s) => s.is_boxed(),
+        _ => panic!("`struct_get` was given a non-struct type definition."),
+    };
+    let body = if is_boxed_struct {
+        struct_get_body(VAR_NAME, field_idx as usize, field.ty.clone())
+    } else {
+        let has_rest = definition.fields().len() > 1;
+        let pattern = PatternNode::make_struct_with_srcs(
+            Arc::new(definition.tycon()),
+            vec![(
+                field.name.clone(),
+                None,
+                PatternNode::make_var(var_local(FIELD_NAME), None),
+            )],
+            has_rest,
+        );
+        expr_let(
+            pattern,
+            expr_var(FullName::local(VAR_NAME), None),
+            expr_var(FullName::local(FIELD_NAME), None),
+            None,
+        )
+    };
+    let expr = expr_abs(vec![var_local(VAR_NAME)], body, None);
     let ty = type_fun(str_ty, field.ty.clone());
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)

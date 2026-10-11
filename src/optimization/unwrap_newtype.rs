@@ -30,7 +30,7 @@ use crate::{
         types::{tycon, TyCon, TyConInfo, TyConVariant},
     },
     fixstd::builtin::{
-        make_tuple_name_abs, make_unit_ty, StructGetOp, StructPlugInOp, StructPunchOp, StructSetOp,
+        make_tuple_name_abs, make_unit_ty, StructPlugInOp, StructPunchOp, StructSetOp,
     },
     misc::{Map, Set},
 };
@@ -202,9 +202,9 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
         EndVisitResult::changed(expr)
     }
 
-    /// Unwraps the type recorded for a builtin expression, and replaces the read, the write, the
-    /// punch and the plug-in of an unwrapped newtype's field by the field value itself, which is
-    /// what a value of that type has become.
+    /// Unwraps the type recorded for a builtin expression, and replaces the write, the punch and the
+    /// plug-in of an unwrapped newtype's field by the field value itself, which is what a value of
+    /// that type has become. A read of the field is a struct pattern, which `end_visit_let` unwraps.
     fn end_visit_builtin(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -218,18 +218,9 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
 
         // `builtin.generic_ty` stays as it is: type checking is the last pass that reads it.
 
-        // Replace StructGetOp, StructSetOp, StructPunchOp, and StructPlugInOp for structures defined by the newtype pattern.
+        // Replace StructSetOp, StructPunchOp, and StructPlugInOp for structures defined by the newtype pattern.
         let op = builtin.op.as_ref();
-        if let Some(get) = op.as_any().downcast_ref::<StructGetOp>() {
-            // @ : S -> F = |s| StructGetOp(s)
-            // =>
-            // @ : F -> F = |s| s
-            let field_ty = new_ty;
-            let struct_name = get.var_name.clone();
-            if self.is_local_of_unwrapped_newtype(&struct_name, state) {
-                expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
-            }
-        } else if let Some(set) = op.as_any().downcast_ref::<StructSetOp>() {
+        if let Some(set) = op.as_any().downcast_ref::<StructSetOp>() {
             // set : F -> S -> S = |f, s| StructSetOp(f)
             // =>
             // set : F -> F -> F = |f, s| f
