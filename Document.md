@@ -54,6 +54,7 @@
     - [More on import statements: filtering entities](#more-on-import-statements-filtering-entities)
     - [Absolute Namespace and Imports](#absolute-namespace-and-imports)
     - [Which is better: importing whole module or only necessary entities?](#which-is-better-importing-whole-module-or-only-necessary-entities)
+    - [Private names](#private-names)
     - [Recursion](#recursion)
     - [Type annotation](#type-annotation)
     - [Pattern matching](#pattern-matching)
@@ -242,7 +243,7 @@ In Fix, values, functions, types, and traits defined in a source file are groupe
 
 When a Fix program is executed, the `main` function defined in the `Main` module is called.
 
-Module names must begin with a capital letter. Additionally, you can use a string of these names concatenated with a period (e.g., `Main.Model.Impl`) as a module name, which is useful for representing a hierarchical module structure.
+Module names must begin with a capital letter, optionally preceded by `_` (see [Private names](#private-names)). Additionally, you can use a string of these names concatenated with a period (e.g., `Main.Model.Impl`) as a module name, which is useful for representing a hierarchical module structure.
 
 ## Global values
 
@@ -301,7 +302,7 @@ The followings are examples of types:
 - `IO ()`: the type of I/O actions which returns no value. It is the type of `main` function of Fix program.
 - `I64 -> Bool -> Array Bool`: this is equivalent to `I64 -> (Bool -> Array Bool)`, that is, the type of functions that receives an integer and returns a function that converts a boolean value into a boolean array. As an example, a function that produces a boolean array from its length and initial value has this type. In Fix, there is no concept of "two-variable functions". The type of something like "two-variable functions" can be represented as `a -> b -> c` or `(a, b) -> c`.
 
-In Fix, the name of a specific type (such as `I64` or `Bool`) or a type constructor (such as `Array`) must starts with a capital letter.
+In Fix, the name of a specific type (such as `I64` or `Bool`) or a type constructor (such as `Array`) must start with a capital letter, optionally preceded by `_` (see [Private names](#private-names)).
 A type that starts with a lowercase letter is interpreted as a type parameter. 
 Each type parameter will be instanciated to a specific type when the program is compiled.
 
@@ -1095,7 +1096,7 @@ Index syntax is syntactic sugar. `vs[0][^x]` is expanded to `|f| vs.(act(0) << a
 
 In Fix, all entities (global values, types, traits) defined in a source file is collected to form a module.
 Each source file has to declare the name of the module by `module {module_name};`.
-A module name must starts with a capital letter.
+A module name must start with a capital letter, optionally preceded by `_`.
 Module name is used as the top-level namespace of entities defined in a source file.
 
 You can import other module by `import {module_name};`. As an example, consider a program consists of two source files:
@@ -1139,7 +1140,7 @@ All entities must be distinguished uniquely by their full name (name and namespa
 Module name is used as the top-level namespace of entities defined in a source file. 
 In addition, you can create a namespace explicitly by `namespace TheNameSpace { ... }`.
 
-A namespace must starts with a capital letter.
+A namespace must start with a capital letter, optionally preceded by `_`.
 
 For example, consider the following program.
 
@@ -1380,6 +1381,21 @@ If you want to avoid this, we recommend a style where you write `import Std::{};
 When adopting a style of importing only the necessary entities, the following tools are useful:
 - The Language Server Protocol support of the Fix compiler can automatically update `import` statements through entity name completion operations or Quick Fix for "Unknown name" errors.
 - Using the `fix edit explicit-import` command, you can automatically rewrite `import` statements to import only the necessary entities based on the entities used in the source file.
+
+## Private names
+
+Fix treats a name starting with `_` as private. When any part of a namespace or module name starts with `_`, as in `RegExp._Impl`, every name defined in it is private as well.
+
+`fix docs` leaves private names out of the documentation unless `--with-private` is given. In completion, the language server ranks private names defined outside the project (in `Std` and in dependencies) below the others.
+
+Unlike in many languages, a private name can still be used from outside. Being private in Fix only states that the name is not part of the public API of its library.
+
+The character after the `_` decides the kind of the name, as the first character does for a name without `_`:
+
+- `_` followed by a capital letter starts the name of a type, a trait, a namespace or a module, such as `_Parser` or `RegExp._Impl`.
+- `_` followed by a lowercase letter or another `_` starts the name of a value, a field or a variant, such as `_helper` or `__MAX_SIZE`.
+
+So a private constant written in capital letters starts with two underscores.
 
 ## Recursion
 

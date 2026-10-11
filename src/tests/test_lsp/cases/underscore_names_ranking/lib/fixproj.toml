@@ -1,0 +1,7 @@
+[general]
+name = "underscore-ranking-lib"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["lib.fix", "impl.fix"]

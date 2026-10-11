@@ -262,6 +262,23 @@ mod tests {
         );
     }
 
+    /// Verifies that a `_` followed by a capital letter starts a capital name, and a `_` followed by
+    /// anything else starts a value name.
+    #[test]
+    fn names_starting_with_an_underscore() {
+        assert_eq!(lex("_Foo"), vec![(Type, "_Foo".into())]);
+        assert_eq!(
+            lex("_Ns::_Foo"),
+            vec![
+                (Namespace, "_Ns".into()),
+                (Operator, "::".into()),
+                (Type, "_Foo".into()),
+            ]
+        );
+        assert_eq!(lex("_foo"), vec![(Variable, "_foo".into())]);
+        assert_eq!(lex("__FOO"), vec![(Variable, "__FOO".into())]);
+    }
+
     /// Verifies number lexing: type suffixes, hex, exponents, a leading minus
     /// as part of the literal, but a binary minus on identifiers as an operator.
     #[test]

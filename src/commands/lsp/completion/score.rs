@@ -130,6 +130,17 @@ pub(super) fn sort_text_for(
     )
 }
 
+/// `sort_text` for a private item of a module outside the root project, which puts the item below
+/// every other candidate. It is `~~` followed by the key the item would otherwise sort by:
+/// `sort_text`, or `label` when there is none. `~` (0x7E) sorts after every character of a Fix name
+/// and every digit that starts a dot-context key, and a deprecated item's key starts with one `~`.
+///
+/// # Examples
+/// `foreign_private_sort_text(None, "_f")` is `"~~_f"`.
+pub(super) fn foreign_private_sort_text(sort_text: Option<String>, label: &str) -> String {
+    format!("~~{}", sort_text.as_deref().unwrap_or(label))
+}
+
 /// `sort_text` for completion items that can never satisfy a dot
 /// expression (types / traits / assoc types). They land at the bottom
 /// of the dot-context list — `Tier::Three` + `NamespaceMatch::Unrelated`

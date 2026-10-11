@@ -1,0 +1,11 @@
+[general]
+name = "underscore-names-ranking"
+version = "0.1.0"
+fix_version = "*"
+
+[build]
+files = ["main.fix", "local.fix"]
+
+[[dependencies]]
+name = "underscore-ranking-lib"
+path = "lib"

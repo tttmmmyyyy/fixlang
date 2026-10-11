@@ -1,0 +1,10 @@
+module Main;
+
+import Lib._Impl;
+import Lib;
+import Main._Local;
+
+main : IO () = (
+    let n = 42.bump;
+    pure()
+);

@@ -1,0 +1,9 @@
+module Main;
+
+import Lib::{_Foo, _Ns::helper, outside, __x};
+
+use_foo : _Foo -> I64 = |_| _Ns::helper + outside + __x;
+
+_local : I64 = 0;
+
+main : IO () = pure();

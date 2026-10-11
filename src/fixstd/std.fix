@@ -115,7 +115,7 @@ namespace Array {
     @ : I64 -> Array a -> a;
     @ = |idx, arr| (
         let idx = _check_range(idx, arr.@size);
-        arr._unsafe_get_bounds_unchecked(idx)
+        arr.unsafe_get_bounds_unchecked(idx)
     );
 
     // Deprecated alias for `Std::Array::@size`.
@@ -125,6 +125,10 @@ namespace Array {
     // Deprecated alias for `Std::Array::@capacity`.
     get_capacity : Array a -> I64 = |arr| arr.@capacity;
     DEPRECATED[get_capacity, "Use `Std::Array::@capacity` instead."];
+
+    // Deprecated alias for `Std::Array::unsafe_get_bounds_unchecked`.
+    _unsafe_get_bounds_unchecked : I64 -> Array a -> a = unsafe_get_bounds_unchecked;
+    DEPRECATED[_unsafe_get_bounds_unchecked, "Use `Std::Array::unsafe_get_bounds_unchecked` instead."];
 
     // Creates an empty array with specified capacity.
     // 
@@ -186,7 +190,7 @@ namespace Array {
     // Optimized implementation of `_unsafe_act_bounds_unchecked` function specialized for `Const r` functor.
     _unsafe_act_bounds_unchecked_const : I64 -> (a -> Const r a) -> Array a -> Const r (Array a);
     _unsafe_act_bounds_unchecked_const = |idx, fun, arr| (
-        let elm = arr._unsafe_get_bounds_unchecked(idx);
+        let elm = arr.unsafe_get_bounds_unchecked(idx);
         let Const { data : res } = fun(elm);
         Const { data : res }
     );
@@ -249,7 +253,7 @@ namespace Array {
             let (parr, elm) = PunchedArray::_unsafe_punch_bounds_unchecked(idx, arr);
             fun(elm).map(|elm| parr._unsafe_plug_bounds_unchecked(elm))
         } else {
-            fun(arr._unsafe_get_bounds_unchecked(idx)).map(|elm| arr.set(idx, elm))
+            fun(arr.unsafe_get_bounds_unchecked(idx)).map(|elm| arr.set(idx, elm))
         }
     );
 
@@ -560,7 +564,7 @@ namespace Array {
     _move_to_front_by_ranged : (a -> Bool) -> I64 -> I64 -> Array a -> (Array a, I64);
     _move_to_front_by_ranged = |pred, start, end, arr| (
         range(start, end).fold((arr, start), |j, (arr, i)|
-            if pred(arr._unsafe_get_bounds_unchecked(j)) {
+            if pred(arr.unsafe_get_bounds_unchecked(j)) {
                 (arr.unsafe_swap_bounds_unchecked(i, j), i + 1)
             } else {
                 (arr, i)
@@ -759,7 +763,7 @@ namespace Array {
     _unsafe_copy_range_bounds_unchecked : Array a -> I64 -> I64 -> I64 -> Array a -> Array a;
     _unsafe_copy_range_bounds_unchecked = |src, begin, end, dst_begin, dst| (
         if begin == end { dst };
-        dst.unsafe_set_bounds_unchecked(dst_begin, src._unsafe_get_bounds_unchecked(begin))
+        dst.unsafe_set_bounds_unchecked(dst_begin, src.unsafe_get_bounds_unchecked(begin))
            ._unsafe_copy_range_bounds_unchecked(src, begin + 1, end, dst_begin + 1)
     );
 
@@ -3240,7 +3244,7 @@ namespace String {
             let bytes = bytes._write_decimal_integer(start + 1 + digit_count, false, mantissa);
             let bytes = loop((start, bytes), |(i, bytes)| (
                 if i >= start + point { break $ bytes };
-                continue $ (i + 1, bytes.unsafe_set_bounds_unchecked(i, bytes._unsafe_get_bounds_unchecked(i + 1)))
+                continue $ (i + 1, bytes.unsafe_set_bounds_unchecked(i, bytes.unsafe_get_bounds_unchecked(i + 1)))
             ));
             (start + digit_count + 1, bytes.unsafe_set_bounds_unchecked(start + point, '.'))
         };
@@ -3269,7 +3273,7 @@ namespace String {
         // The digits are written one place to the right, and the first of them is moved in front
         // of the point.
         let bytes = bytes._write_decimal_integer(at + 1 + count, false, value);
-        let bytes = bytes.unsafe_set_bounds_unchecked(at, bytes._unsafe_get_bounds_unchecked(at + 1));
+        let bytes = bytes.unsafe_set_bounds_unchecked(at, bytes.unsafe_get_bounds_unchecked(at + 1));
         bytes.unsafe_set_bounds_unchecked(at + 1, '.')
     );
 
@@ -3303,7 +3307,7 @@ namespace String {
     // * `bytes` - The text, which is an optional `-`, then digits with at most one `.` among them.
     _round_up_decimal_text : I64 -> I64 -> I64 -> Array U8 -> (Bool, Array U8);
     _round_up_decimal_text = |start, end, round_up, bytes| loop((end - 1, round_up, bytes), |(i, round_up, bytes)| (
-        let c = if i < start { '-' } else { bytes._unsafe_get_bounds_unchecked(i) };
+        let c = if i < start { '-' } else { bytes.unsafe_get_bounds_unchecked(i) };
         if c == '-' { break $ (true, bytes.unsafe_set_bounds_unchecked(i + 1, '1')) };
         if c == '.' { continue $ (i - 1, round_up, bytes) };
         if c == '9' { continue $ (i - 1, 1, bytes.unsafe_set_bounds_unchecked(i, '0')) };
@@ -3415,8 +3419,8 @@ namespace String {
     _write_decimal_digit_pair : I64 -> U64 -> Array U8 -> Array U8;
     _write_decimal_digit_pair = |at, pair, bytes| (
         let from = pair.i64 * 2;
-        let bytes = bytes.unsafe_set_bounds_unchecked(at, _decimal_digit_pairs._unsafe_get_bounds_unchecked(from));
-        bytes.unsafe_set_bounds_unchecked(at + 1, _decimal_digit_pairs._unsafe_get_bounds_unchecked(from + 1))
+        let bytes = bytes.unsafe_set_bounds_unchecked(at, _decimal_digit_pairs.unsafe_get_bounds_unchecked(from));
+        bytes.unsafe_set_bounds_unchecked(at + 1, _decimal_digit_pairs.unsafe_get_bounds_unchecked(from + 1))
     );
 
     // The two decimal digits of each number from 0 to 99, in order: `0` is `00` at index 0, and `n`
@@ -5047,7 +5051,7 @@ namespace F32 {
     _multiply_pow5_inv_shift : U32 -> I64 -> I64 -> U32;
     _multiply_pow5_inv_shift = |m, q, j| (
         // The high word of the multiplier of `F64`, which it rounds down, is rounded up here.
-        _multiply_shift_32(m, F64::_pow5_inv_split._unsafe_get_bounds_unchecked(2 * q + 1) + 1_U64, j)
+        _multiply_shift_32(m, F64::_pow5_inv_split.unsafe_get_bounds_unchecked(2 * q + 1) + 1_U64, j)
     );
 
     // Computes `floor(m * 5 ^ i / 2 ^ j)` with the multipliers of `F64`: Ryu's `mulPow5divPow2`.
@@ -5057,7 +5061,7 @@ namespace F32 {
     // * `i` - The power of five.
     // * `j` - The power of two.
     _multiply_pow5_shift : U32 -> I64 -> I64 -> U32;
-    _multiply_pow5_shift = |m, i, j| _multiply_shift_32(m, F64::_pow5_split._unsafe_get_bounds_unchecked(2 * i + 1), j);
+    _multiply_pow5_shift = |m, i, j| _multiply_shift_32(m, F64::_pow5_split.unsafe_get_bounds_unchecked(2 * i + 1), j);
 
     // The bits of the multipliers `_multiply_pow5_inv_shift` and `_multiply_pow5_shift` read: Ryu's
     // `FLOAT_POW5_INV_BITCOUNT` and `FLOAT_POW5_BITCOUNT`, which are `F64::_pow5_inv_bitcount` and
@@ -5544,8 +5548,8 @@ namespace F64 {
         let (vr, vp, vm, e10, vm_is_trailing_zeros, vr_is_trailing_zeros) = if e2 >= 0 {
             let q = _compute_log10_pow2(e2) - (if e2 > 3 { 1 } else { 0 });
             let i = -e2 + q + _pow5_inv_bitcount + _compute_pow5_bits(q) - 1;
-            let mul_low = _pow5_inv_split._unsafe_get_bounds_unchecked(2 * q);
-            let mul_high = _pow5_inv_split._unsafe_get_bounds_unchecked(2 * q + 1);
+            let mul_low = _pow5_inv_split.unsafe_get_bounds_unchecked(2 * q);
+            let mul_high = _pow5_inv_split.unsafe_get_bounds_unchecked(2 * q + 1);
             let vr = _multiply_shift_64(mv, mul_low, mul_high, i);
             let vp = _multiply_shift_64(mv + 2_U64, mul_low, mul_high, i);
             let vm = _multiply_shift_64(mv - 1_U64 - mm_shift, mul_low, mul_high, i);
@@ -5559,8 +5563,8 @@ namespace F64 {
             let q = _compute_log10_pow5(-e2) - (if -e2 > 1 { 1 } else { 0 });
             let i = -e2 - q;
             let j = q - (_compute_pow5_bits(i) - F64::_pow5_bitcount);
-            let mul_low = _pow5_split._unsafe_get_bounds_unchecked(2 * i);
-            let mul_high = _pow5_split._unsafe_get_bounds_unchecked(2 * i + 1);
+            let mul_low = _pow5_split.unsafe_get_bounds_unchecked(2 * i);
+            let mul_high = _pow5_split.unsafe_get_bounds_unchecked(2 * i + 1);
             let vr = _multiply_shift_64(mv, mul_low, mul_high, j);
             let vp = _multiply_shift_64(mv + 2_U64, mul_low, mul_high, j);
             let vm = _multiply_shift_64(mv - 1_U64 - mm_shift, mul_low, mul_high, j);
@@ -5663,9 +5667,9 @@ namespace F64 {
     // * `j` - The power of two to divide by.
     _multiply_shift_mod_1e9 : U64 -> Array U64 -> I64 -> I64 -> U32;
     _multiply_shift_mod_1e9 = |m, table, p, j| (
-        let b0 = m.u128 * table._unsafe_get_bounds_unchecked(3 * p).u128;
-        let b1 = m.u128 * table._unsafe_get_bounds_unchecked(3 * p + 1).u128;
-        let b2 = m.u128 * table._unsafe_get_bounds_unchecked(3 * p + 2).u128;
+        let b0 = m.u128 * table.unsafe_get_bounds_unchecked(3 * p).u128;
+        let b1 = m.u128 * table.unsafe_get_bounds_unchecked(3 * p + 1).u128;
+        let b2 = m.u128 * table.unsafe_get_bounds_unchecked(3 * p + 2).u128;
         let mid = b1 + b0.shift_right(64_U128);
         let s1 = b2 + mid.shift_right(64_U128);
         let v = s1.shift_right((j - 128).u128);
@@ -5730,7 +5734,7 @@ namespace F64 {
         let (index, bytes) = if e2 < -_mantissa_bits { (index + 1, bytes.unsafe_set_bounds_unchecked(index, '0')) } else {
             let idx = if e2 < 0 { 0 } else { _compute_pow10_index(e2) };
             let j = 16 * idx + _pow10_additional_bits - e2 + 8;
-            let offset = _pow10_offset._unsafe_get_bounds_unchecked(idx).i64;
+            let offset = _pow10_offset.unsafe_get_bounds_unchecked(idx).i64;
             let (index, has_digits, bytes) = loop((_count_pow10_blocks(idx) - 1, index, false, bytes), |(i, index, has_digits, bytes)| (
                 if i < 0 { break $ (index, has_digits, bytes) };
                 let digits = _multiply_shift_mod_1e9(m, _pow10_split, offset + i, j);
@@ -5747,9 +5751,9 @@ namespace F64 {
         // The digits after the point, nine at a time, the last block cut to the precision.
         let idx = -e2 / 16;
         let blocks = precision / 9 + 1;
-        let min_block = _min_block_2._unsafe_get_bounds_unchecked(idx).i64;
-        let offset = _pow10_offset_2._unsafe_get_bounds_unchecked(idx).i64 - min_block;
-        let end = _pow10_offset_2._unsafe_get_bounds_unchecked(idx + 1).i64;
+        let min_block = _min_block_2.unsafe_get_bounds_unchecked(idx).i64;
+        let offset = _pow10_offset_2.unsafe_get_bounds_unchecked(idx).i64 - min_block;
+        let end = _pow10_offset_2.unsafe_get_bounds_unchecked(idx + 1).i64;
         let j = _pow10_additional_bits + (-e2 - 16 * idx) + 8;
         // The first `min_block` blocks are zeros.
         if blocks <= min_block { (index + precision, bytes._fill_bytes(index, precision, '0')) };
@@ -5835,7 +5839,7 @@ namespace F64 {
         let state = if e2 < -_mantissa_bits { state } else {
             let idx = if e2 < 0 { 0 } else { _compute_pow10_index(e2) };
             let j = 16 * idx + _pow10_additional_bits - e2 + 8;
-            let offset = _pow10_offset._unsafe_get_bounds_unchecked(idx).i64;
+            let offset = _pow10_offset.unsafe_get_bounds_unchecked(idx).i64;
             loop((_count_pow10_blocks(idx) - 1, state), |(i, (index, _, written, pending, power, bytes))| (
                 if i < 0 { break $ (index, 0_U32, written, pending, power, bytes) };
                 let digits = _multiply_shift_mod_1e9(m, _pow10_split, offset + i, j);
@@ -5858,9 +5862,9 @@ namespace F64 {
         let (_, _, _, pending, _, _) = state;
         let state = if e2 >= 0 || pending != 0 { state } else {
             let idx = -e2 / 16;
-            let min_block = _min_block_2._unsafe_get_bounds_unchecked(idx).i64;
-            let offset = _pow10_offset_2._unsafe_get_bounds_unchecked(idx).i64 - min_block;
-            let end = _pow10_offset_2._unsafe_get_bounds_unchecked(idx + 1).i64;
+            let min_block = _min_block_2.unsafe_get_bounds_unchecked(idx).i64;
+            let offset = _pow10_offset_2.unsafe_get_bounds_unchecked(idx).i64 - min_block;
+            let end = _pow10_offset_2.unsafe_get_bounds_unchecked(idx + 1).i64;
             let j = _pow10_additional_bits + (-e2 - 16 * idx) + 8;
             loop((min_block, state), |(i, (index, _, written, pending, power, bytes))| (
                 if i >= 200 { break $ (index, 0_U32, written, pending, power, bytes) };

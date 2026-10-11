@@ -9,9 +9,10 @@
 // the item positions.
 
 use super::super::util::{scan_outside_comments, ScanState};
+use super::score::foreign_private_sort_text;
 use super::symbols::{build_completion_item, type_symbols, value_symbols};
 use super::{ResolveContext, ResolveData};
-use crate::ast::name::{FullName, Name};
+use crate::ast::name::{is_private_module_name, FullName, Name, NameSpace};
 use crate::ast::program::{EndNode, Program};
 use crate::constants::chars_allowed_in_identifiers;
 use crate::misc::{Map, Set};
@@ -199,21 +200,26 @@ fn classify_fragment(rest: &str) -> ImportContext {
 }
 
 /// Build the completion items for a cursor inside an `import`
-/// statement. `file_path` is the file being edited (its own module is
-/// not offered as a module candidate); `position` is the cursor, which
-/// the module items' `TextEdit`s are anchored to.
+/// statement. `root_modules` are the modules of the root project, whose
+/// private items rank among the others; `file_path` is the file being
+/// edited (its own module is not offered as a module candidate);
+/// `position` is the cursor, which the module items' `TextEdit`s are
+/// anchored to.
 pub(super) fn import_completion_items(
     ctx: &ImportContext,
     program: &Program,
+    root_modules: &Set<Name>,
     file_path: &Path,
     position: &TextDocumentPositionParams,
 ) -> Vec<CompletionItem> {
     match ctx {
         ImportContext::ModuleName { typed } => {
-            module_name_items(typed, program, file_path, position)
+            module_name_items(typed, program, root_modules, file_path, position)
         }
         ImportContext::HidingKeyword => vec![hiding_keyword_item()],
-        ImportContext::Items { module, namespace } => member_items(module, namespace, program),
+        ImportContext::Items { module, namespace } => {
+            member_items(module, namespace, program, root_modules)
+        }
         ImportContext::Closed => vec![],
     }
 }
@@ -230,6 +236,7 @@ pub(super) fn import_completion_items(
 fn module_name_items(
     typed: &str,
     program: &Program,
+    root_modules: &Set<Name>,
     file_path: &Path,
     position: &TextDocumentPositionParams,
 ) -> Vec<CompletionItem> {
@@ -262,6 +269,8 @@ fn module_name_items(
         .map(|name| CompletionItem {
             label: name.clone(),
             kind: Some(CompletionItemKind::MODULE),
+            sort_text: (is_private_module_name(&name) && !root_modules.contains(&name))
+                .then(|| foreign_private_sort_text(None, &name)),
             filter_text: Some(name.clone()),
             text_edit: Some(CompletionTextEdit::Edit(TextEdit {
                 range,
@@ -294,7 +303,16 @@ fn hiding_keyword_item() -> CompletionItem {
 /// below it. A name that is both an entity and a namespace (e.g. a
 /// type `IO` and the namespace `IO` of its methods) is offered once,
 /// as the entity.
-fn member_items(module: &Name, namespace: &[Name], program: &Program) -> Vec<CompletionItem> {
+///
+/// A private item of a module outside `root_modules` ranks below the
+/// others.
+fn member_items(
+    module: &Name,
+    namespace: &[Name],
+    program: &Program,
+    root_modules: &Set<Name>,
+) -> Vec<CompletionItem> {
+    let is_foreign = !root_modules.contains(module);
     let mut prefix: Vec<&Name> = Vec::with_capacity(namespace.len() + 1);
     prefix.push(module);
     prefix.extend(namespace.iter());
@@ -311,13 +329,18 @@ fn member_items(module: &Name, namespace: &[Name], program: &Program) -> Vec<Com
             None => continue,
         };
         if is_leaf {
-            let item = build_completion_item(symbol, component.clone(), ResolveContext::Import);
+            let is_foreign_private = is_foreign && program.is_private_entity(&symbol.name);
+            let mut item = build_completion_item(symbol, component.clone(), ResolveContext::Import);
+            if is_foreign_private {
+                item.sort_text = Some(foreign_private_sort_text(None, &item.label));
+            }
             leaves.insert(component, item);
         } else {
             child_namespaces.insert(component);
         }
     }
 
+    let parent = NameSpace::new(prefix.iter().map(|name| (*name).clone()).collect());
     let mut items: Vec<CompletionItem> = vec![];
     for name in child_namespaces {
         if leaves.contains_key(&name) {
@@ -326,6 +349,8 @@ fn member_items(module: &Name, namespace: &[Name], program: &Program) -> Vec<Com
         items.push(CompletionItem {
             label: name.clone(),
             kind: Some(CompletionItemKind::MODULE),
+            sort_text: (is_foreign && FullName::new(&parent, &name).is_private())
+                .then(|| foreign_private_sort_text(None, &name)),
             filter_text: Some(name.clone()),
             insert_text: Some(name),
             ..CompletionItem::default()

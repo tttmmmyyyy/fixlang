@@ -4,7 +4,7 @@ use crate::ast::export_statement::{ExportStatement, ExportedFunctionType, IOType
 use crate::ast::expr::{expr_var, Expr, ExprNode, Var};
 use crate::ast::import::{is_accessible, ImportItem, ImportStatement};
 use crate::ast::kind_scope::KindEnv;
-use crate::ast::name::{FullName, Name, NameSpace};
+use crate::ast::name::{is_private_name, FullName, Name, NameSpace};
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
 use crate::ast::typedecl::{describe_field_names, Field, TypeDeclValue, TypeDefn};
@@ -745,6 +745,48 @@ impl Program {
             .iter()
             .map(|expr| expr.get_var().name.clone())
             .collect()
+    }
+
+    /// Whether the entity named `name` is private: its name, or the name of its namespace or module,
+    /// starts with `_` (`FullName::is_private`), or it is an accessor the compiler defines for a
+    /// field or a variant whose name starts with `_`.
+    ///
+    /// # Examples
+    /// For `type S = struct { _x : I64 }` in `Lib`, `Lib::S::@_x` and `Lib::S::set__x` are private.
+    pub fn is_private_entity(&self, name: &FullName) -> bool {
+        name.is_private() || self.is_private_field_accessor(name)
+    }
+
+    /// Whether `name` is an accessor the compiler defines for a field of a struct or a variant of a
+    /// union whose name starts with `_`.
+    fn is_private_field_accessor(&self, name: &FullName) -> bool {
+        if name.namespace.is_local() {
+            return false;
+        }
+        // The namespace of a field accessor is the full name of its owning struct/union.
+        let tycon = TyCon::new(name.namespace.clone().to_fullname());
+        let Some(ty_info) = self.type_env.tycons().get(&tycon) else {
+            return false;
+        };
+        let accessor_prefixes: &[&str] = match ty_info.variant {
+            TyConVariant::Struct => &[
+                STRUCT_GETTER_SYMBOL,
+                STRUCT_SETTER_SYMBOL,
+                STRUCT_MODIFIER_SYMBOL,
+                STRUCT_ACT_SYMBOL,
+            ],
+            TyConVariant::Union => &[UNION_AS_SYMBOL, UNION_IS_SYMBOL, UNION_MOD_SYMBOL],
+            _ => return false,
+        };
+        ty_info
+            .fields
+            .iter()
+            .filter(|field| is_private_name(&field.name))
+            .any(|field| {
+                accessor_prefixes
+                    .iter()
+                    .any(|prefix| name.name == format!("{}{}", prefix, field.name))
+            })
     }
 
     /// The names of the modules declared in `files`, compared by absolute path. A file that

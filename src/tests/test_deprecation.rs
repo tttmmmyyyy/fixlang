@@ -1,6 +1,6 @@
 use crate::{
-    configuration::{Configuration, DeprecationMode},
-    tests::test_util::{run_source_assert_failed, test_source, test_source_fail},
+    configuration::Configuration,
+    tests::test_util::{deprecation_report, test_source, test_source_fail},
 };
 
 /// Verifies that a `DEPRECATED` pragma on a top-level global value
@@ -350,9 +350,7 @@ pub fn test_deprecated_use_is_reported_in_every_expression_form() {
             pure()
         );
     "##;
-    let mut config = Configuration::develop_mode();
-    config.deprecation_mode = DeprecationMode::Deny;
-    let errmsg = run_source_assert_failed(source, config);
+    let errmsg = deprecation_report(source);
     // One line per kind of expression, each holding this program's only use of `old` in that kind.
     for use_site in [
         "in_app_func = old(1);",

@@ -1,0 +1,47 @@
+module Main;
+
+import Main._Internal;
+
+// A public type.
+type Point = struct { x : I64 };
+
+// A type whose name starts with an underscore.
+type _Cache = struct { size : I64 };
+
+namespace _Cache {
+    // A function in the namespace of a type whose name starts with an underscore.
+    clear : _Cache -> _Cache = |c| c.set_size(0);
+}
+
+namespace _Detail {
+    // A value in a namespace whose name starts with an underscore.
+    limit : I64 = 10;
+}
+
+// A public trait with a member and an associated type whose names start with an underscore.
+trait a : Shape {
+    type _Unit a;
+    area : a -> I64;
+    _scale : a -> I64;
+}
+
+impl Point : Shape {
+    type _Unit Point = I64;
+    area = |p| p.@x * p.@x;
+    _scale = |p| p.@x;
+}
+
+// A trait whose name starts with an underscore.
+trait a : _Hidden {
+    hide : a -> a;
+}
+
+impl Point : _Hidden {
+    hide = |p| p;
+}
+
+impl _Cache : Eq {
+    eq = |a, b| a.@size == b.@size;
+}
+
+main : IO () = println((_Cache { size : 1 }.clear.@size + _Detail::limit + internal_value).to_string);

@@ -2,6 +2,35 @@
 
 Newer is above.
 
+**Rows measured before the speedtest cases moved to `random` 1.1.3 and `cp-library` 0.14.0, and
+LangArena to `regexp` 1.3.1, are comparable with rows after it on a hundred of the hundred and six
+programs.** The compiler stopped accepting a value named with `_` followed by a capital letter at
+`5f08f2e`, and the releases before these ones name values that way. The six were measured with one
+compiler on both sides -- `main` at `ea6a972`, the commit before `5f08f2e` -- so nothing but the
+releases the programs build on differs between the two columns. The `ea6a972` row in `log.csv` is
+the last one on the old releases, and the first row on the new ones is the first one recorded once
+this change is on `main`.
+
+| program | instructions | |
+| --- | --- | --- |
+| `Etc::LogParser` | **-37.30%** | `regexp` 1.3 scans for a match without anchoring each start |
+| `Etc::CacheSimulation` | -2.30% | builds on no release that moved; see below |
+| `Template::Regex` | +1.49% | `regexp` 1.3's own code |
+| `cp_lib_bipartite` | +0.30% | `cp-library` 0.14.0 |
+| `cp_lib_lsegtree` | +0.10% | `cp-library` 0.14.0 |
+| `Json::Generate` | +0.01% | builds on no release that moved |
+
+The LangArena repository leaves `fixdeps.lock` out, so the release of each dependency is the one
+the lock in the measuring machine's clone names. That lock moved `regexp` from 1.2.0 to 1.3.1 and
+nothing else; `fixproj.toml` asks for `^1.2.0`, which both satisfy.
+
+`Etc::CacheSimulation` moved with no change to its source or to the releases it builds on, for the
+reason given under the `123412b` entry below: the programs are one Fix project, and the unit
+boundaries are cut by symbol name. Built with `--cu-size inf` and counted on the development
+machine, it runs 12,500,206,087 instructions on `regexp` 1.2.0 and 12,500,205,872 on 1.3.1. The
+same build puts `Etc::LogParser` at -41.84% and `Template::Regex` at +3.03%, so those two moved by
+the code of `regexp` itself.
+
 **LangArena rows measured before the pinned revision rose from `85ac364` to `123412b` are
 comparable with rows after it on thirty-seven of the fifty programs, and on thirteen they are not.**
 The thirteen were measured with one compiler on both sides -- `main` at `39f5521` -- so nothing but

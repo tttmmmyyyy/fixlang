@@ -283,14 +283,13 @@ pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Pro
 /// string is checked against the same tokenisation rules the parser applies to source code.
 #[derive(Clone, Copy)]
 pub enum TokenCategory {
-    /// Lowercase-headed value names: locals, global values, lambda parameters. A leading `@` is
-    /// allowed as well.
+    /// Value names: locals, global values, lambda parameters. A lowercase letter, `@`, or a `_`
+    /// not followed by a capital letter starts them.
     Name,
-    /// Lowercase-headed names written without a leading `@`: struct field names and union variant
-    /// names.
+    /// Struct field names and union variant names: the names of `Name` that do not start with `@`.
     TypeFieldName,
-    /// Uppercase-headed names: types, type aliases, traits, trait aliases, associated types,
-    /// modules, namespaces.
+    /// Names of types, type aliases, traits, trait aliases, associated types, modules and
+    /// namespaces. A capital letter, optionally preceded by a `_`, starts them.
     CapitalName,
 }
 
@@ -379,13 +378,19 @@ pub fn validate_token_str(s: &str, category: TokenCategory) -> Result<(), String
     }
 }
 
-/// Run only the pest-level parse against the grammar. Returns `Ok`
-/// if the grammar accepts `source`, regardless of any later
-/// `Program`-build validation. Test-only — for acceptance / rejection
-/// assertions that should not depend on later semantic checks.
+/// Run only the syntactic checks against `source`: the pest-level parse against the grammar, and
+/// the rejection of the values, fields and variants named with `_` and a capital letter that follows
+/// it. Returns `Ok` if both accept `source`, regardless of any later `Program`-build validation,
+/// and the error text otherwise. Test-only — for acceptance / rejection assertions that should not
+/// depend on later semantic checks.
 #[cfg(test)]
-pub fn check_grammar_accepts(source: &str) -> Result<(), Error<Rule>> {
-    FixParser::parse(Rule::file, source).map(|_| ())
+pub fn check_grammar_accepts(source: &str) -> Result<(), String> {
+    let file = FixParser::parse(Rule::file, source).map_err(|e| e.to_string())?;
+    let source_file = SourceFile::from_file_path_and_content(
+        PathBuf::from("grammar_check.fix"),
+        source.to_string(),
+    );
+    reject_underscore_capital_value_names(file, &source_file).map_err(|errs| errs.to_string())
 }
 
 /// What kind of token the parser was looking for when it failed.
@@ -513,7 +518,33 @@ pub fn parse_renamed_source_file(
             return Err(message_parse_error(e, &source));
         }
     };
+    reject_underscore_capital_value_names(file.clone(), &source)?;
     parse_file(file, source_cloned, renaming, config)
+}
+
+/// Reports every value, field and variant of the parsed `file` named with `_` followed by a capital
+/// letter, which is the head of the name of a type, a trait, a namespace or a module. `source` is the
+/// source `file` was parsed from.
+fn reject_underscore_capital_value_names(
+    file: Pairs<Rule>,
+    source: &SourceFile,
+) -> Result<(), Errors> {
+    let mut errors = Errors::empty();
+    for pair in file.flatten() {
+        if pair.as_rule() != Rule::underscore_capital_value_name {
+            continue;
+        }
+        let name = pair.as_str();
+        errors.append(Errors::from_msg_srcs(
+            format!(
+                "A value, a field or a variant cannot be named `{}`: `_` followed by a capital letter starts the name of a type, a trait, a namespace or a module.\n\
+                 HINT: write a lowercase letter or another `_` after the leading `_`, as in `_{}`.",
+                name, name
+            ),
+            &[&Some(Span::from_pair(source, &pair))],
+        ));
+    }
+    errors.to_result()
 }
 
 /// The program the parsed file `file` declares, which is the one module it is made of. `src` is the
