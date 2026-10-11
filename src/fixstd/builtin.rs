@@ -5284,30 +5284,20 @@ impl StructGetOp {
         !container_ty.is_box(type_env) && !field_ty.is_fully_unboxed(type_env)
     }
 
-    /// How a field getter takes its field out of its container.
-    fn field_read(
-        container_ty: &Arc<TypeNode>,
-        field_ty: &Arc<TypeNode>,
-        type_env: &TypeEnv,
-    ) -> FieldRead {
-        if field_ty.is_fully_unboxed(type_env) {
-            return FieldRead::Moved;
-        }
+    /// How this getter takes its field out of a container of type `container_ty`.
+    fn field_read(&self, container_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> FieldRead {
         assert!(
-            container_ty.is_box(type_env),
-            "a field getter reading a field that holds a reference out of the unboxed `{}` is lowered \
-             to a `Destructure`",
+            !self.takes_container_apart(container_ty, type_env),
+            "a getter of field {} of the unboxed `{}` is lowered to a `Destructure`",
+            self.field_idx,
             container_ty.to_string()
         );
-        FieldRead::Retained
-    }
-
-    /// How this getter reads its field out of its container. A field getter takes exactly the
-    /// container, so `arg_tys[0]` is it.
-    fn field_read_of(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> FieldRead {
-        let container_ty = &arg_tys[0];
         let field_ty = &container_ty.field_types(type_env)[self.field_idx];
-        Self::field_read(container_ty, field_ty, type_env)
+        if field_ty.is_fully_unboxed(type_env) {
+            FieldRead::Moved
+        } else {
+            FieldRead::Retained
+        }
     }
 }
 
@@ -5337,7 +5327,7 @@ impl BuiltinOp for StructGetOp {
                 container_ty.to_string()
             );
         }
-        match Self::field_read(&container_ty, ty, gc.type_env()) {
+        match self.field_read(&container_ty, gc.type_env()) {
             FieldRead::Moved => {
                 let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
                 ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32)
@@ -5402,8 +5392,8 @@ impl BuiltinOp for StructGetOp {
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
         // A read that moves the field out counts nothing; one out of a boxed container retains the
-        // field alone.
-        match self.field_read_of(arg_tys, type_env) {
+        // field alone. A field getter takes exactly the container, so `arg_tys[0]` is it.
+        match self.field_read(&arg_tys[0], type_env) {
             FieldRead::Moved => vec![],
             FieldRead::Retained => vec![RcTarget::Result(vec![])],
         }
