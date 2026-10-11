@@ -373,9 +373,8 @@ mod integration_tests {
         let mut vars = vec![];
         for line in dump.lines() {
             for (at, _) in line.match_indices(&marker) {
-                if let Some(var) = line[..at].split(|c: char| c == ' ' || c == '(').last() {
-                    vars.push(var.to_string());
-                }
+                let var = line[..at].rsplit([' ', '(']).next().unwrap();
+                vars.push(var.to_string());
             }
         }
         vars

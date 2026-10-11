@@ -247,14 +247,20 @@ mod integration_tests {
         assert_binding_prov(&dump, "s0", "[unknown]");
         // Constructing an unboxed tuple carries each component's provenance through: `arr` is fresh,
         // `s0` is unknown. The pair is the one construction of its type.
-        let pair = dump
+        let pairs: Vec<&str> = dump
             .lines()
-            .find(|l| {
+            .filter(|l| {
                 l.contains(" : (Std::Array Std::I64, Std::Array Std::U8) ")
                     && l.contains("= struct_make(")
             })
-            .unwrap_or_else(|| panic!("no construction of the pair in the RC IR dump:\n{}", dump));
-        assert_line_prov(pair, "`pair`", "[{.0=fresh, .1=unknown}]");
+            .collect();
+        assert_eq!(
+            pairs.len(),
+            1,
+            "the pair should be constructed exactly once in the RC IR dump:\n{}",
+            dump
+        );
+        assert_line_prov(pairs[0], "`pair`", "[{.0=fresh, .1=unknown}]");
     }
 
     /// Verifies that a call composes its callee's effect: a recursive function returning its own

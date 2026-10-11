@@ -147,6 +147,14 @@ impl TypeDefn {
         apply_type_args(&Arc::new(self.tycon()), &args)
     }
 
+    pub fn as_struct(&self) -> &Struct {
+        match self.value {
+            TypeDeclValue::Struct(ref s) => s,
+            TypeDeclValue::Union(_) => panic!("Try to get the struct of an union."),
+            TypeDeclValue::Alias(_) => panic!("Try to get the struct of a type alias."),
+        }
+    }
+
     pub fn fields(&self) -> &Vec<Field> {
         match self.value {
             TypeDeclValue::Struct(ref s) => &s.fields,

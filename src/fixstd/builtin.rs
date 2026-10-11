@@ -5421,11 +5421,7 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
     let str_ty = definition.applied_type();
     const VAR_NAME: &str = "str_obj";
     const FIELD_NAME: &str = "field";
-    let is_boxed_struct = match &definition.value {
-        TypeDeclValue::Struct(s) => s.is_boxed(),
-        _ => panic!("`struct_get` was given a non-struct type definition."),
-    };
-    let body = if is_boxed_struct {
+    let body = if definition.as_struct().is_boxed() {
         struct_get_body(VAR_NAME, field_idx as usize, field.ty.clone())
     } else {
         let has_rest = definition.fields().len() > 1;
