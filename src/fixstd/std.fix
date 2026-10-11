@@ -5360,41 +5360,41 @@ impl F64 : FromString {
 // What reading a floating point number of the type `a` from text came to.
 type _FloatTextReading a = union {
     // The text names a number, and this is the number of `a` nearest to it.
-    read : a,
+    _read : a,
     // The text is not a number.
-    malformed : (),
+    _malformed : (),
     // The text names a finite number whose nearest number of `a` is an infinity, or a number other
     // than zero whose nearest number of `a` is zero.
-    out_of_range : (),
+    _out_of_range : (),
 };
 
 // The constants of the binary format of the floating point type `a` that reading a number from
 // decimal text depends on: fast_float's `binary_format`.
 type _BinaryFormat a = struct {
     // The bits of the significand that the encoding stores.
-    mantissa_explicit_bits : I64,
+    _mantissa_explicit_bits : I64,
     // The bias of the exponent, negated.
-    minimum_exponent : I64,
+    _minimum_exponent : I64,
     // The biased exponent of an infinity and of a NaN.
-    infinite_power : I64,
+    _infinite_power : I64,
     // The index of the sign bit.
-    sign_index : I64,
+    _sign_index : I64,
     // The power of ten below which every number whose significand is below `2 ^ 64` rounds to zero.
-    smallest_power_of_10 : I64,
+    _smallest_power_of_10 : I64,
     // The power of ten above which every number whose significand is other than zero rounds to an
     // infinity.
-    largest_power_of_10 : I64,
+    _largest_power_of_10 : I64,
     // The powers of ten from which to which a number whose significand is below `2 ^ 64` can lie
     // halfway between two numbers of `a`.
-    min_exponent_round_to_even : I64,
-    max_exponent_round_to_even : I64,
+    _min_exponent_round_to_even : I64,
+    _max_exponent_round_to_even : I64,
     // The powers of ten whose absolute values `a` holds exactly: Clinger's fast path multiplies or
     // divides by them.
-    min_exponent_fast_path : I64,
-    max_exponent_fast_path : I64,
+    _min_exponent_fast_path : I64,
+    _max_exponent_fast_path : I64,
     // The number of significant digits that decide which of two numbers of `a` a decimal number lies
     // nearer to.
-    max_digits : I64,
+    _max_digits : I64,
 };
 
 // A floating point type that `String::_read_float_text` reads from decimal text: the constants of
@@ -5410,15 +5410,15 @@ trait a : _BinaryFloat {
     _from_bits_u64 : U64 -> a;
 
     // Answers with the number equal to `n`, which is at most
-    // `2 ^ (_BinaryFormat::@mantissa_explicit_bits + 1)`, so that `a` holds it exactly.
+    // `2 ^ (_BinaryFormat::@_mantissa_explicit_bits + 1)`, so that `a` holds it exactly.
     //
     // # Parameters
     // * `n` - The number.
     _from_exact_u64 : U64 -> a;
 
     // Multiplies `v` by `10 ^ e`, or divides it by `10 ^ -e` where `e` is negative, rounding once.
-    // `e` is within `_BinaryFormat::@min_exponent_fast_path` and
-    // `_BinaryFormat::@max_exponent_fast_path`.
+    // `e` is within `_BinaryFormat::@_min_exponent_fast_path` and
+    // `_BinaryFormat::@_max_exponent_fast_path`.
     //
     // # Parameters
     // * `e` - The power of ten.
@@ -5428,17 +5428,17 @@ trait a : _BinaryFloat {
 
 impl F64 : _BinaryFloat {
     _get_binary_format = |_| _BinaryFormat {
-        mantissa_explicit_bits : 52,
-        minimum_exponent : -1023,
-        infinite_power : 0x7FF,
-        sign_index : 63,
-        smallest_power_of_10 : -342,
-        largest_power_of_10 : 308,
-        min_exponent_round_to_even : -4,
-        max_exponent_round_to_even : 23,
-        min_exponent_fast_path : -22,
-        max_exponent_fast_path : 22,
-        max_digits : 769,
+        _mantissa_explicit_bits : 52,
+        _minimum_exponent : -1023,
+        _infinite_power : 0x7FF,
+        _sign_index : 63,
+        _smallest_power_of_10 : -342,
+        _largest_power_of_10 : 308,
+        _min_exponent_round_to_even : -4,
+        _max_exponent_round_to_even : 23,
+        _min_exponent_fast_path : -22,
+        _max_exponent_fast_path : 22,
+        _max_digits : 769,
     };
     _from_bits_u64 = from_bits;
     _from_exact_u64 = to_F64;
@@ -5454,17 +5454,17 @@ impl F64 : _BinaryFloat {
 
 impl F32 : _BinaryFloat {
     _get_binary_format = |_| _BinaryFormat {
-        mantissa_explicit_bits : 23,
-        minimum_exponent : -127,
-        infinite_power : 0xFF,
-        sign_index : 31,
-        smallest_power_of_10 : -64,
-        largest_power_of_10 : 38,
-        min_exponent_round_to_even : -17,
-        max_exponent_round_to_even : 10,
-        min_exponent_fast_path : -10,
-        max_exponent_fast_path : 10,
-        max_digits : 114,
+        _mantissa_explicit_bits : 23,
+        _minimum_exponent : -127,
+        _infinite_power : 0xFF,
+        _sign_index : 31,
+        _smallest_power_of_10 : -64,
+        _largest_power_of_10 : 38,
+        _min_exponent_round_to_even : -17,
+        _max_exponent_round_to_even : 10,
+        _min_exponent_fast_path : -10,
+        _max_exponent_fast_path : 10,
+        _max_digits : 114,
     };
     _from_bits_u64 = |bits| F32::from_bits(bits.u32);
     _from_exact_u64 = to_F32;
@@ -5482,33 +5482,33 @@ impl F32 : _BinaryFloat {
 // `parsed_number_string`.
 type _DecimalText = struct {
     // Whether the text begins with `-`.
-    negative : Bool,
+    _negative : Bool,
     // The significant digits as a number, or the first 19 of them where `too_many_digits` is true.
-    mantissa : U64,
+    _mantissa : U64,
     // The power of ten that `mantissa` is multiplied by.
-    exponent : I64,
+    _exponent : I64,
     // Whether the text holds more than 19 significant digits.
-    too_many_digits : Bool,
+    _too_many_digits : Bool,
     // The index of the first digit of the integer part and the index past its last.
-    integer_start : I64,
-    integer_end : I64,
+    _integer_start : I64,
+    _integer_end : I64,
     // The index of the first digit of the fractional part and the index past its last. The
     // fractional part of a number written without a point is empty, starting where the integer
     // part ends.
-    fraction_start : I64,
-    fraction_end : I64,
+    _fraction_start : I64,
+    _fraction_end : I64,
 };
 
 // How `String::_round_adjusted_mantissa` rounds away the bits below the significand.
 type _Rounding = union {
     // Toward zero.
-    down : (),
+    _down : (),
     // To the nearest, ties to even, where `true` says the digits of the number go on, other than
     // zero, below the bits the significand is rounded from.
-    nearest_with_truncated : Bool,
+    _nearest_with_truncated : Bool,
     // To the nearest, ties to even, where comparing the digits of the number with the point halfway
     // up to the next number found it below, at or above that point: -1, 0 or 1.
-    nearest_by_comparison : I64,
+    _nearest_by_comparison : I64,
 };
 
 // The functions of this namespace whose names begin with `_` and that read a floating point number
@@ -5529,7 +5529,7 @@ namespace String {
     // * `bytes` - The bytes holding the text.
     _read_float_text : [a : _BinaryFloat, a : Neg] I64 -> I64 -> Array U8 -> _FloatTextReading a;
     _read_float_text = |start, end, bytes| (
-        if start == end { _FloatTextReading::malformed() };
+        if start == end { _FloatTextReading::_malformed() };
         match bytes._parse_decimal_text(start, end) {
             some(text) => bytes._round_decimal_text(text),
             none() => bytes._read_infinity_or_nan(start, end)
@@ -5544,9 +5544,9 @@ namespace String {
     _float_text_result : String -> _FloatTextReading a -> Result ErrMsg a;
     _float_text_result = |str, reading| (
         match reading {
-            read(v) => Result::ok(v),
-            malformed() => Result::err("Failed to convert string to number (invalid format): " + str),
-            out_of_range() => Result::err("Failed to convert string to number (out of range): " + str)
+            _read(v) => Result::ok(v),
+            _malformed() => Result::err("Failed to convert string to number (invalid format): " + str),
+            _out_of_range() => Result::err("Failed to convert string to number (out of range): " + str)
         }
     );
 
@@ -5579,14 +5579,14 @@ namespace String {
         let (exponent_end, explicit_exponent) = bytes._parse_explicit_exponent(fraction_end, end);
         if exponent_end != end { Option::none() };
         let text = _DecimalText {
-            negative : negative,
-            mantissa : mantissa,
-            exponent : fraction_start - fraction_end + explicit_exponent,
-            too_many_digits : false,
-            integer_start : integer_start,
-            integer_end : integer_end,
-            fraction_start : fraction_start,
-            fraction_end : fraction_end,
+            _negative : negative,
+            _mantissa : mantissa,
+            _exponent : fraction_start - fraction_end + explicit_exponent,
+            _too_many_digits : false,
+            _integer_start : integer_start,
+            _integer_end : integer_end,
+            _fraction_start : fraction_start,
+            _fraction_end : fraction_end,
         };
         if digit_count <= 19 { Option::some(text) };
         Option::some(bytes._reread_first_19_digits(digit_count, explicit_exponent, text))
@@ -5747,28 +5747,28 @@ namespace String {
     _reread_first_19_digits : I64 -> I64 -> _DecimalText -> Array U8 -> _DecimalText;
     _reread_first_19_digits = |digit_count, explicit_exponent, text, bytes| (
         // The zeros before the first other digit, and the point among them, are not significant.
-        let digit_count = loop((text.@integer_start, digit_count), |(i, count)| (
-            if i == text.@fraction_end { break $ count };
+        let digit_count = loop((text.@_integer_start, digit_count), |(i, count)| (
+            if i == text.@_fraction_end { break $ count };
             let byte = bytes.unsafe_get_bounds_unchecked(i);
             if byte == '0' { continue $ (i + 1, count - 1) };
             if byte == '.' { continue $ (i + 1, count) };
             break $ count
         ));
         if digit_count <= 19 { text };
-        let text = text.set_too_many_digits(true);
+        let text = text.set__too_many_digits(true);
         let minimal_nineteen_digit_integer = 1000000000000000000_U64;
-        let (i, mantissa) = loop((text.@integer_start, 0_U64), |(i, mantissa)| (
-            if mantissa >= minimal_nineteen_digit_integer || i == text.@integer_end { break $ (i, mantissa) };
+        let (i, mantissa) = loop((text.@_integer_start, 0_U64), |(i, mantissa)| (
+            if mantissa >= minimal_nineteen_digit_integer || i == text.@_integer_end { break $ (i, mantissa) };
             continue $ (i + 1, mantissa * 10_U64 + (bytes.unsafe_get_bounds_unchecked(i) - '0').u64)
         ));
         if mantissa >= minimal_nineteen_digit_integer {
-            text.set_mantissa(mantissa).set_exponent(text.@integer_end - i + explicit_exponent)
+            text.set__mantissa(mantissa).set__exponent(text.@_integer_end - i + explicit_exponent)
         };
-        let (i, mantissa) = loop((text.@fraction_start, mantissa), |(i, mantissa)| (
-            if mantissa >= minimal_nineteen_digit_integer || i == text.@fraction_end { break $ (i, mantissa) };
+        let (i, mantissa) = loop((text.@_fraction_start, mantissa), |(i, mantissa)| (
+            if mantissa >= minimal_nineteen_digit_integer || i == text.@_fraction_end { break $ (i, mantissa) };
             continue $ (i + 1, mantissa * 10_U64 + (bytes.unsafe_get_bounds_unchecked(i) - '0').u64)
         ));
-        text.set_mantissa(mantissa).set_exponent(text.@fraction_start - i + explicit_exponent)
+        text.set__mantissa(mantissa).set__exponent(text.@_fraction_start - i + explicit_exponent)
     );
 
     // Reads `inf`, `infinity` or `nan` in any case, with an optional `+` or `-`, from the bytes of
@@ -5787,8 +5787,8 @@ namespace String {
         let negative = first == '-';
         let i = if negative || first == '+' { start + 1 } else { start };
         let length = end - i;
-        let infinity_bits = format.@infinite_power.u64.shift_left(format.@mantissa_explicit_bits.u64);
-        let sign_bit = if negative { 1_U64.shift_left(format.@sign_index.u64) } else { 0_U64 };
+        let infinity_bits = format.@_infinite_power.u64.shift_left(format.@_mantissa_explicit_bits.u64);
+        let sign_bit = if negative { 1_U64.shift_left(format.@_sign_index.u64) } else { 0_U64 };
         let is_nan = length >= 3
             && bytes._get_lowercase_byte(i) == 'n'
             && bytes._get_lowercase_byte(i + 1) == 'a'
@@ -5798,8 +5798,8 @@ namespace String {
                 && bytes.unsafe_get_bounds_unchecked(end - 1) == ')'
                 && bytes._is_nan_payload(i + 4, end - 1)));
         if is_nan {
-            let quiet_bit = 1_U64.shift_left((format.@mantissa_explicit_bits - 1).u64);
-            _FloatTextReading::read $ _from_bits_u64(infinity_bits.bit_or(quiet_bit).bit_or(sign_bit))
+            let quiet_bit = 1_U64.shift_left((format.@_mantissa_explicit_bits - 1).u64);
+            _FloatTextReading::_read $ _from_bits_u64(infinity_bits.bit_or(quiet_bit).bit_or(sign_bit))
         };
         let is_infinity = length >= 3
             && bytes._get_lowercase_byte(i) == 'i'
@@ -5811,8 +5811,8 @@ namespace String {
                 && bytes._get_lowercase_byte(i + 5) == 'i'
                 && bytes._get_lowercase_byte(i + 6) == 't'
                 && bytes._get_lowercase_byte(i + 7) == 'y'));
-        if is_infinity { _FloatTextReading::read $ _from_bits_u64(infinity_bits.bit_or(sign_bit)) };
-        _FloatTextReading::malformed()
+        if is_infinity { _FloatTextReading::_read $ _from_bits_u64(infinity_bits.bit_or(sign_bit)) };
+        _FloatTextReading::_malformed()
     );
 
     // Answers with the byte of `bytes` at `i`, turned to lowercase where it is an uppercase letter.
@@ -5849,21 +5849,21 @@ namespace String {
     _round_decimal_text : [a : _BinaryFloat, a : Neg] _DecimalText -> Array U8 -> _FloatTextReading a;
     _round_decimal_text = |text, bytes| (
         let format : _BinaryFormat a = _get_binary_format();
-        let mantissa_bits = format.@mantissa_explicit_bits;
-        let negative = text.@negative;
-        let mantissa = text.@mantissa;
-        let exponent = text.@exponent;
+        let mantissa_bits = format.@_mantissa_explicit_bits;
+        let negative = text.@_negative;
+        let mantissa = text.@_mantissa;
+        let exponent = text.@_exponent;
         // Clinger's fast path: the significand and the power of ten are both exact in `a`, so one
         // multiplication or division rounds the number once.
-        if !text.@too_many_digits
-            && format.@min_exponent_fast_path <= exponent && exponent <= format.@max_exponent_fast_path
+        if !text.@_too_many_digits
+            && format.@_min_exponent_fast_path <= exponent && exponent <= format.@_max_exponent_fast_path
             && mantissa <= 2_U64.shift_left(mantissa_bits.u64) {
             let v = _from_exact_u64(mantissa);
             let v = if exponent == 0 { v } else { _scale_by_power_of_ten(exponent, v) };
-            _FloatTextReading::read $ if negative { -v } else { v }
+            _FloatTextReading::_read $ if negative { -v } else { v }
         };
         let (result_mantissa, power2) = _compute_float(format, exponent, mantissa);
-        let (result_mantissa, power2) = if !text.@too_many_digits || power2 < 0 { (result_mantissa, power2) } else {
+        let (result_mantissa, power2) = if !text.@_too_many_digits || power2 < 0 { (result_mantissa, power2) } else {
             // The digits past the first 19 put the number between `mantissa` and `mantissa + 1`,
             // and where those two round alike, so does the number.
             let (next_mantissa, next_power2) = _compute_float(format, exponent, mantissa + 1_U64);
@@ -5873,12 +5873,12 @@ namespace String {
         let (result_mantissa, power2) = if power2 >= 0 { (result_mantissa, power2) } else {
             bytes._round_by_digit_comparison(format, text, (result_mantissa, power2))
         };
-        if (mantissa != 0_U64 && result_mantissa == 0_U64 && power2 == 0) || power2 == format.@infinite_power {
-            _FloatTextReading::out_of_range()
+        if (mantissa != 0_U64 && result_mantissa == 0_U64 && power2 == 0) || power2 == format.@_infinite_power {
+            _FloatTextReading::_out_of_range()
         };
-        let sign_bit = if negative { 1_U64.shift_left(format.@sign_index.u64) } else { 0_U64 };
+        let sign_bit = if negative { 1_U64.shift_left(format.@_sign_index.u64) } else { 0_U64 };
         let bits = result_mantissa.bit_or(power2.u64.shift_left(mantissa_bits.u64)).bit_or(sign_bit);
-        _FloatTextReading::read $ _from_bits_u64(bits)
+        _FloatTextReading::_read $ _from_bits_u64(bits)
     );
 
     // The bias `_compute_error` adds to the power of two it answers with, which makes it negative to
@@ -5897,16 +5897,16 @@ namespace String {
     // * `w` - The significand.
     _compute_float : _BinaryFormat a -> I64 -> U64 -> (U64, I64);
     _compute_float = |format, q, w| (
-        let mantissa_bits = format.@mantissa_explicit_bits;
-        if w == 0_U64 || q < format.@smallest_power_of_10 { (0_U64, 0) };
-        if q > format.@largest_power_of_10 { (0_U64, format.@infinite_power) };
+        let mantissa_bits = format.@_mantissa_explicit_bits;
+        if w == 0_U64 || q < format.@_smallest_power_of_10 { (0_U64, 0) };
+        if q > format.@_largest_power_of_10 { (0_U64, format.@_infinite_power) };
         let lz = w.count_leading_zeros;
         let w = w.shift_left(lz);
         let (high, low) = _compute_product_approximation(format, q, w);
         let upper_bit = high.shift_right(63_U64).i64;
         let shift = upper_bit + 64 - mantissa_bits - 3;
         let mantissa = high.shift_right(shift.u64);
-        let power2 = _convert_power_of_10_to_power_of_2(q) + upper_bit - lz.i64 - format.@minimum_exponent;
+        let power2 = _convert_power_of_10_to_power_of_2(q) + upper_bit - lz.i64 - format.@_minimum_exponent;
         if power2 <= 0 {
             // A subnormal number, or zero.
             if -power2 + 1 >= 64 { (0_U64, 0) };
@@ -5918,7 +5918,7 @@ namespace String {
         // A product whose bits below the significand are all zero is a tie, which rounds to even
         // where `5 ^ q` fits in 64 bits and the product is exact.
         let is_tie = low <= 1_U64
-            && format.@min_exponent_round_to_even <= q && q <= format.@max_exponent_round_to_even
+            && format.@_min_exponent_round_to_even <= q && q <= format.@_max_exponent_round_to_even
             && mantissa.bit_and(3_U64) == 1_U64
             && mantissa.shift_left(shift.u64) == high;
         let mantissa = if is_tie { mantissa.bit_and(1_U64.bit_not) } else { mantissa };
@@ -5929,7 +5929,7 @@ namespace String {
             (mantissa, power2)
         };
         let mantissa = mantissa.bit_and(1_U64.shift_left(mantissa_bits.u64).bit_not);
-        if power2 >= format.@infinite_power { (0_U64, format.@infinite_power) };
+        if power2 >= format.@_infinite_power { (0_U64, format.@_infinite_power) };
         (mantissa, power2)
     );
 
@@ -5947,7 +5947,7 @@ namespace String {
         let first = w.u128 * _powers_of_five_128.unsafe_get_bounds_unchecked(index).u128;
         let high = first.shift_right(64_U128).u64;
         let low = first.u64;
-        let precision_mask = U64::maximum.shift_right((format.@mantissa_explicit_bits + 3).u64);
+        let precision_mask = U64::maximum.shift_right((format.@_mantissa_explicit_bits + 3).u64);
         if high.bit_and(precision_mask) != precision_mask { (high, low) };
         let second_high = (w.u128 * _powers_of_five_128.unsafe_get_bounds_unchecked(index + 1).u128).shift_right(64_U128).u64;
         let low = low + second_high;
@@ -5974,7 +5974,7 @@ namespace String {
         let lz = w.count_leading_zeros;
         let (high, _) = _compute_product_approximation(format, q, w.shift_left(lz));
         let high_zeros = high.shift_right(63_U64).bit_xor(1_U64);
-        let bias = format.@mantissa_explicit_bits - format.@minimum_exponent;
+        let bias = format.@_mantissa_explicit_bits - format.@_minimum_exponent;
         let power2 = _convert_power_of_10_to_power_of_2(q) + bias - high_zeros.i64 - lz.i64 - 62 + _invalid_power2_bias;
         (high.shift_left(high_zeros), power2)
     );
@@ -5992,8 +5992,8 @@ namespace String {
     _round_by_digit_comparison : _BinaryFormat a -> _DecimalText -> (U64, I64) -> Array U8 -> (U64, I64);
     _round_by_digit_comparison = |format, text, (mantissa, power2), bytes| (
         let adjusted = (mantissa, power2 - _invalid_power2_bias);
-        let scientific_exponent = _find_scientific_exponent(text.@mantissa, text.@exponent);
-        let (digits, digit_count) = bytes._parse_significant_digits(format.@max_digits, text);
+        let scientific_exponent = _find_scientific_exponent(text.@_mantissa, text.@_exponent);
+        let (digits, digit_count) = bytes._parse_significant_digits(format.@_max_digits, text);
         let exponent = scientific_exponent + 1 - digit_count;
         if exponent >= 0 { _round_positive_digit_comparison(format, digits, exponent) };
         _round_negative_digit_comparison(format, digits, adjusted, exponent)
@@ -6025,19 +6025,19 @@ namespace String {
     // * `bytes` - The bytes holding the text.
     _parse_significant_digits : I64 -> _DecimalText -> Array U8 -> (Array U64, I64);
     _parse_significant_digits = |max_digits, text, bytes| (
-        let integer_start = bytes._skip_zero_digits(text.@integer_start, text.@integer_end);
-        let (i, digits, digit_count) = bytes._accumulate_significant_digits(integer_start, text.@integer_end, max_digits, (_make_bigint(0_U64), 0));
+        let integer_start = bytes._skip_zero_digits(text.@_integer_start, text.@_integer_end);
+        let (i, digits, digit_count) = bytes._accumulate_significant_digits(integer_start, text.@_integer_end, max_digits, (_make_bigint(0_U64), 0));
         if digit_count == max_digits {
-            let truncated = bytes._has_nonzero_digit(i, text.@integer_end) || bytes._has_nonzero_digit(text.@fraction_start, text.@fraction_end);
+            let truncated = bytes._has_nonzero_digit(i, text.@_integer_end) || bytes._has_nonzero_digit(text.@_fraction_start, text.@_fraction_end);
             if truncated { (digits._multiply_add_bigint(10_U64, 1_U64), digit_count + 1) } else { (digits, digit_count) }
         };
         let fraction_start = if digit_count == 0 {
-            bytes._skip_zero_digits(text.@fraction_start, text.@fraction_end)
+            bytes._skip_zero_digits(text.@_fraction_start, text.@_fraction_end)
         } else {
-            text.@fraction_start
+            text.@_fraction_start
         };
-        let (i, digits, digit_count) = bytes._accumulate_significant_digits(fraction_start, text.@fraction_end, max_digits, (digits, digit_count));
-        if digit_count == max_digits && bytes._has_nonzero_digit(i, text.@fraction_end) {
+        let (i, digits, digit_count) = bytes._accumulate_significant_digits(fraction_start, text.@_fraction_end, max_digits, (digits, digit_count));
+        if digit_count == max_digits && bytes._has_nonzero_digit(i, text.@_fraction_end) {
             (digits._multiply_add_bigint(10_U64, 1_U64), digit_count + 1)
         };
         (digits, digit_count)
@@ -6114,9 +6114,9 @@ namespace String {
     _round_positive_digit_comparison = |format, digits, exponent| (
         let digits = digits._multiply_bigint_by_power_of_10(exponent);
         let (mantissa, truncated) = digits._get_high_64_bits_of_bigint;
-        let bias = format.@mantissa_explicit_bits - format.@minimum_exponent;
+        let bias = format.@_mantissa_explicit_bits - format.@_minimum_exponent;
         let power2 = digits._count_bits_of_bigint - 64 + bias;
-        _round_adjusted_mantissa(format, _Rounding::nearest_with_truncated(truncated), (mantissa, power2))
+        _round_adjusted_mantissa(format, _Rounding::_nearest_with_truncated(truncated), (mantissa, power2))
     );
 
     // Rounds `digits * 10 ^ exponent`, where `exponent` is negative, to the nearest number of the
@@ -6130,14 +6130,14 @@ namespace String {
     // * `exponent` - The power of ten.
     _round_negative_digit_comparison : _BinaryFormat a -> Array U64 -> (U64, I64) -> I64 -> (U64, I64);
     _round_negative_digit_comparison = |format, digits, adjusted, exponent| (
-        let mantissa_bits = format.@mantissa_explicit_bits;
-        let (below_mantissa, below_power2) = _round_adjusted_mantissa(format, _Rounding::down(), adjusted);
+        let mantissa_bits = format.@_mantissa_explicit_bits;
+        let (below_mantissa, below_power2) = _round_adjusted_mantissa(format, _Rounding::_down(), adjusted);
         // The number below, decoded from its bits as ffc.h's `ffc_to_extended` does, and the point
         // halfway up to the next number.
         let bits = below_mantissa.bit_or(below_power2.u64.shift_left(mantissa_bits.u64));
         let mantissa_mask = 1_U64.shift_left(mantissa_bits.u64) - 1_U64;
-        let biased_exponent = bits.shift_right(mantissa_bits.u64).bit_and(format.@infinite_power.u64).i64;
-        let bias = mantissa_bits - format.@minimum_exponent;
+        let biased_exponent = bits.shift_right(mantissa_bits.u64).bit_and(format.@_infinite_power.u64).i64;
+        let bias = mantissa_bits - format.@_minimum_exponent;
         let (halfway_mantissa, halfway_power2) = if biased_exponent == 0 {
             (bits.bit_and(mantissa_mask), 1 - bias)
         } else {
@@ -6157,7 +6157,7 @@ namespace String {
             (digits, halfway)
         };
         let order = _compare_bigints(digits, halfway);
-        _round_adjusted_mantissa(format, _Rounding::nearest_by_comparison(order), adjusted)
+        _round_adjusted_mantissa(format, _Rounding::_nearest_by_comparison(order), adjusted)
     );
 
     // Shifts the significand of `adjusted` right to the bits the format stores, rounding as
@@ -6170,7 +6170,7 @@ namespace String {
     // * `adjusted` - The significand, and the power of two it is multiplied by, biased.
     _round_adjusted_mantissa : _BinaryFormat a -> _Rounding -> (U64, I64) -> (U64, I64);
     _round_adjusted_mantissa = |format, rounding, (mantissa, power2)| (
-        let mantissa_bits = format.@mantissa_explicit_bits;
+        let mantissa_bits = format.@_mantissa_explicit_bits;
         let mantissa_shift = 64 - mantissa_bits - 1;
         if -power2 >= mantissa_shift {
             // A subnormal number, or zero.
@@ -6185,7 +6185,7 @@ namespace String {
             (mantissa, power2)
         };
         let mantissa = mantissa.bit_and(1_U64.shift_left(mantissa_bits.u64).bit_not);
-        if power2 >= format.@infinite_power { (0_U64, format.@infinite_power) };
+        if power2 >= format.@_infinite_power { (0_U64, format.@_infinite_power) };
         (mantissa, power2)
     );
 
@@ -6203,8 +6203,8 @@ namespace String {
         let power2 = power2 + shift;
         let is_odd = shifted.bit_and(1_U64) == 1_U64;
         match rounding {
-            down() => (shifted, power2),
-            nearest_with_truncated(truncated) => (
+            _down() => (shifted, power2),
+            _nearest_with_truncated(truncated) => (
                 let mask = if shift == 64 { U64::maximum } else { 1_U64.shift_left(shift.u64) - 1_U64 };
                 let halfway = 1_U64.shift_left((shift - 1).u64);
                 let truncated_bits = mantissa.bit_and(mask);
@@ -6213,7 +6213,7 @@ namespace String {
                 let round_up = is_above || (is_halfway && truncated) || (is_odd && is_halfway);
                 (shifted + (if round_up { 1_U64 } else { 0_U64 }), power2)
             ),
-            nearest_by_comparison(order) => (
+            _nearest_by_comparison(order) => (
                 let round_up = order > 0 || (order == 0 && is_odd);
                 (shifted + (if round_up { 1_U64 } else { 0_U64 }), power2)
             )
