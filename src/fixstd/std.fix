@@ -5746,14 +5746,12 @@ namespace String {
     // * `bytes` - The bytes holding the text.
     _reread_first_19_digits : I64 -> I64 -> _DecimalText -> Array U8 -> _DecimalText;
     _reread_first_19_digits = |digit_count, explicit_exponent, text, bytes| (
-        // The zeros before the first other digit, and the point among them, are not significant.
-        let digit_count = loop((text.@_integer_start, digit_count), |(i, count)| (
-            if i == text.@_fraction_end { break $ count };
-            let byte = bytes.unsafe_get_bounds_unchecked(i);
-            if byte == '0' { continue $ (i + 1, count - 1) };
-            if byte == '.' { continue $ (i + 1, count) };
-            break $ count
-        ));
+        // The zeros before the first other digit are not significant.
+        let integer_zeros_end = bytes._skip_zero_digits(text.@_integer_start, text.@_integer_end);
+        let fraction_zeros = if integer_zeros_end != text.@_integer_end { 0 } else {
+            bytes._skip_zero_digits(text.@_fraction_start, text.@_fraction_end) - text.@_fraction_start
+        };
+        let digit_count = digit_count - (integer_zeros_end - text.@_integer_start) - fraction_zeros;
         if digit_count <= 19 { text };
         let text = text.set__too_many_digits(true);
         let minimal_nineteen_digit_integer = 1000000000000000000_U64;
@@ -5863,13 +5861,14 @@ namespace String {
             _FloatTextReading::_read $ if negative { -v } else { v }
         };
         let (result_mantissa, power2) = _compute_float(format, exponent, mantissa);
-        let (result_mantissa, power2) = if !text.@_too_many_digits || power2 < 0 { (result_mantissa, power2) } else {
+        let (result_mantissa, power2) = if !text.@_too_many_digits { (result_mantissa, power2) } else {
             // The digits past the first 19 put the number between `mantissa` and `mantissa + 1`,
             // and where those two round alike, so does the number.
             let (next_mantissa, next_power2) = _compute_float(format, exponent, mantissa + 1_U64);
             if result_mantissa == next_mantissa && power2 == next_power2 { (result_mantissa, power2) };
             _compute_float_truncated(format, exponent, mantissa)
         };
+        // `_compute_float_truncated` alone answers with a negative exponent.
         let (result_mantissa, power2) = if power2 >= 0 { (result_mantissa, power2) } else {
             bytes._round_by_digit_comparison(format, text, (result_mantissa, power2))
         };
@@ -5887,9 +5886,9 @@ namespace String {
     _invalid_power2_bias = -0x8000;
 
     // Rounds `w * 10 ^ q` to the nearest number of the format, ties to even, by the Eisel-Lemire
-    // algorithm, and answers with the stored significand and the biased exponent of that number.
-    // Answers with a negative exponent where the product of `w` and the 128 bits of `5 ^ q` it reads
-    // cannot decide the rounding. ffc.h's `ffc_compute_float`.
+    // algorithm, and answers with the stored significand and the biased exponent of that number. The
+    // 128 bits of `5 ^ q` it reads always decide the rounding (Mushtak and Lemire, "Fast Number
+    // Parsing Without Fallback"). ffc.h's `ffc_compute_float`.
     //
     // # Parameters
     // * `format` - The binary format.
@@ -6075,10 +6074,17 @@ namespace String {
     // * `end` - The index past the last byte.
     // * `bytes` - The bytes.
     _skip_zero_digits : I64 -> I64 -> Array U8 -> I64;
-    _skip_zero_digits = |i, end, bytes| loop(i, |i| (
-        if i == end || bytes.unsafe_get_bounds_unchecked(i) != '0' { break $ i };
-        continue $ i + 1
-    ));
+    _skip_zero_digits = |i, end, bytes| (
+        // Eight bytes at a time while eight remain, then one at a time.
+        let i = loop(i, |i| (
+            if end - i < 8 || bytes._load_8_bytes_little_endian(i) != 0x3030303030303030_U64 { break $ i };
+            continue $ i + 8
+        ));
+        loop(i, |i| (
+            if i == end || bytes.unsafe_get_bounds_unchecked(i) != '0' { break $ i };
+            continue $ i + 1
+        ))
+    );
 
     // Answers whether a byte of `bytes` from `i` to `end` is other than `0`. ffc.h's
     // `ffc_is_truncated`.
