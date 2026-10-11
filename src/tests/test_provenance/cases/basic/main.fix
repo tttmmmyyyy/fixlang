@@ -4,12 +4,20 @@ module Main;
 // - `Array::fill` and an array literal produce a fresh array.
 // - reading a boxed element out of a boxed container yields an unknown (`dyn`) value.
 // - constructing an unboxed tuple carries each component's provenance through.
+
+// Adds the sizes of the two components. Recursive so that the pair reaches it built, as one value.
+size_of_both : I64 -> (Array I64, String) -> I64;
+size_of_both = |n, pair| (
+    if n > 0 { size_of_both(n - 1, pair) };
+    pair.@0.get_size + pair.@1.get_size
+);
+
 main : IO ();
 main = (
     let arr = Array::fill(3, 7);
     let strs = ["a", "b"];
     let s0 = strs.@(0);
     let pair = (arr, s0);
-    let total = pair.@0.get_size + pair.@1.get_size;
+    let total = size_of_both(1, pair);
     println $ total.to_string
 );

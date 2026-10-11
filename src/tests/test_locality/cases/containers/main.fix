@@ -40,13 +40,14 @@ head_and_tail = |pair| (
 );
 
 // The callback writes through a raw pointer into the array's payload, so an array of boxed elements
-// may afterwards hold a reference to anything, the global's graph included.
-plant_global : Array (Array I64) -> Array (Array I64);
-plant_global = |arr| arr.mutate_elements(|_| pure()).@0;
+// may afterwards hold a reference to anything, the global's graph included. The array comes back in
+// the pair `mutate_elements` returns, which the caller takes apart with a pattern naming it.
+plant_global : Array (Array I64) -> (Array (Array I64), ());
+plant_global = |arr| arr.mutate_elements(|_| pure());
 
 // The same write over a payload of scalars, which holds no reference at all.
-plant_scalars : Array I64 -> Array I64;
-plant_scalars = |arr| arr.mutate_elements(|_| pure()).@0;
+plant_scalars : Array I64 -> (Array I64, ());
+plant_scalars = |arr| arr.mutate_elements(|_| pure());
 
 main : IO ();
 main = (
@@ -59,12 +60,12 @@ main = (
                     + gpair.head_and_tail + gholder.head_of_holder;
 
     // Every element is built here, so what the array holds turns on the write alone.
-    let planted = [built_here([70]), built_here([80])].plant_global;
+    let (planted, _) = [built_here([70]), built_here([80])].plant_global;
     let from_planted = planted.@(0).@(0) + planted.@(1).@(0);
 
     // The same write over a payload of scalars, which holds no reference for the callback to
     // overwrite and so keeps both facts.
-    let scalars = [90, 100].plant_scalars;
+    let (scalars, _) = [90, 100].plant_scalars;
     let from_scalars = scalars.@(0) + scalars.@(1);
 
     println $ (from_local + from_global + from_planted + from_scalars).to_string

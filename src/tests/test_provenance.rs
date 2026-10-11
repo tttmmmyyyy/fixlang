@@ -246,8 +246,15 @@ mod integration_tests {
         // Reading a boxed element out of a boxed container yields an unknown value.
         assert_binding_prov(&dump, "s0", "[unknown]");
         // Constructing an unboxed tuple carries each component's provenance through: `arr` is fresh,
-        // `s0` is unknown.
-        assert_binding_prov(&dump, "pair", "[{.0=fresh, .1=unknown}]");
+        // `s0` is unknown. The pair is the one construction of its type.
+        let pair = dump
+            .lines()
+            .find(|l| {
+                l.contains(" : (Std::Array Std::I64, Std::Array Std::U8) ")
+                    && l.contains("= struct_make(")
+            })
+            .unwrap_or_else(|| panic!("no construction of the pair in the RC IR dump:\n{}", dump));
+        assert_line_prov(pair, "`pair`", "[{.0=fresh, .1=unknown}]");
     }
 
     /// Verifies that a call composes its callee's effect: a recursive function returning its own
