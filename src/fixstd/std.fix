@@ -6229,8 +6229,8 @@ namespace String {
     // * `value` - The number.
     _make_bigint : U64 -> Array U64;
     _make_bigint = |value| (
-        let digits = Array::empty(_bigint_capacity);
-        if value == 0_U64 { digits } else { digits.push_back(value) }
+        let limbs = Array::empty(_bigint_capacity);
+        if value == 0_U64 { limbs } else { limbs.push_back(value) }
     );
 
     // The number of limbs a big integer is allocated room for: enough for the largest that reading a
@@ -6238,85 +6238,85 @@ namespace String {
     _bigint_capacity : I64;
     _bigint_capacity = 64;
 
-    // Answers with `digits * multiplier + addend`. ffc.h's `ffc_add_native`.
+    // Answers with `limbs * multiplier + addend`. ffc.h's `ffc_add_native`.
     //
     // # Parameters
     // * `multiplier` - The number to multiply by.
     // * `addend` - The number to add.
-    // * `digits` - The big integer.
+    // * `limbs` - The big integer.
     _multiply_add_bigint : U64 -> U64 -> Array U64 -> Array U64;
-    _multiply_add_bigint = |multiplier, addend, digits| digits._multiply_bigint_by_limb(multiplier)._add_limb_to_bigint(0, addend);
+    _multiply_add_bigint = |multiplier, addend, limbs| limbs._multiply_bigint_by_limb(multiplier)._add_limb_to_bigint(0, addend);
 
-    // Answers with `digits * multiplier`. ffc.h's `ffc_bigint_small_mul`.
+    // Answers with `limbs * multiplier`. ffc.h's `ffc_bigint_small_mul`.
     //
     // # Parameters
     // * `multiplier` - The number to multiply by.
-    // * `digits` - The big integer.
+    // * `limbs` - The big integer.
     _multiply_bigint_by_limb : U64 -> Array U64 -> Array U64;
-    _multiply_bigint_by_limb = |multiplier, digits| (
-        let size = digits.get_size;
-        let (carry, digits) = loop((0, 0_U64, digits), |(i, carry, digits)| (
-            if i == size { break $ (carry, digits) };
-            let product = digits.unsafe_get_bounds_unchecked(i).u128 * multiplier.u128 + carry.u128;
-            continue $ (i + 1, product.shift_right(64_U128).u64, digits.unsafe_set_bounds_unchecked(i, product.u64))
+    _multiply_bigint_by_limb = |multiplier, limbs| (
+        let size = limbs.get_size;
+        let (carry, limbs) = loop((0, 0_U64, limbs), |(i, carry, limbs)| (
+            if i == size { break $ (carry, limbs) };
+            let product = limbs.unsafe_get_bounds_unchecked(i).u128 * multiplier.u128 + carry.u128;
+            continue $ (i + 1, product.shift_right(64_U128).u64, limbs.unsafe_set_bounds_unchecked(i, product.u64))
         ));
-        if carry == 0_U64 { digits };
-        digits.push_back(carry)
+        if carry == 0_U64 { limbs };
+        limbs.push_back(carry)
     );
 
-    // Answers with `digits + addend * 2 ^ (64 * start)`, where `start` is at most the number of limbs
-    // of `digits`. ffc.h's `ffc_bigint_small_add_from`.
+    // Answers with `limbs + addend * 2 ^ (64 * start)`, where `start` is at most the size of
+    // `limbs`. ffc.h's `ffc_bigint_small_add_from`.
     //
     // # Parameters
     // * `start` - The limb to add at.
     // * `addend` - The number to add.
-    // * `digits` - The big integer.
+    // * `limbs` - The big integer.
     _add_limb_to_bigint : I64 -> U64 -> Array U64 -> Array U64;
-    _add_limb_to_bigint = |start, addend, digits| (
-        let size = digits.get_size;
-        let (carry, digits) = loop((start, addend, digits), |(i, carry, digits)| (
-            if carry == 0_U64 || i == size { break $ (carry, digits) };
-            let sum = digits.unsafe_get_bounds_unchecked(i) + carry;
-            continue $ (i + 1, if sum < carry { 1_U64 } else { 0_U64 }, digits.unsafe_set_bounds_unchecked(i, sum))
+    _add_limb_to_bigint = |start, addend, limbs| (
+        let size = limbs.get_size;
+        let (carry, limbs) = loop((start, addend, limbs), |(i, carry, limbs)| (
+            if carry == 0_U64 || i == size { break $ (carry, limbs) };
+            let sum = limbs.unsafe_get_bounds_unchecked(i) + carry;
+            continue $ (i + 1, if sum < carry { 1_U64 } else { 0_U64 }, limbs.unsafe_set_bounds_unchecked(i, sum))
         ));
-        if carry == 0_U64 { digits };
-        digits.push_back(carry)
+        if carry == 0_U64 { limbs };
+        limbs.push_back(carry)
     );
 
-    // Answers with `digits + addend * 2 ^ (64 * start)`, where `addend` is a big integer. ffc.h's
+    // Answers with `limbs + addend * 2 ^ (64 * start)`, where `addend` is a big integer. ffc.h's
     // `ffc_bigint_large_add_from`.
     //
     // # Parameters
     // * `start` - The limb to add at.
     // * `addend` - The big integer to add.
-    // * `digits` - The big integer.
+    // * `limbs` - The big integer.
     _add_bigint_to_bigint : I64 -> Array U64 -> Array U64 -> Array U64;
-    _add_bigint_to_bigint = |start, addend, digits| (
+    _add_bigint_to_bigint = |start, addend, limbs| (
         let addend_size = addend.get_size;
-        let digits = if digits.get_size >= addend_size + start { digits } else {
-            digits.resize(addend_size + start, 0_U64)
+        let limbs = if limbs.get_size >= addend_size + start { limbs } else {
+            limbs.resize(addend_size + start, 0_U64)
         };
-        let (carry, digits) = loop((0, false, digits), |(i, carry, digits)| (
-            if i == addend_size { break $ (carry, digits) };
-            let x = digits.unsafe_get_bounds_unchecked(i + start);
+        let (carry, limbs) = loop((0, false, limbs), |(i, carry, limbs)| (
+            if i == addend_size { break $ (carry, limbs) };
+            let x = limbs.unsafe_get_bounds_unchecked(i + start);
             let sum = x + addend.unsafe_get_bounds_unchecked(i);
             let carried = sum < x;
             let (sum, carried) = if carry { (sum + 1_U64, carried || sum + 1_U64 == 0_U64) } else { (sum, carried) };
-            continue $ (i + 1, carried, digits.unsafe_set_bounds_unchecked(i + start, sum))
+            continue $ (i + 1, carried, limbs.unsafe_set_bounds_unchecked(i + start, sum))
         ));
-        if !carry { digits };
-        digits._add_limb_to_bigint(addend_size + start, 1_U64)
+        if !carry { limbs };
+        limbs._add_limb_to_bigint(addend_size + start, 1_U64)
     );
 
-    // Answers with `digits * multiplier`, where `multiplier` is a big integer. ffc.h's
+    // Answers with `limbs * multiplier`, where `multiplier` is a big integer. ffc.h's
     // `ffc_bigint_long_mul`, computing the product in one array by long multiplication.
     //
     // # Parameters
     // * `multiplier` - The big integer to multiply by.
-    // * `digits` - The big integer.
+    // * `limbs` - The big integer.
     _multiply_bigint_by_bigint : Array U64 -> Array U64 -> Array U64;
-    _multiply_bigint_by_bigint = |multiplier, digits| (
-        let size = digits.get_size;
+    _multiply_bigint_by_bigint = |multiplier, limbs| (
+        let size = limbs.get_size;
         let multiplier_size = multiplier.get_size;
         let product = Array::fill(max(_bigint_capacity, size + multiplier_size), 0_U64)._unsafe_truncate_bounds_unchecked(size + multiplier_size);
         let product = loop((0, product), |(j, product)| (
@@ -6324,7 +6324,7 @@ namespace String {
             let limb = multiplier.unsafe_get_bounds_unchecked(j);
             let (carry, product) = loop((0, 0_U64, product), |(i, carry, product)| (
                 if i == size { break $ (carry, product) };
-                let sum = digits.unsafe_get_bounds_unchecked(i).u128 * limb.u128
+                let sum = limbs.unsafe_get_bounds_unchecked(i).u128 * limb.u128
                     + product.unsafe_get_bounds_unchecked(i + j).u128 + carry.u128;
                 continue $ (i + 1, sum.shift_right(64_U128).u64, product.unsafe_set_bounds_unchecked(i + j, sum.u64))
             ));
@@ -6333,34 +6333,34 @@ namespace String {
         product._normalize_bigint
     );
 
-    // Removes the zero limbs at the most significant end of `digits`. ffc.h's `ffc_sv_normalize`.
+    // Removes the zero limbs at the most significant end of `limbs`. ffc.h's `ffc_sv_normalize`.
     //
     // # Parameters
-    // * `digits` - The limbs.
+    // * `limbs` - The limbs.
     _normalize_bigint : Array U64 -> Array U64;
-    _normalize_bigint = |digits| loop(digits, |digits| (
-        let size = digits.get_size;
-        if size == 0 || digits.unsafe_get_bounds_unchecked(size - 1) != 0_U64 { break $ digits };
-        continue $ digits.pop_back
+    _normalize_bigint = |limbs| loop(limbs, |limbs| (
+        let size = limbs.get_size;
+        if size == 0 || limbs.unsafe_get_bounds_unchecked(size - 1) != 0_U64 { break $ limbs };
+        continue $ limbs.pop_back
     ));
 
-    // Answers with `digits * 5 ^ power`. ffc.h's `ffc_bigint_pow5`.
+    // Answers with `limbs * 5 ^ power`. ffc.h's `ffc_bigint_pow5`.
     //
     // # Parameters
     // * `power` - The power of five, at least zero.
-    // * `digits` - The big integer.
+    // * `limbs` - The big integer.
     _multiply_bigint_by_power_of_5 : I64 -> Array U64 -> Array U64;
-    _multiply_bigint_by_power_of_5 = |power, digits| (
-        let (power, digits) = loop((power, digits), |(power, digits)| (
-            if power < 135 { break $ (power, digits) };
-            continue $ (power - 135, digits._multiply_bigint_by_bigint(_large_power_of_5))
+    _multiply_bigint_by_power_of_5 = |power, limbs| (
+        let (power, limbs) = loop((power, limbs), |(power, limbs)| (
+            if power < 135 { break $ (power, limbs) };
+            continue $ (power - 135, limbs._multiply_bigint_by_bigint(_large_power_of_5))
         ));
-        let (power, digits) = loop((power, digits), |(power, digits)| (
-            if power < 27 { break $ (power, digits) };
-            continue $ (power - 27, digits._multiply_bigint_by_limb(7450580596923828125_U64))
+        let (power, limbs) = loop((power, limbs), |(power, limbs)| (
+            if power < 27 { break $ (power, limbs) };
+            continue $ (power - 27, limbs._multiply_bigint_by_limb(7450580596923828125_U64))
         ));
-        if power == 0 { digits };
-        digits._multiply_bigint_by_limb(_small_powers_of_5.unsafe_get_bounds_unchecked(power))
+        if power == 0 { limbs };
+        limbs._multiply_bigint_by_limb(_small_powers_of_5.unsafe_get_bounds_unchecked(power))
     );
 
     // `5 ^ 135`, as a big integer. ffc.h's `ffc_large_power_of_5`.
@@ -6381,72 +6381,72 @@ namespace String {
         1490116119384765625_U64, 7450580596923828125_U64
     ];
 
-    // Answers with `digits * 10 ^ power`. ffc.h's `ffc_bigint_pow10`.
+    // Answers with `limbs * 10 ^ power`. ffc.h's `ffc_bigint_pow10`.
     //
     // # Parameters
     // * `power` - The power of ten, at least zero.
-    // * `digits` - The big integer.
+    // * `limbs` - The big integer.
     _multiply_bigint_by_power_of_10 : I64 -> Array U64 -> Array U64;
-    _multiply_bigint_by_power_of_10 = |power, digits| digits._multiply_bigint_by_power_of_5(power)._shift_bigint_left(power);
+    _multiply_bigint_by_power_of_10 = |power, limbs| limbs._multiply_bigint_by_power_of_5(power)._shift_bigint_left(power);
 
-    // Answers with `digits * 2 ^ shift`. ffc.h's `ffc_bigint_shl`.
+    // Answers with `limbs * 2 ^ shift`. ffc.h's `ffc_bigint_shl`.
     //
     // # Parameters
     // * `shift` - The number of bits to shift by, at least zero.
-    // * `digits` - The big integer.
+    // * `limbs` - The big integer.
     _shift_bigint_left : I64 -> Array U64 -> Array U64;
-    _shift_bigint_left = |shift, digits| (
-        let bits = shift % 64;
-        let digits = if bits == 0 { digits } else {
-            let size = digits.get_size;
-            let (carry, digits) = loop((0, 0_U64, digits), |(i, previous, digits)| (
-                if i == size { break $ (previous.shift_right((64 - bits).u64), digits) };
-                let limb = digits.unsafe_get_bounds_unchecked(i);
-                let shifted = limb.shift_left(bits.u64).bit_or(previous.shift_right((64 - bits).u64));
-                continue $ (i + 1, limb, digits.unsafe_set_bounds_unchecked(i, shifted))
+    _shift_bigint_left = |shift, limbs| (
+        let bit_shift = shift % 64;
+        let limbs = if bit_shift == 0 { limbs } else {
+            let size = limbs.get_size;
+            let (carry, limbs) = loop((0, 0_U64, limbs), |(i, previous, limbs)| (
+                if i == size { break $ (previous.shift_right((64 - bit_shift).u64), limbs) };
+                let limb = limbs.unsafe_get_bounds_unchecked(i);
+                let shifted = limb.shift_left(bit_shift.u64).bit_or(previous.shift_right((64 - bit_shift).u64));
+                continue $ (i + 1, limb, limbs.unsafe_set_bounds_unchecked(i, shifted))
             ));
-            if carry == 0_U64 { digits } else { digits.push_back(carry) }
+            if carry == 0_U64 { limbs } else { limbs.push_back(carry) }
         };
-        let limbs = shift / 64;
-        if limbs == 0 || digits.get_size == 0 { digits };
-        let size = digits.get_size;
-        Array::fill(max(_bigint_capacity, limbs + size), 0_U64)._unsafe_truncate_bounds_unchecked(limbs).append(digits)
+        let limb_shift = shift / 64;
+        if limb_shift == 0 || limbs.get_size == 0 { limbs };
+        let size = limbs.get_size;
+        Array::fill(max(_bigint_capacity, limb_shift + size), 0_U64)._unsafe_truncate_bounds_unchecked(limb_shift).append(limbs)
     );
 
-    // Answers with the 64 most significant bits of `digits`, shifted up so that the highest is one,
+    // Answers with the 64 most significant bits of `limbs`, shifted up so that the highest is one,
     // and whether any bit below them is one. ffc.h's `ffc_bigint_hi64`.
     //
     // # Parameters
-    // * `digits` - The big integer.
+    // * `limbs` - The big integer.
     _get_high_64_bits_of_bigint : Array U64 -> (U64, Bool);
-    _get_high_64_bits_of_bigint = |digits| (
-        let size = digits.get_size;
+    _get_high_64_bits_of_bigint = |limbs| (
+        let size = limbs.get_size;
         if size == 0 { (0_U64, false) };
-        let top = digits.unsafe_get_bounds_unchecked(size - 1);
+        let top = limbs.unsafe_get_bounds_unchecked(size - 1);
         let shift = top.count_leading_zeros;
         if size == 1 { (top.shift_left(shift), false) };
-        let next = digits.unsafe_get_bounds_unchecked(size - 2);
+        let next = limbs.unsafe_get_bounds_unchecked(size - 2);
         let (high, truncated) = if shift == 0_U64 { (top, next != 0_U64) } else {
             (top.shift_left(shift).bit_or(next.shift_right(64_U64 - shift)), next.shift_left(shift) != 0_U64)
         };
         let truncated = truncated || loop(0, |i| (
             if i == size - 2 { break $ false };
-            if digits.unsafe_get_bounds_unchecked(i) != 0_U64 { break $ true };
+            if limbs.unsafe_get_bounds_unchecked(i) != 0_U64 { break $ true };
             continue $ i + 1
         ));
         (high, truncated)
     );
 
-    // Answers with the number of bits of `digits` up to its most significant one. ffc.h's
+    // Answers with the number of bits of `limbs` up to its most significant one. ffc.h's
     // `ffc_bigint_bit_length`.
     //
     // # Parameters
-    // * `digits` - The big integer.
+    // * `limbs` - The big integer.
     _count_bits_of_bigint : Array U64 -> I64;
-    _count_bits_of_bigint = |digits| (
-        let size = digits.get_size;
+    _count_bits_of_bigint = |limbs| (
+        let size = limbs.get_size;
         if size == 0 { 0 };
-        64 * size - digits.unsafe_get_bounds_unchecked(size - 1).count_leading_zeros.i64
+        64 * size - limbs.unsafe_get_bounds_unchecked(size - 1).count_leading_zeros.i64
     );
 
     // Answers with 1 where `x` is greater than `y`, -1 where it is less and 0 where they are equal.
