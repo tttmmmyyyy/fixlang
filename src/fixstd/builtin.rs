@@ -5411,9 +5411,9 @@ pub fn struct_get_body(var_name: &str, field_idx: usize, field_ty: Arc<TypeNode>
 
 /// The field getter `@f` of a struct: a function of type `S -> F` returning the field `f`.
 ///
-/// A boxed struct is read by `StructGetOp`, which borrows it. The fields of an unboxed struct are its
-/// references, so its getter takes it apart with the struct pattern `S { f : v, _ }`, as source code
-/// destructuring it does.
+/// The getter of a boxed struct reads the field with `StructGetOp`, which borrows the struct. An
+/// unboxed struct holds its fields' references itself, so its getter takes it apart with the struct
+/// pattern `S { f : v, _ }`, as source code that destructures the struct does.
 pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();

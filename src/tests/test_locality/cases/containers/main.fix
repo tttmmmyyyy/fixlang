@@ -40,8 +40,9 @@ head_and_tail = |pair| (
 );
 
 // The callback writes through a raw pointer into the array's payload, so an array of boxed elements
-// may afterwards hold a reference to anything, the global's graph included. The array comes back in
-// the pair `mutate_elements` returns, which the caller takes apart with a pattern naming it.
+// may afterwards hold a reference to anything, the global's graph included. The function returns the
+// whole pair `mutate_elements` gives back, so that the caller binds the array to a name of its own
+// with a tuple pattern.
 plant_global : Array (Array I64) -> (Array (Array I64), ());
 plant_global = |arr| arr.mutate_elements(|_| pure());
 

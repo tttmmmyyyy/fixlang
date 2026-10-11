@@ -147,6 +147,7 @@ impl TypeDefn {
         apply_type_args(&Arc::new(self.tycon()), &args)
     }
 
+    /// The struct this definition declares. Panics on a union or a type alias.
     pub fn as_struct(&self) -> &Struct {
         match self.value {
             TypeDeclValue::Struct(ref s) => s,

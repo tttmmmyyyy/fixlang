@@ -14,8 +14,8 @@ sum : Array I64 -> I64;
 sum = |a| Iterator::range(0, a.@size).fold(0, |i, acc| acc + a.@(i));
 
 // Reads the field `read` twice, so the struct is still used after the first read and dropped by
-// the second. Recursive so that it stays a function of its own, reached with the struct the caller
-// built.
+// the second. It is recursive so that it is not inlined, and receives the struct as one value the
+// caller built.
 sum_read_twice : I64 -> Both -> I64;
 sum_read_twice = |n, holds_global| (
     if n > 0 { sum_read_twice(n - 1, holds_global) };

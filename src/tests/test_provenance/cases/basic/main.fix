@@ -5,7 +5,8 @@ module Main;
 // - reading a boxed element out of a boxed container yields an unknown (`dyn`) value.
 // - constructing an unboxed tuple carries each component's provenance through.
 
-// Adds the sizes of the two components. Recursive so that the pair reaches it built, as one value.
+// Adds the sizes of the two components. It is recursive so that it is not inlined, and receives the
+// pair as one value the caller built.
 size_of_both : I64 -> (Array I64, String) -> I64;
 size_of_both = |n, pair| (
     if n > 0 { size_of_both(n - 1, pair) };
