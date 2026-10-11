@@ -6580,6 +6580,115 @@ pub fn test_float_from_string_rounds_by_every_digit() {
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `from_string` into `F64` and `F32` rounds a text whose integer part holds more than 19 significant
+/// digits by all of its digits: a midpoint between two neighbouring `F64`s written as an integer,
+/// which ties to the even one, and the same integer with a digit past the point; midpoints written
+/// as integers longer than the digits the reading compares one by one, 114 for `F32` and 769 for
+/// `F64`, with and without a 1 past them; and the integers on either side of the midpoint between
+/// the greatest finite number and the next power of two, the midpoint itself tying to an infinity,
+/// which is out of range.
+#[test]
+pub fn test_float_from_string_rounds_a_long_integer_part_by_every_digit() {
+    let source = r#"
+        module Main;
+
+        expect_f64 : String -> U64 -> IO ();
+        expect_f64 = |text, bits| (
+            let read : Result ErrMsg F64 = text.from_string;
+            assert_eq(|_|"reading \"" + text + "\"", read.as_ok.to_bits, bits)
+        );
+
+        expect_f32 : String -> U32 -> IO ();
+        expect_f32 = |text, bits| (
+            let read : Result ErrMsg F32 = text.from_string;
+            assert_eq(|_|"reading \"" + text + "\"", read.as_ok.to_bits, bits)
+        );
+
+        // Asserts that reading `text` as the type of the first argument reports it out of range.
+        expect_out_of_range : [a : FromString] a -> String -> IO ();
+        expect_out_of_range = |_, text| (
+            let read : Result ErrMsg a = text.from_string;
+            assert_eq(|_|"reading \"" + text + "\"", read.as_err, "Failed to convert string to number (out of range): " + text)
+        );
+
+        main : IO ();
+        main = (
+            expect_f64("1180591620717411434496", 4922434392715952128_U64);;
+            expect_f64("1180591620717411434497", 4922434392715952129_U64);;
+            expect_f64("1180591620717411434496.000000000000000000001", 4922434392715952129_U64);;
+            expect_f32("100000005960464477539062500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e-125", 1065353216_U32);;
+            expect_f32("100000005960464477539062500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e-125", 1065353217_U32);;
+            expect_f64("1000000000000000111022302462515654042363166809082031250000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000e-774", 4607182418800017408_U64);;
+            expect_f64("1000000000000000111022302462515654042363166809082031250000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001e-774", 4607182418800017409_U64);;
+            expect_f64("179769313486231580793728971405303415079934132710037826936173778980444968292764750946649017977587207096330286416692887910946555547851940402630657488671505820681908902000708383676273854845817711531764475730270069855571366959622842914819860834936475292719074168444365510704342711559699508093042880177904174497791", 9218868437227405311_U64);;
+            expect_out_of_range(0.0, "179769313486231580793728971405303415079934132710037826936173778980444968292764750946649017977587207096330286416692887910946555547851940402630657488671505820681908902000708383676273854845817711531764475730270069855571366959622842914819860834936475292719074168444365510704342711559699508093042880177904174497792");;
+            expect_f32("340282356779733661637539395458142568447", 2139095039_U32);;
+            expect_out_of_range(0.0_F32, "340282356779733661637539395458142568448");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `from_string` into `F64` and `F32` reports as malformed a text whose fractional part holds, among
+/// the eight or four bytes the reading takes at once, a byte next to the digits: `/` and `:`, which
+/// precede and follow them, and a byte of a character other than ASCII.
+#[test]
+pub fn test_float_from_string_rejects_a_byte_next_to_the_digits_in_a_group() {
+    let source = r#"
+        module Main;
+
+        // Asserts that reading `text` as the type of the first argument reports it malformed.
+        expect_malformed : [a : FromString] a -> String -> IO ();
+        expect_malformed = |_, text| (
+            let read : Result ErrMsg a = text.from_string;
+            assert_eq(|_|"reading \"" + text + "\"", read.as_err, "Failed to convert string to number (invalid format): " + text)
+        );
+
+        main : IO ();
+        main = (
+            expect_malformed(0.0, "0.1234567:");;
+            expect_malformed(0.0, "0.1234/678");;
+            expect_malformed(0.0, "0.123456é");;
+            expect_malformed(0.0, "0.123:");;
+            expect_malformed(0.0_F32, "0.12/4");;
+            expect_malformed(0.0_F32, "0.12345678123:");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `from_string` into `F64` and `F32` reads a power of ten written with `+`, and reports a power of
+/// ten too large for `I64`, `2 ^ 64 + 5`, as out of range whichever its sign.
+#[test]
+pub fn test_float_from_string_reads_a_power_of_ten_of_any_length() {
+    let source = r#"
+        module Main;
+
+        // Asserts that reading `text` as the type of the first argument reports it out of range.
+        expect_out_of_range : [a : FromString] a -> String -> IO ();
+        expect_out_of_range = |_, text| (
+            let read : Result ErrMsg a = text.from_string;
+            assert_eq(|_|"reading \"" + text + "\"", read.as_err, "Failed to convert string to number (out of range): " + text)
+        );
+
+        main : IO ();
+        main = (
+            let read : Result ErrMsg F64 = "1e+5".from_string;
+            assert_eq(|_|"reading \"1e+5\"", read.as_ok, 100000.0);;
+            let read : Result ErrMsg F32 = "2.5E+3".from_string;
+            assert_eq(|_|"reading \"2.5E+3\"", read.as_ok, 2500.0_F32);;
+            expect_out_of_range(0.0, "1e18446744073709551621");;
+            expect_out_of_range(0.0, "1e-18446744073709551621");;
+            expect_out_of_range(0.0_F32, "1e18446744073709551621");;
+            expect_out_of_range(0.0_F32, "1e-18446744073709551621");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// `from_string` into `F64` and `F32` answers each thread with the outcome of that thread's own
 /// text, while other threads read texts with other outcomes at the same time. Twelve C threads call
 /// back into the program, each reading one text over and over: a number, a malformed text, or one
