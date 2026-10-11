@@ -5746,27 +5746,46 @@ namespace String {
     // * `bytes` - The bytes holding the text.
     _reread_first_19_digits : I64 -> I64 -> _DecimalText -> Array U8 -> _DecimalText;
     _reread_first_19_digits = |digit_count, explicit_exponent, text, bytes| (
-        // The zeros before the first other digit are not significant.
-        let integer_zeros_end = bytes._skip_zero_digits(text.@_integer_start, text.@_integer_end);
+        // The zeros before the first other digit are not significant. A number that begins with
+        // another digit has none, which is the common case and costs one comparison.
+        let starts_with_zero = text.@_integer_start == text.@_integer_end
+            || bytes.unsafe_get_bounds_unchecked(text.@_integer_start) == '0';
+        let integer_zeros_end = if !starts_with_zero { text.@_integer_start } else {
+            bytes._skip_zero_digits(text.@_integer_start, text.@_integer_end)
+        };
         let fraction_zeros = if integer_zeros_end != text.@_integer_end { 0 } else {
             bytes._skip_zero_digits(text.@_fraction_start, text.@_fraction_end) - text.@_fraction_start
         };
         let digit_count = digit_count - (integer_zeros_end - text.@_integer_start) - fraction_zeros;
         if digit_count <= 19 { text };
         let text = text.set__too_many_digits(true);
-        let minimal_nineteen_digit_integer = 1000000000000000000_U64;
-        let (i, mantissa) = loop((text.@_integer_start, 0_U64), |(i, mantissa)| (
-            if mantissa >= minimal_nineteen_digit_integer || i == text.@_integer_end { break $ (i, mantissa) };
-            continue $ (i + 1, mantissa * 10_U64 + (bytes.unsafe_get_bounds_unchecked(i) - '0').u64)
-        ));
-        if mantissa >= minimal_nineteen_digit_integer {
+        let (i, mantissa) = bytes._read_digits_up_to_19(text.@_integer_start, text.@_integer_end, 0_U64);
+        if mantissa >= 1000000000000000000_U64 {
             text.set__mantissa(mantissa).set__exponent(text.@_integer_end - i + explicit_exponent)
         };
-        let (i, mantissa) = loop((text.@_fraction_start, mantissa), |(i, mantissa)| (
-            if mantissa >= minimal_nineteen_digit_integer || i == text.@_fraction_end { break $ (i, mantissa) };
-            continue $ (i + 1, mantissa * 10_U64 + (bytes.unsafe_get_bounds_unchecked(i) - '0').u64)
-        ));
+        let (i, mantissa) = bytes._read_digits_up_to_19(text.@_fraction_start, text.@_fraction_end, mantissa);
         text.set__mantissa(mantissa).set__exponent(text.@_fraction_start - i + explicit_exponent)
+    );
+
+    // Appends the decimal digits of `bytes` from `i` to `mantissa` until it has 19 digits or `end` is
+    // reached, and answers with the index past the last digit appended and the number. Eight digits
+    // are appended at once while that leaves fewer than 19.
+    //
+    // # Parameters
+    // * `i` - The index of the first digit.
+    // * `end` - The index past the last digit.
+    // * `mantissa` - The number the digits before `i` make, below `10 ^ 18`.
+    // * `bytes` - The bytes holding the digits.
+    _read_digits_up_to_19 : I64 -> I64 -> U64 -> Array U8 -> (I64, U64);
+    _read_digits_up_to_19 = |i, end, mantissa, bytes| (
+        let (i, mantissa) = loop((i, mantissa), |(i, mantissa)| (
+            if end - i < 8 || mantissa >= 10000000000_U64 { break $ (i, mantissa) };
+            continue $ (i + 8, mantissa * 100000000_U64 + _parse_eight_digits(bytes._load_8_bytes_little_endian(i)))
+        ));
+        loop((i, mantissa), |(i, mantissa)| (
+            if mantissa >= 1000000000000000000_U64 || i == end { break $ (i, mantissa) };
+            continue $ (i + 1, mantissa * 10_U64 + (bytes.unsafe_get_bounds_unchecked(i) - '0').u64)
+        ))
     );
 
     // Reads `inf`, `infinity` or `nan` in any case, with an optional `+` or `-`, from the bytes of
