@@ -2209,6 +2209,8 @@ By linking a static or shared library to a Fix program using the `--static-link`
 
 However, using FFI can allow external functions to break Fix's guarantees of immutability and memory safety. Programmers are responsible for hiding the side effects of external functions in `IO` and properly managing resources to avoid segmentation faults and memory leaks.
 
+Fix computes with floating point numbers in the default rounding mode, to nearest with ties to even. In a program that changes the rounding mode through an external function, such as C's `fesetround`, the results of floating point arithmetic and of `F64::from_string` and `F32::from_string` are unspecified until the program sets the mode back.
+
 -----
 
 ### Calling External Functions from Fix

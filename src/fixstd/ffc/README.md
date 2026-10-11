@@ -45,7 +45,8 @@ The translation changes ffc.h in these ways.
   character for the point. So are its readers of integers, `ffc_format_double_fixed`, and its
   readers of characters wider than a byte.
 - Clinger's fast path relies on the rounding mode being to nearest, as ffc.h does with
-  `FFC_ROUNDS_TO_NEAREST` defined. Fix compiles arithmetic on floating point numbers in that mode.
+  `FFC_ROUNDS_TO_NEAREST` defined. Fix computes with floating point numbers in that mode, and
+  `Document.md` leaves the results unspecified in a program that changes it.
 - A big integer is an `Array U64` allocated with room for 64 limbs, where ffc.h holds 4000 bits on
   the stack, and its limbs are 64 bits on every target. Multiplying by a big integer accumulates
   the product in one array, where ffc.h's `ffc_bigint_long_mul` adds the product by each limb into

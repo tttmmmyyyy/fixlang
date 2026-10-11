@@ -36,6 +36,7 @@
 
 - #792: `F64::to_string` and `F32::to_string` now write a number with a single significant digit and a power of ten as `1.0e300`, where they wrote `1e300`. The text they write for a finite number is now always a valid floating point literal of Fix, with `_F32` after it for an `F32`.
 - #800: `to_string_exp` and `to_string_exp_precision` of `F64` and `F32` now write the power of ten with no `+` and no leading zero, as a floating point literal of Fix writes it: `100.0.to_string_exp` is `1.000000e2`, where it was `1.000000e+02`, and `0.0123.to_string_exp_precision(1_U8)` is `1.2e-2`, where it was `1.2e-02`.
+- `F64::from_string` and `F32::from_string` now take the rounding mode to be the default one, to nearest, as Fix's floating point arithmetic does. A program that changes the mode through FFI, with C's `fesetround` for example, may read a text as a neighbour of the nearest number until it sets the mode back. See "Foreign Function Interface (FFI)" in `Document.md`.
 - #541, #811: `CChar` is now `U8` on a target where C's `char` without `signed` or `unsigned` is unsigned, such as Linux on arm64. It used to be `I8` on every target, which read a `char` above 127 from a C function as a negative number there.
 
 #### Tool
