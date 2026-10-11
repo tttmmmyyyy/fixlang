@@ -102,9 +102,9 @@ main = (
     assert_eq(|_|"the field of an unboxed container is written", p.@arr.set(0, 444).@(0), 444);;
     assert_eq(|_|"the unboxed container's own field is unchanged", p.@arr.@(0), 0);;
 
-    // A read out of an unboxed container used afterwards leaves both of its fields to it: the one
-    // read and the one left behind. Updating the container while the value read out is live copies
-    // instead of writing through to that value.
+    // An unboxed container used after a read out of it still owns both of its fields: the one read
+    // and the one left behind. Updating the container while the value read out is live copies the
+    // field, so the value read out keeps its contents.
     let q = UnboxedPair { read : Array::from_map(3, |i| i + 1), left : Array::from_map(3, |i| i + 5) };
     let read = q.@read;
     let q = q.mod_read(|a| a.set(0, 555)).mod_left(|a| a.set(0, 666));

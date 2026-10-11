@@ -544,9 +544,9 @@ impl<'a> Lowerer<'a> {
     /// every field, and return the variable bound to the one read.
     ///
     /// The field read is a leaf of the container itself, so the read leaves the container's other
-    /// leaves with no owner. Bound to variables nothing reads, they are released by `Release` nodes
-    /// of their own, which cancellation pairs with the retain RC insertion puts before the
-    /// `Destructure` where the container is used afterwards.
+    /// leaves with no owner. They are bound to variables nothing reads, so RC insertion releases each
+    /// by a `Release` node of its own. Where the container is used afterwards, RC insertion also
+    /// retains it before the `Destructure`, and cancellation pairs that retain with those releases.
     fn lower_field_read_by_destructure(
         &mut self,
         container: &RcVar,

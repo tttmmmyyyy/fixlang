@@ -18,9 +18,9 @@ built_here : Array I64 -> Array I64;
 built_here = |elements| elements.to_iter.to_array;
 
 // One parameter with two boxed leaves, read field by field so that the pair reaches the body as one
-// value. The recursion hands on the pair itself, rebuilt field by field, so the body owns both leaves
-// and the base case releases them. A caller can make one leaf local and leave the other on the
-// global, so the two leaves of one argument carry different keys.
+// value. The recursion passes on the pair itself, rebuilt field by field, so the body owns both
+// leaves and the base case releases them. A caller can make one leaf local and leave the other on
+// the global, so the two leaves of one argument carry different keys.
 walk_tup : I64 -> (Array I64, Array I64) -> I64;
 walk_tup = |n, t| (
     if n <= 0 { 0 };

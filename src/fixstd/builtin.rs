@@ -5278,8 +5278,7 @@ impl StructGetOp {
     /// Whether reading this field out of a container of type `container_ty` takes the container
     /// apart: the field holds a reference and the container is unboxed. Such a read hands out a leaf
     /// of the container itself and leaves the container's other leaves with no owner, so RC IR
-    /// lowering turns it into a `Destructure` of the whole container, and this operation never reads
-    /// it.
+    /// lowering turns it into a `Destructure` of the whole container in place of this operation.
     pub fn takes_container_apart(&self, container_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> bool {
         let field_ty = &container_ty.field_types(type_env)[self.field_idx];
         !container_ty.is_box(type_env) && !field_ty.is_fully_unboxed(type_env)
@@ -5314,8 +5313,8 @@ impl StructGetOp {
 
 /// How a field getter takes its field out of its container, which decides what it counts. Either
 /// way the read needs the container alive for as long as it takes to read it and nothing more.
-/// A read that would take an unboxed container apart is not among these: lowering turns it into a
-/// `Destructure` (see `StructGetOp::takes_container_apart`).
+/// A read that takes an unboxed container apart is lowered to a `Destructure` instead (see
+/// `StructGetOp::takes_container_apart`).
 enum FieldRead {
     /// The field holds no reference, so it is moved out and nothing is counted.
     Moved,
