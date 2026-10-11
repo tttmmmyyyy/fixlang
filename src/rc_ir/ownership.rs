@@ -513,8 +513,8 @@ pub(crate) fn destructure_consumes(
     vec![]
 }
 
-/// Whether a `Destructure` of `container` binding `fields` names each field of the container
-/// exactly once. RC IR lowering makes every `Destructure` of an unboxed container do so.
+/// Whether a `Destructure` of `container` binding `fields` names each unpunched field of the
+/// container exactly once. RC IR lowering makes every `Destructure` of an unboxed container do so.
 pub(crate) fn names_every_field(
     container: &RcVar,
     fields: &[(usize, RcVar)],
