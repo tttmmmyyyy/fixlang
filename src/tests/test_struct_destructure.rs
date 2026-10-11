@@ -139,11 +139,11 @@ main : IO () = (
     /// in an order other than the declared one, over a boxed and an unboxed container whose
     /// unnamed fields are boxed.
     ///
-    /// A partial pattern is what splits the two halves of `get_struct_fields`: an unboxed
-    /// container hands out the named fields and releases the ones left behind, while a boxed one
-    /// retains the named fields and releases itself, letting its own drop reach the rest. A
-    /// reordered pattern is what makes the extraction read the field index recorded per field
-    /// rather than the position the field is written at.
+    /// A partial pattern is what tells the two kinds of container apart: an unboxed container is
+    /// taken apart whole, and the fields the pattern leaves out are released as dead bindings,
+    /// while a boxed one retains the named fields and releases itself, letting its own drop reach
+    /// the rest. A reordered pattern is what makes the extraction read the field index recorded per
+    /// field rather than the position the field is written at.
     const PARTIAL_DESTRUCTURE_SOURCE: &str = r#"
 module Main;
 

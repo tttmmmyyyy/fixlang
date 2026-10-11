@@ -255,9 +255,8 @@ impl<'a> RcInserter<'a> {
     /// it beforehand iff it is used after the destructure (mirroring `get_scoped_obj`'s
     /// retain-if-used-later before `get_struct_fields`), and each field the continuation never uses is
     /// released. Code generation performs the extraction itself: a boxed container retains the fields
-    /// and releases the container; an unboxed container moves the fields out and drops the fields not
-    /// named here. So the field retains, the container release, and the dropped-field releases are not
-    /// emitted here.
+    /// and releases the container; an unboxed container, whose every field is named, moves the fields
+    /// out. So the field retains and the container release are not emitted here.
     fn insert_into_destructure(
         &self,
         container: RcVar,

@@ -1,0 +1,35 @@
+module Main;
+
+// Functions that read a field of an unboxed struct and then update the struct, which holds a second
+// boxed field the read leaves behind: one reads through the field getter, the other through a struct
+// pattern naming the one field. Either read takes the struct apart, so the field left behind is
+// released by a node of its own, and that release cancels against the retain keeping the struct for
+// the update. Nothing is retained, so both arrays arrive at their updates with what is known about
+// them intact, and every update drops its check.
+type Graph = unbox struct { to : Array I64, cap : Array I64 };
+
+add_edges_by_getter : I64 -> Graph -> (Graph, I64);
+add_edges_by_getter = |n, g| (
+    if n == 0 { (g, 0) };
+    let id = g.@to.@size;
+    let g = g.mod_to(|ts| ts.push_back(n)).mod_cap(|cs| cs.push_back(id));
+    let (g, sum) = add_edges_by_getter(n - 1, g);
+    (g, sum + id)
+);
+
+add_edges_by_pattern : I64 -> Graph -> (Graph, I64);
+add_edges_by_pattern = |n, g| (
+    if n == 0 { (g, 0) };
+    let Graph { to : ts, _ } = g;
+    let id = ts.@size;
+    let g = g.mod_to(|ts| ts.push_back(n)).mod_cap(|cs| cs.push_back(id));
+    let (g, sum) = add_edges_by_pattern(n - 1, g);
+    (g, sum + id)
+);
+
+main : IO ();
+main = (
+    let (g, sum) = add_edges_by_getter(5, Graph { to : Array::empty(5), cap : Array::empty(5) });
+    let (h, sum2) = add_edges_by_pattern(5, Graph { to : Array::empty(5), cap : Array::empty(5) });
+    println $ (g.@to.@size + g.@cap.@size + sum + h.@to.@size + h.@cap.@size + sum2).to_string
+);

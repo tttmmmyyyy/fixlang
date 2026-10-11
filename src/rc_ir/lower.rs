@@ -527,6 +527,37 @@ impl<'a> Lowerer<'a> {
         result
     }
 
+    /// Append a `Destructure` of `container` binding each `(index, var)` of `named`. For an unboxed
+    /// container, every field `named` leaves out is bound to a fresh variable as well, so that the
+    /// `Destructure` names every field.
+    ///
+    /// A field of an unboxed container is a leaf of the container itself, so a field the
+    /// `Destructure` leaves out has no owner. Bound to a variable nothing reads, it is released by a
+    /// `Release` node of its own, which cancellation pairs with the retain RC insertion puts before
+    /// the `Destructure` where the container is used afterwards. A boxed container keeps the fields
+    /// it is not asked for, so its `Destructure` binds `named` alone.
+    fn push_destructure(
+        &mut self,
+        container: &RcVar,
+        mut named: Vec<(usize, RcVar)>,
+        source: Option<Span>,
+        bindings: &mut Vec<PendingBinding>,
+    ) {
+        if !container.ty.is_box(self.type_env) {
+            for (idx, field_ty) in container.ty.unpunched_field_types(self.type_env) {
+                if !named.iter().any(|(i, _)| *i == idx) {
+                    named.push((idx, self.fresh_var("field", field_ty, source.clone())));
+                }
+            }
+            named.sort_by_key(|(idx, _)| *idx);
+        }
+        bindings.push(PendingBinding::Destructure(
+            container.clone(),
+            named,
+            source,
+        ));
+    }
+
     /// Lower a function application: the callee and then the arguments become variables, and the
     /// appended binding calls the one on the others.
     fn lower_app(
@@ -968,11 +999,7 @@ impl<'a> Lowerer<'a> {
                 }
                 // Extract all fields in one step (mirroring the back end's `get_struct_fields`); RC
                 // insertion retains the container beforehand iff it is used after this destructure.
-                bindings.push(PendingBinding::Destructure(
-                    obj.clone(),
-                    fields,
-                    pat.info.source.clone(),
-                ));
+                self.push_destructure(obj, fields, pat.info.source.clone(), bindings);
                 for (field_var, subpat) in nested {
                     bound_names.extend(self.destructure_pattern(subpat, &field_var, bindings));
                 }

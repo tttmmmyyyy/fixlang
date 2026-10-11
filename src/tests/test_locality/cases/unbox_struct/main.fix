@@ -1,8 +1,8 @@
 module Main;
 
-// Reading one field out of an unboxed struct drops the fields nobody named, so a field left behind
-// decides whether that drop may skip the state dispatch. The struct itself is built here; the field
-// nobody reads is the global.
+// Reading one field out of an unboxed struct takes it apart and drops the fields nobody named, so a
+// field left behind decides whether that drop may skip the state dispatch. The struct itself is
+// built here; the field nobody reads is the global.
 // Built at run time: a global holding an array literal of numbers is put wherever it is read, so
 // nothing would read the global itself.
 g : Array I64;
@@ -13,12 +13,19 @@ type Both = unbox struct { read : Array I64, dropped : Array I64 };
 sum : Array I64 -> I64;
 sum = |a| Iterator::range(0, a.@size).fold(0, |i, acc| acc + a.@(i));
 
-main : IO ();
-main = (
-    // The struct is read twice, and through the same field both times, so the `let` naming it
-    // survives while `dropped` stays a field nobody names.
-    let holds_global = Both { read : [1, 2], dropped : g };
+// Reads the field `read` twice, so the struct is still used after the first read and dropped by
+// the second. It is recursive so that it is not inlined, and receives the struct as one value the
+// caller built.
+sum_read_twice : I64 -> Both -> I64;
+sum_read_twice = |n, holds_global| (
+    if n > 0 { sum_read_twice(n - 1, holds_global) };
     let taken = holds_global.@read;
     let taken_again = holds_global.@read;
-    println $ (taken.sum + taken_again.sum).to_string
+    taken.sum + taken_again.sum
+);
+
+main : IO ();
+main = (
+    let holds_global = Both { read : Array::from_map(2, |i| i + 1), dropped : g };
+    println $ sum_read_twice(1, holds_global).to_string
 );

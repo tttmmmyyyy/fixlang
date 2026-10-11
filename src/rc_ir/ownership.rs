@@ -492,29 +492,37 @@ fn collect_consumes_go<F: Fn(&RcVar, &FieldPath) -> bool>(
 }
 
 /// The container leaves a `Destructure` consumes. A boxed container is released whole, so every boxed
-/// leaf of it goes; an unboxed container moves each named field's leaves into that field's variable,
-/// an alias whose consume is attributed to the field variable, so only a dropped (unnamed) field's
-/// leaves go. This is the model code generation implements (`ObjectFieldType::get_struct_fields`).
+/// leaf of it goes. An unboxed container's `Destructure` names every field (`names_every_field`), and
+/// each field's leaves move into that field's variable, an alias whose consume is attributed to the
+/// field variable, so none goes. This is the model code generation implements
+/// (`ObjectFieldType::get_struct_fields`).
 pub(crate) fn destructure_consumes(
     container: &RcVar,
     fields: &[(usize, RcVar)],
     type_env: &TypeEnv,
 ) -> Vec<FieldPath> {
-    let leaves = boxed_leaf_paths(&container.ty, type_env);
     if container.ty.is_box(type_env) {
-        return leaves;
+        return boxed_leaf_paths(&container.ty, type_env);
     }
-    let named_fields: Set<usize> = fields.iter().map(|(i, _)| *i).collect();
-    leaves
-        .into_iter()
-        .filter(|leaf| {
-            // A boxed leaf of an unboxed container starts with a field index, so its path is non-empty.
-            let field_idx = leaf
-                .first()
-                .expect("a boxed leaf of an unboxed container has a non-empty path");
-            !named_fields.contains(field_idx)
-        })
-        .collect()
+    assert!(
+        names_every_field(container, fields, type_env),
+        "a `Destructure` of the unboxed `{}` names fields {:?} of it",
+        container.ty.to_string(),
+        fields.iter().map(|(i, _)| *i).collect::<Vec<_>>()
+    );
+    vec![]
+}
+
+/// Whether a `Destructure` of `container` binding `fields` names each unpunched field of the
+/// container exactly once. RC IR lowering makes every `Destructure` of an unboxed container do so.
+pub(crate) fn names_every_field(
+    container: &RcVar,
+    fields: &[(usize, RcVar)],
+    type_env: &TypeEnv,
+) -> bool {
+    container
+        .ty
+        .lists_every_unpunched_field(fields.iter().map(|(i, _)| *i), type_env)
 }
 
 /// The leaves an `App`, `Builtin`, or `Closure` right-hand side consumes: an owning argument

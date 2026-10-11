@@ -246,8 +246,21 @@ mod integration_tests {
         // Reading a boxed element out of a boxed container yields an unknown value.
         assert_binding_prov(&dump, "s0", "[unknown]");
         // Constructing an unboxed tuple carries each component's provenance through: `arr` is fresh,
-        // `s0` is unknown.
-        assert_binding_prov(&dump, "pair", "[{.0=fresh, .1=unknown}]");
+        // `s0` is unknown. The pair is the one construction of its type.
+        let pairs: Vec<&str> = dump
+            .lines()
+            .filter(|l| {
+                l.contains(" : (Std::Array Std::I64, Std::Array Std::U8) ")
+                    && l.contains("= struct_make(")
+            })
+            .collect();
+        assert_eq!(
+            pairs.len(),
+            1,
+            "the pair should be constructed exactly once in the RC IR dump:\n{}",
+            dump
+        );
+        assert_line_prov(pairs[0], "`pair`", "[{.0=fresh, .1=unknown}]");
     }
 
     /// Verifies that a call composes its callee's effect: a recursive function returning its own
@@ -819,6 +832,48 @@ mod integration_tests {
             "the set on the array carried through the struct field should drop its check:\n{}",
             dump
         );
+    }
+
+    /// Verifies that reading a field out of an unboxed struct that is updated afterwards retains
+    /// nothing, so every field reaches its update with its uniqueness intact, whether the read goes
+    /// through the field getter or through a struct pattern naming the one field. The read takes the
+    /// struct apart and releases the field it leaves behind by a node of its own, which cancels
+    /// against the retain that keeps the struct for the update. A release inside the read would
+    /// leave that retain standing, and the retain would make the field left behind of unknown
+    /// sharing, so its update would keep its check.
+    #[test]
+    fn test_unique_check_elim_after_field_read() {
+        let (_temp_dir, project_dir) = setup_test_env("unique_elim_read_field");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        for function in ["add_edges_by_getter", "add_edges_by_pattern"] {
+            let block = func_block(&dump, &format!("fn Main::{}", function), |_| true);
+            assert!(
+                block.iter().all(|l| !l.trim_start().starts_with("retain ")),
+                "`{}` reads a field of the struct before updating it, and should retain nothing:\n{}",
+                function,
+                block.join("\n")
+            );
+            let appends: Vec<&&str> = block
+                .iter()
+                .filter(|l| l.contains("= array_append_value"))
+                .collect();
+            assert_eq!(
+                appends.len(),
+                2,
+                "`{}` should append to each of its two arrays once:\n{}",
+                function,
+                block.join("\n")
+            );
+            assert!(
+                appends
+                    .iter()
+                    .all(|l| l.contains("array_append_value[unique]")),
+                "both appends of `{}` should drop their checks:\n{}",
+                function,
+                block.join("\n")
+            );
+        }
     }
 
     /// Verifies that a loop entered with a shared array pays its uniqueness check on the first

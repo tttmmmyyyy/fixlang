@@ -5333,8 +5333,8 @@ pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// Reads the field at `field_idx` out of the struct `var_name` names: the body of a struct's field
-/// getter `@f`.
+/// Reads the field at `field_idx` out of the boxed struct `var_name` names: the body of the field
+/// getter `@f` of a boxed struct.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StructGetOp {
     pub var_name: FullName,
@@ -5346,48 +5346,36 @@ pub struct StructGetOp {
 
 impl StructGetOp {
     /// The index of the field this operation reads.
-    pub fn field_index(&self) -> usize {
+    fn field_index(&self) -> usize {
         self.field_idx
     }
 
-    /// How a field getter takes its field out of its container.
-    fn field_read(
-        container_ty: &Arc<TypeNode>,
-        field_ty: &Arc<TypeNode>,
-        type_env: &TypeEnv,
-    ) -> FieldRead {
+    /// How this getter takes its field out of a container of type `container_ty`.
+    fn field_read(&self, container_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> FieldRead {
+        assert!(
+            container_ty.is_box(type_env),
+            "a getter of field {} reads a boxed struct, and the getter of the unboxed `{}` takes it \
+             apart with a struct pattern",
+            self.field_idx,
+            container_ty.to_string()
+        );
+        let field_ty = &container_ty.field_types(type_env)[self.field_idx];
         if field_ty.is_fully_unboxed(type_env) {
             FieldRead::Moved
-        } else if container_ty.is_box(type_env) {
-            FieldRead::Retained
         } else {
-            FieldRead::TakenWithContainer
+            FieldRead::Retained
         }
-    }
-
-    /// How this getter reads its field out of its container. A field getter takes exactly the
-    /// container, so `arg_tys[0]` is it.
-    fn field_read_of(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> FieldRead {
-        let container_ty = &arg_tys[0];
-        let field_ty = &container_ty.field_types(type_env)[self.field_idx];
-        Self::field_read(container_ty, field_ty, type_env)
     }
 }
 
-/// How a field getter takes its field out of its container, which decides what it counts.
-///
-/// A boxed container hands out a field it goes on holding, so the read needs the container alive
-/// for as long as it takes to read it and nothing more. An unboxed container is the exception: its
-/// fields *are* its references, and a field left behind has no other owner, so the read takes the
-/// container over and drops what it did not ask for.
+/// How a field getter takes its field out of the boxed struct it reads, which decides what it counts.
+/// Either way the read needs the struct alive for as long as it takes to read it and nothing more.
 enum FieldRead {
     /// The field holds no reference, so it is moved out and nothing is counted.
     Moved,
     /// The field is moved out of a boxed container and retained, so the reader holds a reference of
     /// its own and the container keeps the one it holds.
     Retained,
-    /// The field is taken together with the unboxed container, whose other fields are released.
-    TakenWithContainer,
 }
 
 #[typetag::serde]
@@ -5404,7 +5392,7 @@ impl BuiltinOp for StructGetOp {
                 container_ty.to_string()
             );
         }
-        match Self::field_read(&container_ty, ty, gc.type_env()) {
+        match self.field_read(&container_ty, gc.type_env()) {
             FieldRead::Moved => {
                 let struct_obj = gc.get_scoped_obj_noretain(&self.var_name);
                 ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32)
@@ -5415,16 +5403,6 @@ impl BuiltinOp for StructGetOp {
                     ObjectFieldType::move_out_struct_field(gc, &struct_obj, self.field_idx as u32);
                 gc.retain(field.clone(), assumed_state(self.assume_local));
                 field
-            }
-            FieldRead::TakenWithContainer => {
-                let struct_obj = gc.get_scoped_obj(&self.var_name);
-                ObjectFieldType::get_struct_fields(
-                    gc,
-                    &struct_obj,
-                    &[self.field_idx as u32],
-                    assumed_state(self.assume_local),
-                )[0]
-                .clone()
             }
         }
     }
@@ -5441,35 +5419,20 @@ impl BuiltinOp for StructGetOp {
         vec![&mut self.var_name]
     }
 
-    fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
+    fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         // A field getter takes exactly the container, so operand 0 is it.
         i == 0
-            && !matches!(
-                self.field_read_of(arg_tys, type_env),
-                FieldRead::TakenWithContainer
-            )
     }
 
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
-        arg_tys: &[Arc<TypeNode>],
+        _arg_tys: &[Arc<TypeNode>],
         type_env: &TypeEnv,
     ) -> Provenance {
-        // From a boxed container the field is `Unknown` (contents not tracked); from an unboxed
-        // container it is a pure projection carrying the container's leaf at that field. A field
-        // getter takes exactly the container, so `arg_tys[0]` is it.
-        let container_boxed = arg_tys[0].is_box(type_env);
-        if container_boxed {
-            Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
-        } else {
-            let field_idx = self.field_index();
-            Provenance::build_shape(result_ty, type_env, &|path: &FieldPath| {
-                let mut arg_path = vec![field_idx];
-                arg_path.extend_from_slice(path);
-                sole_origin(LeafOrigin::Arg(0, arg_path))
-            })
-        }
+        // A field holding a reference comes out of a boxed container, whose contents are not
+        // tracked, and a field holding none has no leaf to say anything about.
+        Provenance::uniform(result_ty, type_env, LeafOrigin::Unknown)
     }
 
     fn result_locality(
@@ -5494,14 +5457,10 @@ impl BuiltinOp for StructGetOp {
 
     fn internal_rc_targets(&self, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> Vec<RcTarget> {
         // A read that moves the field out counts nothing; one out of a boxed container retains the
-        // field alone; one that takes the unboxed container over releases the fields nobody asked
-        // for, which the whole operand covers.
-        match self.field_read_of(arg_tys, type_env) {
+        // field alone. A field getter takes exactly the container, so `arg_tys[0]` is it.
+        match self.field_read(&arg_tys[0], type_env) {
             FieldRead::Moved => vec![],
             FieldRead::Retained => vec![RcTarget::Result(vec![])],
-            FieldRead::TakenWithContainer => {
-                vec![RcTarget::Result(vec![]), RcTarget::Operand(0, vec![])]
-            }
         }
     }
 
@@ -5510,32 +5469,46 @@ impl BuiltinOp for StructGetOp {
     }
 }
 
-// `get` built-in function for a given struct.
-pub fn struct_get_body(var_name: &str, field_idx: usize, field_ty: Arc<TypeNode>) -> Arc<ExprNode> {
-    let var_name_clone = FullName::local(var_name);
-    expr_builtin(
-        Box::new(StructGetOp {
-            assume_local: false,
-            var_name: var_name_clone,
-            field_idx,
-        }),
-        field_ty,
-        None,
-    )
-}
-
-// field getter function for a given struct.
+/// The field getter `@f` of a struct: a function of type `S -> F` returning the field `f`.
+///
+/// The getter of a boxed struct reads the field with `StructGetOp`, which borrows the struct. An
+/// unboxed struct holds its fields' references itself, so its getter takes it apart with the struct
+/// pattern `S { f : v, _ }`, as source code that destructures the struct does.
 pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
 
     let str_ty = definition.applied_type();
     const VAR_NAME: &str = "str_obj";
-    let expr = expr_abs(
-        vec![var_local(VAR_NAME)],
-        struct_get_body(VAR_NAME, field_idx as usize, field.ty.clone()),
-        None,
-    );
+    const FIELD_NAME: &str = "field";
+    let body = if definition.as_struct().is_boxed() {
+        expr_builtin(
+            Box::new(StructGetOp {
+                assume_local: false,
+                var_name: FullName::local(VAR_NAME),
+                field_idx: field_idx as usize,
+            }),
+            field.ty.clone(),
+            None,
+        )
+    } else {
+        let pattern = PatternNode::make_struct_with_srcs(
+            Arc::new(definition.tycon()),
+            vec![(
+                field.name.clone(),
+                None,
+                PatternNode::make_var(var_local(FIELD_NAME), None),
+            )],
+            true,
+        );
+        expr_let(
+            pattern,
+            expr_var(FullName::local(VAR_NAME), None),
+            expr_var(FullName::local(FIELD_NAME), None),
+            None,
+        )
+    };
+    let expr = expr_abs(vec![var_local(VAR_NAME)], body, None);
     let ty = type_fun(str_ty, field.ty.clone());
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
@@ -6704,11 +6677,7 @@ pub fn struct_act(
     // and the shared branch is dead: emit the unique branch directly. This also keeps the generated
     // code off `unsafe_is_unique`, whose `[a : Boxed]` bound a struct value need not satisfy. A boxed
     // struct keeps the runtime check that selects the branch.
-    let is_boxed_struct = match &definition.value {
-        TypeDeclValue::Struct(s) => s.is_boxed(),
-        _ => panic!("`struct_act` was given a non-struct type definition."),
-    };
-    let body = if is_boxed_struct {
+    let body = if definition.as_struct().is_boxed() {
         expr_let(
             PatternNode::make_struct(
                 tycon(make_tuple_name_abs(2)),
