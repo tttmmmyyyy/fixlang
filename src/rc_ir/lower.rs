@@ -540,13 +540,8 @@ impl<'a> Lowerer<'a> {
         result
     }
 
-    /// Lower a read of field `field_idx` out of the unboxed `container` as a `Destructure` binding
-    /// every field, and return the variable bound to the one read.
-    ///
-    /// The field read is a leaf of the container itself, so the read leaves the container's other
-    /// leaves with no owner. They are bound to variables nothing reads, so RC insertion releases each
-    /// by a `Release` node of its own. Where the container is used afterwards, RC insertion also
-    /// retains it before the `Destructure`, and cancellation pairs that retain with those releases.
+    /// Lower a read of field `field_idx` out of the unboxed `container` as a `Destructure` of the
+    /// container, and return the variable bound to the field read.
     fn lower_field_read_by_destructure(
         &mut self,
         container: &RcVar,
@@ -554,20 +549,41 @@ impl<'a> Lowerer<'a> {
         source: Option<Span>,
         bindings: &mut Vec<PendingBinding>,
     ) -> RcVar {
-        let fields: Vec<(usize, RcVar)> = container
-            .ty
-            .field_types(self.type_env)
-            .into_iter()
-            .enumerate()
-            .map(|(i, field_ty)| (i, self.fresh_var("field", field_ty, source.clone())))
-            .collect();
-        let read = fields[field_idx].1.clone();
+        let field_ty = container.ty.field_types(self.type_env)[field_idx].clone();
+        let read = self.fresh_var("field", field_ty, source.clone());
+        self.push_destructure(container, vec![(field_idx, read.clone())], source, bindings);
+        read
+    }
+
+    /// Append a `Destructure` of `container` binding each `(index, var)` of `named`. For an unboxed
+    /// container, every field `named` leaves out is bound to a fresh variable as well, so that the
+    /// `Destructure` names every field.
+    ///
+    /// A field of an unboxed container is a leaf of the container itself, so a field the
+    /// `Destructure` leaves out has no owner. Bound to a variable nothing reads, it is released by a
+    /// `Release` node of its own, which cancellation pairs with the retain RC insertion puts before
+    /// the `Destructure` where the container is used afterwards. A boxed container keeps the fields
+    /// it is not asked for, so its `Destructure` binds `named` alone.
+    fn push_destructure(
+        &mut self,
+        container: &RcVar,
+        mut named: Vec<(usize, RcVar)>,
+        source: Option<Span>,
+        bindings: &mut Vec<PendingBinding>,
+    ) {
+        if !container.ty.is_box(self.type_env) {
+            for (idx, field_ty) in container.ty.unpunched_field_types(self.type_env) {
+                if !named.iter().any(|(i, _)| *i == idx) {
+                    named.push((idx, self.fresh_var("field", field_ty, source.clone())));
+                }
+            }
+            named.sort_by_key(|(idx, _)| *idx);
+        }
         bindings.push(PendingBinding::Destructure(
             container.clone(),
-            fields,
+            named,
             source,
         ));
-        read
     }
 
     /// Lower a function application: the callee and then the arguments become variables, and the
@@ -1011,11 +1027,7 @@ impl<'a> Lowerer<'a> {
                 }
                 // Extract all fields in one step (mirroring the back end's `get_struct_fields`); RC
                 // insertion retains the container beforehand iff it is used after this destructure.
-                bindings.push(PendingBinding::Destructure(
-                    obj.clone(),
-                    fields,
-                    pat.info.source.clone(),
-                ));
+                self.push_destructure(obj, fields, pat.info.source.clone(), bindings);
                 for (field_var, subpat) in nested {
                     bound_names.extend(self.destructure_pattern(subpat, &field_var, bindings));
                 }

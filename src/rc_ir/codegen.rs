@@ -314,7 +314,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 // Extract all fields at once (the container was retained beforehand by a `Retain`
                 // node iff it is used afterward). `get_struct_fields` performs the whole-container
                 // reference counting: a boxed container retains the fields and releases itself, an
-                // unboxed container moves the fields out and releases the fields not named here.
+                // unboxed container, whose every field is named, moves the fields out.
                 let container_obj = self.get_scoped_obj_noretain(&container.name);
                 let field_indices: Vec<u32> = fields.iter().map(|(idx, _)| *idx as u32).collect();
                 let field_objs = ObjectFieldType::get_struct_fields(

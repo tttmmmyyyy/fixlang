@@ -12,7 +12,8 @@
 //! name) — every `Retain`/`Release` names one reference-counting unit of its variable; a function
 //! carries a capture parameter exactly for the closure ABI; every match has at least one arm, with
 //! any catch-all arm last; a `Builtin` operation's embedded operand names match its argument list;
-//! and a closure value stores the capture layout its target function projects.
+//! a closure value stores the capture layout its target function projects; and a `Destructure` of an
+//! unboxed container names each of its fields.
 
 use crate::ast::name::FullName;
 use crate::ast::program::TypeEnv;
@@ -20,7 +21,7 @@ use crate::ast::types::TypeNode;
 use crate::fixstd::builtin::{CaptureProjectOp, NoStorageValueOp};
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{FieldPath, FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar};
-use crate::rc_ir::ownership::rc_units;
+use crate::rc_ir::ownership::{names_every_field, rc_units};
 use std::sync::Arc;
 
 /// Check the well-formedness of every function and global, panicking on the first violation. A
@@ -337,6 +338,19 @@ impl<'a> Validator<'a> {
             }
             RcExpr::Destructure(container, fields, _state, k) => {
                 self.use_var(&container.name);
+                // A field an unboxed container's `Destructure` leaves out would be dropped inside code
+                // generation, out of reach of cancellation, so lowering binds every field.
+                if !container.ty.is_box(self.type_env)
+                    && !names_every_field(container, fields, self.type_env)
+                {
+                    panic!(
+                        "[RC IR validate] {}: a `Destructure` of the unboxed `{}` names fields {:?} of it, in `{}`",
+                        self.stage,
+                        container.ty.to_string(),
+                        fields.iter().map(|(i, _)| *i).collect::<Vec<_>>(),
+                        self.location,
+                    );
+                }
                 for (_, field) in fields {
                     self.bind(&field.name);
                 }

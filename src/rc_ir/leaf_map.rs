@@ -135,18 +135,6 @@ impl<T: Clone> LeafMap<T> {
             .map(|(_, fact)| fact)
     }
 
-    /// The facts of the boxed leaves that descend through none of `fields` — what a `Destructure` of
-    /// an unboxed container drops rather than hands out.
-    pub fn leaves_outside_fields<'a>(&'a self, fields: &'a [usize]) -> impl Iterator<Item = &'a T> {
-        self.0
-            .iter()
-            .filter(move |(path, _)| match path.split_first() {
-                Some((head, _)) => !fields.contains(head),
-                None => true,
-            })
-            .map(|(_, fact)| fact)
-    }
-
     /// Every leaf's path and fact, in no particular order.
     pub fn iter(&self) -> impl Iterator<Item = (&FieldPath, &T)> {
         self.0.iter()

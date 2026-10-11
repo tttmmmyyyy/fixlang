@@ -135,9 +135,9 @@ pub enum RcExpr {
     /// subtree of the variable named by the path, then continue.
     Release(RcVar, FieldPath, RcState, RcExprNode),
     /// Destructure a struct/tuple container into its fields at once, then continue. Each `(index,
-    /// var)` binds field `index` to `var`. The container is consumed: an unboxed container's leaves
-    /// are moved into the field variables (no per-field retain) and its fields not named here are
-    /// dropped; a boxed container retains each named field and releases the container. Reference-count
+    /// var)` binds field `index` to `var`. The container is consumed: an unboxed container names every
+    /// field, and its leaves are moved into the field variables (no per-field retain); a boxed
+    /// container retains each named field and releases the container. Reference-count
     /// insertion retains the container before this node iff it is used afterward — together this
     /// mirrors code generation's `get_scoped_obj` retain-if-used-later plus `get_struct_fields`
     /// whole-container extraction. One node for the whole destructure lets that retain be decided

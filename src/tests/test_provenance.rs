@@ -822,7 +822,8 @@ mod integration_tests {
     }
 
     /// Verifies that reading a field out of an unboxed struct that is updated afterwards retains
-    /// nothing, so every field reaches its update with its uniqueness intact. The read takes the
+    /// nothing, so every field reaches its update with its uniqueness intact, whether the read goes
+    /// through the field getter or through a struct pattern naming the one field. The read takes the
     /// struct apart and releases the field it leaves behind by a node of its own, which cancels
     /// against the retain that keeps the struct for the update. A release inside the read would
     /// leave that retain standing, and the retain would make the field left behind of unknown
@@ -832,31 +833,34 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("unique_elim_read_field");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let add_edges = func_block(&dump, "fn Main::add_edges", |_| true);
-        assert!(
-            add_edges
+        for function in ["add_edges_by_getter", "add_edges_by_pattern"] {
+            let block = func_block(&dump, &format!("fn Main::{}", function), |_| true);
+            assert!(
+                block.iter().all(|l| !l.trim_start().starts_with("retain ")),
+                "`{}` reads a field of the struct before updating it, and should retain nothing:\n{}",
+                function,
+                block.join("\n")
+            );
+            let appends: Vec<&&str> = block
                 .iter()
-                .all(|l| !l.trim_start().starts_with("retain ")),
-            "reading a field of the struct before updating it should retain nothing:\n{}",
-            add_edges.join("\n")
-        );
-        let appends: Vec<&&str> = add_edges
-            .iter()
-            .filter(|l| l.contains("= array_append_value"))
-            .collect();
-        assert_eq!(
-            appends.len(),
-            2,
-            "`add_edges` should append to each of its two arrays once:\n{}",
-            add_edges.join("\n")
-        );
-        assert!(
-            appends
-                .iter()
-                .all(|l| l.contains("array_append_value[unique]")),
-            "both appends should drop their checks:\n{}",
-            add_edges.join("\n")
-        );
+                .filter(|l| l.contains("= array_append_value"))
+                .collect();
+            assert_eq!(
+                appends.len(),
+                2,
+                "`{}` should append to each of its two arrays once:\n{}",
+                function,
+                block.join("\n")
+            );
+            assert!(
+                appends
+                    .iter()
+                    .all(|l| l.contains("array_append_value[unique]")),
+                "both appends of `{}` should drop their checks:\n{}",
+                function,
+                block.join("\n")
+            );
+        }
     }
 
     /// Verifies that a loop entered with a shared array pays its uniqueness check on the first
