@@ -62,11 +62,11 @@ plan の [#F4] / [#R12-3] は「unbox getter は純射影 op（op 内で retain/
 明示 `Release` が引き受ける」を要求しており、これは未解決項目のまま。解消すれば
 「フィールドを読んでから同じ構造体を更新する」という最も普通の形でもチェックが落ちる。
 
-**2026-10-11 追記（#822 で解消）**: 参照を持つフィールドを unbox 容器から読む getter は、RC IR への lowering で
-容器全体の `Destructure` になった（`StructGetOp::takes_container_apart`）。読まないフィールドは明示 `Release` で
-解放され、容器を後で使うときに入る retain と cancel で打ち消し合う。参照を持たないフィールドの読みは op のまま
-残り、容器を借りるだけなので鎖を切らない。「フィールドを読んでから同じ構造体を更新する」形でチェックが落ちることは
-`test_unique_check_elim_after_field_read` が固定している。
+**2026-10-11 追記（#822 で解消）**: unbox 容器の getter `@f` は、struct パターン `S { f : v, _ }` で容器を分解する
+関数として定義される（`struct_get`）。`StructGetOp` は box 容器の読みだけを受け持つ。unbox 容器の `Destructure` は
+常に全フィールドを名指すので（`push_destructure`、検証器と `destructure_consumes` が assert する）、読まない
+フィールドは明示 `Release` で解放され、容器を後で使うときに入る retain と cancel で打ち消し合う。「フィールドを
+読んでから同じ構造体を更新する」形でチェックが落ちることは `test_unique_check_elim_after_field_read` が固定している。
 
 ## 規則: 一意性を契約で要求する unsafe プリミティブは結果を一意所有と宣言する
 
