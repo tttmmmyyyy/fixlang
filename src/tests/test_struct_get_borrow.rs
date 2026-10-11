@@ -47,7 +47,7 @@ type Holder = box struct {
 type UnboxedHolder = unbox struct { arr : Array I64, n : I64 };
 
 // An unboxed container with a second boxed field, which a read of the first leaves behind.
-type UnboxedPair = unbox struct { read : Array I64, left : Array I64 };
+type UnboxedPair = unbox struct { read : Array I64, left_behind : Array I64 };
 
 make_holder : I64 -> Holder;
 make_holder = |base| Holder {
@@ -105,12 +105,15 @@ main = (
     // An unboxed container used after a read out of it still owns both of its fields: the one read
     // and the one left behind. Updating the container while the value read out is live copies the
     // field, so the value read out keeps its contents.
-    let q = UnboxedPair { read : Array::from_map(3, |i| i + 1), left : Array::from_map(3, |i| i + 5) };
+    let q = UnboxedPair {
+        read : Array::from_map(3, |i| i + 1),
+        left_behind : Array::from_map(3, |i| i + 5)
+    };
     let read = q.@read;
-    let q = q.mod_read(|a| a.set(0, 555)).mod_left(|a| a.set(0, 666));
+    let q = q.mod_read(|a| a.set(0, 555)).mod_left_behind(|a| a.set(0, 666));
     assert_eq(|_|"the value read out is not written through", read.@(0), 1);;
     assert_eq(|_|"the field read is updated", q.@read.@(0), 555);;
-    assert_eq(|_|"the field left behind is updated", q.@left.@(0), 666);;
+    assert_eq(|_|"the field left behind is updated", q.@left_behind.@(0), 666);;
 
     pure()
 );
