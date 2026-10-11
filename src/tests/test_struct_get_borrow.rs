@@ -4,7 +4,7 @@
 // its last use. The container's fields cover each shape whose retain has somewhere to reach -- a
 // boxed value, an unbox struct with two boxed leaves, a union with a boxed variant, and a closure
 // -- alongside one holding no reference at all. An unboxed container is the exception: its fields
-// are its references, so a read takes it over, and the last arm below is that shape.
+// are its references, so a read takes it apart, and the last arms below are that shape.
 //
 // A parameter a function only field-reads is borrowable for that reason alone, so such a function
 // gets a borrowing version and calls are routed to it. The second source below is where a container
@@ -43,8 +43,11 @@ type Holder = box struct {
     step : I64 -> I64
 };
 
-// The same read out of an unboxed container, which takes the container over instead.
+// The same read out of an unboxed container, which takes the container apart instead.
 type UnboxedHolder = unbox struct { arr : Array I64, n : I64 };
+
+// An unboxed container with a second boxed field, which a read of the first leaves behind.
+type UnboxedPair = unbox struct { read : Array I64, left_behind : Array I64 };
 
 make_holder : I64 -> Holder;
 make_holder = |base| Holder {
@@ -94,10 +97,23 @@ main = (
     );
     assert_eq(|_|"the field outlives the container it was read out of", taken.@(0), 1);;
 
-    // An unboxed container's read takes the container over, and hands out a field just as usable.
+    // An unboxed container's read takes the container apart, and hands out a field just as usable.
     let p = UnboxedHolder { arr : Array::from_map(4, |i| i * 2), n : 9 };
     assert_eq(|_|"the field of an unboxed container is written", p.@arr.set(0, 444).@(0), 444);;
     assert_eq(|_|"the unboxed container's own field is unchanged", p.@arr.@(0), 0);;
+
+    // An unboxed container used after a read out of it still owns both of its fields: the one read
+    // and the one left behind. Updating the container while the value read out is live copies the
+    // field, so the value read out keeps its contents.
+    let q = UnboxedPair {
+        read : Array::from_map(3, |i| i + 1),
+        left_behind : Array::from_map(3, |i| i + 5)
+    };
+    let read = q.@read;
+    let q = q.mod_read(|a| a.set(0, 555)).mod_left_behind(|a| a.set(0, 666));
+    assert_eq(|_|"the value read out is not written through", read.@(0), 1);;
+    assert_eq(|_|"the field read is updated", q.@read.@(0), 555);;
+    assert_eq(|_|"the field left behind is updated", q.@left_behind.@(0), 666);;
 
     pure()
 );

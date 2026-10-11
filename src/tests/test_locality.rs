@@ -333,17 +333,64 @@ mod integration_tests {
         assert_rc_state(&dump, "scalars", "deeplocal");
     }
 
-    /// Verifies that reading one field out of an unboxed struct keeps its dispatch when a field
-    /// nobody named holds a global. The read drops the fields it does not hand out, so what those
-    /// hold decides the answer even though the struct itself was built by the program — and the
-    /// operand the operation declares for them is the only thing that says so.
+    /// Verifies that reading one field out of an unboxed struct releases a field nobody named with
+    /// the runtime dispatch when that field holds a global. The read takes the struct apart and drops
+    /// the fields it does not hand out, so what those hold decides the answer even though the struct
+    /// itself was built by the program.
     #[test]
     fn test_locality_of_a_read_out_of_an_unboxed_struct() {
         let (_temp_dir, project_dir) = setup_test_env("unbox_struct");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let holds_global = binding_vars(&dump, "holds_global");
-        assert_op_state(&dump, "struct_get_0", &holds_global[0], "");
+        let dropped: Vec<String> = vars_of_type(&dump, "Main::Both")
+            .iter()
+            .flat_map(|both| destructure_field_vars(&dump, both, 1))
+            .collect();
+        let releases: Vec<&str> = rc_lines(&dump, &dropped)
+            .into_iter()
+            .filter(|line| line.trim_start().starts_with("release "))
+            .collect();
+        assert!(
+            !releases.is_empty(),
+            "no `release` of the field `dropped` taken out of a `Both`, so this case asserts \
+             nothing:\n{}",
+            dump
+        );
+        for line in &releases {
+            assert!(
+                !line.contains('@'),
+                "the field `dropped` holds a global, so its release should keep the dispatch, but a \
+                 line reads:\n{}",
+                line
+            );
+        }
+    }
+
+    /// Every variable the dump gives the type `ty`, as a parameter or a binding: the token before
+    /// ` : <ty> ` wherever that is written.
+    fn vars_of_type(dump: &str, ty: &str) -> Vec<String> {
+        let marker = format!(" : {} ", ty);
+        let mut vars = vec![];
+        for line in dump.lines() {
+            for (at, _) in line.match_indices(&marker) {
+                let var = line[..at].rsplit([' ', '(']).next().unwrap();
+                vars.push(var.to_string());
+            }
+        }
+        vars
+    }
+
+    /// The variables every `destructure` of `container` binds to field `field_idx`.
+    fn destructure_field_vars(dump: &str, container: &str, field_idx: usize) -> Vec<String> {
+        let arm = format!(".{} -> ", field_idx);
+        dump.lines()
+            .filter_map(|line| {
+                let rest = line.trim_start().strip_prefix("destructure ")?;
+                let fields = rest.strip_prefix(container)?.strip_prefix(" {")?;
+                let (_, bound) = fields.split_once(&arm)?;
+                bound.split_whitespace().next().map(str::to_string)
+            })
+            .collect()
     }
 
     /// The names the dump gives the clones of `source_name`, in no particular order. A clone keyed

@@ -349,15 +349,6 @@ impl ExtShape {
         self.0.leaves_under(path)
     }
 
-    /// The conditions of the boxed leaves that descend through none of `fields` — what a
-    /// `Destructure` of an unboxed container drops.
-    pub fn leaves_outside_fields<'a>(
-        &'a self,
-        fields: &'a [usize],
-    ) -> impl Iterator<Item = &'a LeafCond> {
-        self.0.leaves_outside_fields(fields)
-    }
-
     /// Every boxed leaf's condition, in no particular order.
     pub fn leaves(&self) -> impl Iterator<Item = &LeafCond> {
         self.0.leaves()
@@ -526,7 +517,7 @@ impl<'a> Walk<'a> {
                 (shape, self.rebuild(node, build))
             }
             RcExpr::Destructure(container, fields, _, k) => {
-                let state = self.annotate_destructure(container, fields);
+                let state = self.annotate_destructure(container);
                 self.bind_destructured_fields(container, fields);
                 let (shape, k) = self.walk(k);
                 let build = || RcExpr::Destructure(container.clone(), fields.clone(), state, k);
@@ -791,30 +782,19 @@ impl<'a> Walk<'a> {
     /// The annotation of a `Destructure`, which counts every reference the node itself moves. Out of
     /// a boxed container it releases the container and retains each named field, and the take-out
     /// rule makes the fields local only where the container is `DeepLocal` — which also covers the
-    /// container's own release. Out of an unboxed container it releases the fields nobody named, so
-    /// every one of those has to be local.
-    fn annotate_destructure(&mut self, container: &RcVar, fields: &[(usize, RcVar)]) -> RcState {
-        let shape = self.shape_of(container);
-        if container.ty.is_box(self.type_env) {
-            let Some(inputs) = self.site_inputs(iter::once(shape.leaf_at(&[]))) else {
-                return RcState::Unknown;
-            };
-            return match shape.leaf_at(&[]).resolve(inputs) {
-                Locality::DeepLocal => RcState::Local,
-                _ => RcState::Unknown,
-            };
+    /// container's own release. Out of an unboxed container, whose every field is named, it only moves
+    /// the leaves into the field variables and counts nothing.
+    fn annotate_destructure(&mut self, container: &RcVar) -> RcState {
+        if !container.ty.is_box(self.type_env) {
+            return RcState::Local;
         }
-        let named: Vec<usize> = fields.iter().map(|(idx, _)| *idx).collect();
-        let Some(inputs) = self.site_inputs(shape.leaves_outside_fields(&named)) else {
+        let shape = self.shape_of(container);
+        let Some(inputs) = self.site_inputs(iter::once(shape.leaf_at(&[]))) else {
             return RcState::Unknown;
         };
-        let locality = shape
-            .leaves_outside_fields(&named)
-            .map(|leaf| leaf.resolve(inputs))
-            .fold(Locality::DeepLocal, Locality::join);
-        match locality {
-            Locality::MayExt => RcState::Unknown,
-            _ => RcState::Local,
+        match shape.leaf_at(&[]).resolve(inputs) {
+            Locality::DeepLocal => RcState::Local,
+            _ => RcState::Unknown,
         }
     }
 

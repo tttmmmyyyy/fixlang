@@ -1054,8 +1054,10 @@ impl ObjectFieldType {
     }
 
     /// Take the fields of `struct_obj` listed in `field_indices` out as owned objects, consuming
-    /// the struct: each returned field owns its reference and so outlives the struct it came from,
-    /// and the fields left behind are dropped.
+    /// the struct: each returned field owns its reference and so outlives the struct it came from.
+    /// A boxed struct keeps the fields left out of `field_indices`, and its release drops them. An
+    /// unboxed struct has to be taken apart whole, so `field_indices` lists each of its unpunched
+    /// fields.
     pub fn get_struct_fields<'c, 'm>(
         gc: &mut Generator<'c, 'm>,
         struct_obj: &Object<'c>,
@@ -1078,15 +1080,17 @@ impl ObjectFieldType {
             }
             gc.release(struct_obj.clone(), state);
         } else {
-            // The struct is unboxed, so the fields taken out are released by whoever receives them.
-            // Releasing the fields left behind here accounts for the struct itself.
-            for (field_idx, _) in struct_obj.ty.unpunched_field_types(gc.type_env()) {
-                let field_idx = field_idx as u32;
-                if !field_indices.iter().any(|i| *i == field_idx) {
-                    let field = ObjectFieldType::move_out_struct_field(gc, struct_obj, field_idx);
-                    gc.release(field, state);
-                }
-            }
+            // The struct is unboxed, so its fields are its references, and each one taken out is
+            // released by whoever receives it.
+            assert!(
+                struct_obj.ty.lists_every_unpunched_field(
+                    field_indices.iter().map(|i| *i as usize),
+                    gc.type_env()
+                ),
+                "the unboxed `{}` is taken apart whole, but fields {:?} of it are taken",
+                struct_obj.ty.to_string(),
+                field_indices
+            );
         }
 
         fields

@@ -705,8 +705,12 @@ impl Pattern {
     }
 
     /// This pattern as it is written in the source, its variant and field names carrying the
-    /// namespaces they have been resolved to. A tuple type at the head prints as `(a, b)`, and any
-    /// other struct as `S {f: p}`, or `S {f: p, _}` where the pattern leaves out the other fields.
+    /// namespaces they have been resolved to. A tuple pattern naming every field in order prints as
+    /// `(a, b)`, and any other struct pattern as `S {f: p}`, or `S {f: p, _}` where the pattern
+    /// leaves out the other fields.
+    ///
+    /// # Examples
+    /// The pattern a tuple's getter `@1` destructures with prints as `Std::Tuple3 {1: field, _}`.
     pub fn to_string(&self) -> String {
         let mut ret = "".to_string();
         match self {
@@ -722,7 +726,15 @@ impl Pattern {
                 ret
             }
             Pattern::Struct(tc, fields, has_rest) => {
-                if let Some(n) = get_tuple_n(&tc.name) {
+                let names_every_field_in_order = |n: u32| {
+                    !*has_rest
+                        && fields.len() == n as usize
+                        && fields
+                            .iter()
+                            .enumerate()
+                            .all(|(i, (name, _, _))| *name == i.to_string())
+                };
+                if let Some(n) = get_tuple_n(&tc.name).filter(|n| names_every_field_in_order(*n)) {
                     let pats = fields
                         .iter()
                         .map(|(_, _, pat)| pat.to_string())
@@ -844,5 +856,50 @@ impl Pattern {
             return Err(Errors::from_msg_srcs(msg, &[&match_src]));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::expr::var_local;
+    use crate::ast::types::tycon;
+    use crate::fixstd::builtin::make_tuple_name_abs;
+
+    /// A tuple pattern of the field `index` alone, with `_` for the rest: the pattern a tuple's
+    /// getter destructures with.
+    fn tuple_field_pattern(size: u32, index: usize) -> Arc<PatternNode> {
+        PatternNode::make_struct_with_srcs(
+            tycon(make_tuple_name_abs(size)),
+            vec![(
+                index.to_string(),
+                None,
+                PatternNode::make_var(var_local("field"), None),
+            )],
+            true,
+        )
+    }
+
+    /// Verifies that a tuple pattern naming one field prints the field it names and the `_` for the
+    /// rest, so the patterns of different getters read apart, while a tuple pattern naming every
+    /// field in order keeps the tuple form.
+    #[test]
+    fn test_tuple_pattern_naming_one_field_prints_the_field() {
+        assert_eq!(
+            tuple_field_pattern(3, 1).to_string(),
+            "Std::Tuple3 {1: field, _}"
+        );
+        assert_ne!(
+            tuple_field_pattern(3, 0).to_string(),
+            tuple_field_pattern(3, 2).to_string()
+        );
+        let whole = PatternNode::make_struct(
+            tycon(make_tuple_name_abs(2)),
+            vec![
+                ("0".to_string(), PatternNode::make_var(var_local("a"), None)),
+                ("1".to_string(), PatternNode::make_var(var_local("b"), None)),
+            ],
+        );
+        assert_eq!(whole.to_string(), "(a, b)");
     }
 }
