@@ -2,6 +2,42 @@
 
 Newer is above.
 
+**LangArena rows measured before the pinned revision rose from `123412b` to `8dc7019` are not
+comparable with rows after it on six of the fifty programs, and no one compiler builds both
+sides.** `8dc7019` builds on `std-experimental` 0.3.1, which calls the writers of floating
+point text that `Std` gained with #825, and on `json` 0.8.0, the release of `json` built on it; `123412b` builds on `std-experimental` 0.2.1,
+which calls the C functions #825 removed. The `5f08f2e` row in `log.csv` is the last one on
+`123412b`, and the `cb3c291` row is the first one on `8dc7019`. The `23dc0dd` row between them
+carries no LangArena columns.
+
+The step was measured in two halves.
+
+The first half is `123412b` to `1a081d7`, which moves `regexp` from 1.3 to 2 and changes the two
+programs that call it, measured with one compiler on both sides -- `5f08f2e`. The clone's lock put
+`regexp` at 1.3.1 on the old side and 2.1.0 on the new. Its `123412b` side matches the `5f08f2e`
+row to within 0.000003% on every program, which says the clone measured the same thing
+the pinned run did.
+
+| program | instructions | |
+| --- | --- | --- |
+| `Etc::LogParser` | **-5.60%** | `regexp` 2 |
+| `Template::Regex` | -0.72% | `regexp` 2 |
+| `Compress::LZWDecode` | +0.31% | its source did not change; the unit boundaries moved with `regexp`'s symbols |
+
+The second half is `1a081d7` built by `5f08f2e` to `8dc7019` built by `cb3c291`. The benchmark
+sources are the same on both sides, and what differs is the compiler and the two releases the
+programs build on, which only move together.
+
+| program | instructions | |
+| --- | --- | --- |
+| `Json::Generate` | **-11.07%** | writes its numbers with the writers of #825 |
+| `Etc::CacheSimulation` | -2.07% | its source did not change; the compiler between the two |
+| `Compress::LZWDecode` | -0.31% | returns to where it stood on `123412b` |
+| `Json::ParseMapping` | -0.24% | builds its input with the writer of `Json::Generate` |
+| `CSV::Parse` | -0.11% | |
+
+The forty-three others moved less than 0.1% in both halves.
+
 **Rows measured before the speedtest cases moved to `random` 1.1.3 and `cp-library` 0.14.0, and
 LangArena to `regexp` 1.3.1, are comparable with rows after it on a hundred of the hundred and six
 programs.** The compiler stopped accepting a value named with `_` followed by a capital letter at
