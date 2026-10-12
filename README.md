@@ -111,7 +111,7 @@ main = (
 
 ## License
 
-Fix is distributed under the MIT License with a runtime library exception: a program you build with Fix can be distributed without the copyright notice and the permission notice of the parts of Fix the compiler puts into it, such as the standard library. See [LICENSE](/LICENSE).
+Fix is distributed under the MIT License with a runtime library exception: a program you build with Fix can be distributed without the copyright notice and the permission notice of the parts of Fix the compiler puts into it, such as the standard library and the runtime. See [LICENSE](/LICENSE).
 
 ## Third-party licenses
 
