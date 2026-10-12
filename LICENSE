@@ -19,3 +19,11 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Runtime Library Exception
+
+As an exception, if you use this Software to compile your source code and
+portions of this Software, such as the standard library or the runtime, are
+embedded into the resulting program as a result, you may distribute that
+program without including the above copyright notice and this permission
+notice.
