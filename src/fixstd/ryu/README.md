@@ -9,13 +9,15 @@ second.
 
 - Source: https://github.com/ulfjack/ryu
 - Revision: `4c0618b0e44f7ef027ebae05d2cc7812048f7c8f`
-- License: Apache-2.0 (`LICENSE-Apache2`), or the Boost Software License 1.0 at the user's choice.
-  The translation is taken under Apache-2.0.
+- License: Apache-2.0, or the Boost Software License 1.0 (`LICENSE-Boost`) at the user's choice.
+  The translation is taken under the Boost Software License 1.0, which asks no notice of a program
+  in the form of machine code a compiler made, so a program `fix` builds carries no obligation
+  from it. `std.fix` carries the copyright notice and the license above the translation.
 - Papers: Ulf Adams, "Ryū: fast float-to-string conversion", PLDI 2018; and "Ryū revisited: printf
   floating point conversion", OOPSLA 2019, which `d2fixed.c` implements.
 
-The license is also named on the compiler's third-party licenses page, since every program `fix`
-builds may contain the translation.
+The license is also named on the compiler's third-party licenses page, since the `fix` compiler
+carries the translation in its standard library.
 
 ## What the translation is
 

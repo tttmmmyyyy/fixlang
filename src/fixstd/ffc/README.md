@@ -8,14 +8,17 @@ point whatever locale the program runs in.
 
 - Source: https://github.com/kolemannix/ffc.h, a port of https://github.com/fastfloat/fast_float
 - Revision: `965d4db45d03365b4c852ab34f4d5b08b53bc7b3`
-- License: MIT (`LICENSE-MIT`), or the Apache License 2.0 or the Boost Software License 1.0 at the
-  user's choice. The translation is taken under MIT.
+- License: MIT, or the Apache License 2.0 or the Boost Software License 1.0 (`LICENSE-Boost`) at
+  the user's choice. The translation is taken under the Boost Software License 1.0, which asks no
+  notice of a program in the form of machine code a compiler made, so a program `fix` builds
+  carries no obligation from it. `std.fix` carries the copyright notice and the license above the
+  translation.
 - Papers: Daniel Lemire, "Number Parsing at a Gigabyte per Second", Software: Practice and
   Experience 51 (8), 2021; and Noble Mushtak and Daniel Lemire, "Fast Number Parsing Without
   Fallback", Software: Practice and Experience 53 (7), 2023.
 
-The license is also named on the compiler's third-party licenses page, since every program `fix`
-builds may contain the translation.
+The license is also named on the compiler's third-party licenses page, since the `fix` compiler
+carries the translation in its standard library.
 
 ## What the translation is
 
