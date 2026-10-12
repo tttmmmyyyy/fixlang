@@ -86,144 +86,83 @@ fn run_c_compiler(com: &mut Command, step: &str) -> Result<(), Errors> {
     Ok(())
 }
 
-/// A header the build writes beside the sources, which include it by `path`.
-struct RuntimeHeader {
-    /// Where the header is written, relative to the directory the sources are compiled in, which
-    /// is the path it carries in the compiler's tree.
-    path: &'static str,
-    /// The header's text.
-    text: &'static str,
-}
+/// The path `runtime.c` is written to and compiled at, which is the one it carries in the compiler's
+/// tree.
+const RUNTIME_SOURCE_PATH: &str = "runtime.c";
 
-/// The headers of the libraries under `src/fixstd/` that the runtime carries — fast_float in
-/// `ffc/` — written beside the sources that include them.
-///
-/// Every header those directories hold is carried. `test_vendored_headers_are_all_carried` holds
-/// this list to the directories.
-const RUNTIME_HEADERS: [RuntimeHeader; 1] = [RuntimeHeader {
-    path: "ffc/ffc.h",
-    text: include_str!("../fixstd/ffc/ffc.h"),
-}];
+/// The text of `runtime.c`, carried in the compiler.
+const RUNTIME_SOURCE: &str = include_str!("../fixstd/runtime.c");
 
-/// One of the C sources the runtime is built from.
-struct RuntimeSource {
-    /// Names the object this source compiles to, both in the build directory and in the cache.
-    object_name: &'static str,
-    /// The path this source is written to and compiled at, which is the one it carries in the
-    /// compiler's tree.
-    path: &'static str,
-    /// The text of the source, carried in the compiler.
-    text: &'static str,
-}
-
-/// The C sources the runtime is built from, each compiled to an object of its own.
-const RUNTIME_SOURCES: [RuntimeSource; 2] = [
-    RuntimeSource {
-        object_name: "runtime",
-        path: "runtime.c",
-        text: include_str!("../fixstd/runtime.c"),
-    },
-    RuntimeSource {
-        object_name: "float-text",
-        path: "float_text.c",
-        text: include_str!("../fixstd/float_text.c"),
-    },
-];
-
-/// Removes the directory a runtime build wrote its copies of the sources into.
-fn remove_build_dir(build_dir: &Path) {
-    fs::remove_dir_all(build_dir).expect(&format!(
-        "Failed to remove \"{}\"",
-        build_dir.to_string_lossy().to_string()
-    ));
-}
-
-/// Builds the runtime into object files and answers where they are, reusing the objects a previous
+/// Builds the runtime into an object file and answers where it is, reusing the object a previous
 /// build compiled.
 ///
-/// An object is named by the hash of the settings it is compiled under, so a setting this
+/// The object is named by the hash of the settings it is compiled under, so a setting this
 /// compilation reads belongs in `Configuration::runtime_object_hash`.
 ///
-/// The sources are written into a directory of this build's own, so that builds running side by
-/// side neither read nor overwrite each other's copies, and are compiled from inside it under the
-/// paths they carry in the compiler's tree. What a compiled object records as the file it came
-/// from is therefore that path, the same in every build.
-fn build_runtime_objects(config: &Configuration) -> Result<Vec<PathBuf>, Errors> {
-    let hash = config.runtime_object_hash();
-    let objects: Vec<PathBuf> = RUNTIME_SOURCES
-        .iter()
-        .map(|source| {
-            PathBuf::from(INTERMEDIATE_PATH)
-                .join(format!("fixruntime.{}.{}.o", source.object_name, hash))
-        })
-        .collect();
-    if objects.iter().all(|object| object.exists()) {
-        return Ok(objects);
+/// The source is written into a directory of this build's own, so that builds running side by side
+/// neither read nor overwrite each other's copies, and is compiled from inside it under the path it
+/// carries in the compiler's tree. What the compiled object records as the file it came from is
+/// therefore that path, the same in every build.
+fn build_runtime_object(config: &Configuration) -> Result<PathBuf, Errors> {
+    let object = PathBuf::from(INTERMEDIATE_PATH)
+        .join(format!("fixruntime.{}.o", config.runtime_object_hash()));
+    if object.exists() {
+        return Ok(object);
     }
 
     let build_dir = PathBuf::from(INTERMEDIATE_PATH)
         .join(format!("runtime.{}", thread_rng().gen::<u64>().to_string()));
-    let write_file = |path: &str, text: &str| {
-        let path = build_dir.join(path);
-        fs::create_dir_all(path.parent().unwrap())
-            .expect("Failed to create the directory the runtime is built in.");
-        fs::write(&path, text).expect(&format!(
-            "Failed to generate \"{}\"",
-            path.to_string_lossy().to_string()
-        ));
-    };
-    for header in RUNTIME_HEADERS {
-        write_file(header.path, header.text);
+    fs::create_dir_all(&build_dir)
+        .expect("Failed to create the directory the runtime is built in.");
+    let source_path = build_dir.join(RUNTIME_SOURCE_PATH);
+    fs::write(&source_path, RUNTIME_SOURCE).expect(&format!(
+        "Failed to generate \"{}\"",
+        source_path.to_string_lossy().to_string()
+    ));
+
+    // The compiler runs inside the build directory, so it is given the plain name of the object it
+    // writes.
+    let compiled_name = "runtime.o";
+    let mut com = c_compiler_command(&config)?;
+    com.current_dir(&build_dir);
+    // The runtime is compiled optimized: it compiles in a few milliseconds, and a build reuses the
+    // object a previous build of the same compiler wrote.
+    com.arg("-O2")
+        .arg("-ffunction-sections")
+        .arg("-fdata-sections");
+    // Keep frame pointers for better backtraces on macOS when backtrace is enabled
+    if config.no_elim_frame_pointers() {
+        com.arg("-fno-omit-frame-pointer");
     }
-    for source in &RUNTIME_SOURCES {
-        write_file(source.path, source.text);
+    com.arg("-o")
+        .arg(compiled_name)
+        .arg("-c")
+        .arg(RUNTIME_SOURCE_PATH);
+    for m in &config.runtime_c_macro {
+        com.arg(format!("-D{}", m));
+    }
+    if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
+        com.arg("-fPIC");
+    }
+    if let Err(errors) = run_c_compiler(&mut com, "compile the runtime") {
+        // The source is this build's copy, which a failed compilation is as done with as a
+        // finished one. A directory that resists removal is left where it is, since the
+        // compilation's own failure is what the build reports.
+        let _ = fs::remove_dir_all(&build_dir);
+        return Err(errors);
     }
 
-    for (source, object) in RUNTIME_SOURCES.iter().zip(objects.iter()) {
-        // The compiler runs inside the build directory, so it is given the plain name of the
-        // object it writes.
-        let compiled_name = format!("{}.o", source.object_name);
-        let mut com = c_compiler_command(&config)?;
-        // A source reaches the headers beside it by the path it includes them under, which is the
-        // one it carries in the compiler's tree.
-        com.current_dir(&build_dir).arg("-I.");
-        // Reading a floating point number from text is arithmetic, and unoptimized arithmetic costs
-        // several times what optimized arithmetic costs. The whole runtime compiles in a few
-        // milliseconds, and a build reuses the objects a previous build of the same compiler wrote.
-        com.arg("-O2")
-            .arg("-ffunction-sections")
-            .arg("-fdata-sections");
-        // Keep frame pointers for better backtraces on macOS when backtrace is enabled
-        if config.no_elim_frame_pointers() {
-            com.arg("-fno-omit-frame-pointer");
-        }
-        com.arg("-o").arg(&compiled_name).arg("-c").arg(source.path);
-        for m in &config.runtime_c_macro {
-            com.arg(format!("-D{}", m));
-        }
-        if matches!(config.output_file_type, OutputFileType::DynamicLibrary) {
-            com.arg("-fPIC");
-        }
-        if let Err(errors) =
-            run_c_compiler(&mut com, &format!("compile the runtime's {}", source.path))
-        {
-            // The sources are this build's copies, which a failed compilation is as done with as
-            // a finished one. A directory that resists removal is left where it is, since the
-            // compilation's own failure is what the build reports.
-            let _ = fs::remove_dir_all(&build_dir);
-            return Err(errors);
-        }
-
-        let compiled_path = build_dir.join(&compiled_name);
-        fs::rename(&compiled_path, object).expect(&format!(
-            "Failed to rename \"{}\" to \"{}\"",
-            compiled_path.to_string_lossy().to_string(),
-            object.to_string_lossy().to_string()
-        ));
-    }
-    remove_build_dir(&build_dir);
-
-    Ok(objects)
+    let compiled_path = build_dir.join(compiled_name);
+    fs::rename(&compiled_path, &object).expect(&format!(
+        "Failed to rename \"{}\" to \"{}\"",
+        compiled_path.to_string_lossy().to_string(),
+        object.to_string_lossy().to_string()
+    ));
+    fs::remove_dir_all(&build_dir).expect(&format!(
+        "Failed to remove \"{}\"",
+        build_dir.to_string_lossy().to_string()
+    ));
+    Ok(object)
 }
 
 /// Builds the program specified in the configuration, linking the object files and the runtime into
@@ -274,7 +213,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
         libs_opts.push(ld_flag.clone());
     }
 
-    let runtime_obj_paths = build_runtime_objects(&config)?;
+    let runtime_obj_path = build_runtime_object(&config)?;
 
     let mut com = c_compiler_command(&config)?;
     com.arg("-Wno-unused-command-line-argument");
@@ -295,9 +234,7 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     for obj_path in obj_paths {
         com.arg(obj_path.to_str().unwrap());
     }
-    for runtime_obj_path in &runtime_obj_paths {
-        com.arg(runtime_obj_path.to_str().unwrap());
-    }
+    com.arg(runtime_obj_path.to_str().unwrap());
     com.args(library_search_path_opts).args(libs_opts);
     run_c_compiler(&mut com, "link the output file")?;
 
@@ -306,146 +243,63 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
 
 #[cfg(test)]
 mod tests {
-    use super::{RUNTIME_HEADERS, RUNTIME_SOURCES};
-    use crate::misc::Set;
+    use super::{RUNTIME_SOURCE, RUNTIME_SOURCE_PATH};
     use std::fs;
-    use std::path::Path;
     use std::process::Command;
-
-    /// The directories under `src/fixstd/` that hold a library the runtime carries.
-    const VENDORED_DIRS: [&str; 1] = ["ffc"];
-
-    /// The files in the directories of `VENDORED_DIRS` whose name ends in `extension`, each named
-    /// by its path under `src/fixstd/`, such as `ffc/ffc.h`.
-    fn vendored_files(extension: &str) -> Set<String> {
-        let mut files = Set::default();
-        for dir in VENDORED_DIRS {
-            let vendored_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("src/fixstd")
-                .join(dir);
-            for entry in fs::read_dir(&vendored_dir)
-                .unwrap_or_else(|e| panic!("failed to read {}: {}", vendored_dir.display(), e))
-            {
-                let name = entry
-                    .expect("failed to read a directory entry")
-                    .file_name()
-                    .to_string_lossy()
-                    .to_string();
-                if name.ends_with(extension) {
-                    files.insert(format!("{}/{}", dir, name));
-                }
-            }
-        }
-        files
-    }
-
-    /// Whether `path`, a path under `src/fixstd/`, lies in one of `VENDORED_DIRS`.
-    fn is_vendored(path: &str) -> bool {
-        VENDORED_DIRS
-            .iter()
-            .any(|dir| path.starts_with(&format!("{}/", dir)))
-    }
-
-    /// Every header of the vendored libraries is carried into the directory a build compiles the
-    /// runtime in. Taking a newer version of one is a matter of replacing its directory's files,
-    /// and a header it gained that nothing carried would leave the C compiler with nothing to
-    /// include — at the user's build rather than at ours.
-    #[test]
-    fn test_vendored_headers_are_all_carried() {
-        let carried: Set<String> = RUNTIME_HEADERS
-            .iter()
-            .map(|header| header.path.to_string())
-            .filter(|path| is_vendored(path))
-            .collect();
-        assert_eq!(
-            vendored_files(".h"),
-            carried,
-            "the headers of the vendored libraries and the ones RUNTIME_HEADERS carries"
-        );
-    }
-
-    /// Every source of the vendored libraries is compiled into the runtime. Taking a newer version
-    /// of one is a matter of replacing its directory's files, and a source it gained that nothing
-    /// compiled would be missing from the link.
-    #[test]
-    fn test_vendored_sources_are_all_compiled() {
-        let compiled: Set<String> = RUNTIME_SOURCES
-            .iter()
-            .map(|source| source.path.to_string())
-            .filter(|path| is_vendored(path))
-            .collect();
-        assert_eq!(
-            vendored_files(".c"),
-            compiled,
-            "the sources of the vendored libraries and the ones RUNTIME_SOURCES compiles"
-        );
-    }
 
     /// Every name the runtime's objects define for the linker begins with `fixruntime_`, a prefix
     /// `FFI_EXPORT` rejects. So the runtime's names never meet a name a program or a library it
-    /// links defines, although a program may carry fast_float on its own: the runtime's copy of
-    /// fast_float defines its functions as `static`.
+    /// links defines.
     #[test]
     fn test_runtime_defines_only_fixruntime_names() {
         let build_dir = tempfile::tempdir().expect("failed to create a temporary directory");
-        for header in RUNTIME_HEADERS.iter() {
-            let path = build_dir.path().join(header.path);
-            fs::create_dir_all(path.parent().unwrap()).unwrap();
-            fs::write(&path, header.text).unwrap();
-        }
-        for source in RUNTIME_SOURCES.iter() {
-            let path = build_dir.path().join(source.path);
-            fs::create_dir_all(path.parent().unwrap()).unwrap();
-            fs::write(&path, source.text).unwrap();
-        }
-        for source in RUNTIME_SOURCES.iter() {
-            let object = format!("{}.o", source.object_name);
-            let output = Command::new("gcc")
-                .current_dir(build_dir.path())
-                .args(["-I.", "-O2", "-c", "-o", &object, source.path])
-                .output()
-                .expect("failed to run gcc");
-            assert!(
-                output.status.success(),
-                "gcc failed on {}: {}",
-                source.path,
-                String::from_utf8_lossy(&output.stderr)
-            );
-            let output = Command::new("nm")
-                .current_dir(build_dir.path())
-                .args(["-g", &object])
-                .output()
-                .expect("failed to run nm");
-            assert!(output.status.success(), "nm failed on {}", object);
-            // Each line of `nm -g` is an address, a letter for the kind of the symbol and its name;
-            // an undefined symbol has no address and the letter `U`. Mach-O puts `_` before a C name.
-            let defined: Vec<String> = String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .filter_map(
-                    |line| match line.split_whitespace().collect::<Vec<_>>()[..] {
-                        [_, kind, name] if kind != "U" => Some(name.to_string()),
-                        _ => None,
-                    },
-                )
-                .collect();
-            assert!(!defined.is_empty(), "nm found no name {} defines", object);
-            let foreign: Vec<&String> = defined
-                .iter()
-                .filter(|name| {
-                    let name = if cfg!(target_os = "macos") {
-                        name.strip_prefix('_').unwrap_or(name)
-                    } else {
-                        name
-                    };
-                    !name.starts_with("fixruntime_")
-                })
-                .collect();
-            assert!(
-                foreign.is_empty(),
-                "{} defines names without the `fixruntime_` prefix: {:?}",
-                object,
-                foreign
-            );
-        }
+        fs::write(build_dir.path().join(RUNTIME_SOURCE_PATH), RUNTIME_SOURCE).unwrap();
+        let object = "runtime.o";
+        let output = Command::new("gcc")
+            .current_dir(build_dir.path())
+            .args(["-O2", "-c", "-o", object, RUNTIME_SOURCE_PATH])
+            .output()
+            .expect("failed to run gcc");
+        assert!(
+            output.status.success(),
+            "gcc failed on {}: {}",
+            RUNTIME_SOURCE_PATH,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let output = Command::new("nm")
+            .current_dir(build_dir.path())
+            .args(["-g", object])
+            .output()
+            .expect("failed to run nm");
+        assert!(output.status.success(), "nm failed on {}", object);
+        // Each line of `nm -g` is an address, a letter for the kind of the symbol and its name;
+        // an undefined symbol has no address and the letter `U`. Mach-O puts `_` before a C name.
+        let defined: Vec<String> = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(
+                |line| match line.split_whitespace().collect::<Vec<_>>()[..] {
+                    [_, kind, name] if kind != "U" => Some(name.to_string()),
+                    _ => None,
+                },
+            )
+            .collect();
+        assert!(!defined.is_empty(), "nm found no name {} defines", object);
+        let foreign: Vec<&String> = defined
+            .iter()
+            .filter(|name| {
+                let name = if cfg!(target_os = "macos") {
+                    name.strip_prefix('_').unwrap_or(name)
+                } else {
+                    name
+                };
+                !name.starts_with("fixruntime_")
+            })
+            .collect();
+        assert!(
+            foreign.is_empty(),
+            "{} defines names without the `fixruntime_` prefix: {:?}",
+            object,
+            foreign
+        );
     }
 }

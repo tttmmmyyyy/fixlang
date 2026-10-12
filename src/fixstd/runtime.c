@@ -16,8 +16,7 @@ The C functions and values the Fix standard library is implemented with.
 #include <string.h>
 #include <time.h>
 
-// Defined by the compiler, and declared in `float_text.c` as well; the two translation units carry
-// the declaration because the runtime has no header of its own.
+// Defined at the end of this file, and called by the functions before it.
 __attribute__((noreturn)) void fixruntime_abort(void);
 
 // Print message to stderr, and flush it.

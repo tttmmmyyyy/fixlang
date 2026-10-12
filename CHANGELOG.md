@@ -36,6 +36,8 @@
 
 - #792: `F64::to_string` and `F32::to_string` now write a number with a single significant digit and a power of ten as `1.0e300`, where they wrote `1e300`. The text they write for a finite number is now always a valid floating point literal of Fix, with `_F32` after it for an `F32`.
 - #800: `to_string_exp` and `to_string_exp_precision` of `F64` and `F32` now write the power of ten with no `+` and no leading zero, as a floating point literal of Fix writes it: `100.0.to_string_exp` is `1.000000e2`, where it was `1.000000e+02`, and `0.0123.to_string_exp_precision(1_U8)` is `1.2e-2`, where it was `1.2e-02`.
+- #827: The standard library's translations of Ryu, which writes a floating point number as text, and of fast_float, which reads one, are now taken under the Boost Software License 1.0 instead of the Apache License 2.0 and the MIT License. The Boost Software License asks no copyright notice of a program in the form of machine code a compiler made, so a program built by `fix` that you distribute needs no notice of them.
+- #760, #827: If a program has changed the floating point rounding mode from the default (round to nearest), for example by calling C's `fesetround` through FFI, `F64::from_string` and `F32::from_string` may now return the number next to the nearest one.
 - #541, #811: `CChar` is now `U8` on a target where C's `char` without `signed` or `unsigned` is unsigned, such as Linux on arm64. It used to be `I8` on every target, which read a `char` above 127 from a C function as a negative number there.
 
 #### Tool
