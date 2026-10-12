@@ -927,7 +927,7 @@ impl Array : Functor {
 
 impl Array : Monad {
     pure = |x| [x];
-    // Joins the arrays `f` makes of the elements, in order.
+    // Concatenates the arrays that `f` returns for each element, in order.
     bind = |f, arr| arr.to_iter.fold(Array::empty(arr.@size), |x, joined| joined.append(f(x)));
 }
 
