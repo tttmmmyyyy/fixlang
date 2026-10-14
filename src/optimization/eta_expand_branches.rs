@@ -45,21 +45,23 @@ branches and reduces it against the lambda each branch ends in. No closure is bu
 ## Conditions
 
 The rewrite moves the branches under a lambda, where they are evaluated at the application instead
-of at the `let`. It fires only where that leaves every value's lifetime as it was, since a value
-living longer can turn an in-place update of it into a copy: an update reads the value shared while
-the longer-lived reference stands.
+of at the `let`. It fires only where no value holding a reference count lives longer for it, since
+such a value living longer can turn an in-place update of it into a copy: an update reads the value
+shared while the longer-lived reference stands.
 
 1. The condition of an `if`, or the matched value of a `match`, is evaluated where it was, and bound
    to a name, so the lambda reads only that name.
-2. Nothing the lambda captures holds a reference count: each name a branch reads from outside it
-   has a type that holds none, and so does the matched value of a `match`, whose parts are what its
-   patterns bind. The lambda captures what all the branches read, and keeps it until the
-   application, where the closure of the branch taken kept only what that branch read; keeping a
-   value that holds no reference count longer changes no reference count. The passes after this
-   one only take reads away from a branch, so this stays true of the program they leave.
+2. Nothing the lambda captures holds a reference count. The lambda captures every name the
+   branches read from outside them, and the whole matched value of a `match`; each of these has a
+   type that holds no reference count. The lambda keeps them until the application, while the
+   closure of the branch taken kept only what that branch read, and only the parts of the matched
+   value its pattern bound. Keeping a value that holds no reference count longer changes no
+   reference count. The passes after this one only take reads away from a branch, so the lambda
+   they leave still captures nothing that holds one.
 3. Each branch is a chain of `let`s binding a name, a constant, a lambda or an unboxed struct of
    those, and ends in a name or a lambda. What a branch evaluates before the lambda it ends in
-   moves under the lambda, so it is limited to what costs nothing to evaluate again.
+   moves under the lambda, so it is limited to what costs nothing to evaluate again. What it reads
+   from outside the branch is what condition 2 covers.
 4. `m` is applied once, which is what lets `let_elimination` move it to the application. Without
    it, the rewrite leaves the closure as it was.
 */
@@ -94,8 +96,8 @@ pub fn run_on_expr_once(expr: &mut Arc<ExprNode>, type_env: &TypeEnv) -> bool {
 struct BranchEtaExpander<'a> {
     /// The types of the program, which say whether a value holds a reference count.
     type_env: &'a TypeEnv,
-    /// Every name the expression binds or reads, and every name the walk has minted. A new name
-    /// avoids all of them, so the names the rewrites of a chain of `let`s mint differ from one
+    /// Every name the expression binds or reads, and every name the walk has created. A new name
+    /// avoids all of them, so the names the rewrites of a chain of `let`s create differ from one
     /// another, and moving one rewritten `let` past another renames nothing.
     taken: Set<FullName>,
 }
