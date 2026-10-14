@@ -96,7 +96,7 @@ pub fn run_on_expr_once(
 pub fn is_applied_once(name: &FullName, expr: &Arc<ExprNode>) -> bool {
     let mut probe = FreeOccurrenceProbe::new(name.clone());
     probe.traverse(expr);
-    probe.count == 1 && probe.is_applied && !probe.is_argument_to_builtin
+    probe.is_applied_once()
 }
 
 /// The walk that eliminates the `let`s and the renaming `match`es of an expression, by the
@@ -139,7 +139,7 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
             // Case 2 of the documentation at the top.
             let mut any_sub_condition_holds = false;
 
-            if e0.is_lam() && probe.is_applied {
+            if e0.is_lam() && probe.is_applied_once() {
                 // Case 2-a of the documentation at the top.
                 any_sub_condition_holds = true;
             }
@@ -241,6 +241,12 @@ impl FreeOccurrenceProbe {
             is_captured_by_lambda: false,
             is_argument_to_builtin: false,
         }
+    }
+
+    /// Is the target name read once, as the function of an application, and nowhere as an argument
+    /// of a builtin expression? That is the use condition 2-a asks of a name bound to a lambda.
+    fn is_applied_once(&self) -> bool {
+        self.count == 1 && self.is_applied && !self.is_argument_to_builtin
     }
 
     /// Does the target name occur free in `expr`? The traversal visits `expr` only if it does.
