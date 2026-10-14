@@ -82,7 +82,10 @@ use crate::{
         types::TypeNode,
     },
     misc::Set,
-    optimization::{let_elimination, rename::generate_new_names},
+    optimization::{
+        let_elimination,
+        rename::{generate_new_names, NamedExpr},
+    },
 };
 use std::sync::Arc;
 
@@ -176,9 +179,10 @@ impl<'a> BranchEtaExpander<'a> {
         // The names the new binders avoid: every name free in the `let`, and the name it binds.
         let mut black_list = expr.free_vars();
         black_list.insert(pat.get_var().name.clone());
-        let (subject, binding) = bind_to_name(subject, &mut black_list);
-        let chosen = set_subject(&bound, subject);
-        Some(rebuild(expr, chosen, binding, &ty, &black_list))
+        let subject = NamedExpr::new(subject, &black_list);
+        black_list.insert(subject.value.get_var().name.clone());
+        let chosen = set_subject(&bound, subject.value.clone());
+        Some(subject.wrap(expanded_let(expr, chosen, &ty, &black_list)))
     }
 
     /// The local names `branch` reads from outside it whose type holds a reference count, leaving
@@ -262,12 +266,11 @@ impl<'a> BranchEtaExpander<'a> {
     }
 }
 
-/// `let {binding} in let m = |x| {chosen}(x) in {value}`, for the `let m = .. in {value}` that `expr`
-/// is, where `m` has type `ty`.
-fn rebuild(
+/// `let m = |x| {chosen}(x) in {value}`, for the `let m = .. in {value}` that `expr` is, where `m`
+/// has type `ty` and `x` is a fresh name avoiding `black_list`.
+fn expanded_let(
     expr: &Arc<ExprNode>,
     chosen: Arc<ExprNode>,
-    binding: Option<(Arc<PatternNode>, Arc<ExprNode>)>,
     ty: &Arc<TypeNode>,
     black_list: &Set<FullName>,
 ) -> Arc<ExprNode> {
@@ -275,30 +278,10 @@ fn rebuild(
     let param = generate_new_names(black_list, 1)[0].clone();
     let arg = expr_var(param.clone(), None).set_type(param_ty.clone());
     let lam = expr_abs_typed(var_var(param), param_ty, expr_app_typed(chosen, vec![arg]));
-    let rebuilt = expr_let_typed(expr.get_let_pat(), lam, expr.get_let_value());
-    match binding {
-        Some((pat, bound)) => expr_let_typed(pat, bound, rebuilt),
-        None => rebuilt,
-    }
+    expr_let_typed(expr.get_let_pat(), lam, expr.get_let_value())
 }
 
 /// Is every set of `sets` the same?
 fn all_equal(sets: &[Set<FullName>]) -> bool {
     sets.windows(2).all(|pair| pair[0] == pair[1])
-}
-
-/// `expr` as a name: `expr` itself where it is one, or a fresh name avoiding `black_list`, together
-/// with the binding that gives it `expr`.
-fn bind_to_name(
-    expr: &Arc<ExprNode>,
-    black_list: &mut Set<FullName>,
-) -> (Arc<ExprNode>, Option<(Arc<PatternNode>, Arc<ExprNode>)>) {
-    if expr.is_var() {
-        return (expr.clone(), None);
-    }
-    let ty = expr.type_.as_ref().unwrap().clone();
-    let name = generate_new_names(black_list, 1)[0].clone();
-    black_list.insert(name.clone());
-    let pat = PatternNode::make_var(var_var(name.clone()), None).set_type(ty.clone());
-    (expr_var(name, None).set_type(ty), Some((pat, expr.clone())))
 }

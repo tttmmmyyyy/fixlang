@@ -354,6 +354,47 @@ impl ExprVisitor for Substitutor {
     }
 }
 
+/// An expression as a name, for a rewrite that mentions it in several places: the expression itself
+/// where it is a name, which has nothing to evaluate, and otherwise a fresh name, which the `let`
+/// that `wrap` builds gives the expression, so that it is evaluated once.
+pub struct NamedExpr {
+    /// The name that stands for the expression.
+    pub value: Arc<ExprNode>,
+    /// The pattern and bound expression of the `let` that gives a fresh name its expression.
+    binding: Option<(Arc<PatternNode>, Arc<ExprNode>)>,
+}
+
+impl NamedExpr {
+    /// Names `expr`.
+    ///
+    /// # Arguments
+    /// * `black_list` - the names a fresh name avoids: those free in what the `let` built by `wrap`
+    ///   wraps.
+    pub fn new(expr: &Arc<ExprNode>, black_list: &Set<FullName>) -> Self {
+        if expr.is_var() {
+            return NamedExpr {
+                value: expr.clone(),
+                binding: None,
+            };
+        }
+        let ty = expr.type_.as_ref().unwrap().clone();
+        let name = generate_new_names(black_list, 1)[0].clone();
+        let pat = PatternNode::make_var(var_var(name.clone()), None).set_type(ty.clone());
+        NamedExpr {
+            value: expr_var(name, None).set_type(ty),
+            binding: Some((pat, expr.clone())),
+        }
+    }
+
+    /// `expr` under the `let` that gives the fresh name its expression, where there is one.
+    pub fn wrap(self, expr: Arc<ExprNode>) -> Arc<ExprNode> {
+        match self.binding {
+            Some((pat, bound)) => expr_let_typed(pat, bound, expr),
+            None => expr,
+        }
+    }
+}
+
 /// Generates `n` fresh names, each of which is absent from `ng_list`.
 pub fn generate_new_names(ng_list: &Set<FullName>, n: usize) -> Vec<FullName> {
     generate_new_names_pred(|name| ng_list.contains(name), n)
