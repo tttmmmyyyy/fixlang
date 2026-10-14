@@ -21,9 +21,7 @@ pub fn rename_free_names(expr: &Arc<ExprNode>, mut map: Map<FullName, FullName>)
         .into_iter()
         .map(|(from, to)| (from, expr_var(to, None)))
         .collect::<Map<FullName, Arc<ExprNode>>>();
-    let mut substitutor = Substitutor::new(map);
-    let res = substitutor.traverse(expr);
-    res.expr
+    substitute_free_names(expr, map)
 }
 
 /// Replaces the free occurrences of `from` in `expr` with `to`.
