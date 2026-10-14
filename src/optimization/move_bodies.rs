@@ -5,7 +5,7 @@ use super::{
     find_usage_of_name::{self, UsageType},
     inline_local,
     let_elimination::create_global_lambda_to_arity_map,
-    rename::substitute_free_name,
+    rename::substitute_free_names,
 };
 use crate::{
     ast::{
@@ -83,10 +83,7 @@ pub fn move_bodies_into_callers(
         }
         // The function is named by the call alone, so putting the body where its name stands leaves
         // the body applied to the arguments the call supplies.
-        let mut expr = caller_expr;
-        for (callee, body) in moved_bodies {
-            expr = substitute_free_name(&expr, &callee, &body);
-        }
+        let expr = substitute_free_names(&caller_expr, moved_bodies);
         let sym = symbols.get_mut(caller).unwrap();
         sym.expr = Some(expr);
         // Reduce what the substitution left: a lambda applied to the arguments the call supplies.
