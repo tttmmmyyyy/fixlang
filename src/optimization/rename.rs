@@ -48,6 +48,17 @@ pub fn substitute_free_name(
     res.expr
 }
 
+/// Replaces the free occurrences of each name of `map` in `expr` with the expression it maps to, all
+/// at once: a name occurring in one of those expressions is left as it is.
+pub fn substitute_free_names(
+    expr: &Arc<ExprNode>,
+    map: Map<FullName, Arc<ExprNode>>,
+) -> Arc<ExprNode> {
+    let mut substitutor = Substitutor::new(map);
+    let res = substitutor.traverse(expr);
+    res.expr
+}
+
 /// An ExprVisitor that performs substitution of free names in an expression, i.e. `{expr0}[x:={expr1}]`
 struct Substitutor {
     /// The mapping from names to the expressions they are replaced by.
