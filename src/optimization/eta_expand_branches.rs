@@ -56,8 +56,10 @@ shared while the longer-lived reference stands.
    type that holds no reference count. The lambda keeps them until the application, while the
    closure of the branch taken kept only what that branch read, and only the parts of the matched
    value its pattern bound. Keeping a value that holds no reference count longer changes no
-   reference count. The passes after this one only take reads away from a branch, so the lambda
-   they leave still captures nothing that holds one.
+   reference count. What the passes after this one put into a branch is the body of a lambda the
+   branch applies, the argument of an application, which the closure was handed at the same
+   point, or code of a global; none of these makes the lambda capture a local value it did not,
+   so the lambda they leave still captures nothing that holds one.
 3. Each branch is a chain of `let`s binding a name, a constant, a lambda or an unboxed struct of
    those, and ends in a name or a lambda. What a branch evaluates before the lambda it ends in
    moves under the lambda, so it is limited to what costs nothing to evaluate again. What it reads
