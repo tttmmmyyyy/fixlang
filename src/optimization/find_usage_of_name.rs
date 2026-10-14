@@ -68,6 +68,12 @@ impl UsageFinder<'_> {
 }
 
 impl ExprVisitor for UsageFinder<'_> {
+    // Whether the walk enters `expr`: only where the name occurs free in it. A subexpression the name
+    // is not free in holds no use of it, or only uses of an inner binding of the same name.
+    fn should_visit(&self, expr: &Arc<ExprNode>) -> bool {
+        expr.has_free_var(self.name)
+    }
+
     // The name standing anywhere the calls and the struct expressions below did not already take it
     // from is held as a value there, which is what `Elsewhere` records.
     fn start_visit_var(
