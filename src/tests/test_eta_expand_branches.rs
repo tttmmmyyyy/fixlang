@@ -83,7 +83,7 @@ mod tests {
     }
 
     /// One branch reads the counter of the loop and the other does not. A value without a reference
-    /// count costs nothing to keep longer, so the branches need not read the same ones of those.
+    /// count costs nothing to keep longer, so the branches may read different values of that kind.
     #[test]
     fn test_branches_reading_different_uncounted_values_build_no_closure() {
         let source = r#"

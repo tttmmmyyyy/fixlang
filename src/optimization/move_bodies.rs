@@ -29,7 +29,7 @@ use std::sync::Arc;
 /// # Arguments
 /// * `callees_by_caller` - for each symbol, the functions whose bodies are to be put where it calls
 ///   them.
-/// * `type_env` - the types of the program, which the reduction asks whether a value holds a
+/// * `type_env` - the types of the program, which tell the reduction whether a value holds a
 ///   reference count.
 pub fn move_bodies_into_callers(
     symbols: &mut Map<FullName, Symbol>,
