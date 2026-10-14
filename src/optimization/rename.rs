@@ -43,9 +43,7 @@ pub fn substitute_free_name(
 ) -> Arc<ExprNode> {
     let mut map = Map::default();
     map.insert(from.clone(), to.clone());
-    let mut substitutor = Substitutor::new(map);
-    let res = substitutor.traverse(expr);
-    res.expr
+    substitute_free_names(expr, map)
 }
 
 /// Replaces the free occurrences of each name of `map` in `expr` with the expression it maps to, all
