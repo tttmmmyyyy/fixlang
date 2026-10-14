@@ -54,10 +54,11 @@ the longer-lived reference stands.
 2. Each name a branch reads from outside it, of a type holding a reference count, is read by every
    branch. The lambda captures what all the branches read, while the closure of the branch taken
    captured only what that branch read.
-3. Each branch is a chain of `let`s binding a name, a constant, a lambda or an unboxed struct of
-   those, ending in a name or a lambda. What a branch evaluates before the lambda it ends in moves
-   under the lambda, so it is limited to what reads no reference-counted value at the point it
-   moves from and costs nothing to evaluate again.
+3. Each branch is a chain of `let`s, each binding one name that the rest of the branch reads to a
+   name, a constant, a lambda or an unboxed struct of those, and ends in a name or a lambda. What a
+   branch evaluates before the lambda it ends in moves under the lambda, so it is limited to what
+   costs nothing to evaluate again, and what it reads is kept by the lambda the branch ends in, as
+   the closure of the branch kept it.
 4. `m` is applied once, which is what lets `let_elimination` move it to the application. Without
    it, the rewrite leaves the closure as it was.
 
@@ -230,13 +231,18 @@ impl<'a> BranchEtaExpander<'a> {
         binds_all
     }
 
-    /// Is `branch` a chain of `let`s binding a name, a constant, a lambda or an unboxed struct of
-    /// those, ending in a name or a lambda? What such a branch evaluates is free to evaluate again,
-    /// and reads no value it does not keep (condition 3).
+    /// Is `branch` a chain of `let`s, each binding one name that the rest of the branch reads to a
+    /// name, a constant, a lambda or an unboxed struct of those, ending in a name or a lambda? What
+    /// such a branch evaluates is free to evaluate again, and reads no value it does not keep
+    /// (condition 3).
     fn is_cheap(&self, branch: &Arc<ExprNode>) -> bool {
         match &*branch.expr {
             Expr::Var(_) | Expr::Lam(_, _) => true,
-            Expr::Let(_, bound, value) => self.is_cheap_bound(bound) && self.is_cheap(value),
+            Expr::Let(pat, bound, value) => {
+                binds_a_name_read_by(pat, value)
+                    && self.is_cheap_bound(bound)
+                    && self.is_cheap(value)
+            }
             _ => false,
         }
     }
@@ -253,8 +259,10 @@ impl<'a> BranchEtaExpander<'a> {
                         .iter()
                         .all(|(_name, _src, field)| self.is_cheap_bound(field))
             }
-            Expr::Let(_, inner_bound, value) => {
-                self.is_cheap_bound(inner_bound) && self.is_cheap_bound(value)
+            Expr::Let(pat, inner_bound, value) => {
+                binds_a_name_read_by(pat, value)
+                    && self.is_cheap_bound(inner_bound)
+                    && self.is_cheap_bound(value)
             }
             _ => false,
         }
@@ -279,6 +287,12 @@ fn expanded_let(
     let arg = expr_var(param.clone(), None).set_type(param_ty.clone());
     let lam = expr_abs_typed(var_var(param), param_ty, expr_app_typed(chosen, vec![arg]));
     expr_let_typed(expr.get_let_pat(), lam, expr.get_let_value())
+}
+
+/// Does `pat` bind one name, which `value` reads? A binding nothing reads would release what it
+/// reads where it stands, and keep it under the lambda once moved there.
+fn binds_a_name_read_by(pat: &Arc<PatternNode>, value: &Arc<ExprNode>) -> bool {
+    pat.is_var() && value.has_free_var(&pat.get_var().name)
 }
 
 /// Is every set of `sets` the same?
