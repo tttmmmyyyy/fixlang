@@ -6,9 +6,9 @@ use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::typedecl::Field;
 use crate::constants::{
-    TraverserWorkType, BOOL_NAME, F32_NAME, F64_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME,
-    I8_NAME, PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, STRING_NAME, TRAVERSER_WORK_MARK_GLOBAL,
-    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U128_NAME,
+    TraverserWorkType, ARROW_NAME, BOOL_NAME, F32_NAME, F64_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME,
+    I8_NAME, IOSTATE_NAME, IO_NAME, PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, STRING_NAME, TRAVERSER_WORK_MARK_GLOBAL,
+    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TUPLE_NAME, TYPE_WILDCARD_VAR_PREFIX, U128_NAME,
     U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
@@ -16,9 +16,8 @@ use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use crate::error::Errors;
 use crate::fixstd::builtin::{
     get_tuple_n, is_array_storage_tycon, is_array_tycon, is_destructor_object_tycon,
-    is_dynamic_object_tycon, is_funptr_tycon, is_punched_array_tycon, make_array_tycon,
-    make_arrow_name_abs, make_arrow_tycon, make_funptr_tycon, make_io_tycon, make_iostate_name,
-    make_tuple_name_abs, make_unit_ty,
+    is_dynamic_object_tycon, is_funptr_tycon, is_punched_array_tycon, make_arrow_name_abs,
+    make_funptr_tycon, make_unit_ty,
 };
 use crate::generator::Generator;
 use crate::misc::{collect_results, number_to_varname, Map, Set};
@@ -294,21 +293,21 @@ impl TyCon {
 
     /// Whether this is the unit type `()`, i.e. the tuple of no element.
     pub fn is_unit(self: &TyCon) -> bool {
-        self.name == make_tuple_name_abs(0)
+        self.name.namespace.is(&[STD_NAME]) && self.name.name.strip_prefix(TUPLE_NAME) == Some("0")
     }
 
     /// Whether a value of this type crosses to C as one scalar: an integer, a floating point
     /// number, or a pointer, which C and Fix lay down the same way. These are the types a C
     /// function signature can name, and the types an exported Fix function can exchange.
     pub fn is_c_scalar(self: &TyCon) -> bool {
-        self.name.namespace == NameSpace::from_strs(&[STD_NAME])
+        self.name.namespace.is(&[STD_NAME])
             && C_SCALAR_NAMES.contains(&self.name.name.as_str())
     }
 
     /// Whether this is an integer type that carries a sign. Panics for a type that is not an
     /// integer type of `Std`.
     pub fn is_signed_integer(self: &TyCon) -> bool {
-        if self.name.namespace != NameSpace::from_strs(&[STD_NAME]) {
+        if !self.name.namespace.is(&[STD_NAME]) {
             panic!("call is_signed_integer for {}", self.to_string())
         }
         match self.name.name.as_str() {
@@ -328,30 +327,29 @@ impl TyCon {
 
     /// Whether this is the type `Bool` of `Std`.
     pub fn is_boolean(&self) -> bool {
-        return self.name == FullName::from_strs(&[STD_NAME], BOOL_NAME);
+        self.name.is(&[STD_NAME], BOOL_NAME)
     }
 
     /// Whether this is `I128` or `U128` of `Std`, the integer types wider than every integer type
     /// standard C has.
     pub fn is_128_bit_integer(&self) -> bool {
-        self.name == FullName::from_strs(&[STD_NAME], I128_NAME)
-            || self.name == FullName::from_strs(&[STD_NAME], U128_NAME)
+        self.name.is(&[STD_NAME], I128_NAME) || self.name.is(&[STD_NAME], U128_NAME)
     }
 
     /// Whether this is the type `String` of `Std`.
     pub fn is_string(&self) -> bool {
-        return self.name == FullName::from_strs(&[STD_NAME], STRING_NAME);
+        self.name.is(&[STD_NAME], STRING_NAME)
     }
 
     /// Whether this is the type constructor `IO`.
     pub fn is_io(&self) -> bool {
-        self == make_io_tycon().as_ref()
+        self.name.is(&[STD_NAME], IO_NAME)
     }
 
     /// Whether this is the type `IOState`, the token that an `IO` action threads.
     #[allow(dead_code)]
     pub fn is_iostate(&self) -> bool {
-        return self.name == make_iostate_name();
+        self.name.is(&[STD_NAME, IO_NAME], IOSTATE_NAME)
     }
 
     /// Renames this struct's type constructor to the one that stands for the struct with one field
@@ -365,15 +363,14 @@ impl TyCon {
     }
 
     /// Whether this is the type constructor `->` that heads a function type.
-    #[allow(dead_code)]
     pub fn is_arrow(&self) -> bool {
-        self == &make_arrow_tycon()
+        self.name.is(&[STD_NAME], ARROW_NAME)
     }
 
     /// Whether this is the type constructor `Std::Array`.
     #[allow(dead_code)]
     pub fn is_array(&self) -> bool {
-        self == &make_array_tycon()
+        is_array_tycon(self)
     }
 }
 
@@ -1398,7 +1395,7 @@ impl TypeNode {
     /// Whether this type is a function type `a -> b`, a value of which pairs the code to run with
     /// the values it captured.
     pub fn is_closure(&self) -> bool {
-        self.toplevel_tycon_satisfies(|tc| tc.name == make_arrow_name_abs())
+        self.toplevel_tycon_satisfies(TyCon::is_arrow)
     }
 
     /// Whether this type is one of the `Std::#FunPtr{n}` constructors, a pointer to code of `n`
@@ -1969,7 +1966,7 @@ impl TypeNode {
                             return format!("({})", arg_strs.join(", "));
                         }
                     }
-                    if tycon.name == make_arrow_name_abs() {
+                    if tycon.is_arrow() {
                         // `->` case.
                         // In this case we use special notation when the `Arrow` type is fully applied.
                         let args = self.collect_type_arguments();

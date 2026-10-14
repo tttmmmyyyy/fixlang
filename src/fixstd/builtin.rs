@@ -4,7 +4,7 @@ use crate::ast::{
         expr_abs, expr_abs_many, expr_app, expr_builtin, expr_if, expr_let, expr_make_struct,
         expr_var, var_local, AppSourceCodeOrderType, ExprNode,
     },
-    name::{FullName, Name, NameSpace},
+    name::{FullName, Name},
     pattern::PatternNode,
     predicate::Predicate,
     program::TypeEnv,
@@ -382,7 +382,7 @@ pub fn make_array_storage_ty(elem_ty: Arc<TypeNode>) -> Arc<TypeNode> {
 
 // Returns whether the given tycon is `#ArrayStorage`.
 pub fn is_array_storage_tycon(tc: &TyCon) -> bool {
-    tc.name == make_array_storage_name()
+    tc.name.is(&[STD_NAME], ARRAY_STORAGE_NAME)
 }
 
 pub fn make_destructor_name() -> FullName {
@@ -415,42 +415,31 @@ pub fn make_array_name() -> FullName {
 
 // If given tycon is function pointer, returns its arity
 pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
-    if tc.name.namespace != NameSpace::new(vec![STD_NAME.to_string()]) {
+    if !tc.name.namespace.is(&[STD_NAME]) {
         return None;
     }
-    if !tc.name.name.starts_with(FUNPTR_NAME) {
-        return None;
-    }
-    let mut chars = tc.name.name.chars();
-    for _ in 0..FUNPTR_NAME.len() {
-        chars.next();
-    }
-    let number = chars.as_str().to_string();
+    let number = tc.name.name.strip_prefix(FUNPTR_NAME)?;
     Some(number.parse::<u32>().unwrap())
 }
 
 // Returns whether given tycon is dyanmic object
 pub fn is_dynamic_object_tycon(tc: &TyCon) -> bool {
-    tc.name == make_dynamic_object_name()
+    tc.name.is(&[STD_NAME], DYNAMIC_OBJECT_NAME)
 }
 
 // Returns whether given tycon is Std::Destructor
 pub fn is_destructor_object_tycon(tc: &TyCon) -> bool {
-    tc.name == make_destructor_name()
+    tc.name.is(&[STD_NAME, FFI_NAME], DESTRUCTOR_NAME)
 }
 
 // Returns whether given tycon is array
 pub fn is_array_tycon(tc: &TyCon) -> bool {
-    *tc == make_array_tycon()
-}
-
-pub fn make_punched_array_tycon() -> TyCon {
-    TyCon::new(FullName::from_strs(&[STD_NAME], PUNCHED_ARRAY_NAME))
+    tc.name.is(&[STD_NAME], ARRAY_NAME)
 }
 
 // Returns whether given tycon is a punched array (`Std::PunchedArray`).
 pub fn is_punched_array_tycon(tc: &TyCon) -> bool {
-    *tc == make_punched_array_tycon()
+    tc.name.is(&[STD_NAME], PUNCHED_ARRAY_NAME)
 }
 
 // Make `Std::Boxed` trait.
@@ -889,18 +878,10 @@ pub fn make_io_unit_ty() -> Arc<TypeNode> {
 /// # Examples
 /// `get_tuple_n` of `Std::Tuple3` is `Some(3)`, and of `Std::Array` it is `None`.
 pub fn get_tuple_n(name: &FullName) -> Option<u32> {
-    if name.namespace != NameSpace::from_strs(&[STD_NAME]) {
+    if !name.namespace.is(&[STD_NAME]) {
         return None;
     }
-    if name.name.len() < TUPLE_NAME.len() {
-        return None;
-    }
-    let prefix = &name.name[..TUPLE_NAME.len()];
-    if prefix != TUPLE_NAME {
-        return None;
-    }
-    let number_str = &name.name[TUPLE_NAME.len()..];
-    number_str.parse::<u32>().ok()
+    name.name.strip_prefix(TUPLE_NAME)?.parse::<u32>().ok()
 }
 
 /// The declaration of the tuple type of `size` fields: an unboxed struct whose fields are named
@@ -9755,7 +9736,7 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 // Run either an IO or an IOState runner based on the type of the given value.
 pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
-    if io.ty.toplevel_tycon().unwrap().name == make_io_tycon().name {
+    if io.ty.toplevel_tycon().unwrap().is_io() {
         return run_io(gc, io);
     }
     // The other value run here is the runner an `IO` holds, which `run_ios_runner` applies to an

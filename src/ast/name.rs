@@ -87,6 +87,12 @@ impl NameSpace {
         Self::new(names.iter().map(|s| s.to_string()).collect())
     }
 
+    /// Whether the path holds exactly `names`, the outermost first; `is_absolute` takes no part, as
+    /// in equality. Equal to comparing with `NameSpace::from_strs(names)`, without building it.
+    pub fn is(&self, names: &[&str]) -> bool {
+        self.names == names
+    }
+
     /// Whether the path holds no name, as the path of a name written with no qualification does.
     pub fn is_local(&self) -> bool {
         self.names.len() == 0
@@ -300,6 +306,13 @@ impl FullName {
     /// The name `name` under the namespace `ns` spells out, the outermost name first.
     pub fn from_strs(ns: &[&str], name: &str) -> Self {
         Self::new(&NameSpace::from_strs(ns), name)
+    }
+
+    /// Whether this is the name `name` under the namespace `ns` spells out; `is_absolute` takes no
+    /// part, as in equality. Equal to comparing with `FullName::from_strs(ns, name)`, without
+    /// building it.
+    pub fn is(&self, ns: &[&str], name: &str) -> bool {
+        self.namespace.is(ns) && self.name == name
     }
 
     /// The name `name` written with no namespace.
