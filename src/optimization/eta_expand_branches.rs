@@ -72,12 +72,9 @@ A `match` takes two more:
    them a copy.
 */
 
-use std::sync::Arc;
 use crate::{
     ast::{
-        expr::{
-            expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_var, Expr, ExprNode,
-        },
+        expr::{expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_var, Expr, ExprNode},
         name::FullName,
         pattern::{Pattern, PatternNode},
         program::TypeEnv,
@@ -87,6 +84,7 @@ use crate::{
     misc::Set,
     optimization::{let_elimination, rename::generate_new_names},
 };
+use std::sync::Arc;
 
 /// Runs the transformation once over `expr`, and answers whether it rewrote anything.
 pub fn run_on_expr_once(expr: &mut Arc<ExprNode>, type_env: &TypeEnv) -> bool {
@@ -126,39 +124,46 @@ impl<'a> BranchEtaExpander<'a> {
         if !ty.is_closure() {
             return None;
         }
-        let (subject, read_by_branch, set_subject): (_, _, fn(&ExprNode, Arc<ExprNode>) -> Arc<ExprNode>) =
-            match &*bound.expr {
-                Expr::If(cond, then_expr, else_expr) => {
-                    let branches = [then_expr, else_expr];
-                    if !branches.iter().all(|branch| self.is_cheap(branch)) {
+        let (subject, read_by_branch, set_subject): (
+            _,
+            _,
+            fn(&ExprNode, Arc<ExprNode>) -> Arc<ExprNode>,
+        ) = match &*bound.expr {
+            Expr::If(cond, then_expr, else_expr) => {
+                let branches = [then_expr, else_expr];
+                if !branches.iter().all(|branch| self.is_cheap(branch)) {
+                    return None;
+                }
+                let read_by_branch = branches
+                    .iter()
+                    .map(|branch| self.counted_names_read(branch, &Set::default(), state))
+                    .collect::<Vec<_>>();
+                (cond, read_by_branch, ExprNode::set_if_cond)
+            }
+            Expr::Match(scrutinee, arms) => {
+                // Condition 6.
+                if !scrutinee.type_.as_ref().unwrap().is_unbox(self.type_env) {
+                    return None;
+                }
+                let mut read_by_branch = vec![];
+                for (arm_pat, arm_val) in arms {
+                    if !self.is_cheap(arm_val) {
                         return None;
                     }
-                    let read_by_branch = branches
-                        .iter()
-                        .map(|branch| self.counted_names_read(branch, &Set::default(), state))
-                        .collect::<Vec<_>>();
-                    (cond, read_by_branch, ExprNode::set_if_cond)
-                }
-                Expr::Match(scrutinee, arms) => {
-                    // Condition 6.
-                    if !scrutinee.type_.as_ref().unwrap().is_unbox(self.type_env) {
+                    // Condition 5.
+                    if !self.binds_every_counted_part(arm_pat, arm_val) {
                         return None;
                     }
-                    let mut read_by_branch = vec![];
-                    for (arm_pat, arm_val) in arms {
-                        if !self.is_cheap(arm_val) {
-                            return None;
-                        }
-                        // Condition 5.
-                        if !self.binds_every_counted_part(arm_pat, arm_val) {
-                            return None;
-                        }
-                        read_by_branch.push(self.counted_names_read(arm_val, &arm_pat.pattern.vars(), state));
-                    }
-                    (scrutinee, read_by_branch, ExprNode::set_match_cond)
+                    read_by_branch.push(self.counted_names_read(
+                        arm_val,
+                        &arm_pat.pattern.vars(),
+                        state,
+                    ));
                 }
-                _ => return None,
-            };
+                (scrutinee, read_by_branch, ExprNode::set_match_cond)
+            }
+            _ => return None,
+        };
         // Condition 2.
         if !all_equal(&read_by_branch) {
             return None;
