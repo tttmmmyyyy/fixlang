@@ -103,7 +103,7 @@ pub fn run(prg: &mut Program) {
             callees_by_caller.insert(name.clone(), mover.callees);
         }
     }
-    move_bodies_into_callers(&mut prg.symbols, &callees_by_caller);
+    move_bodies_into_callers(&mut prg.symbols, &callees_by_caller, &prg.type_env);
 }
 
 /// The name an op declaring `BuiltinOp::env_operand` applies as a function, if `builtin` is such an

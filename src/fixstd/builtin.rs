@@ -1184,6 +1184,12 @@ impl BuiltinOp for StringBufOp {
         vec![]
     }
 
+    /// The array is a constant in the program's data, so a copy of the literal where the value is
+    /// named costs what naming it costs.
+    fn is_free_to_duplicate(&self) -> bool {
+        true
+    }
+
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,

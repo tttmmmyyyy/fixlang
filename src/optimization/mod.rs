@@ -6,6 +6,7 @@ mod constant_array_literals;
 mod dead_symbol_elimination;
 mod decapture_scope_functions;
 mod defunctionalize_fix;
+mod eta_expand_branches;
 #[allow(dead_code)]
 mod eta_expansion;
 mod find_usage_of_name;

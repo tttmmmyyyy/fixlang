@@ -91,6 +91,14 @@ pub fn run_on_expr_once(
     res.changed
 }
 
+/// Is `name` read once in `expr`, as the function of an application, and nowhere as an argument of
+/// a builtin expression? That is the use condition 2-a asks of a name bound to a lambda.
+pub fn is_applied_once(name: &FullName, expr: &Arc<ExprNode>) -> bool {
+    let mut probe = FreeOccurrenceProbe::new(name.clone());
+    probe.traverse(expr);
+    probe.count == 1 && probe.is_applied && !probe.is_argument_to_builtin
+}
+
 /// The walk that eliminates the `let`s and the renaming `match`es of an expression, by the
 /// conditions the module documentation lists.
 struct LetEliminator<'a> {

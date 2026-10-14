@@ -84,7 +84,7 @@ pub fn run(prg: &mut Program) {
             // holding a lambda is bound to a name, and the reader handed that name calls it, so the
             // lambda stands bound to a name and applied at its one use — a closure the program
             // would build on the heap and call through.
-            inline_local::run_on_symbol(sym, &global_lambda_to_arity);
+            inline_local::run_on_symbol(sym, &global_lambda_to_arity, &type_env);
         }
     }
 }

@@ -743,7 +743,7 @@ fn realize_all(
     // been offered a body: the value a loop body returns each round, for one, is built in the lambda
     // and taken apart in the copy of `Std::loop` that calls it, and the simplifier cancels the two
     // only once they stand in one function.
-    move_bodies_into_callers(&mut symbols, &specialized_lambdas);
+    move_bodies_into_callers(&mut symbols, &specialized_lambdas, &prg.type_env);
 
     prg.symbols = symbols;
 }

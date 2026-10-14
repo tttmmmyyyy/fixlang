@@ -1,0 +1,320 @@
+/*
+# Eta expansion of a branch that chooses a function
+
+## Overview
+
+This transformation rewrites a `let` binding a function that an `if` or a `match` chooses, and that
+is applied once:
+
+```
+let m = if c { {e0} } else { {e1} } in {e2}
+```
+
+is transformed into
+
+```
+let b = c in let m = |x| (if b { {e0} } else { {e1} })(x) in {e2}
+```
+
+and
+
+```
+let m = match s { p0 => {e0}, p1 => {e1} } in {e2}
+```
+
+into
+
+```
+let v = s in let m = |x| (match v { p0 => {e0}, p1 => {e1} })(x) in {e2}
+```
+
+## Purpose
+
+A value of a monad such as `IO` is a function once `unwrap_newtype` has taken its struct apart, so
+`if c { print("a") } else { print("b") }` is an `if` choosing between two lambdas. Bound by a `let`
+and applied inside the lambda that `bind` builds for what follows, it is applied where neither
+`application_inlining` nor `let_elimination` reaches: the application's function is a name, and
+`let_elimination` moves a `let` into a lambda only where it binds a lambda. The `if` is left
+building the closure of the branch taken, at every evaluation, and the application calls it through
+a function pointer.
+
+After this transformation, `m` binds a lambda applied once, which `let_elimination` moves to the
+application (its condition 2-a), and `application_inlining` then pushes the application into the
+branches and reduces it against the lambda each branch ends in. No closure is built.
+
+## Conditions
+
+The rewrite moves the branches under a lambda, where they are evaluated at the application instead
+of at the `let`. It fires only where that leaves every value's lifetime as it was, since a value
+living longer can turn an in-place update of it into a copy: an update reads the value shared while
+the longer-lived reference stands.
+
+1. The condition of an `if`, or the matched value of a `match`, is evaluated where it was, and bound
+   to a name, so the lambda reads only that name.
+2. Each name a branch reads from outside it, of a type holding a reference count, is read by every
+   branch. The lambda captures what all the branches read, while the closure of the branch taken
+   captured only what that branch read.
+3. Each branch is a chain of `let`s binding a name, a constant, a lambda or an unboxed struct of
+   those, ending in a name or a lambda. What a branch evaluates before the lambda it ends in moves
+   under the lambda, so it is limited to what reads no reference-counted value at the point it
+   moves from and costs nothing to evaluate again.
+4. `m` is applied once, which is what lets `let_elimination` move it to the application. Without
+   it, the rewrite leaves the closure as it was.
+
+A `match` takes two more:
+
+5. Each pattern binds every part of the matched value that holds a reference count, and the branch
+   reads each name doing so. The lambda captures the matched value whole, where the closure of the
+   branch taken captured only what its pattern bound and its body read: a part the pattern drops
+   was released at the `match`, and would live under the lambda until the application.
+6. The matched value is of an unboxed type. The box of a boxed value is an object of its own that
+   other places may point at, and the lambda holding it would make an in-place update through
+   them a copy.
+*/
+
+use std::sync::Arc;
+
+use crate::{
+    ast::{
+        expr::{
+            expr_abs_typed, expr_app_typed, expr_if_typed, expr_let_typed, expr_match_typed,
+            expr_var, var_var, Expr, ExprNode,
+        },
+        name::FullName,
+        pattern::{Pattern, PatternNode},
+        program::TypeEnv,
+        traverse::{EndVisitResult, ExprVisitor, VisitState},
+        types::TypeNode,
+    },
+    misc::Set,
+    optimization::{let_elimination, rename::generate_new_names},
+};
+
+/// Runs the transformation once over `expr`, and answers whether it rewrote anything.
+pub fn run_on_expr_once(expr: &mut Arc<ExprNode>, type_env: &TypeEnv) -> bool {
+    let mut expander = BranchEtaExpander { type_env };
+    let res = expander.traverse(expr);
+    *expr = res.expr;
+    res.changed
+}
+
+/// The walk that rewrites each `let` the module documentation describes.
+struct BranchEtaExpander<'a> {
+    /// The types of the program, which say whether a value holds a reference count.
+    type_env: &'a TypeEnv,
+}
+
+impl<'a> ExprVisitor for BranchEtaExpander<'a> {
+    /// Rewrites a `let` binding a function an `if` or a `match` chooses, where the conditions of the
+    /// module documentation hold.
+    fn end_visit_let(&mut self, expr: &Arc<ExprNode>, state: &mut VisitState) -> EndVisitResult {
+        match self.expand(expr, state) {
+            Some(expr) => EndVisitResult::changed(expr),
+            None => EndVisitResult::unchanged(expr),
+        }
+    }
+}
+
+impl<'a> BranchEtaExpander<'a> {
+    /// The rewritten `let`, or `None` where `expr` is not of the form the module documentation
+    /// describes or a condition fails.
+    fn expand(&self, expr: &Arc<ExprNode>, state: &VisitState) -> Option<Arc<ExprNode>> {
+        let pat = expr.get_let_pat();
+        if !pat.is_var() {
+            return None;
+        }
+        let bound = expr.get_let_bound();
+        let value = expr.get_let_value();
+        let ty = bound.type_.clone()?;
+        if !ty.is_closure() {
+            return None;
+        }
+        // Condition 4.
+        if !let_elimination::is_applied_once(&pat.get_var().name, &value) {
+            return None;
+        }
+
+        // The names the new binders avoid: every name free in the `let`, and the name it binds.
+        let mut black_list = expr.free_vars();
+        black_list.insert(pat.get_var().name.clone());
+        match &*bound.expr {
+            Expr::If(cond, then_expr, else_expr) => {
+                let branches = [then_expr.clone(), else_expr.clone()];
+                if !branches.iter().all(|branch| self.is_cheap(branch)) {
+                    return None;
+                }
+                let read = branches
+                    .iter()
+                    .map(|branch| self.counted_names_read(branch, &Set::default(), state))
+                    .collect::<Vec<_>>();
+                if !all_equal(&read) {
+                    return None;
+                }
+                let (cond, cond_binding) = bind_to_name(cond, &mut black_list);
+                let chosen = expr_if_typed(cond, then_expr.clone(), else_expr.clone());
+                Some(self.rebuild(expr, chosen, cond_binding, &ty, &mut black_list))
+            }
+            Expr::Match(scrutinee, arms) => {
+                // Condition 6.
+                let scrutinee_ty = scrutinee.type_.clone()?;
+                if !is_concrete(&scrutinee_ty) || !scrutinee_ty.is_unbox(self.type_env) {
+                    return None;
+                }
+                let mut read = vec![];
+                for (arm_pat, arm_val) in arms {
+                    if !self.is_cheap(arm_val) {
+                        return None;
+                    }
+                    // Condition 5.
+                    if !self.binds_every_counted_part(arm_pat, arm_val) {
+                        return None;
+                    }
+                    read.push(self.counted_names_read(arm_val, &arm_pat.pattern.vars(), state));
+                }
+                if !all_equal(&read) {
+                    return None;
+                }
+                let (scrutinee, scrutinee_binding) = bind_to_name(scrutinee, &mut black_list);
+                let chosen = expr_match_typed(scrutinee, arms.clone());
+                Some(self.rebuild(expr, chosen, scrutinee_binding, &ty, &mut black_list))
+            }
+            _ => None,
+        }
+    }
+
+    /// `let {binding} in let m = |x| {chosen}(x) in {value}`, for the `let m = .. in {value}` that
+    /// `expr` is.
+    fn rebuild(
+        &self,
+        expr: &Arc<ExprNode>,
+        chosen: Arc<ExprNode>,
+        binding: Option<(Arc<PatternNode>, Arc<ExprNode>)>,
+        ty: &Arc<TypeNode>,
+        black_list: &mut Set<FullName>,
+    ) -> Arc<ExprNode> {
+        let param_ty = ty.get_lambda_srcs()[0].clone();
+        let param = generate_new_names(black_list, 1)[0].clone();
+        let arg = expr_var(param.clone(), None).set_type(param_ty.clone());
+        let lam = expr_abs_typed(var_var(param), param_ty, expr_app_typed(chosen, vec![arg]));
+        let rebuilt = expr_let_typed(expr.get_let_pat(), lam, expr.get_let_value());
+        match binding {
+            Some((pat, bound)) => expr_let_typed(pat, bound, rebuilt),
+            None => rebuilt,
+        }
+    }
+
+    /// The local names `branch` reads from outside it whose type holds a reference count, leaving
+    /// out `bound_by_pattern`. A name whose type is not known is counted as one holding a
+    /// reference count.
+    fn counted_names_read(
+        &self,
+        branch: &Arc<ExprNode>,
+        bound_by_pattern: &Set<FullName>,
+        state: &VisitState,
+    ) -> Set<FullName> {
+        branch
+            .free_vars()
+            .into_iter()
+            .filter(|name| name.is_local() && !bound_by_pattern.contains(name))
+            .filter(|name| {
+                let ty = state.scope.get_local(&name.name).flatten();
+                !ty.map_or(false, |ty| self.holds_no_count(&ty))
+            })
+            .collect()
+    }
+
+    /// Does `pat` bind every part of what it matches that holds a reference count, to a name that
+    /// `val` reads?
+    fn binds_every_counted_part(&self, pat: &Arc<PatternNode>, val: &Arc<ExprNode>) -> bool {
+        let read = val.free_vars();
+        let mut binds_all = true;
+        pat.walk_nodes(&mut |node| {
+            let counted = !node
+                .info
+                .type_
+                .as_ref()
+                .map_or(false, |ty| self.holds_no_count(ty));
+            match &node.pattern {
+                Pattern::Var(var, _) => {
+                    if counted && !read.contains(&var.name) {
+                        binds_all = false;
+                    }
+                }
+                // A struct pattern written with `_` after its fields drops the fields it does
+                // not name.
+                Pattern::Struct(_, _, leaves_out_fields) => {
+                    if counted && *leaves_out_fields {
+                        binds_all = false;
+                    }
+                }
+                Pattern::Union(..) => {}
+            }
+        });
+        binds_all
+    }
+
+    /// Is `branch` a chain of `let`s binding a name, a constant, a lambda or an unboxed struct of
+    /// those, ending in a name or a lambda? What such a branch evaluates is free to evaluate again,
+    /// and reads no value it does not keep (condition 3).
+    fn is_cheap(&self, branch: &Arc<ExprNode>) -> bool {
+        match &*branch.expr {
+            Expr::Var(_) | Expr::Lam(_, _) => true,
+            Expr::Let(_, bound, value) => self.is_cheap_bound(bound) && self.is_cheap(value),
+            _ => false,
+        }
+    }
+
+    /// Is `bound` a name, a constant, a lambda, an unboxed struct of those, or a chain of `let`s of
+    /// those ending in one?
+    fn is_cheap_bound(&self, bound: &Arc<ExprNode>) -> bool {
+        match &*bound.expr {
+            Expr::Var(_) | Expr::Lam(_, _) => true,
+            Expr::Builtin(builtin) => builtin.op.is_free_to_duplicate(),
+            Expr::MakeStruct(_, fields) => {
+                bound
+                    .type_
+                    .as_ref()
+                    .map_or(false, |ty| is_concrete(ty) && ty.is_unbox(self.type_env))
+                    && fields
+                        .iter()
+                        .all(|(_name, _src, field)| self.is_cheap_bound(field))
+            }
+            Expr::Let(_, inner_bound, value) => {
+                self.is_cheap_bound(inner_bound) && self.is_cheap_bound(value)
+            }
+            _ => false,
+        }
+    }
+
+    /// Does a value of `ty` hold no reference count?
+    fn holds_no_count(&self, ty: &Arc<TypeNode>) -> bool {
+        is_concrete(ty) && ty.is_fully_unboxed(self.type_env)
+    }
+}
+
+/// Is `ty` free of type variables, so that the declarations of its type constructors answer what it
+/// holds?
+fn is_concrete(ty: &Arc<TypeNode>) -> bool {
+    ty.free_vars_vec().is_empty()
+}
+
+/// Is every set of `sets` the same?
+fn all_equal(sets: &[Set<FullName>]) -> bool {
+    sets.windows(2).all(|pair| pair[0] == pair[1])
+}
+
+/// `expr` as a name: `expr` itself where it is one, or a fresh name avoiding `black_list`, together
+/// with the binding that gives it `expr`.
+fn bind_to_name(
+    expr: &Arc<ExprNode>,
+    black_list: &mut Set<FullName>,
+) -> (Arc<ExprNode>, Option<(Arc<PatternNode>, Arc<ExprNode>)>) {
+    if expr.is_var() {
+        return (expr.clone(), None);
+    }
+    let ty = expr.type_.as_ref().unwrap().clone();
+    let name = generate_new_names(black_list, 1)[0].clone();
+    black_list.insert(name.clone());
+    let pat = PatternNode::make_var(var_var(name.clone()), None).set_type(ty.clone());
+    (expr_var(name, None).set_type(ty), Some((pat, expr.clone())))
+}

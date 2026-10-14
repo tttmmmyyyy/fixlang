@@ -35,6 +35,7 @@ mod test_develop_mode;
 mod test_doc_test;
 mod test_docs;
 mod test_dynamic_library;
+mod test_eta_expand_branches;
 mod test_evaluation_order;
 mod test_explicit_import;
 mod test_external_projects;

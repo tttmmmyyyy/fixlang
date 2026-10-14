@@ -1,34 +1,42 @@
 use crate::{
     ast::{
         name::FullName,
-        program::{Program, Symbol},
+        program::{Program, Symbol, TypeEnv},
     },
     misc::Map,
-    optimization::{application_inlining, let_elimination},
+    optimization::{application_inlining, eta_expand_branches, let_elimination},
 };
 
 /// Inline the local functions of every symbol of `prg`.
 pub fn run(prg: &mut Program) {
     let global_lambda_to_arity = let_elimination::create_global_lambda_to_arity_map(&prg.symbols);
+    let type_env = prg.type_env.clone();
     for (_name, sym) in &mut prg.symbols {
-        run_on_symbol(sym, &global_lambda_to_arity);
+        run_on_symbol(sym, &global_lambda_to_arity, &type_env);
     }
 }
 
-/// Inline the local functions of one symbol: eliminate a `let` that binds a lambda, and reduce an
-/// application of a lambda, until neither applies. Together the two turn `let f = |x| {e0}; f(y)`
-/// into `{e0}[x := y]`.
+/// Inline the local functions of one symbol: eliminate a `let` that binds a lambda, reduce an
+/// application of a lambda, and turn a `let` binding a function an `if` or a `match` chooses into
+/// one binding a lambda, until none applies. Together the first two turn `let f = |x| {e0}; f(y)`
+/// into `{e0}[x := y]`, and the third gives them that shape where a branch chooses `f`.
 ///
 /// # Arguments
 /// * `global_lambda_to_arity` - how many parameters each global lambda takes, which is what decides
 ///   whether a `let` binding one of them may be eliminated.
-pub fn run_on_symbol(sym: &mut Symbol, global_lambda_to_arity: &Map<FullName, usize>) {
+/// * `type_env` - the types of the program, which say whether a value holds a reference count.
+pub fn run_on_symbol(
+    sym: &mut Symbol,
+    global_lambda_to_arity: &Map<FullName, usize>,
+    type_env: &TypeEnv,
+) {
     assert_recorded_arity_holds(sym, global_lambda_to_arity);
     let mut expr = sym.expr.as_ref().unwrap().clone();
     loop {
         let mut changed = false;
         changed |= let_elimination::run_on_expr_once(&mut expr, global_lambda_to_arity);
         changed |= application_inlining::run_on_expr_once(&mut expr);
+        changed |= eta_expand_branches::run_on_expr_once(&mut expr, type_env);
         if !changed {
             break;
         }

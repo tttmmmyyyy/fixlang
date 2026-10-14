@@ -8,7 +8,11 @@ use super::{
     rename::substitute_free_name,
 };
 use crate::{
-    ast::{expr::ExprNode, name::FullName, program::Symbol},
+    ast::{
+        expr::ExprNode,
+        name::FullName,
+        program::{Symbol, TypeEnv},
+    },
     misc::Map,
 };
 use std::sync::Arc;
@@ -25,9 +29,12 @@ use std::sync::Arc;
 /// # Arguments
 /// * `callees_by_caller` - for each symbol, the functions whose bodies are to be put where it calls
 ///   them.
+/// * `type_env` - the types of the program, which the reduction asks whether a value holds a
+///   reference count.
 pub fn move_bodies_into_callers(
     symbols: &mut Map<FullName, Symbol>,
     callees_by_caller: &Map<FullName, Vec<FullName>>,
+    type_env: &TypeEnv,
 ) {
     let bodies = callees_by_caller
         .iter()
@@ -85,7 +92,7 @@ pub fn move_bodies_into_callers(
         // Reduce what the substitution left: a lambda applied to the arguments the call supplies.
         // Left standing, that application is a closure the program builds on the heap and calls
         // through.
-        inline_local::run_on_symbol(sym, &arity_map);
+        inline_local::run_on_symbol(sym, &arity_map, type_env);
     }
 }
 

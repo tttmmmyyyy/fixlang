@@ -150,7 +150,7 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
         if res.changed {
             changed = true;
             sym.expr = Some(res.expr);
-            inline_local::run_on_symbol(&mut sym, &global_lambda_to_arity);
+            inline_local::run_on_symbol(&mut sym, &global_lambda_to_arity, &prg.type_env);
         } else if !inliner.refused_for_budget {
             // A round that substituted nothing and refused nothing has reached the symbol's end
             // state. A symbol whose round refused a body it could not afford is asked again next
