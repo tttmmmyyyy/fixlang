@@ -127,6 +127,13 @@ impl Substitutor {
 }
 
 impl ExprVisitor for Substitutor {
+    /// Whether the walk enters `expr`: only where a name the map replaces occurs free in it. Nothing
+    /// else in `expr` changes, a binder included, since a binder is renamed only so that a
+    /// replacement under it does not capture it.
+    fn should_visit(&self, expr: &Arc<ExprNode>) -> bool {
+        self.map.keys().any(|name| expr.has_free_var(name))
+    }
+
     /// Replaces a variable occurrence with the expression its name maps to, giving the replacement
     /// the occurrence's type when it carries none of its own.
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
