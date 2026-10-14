@@ -334,8 +334,8 @@ fn assert_no_global_is_kept_for(dump: &str, name: &str) {
 
 /// A program that names one global string from three places.
 ///
-/// Building the literal allocates a buffer and copies the bytes into it, so a global whose body is
-/// a literal costs one allocation where it is named once and three where it is named three times.
+/// A string literal evaluates to an array whose storage is a constant in the program's data, so a
+/// copy of the literal where the global is named costs what naming it costs.
 const STRING_GLOBAL_SOURCE: &str = r#"
     module Main;
 
@@ -361,13 +361,13 @@ const GREETING_BUF: &str = "string_buf(\"hello\")";
 /// The global the program names, as the RC IR dump spells it, before the suffix the compiler adds.
 const GREETING_GLOBAL: &str = "Main::greeting";
 
-/// A global whose body allocates stays in the global, and every name reads it from there.
+/// A global whose body is a string literal is put at every name.
 ///
-/// Building a string literal allocates a buffer and copies the bytes into it, so a copy of the body
-/// at each name is an allocation at each name. The program names `greeting` from three places, and
-/// the RC IR dump holds one construction of the literal.
+/// The literal reads its bytes out of a constant in the program's data, so a copy of it at each
+/// name allocates nothing, and the global it would otherwise stand in puts an initialization flag
+/// and a load in front of every read.
 #[test]
-fn test_a_global_string_is_built_once_however_many_places_name_it() {
+fn test_a_global_string_literal_is_put_at_every_name() {
     let dump = build_run_and_read_rc_ir(
         STRING_GLOBAL_SOURCE,
         "max",
@@ -376,28 +376,16 @@ fn test_a_global_string_is_built_once_however_many_places_name_it() {
     );
 
     let constructions = dump.matches(GREETING_BUF).count();
-
-    // The places the property is about: the value reaches a reader as a name of the global or as a
-    // copy of the construction, so this counts the readers either way, and falls only where a
-    // reader stopped reading.
-    let places = dump
-        .lines()
-        .filter(|line| line.contains(GREETING_GLOBAL) && !line.starts_with("global "))
-        .count()
-        + constructions;
     assert!(
-        places > 1,
-        "the program should hold `greeting` in more than one place, and it holds it in {}:\n{}",
-        places,
+        constructions > 1,
+        "`{}` should be at each of the three names of `{}`, and the dump holds {}:\n{}",
+        GREETING_BUF,
+        GREETING_GLOBAL,
+        constructions,
         dump
     );
 
-    assert_eq!(
-        constructions, 1,
-        "the literal of a global is built {} times, once for the global and once more wherever \
-         its body was put; the dump is:\n{}",
-        constructions, dump
-    );
+    assert_no_global_is_kept_for(&dump, GREETING_GLOBAL);
 }
 
 /// A program that names two globals whose bodies are literals from two places each.
