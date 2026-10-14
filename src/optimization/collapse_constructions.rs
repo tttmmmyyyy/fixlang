@@ -41,7 +41,7 @@ use crate::{
     misc::{Map, Set},
     optimization::{
         inline_local, let_elimination::create_global_lambda_to_arity_map, pull_let,
-        unique_local_names,
+        rename::names_bound_in, unique_local_names,
     },
 };
 use std::sync::Arc;
@@ -93,56 +93,6 @@ pub fn run(prg: &mut Program) {
 fn with_lets_pulled_out(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
     let expr = pull_let::run_on_expr(expr);
     unique_local_names::run_on_expr(&expr, Set::default())
-}
-
-/// Every local name `expr` binds: the parameters of its lambdas and the names its patterns bind.
-fn names_bound_in(expr: &Arc<ExprNode>) -> Set<FullName> {
-    let mut collector = BoundNameCollector {
-        names: Set::default(),
-    };
-    collector.traverse(expr);
-    collector.names
-}
-
-/// The walk of `names_bound_in`, carrying the names met so far.
-struct BoundNameCollector {
-    /// The names bound by the binders walked so far.
-    names: Set<FullName>,
-}
-
-impl ExprVisitor for BoundNameCollector {
-    /// Collects the parameters of a lambda.
-    fn start_visit_lam(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        self.names
-            .extend(expr.get_lam_params().iter().map(|param| param.name.clone()));
-        StartVisitResult::VisitChildren
-    }
-
-    /// Collects the names the pattern of a `let` binds.
-    fn start_visit_let(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        self.names.extend(expr.get_let_pat().pattern.vars());
-        StartVisitResult::VisitChildren
-    }
-
-    /// Collects the names the patterns of a `match` bind.
-    fn start_visit_match(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        _state: &mut VisitState,
-    ) -> StartVisitResult {
-        for (pat, _) in expr.get_match_pat_vals() {
-            self.names.extend(pat.pattern.vars());
-        }
-        StartVisitResult::VisitChildren
-    }
 }
 
 /// A value whose construction this walk has seen.

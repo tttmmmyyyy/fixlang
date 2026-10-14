@@ -56,8 +56,8 @@ mod tests {
         );
     }
 
-    /// A `match` on an `Option` choosing which of two actions to run, where the action of `some`
-    /// reads what the `Option` holds.
+    /// A `match` on an `Option` choosing which of two actions to run. The `Option` is read out of an
+    /// array, so the compiler cannot fold the `match` away.
     #[test]
     fn test_a_match_choosing_an_action_builds_no_closure() {
         let source = r#"
@@ -66,10 +66,11 @@ mod tests {
         main : IO ();
         main = (
             let n = (*get_args).@size * 6;
+            let picks = [some(0), none(), none()];
             loop_m(0, |i|
                 if i == n { break_m $ () };
-                let o = if i % 3 == 0 { some("a") } else { none() };
-                (match o { some(s) => print(s), none() => print("bc") });;
+                let o = picks.@(i % 3);
+                (match o { some(_) => print("a"), none() => print("bc") });;
                 continue_m $ i + 1
             );;
             println("")
@@ -240,8 +241,8 @@ mod tests {
         main = (
             let k = (*get_args).@size;
             let cell = Cell { v : 0 };
-            let o = if k == 1 { some("x") } else { none() };
-            let action = match o { some(s) => print(s), none() => IO::from_runner(|ios| (print(cell.@v.to_string).@runner)(ios)) };
+            let o = if k == 1 { some(1) } else { none() };
+            let action = match o { some(_) => print("x"), none() => IO::from_runner(|ios| (print(cell.@v.to_string).@runner)(ios)) };
             let (unique, cell) = cell.unsafe_is_unique;
             action;;
             println("");;
@@ -281,6 +282,125 @@ mod tests {
             source,
             "1\ntrue",
             "a `match` whose struct pattern leaves out the field holding a boxed value",
+        );
+    }
+
+    /// The pattern takes apart a boxed struct the `Option` holds, and binds only a field without a
+    /// reference count. The box is released where the `match` stands, so it is not kept by the
+    /// action.
+    #[test]
+    fn test_a_box_a_pattern_takes_apart_is_not_kept() {
+        let source = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : 5 };
+            let o = if k == 1 { some(cell) } else { none() };
+            let action = match o { some(Cell { v : v }) => IO::from_runner(|ios| (print(v.to_string).@runner)(ios)), none() => print("y") };
+            let (unique, cell) = cell.unsafe_is_unique;
+            action;;
+            println("");;
+            println(unique.to_string)
+        );
+        "#;
+        assert_the_value_stays_unique(
+            source,
+            "5\ntrue",
+            "a `match` whose pattern takes apart a boxed struct",
+        );
+    }
+
+    /// A struct pattern naming some of the fields without `_` drops the others, as one with `_`
+    /// does. The field it drops is not kept by the action.
+    #[test]
+    fn test_what_a_struct_pattern_without_a_wildcard_leaves_out_is_not_kept() {
+        let source = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+        type Pair = struct { c : Cell, n : I64 };
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : 0 };
+            let p = Pair { c : cell, n : k };
+            let action = match p { Pair { n } => IO::from_runner(|ios| (print(n.to_string).@runner)(ios)) };
+            let (unique, cell) = cell.unsafe_is_unique;
+            action;;
+            println("");;
+            println(unique.to_string)
+        );
+        "#;
+        assert_the_value_stays_unique(
+            source,
+            "1\ntrue",
+            "a `match` whose struct pattern names some of the fields without `_`",
+        );
+    }
+
+    /// The source of a program whose branches both read a boxed value when the action is chosen, and
+    /// in which the read of the branch taken goes away once `second6` is inlined: `second6`
+    /// answers with its second argument, through seven calls the inliner takes one round each.
+    /// `{action}` is replaced with the expression choosing the action.
+    const READ_THAT_GOES_AWAY_SOURCE: &str = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+
+        second0 : a -> b -> b;
+        second0 = |a, b| b;
+        second1 : a -> b -> b;
+        second1 = |a, b| second0(a, b);
+        second2 : a -> b -> b;
+        second2 = |a, b| second1(a, b);
+        second3 : a -> b -> b;
+        second3 = |a, b| second2(a, b);
+        second4 : a -> b -> b;
+        second4 = |a, b| second3(a, b);
+        second5 : a -> b -> b;
+        second5 = |a, b| second4(a, b);
+        second6 : a -> b -> b;
+        second6 = |a, b| second5(a, b);
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : 5 };
+            let action = {action};
+            let (unique, cell) = cell.unsafe_is_unique;
+            action;;
+            println("");;
+            println(unique.to_string)
+        );
+    "#;
+
+    /// The branch taken reads the boxed value when the action is chosen, and the read goes away once
+    /// the program is optimized, so the action keeps nothing. The value is not kept for the branch
+    /// not taken.
+    #[test]
+    fn test_a_read_that_goes_away_keeps_nothing() {
+        let if_source = READ_THAT_GOES_AWAY_SOURCE.replace(
+            "{action}",
+            "if k == 1 { IO::from_runner(|ios| (second6(cell, print(\"x\")).@runner)(ios)) } else { IO::from_runner(|ios| (print(cell.@v.to_string).@runner)(ios)) }",
+        );
+        assert_the_value_stays_unique(
+            &if_source,
+            "x\ntrue",
+            "an `if` whose branch taken reads a boxed value until it is optimized",
+        );
+        let match_source = READ_THAT_GOES_AWAY_SOURCE.replace(
+            "{action}",
+            "match (if k == 1 { some(cell) } else { none() }) { some(c) => IO::from_runner(|ios| (second6(c, print(\"x\")).@runner)(ios)), none() => print(\"y\") }",
+        );
+        assert_the_value_stays_unique(
+            &match_source,
+            "x\ntrue",
+            "a `match` whose arm taken reads the boxed value it binds until it is optimized",
         );
     }
 

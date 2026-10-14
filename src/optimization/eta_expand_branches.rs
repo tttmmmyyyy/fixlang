@@ -51,33 +51,23 @@ the longer-lived reference stands.
 
 1. The condition of an `if`, or the matched value of a `match`, is evaluated where it was, and bound
    to a name, so the lambda reads only that name.
-2. Each name a branch reads from outside it, of a type holding a reference count, is read by every
-   branch. The lambda captures what all the branches read, while the closure of the branch taken
-   captured only what that branch read.
-3. Each branch is a chain of `let`s, each binding one name that the rest of the branch reads to a
-   name, a constant, a lambda or an unboxed struct of those, and ends in a name or a lambda. What a
-   branch evaluates before the lambda it ends in moves under the lambda, so it is limited to what
-   costs nothing to evaluate again, and what it reads is kept by the lambda the branch ends in, as
-   the closure of the branch kept it.
+2. Nothing the lambda captures holds a reference count: each name a branch reads from outside it
+   has a type that holds none, and so does the matched value of a `match`, whose parts are what its
+   patterns bind. The lambda captures what all the branches read, and keeps it until the
+   application, where the closure of the branch taken kept only what that branch read; keeping a
+   value that holds no reference count longer changes no reference count. The passes after this
+   one only take reads away from a branch, so this stays true of the program they leave.
+3. Each branch is a chain of `let`s binding a name, a constant, a lambda or an unboxed struct of
+   those, and ends in a name or a lambda. What a branch evaluates before the lambda it ends in
+   moves under the lambda, so it is limited to what costs nothing to evaluate again.
 4. `m` is applied once, which is what lets `let_elimination` move it to the application. Without
    it, the rewrite leaves the closure as it was.
-
-A `match` takes two more:
-
-5. Each pattern binds every part of the matched value that holds a reference count, and the branch
-   reads each name doing so. The lambda captures the matched value whole, where the closure of the
-   branch taken captured only what its pattern bound and its body read: a part the pattern drops
-   was released at the `match`, and would live under the lambda until the application.
-6. The matched value is of an unboxed type. The box of a boxed value is an object of its own that
-   other places may point at, and the lambda holding it would make an in-place update through
-   them a copy.
 */
 
 use crate::{
     ast::{
         expr::{expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_var, Expr, ExprNode},
         name::FullName,
-        pattern::{Pattern, PatternNode},
         program::TypeEnv,
         traverse::{EndVisitResult, ExprVisitor, VisitState},
         types::TypeNode,
@@ -85,14 +75,16 @@ use crate::{
     misc::Set,
     optimization::{
         let_elimination,
-        rename::{generate_new_names, NamedExpr},
+        rename::{generate_new_names, names_bound_in, NamedExpr},
     },
 };
 use std::sync::Arc;
 
 /// Runs the transformation once over `expr`, and answers whether it rewrote anything.
 pub fn run_on_expr_once(expr: &mut Arc<ExprNode>, type_env: &TypeEnv) -> bool {
-    let mut expander = BranchEtaExpander { type_env };
+    let mut taken = names_bound_in(expr);
+    taken.extend(expr.free_vars());
+    let mut expander = BranchEtaExpander { type_env, taken };
     let res = expander.traverse(expr);
     *expr = res.expr;
     res.changed
@@ -102,6 +94,10 @@ pub fn run_on_expr_once(expr: &mut Arc<ExprNode>, type_env: &TypeEnv) -> bool {
 struct BranchEtaExpander<'a> {
     /// The types of the program, which say whether a value holds a reference count.
     type_env: &'a TypeEnv,
+    /// Every name the expression binds or reads, and every name the walk has minted. A new name
+    /// avoids all of them, so the names the rewrites of a chain of `let`s mint differ from one
+    /// another, and moving one rewritten `let` past another renames nothing.
+    taken: Set<FullName>,
 }
 
 impl<'a> ExprVisitor for BranchEtaExpander<'a> {
@@ -118,7 +114,7 @@ impl<'a> ExprVisitor for BranchEtaExpander<'a> {
 impl<'a> BranchEtaExpander<'a> {
     /// The rewritten `let`, for a `let` of the form the module documentation describes that meets
     /// its conditions.
-    fn expand(&self, expr: &Arc<ExprNode>, state: &VisitState) -> Option<Arc<ExprNode>> {
+    fn expand(&mut self, expr: &Arc<ExprNode>, state: &VisitState) -> Option<Arc<ExprNode>> {
         let pat = expr.get_let_pat();
         if !pat.is_var() {
             return None;
@@ -128,121 +124,71 @@ impl<'a> BranchEtaExpander<'a> {
         if !ty.is_closure() {
             return None;
         }
-        let (subject, read_by_branch, set_subject): (
-            _,
-            _,
-            fn(&ExprNode, Arc<ExprNode>) -> Arc<ExprNode>,
-        ) = match &*bound.expr {
-            Expr::If(cond, then_expr, else_expr) => {
-                let branches = [then_expr, else_expr];
-                if !branches.iter().all(|branch| self.is_cheap(branch)) {
-                    return None;
+        let (subject, set_subject): (_, fn(&ExprNode, Arc<ExprNode>) -> Arc<ExprNode>) =
+            match &*bound.expr {
+                Expr::If(cond, then_expr, else_expr) => {
+                    for branch in [then_expr, else_expr] {
+                        if !self.is_cheap(branch)
+                            || self.reads_counted_name(branch, &Set::default(), state)
+                        {
+                            return None;
+                        }
+                    }
+                    (cond, ExprNode::set_if_cond)
                 }
-                let read_by_branch = branches
-                    .iter()
-                    .map(|branch| self.counted_names_read(branch, &Set::default(), state))
-                    .collect::<Vec<_>>();
-                (cond, read_by_branch, ExprNode::set_if_cond)
-            }
-            Expr::Match(scrutinee, arms) => {
-                // Condition 6.
-                if !scrutinee.type_.as_ref().unwrap().is_unbox(self.type_env) {
-                    return None;
-                }
-                let mut read_by_branch = vec![];
-                for (arm_pat, arm_val) in arms {
-                    if !self.is_cheap(arm_val) {
+                Expr::Match(scrutinee, arms) => {
+                    if self.holds_count(scrutinee.type_.as_ref().unwrap()) {
                         return None;
                     }
-                    // Condition 5.
-                    if !self.binds_every_counted_part(arm_pat, arm_val) {
-                        return None;
+                    for (arm_pat, arm_val) in arms {
+                        if !self.is_cheap(arm_val)
+                            || self.reads_counted_name(arm_val, &arm_pat.pattern.vars(), state)
+                        {
+                            return None;
+                        }
                     }
-                    read_by_branch.push(self.counted_names_read(
-                        arm_val,
-                        &arm_pat.pattern.vars(),
-                        state,
-                    ));
+                    (scrutinee, ExprNode::set_match_cond)
                 }
-                (scrutinee, read_by_branch, ExprNode::set_match_cond)
-            }
-            _ => return None,
-        };
-        // Condition 2.
-        if !all_equal(&read_by_branch) {
-            return None;
-        }
+                _ => return None,
+            };
         // Condition 4.
         if !let_elimination::is_applied_once(&pat.get_var().name, &expr.get_let_value()) {
             return None;
         }
 
-        // The names the new binders avoid: every name free in the `let`, and the name it binds.
-        let mut black_list = expr.free_vars();
-        black_list.insert(pat.get_var().name.clone());
-        let subject = NamedExpr::new(subject, &black_list);
-        black_list.insert(subject.value.get_var().name.clone());
+        let subject = NamedExpr::new(subject, &self.taken);
+        self.taken.insert(subject.value.get_var().name.clone());
         let chosen = set_subject(&bound, subject.value.clone());
-        Some(subject.wrap(expanded_let(expr, chosen, &ty, &black_list)))
+        let param = generate_new_names(&self.taken, 1)[0].clone();
+        self.taken.insert(param.clone());
+        Some(subject.wrap(expanded_let(expr, chosen, &ty, param)))
     }
 
-    /// The local names `branch` reads from outside it whose type holds a reference count, leaving
-    /// out `bound_by_pattern`.
-    fn counted_names_read(
+    /// Does `branch` read, from outside it, a local name whose type holds a reference count? The
+    /// names in `bound_by_pattern` are bound for the branch, so they are left out.
+    fn reads_counted_name(
         &self,
         branch: &Arc<ExprNode>,
         bound_by_pattern: &Set<FullName>,
         state: &VisitState,
-    ) -> Set<FullName> {
+    ) -> bool {
         branch
             .free_vars()
             .into_iter()
             .filter(|name| name.is_local() && !bound_by_pattern.contains(name))
-            .filter(|name| {
+            .any(|name| {
                 let ty = state.scope.get_local(&name.name).unwrap().unwrap();
                 self.holds_count(&ty)
             })
-            .collect()
     }
 
-    /// Does `pat` bind every part of what it matches that holds a reference count, to a name that
-    /// `val` reads?
-    fn binds_every_counted_part(&self, pat: &Arc<PatternNode>, val: &Arc<ExprNode>) -> bool {
-        let names_read = val.free_vars();
-        let mut binds_all = true;
-        pat.walk_nodes(&mut |node| {
-            let counted = self.holds_count(node.info.type_.as_ref().unwrap());
-            match &node.pattern {
-                Pattern::Var(var, _) => {
-                    if counted && !names_read.contains(&var.name) {
-                        binds_all = false;
-                    }
-                }
-                // A struct pattern written with `_` after its fields drops the fields it does
-                // not name.
-                Pattern::Struct(_, _, leaves_out_fields) => {
-                    if counted && *leaves_out_fields {
-                        binds_all = false;
-                    }
-                }
-                Pattern::Union(..) => {}
-            }
-        });
-        binds_all
-    }
-
-    /// Is `branch` a chain of `let`s, each binding one name that the rest of the branch reads to a
-    /// name, a constant, a lambda or an unboxed struct of those, ending in a name or a lambda? What
-    /// such a branch evaluates is free to evaluate again, and reads no value it does not keep
+    /// Is `branch` a chain of `let`s binding a name, a constant, a lambda or an unboxed struct of
+    /// those, ending in a name or a lambda? What such a branch evaluates is free to evaluate again
     /// (condition 3).
     fn is_cheap(&self, branch: &Arc<ExprNode>) -> bool {
         match &*branch.expr {
             Expr::Var(_) | Expr::Lam(_, _) => true,
-            Expr::Let(pat, bound, value) => {
-                binds_a_name_read_by(pat, value)
-                    && self.is_cheap_bound(bound)
-                    && self.is_cheap(value)
-            }
+            Expr::Let(_, bound, value) => self.is_cheap_bound(bound) && self.is_cheap(value),
             _ => false,
         }
     }
@@ -259,10 +205,8 @@ impl<'a> BranchEtaExpander<'a> {
                         .iter()
                         .all(|(_name, _src, field)| self.is_cheap_bound(field))
             }
-            Expr::Let(pat, inner_bound, value) => {
-                binds_a_name_read_by(pat, value)
-                    && self.is_cheap_bound(inner_bound)
-                    && self.is_cheap_bound(value)
+            Expr::Let(_, inner_bound, value) => {
+                self.is_cheap_bound(inner_bound) && self.is_cheap_bound(value)
             }
             _ => false,
         }
@@ -275,27 +219,15 @@ impl<'a> BranchEtaExpander<'a> {
 }
 
 /// `let m = |x| {chosen}(x) in {value}`, for the `let m = .. in {value}` that `expr` is, where `m`
-/// has type `ty` and `x` is a fresh name avoiding `black_list`.
+/// has type `ty` and `x` is `param`.
 fn expanded_let(
     expr: &Arc<ExprNode>,
     chosen: Arc<ExprNode>,
     ty: &Arc<TypeNode>,
-    black_list: &Set<FullName>,
+    param: FullName,
 ) -> Arc<ExprNode> {
     let param_ty = ty.get_lambda_srcs()[0].clone();
-    let param = generate_new_names(black_list, 1)[0].clone();
     let arg = expr_var(param.clone(), None).set_type(param_ty.clone());
     let lam = expr_abs_typed(var_var(param), param_ty, expr_app_typed(chosen, vec![arg]));
     expr_let_typed(expr.get_let_pat(), lam, expr.get_let_value())
-}
-
-/// Does `pat` bind one name, which `value` reads? A binding nothing reads would release what it
-/// reads where it stands, and keep it under the lambda once moved there.
-fn binds_a_name_read_by(pat: &Arc<PatternNode>, value: &Arc<ExprNode>) -> bool {
-    pat.is_var() && value.has_free_var(&pat.get_var().name)
-}
-
-/// Is every set of `sets` the same?
-fn all_equal(sets: &[Set<FullName>]) -> bool {
-    sets.windows(2).all(|pair| pair[0] == pair[1])
 }
