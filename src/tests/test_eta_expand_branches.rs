@@ -82,6 +82,31 @@ mod tests {
         );
     }
 
+    /// One branch reads the counter of the loop and the other does not. A value without a reference
+    /// count costs nothing to keep longer, so the branches need not read the same ones of those.
+    #[test]
+    fn test_branches_reading_different_uncounted_values_build_no_closure() {
+        let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let n = (*get_args).@size * 6;
+            loop_m(0, |i|
+                if i == n { break_m $ () };
+                (if i % 3 == 0 { IO::from_runner(|ios| (print(i.to_string).@runner)(ios)) } else { print("_") });;
+                continue_m $ i + 1
+            );;
+            println("")
+        );
+        "#;
+        assert_no_io_closure_is_built(
+            source,
+            "0__3__",
+            "an `if` whose branches read different values without a reference count",
+        );
+    }
+
     /// Builds `source` at `-O max`, runs it, and asserts that it prints `expected_output`, one line
     /// of which says whether the value was unique where the program asked.
     fn assert_the_value_stays_unique(source: &str, expected_output: &str, description: &str) {
@@ -199,6 +224,63 @@ mod tests {
             source,
             "x\ntrue",
             "a `match` whose pattern drops the boxed value the `Option` holds",
+        );
+    }
+
+    /// One arm of a `match` keeps a boxed value for its action to read, and the arm taken does not.
+    /// The action of the arm taken keeps nothing, so the value is not kept.
+    #[test]
+    fn test_what_only_the_arm_not_taken_reads_is_not_kept() {
+        let source = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : 0 };
+            let o = if k == 1 { some("x") } else { none() };
+            let action = match o { some(s) => print(s), none() => IO::from_runner(|ios| (print(cell.@v.to_string).@runner)(ios)) };
+            let (unique, cell) = cell.unsafe_is_unique;
+            action;;
+            println("");;
+            println(unique.to_string)
+        );
+        "#;
+        assert_the_value_stays_unique(
+            source,
+            "x\ntrue",
+            "a `match` where the arm not taken keeps a boxed value",
+        );
+    }
+
+    /// The struct matched holds a boxed value, and the pattern leaves out the field holding it. The
+    /// value is not kept by the action.
+    #[test]
+    fn test_what_a_struct_pattern_leaves_out_is_not_kept() {
+        let source = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+        type Pair = struct { c : Cell, n : I64 };
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : 0 };
+            let p = Pair { c : cell, n : k };
+            let action = match p { Pair { n, _ } => IO::from_runner(|ios| (print(n.to_string).@runner)(ios)) };
+            let (unique, cell) = cell.unsafe_is_unique;
+            action;;
+            println("");;
+            println(unique.to_string)
+        );
+        "#;
+        assert_the_value_stays_unique(
+            source,
+            "1\ntrue",
+            "a `match` whose struct pattern leaves out the field holding a boxed value",
         );
     }
 
