@@ -77,8 +77,7 @@ use std::sync::Arc;
 use crate::{
     ast::{
         expr::{
-            expr_abs_typed, expr_app_typed, expr_if_typed, expr_let_typed, expr_match_typed,
-            expr_var, var_var, Expr, ExprNode,
+            expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_var, Expr, ExprNode,
         },
         name::FullName,
         pattern::{Pattern, PatternNode},
@@ -124,88 +123,62 @@ impl<'a> BranchEtaExpander<'a> {
             return None;
         }
         let bound = expr.get_let_bound();
-        let value = expr.get_let_value();
-        let ty = bound.type_.clone()?;
+        let ty = bound.type_.clone().unwrap();
         if !ty.is_closure() {
             return None;
         }
+        let (subject, read, set_subject): (_, _, fn(&ExprNode, Arc<ExprNode>) -> Arc<ExprNode>) =
+            match &*bound.expr {
+                Expr::If(cond, then_expr, else_expr) => {
+                    let branches = [then_expr, else_expr];
+                    if !branches.iter().all(|branch| self.is_cheap(branch)) {
+                        return None;
+                    }
+                    let read = branches
+                        .iter()
+                        .map(|branch| self.counted_names_read(branch, &Set::default(), state))
+                        .collect::<Vec<_>>();
+                    (cond, read, ExprNode::set_if_cond)
+                }
+                Expr::Match(scrutinee, arms) => {
+                    // Condition 6.
+                    if !scrutinee.type_.as_ref().unwrap().is_unbox(self.type_env) {
+                        return None;
+                    }
+                    let mut read = vec![];
+                    for (arm_pat, arm_val) in arms {
+                        if !self.is_cheap(arm_val) {
+                            return None;
+                        }
+                        // Condition 5.
+                        if !self.binds_every_counted_part(arm_pat, arm_val) {
+                            return None;
+                        }
+                        read.push(self.counted_names_read(arm_val, &arm_pat.pattern.vars(), state));
+                    }
+                    (scrutinee, read, ExprNode::set_match_cond)
+                }
+                _ => return None,
+            };
+        // Condition 2.
+        if !all_equal(&read) {
+            return None;
+        }
         // Condition 4.
-        if !let_elimination::is_applied_once(&pat.get_var().name, &value) {
+        if !let_elimination::is_applied_once(&pat.get_var().name, &expr.get_let_value()) {
             return None;
         }
 
         // The names the new binders avoid: every name free in the `let`, and the name it binds.
         let mut black_list = expr.free_vars();
         black_list.insert(pat.get_var().name.clone());
-        match &*bound.expr {
-            Expr::If(cond, then_expr, else_expr) => {
-                let branches = [then_expr.clone(), else_expr.clone()];
-                if !branches.iter().all(|branch| self.is_cheap(branch)) {
-                    return None;
-                }
-                let read = branches
-                    .iter()
-                    .map(|branch| self.counted_names_read(branch, &Set::default(), state))
-                    .collect::<Vec<_>>();
-                if !all_equal(&read) {
-                    return None;
-                }
-                let (cond, cond_binding) = bind_to_name(cond, &mut black_list);
-                let chosen = expr_if_typed(cond, then_expr.clone(), else_expr.clone());
-                Some(self.rebuild(expr, chosen, cond_binding, &ty, &mut black_list))
-            }
-            Expr::Match(scrutinee, arms) => {
-                // Condition 6.
-                let scrutinee_ty = scrutinee.type_.clone()?;
-                if !is_concrete(&scrutinee_ty) || !scrutinee_ty.is_unbox(self.type_env) {
-                    return None;
-                }
-                let mut read = vec![];
-                for (arm_pat, arm_val) in arms {
-                    if !self.is_cheap(arm_val) {
-                        return None;
-                    }
-                    // Condition 5.
-                    if !self.binds_every_counted_part(arm_pat, arm_val) {
-                        return None;
-                    }
-                    read.push(self.counted_names_read(arm_val, &arm_pat.pattern.vars(), state));
-                }
-                if !all_equal(&read) {
-                    return None;
-                }
-                let (scrutinee, scrutinee_binding) = bind_to_name(scrutinee, &mut black_list);
-                let chosen = expr_match_typed(scrutinee, arms.clone());
-                Some(self.rebuild(expr, chosen, scrutinee_binding, &ty, &mut black_list))
-            }
-            _ => None,
-        }
-    }
-
-    /// `let {binding} in let m = |x| {chosen}(x) in {value}`, for the `let m = .. in {value}` that
-    /// `expr` is.
-    fn rebuild(
-        &self,
-        expr: &Arc<ExprNode>,
-        chosen: Arc<ExprNode>,
-        binding: Option<(Arc<PatternNode>, Arc<ExprNode>)>,
-        ty: &Arc<TypeNode>,
-        black_list: &mut Set<FullName>,
-    ) -> Arc<ExprNode> {
-        let param_ty = ty.get_lambda_srcs()[0].clone();
-        let param = generate_new_names(black_list, 1)[0].clone();
-        let arg = expr_var(param.clone(), None).set_type(param_ty.clone());
-        let lam = expr_abs_typed(var_var(param), param_ty, expr_app_typed(chosen, vec![arg]));
-        let rebuilt = expr_let_typed(expr.get_let_pat(), lam, expr.get_let_value());
-        match binding {
-            Some((pat, bound)) => expr_let_typed(pat, bound, rebuilt),
-            None => rebuilt,
-        }
+        let (subject, binding) = bind_to_name(subject, &mut black_list);
+        let chosen = set_subject(&bound, subject);
+        Some(rebuild(expr, chosen, binding, &ty, &black_list))
     }
 
     /// The local names `branch` reads from outside it whose type holds a reference count, leaving
-    /// out `bound_by_pattern`. A name whose type is not known is counted as one holding a
-    /// reference count.
+    /// out `bound_by_pattern`.
     fn counted_names_read(
         &self,
         branch: &Arc<ExprNode>,
@@ -217,8 +190,8 @@ impl<'a> BranchEtaExpander<'a> {
             .into_iter()
             .filter(|name| name.is_local() && !bound_by_pattern.contains(name))
             .filter(|name| {
-                let ty = state.scope.get_local(&name.name).flatten();
-                !ty.map_or(false, |ty| self.holds_no_count(&ty))
+                let ty = state.scope.get_local(&name.name).unwrap().unwrap();
+                !self.holds_no_count(&ty)
             })
             .collect()
     }
@@ -229,11 +202,7 @@ impl<'a> BranchEtaExpander<'a> {
         let read = val.free_vars();
         let mut binds_all = true;
         pat.walk_nodes(&mut |node| {
-            let counted = !node
-                .info
-                .type_
-                .as_ref()
-                .map_or(false, |ty| self.holds_no_count(ty));
+            let counted = !self.holds_no_count(node.info.type_.as_ref().unwrap());
             match &node.pattern {
                 Pattern::Var(var, _) => {
                     if counted && !read.contains(&var.name) {
@@ -271,10 +240,7 @@ impl<'a> BranchEtaExpander<'a> {
             Expr::Var(_) | Expr::Lam(_, _) => true,
             Expr::Builtin(builtin) => builtin.op.is_free_to_duplicate(),
             Expr::MakeStruct(_, fields) => {
-                bound
-                    .type_
-                    .as_ref()
-                    .map_or(false, |ty| is_concrete(ty) && ty.is_unbox(self.type_env))
+                bound.type_.as_ref().unwrap().is_unbox(self.type_env)
                     && fields
                         .iter()
                         .all(|(_name, _src, field)| self.is_cheap_bound(field))
@@ -288,14 +254,28 @@ impl<'a> BranchEtaExpander<'a> {
 
     /// Does a value of `ty` hold no reference count?
     fn holds_no_count(&self, ty: &Arc<TypeNode>) -> bool {
-        is_concrete(ty) && ty.is_fully_unboxed(self.type_env)
+        ty.is_fully_unboxed(self.type_env)
     }
 }
 
-/// Is `ty` free of type variables, so that the declarations of its type constructors answer what it
-/// holds?
-fn is_concrete(ty: &Arc<TypeNode>) -> bool {
-    ty.free_vars_vec().is_empty()
+/// `let {binding} in let m = |x| {chosen}(x) in {value}`, for the `let m = .. in {value}` that `expr`
+/// is, where `m` has type `ty`.
+fn rebuild(
+    expr: &Arc<ExprNode>,
+    chosen: Arc<ExprNode>,
+    binding: Option<(Arc<PatternNode>, Arc<ExprNode>)>,
+    ty: &Arc<TypeNode>,
+    black_list: &Set<FullName>,
+) -> Arc<ExprNode> {
+    let param_ty = ty.get_lambda_srcs()[0].clone();
+    let param = generate_new_names(black_list, 1)[0].clone();
+    let arg = expr_var(param.clone(), None).set_type(param_ty.clone());
+    let lam = expr_abs_typed(var_var(param), param_ty, expr_app_typed(chosen, vec![arg]));
+    let rebuilt = expr_let_typed(expr.get_let_pat(), lam, expr.get_let_value());
+    match binding {
+        Some((pat, bound)) => expr_let_typed(pat, bound, rebuilt),
+        None => rebuilt,
+    }
 }
 
 /// Is every set of `sets` the same?
