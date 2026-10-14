@@ -116,8 +116,8 @@ impl<'a> ExprVisitor for BranchEtaExpander<'a> {
 }
 
 impl<'a> BranchEtaExpander<'a> {
-    /// The rewritten `let`, or `None` where `expr` is not of the form the module documentation
-    /// describes or a condition fails.
+    /// The rewritten `let`, for a `let` of the form the module documentation describes that meets
+    /// its conditions.
     fn expand(&self, expr: &Arc<ExprNode>, state: &VisitState) -> Option<Arc<ExprNode>> {
         let pat = expr.get_let_pat();
         if !pat.is_var() {
@@ -200,7 +200,7 @@ impl<'a> BranchEtaExpander<'a> {
             .filter(|name| name.is_local() && !bound_by_pattern.contains(name))
             .filter(|name| {
                 let ty = state.scope.get_local(&name.name).unwrap().unwrap();
-                !self.holds_no_count(&ty)
+                self.holds_count(&ty)
             })
             .collect()
     }
@@ -211,7 +211,7 @@ impl<'a> BranchEtaExpander<'a> {
         let names_read = val.free_vars();
         let mut binds_all = true;
         pat.walk_nodes(&mut |node| {
-            let counted = !self.holds_no_count(node.info.type_.as_ref().unwrap());
+            let counted = self.holds_count(node.info.type_.as_ref().unwrap());
             match &node.pattern {
                 Pattern::Var(var, _) => {
                     if counted && !names_read.contains(&var.name) {
@@ -268,9 +268,9 @@ impl<'a> BranchEtaExpander<'a> {
         }
     }
 
-    /// Does a value of `ty` hold no reference count?
-    fn holds_no_count(&self, ty: &Arc<TypeNode>) -> bool {
-        ty.is_fully_unboxed(self.type_env)
+    /// Does a value of `ty` hold a reference count?
+    fn holds_count(&self, ty: &Arc<TypeNode>) -> bool {
+        !ty.is_fully_unboxed(self.type_env)
     }
 }
 
