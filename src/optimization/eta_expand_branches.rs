@@ -127,25 +127,25 @@ impl<'a> BranchEtaExpander<'a> {
         if !ty.is_closure() {
             return None;
         }
-        let (subject, read, set_subject): (_, _, fn(&ExprNode, Arc<ExprNode>) -> Arc<ExprNode>) =
+        let (subject, read_by_branch, set_subject): (_, _, fn(&ExprNode, Arc<ExprNode>) -> Arc<ExprNode>) =
             match &*bound.expr {
                 Expr::If(cond, then_expr, else_expr) => {
                     let branches = [then_expr, else_expr];
                     if !branches.iter().all(|branch| self.is_cheap(branch)) {
                         return None;
                     }
-                    let read = branches
+                    let read_by_branch = branches
                         .iter()
                         .map(|branch| self.counted_names_read(branch, &Set::default(), state))
                         .collect::<Vec<_>>();
-                    (cond, read, ExprNode::set_if_cond)
+                    (cond, read_by_branch, ExprNode::set_if_cond)
                 }
                 Expr::Match(scrutinee, arms) => {
                     // Condition 6.
                     if !scrutinee.type_.as_ref().unwrap().is_unbox(self.type_env) {
                         return None;
                     }
-                    let mut read = vec![];
+                    let mut read_by_branch = vec![];
                     for (arm_pat, arm_val) in arms {
                         if !self.is_cheap(arm_val) {
                             return None;
@@ -154,14 +154,14 @@ impl<'a> BranchEtaExpander<'a> {
                         if !self.binds_every_counted_part(arm_pat, arm_val) {
                             return None;
                         }
-                        read.push(self.counted_names_read(arm_val, &arm_pat.pattern.vars(), state));
+                        read_by_branch.push(self.counted_names_read(arm_val, &arm_pat.pattern.vars(), state));
                     }
-                    (scrutinee, read, ExprNode::set_match_cond)
+                    (scrutinee, read_by_branch, ExprNode::set_match_cond)
                 }
                 _ => return None,
             };
         // Condition 2.
-        if !all_equal(&read) {
+        if !all_equal(&read_by_branch) {
             return None;
         }
         // Condition 4.
@@ -199,13 +199,13 @@ impl<'a> BranchEtaExpander<'a> {
     /// Does `pat` bind every part of what it matches that holds a reference count, to a name that
     /// `val` reads?
     fn binds_every_counted_part(&self, pat: &Arc<PatternNode>, val: &Arc<ExprNode>) -> bool {
-        let read = val.free_vars();
+        let names_read = val.free_vars();
         let mut binds_all = true;
         pat.walk_nodes(&mut |node| {
             let counted = !self.holds_no_count(node.info.type_.as_ref().unwrap());
             match &node.pattern {
                 Pattern::Var(var, _) => {
-                    if counted && !read.contains(&var.name) {
+                    if counted && !names_read.contains(&var.name) {
                         binds_all = false;
                     }
                 }
