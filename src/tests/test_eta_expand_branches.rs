@@ -6,7 +6,9 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_util::{build_run_and_read_rc_ir, build_within_and_run};
+    use crate::tests::test_util::{
+        build_and_run_within, build_run_and_read_rc_ir, build_within_and_run,
+    };
     use std::time::Duration;
 
     /// What a closure holding an `IO ()` action is declared as in the RC IR dump.
@@ -106,6 +108,37 @@ mod tests {
             "0__3__",
             "an `if` whose branches read different values without a reference count",
         );
+    }
+
+    /// The action is chosen once, before a loop of ten thousand rounds runs it, and the branch taken
+    /// computes the text it prints by a fold over ten million numbers before its action. That
+    /// computation stays where the action is chosen, so it runs once; moved under the lambda the
+    /// action becomes, it would run every round and take minutes.
+    #[test]
+    fn test_what_a_branch_computes_before_its_action_runs_once() {
+        let source = r#"
+        module Main;
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let action = if k == 1 { print(Iterator::range(0, 10000000).fold(0, |i, s| s + i % 7).to_string) } else { print("y") };
+            loop_m(0, |i|
+                if i == 10000 { break_m $ () };
+                action;;
+                continue_m $ i + 1
+            );;
+            println("")
+        );
+        "#;
+        let printed = build_and_run_within(
+            source,
+            "max",
+            &[],
+            Duration::from_secs(10),
+            "an action whose branch computes its text before the action, run ten thousand times",
+        );
+        assert_eq!(printed, "29999994".repeat(10000));
     }
 
     /// Builds `source` at `-O max`, runs it, and asserts that it prints `expected_output`, one line
