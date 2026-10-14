@@ -22,11 +22,10 @@
 //! A construction left with no reader goes with it, which is what keeps the reference it holds from
 //! being counted alongside the one the reader now has.
 //!
-//! A symbol the pass rewrote is then run to the fixpoint of `let_elimination` and
-//! `application_inlining`. The name the pass binds a field to is what carries a construction to its
-//! reader, and once the reading is done a name bound to a lambda and called at its one use is a
-//! closure the program would build on the heap; the fixpoint takes that one along with every other
-//! `let` those two reduce.
+//! A symbol the pass rewrote is then run through `inline_local`. The name the pass binds a field to
+//! is what carries a construction to its reader, and once the reading is done a name bound to a
+//! lambda and called at its one use is a closure the program would build on the heap;
+//! `inline_local` takes that one along with every other `let` it reduces.
 
 use crate::{
     ast::{
@@ -52,8 +51,8 @@ pub fn run(prg: &mut Program) {
     let type_env = prg.type_env.clone();
     // How many parameters each global lambda takes. Neither `Collapser` nor `inline_local`
     // shortens a symbol's leading run of lambdas, so one map answers for every symbol: `Collapser`
-    // rewrites what a construction's reader sees, and `let_elimination` and `application_inlining`
-    // expose a lambda without removing one.
+    // rewrites what a construction's reader sees, and the rewrites of `inline_local` expose or
+    // build a lambda without removing one.
     let global_lambda_to_arity = create_global_lambda_to_arity_map(&prg.symbols);
     for (_name, sym) in prg.symbols.iter_mut() {
         let mut expr = with_lets_pulled_out(sym.expr.as_ref().unwrap());
@@ -79,8 +78,8 @@ pub fn run(prg: &mut Program) {
         // they should meet as it was written.
         if read_any {
             sym.expr = Some(expr);
-            // Run the rewritten symbol to the fixpoint of `let_elimination` and
-            // `application_inlining`. Among what they take is the shape this pass writes: a field
+            // Run the rewritten symbol through `inline_local`. Among what it takes is the shape this
+            // pass writes: a field
             // holding a lambda is bound to a name, and the reader handed that name calls it, so the
             // lambda stands bound to a name and applied at its one use — a closure the program
             // would build on the heap and call through.

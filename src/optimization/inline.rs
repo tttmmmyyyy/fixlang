@@ -6,8 +6,8 @@
 //! What a copy of a global costs, and where it may be put, is what `InlineCost` holds:
 //! `may_be_inlined_at_non_call_site` answers for the places a global is named, and
 //! `may_be_inlined_at_call_site` for the places it is called. A round of substitution leaves a
-//! lambda applied where it stands, so a symbol the round rewrote is run to the fixpoint of
-//! `let_elimination` and `application_inlining` (`inline_local`), which reduces that shape.
+//! lambda applied where it stands, so a symbol the round rewrote is run through `inline_local`,
+//! which reduces that shape.
 //!
 //! Globals that name each other in a cycle never reach a program that stops changing, which is why
 //! the rewriting is bounded: `MAX_ROUNDS` bounds the rounds, and `MAX_NODES_SUBSTITUTED_PER_ROUND`
