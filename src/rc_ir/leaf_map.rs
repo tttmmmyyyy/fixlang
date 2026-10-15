@@ -368,7 +368,11 @@ mod tests {
         };
         let s_info = TyConInfo {
             fields: vec![
-                Field::make("w".to_string(), type_tycon(&tycon(w_tycon.name.clone())), None),
+                Field::make(
+                    "w".to_string(),
+                    type_tycon(&tycon(w_tycon.name.clone())),
+                    None,
+                ),
                 Field::make("n".to_string(), make_i64_ty(), None),
             ],
             ..s_info(0)
