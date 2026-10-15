@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use crate::ast::equality::Equality;
 use crate::ast::name::Name;
 use crate::ast::predicate::Predicate;

@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::Name;
 use crate::ast::program::EndNode;

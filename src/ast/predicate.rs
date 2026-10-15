@@ -1,5 +1,4 @@
 use std::sync::Arc;
-
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::program::EndNode;
 use crate::ast::traits::{TraitAliasEnv, TraitId};
