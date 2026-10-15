@@ -348,9 +348,9 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret
 }
 
-/// The name of a type the compiler declares: the namespace it lies in, as its path of names from the
-/// outermost, and its name there. Both the constructor of the type's `FullName` and the test of
-/// whether a `FullName` is it read the one constant that holds the name.
+/// The name of a type the compiler declares: the path of its namespace and its name there. Building
+/// the type's `FullName` and testing whether a `FullName` is the type both read one constant of this
+/// struct.
 pub struct BuiltinTypeName {
     /// The path of the namespace, the outermost name first.
     namespace: &'static [&'static str],

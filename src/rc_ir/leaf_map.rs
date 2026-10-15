@@ -64,8 +64,8 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
     out
 }
 
-/// The boxed leaf paths `boxed_leaf_paths` has worked out under one `TypeEnv`, by type, which it
-/// answers a later call for the same type from. The `TypeEnv` holds it, and only
+/// The boxed leaf paths that `boxed_leaf_paths` has worked out under one `TypeEnv`, by type. A later
+/// call for the same type reads its answer from here. The `TypeEnv` holds it, and only
 /// `boxed_leaf_paths` reads or writes it.
 #[derive(Default)]
 pub struct BoxedLeafPathsMemo(Mutex<Map<Arc<TypeNode>, Vec<FieldPath>>>);

@@ -113,8 +113,7 @@ impl TypeEnv {
     }
 
     /// The declaration of `tycon` if a value of it has become a value of its one field, and `None`
-    /// otherwise. A recorded newtype is one this environment declares, which `unwrap_newtypes`
-    /// states where it records them.
+    /// otherwise. `unwrap_newtypes` asserts that every newtype it records is declared here.
     pub fn unwrapped_newtype_info(&self, tycon: &TyCon) -> Option<&TyConInfo> {
         if !self.unwrapped_newtypes.contains(tycon) {
             return None;
@@ -128,8 +127,9 @@ impl TypeEnv {
     }
 
     /// Adds each declaration of `new_tycons` to this environment, replacing the one already held
-    /// under the same name, each with its field types unwrapped, so that a declaration minted after
-    /// the newtype-unwrapping pass answers as the ones that were there before it do.
+    /// under the same name. The field types of each are unwrapped as `unwrap_newtypes` unwraps those
+    /// already held, so a declaration added after that pass reads the same as one that was there
+    /// before it.
     pub fn add_tycons(&mut self, new_tycons: Map<TyCon, TyConInfo>) {
         let declared_type_env = self.clone();
         let mut tycons = self.tycons.as_ref().clone();
@@ -190,9 +190,8 @@ impl TypeEnv {
         }
     }
 
-    /// Makes every type written in the definition of a type constructor or a type alias of this
-    /// environment a full name, resolving each one in the module that declares the type constructor
-    /// or the alias.
+    /// Resolves every type name written in the definitions of the type constructors and the type
+    /// aliases of this environment to its full name, in the module that declares each definition.
     pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut tycons = (*self.tycons).clone();
         for (tc, ti) in &mut tycons {
