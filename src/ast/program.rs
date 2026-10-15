@@ -83,9 +83,10 @@ pub struct TypeEnv {
     unwrapped_newtypes: Arc<Set<TyCon>>,
     /// The boxed leaf paths `boxed_leaf_paths` has worked out under this environment.
     ///
-    /// The paths follow from the declarations in `tycons`, so `set_tycons` puts an empty memo here
-    /// whenever they are replaced. The clones of an environment share the memo until one of them
-    /// replaces its declarations.
+    /// The paths follow from `tycons` and `unwrapped_newtypes`. `set_tycons` puts an empty memo here
+    /// whenever the declarations are replaced, and `unwrap_newtypes`, the one place that replaces
+    /// `unwrapped_newtypes`, ends by calling it. The clones of an environment share the memo until
+    /// one of them replaces its declarations.
     boxed_leaf_paths_memo: Arc<BoxedLeafPathsMemo>,
 }
 
