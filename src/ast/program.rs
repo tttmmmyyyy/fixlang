@@ -2630,19 +2630,7 @@ impl Program {
         let env = self.create_name_resolution_env();
         let mut ctx = NameResolutionContext::new("NA".to_string(), env.clone());
 
-        // Resolve namespaces in type constructors.
-        self.type_env.resolve_namespace_in_tycons(&mut ctx)?;
-        // Resolve namespaces in type aliases.
-        {
-            let mut aliases = (*self.type_env.aliases).clone();
-            for (tc, ta) in &mut aliases {
-                let module = tc.name.module();
-                ctx.set_current_module(module);
-                ta.resolve_namespace(&mut ctx)?;
-            }
-            self.type_env.aliases = Arc::new(aliases);
-        }
-
+        self.type_env.resolve_namespace(&mut ctx)?;
         self.trait_env.resolve_namespace(&mut ctx)?;
 
         for decl in &mut self.type_defns {

@@ -190,18 +190,22 @@ impl TypeEnv {
         }
     }
 
-    /// Makes every type written in the definition of a type constructor of this environment a full
-    /// name, resolving each one in the module that declares the type constructor.
-    pub fn resolve_namespace_in_tycons(
-        &mut self,
-        ctx: &mut NameResolutionContext,
-    ) -> Result<(), Errors> {
+    /// Makes every type written in the definition of a type constructor or a type alias of this
+    /// environment a full name, resolving each one in the module that declares the type constructor
+    /// or the alias.
+    pub fn resolve_namespace(&mut self, ctx: &mut NameResolutionContext) -> Result<(), Errors> {
         let mut tycons = (*self.tycons).clone();
         for (tc, ti) in &mut tycons {
             ctx.set_current_module(tc.name.module());
             ti.resolve_namespace(ctx)?;
         }
         self.set_tycons(tycons);
+        let mut aliases = (*self.aliases).clone();
+        for (tc, ta) in &mut aliases {
+            ctx.set_current_module(tc.name.module());
+            ta.resolve_namespace(ctx)?;
+        }
+        self.aliases = Arc::new(aliases);
         Ok(())
     }
 
