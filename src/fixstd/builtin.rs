@@ -86,7 +86,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     );
 
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], PTR_NAME)),
+        TyCon::new(PTR_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -99,7 +99,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], U8_NAME)),
+        TyCon::new(U8_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -112,7 +112,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], I8_NAME)),
+        TyCon::new(I8_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -125,7 +125,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], U16_NAME)),
+        TyCon::new(U16_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -138,7 +138,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], I16_NAME)),
+        TyCon::new(I16_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -151,7 +151,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], I32_NAME)),
+        TyCon::new(I32_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -164,7 +164,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], U32_NAME)),
+        TyCon::new(U32_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -177,7 +177,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], I64_NAME)),
+        TyCon::new(I64_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -190,7 +190,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], U64_NAME)),
+        TyCon::new(U64_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -229,7 +229,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], F32_NAME)),
+        TyCon::new(F32_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -242,7 +242,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], F64_NAME)),
+        TyCon::new(F64_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -430,6 +430,72 @@ pub const STRING_TYPE: BuiltinTypeName = BuiltinTypeName {
     name: STRING_NAME,
 };
 
+/// `Std::Ptr`.
+pub const PTR_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: PTR_NAME,
+};
+
+/// `Std::U8`.
+pub const U8_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: U8_NAME,
+};
+
+/// `Std::I8`.
+pub const I8_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: I8_NAME,
+};
+
+/// `Std::U16`.
+pub const U16_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: U16_NAME,
+};
+
+/// `Std::I16`.
+pub const I16_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: I16_NAME,
+};
+
+/// `Std::U32`.
+pub const U32_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: U32_NAME,
+};
+
+/// `Std::I32`.
+pub const I32_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: I32_NAME,
+};
+
+/// `Std::U64`.
+pub const U64_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: U64_NAME,
+};
+
+/// `Std::I64`.
+pub const I64_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: I64_NAME,
+};
+
+/// `Std::F32`.
+pub const F32_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: F32_NAME,
+};
+
+/// `Std::F64`.
+pub const F64_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: F64_NAME,
+};
+
 /// `Std::I128`.
 pub const I128_TYPE: BuiltinTypeName = BuiltinTypeName {
     namespace: &[STD_NAME],
@@ -522,47 +588,47 @@ pub fn make_iostate_ty() -> Arc<TypeNode> {
 
 // Get Ptr type.
 pub fn make_ptr_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], PTR_NAME)))
+    type_tycon(&tycon(PTR_TYPE.to_fullname()))
 }
 
 // Get U8 type.
 pub fn make_u8_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U8_NAME)))
+    type_tycon(&tycon(U8_TYPE.to_fullname()))
 }
 
 // Get I8 type.
 pub fn make_i8_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I8_NAME)))
+    type_tycon(&tycon(I8_TYPE.to_fullname()))
 }
 
 // Get U16 type.
 pub fn make_u16_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U16_NAME)))
+    type_tycon(&tycon(U16_TYPE.to_fullname()))
 }
 
 // Get I16 type.
 pub fn make_i16_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I16_NAME)))
+    type_tycon(&tycon(I16_TYPE.to_fullname()))
 }
 
 // Get I32 type.
 pub fn make_i32_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I32_NAME)))
+    type_tycon(&tycon(I32_TYPE.to_fullname()))
 }
 
 // Get U32 type.
 pub fn make_u32_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U32_NAME)))
+    type_tycon(&tycon(U32_TYPE.to_fullname()))
 }
 
 // Get I64 type.
 pub fn make_i64_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I64_NAME)))
+    type_tycon(&tycon(I64_TYPE.to_fullname()))
 }
 
 // Get U64 type.
 pub fn make_u64_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U64_NAME)))
+    type_tycon(&tycon(U64_TYPE.to_fullname()))
 }
 
 // Get I128 type.
@@ -577,12 +643,12 @@ pub fn make_u128_ty() -> Arc<TypeNode> {
 
 // Get F32 type.
 pub fn make_f32_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], F32_NAME)))
+    type_tycon(&tycon(F32_TYPE.to_fullname()))
 }
 
 // Get F64 type.
 pub fn make_f64_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], F64_NAME)))
+    type_tycon(&tycon(F64_TYPE.to_fullname()))
 }
 
 // Get Bool type.
