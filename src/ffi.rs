@@ -168,8 +168,8 @@ impl CNumericTypes {
     }
 
     /// The C numeric types, each paired with the sign and the bit width of the Fix type it is an
-    /// alias of. The name built from those two must be the name of one of `C_SCALAR_TYPES`, which is the set
-    /// `TyCon::get_c_type` can map.
+    /// alias of. Those two spell the name of a `Std` type, which must be one of `C_SCALAR_TYPES`,
+    /// the types `TyCon::get_c_type` can map.
     pub fn get_c_types(&self) -> Vec<(&str, &str, usize)> {
         vec![
             (

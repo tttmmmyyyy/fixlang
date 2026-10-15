@@ -1840,9 +1840,9 @@ pub fn test_ffi_call_wrong_argument_count() {
     );
 }
 
-/// The types that cross to C as one scalar are those of `Std`. A type a program declares under one
-/// of their names is a type of its own namespace, and a struct of one field is a struct: it crosses
-/// neither through the `...` of an `FFI_CALL` nor at an exported signature.
+/// Verifies that only the `Std` types cross to C as one scalar value. A type a program declares
+/// under the same name, here a one-field struct `Main::I32`, is rejected both in the `...` of an
+/// `FFI_CALL` and in the signature of an exported function.
 #[test]
 pub fn test_type_named_like_a_c_scalar_outside_std_does_not_cross_to_c() {
     let declarations = r##"

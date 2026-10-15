@@ -208,8 +208,8 @@ pub enum TyConVariant {
     Opaque,
 }
 
-/// The types that cross to C as a single scalar value. The names `CNumericTypes::get_c_types`
-/// builds for the C numeric type aliases must all be names of these.
+/// The types that cross to C as a single scalar value. Every type that
+/// `CNumericTypes::get_c_types` makes a C numeric type an alias of must be one of these.
 const C_SCALAR_TYPES: &[BuiltinTypeName] = &[
     I8_TYPE, U8_TYPE, I16_TYPE, U16_TYPE, I32_TYPE, U32_TYPE, I64_TYPE, U64_TYPE, F32_TYPE,
     F64_TYPE, PTR_TYPE,
