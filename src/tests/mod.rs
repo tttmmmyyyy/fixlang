@@ -95,6 +95,7 @@ mod test_struct_get_borrow;
 mod test_struct_literal;
 mod test_struct_pattern_rest;
 mod test_struct_rmw;
+mod test_substitution_build_time;
 mod test_thread_safety;
 mod test_threaded_rc;
 mod test_threaded_setting;
