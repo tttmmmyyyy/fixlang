@@ -17,8 +17,8 @@ use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use crate::error::Errors;
 use crate::fixstd::builtin::{
     get_tuple_n, is_funptr_tycon, make_arrow_name_abs, make_funptr_tycon, make_unit_ty,
-    ARRAY_STORAGE_TYPE, ARRAY_TYPE, ARROW_TYPE, BOOL_TYPE, BuiltinTypeName, DESTRUCTOR_TYPE, DYNAMIC_OBJECT_TYPE,
-    I128_TYPE, IO_TYPE, PUNCHED_ARRAY_TYPE, STRING_TYPE, U128_TYPE,
+    BuiltinTypeName, ARRAY_STORAGE_TYPE, ARRAY_TYPE, ARROW_TYPE, BOOL_TYPE, DESTRUCTOR_TYPE,
+    DYNAMIC_OBJECT_TYPE, I128_TYPE, IO_TYPE, PUNCHED_ARRAY_TYPE, STRING_TYPE, U128_TYPE,
 };
 use crate::generator::Generator;
 use crate::misc::{collect_results, number_to_varname, Map, Set};
