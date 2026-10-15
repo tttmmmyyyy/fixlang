@@ -48,7 +48,7 @@ and the cost for retaining and releasing an array is saved.
 
 use crate::{
     ast::{
-        expr::ExprNode,
+        expr::{Expr, ExprNode},
         name::FullName,
         program::Symbol,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
@@ -501,24 +501,19 @@ fn is_global_lambda_strictly_partially_applied_to_names(
     expr: &Arc<ExprNode>,
     global_lambda_to_arity: &Map<FullName, usize>,
 ) -> bool {
-    if expr.is_var() {
-        let name = &expr.get_var().name;
-        if let Some(_arity) = global_lambda_to_arity.get(name) {
-            return true;
-        }
-    } else if expr.is_app() {
-        let (func, args) = expr.destructure_app();
-        if func.is_var() {
-            let name = &func.get_var().name;
-            if let Some(arity) = global_lambda_to_arity.get(name) {
-                // Check if the number of arguments is less than the arity (strictly partial application).
-                if *arity <= args.len() {
-                    return false;
-                }
-                // Check if all arguments are name expressions.
-                return args.iter().all(|arg| arg.is_var());
-            }
-        }
+    // An application written by uncurrying hands several arguments over at once, so the arguments
+    // are counted over the whole chain rather than one per application.
+    let mut func = expr;
+    let mut args = vec![];
+    while let Expr::App(inner, inner_args) = &*func.expr {
+        args.extend(inner_args.iter());
+        func = inner;
     }
-    false
+    if !func.is_var() {
+        return false;
+    }
+    let Some(arity) = global_lambda_to_arity.get(&func.get_var().name) else {
+        return false;
+    };
+    args.is_empty() || (args.len() < *arity && args.iter().all(|arg| arg.is_var()))
 }

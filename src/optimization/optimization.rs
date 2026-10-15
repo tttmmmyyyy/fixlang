@@ -1,5 +1,5 @@
 use super::{
-    application_inlining, closure_specialization, collapse_constructions, constant_array_literals,
+    closure_specialization, collapse_constructions, constant_array_literals,
     dead_symbol_elimination, decapture_scope_functions, defunctionalize_fix, inline, inline_local,
     optimize_act, remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args, uncurry,
     unwrap_newtype,
@@ -178,21 +178,24 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         dead_symbol_elimination::run,
     );
 
-    // Push an application into the branches of what produces the function. Specializing a closure
-    // puts the body of the function a caller passed into the caller, so a body answering with a
-    // lambda leaves an application whose function is an `if`, and the lambda of the branch taken is
-    // built at run time.
+    // Inline the local functions once more. Specializing a closure puts the body of the function a
+    // caller passed into the caller, so a body answering with a lambda leaves an application whose
+    // function is an `if`, or a name bound to one, and the lambda of the branch taken is built at
+    // run time.
     //
     // It runs below uncurrying because that is what brings the application and the `if` into one
-    // scope: above it, the application sits inside a lambda the `if` is outside of, and the pass
-    // finds nothing to move. Uncurrying's eta expansion is what closes that gap, by binding the
-    // action to a name and folding the name into its one use.
+    // scope: above it, the application sits inside a lambda the `if` is outside of. Uncurrying's eta
+    // expansion closes that gap, leaving the application where the name bound to the `if` is read
+    // first. `let_elimination` then moves the `if` to the application, and `application_inlining`
+    // pushes the application into its branches.
     run_pass(
         prg,
         config,
-        config.enable_closure_specialization() && config.enable_uncurry_optimization(),
-        "application_inlining",
-        application_inlining::run,
+        config.enable_closure_specialization()
+            && config.enable_uncurry_optimization()
+            && config.enable_inline_local_optimization(),
+        "inline_local",
+        inline_local::run,
     );
 
     if config.emit_symbols {
