@@ -437,6 +437,10 @@ pub fn is_array_tycon(tc: &TyCon) -> bool {
     tc.name.is(&[STD_NAME], ARRAY_NAME)
 }
 
+pub fn make_punched_array_tycon() -> TyCon {
+    TyCon::new(FullName::from_strs(&[STD_NAME], PUNCHED_ARRAY_NAME))
+}
+
 // Returns whether given tycon is a punched array (`Std::PunchedArray`).
 pub fn is_punched_array_tycon(tc: &TyCon) -> bool {
     tc.name.is(&[STD_NAME], PUNCHED_ARRAY_NAME)
@@ -540,7 +544,7 @@ pub fn make_array_ty() -> Arc<TypeNode> {
 }
 
 pub fn make_punched_array_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], PUNCHED_ARRAY_NAME)))
+    type_tycon(&Arc::new(make_punched_array_tycon()))
 }
 
 pub fn integral_types() -> Vec<Arc<TypeNode>> {
