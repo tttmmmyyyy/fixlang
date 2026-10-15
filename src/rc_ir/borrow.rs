@@ -37,7 +37,7 @@
 //! model in `ownership`, so every part of this pass gives the same answer.
 
 use crate::ast::name::FullName;
-use crate::ast::program::TypeEnv;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::Type;
 use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};

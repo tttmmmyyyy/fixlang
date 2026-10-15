@@ -1,6 +1,7 @@
 use crate::ast::kind_scope::KindScope;
 use crate::ast::name::{FullName, Name};
-use crate::ast::program::{EndNode, TypeEnv};
+use crate::ast::program::EndNode;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{
     apply_type_args, kind_arrow, kind_star, type_from_tyvar, Kind, TyAliasInfo, TyCon, TyConInfo,
     TyConVariant, TyVar, TypeNode,

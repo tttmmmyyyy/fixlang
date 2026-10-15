@@ -30,7 +30,7 @@
 //! The check runs over an instantiated program, before code generation walks the fields of any
 //! type.
 
-use crate::ast::program::TypeEnv;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{TypeNode, MAX_TYPE_DEPTH};
 use crate::misc::{grow_stack, shorten_for_report, Set};
 use crate::object::{ty_to_object_ty, ObjectFieldType};

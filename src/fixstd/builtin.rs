@@ -4,12 +4,12 @@ use crate::ast::{
         expr_abs, expr_abs_many, expr_app, expr_builtin, expr_if, expr_let, expr_make_struct,
         expr_var, var_local, AppSourceCodeOrderType, ExprNode,
     },
-    name::{FullName, Name, NameSpace},
+    name::{FullName, Name},
     pattern::PatternNode,
     predicate::Predicate,
-    program::TypeEnv,
     qual_pred::QualPred,
     traits::{TraitId, TraitImpl},
+    type_env::TypeEnv,
     typedecl::{Field, Struct, TypeDeclValue, TypeDefn},
     types::{
         apply_type_args, kind_arrow, kind_star, make_tyvar, tycon, type_from_tyvar, type_fun,
@@ -72,7 +72,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     let mut ret = Map::default();
     // Primitive types
     ret.insert(
-        TyCon::new(make_iostate_name()),
+        TyCon::new(IOSTATE_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -86,7 +86,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     );
 
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], PTR_NAME)),
+        TyCon::new(PTR_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -99,7 +99,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], U8_NAME)),
+        TyCon::new(U8_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -112,7 +112,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], I8_NAME)),
+        TyCon::new(I8_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -125,7 +125,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], U16_NAME)),
+        TyCon::new(U16_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -138,7 +138,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], I16_NAME)),
+        TyCon::new(I16_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -151,7 +151,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], I32_NAME)),
+        TyCon::new(I32_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -164,7 +164,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], U32_NAME)),
+        TyCon::new(U32_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -177,7 +177,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], I64_NAME)),
+        TyCon::new(I64_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -190,7 +190,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], U64_NAME)),
+        TyCon::new(U64_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -203,7 +203,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], I128_NAME)),
+        TyCon::new(I128_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -216,7 +216,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], U128_NAME)),
+        TyCon::new(U128_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -229,7 +229,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], F32_NAME)),
+        TyCon::new(F32_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -242,7 +242,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
     ret.insert(
-        TyCon::new(FullName::from_strs(&[STD_NAME], F64_NAME)),
+        TyCon::new(F64_TYPE.to_fullname()),
         TyConInfo {
             punched_from: None,
             kind: kind_star(),
@@ -348,8 +348,168 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret
 }
 
+/// The name of a type the compiler declares: the path of its namespace and its name there. Building
+/// the type's `FullName` and testing whether a `FullName` is the type both read one constant of this
+/// struct.
+pub struct BuiltinTypeName {
+    /// The path of the namespace, the outermost name first.
+    namespace: &'static [&'static str],
+    /// The name of the type in that namespace.
+    name: &'static str,
+}
+
+impl BuiltinTypeName {
+    /// This name as a `FullName`, written with no leading `::`.
+    pub fn to_fullname(&self) -> FullName {
+        FullName::from_strs(self.namespace, self.name)
+    }
+
+    /// Whether `name` is this name. Same as comparing with `to_fullname()`, without building it.
+    pub fn is(&self, name: &FullName) -> bool {
+        name.is(self.namespace, self.name)
+    }
+}
+
+/// `Std::Arrow`, the type constructor `->` of function types.
+pub const ARROW_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: ARROW_NAME,
+};
+
+/// `Std::Array`.
+pub const ARRAY_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: ARRAY_NAME,
+};
+
+/// `Std::#ArrayStorage`, the buffer an array holds its elements in.
+pub const ARRAY_STORAGE_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: ARRAY_STORAGE_NAME,
+};
+
+/// `Std::PunchedArray`, an array with one element moved out of it.
+pub const PUNCHED_ARRAY_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: PUNCHED_ARRAY_NAME,
+};
+
+/// `Std::#DynamicObject`.
+pub const DYNAMIC_OBJECT_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: DYNAMIC_OBJECT_NAME,
+};
+
+/// `Std::FFI::Destructor`.
+pub const DESTRUCTOR_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME, FFI_NAME],
+    name: DESTRUCTOR_NAME,
+};
+
+/// `Std::IO`.
+pub const IO_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: IO_NAME,
+};
+
+/// `Std::IO::IOState`, the token that an `IO` action threads.
+pub const IOSTATE_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME, IO_NAME],
+    name: IOSTATE_NAME,
+};
+
+/// `Std::Bool`.
+pub const BOOL_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: BOOL_NAME,
+};
+
+/// `Std::String`.
+pub const STRING_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: STRING_NAME,
+};
+
+/// `Std::Ptr`.
+pub const PTR_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: PTR_NAME,
+};
+
+/// `Std::U8`.
+pub const U8_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: U8_NAME,
+};
+
+/// `Std::I8`.
+pub const I8_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: I8_NAME,
+};
+
+/// `Std::U16`.
+pub const U16_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: U16_NAME,
+};
+
+/// `Std::I16`.
+pub const I16_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: I16_NAME,
+};
+
+/// `Std::U32`.
+pub const U32_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: U32_NAME,
+};
+
+/// `Std::I32`.
+pub const I32_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: I32_NAME,
+};
+
+/// `Std::U64`.
+pub const U64_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: U64_NAME,
+};
+
+/// `Std::I64`.
+pub const I64_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: I64_NAME,
+};
+
+/// `Std::F32`.
+pub const F32_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: F32_NAME,
+};
+
+/// `Std::F64`.
+pub const F64_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: F64_NAME,
+};
+
+/// `Std::I128`.
+pub const I128_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: I128_NAME,
+};
+
+/// `Std::U128`.
+pub const U128_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: U128_NAME,
+};
+
 pub fn make_arrow_name_abs() -> FullName {
-    let mut name = FullName::from_strs(&[STD_NAME], ARROW_NAME);
+    let mut name = ARROW_TYPE.to_fullname();
     name.set_absolute();
     name
 }
@@ -359,38 +519,24 @@ pub fn make_arrow_tycon() -> TyCon {
     TyCon::new(make_arrow_name_abs())
 }
 
-pub fn make_dynamic_object_name() -> FullName {
-    FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME)
-}
-
 pub fn make_dynamic_object_tycon() -> TyCon {
-    TyCon::new(make_dynamic_object_name())
-}
-
-pub fn make_array_storage_name() -> FullName {
-    FullName::from_strs(&[STD_NAME], ARRAY_STORAGE_NAME)
+    TyCon::new(DYNAMIC_OBJECT_TYPE.to_fullname())
 }
 
 pub fn make_array_storage_tycon() -> TyCon {
-    TyCon::new(make_array_storage_name())
+    TyCon::new(ARRAY_STORAGE_TYPE.to_fullname())
 }
 
 // The `#ArrayStorage a` type for an element type `a`.
 pub fn make_array_storage_ty(elem_ty: Arc<TypeNode>) -> Arc<TypeNode> {
-    type_tyapp(type_tycon(&tycon(make_array_storage_name())), elem_ty)
-}
-
-// Returns whether the given tycon is `#ArrayStorage`.
-pub fn is_array_storage_tycon(tc: &TyCon) -> bool {
-    tc.name == make_array_storage_name()
-}
-
-pub fn make_destructor_name() -> FullName {
-    FullName::from_strs(&[STD_NAME, FFI_NAME], DESTRUCTOR_NAME)
+    type_tyapp(
+        type_tycon(&tycon(ARRAY_STORAGE_TYPE.to_fullname())),
+        elem_ty,
+    )
 }
 
 pub fn make_destructor_ty(val_ty: Arc<TypeNode>) -> Arc<TypeNode> {
-    type_tyapp(type_tycon(&tycon(make_destructor_name())), val_ty)
+    type_tyapp(type_tycon(&tycon(DESTRUCTOR_TYPE.to_fullname())), val_ty)
 }
 
 pub fn make_functor_name() -> FullName {
@@ -406,51 +552,20 @@ pub fn make_funptr_tycon(arity: u32) -> TyCon {
 }
 
 pub fn make_array_tycon() -> TyCon {
-    TyCon::new(make_array_name())
-}
-
-pub fn make_array_name() -> FullName {
-    FullName::from_strs(&[STD_NAME], ARRAY_NAME)
+    TyCon::new(ARRAY_TYPE.to_fullname())
 }
 
 // If given tycon is function pointer, returns its arity
 pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
-    if tc.name.namespace != NameSpace::new(vec![STD_NAME.to_string()]) {
+    if !tc.name.namespace.is(&[STD_NAME]) {
         return None;
     }
-    if !tc.name.name.starts_with(FUNPTR_NAME) {
-        return None;
-    }
-    let mut chars = tc.name.name.chars();
-    for _ in 0..FUNPTR_NAME.len() {
-        chars.next();
-    }
-    let number = chars.as_str().to_string();
+    let number = tc.name.name.strip_prefix(FUNPTR_NAME)?;
     Some(number.parse::<u32>().unwrap())
 }
 
-// Returns whether given tycon is dyanmic object
-pub fn is_dynamic_object_tycon(tc: &TyCon) -> bool {
-    tc.name == make_dynamic_object_name()
-}
-
-// Returns whether given tycon is Std::Destructor
-pub fn is_destructor_object_tycon(tc: &TyCon) -> bool {
-    tc.name == make_destructor_name()
-}
-
-// Returns whether given tycon is array
-pub fn is_array_tycon(tc: &TyCon) -> bool {
-    *tc == make_array_tycon()
-}
-
 pub fn make_punched_array_tycon() -> TyCon {
-    TyCon::new(FullName::from_strs(&[STD_NAME], PUNCHED_ARRAY_NAME))
-}
-
-// Returns whether given tycon is a punched array (`Std::PunchedArray`).
-pub fn is_punched_array_tycon(tc: &TyCon) -> bool {
-    *tc == make_punched_array_tycon()
+    TyCon::new(PUNCHED_ARRAY_TYPE.to_fullname())
 }
 
 // Make `Std::Boxed` trait.
@@ -466,92 +581,88 @@ pub fn make_kind_fun(arity: u32) -> Arc<Kind> {
     res
 }
 
-pub fn make_iostate_name() -> FullName {
-    FullName::from_strs(&[STD_NAME, IO_NAME], IOSTATE_NAME)
-}
-
 // Make the `IOState` type.
 pub fn make_iostate_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(make_iostate_name()))
+    type_tycon(&tycon(IOSTATE_TYPE.to_fullname()))
 }
 
 // Get Ptr type.
 pub fn make_ptr_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], PTR_NAME)))
+    type_tycon(&tycon(PTR_TYPE.to_fullname()))
 }
 
 // Get U8 type.
 pub fn make_u8_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U8_NAME)))
+    type_tycon(&tycon(U8_TYPE.to_fullname()))
 }
 
 // Get I8 type.
 pub fn make_i8_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I8_NAME)))
+    type_tycon(&tycon(I8_TYPE.to_fullname()))
 }
 
 // Get U16 type.
 pub fn make_u16_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U16_NAME)))
+    type_tycon(&tycon(U16_TYPE.to_fullname()))
 }
 
 // Get I16 type.
 pub fn make_i16_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I16_NAME)))
+    type_tycon(&tycon(I16_TYPE.to_fullname()))
 }
 
 // Get I32 type.
 pub fn make_i32_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I32_NAME)))
+    type_tycon(&tycon(I32_TYPE.to_fullname()))
 }
 
 // Get U32 type.
 pub fn make_u32_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U32_NAME)))
+    type_tycon(&tycon(U32_TYPE.to_fullname()))
 }
 
 // Get I64 type.
 pub fn make_i64_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I64_NAME)))
+    type_tycon(&tycon(I64_TYPE.to_fullname()))
 }
 
 // Get U64 type.
 pub fn make_u64_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U64_NAME)))
+    type_tycon(&tycon(U64_TYPE.to_fullname()))
 }
 
 // Get I128 type.
 pub fn make_i128_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], I128_NAME)))
+    type_tycon(&tycon(I128_TYPE.to_fullname()))
 }
 
 // Get U128 type.
 pub fn make_u128_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], U128_NAME)))
+    type_tycon(&tycon(U128_TYPE.to_fullname()))
 }
 
 // Get F32 type.
 pub fn make_f32_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], F32_NAME)))
+    type_tycon(&tycon(F32_TYPE.to_fullname()))
 }
 
 // Get F64 type.
 pub fn make_f64_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], F64_NAME)))
+    type_tycon(&tycon(F64_TYPE.to_fullname()))
 }
 
 // Get Bool type.
 pub fn make_bool_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], BOOL_NAME)))
+    type_tycon(&tycon(BOOL_TYPE.to_fullname()))
 }
 
 // Get Array type.
 pub fn make_array_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], ARRAY_NAME)))
+    type_tycon(&tycon(ARRAY_TYPE.to_fullname()))
 }
 
 pub fn make_punched_array_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(&[STD_NAME], PUNCHED_ARRAY_NAME)))
+    type_tycon(&Arc::new(make_punched_array_tycon()))
 }
 
 pub fn integral_types() -> Vec<Arc<TypeNode>> {
@@ -575,7 +686,7 @@ pub fn floating_types() -> Vec<Arc<TypeNode>> {
 
 /// The `TyCon` of `Std::String`.
 pub fn make_string_tycon() -> Arc<TyCon> {
-    tycon(FullName::from_strs(&[STD_NAME], STRING_NAME))
+    tycon(STRING_TYPE.to_fullname())
 }
 
 /// The type of `integral_types` that has that name, and `None` where none of them has it.
@@ -821,10 +932,7 @@ pub fn make_numeric_ty(name: &str) -> (Arc<TypeNode>, bool) {
 
 /// The type `Std::#DynamicObject`, the boxed object a closure holds its captured values in.
 pub fn make_dynamic_object_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(
-        &[STD_NAME],
-        DYNAMIC_OBJECT_NAME,
-    )))
+    type_tycon(&tycon(DYNAMIC_OBJECT_TYPE.to_fullname()))
 }
 
 /// The tuple type whose fields are `tys` in that order, such as `Std::Tuple2 I64 Bool`. An empty
@@ -874,7 +982,7 @@ pub fn make_io_runner_ty(res_ty: Arc<TypeNode>) -> Arc<TypeNode> {
 /// The type constructor `Std::IO`. An `IO a` is an action that gives an `a` while it acts on the
 /// state of the computer.
 pub fn make_io_tycon() -> Arc<TyCon> {
-    tycon(FullName::from_strs(&[STD_NAME], IO_NAME))
+    tycon(IO_TYPE.to_fullname())
 }
 
 /// The type `Std::IO ()`, an action that acts and gives nothing. `Main::main` is written with
@@ -889,18 +997,10 @@ pub fn make_io_unit_ty() -> Arc<TypeNode> {
 /// # Examples
 /// `get_tuple_n` of `Std::Tuple3` is `Some(3)`, and of `Std::Array` it is `None`.
 pub fn get_tuple_n(name: &FullName) -> Option<u32> {
-    if name.namespace != NameSpace::from_strs(&[STD_NAME]) {
+    if !name.namespace.is(&[STD_NAME]) {
         return None;
     }
-    if name.name.len() < TUPLE_NAME.len() {
-        return None;
-    }
-    let prefix = &name.name[..TUPLE_NAME.len()];
-    if prefix != TUPLE_NAME {
-        return None;
-    }
-    let number_str = &name.name[TUPLE_NAME.len()..];
-    number_str.parse::<u32>().ok()
+    name.name.strip_prefix(TUPLE_NAME)?.parse::<u32>().ok()
 }
 
 /// The declaration of the tuple type of `size` fields: an unboxed struct whose fields are named
@@ -9755,7 +9855,7 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 // Run either an IO or an IOState runner based on the type of the given value.
 pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
-    if io.ty.toplevel_tycon().unwrap().name == make_io_tycon().name {
+    if io.ty.toplevel_tycon().unwrap().is_io() {
         return run_io(gc, io);
     }
     // The other value run here is the runner an `IO` holds, which `run_ios_runner` applies to an

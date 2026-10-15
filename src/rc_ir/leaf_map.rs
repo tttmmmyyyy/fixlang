@@ -11,13 +11,13 @@
 //! facts, so it has to hash and compare by content; the ordered map gives equal shapes an identical
 //! hash whatever order they were built in.
 
-use crate::ast::program::TypeEnv;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::misc::Map;
 use crate::rc_ir::ast::FieldPath;
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// The paths of the boxed leaves of a value of type `ty` — the field indices from the root of `ty`
 /// down to each boxed leaf. A closure lowers to `{funptr, capture-pointer}`, so its one boxed leaf is
@@ -54,10 +54,21 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
             path.pop();
         }
     }
+    let memo = &type_env.boxed_leaf_paths_memo().0;
+    if let Some(paths) = memo.lock().unwrap().get(ty) {
+        return paths.clone();
+    }
     let mut out = Vec::new();
     go(ty, type_env, &mut Vec::new(), &mut out);
+    memo.lock().unwrap().insert(ty.clone(), out.clone());
     out
 }
+
+/// The boxed leaf paths that `boxed_leaf_paths` has worked out under one `TypeEnv`, by type. A later
+/// call for the same type reads its answer from here. The `TypeEnv` holds it, and only
+/// `boxed_leaf_paths` reads or writes it.
+#[derive(Default)]
+pub struct BoxedLeafPathsMemo(Mutex<Map<Arc<TypeNode>, Vec<FieldPath>>>);
 
 /// One fact of type `T` per boxed leaf of a value, keyed by the leaf's path.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -257,5 +268,121 @@ impl<T: Copy> LeafKey<T> {
                 .map(|path| (path, fact))
                 .collect(),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::boxed_leaf_paths;
+    use crate::ast::name::FullName;
+    use crate::ast::type_env::TypeEnv;
+    use crate::ast::typedecl::Field;
+    use crate::ast::types::{
+        kind_star, tycon, type_tyapp, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode,
+    };
+    use crate::fixstd::builtin::{bulitin_tycons, make_array_ty, make_i64_ty};
+    use crate::misc::{Map, Set};
+    use std::sync::Arc;
+
+    /// `Test::S`, the type the declarations below declare.
+    fn s_tycon() -> TyCon {
+        TyCon::new(FullName::from_strs(&["Test"], "S"))
+    }
+
+    /// The type `Test::S`.
+    fn s_ty() -> Arc<TypeNode> {
+        type_tycon(&tycon(s_tycon().name))
+    }
+
+    /// An unboxed struct `Test::S` holding `Array I64` and `I64`, the array at field
+    /// `array_index`.
+    fn s_info(array_index: usize) -> TyConInfo {
+        let mut fields = vec![Field::make("n".to_string(), make_i64_ty(), None)];
+        fields.insert(
+            array_index,
+            Field::make(
+                "a".to_string(),
+                type_tyapp(make_array_ty(), make_i64_ty()),
+                None,
+            ),
+        );
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Struct,
+            is_unbox: true,
+            tyvars: vec![],
+            fields,
+            source: None,
+            document: None,
+            punched_from: None,
+        }
+    }
+
+    /// The built-in type constructors and `Test::S` with its array at field `array_index`.
+    fn type_env(array_index: usize) -> TypeEnv {
+        let mut tycons = bulitin_tycons();
+        tycons.insert(s_tycon(), s_info(array_index));
+        TypeEnv::new(tycons, Map::default())
+    }
+
+    /// Replacing a declaration changes the boxed leaf paths of its type, even after an earlier call
+    /// asked about that type under the old declaration.
+    #[test]
+    fn test_boxed_leaf_paths_follow_a_replaced_declaration() {
+        let mut env = type_env(0);
+        assert_eq!(boxed_leaf_paths(&s_ty(), &env), vec![vec![0]]);
+        env.add_tycons(Map::from_iter([(s_tycon(), s_info(1))]));
+        assert_eq!(boxed_leaf_paths(&s_ty(), &env), vec![vec![1]]);
+    }
+
+    /// A clone that replaces a declaration leaves the boxed leaf paths of the environment it was
+    /// cloned from as they were.
+    #[test]
+    fn test_boxed_leaf_paths_of_a_clone_stay_apart() {
+        let env = type_env(0);
+        assert_eq!(boxed_leaf_paths(&s_ty(), &env), vec![vec![0]]);
+        let mut replaced = env.clone();
+        replaced.add_tycons(Map::from_iter([(s_tycon(), s_info(1))]));
+        assert_eq!(boxed_leaf_paths(&s_ty(), &replaced), vec![vec![1]]);
+        assert_eq!(boxed_leaf_paths(&s_ty(), &env), vec![vec![0]]);
+    }
+
+    /// Unwrapping a newtype changes the boxed leaf paths of a type holding it, even after an earlier
+    /// call asked about that type while the newtype was still a struct.
+    #[test]
+    fn test_boxed_leaf_paths_follow_unwrapped_newtypes() {
+        let w_tycon = TyCon::new(FullName::from_strs(&["Test"], "W"));
+        let w_info = TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Struct,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![Field::make(
+                "a".to_string(),
+                type_tyapp(make_array_ty(), make_i64_ty()),
+                None,
+            )],
+            source: None,
+            document: None,
+            punched_from: None,
+        };
+        let s_info = TyConInfo {
+            fields: vec![
+                Field::make(
+                    "w".to_string(),
+                    type_tycon(&tycon(w_tycon.name.clone())),
+                    None,
+                ),
+                Field::make("n".to_string(), make_i64_ty(), None),
+            ],
+            ..s_info(0)
+        };
+        let mut tycons = bulitin_tycons();
+        tycons.insert(w_tycon.clone(), w_info);
+        tycons.insert(s_tycon(), s_info);
+        let mut env = TypeEnv::new(tycons, Map::default());
+        assert_eq!(boxed_leaf_paths(&s_ty(), &env), vec![vec![0, 0]]);
+        env.unwrap_newtypes(Set::from_iter([w_tycon]));
+        assert_eq!(boxed_leaf_paths(&s_ty(), &env), vec![vec![0]]);
     }
 }

@@ -6,16 +6,16 @@
 //! `CSignature::get_or_declare_in_module` is where they meet.
 
 use crate::ast::export_statement::ExportedFunctionType;
-use crate::ast::name::{FullName, Name};
-use crate::ast::program::TypeEnv;
+use crate::ast::name::Name;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{tycon, TyCon, TypeNode};
 use crate::constants::{
     C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME, C_LONG_NAME,
     C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME, C_UNSIGNED_INT_NAME,
     C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME, C_UNSIGNED_SHORT_NAME, F32_NAME, F64_NAME,
-    I16_NAME, I32_NAME, I64_NAME, I8_NAME, PTR_NAME, STD_NAME, U16_NAME, U32_NAME, U64_NAME,
-    U8_NAME,
+    I16_NAME, I32_NAME, I64_NAME, I8_NAME, PTR_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
+use crate::fixstd::builtin::{I32_TYPE, PTR_TYPE};
 use crate::generator::Generator;
 use crate::object::int_type_of_bits;
 use crate::target_triple::{
@@ -168,8 +168,8 @@ impl CNumericTypes {
     }
 
     /// The C numeric types, each paired with the sign and the bit width of the Fix type it is an
-    /// alias of. The name built from those two must be one of `C_SCALAR_NAMES`, which is the set
-    /// `TyCon::get_c_type` can map.
+    /// alias of. Those two spell the name of a `Std` type, which must be one of `C_SCALAR_TYPES`,
+    /// the types `TyCon::get_c_type` can map.
     pub fn get_c_types(&self) -> Vec<(&str, &str, usize)> {
         vec![
             (
@@ -286,7 +286,7 @@ impl TyCon {
             F32_NAME => CTypeShape::Float32,
             F64_NAME => CTypeShape::Float64,
             PTR_NAME => CTypeShape::Pointer,
-            // `C_SCALAR_NAMES` gained a name that this mapping does not cover.
+            // `C_SCALAR_TYPES` gained a type that this mapping does not cover.
             name => unreachable!("no C type for `{}`", name),
         })
     }
@@ -329,7 +329,7 @@ impl TyCon {
             F32_NAME => "float",
             F64_NAME => "double",
             PTR_NAME => "void *",
-            // `C_SCALAR_NAMES` gained a name that this mapping does not cover.
+            // `C_SCALAR_TYPES` gained a type that this mapping does not cover.
             name => unreachable!("no C spelling for `{}`", name),
         }
         .to_string()
@@ -368,10 +368,9 @@ pub struct CSignature {
 /// naming it. A program that does name it — an `FFI_CALL` of `main`, which re-runs the program —
 /// gives this signature, and `Program::validate_c_function_calls` reports one that gives another.
 pub fn c_entry_point_signature() -> CSignature {
-    let std_tycon = |name: &str| tycon(FullName::from_strs(&[STD_NAME], name));
     CSignature {
-        param_tys: vec![std_tycon(I32_NAME), std_tycon(PTR_NAME)],
-        ret_tycon: std_tycon(I32_NAME),
+        param_tys: vec![tycon(I32_TYPE.to_fullname()), tycon(PTR_TYPE.to_fullname())],
+        ret_tycon: tycon(I32_TYPE.to_fullname()),
         is_var_args: false,
     }
 }
@@ -499,7 +498,7 @@ impl CSignature {
 pub fn c_boundary_tycon(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<TyCon>> {
     let head = ty.toplevel_tycon()?;
     if ty.is_box(type_env) {
-        return Some(tycon(FullName::from_strs(&[STD_NAME], PTR_NAME)));
+        return Some(tycon(PTR_TYPE.to_fullname()));
     }
     if !head.is_c_scalar() {
         return None;

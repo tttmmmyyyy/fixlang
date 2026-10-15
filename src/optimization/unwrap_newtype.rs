@@ -25,8 +25,9 @@ use crate::{
         expr::{expr_let_typed, expr_make_struct, expr_match_typed, expr_var, Expr, ExprNode},
         name::FullName,
         pattern::{Pattern, PatternInfo, PatternNode},
-        program::{Program, Symbol, TypeEnv},
+        program::{Program, Symbol},
         traverse::{EndVisitResult, ExprVisitor, VisitState},
+        type_env::TypeEnv,
         types::{tycon, TyCon, TyConInfo, TyConVariant},
     },
     fixstd::builtin::{

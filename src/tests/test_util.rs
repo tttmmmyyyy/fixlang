@@ -1,5 +1,5 @@
 use crate::{
-    ast::program::TypeEnv,
+    ast::type_env::TypeEnv,
     commands::run::run,
     configuration::{Configuration, DeprecationMode},
     constants::COMPILER_TEST_WORKING_PATH,

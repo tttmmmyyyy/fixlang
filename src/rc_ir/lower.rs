@@ -11,7 +11,8 @@ use crate::ast::builtin_op::BuiltinOpExpr;
 use crate::ast::expr::{Expr, ExprNode, FieldSrc, Var};
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::{Pattern, PatternNode};
-use crate::ast::program::{Symbol, TypeEnv};
+use crate::ast::program::Symbol;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{TyCon, TypeNode};
 use crate::constants::{BOOL_FALSE_TAG, BOOL_TRUE_TAG, CAP_NAME};
 use crate::fixstd::builtin::{

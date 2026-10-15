@@ -1,11 +1,12 @@
 use crate::{
-    ast::{name::FullName, program::TypeEnv, types::tycon},
+    ast::{type_env::TypeEnv, types::tycon},
     build::build_object_files::get_target_machine,
     configuration::{Configuration, OutputFileType},
-    constants::{COMPILER_TEST_WORKING_PATH, C_ENTRY_POINT_NAME, I8_NAME, STD_NAME, U16_NAME},
+    constants::{COMPILER_TEST_WORKING_PATH, C_ENTRY_POINT_NAME},
     elaboration::elaborate_via_config,
     error::panic_if_err,
     ffi::{c_abi_extends_narrow_integers, CNumericTypes, CSignature},
+    fixstd::builtin::{I8_TYPE, U16_TYPE},
     fixstd::runtime::{
         build_runtime, compiler_defined_c_function_reason, BuildMode, RUNTIME_ABORT,
         RUNTIME_GET_ARGC,
@@ -244,10 +245,9 @@ pub fn test_narrow_integer_extension_attribute_follows_the_host_abi() {
 #[test]
 pub fn test_narrow_integer_extension_follows_the_target_abi() {
     let config = Configuration::develop_mode();
-    let std_tycon = |name: &str| tycon(FullName::from_strs(&[STD_NAME], name));
     let signature = CSignature {
-        param_tys: vec![std_tycon(U16_NAME)],
-        ret_tycon: std_tycon(I8_NAME),
+        param_tys: vec![tycon(U16_TYPE.to_fullname())],
+        ret_tycon: tycon(I8_TYPE.to_fullname()),
         is_var_args: false,
     };
     for (triple, extends) in [
@@ -1837,5 +1837,45 @@ pub fn test_ffi_call_wrong_argument_count() {
         too_few,
         Configuration::develop_mode(),
         "Wrong number of arguments in FFI_CALL_IO expression.",
+    );
+}
+
+/// Verifies that only the `Std` types cross to C as one scalar value. A type a program declares
+/// under the same name, here a one-field struct `Main::I32`, is rejected both in the `...` of an
+/// `FFI_CALL` and in the signature of an exported function.
+#[test]
+pub fn test_type_named_like_a_c_scalar_outside_std_does_not_cross_to_c() {
+    let declarations = r##"
+        module Main;
+
+        type I32 = unbox struct { v : Std::I32 };
+    "##;
+
+    test_source_fail(
+        &format!(
+            r##"{}
+        main : IO ();
+        main = println(FFI_CALL[CInt c_report(CInt, ...), 1.c_int, Main::I32 {{ v : 1_I32 }}].to_string);
+    "##,
+            declarations
+        ),
+        Configuration::develop_mode(),
+        "`Main::I32` cannot be passed through the `...` of an `FFI_CALL`",
+    );
+
+    test_source_fail(
+        &format!(
+            r##"{}
+        get_v : Main::I32 -> Std::I32;
+        get_v = |x| x.@v;
+        FFI_EXPORT[get_v, c_get_v];
+
+        main : IO ();
+        main = println(get_v(Main::I32 {{ v : 1_I32 }}).to_string);
+    "##,
+            declarations
+        ),
+        Configuration::develop_mode(),
+        "`Main::I32` cannot be used as an argument of an exported function",
     );
 }

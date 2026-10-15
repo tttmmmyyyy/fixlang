@@ -7,10 +7,11 @@ use crate::ast::kind_scope::KindEnv;
 use crate::ast::name::{is_private_name, FullName, Name, NameSpace};
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
+use crate::ast::type_env::TypeEnv;
 use crate::ast::typedecl::{describe_field_names, Field, TypeDeclValue, TypeDefn};
 use crate::ast::types::{
-    is_opaque_tyvar, AssocType, Kind, OpaqueTyConResolution, Scheme, TyAliasInfo, TyCon, TyConInfo,
-    TyConVariant, TypeNode,
+    is_opaque_tyvar, AssocType, OpaqueTyConResolution, Scheme, TyAliasInfo, TyCon, TyConVariant,
+    TypeNode,
 };
 use crate::configuration::{
     Configuration, DeprecationMode, OutputFileType, ProjectSources, SubCommand,
@@ -57,171 +58,6 @@ use std::mem::replace;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::vec;
-
-/// What a program declares about its types: the type constructors and the type aliases it can name,
-/// and which of the newtypes among them a value has stopped being built at.
-#[derive(Clone)]
-pub struct TypeEnv {
-    /// The declaration of every type constructor, built-in and user-defined, by its name.
-    ///
-    /// Private, because the field types held here answer what a value of a type is laid out as, and
-    /// `unwrap_newtypes` puts them in a form the rest of the compiler relies on. A declaration
-    /// enters through `add_tycons`, which puts it in that same form.
-    tycons: Arc<Map<TyCon, TyConInfo>>,
-    /// The declaration of every type alias, by its name.
-    pub aliases: Arc<Map<TyCon, TyAliasInfo>>,
-    /// The newtypes a value of which has become a value of its one field. Empty until the pass that
-    /// unwraps newtypes runs.
-    ///
-    /// A field type this environment reports has none of these saturated in it, so a value is never
-    /// built at the struct one of them was declared as. The declarations stay, because a newtype
-    /// carried by a higher-kinded type variable occurs without its arguments, and such an occurrence
-    /// still names one.
-    unwrapped_newtypes: Arc<Set<TyCon>>,
-}
-
-impl Default for TypeEnv {
-    /// An environment in which no type constructor and no type alias is declared.
-    fn default() -> Self {
-        Self {
-            tycons: Arc::new(Default::default()),
-            aliases: Arc::new(Default::default()),
-            unwrapped_newtypes: Arc::new(Default::default()),
-        }
-    }
-}
-
-impl TypeEnv {
-    /// An environment holding `tycons` and `aliases` as declared, with every newtype among them
-    /// still a type values are built at.
-    pub fn new(tycons: Map<TyCon, TyConInfo>, aliases: Map<TyCon, TyAliasInfo>) -> TypeEnv {
-        TypeEnv {
-            tycons: Arc::new(tycons),
-            aliases: Arc::new(aliases),
-            unwrapped_newtypes: Arc::new(Default::default()),
-        }
-    }
-
-    /// Makes a value of each newtype in `newtypes` a value of its one field: records them, then
-    /// rewrites the stored declarations so that no field type this environment reports has one of
-    /// them saturated in it.
-    ///
-    /// The declarations are read as they stand while they are rewritten, so each one is unwrapped
-    /// from the same starting point.
-    ///
-    /// Every newtype recorded is one this environment declares, which is what lets
-    /// `unwrapped_newtype_info` answer with a declaration rather than with the possibility of one.
-    pub fn unwrap_newtypes(&mut self, newtypes: Set<TyCon>) {
-        for tycon in &newtypes {
-            assert!(
-                self.tycons.contains_key(tycon),
-                "`{}` is unwrapped, though this environment holds no declaration of it.",
-                tycon.to_string()
-            );
-        }
-        self.unwrapped_newtypes = Arc::new(newtypes);
-        let declared_type_env = self.clone();
-        let mut rewritten = self.tycons.as_ref().clone();
-        for (_tycon, tycon_info) in &mut rewritten {
-            for field in &mut tycon_info.fields {
-                field.ty = field.ty.unwrap_newtypes(&declared_type_env);
-            }
-        }
-        self.tycons = Arc::new(rewritten);
-    }
-
-    /// The declaration of `tycon` if a value of it has become a value of its one field, and `None`
-    /// otherwise. A recorded newtype is one this environment declares, which `unwrap_newtypes`
-    /// states where it records them.
-    pub fn unwrapped_newtype_info(&self, tycon: &TyCon) -> Option<&TyConInfo> {
-        if !self.unwrapped_newtypes.contains(tycon) {
-            return None;
-        }
-        Some(self.tycons.get(tycon).unwrap())
-    }
-
-    /// Whether a value of `tycon` has become a value of its one field.
-    pub fn is_unwrapped_newtype(&self, tycon: &TyCon) -> bool {
-        self.unwrapped_newtypes.contains(tycon)
-    }
-
-    /// Adds each declaration of `new_tycons` to this environment, replacing the one already held
-    /// under the same name, each with its field types unwrapped, so that a declaration minted after
-    /// the newtype-unwrapping pass answers as the ones that were there before it do.
-    pub fn add_tycons(&mut self, new_tycons: Map<TyCon, TyConInfo>) {
-        let declared_type_env = self.clone();
-        let mut tycons = self.tycons.as_ref().clone();
-        for (tycon, mut tycon_info) in new_tycons.into_iter() {
-            for field in &mut tycon_info.fields {
-                field.ty = field.ty.unwrap_newtypes(&declared_type_env);
-            }
-            tycons.insert(tycon, tycon_info);
-        }
-        self.tycons = Arc::new(tycons);
-    }
-
-    /// The declaration of every type constructor this environment holds, by its name.
-    pub fn tycons(&self) -> &Map<TyCon, TyConInfo> {
-        &self.tycons
-    }
-
-    /// The kind of every name this environment gives a meaning to, type constructors and type
-    /// aliases together in one table.
-    pub fn kinds(&self) -> Map<TyCon, Arc<Kind>> {
-        let mut res = Map::default();
-        for (tc, ti) in self.tycons.as_ref().iter() {
-            res.insert(tc.clone(), ti.kind.clone());
-        }
-        for (tc, ta) in self.aliases.as_ref().iter() {
-            res.insert(tc.clone(), ta.kind.clone());
-        }
-        res
-    }
-
-    /// The struct and the field that `name` is the `act_{field}` function of: `name` is a global
-    /// name whose namespace is a struct this environment declares, and whose last component names
-    /// one of that struct's fields.
-    ///
-    /// The answer comes from the name alone, so ask it while a value of the struct is still built as
-    /// that struct. A newtype keeps its declaration after `unwrap_newtypes` records it, so this
-    /// still names the struct of a newtype whose values have become values of its one field.
-    pub fn is_struct_act(&self, name: &FullName) -> Option<(TyCon, Name)> {
-        if name.is_local() {
-            return None;
-        }
-        let struct_name = name.namespace.clone().to_fullname();
-        let struct_tycon = TyCon { name: struct_name };
-        match self.tycons.get(&struct_tycon) {
-            Some(tycon_info) => {
-                if tycon_info.variant != TyConVariant::Struct {
-                    return None;
-                }
-                for field in &tycon_info.fields {
-                    let act_func_name = format!("{}{}", STRUCT_ACT_SYMBOL, field.name);
-                    if act_func_name == name.name {
-                        return Some((struct_tycon, field.name.clone()));
-                    }
-                }
-                None
-            }
-            None => None,
-        }
-    }
-
-    /// Replace every type alias written in the definition of a type constructor of this environment
-    /// by the type it stands for, so that a stage reading a field or variant type meets no alias.
-    pub fn resolve_type_aliases_in_tycons(&mut self) -> Result<(), Errors> {
-        let mut errors = Errors::empty();
-        let type_env = self.clone();
-        let mut tycons = (*self.tycons).clone();
-        for (_, ti) in &mut tycons {
-            errors.eat_err(ti.resolve_type_aliases(&type_env));
-        }
-        errors.to_result()?; // Throw errors if any.
-        self.tycons = Arc::new(tycons);
-        Ok(())
-    }
-}
 
 /// A Fix value at one concrete type, under a name of its own. A generic definition becomes one
 /// symbol per type it is used at, and the program that reaches code generation is made of these.
@@ -1068,7 +904,7 @@ impl Program {
     pub fn tycon_sources_with_aliases(&self) -> Map<FullName, Option<Span>> {
         let type_env = self.type_env();
         let tycons = type_env
-            .tycons
+            .tycons()
             .iter()
             .map(|(tycon, info)| (tycon.name.clone(), info.source.clone()));
         let aliases = type_env
@@ -2794,27 +2630,7 @@ impl Program {
         let env = self.create_name_resolution_env();
         let mut ctx = NameResolutionContext::new("NA".to_string(), env.clone());
 
-        // Resolve namespaces in type constructors.
-        {
-            let mut tycons = (*self.type_env.tycons).clone();
-            for (tc, ti) in &mut tycons {
-                let module = tc.name.module();
-                ctx.set_current_module(module);
-                ti.resolve_namespace(&mut ctx)?;
-            }
-            self.type_env.tycons = Arc::new(tycons);
-        }
-        // Resolve namespaces in type aliases.
-        {
-            let mut aliases = (*self.type_env.aliases).clone();
-            for (tc, ta) in &mut aliases {
-                let module = tc.name.module();
-                ctx.set_current_module(module);
-                ta.resolve_namespace(&mut ctx)?;
-            }
-            self.type_env.aliases = Arc::new(aliases);
-        }
-
+        self.type_env.resolve_namespace(&mut ctx)?;
         self.trait_env.resolve_namespace(&mut ctx)?;
 
         for decl in &mut self.type_defns {

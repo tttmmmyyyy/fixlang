@@ -1,6 +1,7 @@
 use crate::ast::expr::{FieldSrc, Var};
 use crate::ast::name::{FullName, Name};
-use crate::ast::program::{EndNode, TypeEnv};
+use crate::ast::program::EndNode;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::typedecl::Field;
 use crate::ast::types::{TyCon, TyConInfo, TypeNode};
 use crate::elaboration::name_resolution::NameResolutionContext;

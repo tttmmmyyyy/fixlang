@@ -16,7 +16,7 @@
 //! unboxed container names each of its fields.
 
 use crate::ast::name::FullName;
-use crate::ast::program::TypeEnv;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::fixstd::builtin::{CaptureProjectOp, NoStorageValueOp};
 use crate::misc::{grow_stack, Map, Set};

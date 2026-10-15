@@ -3,7 +3,7 @@
 
 use crate::ast::name::FullName;
 use crate::ast::name::Name;
-use crate::ast::program::TypeEnv;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::type_tycon;
 use crate::ast::types::TyCon;
 use crate::ast::types::TypeNode;

@@ -16,7 +16,7 @@
 //! `Retain`/`Release` would generate no code).
 
 use crate::ast::name::FullName;
-use crate::ast::program::TypeEnv;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;

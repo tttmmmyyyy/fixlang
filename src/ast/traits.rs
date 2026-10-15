@@ -5,9 +5,10 @@ use crate::ast::expr::ExprNode;
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::{FullName, Name};
 use crate::ast::predicate::Predicate;
-use crate::ast::program::{EndNode, TypeEnv};
+use crate::ast::program::EndNode;
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::qual_type::QualType;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{
     is_opaque_tyvar, type_from_tyvar, type_tyvar, unfixed_type_variable_error, AssocType, Kind,
     Scheme, TyVar, TypeNode,

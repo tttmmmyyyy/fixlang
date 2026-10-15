@@ -1,13 +1,13 @@
-use std::sync::Arc;
-
 use crate::ast::kind_scope::{KindEnv, KindScope};
-use crate::ast::program::{EndNode, TypeEnv};
+use crate::ast::program::EndNode;
 use crate::ast::traits::{TraitAliasEnv, TraitId};
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{is_opaque_tyvar, TyVar, Type, TypeNode};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
 use crate::parse::sourcefile::{SourcePos, Span};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 // Statement such as "String : Show" or "a : Eq".
 #[derive(Clone, Serialize, Deserialize)]
