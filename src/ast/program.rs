@@ -46,7 +46,7 @@ use crate::misc::{
 };
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
-use crate::rc_ir::ast::FieldPath;
+use crate::rc_ir::leaf_map::BoxedLeafPathsMemo;
 use crate::type_size::{no_size_reason, LayoutWalk};
 use build_time::build_time_utc;
 use serde::{Deserialize, Serialize};
@@ -81,13 +81,12 @@ pub struct TypeEnv {
     /// carried by a higher-kinded type variable occurs without its arguments, and such an occurrence
     /// still names one.
     unwrapped_newtypes: Arc<Set<TyCon>>,
-    /// The boxed leaf paths of each type `boxed_leaf_paths` has been asked about, so that a later
-    /// call for the same type answers without descending the type again.
+    /// The boxed leaf paths `boxed_leaf_paths` has worked out under this environment.
     ///
-    /// The paths follow from the declarations in `tycons`, so `set_tycons` empties it whenever they
-    /// are replaced. The clones of an environment share it until one of them replaces its
-    /// declarations.
-    boxed_leaf_paths_memo: Arc<Mutex<Map<Arc<TypeNode>, Vec<FieldPath>>>>,
+    /// The paths follow from the declarations in `tycons`, so `set_tycons` puts an empty memo here
+    /// whenever they are replaced. The clones of an environment share the memo until one of them
+    /// replaces its declarations.
+    boxed_leaf_paths_memo: Arc<BoxedLeafPathsMemo>,
 }
 
 impl Default for TypeEnv {
@@ -121,22 +120,9 @@ impl TypeEnv {
         self.boxed_leaf_paths_memo = Arc::new(Default::default());
     }
 
-    /// The boxed leaf paths of `ty`: those stored by an earlier call for the same type, or else the
-    /// result of `compute`, which is then stored.
-    pub fn memoize_boxed_leaf_paths(
-        &self,
-        ty: &Arc<TypeNode>,
-        compute: impl FnOnce() -> Vec<FieldPath>,
-    ) -> Vec<FieldPath> {
-        if let Some(paths) = self.boxed_leaf_paths_memo.lock().unwrap().get(ty) {
-            return paths.clone();
-        }
-        let paths = compute();
-        self.boxed_leaf_paths_memo
-            .lock()
-            .unwrap()
-            .insert(ty.clone(), paths.clone());
-        paths
+    /// The boxed leaf paths `boxed_leaf_paths` has worked out under this environment.
+    pub fn boxed_leaf_paths_memo(&self) -> &BoxedLeafPathsMemo {
+        &self.boxed_leaf_paths_memo
     }
 
     /// Makes a value of each newtype in `newtypes` a value of its one field: records them, then

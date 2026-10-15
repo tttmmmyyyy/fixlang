@@ -17,7 +17,7 @@ use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::misc::Map;
 use crate::rc_ir::ast::FieldPath;
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// The paths of the boxed leaves of a value of type `ty` — the field indices from the root of `ty`
 /// down to each boxed leaf. A closure lowers to `{funptr, capture-pointer}`, so its one boxed leaf is
@@ -54,12 +54,21 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
             path.pop();
         }
     }
-    type_env.memoize_boxed_leaf_paths(ty, || {
-        let mut out = Vec::new();
-        go(ty, type_env, &mut Vec::new(), &mut out);
-        out
-    })
+    let memo = &type_env.boxed_leaf_paths_memo().0;
+    if let Some(paths) = memo.lock().unwrap().get(ty) {
+        return paths.clone();
+    }
+    let mut out = Vec::new();
+    go(ty, type_env, &mut Vec::new(), &mut out);
+    memo.lock().unwrap().insert(ty.clone(), out.clone());
+    out
 }
+
+/// The boxed leaf paths `boxed_leaf_paths` has worked out under one `TypeEnv`, by type, which it
+/// answers a later call for the same type from. The `TypeEnv` holds it, and only
+/// `boxed_leaf_paths` reads or writes it.
+#[derive(Default)]
+pub struct BoxedLeafPathsMemo(Mutex<Map<Arc<TypeNode>, Vec<FieldPath>>>);
 
 /// One fact of type `T` per boxed leaf of a value, keyed by the leaf's path.
 #[derive(Clone, PartialEq, Eq, Debug)]
