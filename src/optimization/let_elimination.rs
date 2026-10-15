@@ -48,7 +48,7 @@ and the cost for retaining and releasing an array is saved.
 
 use crate::{
     ast::{
-        expr::{Expr, ExprNode},
+        expr::{collect_app, ExprNode},
         name::FullName,
         program::Symbol,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
@@ -503,12 +503,7 @@ fn is_global_lambda_strictly_partially_applied_to_names(
 ) -> bool {
     // An application written by uncurrying hands several arguments over at once, so the arguments
     // are counted over the whole chain rather than one per application.
-    let mut func = expr;
-    let mut args = vec![];
-    while let Expr::App(inner, inner_args) = &*func.expr {
-        args.extend(inner_args.iter());
-        func = inner;
-    }
+    let (func, args) = collect_app(expr);
     if !func.is_var() {
         return false;
     }
