@@ -1839,3 +1839,43 @@ pub fn test_ffi_call_wrong_argument_count() {
         "Wrong number of arguments in FFI_CALL_IO expression.",
     );
 }
+
+/// The types that cross to C as one scalar are those of `Std`. A type a program declares under one
+/// of their names is a type of its own namespace, and a struct of one field is a struct: it crosses
+/// neither through the `...` of an `FFI_CALL` nor at an exported signature.
+#[test]
+pub fn test_type_named_like_a_c_scalar_outside_std_does_not_cross_to_c() {
+    let declarations = r##"
+        module Main;
+
+        type I32 = unbox struct { v : Std::I32 };
+    "##;
+
+    test_source_fail(
+        &format!(
+            r##"{}
+        main : IO ();
+        main = println(FFI_CALL[CInt c_report(CInt, ...), 1.c_int, Main::I32 {{ v : 1_I32 }}].to_string);
+    "##,
+            declarations
+        ),
+        Configuration::develop_mode(),
+        "`Main::I32` cannot be passed through the `...` of an `FFI_CALL`",
+    );
+
+    test_source_fail(
+        &format!(
+            r##"{}
+        get_v : Main::I32 -> Std::I32;
+        get_v = |x| x.@v;
+        FFI_EXPORT[get_v, c_get_v];
+
+        main : IO ();
+        main = println(get_v(Main::I32 {{ v : 1_I32 }}).to_string);
+    "##,
+            declarations
+        ),
+        Configuration::develop_mode(),
+        "`Main::I32` cannot be used as an argument of an exported function",
+    );
+}
