@@ -6,10 +6,10 @@ use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::typedecl::Field;
 use crate::constants::{
-    TraverserWorkType, ARROW_NAME, BOOL_NAME, F32_NAME, F64_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME,
-    I8_NAME, IOSTATE_NAME, IO_NAME, PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, STRING_NAME, TRAVERSER_WORK_MARK_GLOBAL,
-    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U128_NAME,
-    U16_NAME, U32_NAME, U64_NAME, U8_NAME,
+    TraverserWorkType, ARROW_NAME, BOOL_NAME, F32_NAME, F64_NAME, I128_NAME, I16_NAME, I32_NAME,
+    I64_NAME, I8_NAME, IOSTATE_NAME, IO_NAME, PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, STRING_NAME,
+    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
+    TYPE_WILDCARD_VAR_PREFIX, U128_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
@@ -300,8 +300,7 @@ impl TyCon {
     /// number, or a pointer, which C and Fix lay down the same way. These are the types a C
     /// function signature can name, and the types an exported Fix function can exchange.
     pub fn is_c_scalar(self: &TyCon) -> bool {
-        self.name.namespace.is(&[STD_NAME])
-            && C_SCALAR_NAMES.contains(&self.name.name.as_str())
+        self.name.namespace.is(&[STD_NAME]) && C_SCALAR_NAMES.contains(&self.name.name.as_str())
     }
 
     /// Whether this is an integer type that carries a sign. Panics for a type that is not an
