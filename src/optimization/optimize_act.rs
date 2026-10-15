@@ -112,7 +112,7 @@ fn run_on_array_act(
 }
 
 fn is_builtin_array_act(generic_name: &FullName) -> bool {
-    generic_name == &FullName::from_strs(&[STD_NAME, ARRAY_NAME], BUILTIN_ACT_NAME)
+    generic_name.is(&[STD_NAME, ARRAY_NAME], BUILTIN_ACT_NAME)
 }
 
 fn run_on_struct_field_act(
