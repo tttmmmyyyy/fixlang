@@ -866,10 +866,7 @@ pub fn make_numeric_ty(name: &str) -> (Arc<TypeNode>, bool) {
 
 /// The type `Std::#DynamicObject`, the boxed object a closure holds its captured values in.
 pub fn make_dynamic_object_ty() -> Arc<TypeNode> {
-    type_tycon(&tycon(FullName::from_strs(
-        &[STD_NAME],
-        DYNAMIC_OBJECT_NAME,
-    )))
+    type_tycon(&tycon(DYNAMIC_OBJECT_TYPE.to_fullname()))
 }
 
 /// The tuple type whose fields are `tys` in that order, such as `Std::Tuple2 I64 Bool`. An empty

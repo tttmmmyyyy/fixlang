@@ -3,17 +3,17 @@ use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{TyConVariant, TypeNode};
 use crate::constants::{
     RefcntState, TraverserWorkType, ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT,
-    ARRAY_CAP_IDX, ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK, ARRAY_STORAGE_IDX, BOOL_NAME,
+    ARRAY_CAP_IDX, ARRAY_SIZE_IDX, ARRAY_STORAGE_ALLOC_SLACK, ARRAY_STORAGE_IDX,
     BOXED_TYPE_DATA_IDX, DEBUG_ARRAY_ASSUMED_LEN, DW_ATE_ADDRESS, DW_ATE_BOOLEAN, DW_ATE_FLOAT,
     DW_ATE_SIGNED, DW_ATE_UNSIGNED, DYNAMIC_OBJ_CAP_IDX, DYNAMIC_OBJ_TRAVARSER_IDX,
-    MAX_UNION_VARIANTS, PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, REFCNT_BITS, STD_NAME,
+    MAX_UNION_VARIANTS, PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, REFCNT_BITS,
     STORAGE_BUF_IDX, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
     TRAVERSER_WORK_RELEASE, UNION_DATA_IDX, UNION_TAG_BITS, UNION_TAG_IDX,
 };
 use crate::fixstd::builtin::{
     make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i128_ty,
     make_i16_ty, make_i32_ty, make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u128_ty,
-    make_u16_ty, make_u32_ty, make_u64_ty, make_u8_ty,
+    make_u16_ty, make_u32_ty, make_u64_ty, make_u8_ty, BOOL_TYPE,
 };
 use crate::fixstd::runtime::{
     RUNTIME_ARRAY_SIZE_OVERFLOW, RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC,
@@ -2652,12 +2652,7 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
     if ty.is_boolean() {
         return gc
             .get_di_builder()
-            .create_basic_type(
-                &format!("{}::{}", STD_NAME, BOOL_NAME),
-                8,
-                DW_ATE_BOOLEAN,
-                0,
-            )
+            .create_basic_type(&BOOL_TYPE.to_fullname().to_string(), 8, DW_ATE_BOOLEAN, 0)
             .unwrap()
             .as_type();
     }
