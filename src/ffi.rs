@@ -168,7 +168,7 @@ impl CNumericTypes {
     }
 
     /// The C numeric types, each paired with the sign and the bit width of the Fix type it is an
-    /// alias of. The name built from those two must be one of `C_SCALAR_NAMES`, which is the set
+    /// alias of. The name built from those two must be the name of one of `C_SCALAR_TYPES`, which is the set
     /// `TyCon::get_c_type` can map.
     pub fn get_c_types(&self) -> Vec<(&str, &str, usize)> {
         vec![
@@ -286,7 +286,7 @@ impl TyCon {
             F32_NAME => CTypeShape::Float32,
             F64_NAME => CTypeShape::Float64,
             PTR_NAME => CTypeShape::Pointer,
-            // `C_SCALAR_NAMES` gained a name that this mapping does not cover.
+            // `C_SCALAR_TYPES` gained a type that this mapping does not cover.
             name => unreachable!("no C type for `{}`", name),
         })
     }
@@ -329,7 +329,7 @@ impl TyCon {
             F32_NAME => "float",
             F64_NAME => "double",
             PTR_NAME => "void *",
-            // `C_SCALAR_NAMES` gained a name that this mapping does not cover.
+            // `C_SCALAR_TYPES` gained a type that this mapping does not cover.
             name => unreachable!("no C spelling for `{}`", name),
         }
         .to_string()

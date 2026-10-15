@@ -7,10 +7,9 @@ use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::type_env::TypeEnv;
 use crate::ast::typedecl::Field;
 use crate::constants::{
-    TraverserWorkType, F32_NAME, F64_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
-    PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL,
-    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U128_NAME,
-    U16_NAME, U32_NAME, U64_NAME, U8_NAME,
+    TraverserWorkType, I128_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME, PUNCHED_TYPE_SYMBOL,
+    STD_NAME, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
+    TYPE_WILDCARD_VAR_PREFIX, U128_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
@@ -18,7 +17,9 @@ use crate::error::Errors;
 use crate::fixstd::builtin::{
     get_tuple_n, is_funptr_tycon, make_arrow_name_abs, make_funptr_tycon, make_unit_ty,
     BuiltinTypeName, ARRAY_STORAGE_TYPE, ARRAY_TYPE, ARROW_TYPE, BOOL_TYPE, DESTRUCTOR_TYPE,
-    DYNAMIC_OBJECT_TYPE, I128_TYPE, IO_TYPE, PUNCHED_ARRAY_TYPE, STRING_TYPE, U128_TYPE,
+    DYNAMIC_OBJECT_TYPE, F32_TYPE, F64_TYPE, I128_TYPE, I16_TYPE, I32_TYPE, I64_TYPE, I8_TYPE,
+    IO_TYPE, PTR_TYPE, PUNCHED_ARRAY_TYPE, STRING_TYPE, U128_TYPE, U16_TYPE, U32_TYPE, U64_TYPE,
+    U8_TYPE,
 };
 use crate::generator::Generator;
 use crate::misc::{collect_results, number_to_varname, Map, Set};
@@ -207,11 +208,11 @@ pub enum TyConVariant {
     Opaque,
 }
 
-/// The names, in the `Std` namespace, of the types that cross to C as a single scalar value.
-/// The names `CNumericTypes::get_c_types` builds for the C numeric type aliases must all appear here.
-const C_SCALAR_NAMES: &[&str] = &[
-    I8_NAME, U8_NAME, I16_NAME, U16_NAME, I32_NAME, U32_NAME, I64_NAME, U64_NAME, F32_NAME,
-    F64_NAME, PTR_NAME,
+/// The types that cross to C as a single scalar value. The names `CNumericTypes::get_c_types`
+/// builds for the C numeric type aliases must all be names of these.
+const C_SCALAR_TYPES: &[BuiltinTypeName] = &[
+    I8_TYPE, U8_TYPE, I16_TYPE, U16_TYPE, I32_TYPE, U32_TYPE, I64_TYPE, U64_TYPE, F32_TYPE,
+    F64_TYPE, PTR_TYPE,
 ];
 
 /// A type constructor, such as `Std::I64` or `Std::Array`, before any type argument is applied to
@@ -301,7 +302,7 @@ impl TyCon {
     /// number, or a pointer, which C and Fix lay down the same way. These are the types a C
     /// function signature can name, and the types an exported Fix function can exchange.
     pub fn is_c_scalar(self: &TyCon) -> bool {
-        self.name.namespace.is(&[STD_NAME]) && C_SCALAR_NAMES.contains(&self.name.name.as_str())
+        C_SCALAR_TYPES.iter().any(|ty| ty.is(&self.name))
     }
 
     /// Whether this is an integer type that carries a sign. Panics for a type that is not an

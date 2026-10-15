@@ -13,7 +13,7 @@ use crate::constants::{
 use crate::fixstd::builtin::{
     make_array_storage_ty, make_dynamic_object_ty, make_f32_ty, make_f64_ty, make_i128_ty,
     make_i16_ty, make_i32_ty, make_i64_ty, make_i8_ty, make_iostate_ty, make_ptr_ty, make_u128_ty,
-    make_u16_ty, make_u32_ty, make_u64_ty, make_u8_ty, BOOL_TYPE,
+    make_u16_ty, make_u32_ty, make_u64_ty, make_u8_ty, BOOL_TYPE, F32_TYPE, F64_TYPE, PTR_TYPE,
 };
 use crate::fixstd::runtime::{
     RUNTIME_ARRAY_SIZE_OVERFLOW, RUNTIME_INDEX_OUT_OF_RANGE, RUNTIME_MALLOC,
@@ -143,7 +143,7 @@ impl ObjectFieldType {
             ObjectFieldType::ControlBlock => control_block_di_type(gc),
             ObjectFieldType::TraverseFunction => ptr_di_type("<ptr to traverser func>", gc),
             ObjectFieldType::LambdaFunction(_) => ptr_di_type("<ptr to closure func>", gc),
-            ObjectFieldType::Ptr => ptr_di_type("Std::Ptr", gc),
+            ObjectFieldType::Ptr => ptr_di_type(&PTR_TYPE.to_fullname().to_string(), gc),
             ObjectFieldType::Integer { bits, signed } => gc
                 .get_di_builder()
                 .create_basic_type(
@@ -160,12 +160,12 @@ impl ObjectFieldType {
                 .as_type(),
             ObjectFieldType::F32 => gc
                 .get_di_builder()
-                .create_basic_type("Std::F32", 32, DW_ATE_FLOAT, 0)
+                .create_basic_type(&F32_TYPE.to_fullname().to_string(), 32, DW_ATE_FLOAT, 0)
                 .unwrap()
                 .as_type(),
             ObjectFieldType::F64 => gc
                 .get_di_builder()
-                .create_basic_type("Std::F64", 64, DW_ATE_FLOAT, 0)
+                .create_basic_type(&F64_TYPE.to_fullname().to_string(), 64, DW_ATE_FLOAT, 0)
                 .unwrap()
                 .as_type(),
             ObjectFieldType::SubObject(ty, _is_punched) => ty_to_debug_embedded_ty(ty.clone(), gc),
