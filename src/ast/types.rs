@@ -17,7 +17,7 @@ use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use crate::error::Errors;
 use crate::fixstd::builtin::{
     get_tuple_n, is_funptr_tycon, make_arrow_name_abs, make_funptr_tycon, make_unit_ty,
-    ARRAY_STORAGE_TYPE, ARRAY_TYPE, ARROW_TYPE, BOOL_TYPE, DESTRUCTOR_TYPE, DYNAMIC_OBJECT_TYPE,
+    ARRAY_STORAGE_TYPE, ARRAY_TYPE, ARROW_TYPE, BOOL_TYPE, BuiltinTypeName, DESTRUCTOR_TYPE, DYNAMIC_OBJECT_TYPE,
     I128_TYPE, IO_TYPE, PUNCHED_ARRAY_TYPE, STRING_TYPE, U128_TYPE,
 };
 use crate::generator::Generator;
@@ -1380,6 +1380,11 @@ impl TypeNode {
         }
     }
 
+    /// Whether the top-level type constructor of this type is the built-in type `name`.
+    fn toplevel_tycon_is(&self, name: &BuiltinTypeName) -> bool {
+        self.toplevel_tycon_satisfies(|tc| name.is(&tc.name))
+    }
+
     /// Whether this type is a function type `a -> b`, a value of which pairs the code to run with
     /// the values it captured.
     pub fn is_closure(&self) -> bool {
@@ -1394,12 +1399,12 @@ impl TypeNode {
 
     /// Whether this type is `Std::Array`.
     pub fn is_array(&self) -> bool {
-        self.toplevel_tycon_satisfies(|tc| ARRAY_TYPE.is(&tc.name))
+        self.toplevel_tycon_is(&ARRAY_TYPE)
     }
 
     /// Whether this is the internal `#ArrayStorage` type.
     pub fn is_array_storage(&self) -> bool {
-        self.toplevel_tycon_satisfies(|tc| ARRAY_STORAGE_TYPE.is(&tc.name))
+        self.toplevel_tycon_is(&ARRAY_STORAGE_TYPE)
     }
 
     /// Whether this type is one of the signed integer types of `Std`.
@@ -1412,7 +1417,7 @@ impl TypeNode {
 
     /// Whether this type is `Std::PunchedArray`, an array with one element moved out of it.
     pub fn is_punched_array(&self) -> bool {
-        self.toplevel_tycon_satisfies(|tc| PUNCHED_ARRAY_TYPE.is(&tc.name))
+        self.toplevel_tycon_is(&PUNCHED_ARRAY_TYPE)
     }
 
     /// Whether this is the unit type `()`, i.e. the tuple of no element.
@@ -1466,13 +1471,13 @@ impl TypeNode {
     /// in. Its fields vary with the closure, so its layout follows from the capture types passed to
     /// `ty_to_object_ty` together with the type.
     pub fn is_dynamic(&self) -> bool {
-        self.toplevel_tycon_satisfies(|tc| DYNAMIC_OBJECT_TYPE.is(&tc.name))
+        self.toplevel_tycon_is(&DYNAMIC_OBJECT_TYPE)
     }
 
     /// Whether this type is `Std::FFI::Destructor`, which runs the destructor function it holds
     /// over its value as it is destroyed.
     pub fn is_destructor_object(&self) -> bool {
-        self.toplevel_tycon_satisfies(|tc| DESTRUCTOR_TYPE.is(&tc.name))
+        self.toplevel_tycon_is(&DESTRUCTOR_TYPE)
     }
 
     /// The declaration of this type's outermost type constructor: its variant, boxedness, type
