@@ -1,8 +1,8 @@
 // An `IO` action chosen by an `if` or a `match` in the body of a loop is run without building a
 // closure for it. Once the loop is specialized for its body, the choice and the application of the
-// action stand side by side, and the branch taken is reduced where the action runs. That reduction
-// moves the choice only where it leaves every value's lifetime as it was, which a program observes
-// as an update in place staying in place, and these tests observe through `unsafe_is_unique`.
+// action stand side by side, and the branch taken is reduced where the action runs. The choice is
+// moved only where every value's lifetime stays as it was. A program sees this as an update in place
+// staying in place, and these tests see it through `unsafe_is_unique`.
 
 #[cfg(test)]
 mod tests {

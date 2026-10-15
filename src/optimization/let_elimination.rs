@@ -501,8 +501,8 @@ fn is_global_lambda_strictly_partially_applied_to_names(
     expr: &Arc<ExprNode>,
     global_lambda_to_arity: &Map<FullName, usize>,
 ) -> bool {
-    // An application written by uncurrying hands several arguments over at once, so the arguments
-    // are counted over the whole chain rather than one per application.
+    // One application may hand over one argument or several, as uncurrying writes it, so the
+    // arguments are counted over the whole chain of applications.
     let (func, args) = collect_app(expr);
     if !func.is_var() {
         return false;
