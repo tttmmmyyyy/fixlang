@@ -7,9 +7,9 @@ use crate::ast::{
     name::{FullName, Name},
     pattern::PatternNode,
     predicate::Predicate,
-    program::TypeEnv,
     qual_pred::QualPred,
     traits::{TraitId, TraitImpl},
+    type_env::TypeEnv,
     typedecl::{Field, Struct, TypeDeclValue, TypeDefn},
     types::{
         apply_type_args, kind_arrow, kind_star, make_tyvar, tycon, type_from_tyvar, type_fun,

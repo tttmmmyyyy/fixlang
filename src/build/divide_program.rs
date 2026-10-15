@@ -8,7 +8,8 @@
 //! unit that has no copy of it names it.
 
 use crate::ast::name::FullName;
-use crate::ast::program::{Program, TypeEnv};
+use crate::ast::program::Program;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{TyCon, TyConInfo, TypeNode};
 use crate::build::compile_unit::CompileUnit;
 use crate::configuration::Configuration;

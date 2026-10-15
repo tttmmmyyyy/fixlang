@@ -11,10 +11,11 @@ use crate::{
         name::{FullName, Name, NameSpace},
         pattern::{Pattern, PatternNode},
         predicate::Predicate,
-        program::{ModuleInfo, TypeEnv},
+        program::ModuleInfo,
         qual_pred::{QualPred, QualPredScheme},
         qual_type::QualType,
         traits::{TraitEnv, TraitId},
+        type_env::TypeEnv,
         typedecl::describe_field_names,
         types::{
             is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar,
@@ -3345,8 +3346,8 @@ mod tests {
     use crate::ast::kind_scope::KindEnv;
     use crate::ast::name::FullName;
     use crate::ast::pattern::PatternNode;
-    use crate::ast::program::TypeEnv;
     use crate::ast::traits::TraitEnv;
+    use crate::ast::type_env::TypeEnv;
     use crate::ast::types::TyCon;
     use crate::elaboration::typecheckcache::MemoryCache;
     use crate::fixstd::builtin::make_bool_ty;

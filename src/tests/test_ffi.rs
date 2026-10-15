@@ -1,5 +1,5 @@
 use crate::{
-    ast::{name::FullName, program::TypeEnv, types::tycon},
+    ast::{name::FullName, type_env::TypeEnv, types::tycon},
     build::build_object_files::get_target_machine,
     configuration::{Configuration, OutputFileType},
     constants::{COMPILER_TEST_WORKING_PATH, C_ENTRY_POINT_NAME, I8_NAME, STD_NAME, U16_NAME},

@@ -30,7 +30,7 @@
 
 use crate::ast::builtin_op::BuiltinOp;
 use crate::ast::name::FullName;
-use crate::ast::program::TypeEnv;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::constants::{BOOL_TRUE_TAG, IS_UNIQUE_FLAG_FIELD, IS_UNIQUE_VALUE_FIELD};
 use crate::fixstd::builtin::{ArrayIsStorageUniqueOp, IsUniqueOp, IS_UNIQUE_VALUE_ARG};

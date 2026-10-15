@@ -3,7 +3,8 @@ use crate::{
         export_statement::ExportStatement,
         expr::ExprNode,
         name::FullName,
-        program::{Program, Symbol, TypeEnv},
+        program::{Program, Symbol},
+        type_env::TypeEnv,
         types::TypeNode,
     },
     build::divide_program::{

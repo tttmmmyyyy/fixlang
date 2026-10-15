@@ -1,5 +1,5 @@
 use crate::ast::name::FullName;
-use crate::ast::program::TypeEnv;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::generator::{Generator, Object};
 use crate::rc_ir::ast::{FieldPath, RcTarget, UniqueCheckOperand};

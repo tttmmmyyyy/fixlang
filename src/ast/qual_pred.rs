@@ -1,7 +1,8 @@
 use crate::ast::equality::Equality;
 use crate::ast::predicate::Predicate;
-use crate::ast::program::{EndNode, TypeEnv};
+use crate::ast::program::EndNode;
 use crate::ast::traits::KindSignature;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TyVar;
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;

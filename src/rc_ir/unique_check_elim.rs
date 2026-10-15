@@ -23,7 +23,7 @@
 //! `dead_code_elim::eliminate_unreachable` drops the versions nothing calls.
 
 use crate::ast::builtin_op::BuiltinOp;
-use crate::ast::program::TypeEnv;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{

@@ -11,7 +11,7 @@
 //! facts, so it has to hash and compare by content; the ordered map gives equal shapes an identical
 //! hash whatever order they were built in.
 
-use crate::ast::program::TypeEnv;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::constants::CLOSURE_CAPTURE_IDX;
 use crate::misc::Map;
@@ -275,7 +275,7 @@ impl<T: Copy> LeafKey<T> {
 mod tests {
     use super::boxed_leaf_paths;
     use crate::ast::name::FullName;
-    use crate::ast::program::TypeEnv;
+    use crate::ast::type_env::TypeEnv;
     use crate::ast::typedecl::Field;
     use crate::ast::types::{
         kind_star, tycon, type_tyapp, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode,

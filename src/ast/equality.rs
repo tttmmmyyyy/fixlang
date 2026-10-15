@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::Name;
-use crate::ast::program::{EndNode, TypeEnv};
+use crate::ast::program::EndNode;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{is_opaque_tyvar, type_assocty, AssocType, TyVar, Type, TypeNode};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;

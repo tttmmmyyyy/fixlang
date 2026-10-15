@@ -1,7 +1,8 @@
 use crate::ast::builtin_op::{BuiltinOp, BuiltinOpExpr};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::PatternNode;
-use crate::ast::program::{EndNode, TypeEnv};
+use crate::ast::program::EndNode;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{type_fun, TyCon, TypeNode};
 use crate::constants::{CAP_NAME, FORMAT_LINE_LIMIT, HOLE_NAME, STD_NAME};
 use crate::elaboration::name_resolution::NameResolutionContext;

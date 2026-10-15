@@ -20,7 +20,7 @@
 
 use crate::ast::builtin_op::BuiltinOp;
 use crate::ast::name::FullName;
-use crate::ast::program::TypeEnv;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::constants::{CLOSURE_CAPTURE_IDX, CLOSURE_FIELD_COUNT};
 use crate::misc::{grow_stack, Map, Set};
@@ -949,7 +949,7 @@ mod tests {
         rc_units, truncate_to_unit, unit_step, Binding, Origin, UnitStep, VarTable,
     };
     use crate::ast::name::FullName;
-    use crate::ast::program::TypeEnv;
+    use crate::ast::type_env::TypeEnv;
     use crate::ast::typedecl::Field;
     use crate::ast::types::{
         kind_arrow, kind_star, make_tyvar, tycon, type_fun, type_tyapp, type_tycon,

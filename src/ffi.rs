@@ -7,7 +7,7 @@
 
 use crate::ast::export_statement::ExportedFunctionType;
 use crate::ast::name::{FullName, Name};
-use crate::ast::program::TypeEnv;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{tycon, TyCon, TypeNode};
 use crate::constants::{
     C_CHAR_NAME, C_DOUBLE_NAME, C_FLOAT_NAME, C_INT_NAME, C_LONG_LONG_NAME, C_LONG_NAME,

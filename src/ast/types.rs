@@ -2,8 +2,9 @@ use crate::ast::equality::Equality;
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::predicate::Predicate;
-use crate::ast::program::{EndNode, TypeEnv};
+use crate::ast::program::EndNode;
 use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
+use crate::ast::type_env::TypeEnv;
 use crate::ast::typedecl::Field;
 use crate::constants::{
     TraverserWorkType, BOOL_NAME, F32_NAME, F64_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME,

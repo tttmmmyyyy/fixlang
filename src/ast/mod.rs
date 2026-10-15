@@ -14,5 +14,6 @@ pub mod qual_pred;
 pub mod qual_type;
 pub mod traits;
 pub mod traverse;
+pub mod type_env;
 pub mod typedecl;
 pub mod types;

@@ -1,5 +1,5 @@
 use crate::ast::name::FullName;
-use crate::ast::program::TypeEnv;
+use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{TyConVariant, TypeNode};
 use crate::constants::{
     RefcntState, TraverserWorkType, ARRAY_ALIGNED_ALLOC_THRESHOLD, ARRAY_BUF_ALIGNMENT,
