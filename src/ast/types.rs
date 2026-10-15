@@ -7,8 +7,8 @@ use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::type_env::TypeEnv;
 use crate::ast::typedecl::Field;
 use crate::constants::{
-    TraverserWorkType, BOOL_NAME, F32_NAME, F64_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME,
-    I8_NAME, PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, STRING_NAME, TRAVERSER_WORK_MARK_GLOBAL,
+    TraverserWorkType, F32_NAME, F64_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
+    PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL,
     TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U128_NAME,
     U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
@@ -16,9 +16,9 @@ use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionT
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use crate::error::Errors;
 use crate::fixstd::builtin::{
-    get_tuple_n, is_array_storage_tycon, is_array_tycon, is_destructor_object_tycon,
-    is_dynamic_object_tycon, is_funptr_tycon, is_punched_array_tycon, make_arrow_name_abs,
-    make_funptr_tycon, make_unit_ty, ARROW_TYPE, IO_TYPE,
+    get_tuple_n, is_funptr_tycon, make_arrow_name_abs, make_funptr_tycon, make_unit_ty,
+    ARRAY_STORAGE_TYPE, ARRAY_TYPE, ARROW_TYPE, BOOL_TYPE, DESTRUCTOR_TYPE, DYNAMIC_OBJECT_TYPE,
+    I128_TYPE, IO_TYPE, PUNCHED_ARRAY_TYPE, STRING_TYPE, U128_TYPE,
 };
 use crate::generator::Generator;
 use crate::misc::{collect_results, number_to_varname, Map, Set};
@@ -327,18 +327,18 @@ impl TyCon {
 
     /// Whether this is the type `Bool` of `Std`.
     pub fn is_boolean(&self) -> bool {
-        self.name.is(&[STD_NAME], BOOL_NAME)
+        BOOL_TYPE.is(&self.name)
     }
 
     /// Whether this is `I128` or `U128` of `Std`, the integer types wider than every integer type
     /// standard C has.
     pub fn is_128_bit_integer(&self) -> bool {
-        self.name.is(&[STD_NAME], I128_NAME) || self.name.is(&[STD_NAME], U128_NAME)
+        I128_TYPE.is(&self.name) || U128_TYPE.is(&self.name)
     }
 
     /// Whether this is the type `String` of `Std`.
     pub fn is_string(&self) -> bool {
-        self.name.is(&[STD_NAME], STRING_NAME)
+        STRING_TYPE.is(&self.name)
     }
 
     /// Whether this is the type constructor `IO`.
@@ -1394,12 +1394,12 @@ impl TypeNode {
 
     /// Whether this type is `Std::Array`.
     pub fn is_array(&self) -> bool {
-        self.toplevel_tycon_satisfies(is_array_tycon)
+        self.toplevel_tycon_satisfies(|tc| ARRAY_TYPE.is(&tc.name))
     }
 
     /// Whether this is the internal `#ArrayStorage` type.
     pub fn is_array_storage(&self) -> bool {
-        self.toplevel_tycon_satisfies(is_array_storage_tycon)
+        self.toplevel_tycon_satisfies(|tc| ARRAY_STORAGE_TYPE.is(&tc.name))
     }
 
     /// Whether this type is one of the signed integer types of `Std`.
@@ -1412,7 +1412,7 @@ impl TypeNode {
 
     /// Whether this type is `Std::PunchedArray`, an array with one element moved out of it.
     pub fn is_punched_array(&self) -> bool {
-        self.toplevel_tycon_satisfies(is_punched_array_tycon)
+        self.toplevel_tycon_satisfies(|tc| PUNCHED_ARRAY_TYPE.is(&tc.name))
     }
 
     /// Whether this is the unit type `()`, i.e. the tuple of no element.
@@ -1466,13 +1466,13 @@ impl TypeNode {
     /// in. Its fields vary with the closure, so its layout follows from the capture types passed to
     /// `ty_to_object_ty` together with the type.
     pub fn is_dynamic(&self) -> bool {
-        self.toplevel_tycon_satisfies(is_dynamic_object_tycon)
+        self.toplevel_tycon_satisfies(|tc| DYNAMIC_OBJECT_TYPE.is(&tc.name))
     }
 
     /// Whether this type is `Std::FFI::Destructor`, which runs the destructor function it holds
     /// over its value as it is destroyed.
     pub fn is_destructor_object(&self) -> bool {
-        self.toplevel_tycon_satisfies(is_destructor_object_tycon)
+        self.toplevel_tycon_satisfies(|tc| DESTRUCTOR_TYPE.is(&tc.name))
     }
 
     /// The declaration of this type's outermost type constructor: its variant, boxedness, type
