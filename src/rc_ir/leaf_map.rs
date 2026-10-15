@@ -261,3 +261,80 @@ impl<T: Copy> LeafKey<T> {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::boxed_leaf_paths;
+    use crate::ast::name::FullName;
+    use crate::ast::program::TypeEnv;
+    use crate::ast::typedecl::Field;
+    use crate::ast::types::{
+        kind_star, tycon, type_tyapp, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode,
+    };
+    use crate::fixstd::builtin::{bulitin_tycons, make_array_ty, make_i64_ty};
+    use crate::misc::Map;
+    use std::sync::Arc;
+
+    /// `Test::S`, the type the declarations below declare.
+    fn s_tycon() -> TyCon {
+        TyCon::new(FullName::from_strs(&["Test"], "S"))
+    }
+
+    /// The type `Test::S`.
+    fn s_ty() -> Arc<TypeNode> {
+        type_tycon(&tycon(s_tycon().name))
+    }
+
+    /// An unboxed struct `Test::S` holding `Array I64` and `I64`, the array at field
+    /// `array_index`.
+    fn s_info(array_index: usize) -> TyConInfo {
+        let mut fields = vec![Field::make("n".to_string(), make_i64_ty(), None)];
+        fields.insert(
+            array_index,
+            Field::make(
+                "a".to_string(),
+                type_tyapp(make_array_ty(), make_i64_ty()),
+                None,
+            ),
+        );
+        TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Struct,
+            is_unbox: true,
+            tyvars: vec![],
+            fields,
+            source: None,
+            document: None,
+            punched_from: None,
+        }
+    }
+
+    /// The built-in type constructors and `Test::S` with its array at field `array_index`.
+    fn type_env(array_index: usize) -> TypeEnv {
+        let mut tycons = bulitin_tycons();
+        tycons.insert(s_tycon(), s_info(array_index));
+        TypeEnv::new(tycons, Map::default())
+    }
+
+    /// Replacing a declaration changes the boxed leaf paths of its type, though an earlier call
+    /// asked about that type under the declaration it replaced.
+    #[test]
+    fn test_boxed_leaf_paths_follow_a_replaced_declaration() {
+        let mut env = type_env(0);
+        assert_eq!(boxed_leaf_paths(&s_ty(), &env), vec![vec![0]]);
+        env.add_tycons(Map::from_iter([(s_tycon(), s_info(1))]));
+        assert_eq!(boxed_leaf_paths(&s_ty(), &env), vec![vec![1]]);
+    }
+
+    /// A clone that replaces a declaration leaves the boxed leaf paths of the environment it was
+    /// cloned from as they were.
+    #[test]
+    fn test_boxed_leaf_paths_of_a_clone_stay_apart() {
+        let env = type_env(0);
+        assert_eq!(boxed_leaf_paths(&s_ty(), &env), vec![vec![0]]);
+        let mut replaced = env.clone();
+        replaced.add_tycons(Map::from_iter([(s_tycon(), s_info(1))]));
+        assert_eq!(boxed_leaf_paths(&s_ty(), &replaced), vec![vec![1]]);
+        assert_eq!(boxed_leaf_paths(&s_ty(), &env), vec![vec![0]]);
+    }
+}
