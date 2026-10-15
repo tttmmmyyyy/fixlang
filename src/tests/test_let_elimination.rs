@@ -356,6 +356,40 @@ mod tests {
         test_source(source, Configuration::develop_mode());
     }
 
+    /// `partial` is bound to a strictly partial application and eliminated, which leaves `reader`
+    /// bound to a chain of two applications that together hand `make_reader` every parameter it
+    /// takes. `reader` is applied once, after the program asks whether the cell the call reads is
+    /// unique. The chain is not strictly partial, so its binding stays, and the call has released
+    /// the cell by the time the program asks.
+    #[test]
+    fn test_name_bound_to_a_saturated_application_chain_keeps_its_binding() {
+        let source = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+
+        make_reader : I64 -> Cell -> I64 -> I64 -> I64;
+        make_reader = |d, cell, k| (
+            if d > 0 { make_reader(d - 1, cell, k) };
+            let v = cell.@v;
+            |x| x + v + k
+        );
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : 10 };
+            let partial = make_reader(k);
+            let reader = partial(cell, k);
+            let (unique, cell_after) = cell.unsafe_is_unique;
+            assert_eq(|_|"the reader adds the value and `k` to its argument", reader(cell_after.@v), 21);;
+            assert_eq(|_|"the call has released the cell before the program asks", unique, true);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
     /// The binding is read in a later field of a struct expression while an earlier field reads a
     /// name of the enclosing scope.
     #[test]
