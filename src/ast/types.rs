@@ -8,7 +8,7 @@ use crate::ast::typedecl::Field;
 use crate::constants::{
     TraverserWorkType, ARROW_NAME, BOOL_NAME, F32_NAME, F64_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME,
     I8_NAME, IOSTATE_NAME, IO_NAME, PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, STRING_NAME, TRAVERSER_WORK_MARK_GLOBAL,
-    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TUPLE_NAME, TYPE_WILDCARD_VAR_PREFIX, U128_NAME,
+    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U128_NAME,
     U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
@@ -293,7 +293,7 @@ impl TyCon {
 
     /// Whether this is the unit type `()`, i.e. the tuple of no element.
     pub fn is_unit(self: &TyCon) -> bool {
-        self.name.namespace.is(&[STD_NAME]) && self.name.name.strip_prefix(TUPLE_NAME) == Some("0")
+        get_tuple_n(&self.name) == Some(0)
     }
 
     /// Whether a value of this type crosses to C as one scalar: an integer, a floating point
