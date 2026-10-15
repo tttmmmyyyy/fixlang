@@ -54,9 +54,11 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
             path.pop();
         }
     }
-    let mut out = Vec::new();
-    go(ty, type_env, &mut Vec::new(), &mut out);
-    out
+    type_env.memoize_boxed_leaf_paths(ty, || {
+        let mut out = Vec::new();
+        go(ty, type_env, &mut Vec::new(), &mut out);
+        out
+    })
 }
 
 /// One fact of type `T` per boxed leaf of a value, keyed by the leaf's path.

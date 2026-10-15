@@ -46,6 +46,7 @@ use crate::misc::{
 };
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
+use crate::rc_ir::ast::FieldPath;
 use crate::type_size::{no_size_reason, LayoutWalk};
 use build_time::build_time_utc;
 use serde::{Deserialize, Serialize};
@@ -67,6 +68,8 @@ pub struct TypeEnv {
     /// Private, because the field types held here answer what a value of a type is laid out as, and
     /// `unwrap_newtypes` puts them in a form the rest of the compiler relies on. A declaration
     /// enters through `add_tycons`, which puts it in that same form.
+    ///
+    /// Replaced through `set_tycons` alone, which keeps `boxed_leaf_paths_memo` in step with it.
     tycons: Arc<Map<TyCon, TyConInfo>>,
     /// The declaration of every type alias, by its name.
     pub aliases: Arc<Map<TyCon, TyAliasInfo>>,
@@ -78,6 +81,13 @@ pub struct TypeEnv {
     /// carried by a higher-kinded type variable occurs without its arguments, and such an occurrence
     /// still names one.
     unwrapped_newtypes: Arc<Set<TyCon>>,
+    /// The paths of the boxed leaves of each type `boxed_leaf_paths` has been asked about, which
+    /// it answers from rather than descending the type again.
+    ///
+    /// The paths follow from the declarations in `tycons`, so `set_tycons` empties it whenever they
+    /// are replaced. The clones of an environment share it until one of them replaces its
+    /// declarations.
+    boxed_leaf_paths_memo: Arc<Mutex<Map<Arc<TypeNode>, Vec<FieldPath>>>>,
 }
 
 impl Default for TypeEnv {
@@ -87,6 +97,7 @@ impl Default for TypeEnv {
             tycons: Arc::new(Default::default()),
             aliases: Arc::new(Default::default()),
             unwrapped_newtypes: Arc::new(Default::default()),
+            boxed_leaf_paths_memo: Arc::new(Default::default()),
         }
     }
 }
@@ -99,7 +110,33 @@ impl TypeEnv {
             tycons: Arc::new(tycons),
             aliases: Arc::new(aliases),
             unwrapped_newtypes: Arc::new(Default::default()),
+            boxed_leaf_paths_memo: Arc::new(Default::default()),
         }
+    }
+
+    /// Replaces the declarations of the type constructors by `tycons`, forgetting what was worked
+    /// out from the ones they replace.
+    fn set_tycons(&mut self, tycons: Map<TyCon, TyConInfo>) {
+        self.tycons = Arc::new(tycons);
+        self.boxed_leaf_paths_memo = Arc::new(Default::default());
+    }
+
+    /// The paths of the boxed leaves of `ty`, which `compute` works out, answered from what an
+    /// earlier call worked out for the same type where there is one.
+    pub fn memoize_boxed_leaf_paths(
+        &self,
+        ty: &Arc<TypeNode>,
+        compute: impl FnOnce() -> Vec<FieldPath>,
+    ) -> Vec<FieldPath> {
+        if let Some(paths) = self.boxed_leaf_paths_memo.lock().unwrap().get(ty) {
+            return paths.clone();
+        }
+        let paths = compute();
+        self.boxed_leaf_paths_memo
+            .lock()
+            .unwrap()
+            .insert(ty.clone(), paths.clone());
+        paths
     }
 
     /// Makes a value of each newtype in `newtypes` a value of its one field: records them, then
@@ -127,7 +164,7 @@ impl TypeEnv {
                 field.ty = field.ty.unwrap_newtypes(&declared_type_env);
             }
         }
-        self.tycons = Arc::new(rewritten);
+        self.set_tycons(rewritten);
     }
 
     /// The declaration of `tycon` if a value of it has become a value of its one field, and `None`
@@ -157,7 +194,7 @@ impl TypeEnv {
             }
             tycons.insert(tycon, tycon_info);
         }
-        self.tycons = Arc::new(tycons);
+        self.set_tycons(tycons);
     }
 
     /// The declaration of every type constructor this environment holds, by its name.
@@ -218,7 +255,7 @@ impl TypeEnv {
             errors.eat_err(ti.resolve_type_aliases(&type_env));
         }
         errors.to_result()?; // Throw errors if any.
-        self.tycons = Arc::new(tycons);
+        self.set_tycons(tycons);
         Ok(())
     }
 }
@@ -2802,7 +2839,7 @@ impl Program {
                 ctx.set_current_module(module);
                 ti.resolve_namespace(&mut ctx)?;
             }
-            self.type_env.tycons = Arc::new(tycons);
+            self.type_env.set_tycons(tycons);
         }
         // Resolve namespaces in type aliases.
         {
