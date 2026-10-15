@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use crate::ast::equality::Equality;
 use crate::ast::name::Name;
 use crate::ast::predicate::Predicate;
@@ -10,6 +9,7 @@ use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
 use crate::misc::Set;
 use crate::parse::sourcefile::{SourcePos, Span};
+use std::sync::Arc;
 
 /// A type together with the constraints written in front of it, as a type signature holds them:
 /// `[a : Show] a -> String`.
