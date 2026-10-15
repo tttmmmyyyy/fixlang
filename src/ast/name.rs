@@ -87,8 +87,8 @@ impl NameSpace {
         Self::new(names.iter().map(|s| s.to_string()).collect())
     }
 
-    /// Whether the path holds exactly `names`, the outermost first; `is_absolute` takes no part, as
-    /// in equality. Equal to comparing with `NameSpace::from_strs(names)`, without building it.
+    /// Whether the path holds exactly `names`, the outermost first. `is_absolute` is ignored, as in
+    /// equality. Same as comparing with `NameSpace::from_strs(names)`, without building it.
     pub fn is(&self, names: &[&str]) -> bool {
         self.names == names
     }
@@ -308,8 +308,8 @@ impl FullName {
         Self::new(&NameSpace::from_strs(ns), name)
     }
 
-    /// Whether this is the name `name` under the namespace `ns` spells out; `is_absolute` takes no
-    /// part, as in equality. Equal to comparing with `FullName::from_strs(ns, name)`, without
+    /// Whether this is the name `name` in the namespace that `ns` spells out. `is_absolute` is
+    /// ignored, as in equality. Same as comparing with `FullName::from_strs(ns, name)`, without
     /// building it.
     pub fn is(&self, ns: &[&str], name: &str) -> bool {
         self.namespace.is(ns) && self.name == name

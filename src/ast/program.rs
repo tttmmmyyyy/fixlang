@@ -81,8 +81,8 @@ pub struct TypeEnv {
     /// carried by a higher-kinded type variable occurs without its arguments, and such an occurrence
     /// still names one.
     unwrapped_newtypes: Arc<Set<TyCon>>,
-    /// The paths of the boxed leaves of each type `boxed_leaf_paths` has been asked about, which
-    /// it answers from rather than descending the type again.
+    /// The boxed leaf paths of each type `boxed_leaf_paths` has been asked about, so that a later
+    /// call for the same type answers without descending the type again.
     ///
     /// The paths follow from the declarations in `tycons`, so `set_tycons` empties it whenever they
     /// are replaced. The clones of an environment share it until one of them replaces its
@@ -114,15 +114,15 @@ impl TypeEnv {
         }
     }
 
-    /// Replaces the declarations of the type constructors by `tycons`, forgetting what was worked
-    /// out from the ones they replace.
+    /// Replaces the declarations of the type constructors with `tycons`, and forgets what was worked
+    /// out from the old ones.
     fn set_tycons(&mut self, tycons: Map<TyCon, TyConInfo>) {
         self.tycons = Arc::new(tycons);
         self.boxed_leaf_paths_memo = Arc::new(Default::default());
     }
 
-    /// The paths of the boxed leaves of `ty`, which `compute` works out, answered from what an
-    /// earlier call worked out for the same type where there is one.
+    /// The boxed leaf paths of `ty`: those stored by an earlier call for the same type, or else the
+    /// result of `compute`, which is then stored.
     pub fn memoize_boxed_leaf_paths(
         &self,
         ty: &Arc<TypeNode>,

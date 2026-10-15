@@ -316,8 +316,8 @@ mod tests {
         TypeEnv::new(tycons, Map::default())
     }
 
-    /// Replacing a declaration changes the boxed leaf paths of its type, though an earlier call
-    /// asked about that type under the declaration it replaced.
+    /// Replacing a declaration changes the boxed leaf paths of its type, even after an earlier call
+    /// asked about that type under the old declaration.
     #[test]
     fn test_boxed_leaf_paths_follow_a_replaced_declaration() {
         let mut env = type_env(0);
