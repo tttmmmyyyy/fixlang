@@ -281,7 +281,7 @@ mod tests {
         kind_star, tycon, type_tyapp, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode,
     };
     use crate::fixstd::builtin::{bulitin_tycons, make_array_ty, make_i64_ty};
-    use crate::misc::Map;
+    use crate::misc::{Map, Set};
     use std::sync::Arc;
 
     /// `Test::S`, the type the declarations below declare.
@@ -344,6 +344,41 @@ mod tests {
         let mut replaced = env.clone();
         replaced.add_tycons(Map::from_iter([(s_tycon(), s_info(1))]));
         assert_eq!(boxed_leaf_paths(&s_ty(), &replaced), vec![vec![1]]);
+        assert_eq!(boxed_leaf_paths(&s_ty(), &env), vec![vec![0]]);
+    }
+
+    /// Unwrapping a newtype changes the boxed leaf paths of a type holding it, even after an earlier
+    /// call asked about that type while the newtype was still a struct.
+    #[test]
+    fn test_boxed_leaf_paths_follow_unwrapped_newtypes() {
+        let w_tycon = TyCon::new(FullName::from_strs(&["Test"], "W"));
+        let w_info = TyConInfo {
+            kind: kind_star(),
+            variant: TyConVariant::Struct,
+            is_unbox: true,
+            tyvars: vec![],
+            fields: vec![Field::make(
+                "a".to_string(),
+                type_tyapp(make_array_ty(), make_i64_ty()),
+                None,
+            )],
+            source: None,
+            document: None,
+            punched_from: None,
+        };
+        let s_info = TyConInfo {
+            fields: vec![
+                Field::make("w".to_string(), type_tycon(&tycon(w_tycon.name.clone())), None),
+                Field::make("n".to_string(), make_i64_ty(), None),
+            ],
+            ..s_info(0)
+        };
+        let mut tycons = bulitin_tycons();
+        tycons.insert(w_tycon.clone(), w_info);
+        tycons.insert(s_tycon(), s_info);
+        let mut env = TypeEnv::new(tycons, Map::default());
+        assert_eq!(boxed_leaf_paths(&s_ty(), &env), vec![vec![0, 0]]);
+        env.unwrap_newtypes(Set::from_iter([w_tycon]));
         assert_eq!(boxed_leaf_paths(&s_ty(), &env), vec![vec![0]]);
     }
 }
