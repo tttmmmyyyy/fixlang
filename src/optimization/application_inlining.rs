@@ -51,25 +51,9 @@ use crate::ast::{
         AppSourceCodeOrderType, Expr, ExprNode,
     },
     pattern::PatternNode,
-    program::{Program, Symbol},
     traverse::{EndVisitResult, ExprVisitor, VisitState},
 };
 use std::sync::Arc;
-
-/// Optimizes every symbol of `prg` in place.
-pub fn run(prg: &mut Program) {
-    for (_name, sym) in &mut prg.symbols {
-        run_on_symbol(sym);
-    }
-}
-
-/// Optimizes the expression of a symbol in place. The symbol has to be one that already has an
-/// expression.
-fn run_on_symbol(sym: &mut Symbol) {
-    let expr = sym.expr.as_ref().unwrap().clone();
-    let expr = run_on_expr(expr);
-    sym.expr = Some(expr);
-}
 
 /// Optimizes an expression to a fixpoint, repeating the traversal for as long as it keeps finding
 /// applications to rewrite.

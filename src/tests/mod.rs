@@ -1,4 +1,5 @@
 mod test_abs_path_dep_hash;
+mod test_action_chosen_by_a_branch;
 mod test_application_inlining;
 mod test_array_alignment;
 mod test_array_bounds_check;

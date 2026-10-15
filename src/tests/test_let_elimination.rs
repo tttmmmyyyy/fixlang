@@ -356,6 +356,70 @@ mod tests {
         test_source(source, Configuration::develop_mode());
     }
 
+    /// `partial` is bound to a strictly partial application and eliminated, which leaves `reader`
+    /// bound to a chain of two applications that together hand `make_reader` every parameter it
+    /// takes. `reader` is applied once, after the program asks whether the cell the call reads is
+    /// unique. The chain is not strictly partial, so its binding stays, and the call has released
+    /// the cell by the time the program asks.
+    #[test]
+    fn test_name_bound_to_a_saturated_application_chain_keeps_its_binding() {
+        let source = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+
+        make_reader : I64 -> Cell -> I64 -> I64 -> I64;
+        make_reader = |d, cell, k| (
+            if d > 0 { make_reader(d - 1, cell, k) };
+            let v = cell.@v;
+            |x| x + v + k
+        );
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : 10 };
+            let partial = make_reader(k);
+            let reader = partial(cell, k);
+            let (unique, cell_after) = cell.unsafe_is_unique;
+            assert_eq(|_|"the reader adds the value and `k` to its argument", reader(cell_after.@v), 21);;
+            assert_eq(|_|"the call has released the cell before the program asks", unique, true);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// `v` reads the cell, and is read in the last argument of a call whose earlier argument hands
+    /// the cell to `is_unique_after`. Both functions call themselves, so they keep their call sites,
+    /// and the call takes all its arguments at once after uncurrying. The arguments are evaluated
+    /// from left to right, so the binding stays ahead of the call, the cell's last use is the call
+    /// of `is_unique_after`, and the cell is unique there.
+    #[test]
+    fn test_name_read_in_a_later_argument_of_a_call_keeps_its_binding() {
+        let source = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+
+        is_unique_after : I64 -> Cell -> Bool;
+        is_unique_after = |n, cell| if n <= 0 { cell.unsafe_is_unique.@0 } else { is_unique_after(n - 1, cell) };
+
+        show_both : I64 -> Bool -> I64 -> String;
+        show_both = |n, unique, v| if n <= 0 { unique.to_string + " " + v.to_string } else { show_both(n - 1, unique, v) };
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : 10 + k };
+            let v = cell.@v;
+            assert_eq(|_|"the cell is unique where the call reads it", show_both(k, is_unique_after(k, cell), v), "true 11");;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
     /// The binding is read in a later field of a struct expression while an earlier field reads a
     /// name of the enclosing scope.
     #[test]
