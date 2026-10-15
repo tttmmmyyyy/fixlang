@@ -48,7 +48,7 @@ and the cost for retaining and releasing an array is saved.
 
 use crate::{
     ast::{
-        expr::ExprNode,
+        expr::{collect_app, ExprNode},
         name::FullName,
         program::Symbol,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
@@ -311,15 +311,21 @@ impl ExprVisitor for FreeOccurrenceProbe {
         EndVisitResult::unchanged(expr)
     }
 
-    /// A target name read in the argument of an application, while the function position reads a
-    /// local name, leaves `used_before_any_other_local_names` false.
+    /// A target name read in an argument of an application, while the function position or an
+    /// earlier argument reads a local name, leaves `used_before_any_other_local_names` false. The
+    /// function is evaluated first, and then the arguments from left to right.
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        if self.target_is_read_after_a_local_name(&expr.get_app_func(), expr.get_app_args().iter())
-        {
+        let args = expr.get_app_args();
+        let read_after_a_local_name =
+            self.target_is_read_after_a_local_name(&expr.get_app_func(), args.iter())
+                || args.iter().enumerate().any(|(i, arg)| {
+                    self.target_is_read_after_a_local_name(arg, args[i + 1..].iter())
+                });
+        if read_after_a_local_name {
             self.used_before_any_other_local_names = false;
         }
 
@@ -501,24 +507,14 @@ fn is_global_lambda_strictly_partially_applied_to_names(
     expr: &Arc<ExprNode>,
     global_lambda_to_arity: &Map<FullName, usize>,
 ) -> bool {
-    if expr.is_var() {
-        let name = &expr.get_var().name;
-        if let Some(_arity) = global_lambda_to_arity.get(name) {
-            return true;
-        }
-    } else if expr.is_app() {
-        let (func, args) = expr.destructure_app();
-        if func.is_var() {
-            let name = &func.get_var().name;
-            if let Some(arity) = global_lambda_to_arity.get(name) {
-                // Check if the number of arguments is less than the arity (strictly partial application).
-                if *arity <= args.len() {
-                    return false;
-                }
-                // Check if all arguments are name expressions.
-                return args.iter().all(|arg| arg.is_var());
-            }
-        }
+    // One application may hand over one argument or several, as uncurrying writes it, so the
+    // arguments are counted over the whole chain of applications.
+    let (func, args) = collect_app(expr);
+    if !func.is_var() {
+        return false;
     }
-    false
+    let Some(arity) = global_lambda_to_arity.get(&func.get_var().name) else {
+        return false;
+    };
+    args.is_empty() || (args.len() < *arity && args.iter().all(|arg| arg.is_var()))
 }
