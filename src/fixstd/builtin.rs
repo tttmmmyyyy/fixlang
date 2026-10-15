@@ -348,8 +348,78 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
     ret
 }
 
+/// The name of a type the compiler declares: the namespace it lies in, as its path of names from the
+/// outermost, and its name there. Both the constructor of the type's `FullName` and the test of
+/// whether a `FullName` is it read the one constant that holds the name.
+pub struct BuiltinTypeName {
+    /// The path of the namespace, the outermost name first.
+    namespace: &'static [&'static str],
+    /// The name of the type in that namespace.
+    name: &'static str,
+}
+
+impl BuiltinTypeName {
+    /// This name as a `FullName`, written with no leading `::`.
+    pub fn to_fullname(&self) -> FullName {
+        FullName::from_strs(self.namespace, self.name)
+    }
+
+    /// Whether `name` is this name. Same as comparing with `to_fullname()`, without building it.
+    pub fn is(&self, name: &FullName) -> bool {
+        name.is(self.namespace, self.name)
+    }
+}
+
+/// `Std::Arrow`, the type constructor `->` of function types.
+pub const ARROW_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: ARROW_NAME,
+};
+
+/// `Std::Array`.
+pub const ARRAY_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: ARRAY_NAME,
+};
+
+/// `Std::#ArrayStorage`, the buffer an array holds its elements in.
+pub const ARRAY_STORAGE_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: ARRAY_STORAGE_NAME,
+};
+
+/// `Std::PunchedArray`, an array with one element moved out of it.
+pub const PUNCHED_ARRAY_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: PUNCHED_ARRAY_NAME,
+};
+
+/// `Std::#DynamicObject`.
+pub const DYNAMIC_OBJECT_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: DYNAMIC_OBJECT_NAME,
+};
+
+/// `Std::FFI::Destructor`.
+pub const DESTRUCTOR_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME, FFI_NAME],
+    name: DESTRUCTOR_NAME,
+};
+
+/// `Std::IO`.
+pub const IO_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME],
+    name: IO_NAME,
+};
+
+/// `Std::IO::IOState`, the token that an `IO` action threads.
+pub const IOSTATE_TYPE: BuiltinTypeName = BuiltinTypeName {
+    namespace: &[STD_NAME, IO_NAME],
+    name: IOSTATE_NAME,
+};
+
 pub fn make_arrow_name_abs() -> FullName {
-    let mut name = FullName::from_strs(&[STD_NAME], ARROW_NAME);
+    let mut name = ARROW_TYPE.to_fullname();
     name.set_absolute();
     name
 }
@@ -360,7 +430,7 @@ pub fn make_arrow_tycon() -> TyCon {
 }
 
 pub fn make_dynamic_object_name() -> FullName {
-    FullName::from_strs(&[STD_NAME], DYNAMIC_OBJECT_NAME)
+    DYNAMIC_OBJECT_TYPE.to_fullname()
 }
 
 pub fn make_dynamic_object_tycon() -> TyCon {
@@ -368,7 +438,7 @@ pub fn make_dynamic_object_tycon() -> TyCon {
 }
 
 pub fn make_array_storage_name() -> FullName {
-    FullName::from_strs(&[STD_NAME], ARRAY_STORAGE_NAME)
+    ARRAY_STORAGE_TYPE.to_fullname()
 }
 
 pub fn make_array_storage_tycon() -> TyCon {
@@ -382,11 +452,11 @@ pub fn make_array_storage_ty(elem_ty: Arc<TypeNode>) -> Arc<TypeNode> {
 
 // Returns whether the given tycon is `#ArrayStorage`.
 pub fn is_array_storage_tycon(tc: &TyCon) -> bool {
-    tc.name.is(&[STD_NAME], ARRAY_STORAGE_NAME)
+    ARRAY_STORAGE_TYPE.is(&tc.name)
 }
 
 pub fn make_destructor_name() -> FullName {
-    FullName::from_strs(&[STD_NAME, FFI_NAME], DESTRUCTOR_NAME)
+    DESTRUCTOR_TYPE.to_fullname()
 }
 
 pub fn make_destructor_ty(val_ty: Arc<TypeNode>) -> Arc<TypeNode> {
@@ -410,7 +480,7 @@ pub fn make_array_tycon() -> TyCon {
 }
 
 pub fn make_array_name() -> FullName {
-    FullName::from_strs(&[STD_NAME], ARRAY_NAME)
+    ARRAY_TYPE.to_fullname()
 }
 
 // If given tycon is function pointer, returns its arity
@@ -424,26 +494,26 @@ pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
 
 // Returns whether given tycon is dyanmic object
 pub fn is_dynamic_object_tycon(tc: &TyCon) -> bool {
-    tc.name.is(&[STD_NAME], DYNAMIC_OBJECT_NAME)
+    DYNAMIC_OBJECT_TYPE.is(&tc.name)
 }
 
 // Returns whether given tycon is Std::Destructor
 pub fn is_destructor_object_tycon(tc: &TyCon) -> bool {
-    tc.name.is(&[STD_NAME, FFI_NAME], DESTRUCTOR_NAME)
+    DESTRUCTOR_TYPE.is(&tc.name)
 }
 
 // Returns whether given tycon is array
 pub fn is_array_tycon(tc: &TyCon) -> bool {
-    tc.name.is(&[STD_NAME], ARRAY_NAME)
+    ARRAY_TYPE.is(&tc.name)
 }
 
 pub fn make_punched_array_tycon() -> TyCon {
-    TyCon::new(FullName::from_strs(&[STD_NAME], PUNCHED_ARRAY_NAME))
+    TyCon::new(PUNCHED_ARRAY_TYPE.to_fullname())
 }
 
 // Returns whether given tycon is a punched array (`Std::PunchedArray`).
 pub fn is_punched_array_tycon(tc: &TyCon) -> bool {
-    tc.name.is(&[STD_NAME], PUNCHED_ARRAY_NAME)
+    PUNCHED_ARRAY_TYPE.is(&tc.name)
 }
 
 // Make `Std::Boxed` trait.
@@ -460,7 +530,7 @@ pub fn make_kind_fun(arity: u32) -> Arc<Kind> {
 }
 
 pub fn make_iostate_name() -> FullName {
-    FullName::from_strs(&[STD_NAME, IO_NAME], IOSTATE_NAME)
+    IOSTATE_TYPE.to_fullname()
 }
 
 // Make the `IOState` type.
@@ -867,7 +937,7 @@ pub fn make_io_runner_ty(res_ty: Arc<TypeNode>) -> Arc<TypeNode> {
 /// The type constructor `Std::IO`. An `IO a` is an action that gives an `a` while it acts on the
 /// state of the computer.
 pub fn make_io_tycon() -> Arc<TyCon> {
-    tycon(FullName::from_strs(&[STD_NAME], IO_NAME))
+    tycon(IO_TYPE.to_fullname())
 }
 
 /// The type `Std::IO ()`, an action that acts and gives nothing. `Main::main` is written with

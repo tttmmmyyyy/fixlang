@@ -6,10 +6,10 @@ use crate::ast::program::{EndNode, TypeEnv};
 use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::typedecl::Field;
 use crate::constants::{
-    TraverserWorkType, ARROW_NAME, BOOL_NAME, F32_NAME, F64_NAME, I128_NAME, I16_NAME, I32_NAME,
-    I64_NAME, I8_NAME, IOSTATE_NAME, IO_NAME, PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, STRING_NAME,
-    TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
-    TYPE_WILDCARD_VAR_PREFIX, U128_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
+    TraverserWorkType, BOOL_NAME, F32_NAME, F64_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME,
+    I8_NAME, PTR_NAME, PUNCHED_TYPE_SYMBOL, STD_NAME, STRING_NAME, TRAVERSER_WORK_MARK_GLOBAL,
+    TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U128_NAME,
+    U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
@@ -17,7 +17,7 @@ use crate::error::Errors;
 use crate::fixstd::builtin::{
     get_tuple_n, is_array_storage_tycon, is_array_tycon, is_destructor_object_tycon,
     is_dynamic_object_tycon, is_funptr_tycon, is_punched_array_tycon, make_arrow_name_abs,
-    make_funptr_tycon, make_unit_ty,
+    make_funptr_tycon, make_unit_ty, ARROW_TYPE, IO_TYPE,
 };
 use crate::generator::Generator;
 use crate::misc::{collect_results, number_to_varname, Map, Set};
@@ -342,13 +342,7 @@ impl TyCon {
 
     /// Whether this is the type constructor `IO`.
     pub fn is_io(&self) -> bool {
-        self.name.is(&[STD_NAME], IO_NAME)
-    }
-
-    /// Whether this is the type `IOState`, the token that an `IO` action threads.
-    #[allow(dead_code)]
-    pub fn is_iostate(&self) -> bool {
-        self.name.is(&[STD_NAME, IO_NAME], IOSTATE_NAME)
+        IO_TYPE.is(&self.name)
     }
 
     /// Renames this struct's type constructor to the one that stands for the struct with one field
@@ -363,13 +357,7 @@ impl TyCon {
 
     /// Whether this is the type constructor `->` that heads a function type.
     pub fn is_arrow(&self) -> bool {
-        self.name.is(&[STD_NAME], ARROW_NAME)
-    }
-
-    /// Whether this is the type constructor `Std::Array`.
-    #[allow(dead_code)]
-    pub fn is_array(&self) -> bool {
-        is_array_tycon(self)
+        ARROW_TYPE.is(&self.name)
     }
 }
 
