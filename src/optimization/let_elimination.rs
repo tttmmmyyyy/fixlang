@@ -311,15 +311,21 @@ impl ExprVisitor for FreeOccurrenceProbe {
         EndVisitResult::unchanged(expr)
     }
 
-    /// A target name read in the argument of an application, while the function position reads a
-    /// local name, leaves `used_before_any_other_local_names` false.
+    /// A target name read in an argument of an application, while the function position or an
+    /// earlier argument reads a local name, leaves `used_before_any_other_local_names` false. The
+    /// function is evaluated first, and then the arguments from left to right.
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        if self.target_is_read_after_a_local_name(&expr.get_app_func(), expr.get_app_args().iter())
-        {
+        let args = expr.get_app_args();
+        let read_after_a_local_name =
+            self.target_is_read_after_a_local_name(&expr.get_app_func(), args.iter())
+                || args.iter().enumerate().any(|(i, arg)| {
+                    self.target_is_read_after_a_local_name(arg, args[i + 1..].iter())
+                });
+        if read_after_a_local_name {
             self.used_before_any_other_local_names = false;
         }
 
