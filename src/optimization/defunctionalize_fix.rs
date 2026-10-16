@@ -105,7 +105,7 @@ fn run_one(
     // single substitution below reaches them all.
     let arity_map = let_elimination::create_global_lambda_to_arity_map(&prg.symbols);
     let symbols = mem::take(&mut prg.symbols);
-    let existing_names = Arc::new(symbols.keys().cloned().collect::<Set<FullName>>());
+    let existing_names = GlobalNames::existing_in(&symbols);
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let mut new_tycons: Map<TyCon, TyConInfo> = Map::default();
 
@@ -156,14 +156,7 @@ fn run_one(
                 lifted.cap.tycon.as_ref().clone(),
                 lifted.cap.tycon_info.clone(),
             );
-            let func_name = lifted.func_name.clone();
-            assert!(
-                new_symbols
-                    .insert(func_name.clone(), lifted.into_symbol())
-                    .is_none(),
-                "the lifted function `{}` is named like another global",
-                func_name.to_string()
-            );
+            GlobalNames::insert_minted(&mut new_symbols, lifted.into_symbol());
         }
         new_symbols.insert(name, sym);
     }

@@ -7,11 +7,12 @@ use crate::{
         expr::{expr_make_struct, expr_var, var_var, ExprNode},
         name::FullName,
         pattern::PatternNode,
+        program::Symbol,
         traverse::VisitState,
         typedecl::Field,
         types::{kind_star, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode},
     },
-    misc::Set,
+    misc::{Map, Set},
 };
 use std::sync::Arc;
 
@@ -130,6 +131,23 @@ pub struct GlobalNames {
 }
 
 impl GlobalNames {
+    // The names of the globals `symbols` defines, which the walks over them share as what they mint
+    // against.
+    pub fn existing_in(symbols: &Map<FullName, Symbol>) -> Arc<Set<FullName>> {
+        Arc::new(symbols.keys().cloned().collect())
+    }
+
+    // Add `sym`, a function named by `fresh`, to `symbols`, which hold the globals the names were
+    // minted against and the functions minted from them so far.
+    pub fn insert_minted(symbols: &mut Map<FullName, Symbol>, sym: Symbol) {
+        let name = sym.name.clone();
+        assert!(
+            symbols.insert(name.clone(), sym).is_none(),
+            "the minted function `{}` is named like another global",
+            name.to_string()
+        );
+    }
+
     // The names to mint against for a walk over a program whose globals are `existing`.
     pub fn new(existing: Arc<Set<FullName>>) -> Self {
         GlobalNames {

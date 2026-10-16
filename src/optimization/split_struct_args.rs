@@ -67,7 +67,7 @@ pub fn run(prg: &mut Program, num_threads: usize) {
 /// The globals are split independently of one another, on up to `num_threads` threads.
 fn run_once(prg: &mut Program, wrappers: &mut Set<FullName>, num_threads: usize) -> bool {
     let symbols = mem::take(&mut prg.symbols);
-    let existing_names = Arc::new(symbols.keys().cloned().collect::<Set<_>>());
+    let existing_names = GlobalNames::existing_in(&symbols);
     let splits =
         map_on_compiler_threads(symbols.into_iter().collect(), num_threads, |(name, sym)| {
             let split = if wrappers.contains(&name) {
@@ -86,12 +86,7 @@ fn run_once(prg: &mut Program, wrappers: &mut Set<FullName>, num_threads: usize)
             Some((twin, wrapper)) => {
                 changed = true;
                 wrappers.insert(name.clone());
-                let twin_name = twin.name.clone();
-                assert!(
-                    new_symbols.insert(twin_name.clone(), twin).is_none(),
-                    "the twin `{}` is named like another global",
-                    twin_name.to_string()
-                );
+                GlobalNames::insert_minted(&mut new_symbols, twin);
                 new_symbols.insert(name, wrapper);
             }
             None => {

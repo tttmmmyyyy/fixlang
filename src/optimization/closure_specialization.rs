@@ -601,7 +601,7 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
         let mut changed = false;
         let symbols = mem::take(&mut prg.symbols);
         let mut new_symbols: Map<FullName, Symbol> = Map::default();
-        let existing_names = Arc::new(symbols.keys().cloned().collect::<Set<_>>());
+        let existing_names = GlobalNames::existing_in(&symbols);
 
         for (name, mut sym) in symbols {
             if stable.contains(&name) {
@@ -811,12 +811,7 @@ fn known_arguments(
 /// Register the global function each lambda lifted by a walk became.
 fn register_lifted_lambdas(new_symbols: Vec<Symbol>, symbols: &mut Map<FullName, Symbol>) {
     for sym in new_symbols {
-        let name = sym.name.clone();
-        assert!(
-            symbols.insert(name.clone(), sym).is_none(),
-            "the lifted function `{}` is named like another global",
-            name.to_string()
-        );
+        GlobalNames::insert_minted(symbols, sym);
     }
 }
 
