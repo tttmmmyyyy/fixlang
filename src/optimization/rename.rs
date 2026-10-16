@@ -5,7 +5,6 @@ use crate::{
         pattern::PatternNode,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
-    constants::CAP_NAME,
     misc::{Map, Set},
 };
 use std::sync::Arc;
@@ -76,17 +75,15 @@ struct ScopeBackup {
 impl Substitutor {
     /// Creates a substitutor that replaces each name of `map` with the expression it maps to.
     fn new(map: Map<FullName, Arc<ExprNode>>) -> Self {
-        // The walk enters a subexpression only where a replaced name is free in it, so it can only
-        // replace a name that free variables account for. `CAP_NAME` is the one name they do not:
-        // a lambda expression binds it implicitly, and it is absent from the free variables of
-        // every lambda expression whose body reads it.
-        assert!(
-            !map.contains_key(&FullName::local(CAP_NAME)),
-            "occurrences of `{}` cannot be substituted",
-            CAP_NAME
-        );
         let mut capturable_names = Set::default();
-        for to in map.values() {
+        for (from, to) in &map {
+            // The walk enters a subexpression only where a replaced name is free in it, so it can
+            // only replace a name that free variables locate.
+            assert!(
+                ExprNode::free_vars_locate(from),
+                "occurrences of `{}` cannot be substituted",
+                from.to_string()
+            );
             capturable_names.extend(to.free_vars());
         }
         Self {
@@ -115,13 +112,12 @@ impl Substitutor {
         }
 
         let renaming = self.create_rename_of_local_names(introduced_names, expr);
-        let mut inserted = vec![];
         for (old, renamed) in renaming.iter() {
             self.map
                 .insert(old.clone(), expr_var(renamed.clone(), None));
             self.capturable_names.insert(renamed.clone());
-            inserted.push(old.clone());
         }
+        let inserted = renaming.keys().cloned().collect();
 
         Some((ScopeBackup { removed, inserted }, renaming))
     }
@@ -129,9 +125,19 @@ impl Substitutor {
     /// Leave the scope entered by `enter_scope`, putting the enclosing scope's substitution back.
     fn leave_scope(&mut self, backup: ScopeBackup) {
         for name in backup.inserted {
-            self.map.remove(&name);
+            assert!(
+                self.map.remove(&name).is_some(),
+                "the renaming of `{}` left the substitution before its scope did",
+                name.to_string()
+            );
         }
-        self.map.extend(backup.removed);
+        for (name, to) in backup.removed {
+            assert!(
+                self.map.insert(name.clone(), to).is_none(),
+                "`{}` came back into the substitution inside the scope of its binder",
+                name.to_string()
+            );
+        }
     }
 
     /// Decides which of the local names `introduced_names` that `expr` introduces have to be
@@ -289,8 +295,13 @@ impl ExprVisitor for Substitutor {
         let introduced_names: Vec<FullName> = params.iter().map(|p| p.name.clone()).collect();
 
         let body = expr.get_lam_body().clone();
+        // `should_visit` let the walk in, so a substituted name other than the parameter is free in
+        // the body.
         let Some((backup, renaming)) = self.enter_scope(&introduced_names, expr, &body) else {
-            return StartVisitResult::Return;
+            unreachable!(
+                "the walk entered a lambda expression binding `{}` whose body no substituted name is free in",
+                introduced_names[0].to_string()
+            );
         };
 
         // Rename the parameters.

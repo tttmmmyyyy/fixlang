@@ -1,12 +1,9 @@
 // This module provides functionality to find how a name is used in an expression.
 
-use crate::{
-    ast::{
-        expr::ExprNode,
-        name::FullName,
-        traverse::{ExprVisitor, StartVisitResult, VisitState},
-    },
-    constants::CAP_NAME,
+use crate::ast::{
+    expr::ExprNode,
+    name::FullName,
+    traverse::{ExprVisitor, StartVisitResult, VisitState},
 };
 use std::sync::Arc;
 
@@ -37,13 +34,11 @@ pub enum UsageType {
 // of that binding, and stays out of the result.
 pub fn run(expr: &Arc<ExprNode>, name: &FullName) -> Vec<UsageType> {
     // The walk enters a subexpression only where `name` is free in it, so it can only look for a
-    // name that free variables account for. `CAP_NAME` is the one name they do not: a lambda
-    // expression binds it implicitly, and it is absent from the free variables of every lambda
-    // expression whose body reads it.
+    // name that free variables locate.
     assert!(
-        !(name.is_local() && name.name == CAP_NAME),
+        ExprNode::free_vars_locate(name),
         "the uses of `{}` cannot be found",
-        CAP_NAME
+        name.to_string()
     );
     let mut usages = Vec::new();
     let mut finder = UsageFinder {
