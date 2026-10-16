@@ -189,20 +189,23 @@ impl LiftedFix {
     }
 }
 
+/// The traversal of one symbol that lifts the argument of each application of `fix` it meets to a
+/// global function.
 struct FixDefunctionalizer {
     /// The names of the functions this traversal lifts.
     minted_names: MintedNames,
     /// The counter the name of the next capture parameter is tried with.
     cap_param_counter: u32,
-    // Functions lifted out during this traversal.
+    /// Functions lifted out during this traversal.
     lifted: Vec<LiftedFix>,
-    // Local lambda bindings `let name = |..| ..`, so `fix(name)` — a `fix` whose argument is a
-    // let-bound lambda that could not be inlined into the call (e.g. it is used more than once) —
-    // resolves to the lambda. Names are unique across the symbol (`unique_local_names` ran), so one
-    // flat map needs no scoping.
+    /// Local lambda bindings `let name = |..| ..`, so `fix(name)` — a `fix` whose argument is a
+    /// let-bound lambda that could not be inlined into the call (e.g. it is used more than once) —
+    /// resolves to the lambda. Names are unique across the symbol (`unique_local_names` ran), so one
+    /// flat map needs no scoping.
     local_lambdas: Map<FullName, Arc<ExprNode>>,
-    // Global lambda definitions and the deduplicated fixpoints built for them, shared across symbols.
+    /// The lambda defining each global function, shared across symbols.
     global_lambdas: GlobalLambdas,
+    /// The fixpoint built for each global function applied to `fix`, shared across symbols.
     global_fix_refs: GlobalFixRefs,
 }
 
