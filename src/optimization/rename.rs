@@ -5,6 +5,7 @@ use crate::{
         pattern::PatternNode,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
+    constants::CAP_NAME,
     misc::{Map, Set},
 };
 use std::sync::Arc;
@@ -59,49 +60,78 @@ pub fn substitute_free_names(
 struct Substitutor {
     /// The mapping from names to the expressions they are replaced by.
     map: Map<FullName, Arc<ExprNode>>,
+    /// The names a binder entered on the way here has to avoid: the free names of every expression
+    /// `map` has held since the walk began, which keeps it a superset of those `map` holds now.
+    capturable_names: Set<FullName>,
 }
 
-/// The substitution state of the scope a binder was entered from, which `Substitutor::leave_scope`
-/// puts back.
+/// What entering a binder changed in a `Substitutor`, which `Substitutor::leave_scope` undoes.
 struct ScopeBackup {
-    /// The mapping from names to expressions in force outside the binder.
-    map: Map<FullName, Arc<ExprNode>>,
+    /// The entries the binder took out of `map`.
+    removed: Vec<(FullName, Arc<ExprNode>)>,
+    /// The names of the entries the binder put into `map`, one per binder it renamed.
+    inserted: Vec<FullName>,
 }
 
 impl Substitutor {
     /// Creates a substitutor that replaces each name of `map` with the expression it maps to.
     fn new(map: Map<FullName, Arc<ExprNode>>) -> Self {
-        Self { map }
+        // The walk enters a subexpression only where a replaced name is free in it, so it can only
+        // replace a name that free variables account for. `CAP_NAME` is the one name they do not:
+        // a lambda expression binds it implicitly, and it is absent from the free variables of
+        // every lambda expression whose body reads it.
+        assert!(
+            !map.contains_key(&FullName::local(CAP_NAME)),
+            "occurrences of `{}` cannot be substituted",
+            CAP_NAME
+        );
+        let mut capturable_names = Set::default();
+        for to in map.values() {
+            capturable_names.extend(to.free_vars());
+        }
+        Self {
+            map,
+            capturable_names,
+        }
     }
 
-    /// Enter the scope of a binder that introduces `introduced_names` in `expr`: the names it binds
-    /// stop being substituted, and each local name that would capture a substituted value is given a
-    /// new name. Returns that renaming together with the state that `leave_scope` puts back.
+    /// Enter the scope of a binder that introduces `introduced_names` in `expr`, over `body`: the
+    /// names it binds stop being substituted, and each local name that would capture a substituted
+    /// value is given a new name. Returns that renaming together with the state that `leave_scope`
+    /// puts back, or `None`, with nothing changed, when no name still substituted is free in `body`.
     fn enter_scope(
         &mut self,
         introduced_names: &Vec<FullName>,
         expr: &Arc<ExprNode>,
-    ) -> (ScopeBackup, Map<FullName, FullName>) {
-        let backup = ScopeBackup {
-            map: self.map.clone(),
-        };
-
-        for name in introduced_names {
-            self.map.remove(name);
+        body: &Arc<ExprNode>,
+    ) -> Option<(ScopeBackup, Map<FullName, FullName>)> {
+        let removed = introduced_names
+            .iter()
+            .filter_map(|name| self.map.remove_entry(name))
+            .collect::<Vec<_>>();
+        if !body.has_free_var_in(&self.map) {
+            self.map.extend(removed);
+            return None;
         }
 
         let renaming = self.create_rename_of_local_names(introduced_names, expr);
+        let mut inserted = vec![];
         for (old, renamed) in renaming.iter() {
             self.map
                 .insert(old.clone(), expr_var(renamed.clone(), None));
+            self.capturable_names.insert(renamed.clone());
+            inserted.push(old.clone());
         }
 
-        (backup, renaming)
+        Some((ScopeBackup { removed, inserted }, renaming))
     }
 
     /// Leave the scope entered by `enter_scope`, putting the enclosing scope's substitution back.
     fn leave_scope(&mut self, backup: ScopeBackup) {
-        self.map = backup.map;
+        for name in backup.inserted {
+            self.map.remove(&name);
+        }
+        self.map.extend(backup.removed);
     }
 
     /// Decides which of the local names `introduced_names` that `expr` introduces have to be
@@ -123,13 +153,11 @@ impl Substitutor {
                 .join(", ")
         );
 
-        // The names the replacement expressions read, which an introduced name would capture.
-        let mut to_names = Set::default();
-        for to in self.map.values() {
-            to_names.extend(to.free_vars());
-        }
-
-        calculate_renaming_bound_vars_avoiding(&to_names, introduced_names.clone(), expr.clone())
+        calculate_renaming_bound_vars_avoiding(
+            &self.capturable_names,
+            introduced_names.clone(),
+            expr.clone(),
+        )
     }
 }
 
@@ -138,7 +166,7 @@ impl ExprVisitor for Substitutor {
     /// else in `expr` changes, a binder included, since a binder is renamed only so that a
     /// replacement under it does not capture it.
     fn should_visit(&self, expr: &Arc<ExprNode>) -> bool {
-        self.map.keys().any(|name| expr.has_free_var(name))
+        expr.has_free_var_in(&self.map)
     }
 
     /// Replaces a variable occurrence with the expression its name maps to, giving the replacement
@@ -260,12 +288,10 @@ impl ExprVisitor for Substitutor {
         );
         let introduced_names: Vec<FullName> = params.iter().map(|p| p.name.clone()).collect();
 
-        let (backup, renaming) = self.enter_scope(&introduced_names, expr);
-
-        if self.map.is_empty() {
-            self.leave_scope(backup);
+        let body = expr.get_lam_body().clone();
+        let Some((backup, renaming)) = self.enter_scope(&introduced_names, expr, &body) else {
             return StartVisitResult::Return;
-        }
+        };
 
         // Rename the parameters.
         for param in &mut params {
@@ -273,7 +299,6 @@ impl ExprVisitor for Substitutor {
                 *param = param.set_name(new_name.clone());
             }
         }
-        let body = expr.get_lam_body().clone();
         let body = self.traverse(&body).expr;
         let expr = expr.set_lam_params(params).set_lam_body(body);
 
@@ -304,20 +329,18 @@ impl ExprVisitor for Substitutor {
             .cloned()
             .collect::<Vec<_>>();
 
-        let (backup, renaming) = self.enter_scope(&introduced_names, &expr);
-        if self.map.is_empty() {
-            self.leave_scope(backup);
+        let value = expr.get_let_value();
+        let Some((backup, renaming)) = self.enter_scope(&introduced_names, &expr, &value) else {
             if changed {
                 return StartVisitResult::ReplaceAndReturn(expr);
             } else {
                 return StartVisitResult::Return;
             }
-        }
+        };
 
         // Rename the local names.
         let pattern = expr.get_let_pat();
         let pattern = pattern.rename_by_map(&renaming);
-        let value = expr.get_let_value();
         let value = self.traverse(&value).expr;
         let expr = expr.set_let_pat(pattern).set_let_value(value);
 
@@ -347,11 +370,9 @@ impl ExprVisitor for Substitutor {
         for (pat, val) in pat_vals.iter_mut() {
             let introduced_names = pat.pattern.vars().into_iter().collect::<Vec<_>>();
 
-            let (backup, renaming) = self.enter_scope(&introduced_names, &expr);
-            if self.map.is_empty() {
-                self.leave_scope(backup);
+            let Some((backup, renaming)) = self.enter_scope(&introduced_names, &expr, val) else {
                 continue;
-            }
+            };
             changed = true;
 
             *pat = pat.rename_by_map(&renaming);

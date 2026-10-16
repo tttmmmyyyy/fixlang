@@ -7,7 +7,7 @@ use crate::ast::types::{type_fun, TyCon, TypeNode};
 use crate::constants::{CAP_NAME, FORMAT_LINE_LIMIT, HOLE_NAME, STD_NAME};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
-use crate::misc::{collect_results, grow_stack, Set};
+use crate::misc::{collect_results, grow_stack, Map, Set};
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
 use serde::{Deserialize, Serialize};
@@ -1290,6 +1290,18 @@ impl ExprNode {
     /// Does the given name occur free in this expression?
     pub fn has_free_var(&self, name: &FullName) -> bool {
         self.with_free_vars(|free_vars| free_vars.contains(name))
+    }
+
+    /// Does a name `names` holds as a key occur free in this expression? Looks each name of the
+    /// smaller of the two sets up in the other.
+    pub fn has_free_var_in<V>(&self, names: &Map<FullName, V>) -> bool {
+        self.with_free_vars(|free_vars| {
+            if names.len() < free_vars.len() {
+                names.keys().any(|name| free_vars.contains(name))
+            } else {
+                free_vars.iter().any(|name| names.contains_key(name))
+            }
+        })
     }
 
     /// Does any local name occur free in this expression?
