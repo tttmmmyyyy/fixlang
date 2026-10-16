@@ -1078,12 +1078,12 @@ struct ClosureSpecializationVisitor {
     /// Copies this walk asks for
     required_specializations: Vec<SpecializationRequest>,
 
-    /* Name generation */
-    /// The symbol this walk is over, under the name it carries now. Every name this walk mints is
-    /// formed from it.
+    /// The symbol this walk is over, under the name it carries now, which the walk's assertions
+    /// name.
     current_symbol: FullName,
-    /// The global names already taken. A name minted here is one they leave free, and joins them.
-    /// `None` for a walk that lifts no lambda, which mints no name.
+
+    /* Name generation */
+    /// The names this walk gives the lambdas it lifts. `None` for a walk that lifts no lambda.
     global_names: Option<GlobalNames>,
 
     /* Termination */

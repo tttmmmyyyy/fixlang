@@ -6,14 +6,14 @@ use crate::{
 };
 use std::sync::Arc;
 
-/// The names a walk over one symbol gives the global functions it creates, and what they are kept
-/// apart from: the globals of the program as the walk found them, shared by the walks over every
-/// symbol, and the names this walk has minted.
+/// The names a walk over one symbol gives the global functions it creates, kept apart from the
+/// globals of the program as the walk found them, which the walks over every symbol share.
 ///
 /// A minted name is the walk's symbol, then the suffix, whose last character is not a digit, then a
 /// counter. So the digits at its end are the counter, and what precedes the suffix is the symbol.
-/// Names minted from two different symbols therefore differ, and each walk checks its names against
-/// the program's globals alone, without seeing what the other walks minted.
+/// The counter only grows, so the names one walk mints differ from one another; names minted from
+/// two different symbols differ as well, so each walk checks its names against the program's
+/// globals alone, without seeing what the other walks minted.
 pub struct GlobalNames {
     /// The globals of the program as the walks found them.
     existing: Arc<Set<FullName>>,
@@ -23,8 +23,6 @@ pub struct GlobalNames {
     suffix: &'static str,
     /// The counter the next name is tried with.
     counter: u32,
-    /// The names minted through this value.
-    minted: Set<FullName>,
 }
 
 impl GlobalNames {
@@ -41,12 +39,11 @@ impl GlobalNames {
             symbol,
             suffix,
             counter: 0,
-            minted: Set::default(),
         }
     }
 
     /// A name for a new global function, which differs from the existing globals and from every
-    /// name minted before it.
+    /// name this value minted before it.
     ///
     /// # Examples
     /// The first two names minted for `Main::f` with the suffix `#lam` are `Main::f#lam0` and
@@ -56,7 +53,7 @@ impl GlobalNames {
             let mut name = self.symbol.clone();
             *name.name_as_mut() += &format!("{}{}", self.suffix, self.counter);
             self.counter += 1;
-            if !self.existing.contains(&name) && self.minted.insert(name.clone()) {
+            if !self.existing.contains(&name) {
                 return name;
             }
         }
