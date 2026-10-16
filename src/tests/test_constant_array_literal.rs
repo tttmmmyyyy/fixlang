@@ -7,9 +7,10 @@
 mod tests {
     use crate::configuration::{Configuration, FixOptimizationLevel};
     use crate::tests::test_util::{
-        build_program, build_run_and_read_rc_ir, build_within_and_run, test_source,
+        assert_global_read_from_many_units_is_held_once,
+        assert_global_read_many_times_builds_in_little_memory, build_run_and_read_rc_ir,
+        build_within_and_run, test_source,
     };
-    use std::fs;
     use std::time::Duration;
 
     /// The levels a program writing into a constant is run at. A write into read-only memory faults
@@ -187,58 +188,48 @@ mod tests {
         );
     }
 
-    /// A table read from many compilation units is held once by the program. Each unit reading the
-    /// table defines its storage, so that the unit sees the elements, and the linker keeps one of
-    /// those definitions.
+    /// A table read from many compilation units is held once by the program.
     #[test]
     fn test_a_table_read_from_many_compilation_units_is_held_once() {
         const ELEMENT_COUNT: usize = 20000;
-        const READER_COUNT: usize = 12;
         let elements = (0..ELEMENT_COUNT)
             .map(|i| format!("{}_U64", i * 7919))
             .collect::<Vec<_>>()
             .join(", ");
-        // Each reader is exported, so that it keeps a unit of its own at `--cu-size 1`.
-        let readers = (0..READER_COUNT)
-            .map(|k| {
+        assert_global_read_from_many_units_is_held_once(
+            &format!("table : Array U64;\ntable = [{elements}];"),
+            |step| {
                 format!(
-                    "reader{k} : I64 -> I64;\n\
-                     reader{k} = |n| loop((n, 0_U64), |(i, s)| if i <= 0 {{ break $ s.i64 }} \
-                     else {{ continue $ (i - 1, s + table.@((i * {step}) % {count})) }});\n\
-                     FFI_EXPORT[reader{k}, fixtest_reader{k}];\n",
-                    k = k,
-                    step = k + 3,
-                    count = ELEMENT_COUNT
+                    "|n| loop((n, 0_U64), |(i, s)| if i <= 0 {{ break $ s.i64 }} \
+                     else {{ continue $ (i - 1, s + table.@((i * {step}) % {ELEMENT_COUNT})) }})"
                 )
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        let source = format!(
-            "module Main;\n\
-             \n\
-             table : Array U64;\n\
-             table = [{elements}];\n\
-             \n\
-             {readers}\n\
-             main : IO ();\n\
-             main = println(reader0(10).to_string);\n"
-        );
-        let (_temp_dir, program) = build_program(
-            &source,
-            "max",
-            &["--cu-size", "1"],
-            None,
+            },
+            (ELEMENT_COUNT * 8) as u64,
             "a table read from many compilation units",
         );
-        let table_bytes = (ELEMENT_COUNT * 8) as u64;
-        let program_bytes = fs::metadata(&program)
-            .expect("Failed to read the size of the program")
-            .len();
-        assert!(
-            program_bytes < 2 * table_bytes,
-            "the program takes {} bytes, which holds the {}-byte table more than once",
-            program_bytes,
-            table_bytes
+    }
+
+    /// A global array literal of 40,000 numbers, read seventy times by `main`, builds in memory
+    /// that does not grow with the literal. The literal is put at each of the seventy places, and
+    /// the optimizer copies an operation wherever it copies or rewrites the expression holding it,
+    /// so a copy of the literal's operation that copies its elements holds them once per copy,
+    /// several gigabytes in all.
+    #[test]
+    fn test_a_long_array_literal_read_many_times_builds_in_little_memory() {
+        const ELEMENT_COUNT: usize = 40000;
+        const READS: usize = 70;
+        let elements = (0..ELEMENT_COUNT)
+            .map(|i| format!("{}_U64", i * 7919))
+            .collect::<Vec<_>>()
+            .join(", ");
+        assert_global_read_many_times_builds_in_little_memory(
+            &format!("table : Array U64;\ntable = [{elements}];"),
+            |step| format!("table.@((n * {step}) % {ELEMENT_COUNT}).i64"),
+            READS,
+            &format!(
+                "a global array literal of {} numbers read {} times",
+                ELEMENT_COUNT, READS
+            ),
         );
     }
 

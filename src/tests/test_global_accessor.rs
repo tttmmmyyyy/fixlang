@@ -1,7 +1,9 @@
 use crate::env_vars::MAX_OPT_LEVEL_VAR;
 use crate::tests::test_util::{
-    build_run_and_read_rc_ir, emitted_llvm_ir, emitted_llvm_ir_modules, fix_build_source_command,
-    llvm_function_bodies, EmittedIr,
+    assert_global_read_from_many_units_is_held_once,
+    assert_global_read_many_times_builds_in_little_memory, build_run_and_read_rc_ir,
+    emitted_llvm_ir, emitted_llvm_ir_modules, fix_build_source_command, llvm_function_bodies,
+    EmittedIr,
 };
 use std::path::Path;
 use tempfile::TempDir;
@@ -334,8 +336,8 @@ fn assert_no_global_is_kept_for(dump: &str, name: &str) {
 
 /// A program that names one global string from three places.
 ///
-/// Building the literal allocates a buffer and copies the bytes into it, so a global whose body is
-/// a literal costs one allocation where it is named once and three where it is named three times.
+/// A string literal evaluates to an array whose storage is a constant in the program's data, so a
+/// copy of the literal where the global is named costs what naming it costs.
 const STRING_GLOBAL_SOURCE: &str = r#"
     module Main;
 
@@ -361,13 +363,13 @@ const GREETING_BUF: &str = "string_buf(\"hello\")";
 /// The global the program names, as the RC IR dump spells it, before the suffix the compiler adds.
 const GREETING_GLOBAL: &str = "Main::greeting";
 
-/// A global whose body allocates stays in the global, and every name reads it from there.
+/// A global whose body is a string literal is put at every name.
 ///
-/// Building a string literal allocates a buffer and copies the bytes into it, so a copy of the body
-/// at each name is an allocation at each name. The program names `greeting` from three places, and
-/// the RC IR dump holds one construction of the literal.
+/// The literal reads its bytes out of a constant in the program's data, so a copy of it at each
+/// name allocates nothing. Reading a global tests an initialization flag and loads the storage on
+/// every read.
 #[test]
-fn test_a_global_string_is_built_once_however_many_places_name_it() {
+fn test_a_global_string_literal_is_put_at_every_name() {
     let dump = build_run_and_read_rc_ir(
         STRING_GLOBAL_SOURCE,
         "max",
@@ -376,27 +378,50 @@ fn test_a_global_string_is_built_once_however_many_places_name_it() {
     );
 
     let constructions = dump.matches(GREETING_BUF).count();
-
-    // The places the property is about: the value reaches a reader as a name of the global or as a
-    // copy of the construction, so this counts the readers either way, and falls only where a
-    // reader stopped reading.
-    let places = dump
-        .lines()
-        .filter(|line| line.contains(GREETING_GLOBAL) && !line.starts_with("global "))
-        .count()
-        + constructions;
     assert!(
-        places > 1,
-        "the program should hold `greeting` in more than one place, and it holds it in {}:\n{}",
-        places,
+        constructions > 1,
+        "`{}` should be at each of the three names of `{}`, and the dump holds {}:\n{}",
+        GREETING_BUF,
+        GREETING_GLOBAL,
+        constructions,
         dump
     );
 
-    assert_eq!(
-        constructions, 1,
-        "the literal of a global is built {} times, once for the global and once more wherever \
-         its body was put; the dump is:\n{}",
-        constructions, dump
+    assert_no_global_is_kept_for(&dump, GREETING_GLOBAL);
+}
+
+/// A global string literal read from many compilation units is held once by the program, as a
+/// literal put at each name has to be for the copies to cost nothing.
+#[test]
+fn test_a_global_string_literal_read_from_many_compilation_units_is_held_once() {
+    const LITERAL_BYTES: usize = 160000;
+    let literal = "0123456789".repeat(LITERAL_BYTES / 10);
+    assert_global_read_from_many_units_is_held_once(
+        &format!("text : String;\ntext = \"{literal}\";"),
+        |step| format!("|i| text.get_bytes.@((i * {step}) % {LITERAL_BYTES}).i64"),
+        LITERAL_BYTES as u64,
+        "a global string literal read from many compilation units",
+    );
+}
+
+/// A global string literal of a megabyte, read a hundred times by `main`, builds in memory that
+/// does not grow with the literal. The literal is put at each of the hundred places, and the
+/// optimizer copies an operation wherever it copies or rewrites the expression holding it, so a
+/// copy of the literal's operation that copies its bytes holds them once per copy, several
+/// gigabytes in all.
+#[test]
+fn test_a_long_global_string_literal_read_many_times_builds_in_little_memory() {
+    const LITERAL_BYTES: usize = 1000000;
+    const READS: usize = 100;
+    let literal = "0123456789".repeat(LITERAL_BYTES / 10);
+    assert_global_read_many_times_builds_in_little_memory(
+        &format!("text : String;\ntext = \"{literal}\";"),
+        |step| format!("text.get_bytes.@((n * {step}) % {LITERAL_BYTES}).i64"),
+        READS,
+        &format!(
+            "a {}-byte global string literal read {} times",
+            LITERAL_BYTES, READS
+        ),
     );
 }
 
@@ -437,8 +462,7 @@ const SCALAR_GLOBALS: [(&str, &str); 2] =
 /// A global whose body is a scalar literal is put at every name.
 ///
 /// Its value is held in a register, so a copy of the literal at each name costs what the name
-/// costs, and the global it would otherwise stand in puts an initialization flag and a load in
-/// front of every read.
+/// costs. Reading a global tests an initialization flag and loads the storage on every read.
 #[test]
 fn test_a_global_scalar_literal_is_put_at_every_name() {
     let dump = build_run_and_read_rc_ir(

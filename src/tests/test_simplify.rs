@@ -345,7 +345,7 @@ mod value_tests {
 /// A program shaped to drive case-of-case, bounded in how long it may take to compile.
 #[cfg(test)]
 mod build_time_tests {
-    use crate::tests::test_util::{build_peak_memory, build_within_and_run};
+    use crate::tests::test_util::{assert_build_peak_memory_below, build_within_and_run};
     use std::time::Duration;
 
     /// Deep enough that a term doubling per level is out of reach, and shallow enough that a term
@@ -478,18 +478,12 @@ mod build_time_tests {
     /// otherwise takes. The figure comes from `/proc`, so the check runs where that is readable.
     #[test]
     fn test_a_discarded_candidate_is_not_built() {
-        let description = format!("a nest of {} conditions", NEST_DEPTH);
-        let Some(peak) =
-            build_peak_memory(&discarded_candidate_source(), "max", TIMEOUT, &description)
-        else {
-            return;
-        };
-        assert!(
-            peak < MEMORY_BOUND,
-            "compiling {} held {} MB, over the {} MB this shape is allowed",
-            description,
-            peak / (1024 * 1024),
-            MEMORY_BOUND / (1024 * 1024)
+        assert_build_peak_memory_below(
+            &discarded_candidate_source(),
+            "max",
+            TIMEOUT,
+            MEMORY_BOUND,
+            &format!("a nest of {} conditions", NEST_DEPTH),
         );
     }
 }
