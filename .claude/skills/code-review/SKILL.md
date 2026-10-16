@@ -947,7 +947,7 @@ Function comment shape. Aim the comment so that the name, the signature and the 
   /// Resolves the symbol at the given position.
   ///
   /// # Arguments
-  /// * `prefer_definition` — when true, jump through re-exports to the original definition. Used by goto-def; references search wants this off.
+  /// * `prefer_definition` — when true, jump through re-exports to the original definition; when false, stop at the name the position refers to.
   ```
   A bare restatement adds nothing: `the position` for `pos` says only what the name already says, where `0-indexed byte offset into the source string` states the meaning.
 - Add a `# Returns` section only when the return value needs explanation beyond the type — and then say what the value *means*, such as what a `None`, an empty collection, or a particular variant signifies here. Keep this to the surprising cases; the *Don't enumerate None / error cases* convention still suppresses routine failures.
