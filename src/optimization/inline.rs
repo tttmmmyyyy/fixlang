@@ -198,7 +198,7 @@ impl<'r> SymbolRound<'r> {
             return SymbolOutcome::Kept {
                 sym,
                 changed: false,
-                stable: false,
+                stable: true,
             };
         }
 

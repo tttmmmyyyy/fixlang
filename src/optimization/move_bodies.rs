@@ -70,8 +70,7 @@ pub fn move_bodies_into_callers(
             // elimination. Where the function is named anywhere else, or called more than once,
             // placing the body would duplicate it, and how much duplication is worth its gain is the
             // judgement `inline` makes.
-            let mut sym = symbols[caller].clone();
-            let caller_expr = sym.expr.as_ref().unwrap();
+            let caller_expr = symbols[caller].expr.as_ref().unwrap();
             let moved_bodies = callees
                 .iter()
                 .filter(|callee| {
@@ -84,6 +83,7 @@ pub fn move_bodies_into_callers(
             }
             // The function is named by the call alone, so putting the body where its name stands
             // leaves the body applied to the arguments the call supplies.
+            let mut sym = symbols[caller].clone();
             sym.expr = Some(substitute_free_names(caller_expr, moved_bodies));
             // Reduce what the substitution left: a lambda applied to the arguments the call
             // supplies. Left standing, that application is a closure the program builds on the heap

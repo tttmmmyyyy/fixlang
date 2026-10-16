@@ -1352,8 +1352,6 @@ impl Program {
         struct TraitMemberSignature<'p> {
             /// The type scheme obtained from the trait member definition.
             scm_via_defn: &'p Arc<Scheme>,
-            /// Where the implementation is written.
-            impl_src: &'p Option<Span>,
             /// Where the trait member is declared.
             decl_src: &'p Option<Span>,
         }
@@ -1393,7 +1391,6 @@ impl Program {
                             version_hash,
                             trait_member: Some(TraitMemberSignature {
                                 scm_via_defn: &impl_.scm_via_defn,
-                                impl_src: &impl_.expr.expr.source,
                                 decl_src: &gv.decl_src,
                             }),
                         });
@@ -1432,10 +1429,7 @@ impl Program {
                     return Err(impl_signature_mismatch_error(
                         task.scm,
                         trait_member.scm_via_defn,
-                        &trait_member
-                            .impl_src
-                            .as_ref()
-                            .map(|s| s.to_head_character()),
+                        &task.te.expr.source.as_ref().map(|s| s.to_head_character()),
                         &trait_member
                             .decl_src
                             .as_ref()
