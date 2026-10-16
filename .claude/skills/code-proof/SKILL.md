@@ -2,6 +2,7 @@
 name: code-proof
 description: "Prove that a piece of code has a stated property — that inputs satisfying a precondition produce outputs satisfying a postcondition — and write the proof as a dev doc: definitions, then a sequence of numbered propositions whose every leaf step cites exactly the facts, definitions and code it rests on, in Lamport's structured-proof style. The orchestrator fixes the target commit, states the property and calibrates it against a bug the code actually had, has a critic subagent judge whether the property is the right one and strong enough, then alternates prover subagents that write the proof with verifier subagents that check one step at a time and report every step that is false, non-obvious, hedged, or built on an undefined word. Use when: asked to prove that a pass, a function, or a subsystem is correct, sound, safe, or otherwise satisfies a property; or to re-verify an existing proof after the code changed."
 argument-hint: "The processing to prove something about (a pass, a function, a module), and optionally the property to prove. If omitted, the skill asks."
+disable-model-invocation: true
 ---
 
 # Proving a property of code
