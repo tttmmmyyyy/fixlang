@@ -3,16 +3,16 @@ use crate::{
         name::FullName,
         program::{Program, Symbol},
     },
-    misc::Map,
+    misc::{for_each_on_compiler_threads, Map},
     optimization::{application_inlining, let_elimination},
 };
 
-/// Inline the local functions of every symbol of `prg`.
-pub fn run(prg: &mut Program) {
+/// Inline the local functions of every symbol of `prg`, on up to `num_threads` threads.
+pub fn run(prg: &mut Program, num_threads: usize) {
     let global_lambda_to_arity = let_elimination::create_global_lambda_to_arity_map(&prg.symbols);
-    for (_name, sym) in &mut prg.symbols {
-        run_on_symbol(sym, &global_lambda_to_arity);
-    }
+    for_each_on_compiler_threads(prg.symbols.values_mut().collect(), num_threads, |sym| {
+        run_on_symbol(sym, &global_lambda_to_arity)
+    });
 }
 
 /// Inline the local functions of one symbol: eliminate a `let` that binds a lambda, and reduce an

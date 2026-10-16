@@ -565,14 +565,23 @@ impl LiftedLambdas {
 /// before anything is keyed on it. The table of what is worth copying is then solved once over the
 /// program lifting left behind. Only then are copies made, from that same program, so that a copy's
 /// body names the functions the table answers for.
-pub fn run(prg: &mut Program, show_build_times: bool) {
+///
+/// The bodies of the lambdas the copies are specialized on are moved into the copies on up to
+/// `num_threads` threads.
+pub fn run(prg: &mut Program, show_build_times: bool, num_threads: usize) {
     let _sw = StopWatch::new("closure_specialization::run", show_build_times);
 
     let lifted = Rc::new(RefCell::new(LiftedLambdas::default()));
     lift_all(prg, &lifted, show_build_times);
 
     let specializable_slots = Rc::new(find_specializable_slots(&prg.symbols, &lifted.borrow()));
-    realize_all(prg, &lifted, specializable_slots, show_build_times);
+    realize_all(
+        prg,
+        &lifted,
+        specializable_slots,
+        show_build_times,
+        num_threads,
+    );
 }
 
 /// Lift every lambda in the program to a global function, until lifting one leaves nothing more to
@@ -636,11 +645,15 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
 ///
 /// The bodies every copy is made from are the ones lifting left behind, so a copy names the same
 /// functions its original does and the table answers for all of them.
+///
+/// The bodies of the lambdas the copies are specialized on are moved into the copies on up to
+/// `num_threads` threads.
 fn realize_all(
     prg: &mut Program,
     lifted: &Rc<RefCell<LiftedLambdas>>,
     specializable_slots: Rc<SpecializableSlots>,
     show_build_times: bool,
+    num_threads: usize,
 ) {
     let _sw = StopWatch::new("closure_specialization::realize_all", show_build_times);
 
@@ -743,7 +756,7 @@ fn realize_all(
     // been offered a body: the value a loop body returns each round, for one, is built in the lambda
     // and taken apart in the copy of `Std::loop` that calls it, and the simplifier cancels the two
     // only once they stand in one function.
-    move_bodies_into_callers(&mut symbols, &specialized_lambdas);
+    move_bodies_into_callers(&mut symbols, &specialized_lambdas, num_threads);
 
     prg.symbols = symbols;
 }

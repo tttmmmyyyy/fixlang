@@ -33,14 +33,14 @@ use crate::{
         expr::{expr_let_typed, expr_var, var_var, Expr, ExprNode},
         name::{FullName, Name},
         pattern::{Pattern, PatternNode},
-        program::Program,
+        program::{Program, Symbol},
         traverse::{ExprVisitor, StartVisitResult, VisitState},
         type_env::TypeEnv,
         types::{TyCon, TypeNode},
     },
     constants::BOUND_FIELD_PREFIX,
     fixstd::builtin::MakeUnionOp,
-    misc::{Map, Set},
+    misc::{for_each_on_compiler_threads, Map, Set},
     optimization::{
         inline_local, let_elimination::create_global_lambda_to_arity_map, pull_let,
         unique_local_names,
@@ -48,45 +48,58 @@ use crate::{
 };
 use std::sync::Arc;
 
-/// Read every construction the code taking it apart can see, over every global.
-pub fn run(prg: &mut Program) {
+/// Read every construction the code taking it apart can see, over every global, on up to
+/// `num_threads` threads.
+pub fn run(prg: &mut Program, num_threads: usize) {
     let type_env = prg.type_env.clone();
     // How many parameters each global lambda takes. Neither `Collapser` nor `inline_local`
     // shortens a symbol's leading run of lambdas, so one map answers for every symbol: `Collapser`
     // rewrites what a construction's reader sees, and `let_elimination` and `application_inlining`
     // expose a lambda without removing one.
     let global_lambda_to_arity = create_global_lambda_to_arity_map(&prg.symbols);
-    for (_name, sym) in prg.symbols.iter_mut() {
-        let mut expr = with_lets_pulled_out(sym.expr.as_ref().unwrap());
-        let mut bound_field_count = 0;
-        let mut read_any = false;
-        loop {
-            let mut collapser = Collapser {
-                type_env: &type_env,
-                constructions: Map::default(),
-                bound_fields: &mut bound_field_count,
-                bound_names: names_bound_in(&expr),
-            };
-            let res = collapser.traverse(&expr);
-            if !res.changed {
-                break;
-            }
-            read_any = true;
-            expr = with_lets_pulled_out(&res.expr);
+    for_each_on_compiler_threads(prg.symbols.values_mut().collect(), num_threads, |sym| {
+        run_on_symbol(sym, &type_env, &global_lambda_to_arity)
+    });
+}
+
+/// Read every construction the code taking it apart can see, in the global `sym`.
+///
+/// # Arguments
+/// * `global_lambda_to_arity` - how many parameters each global lambda takes, for `inline_local`.
+fn run_on_symbol(
+    sym: &mut Symbol,
+    type_env: &TypeEnv,
+    global_lambda_to_arity: &Map<FullName, usize>,
+) {
+    let mut expr = with_lets_pulled_out(sym.expr.as_ref().unwrap());
+    let mut bound_field_count = 0;
+    let mut read_any = false;
+    loop {
+        let mut collapser = Collapser {
+            type_env,
+            constructions: Map::default(),
+            bound_fields: &mut bound_field_count,
+            bound_names: names_bound_in(&expr),
+        };
+        let res = collapser.traverse(&expr);
+        if !res.changed {
+            break;
         }
-        // Floating the `let`s outward and renaming the locals is what lets a construction be read,
-        // so a global holding none of them keeps the body it came with. The stages below read the
-        // shape of a body as well as its meaning, and one this pass has nothing to say about is one
-        // they should meet as it was written.
-        if read_any {
-            sym.expr = Some(expr);
-            // Run the rewritten symbol to the fixpoint of `let_elimination` and
-            // `application_inlining`. Among what they take is the shape this pass writes: a field
-            // holding a lambda is bound to a name, and the reader handed that name calls it, so the
-            // lambda stands bound to a name and applied at its one use — a closure the program
-            // would build on the heap and call through.
-            inline_local::run_on_symbol(sym, &global_lambda_to_arity);
-        }
+        read_any = true;
+        expr = with_lets_pulled_out(&res.expr);
+    }
+    // Floating the `let`s outward and renaming the locals is what lets a construction be read, so a
+    // global holding none of them keeps the body it came with. The stages below read the shape of a
+    // body as well as its meaning, and one this pass has nothing to say about is one they should
+    // meet as it was written.
+    if read_any {
+        sym.expr = Some(expr);
+        // Run the rewritten symbol to the fixpoint of `let_elimination` and
+        // `application_inlining`. Among what they take is the shape this pass writes: a field
+        // holding a lambda is bound to a name, and the reader handed that name calls it, so the
+        // lambda stands bound to a name and applied at its one use — a closure the program would
+        // build on the heap and call through.
+        inline_local::run_on_symbol(sym, global_lambda_to_arity);
     }
 }
 

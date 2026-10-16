@@ -19,8 +19,9 @@ use crate::{
         name::FullName,
         program::{Program, Symbol},
         traverse::{EndVisitResult, ExprVisitor, VisitState},
+        type_env::TypeEnv,
     },
-    misc::{Map, Set},
+    misc::{map_on_compiler_threads, Map, Set},
     optimization::{
         inline_local, let_elimination::create_global_lambda_to_arity_map, uncurry::is_std_fix,
     },
@@ -93,10 +94,10 @@ const MAX_ROUNDS: usize = 10;
 /// (`is_free_to_duplicate`), and a global that is one name standing for another, go wherever the
 /// name occurs; a lambda small enough (`INLINE_COST_THRESHOLD`) and one wrapping a builtin
 /// operation go into the calls of it. A body that calls itself stays where it is.
-pub fn run(prg: &mut Program) {
+pub fn run(prg: &mut Program, num_threads: usize) {
     let mut stable_symbols = Set::default();
     for _ in 0..MAX_ROUNDS {
-        if !run_one(prg, &mut stable_symbols) {
+        if !run_one(prg, &mut stable_symbols, num_threads) {
             break;
         }
     }
@@ -105,124 +106,225 @@ pub fn run(prg: &mut Program) {
 /// One round of `run`: substitute into each symbol once and discard the symbols nothing names.
 /// Returns whether the program changed.
 ///
+/// Every symbol reads the bodies of the others as they were when the round began, so the symbols
+/// are rewritten independently of one another, on up to `num_threads` threads.
+///
 /// # Arguments
 /// * `stable_symbols` — the symbols with nothing left to substitute into them, carried from round to
 ///   round: a symbol listed here is passed through untouched, and a symbol this round leaves
 ///   unchanged joins it.
-fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
-    let mut changed = false;
-
-    let costs = calculate_inline_costs(prg);
+fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>, num_threads: usize) -> bool {
+    let costs = calculate_inline_costs(prg, num_threads);
     let symbols = mem::take(&mut prg.symbols);
-    let mut inliner = Inliner {
-        costs: &costs,
-        symbols: symbols.clone(),
-        budget: 0,
-        refused_for_budget: false,
-    };
     let global_lambda_to_arity = create_global_lambda_to_arity_map(&symbols);
-    let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let root_value_names = prg.root_value_names();
+    let round = SymbolRound {
+        costs: &costs,
+        symbols: &symbols,
+        global_lambda_to_arity: &global_lambda_to_arity,
+        root_value_names: &root_value_names,
+        stable_symbols,
+    };
+    let outcomes = map_on_compiler_threads(symbols.iter().collect(), num_threads, |(name, sym)| {
+        (name, round.run_on_symbol(name, sym))
+    });
 
-    for (name, mut sym) in symbols {
-        // If nothing in the program names the symbol, and it is neither the entry point nor an
-        // exported value, discard it.
-        if costs.get_use_count(&name) == 0 && !root_value_names.contains(&name) {
-            changed = true;
-            continue;
+    let mut changed = false;
+    let mut new_symbols: Map<FullName, Symbol> = Map::default();
+    for (name, outcome) in outcomes {
+        match outcome {
+            SymbolOutcome::Discarded => changed = true,
+            SymbolOutcome::Kept {
+                sym,
+                changed: sym_changed,
+                stable,
+            } => {
+                changed |= sym_changed;
+                if stable {
+                    stable_symbols.insert(name.clone());
+                }
+                new_symbols.insert(name.clone(), sym);
+            }
         }
-
-        // If the symbol is known to be stable, skip it.
-        if stable_symbols.contains(&name) {
-            new_symbols.insert(name, sym);
-            continue;
-        }
-
-        // A symbol whose expression names nothing has nothing to substitute into it.
-        if sym.expr.as_ref().unwrap().free_vars().is_empty() {
-            stable_symbols.insert(name.clone());
-            new_symbols.insert(name.clone(), sym);
-            continue;
-        }
-
-        let res = inliner.substitute_into(&sym.expr.as_ref().unwrap());
-
-        if res.changed {
-            changed = true;
-            sym.expr = Some(res.expr);
-            inline_local::run_on_symbol(&mut sym, &global_lambda_to_arity);
-        } else if !inliner.refused_for_budget {
-            // A round that substituted nothing and refused nothing has reached the symbol's end
-            // state. A symbol whose round refused a body it could not afford is asked again next
-            // round: the body may come back smaller, since `inline_local` reduces what the
-            // substitution left in every symbol the round changed.
-            stable_symbols.insert(name.clone());
-        }
-
-        // The round may have left an expression that names nothing, which is the same end state.
-        if sym.expr.as_ref().unwrap().free_vars().is_empty() {
-            stable_symbols.insert(name.clone());
-        }
-
-        new_symbols.insert(name, sym);
     }
-
     prg.symbols = new_symbols;
 
     changed
 }
 
-/// Measure every symbol of the program: how large its expression is, how many times the program
-/// names it, and the shapes of that expression which decide where it may be inlined.
-fn calculate_inline_costs(prg: &Program) -> InlineCosts {
-    let mut costs = InlineCosts::new();
-    let type_env = prg.type_env();
-    for (name, sym) in &prg.symbols {
-        let expr = sym.expr.as_ref().unwrap();
+/// What one round of `run` reads while it rewrites each symbol: the program as the round found it.
+struct SymbolRound<'r> {
+    /// What each global of the program costs to inline, and where it may be inlined.
+    costs: &'r InlineCosts,
+    /// The symbols of the program as the round found them, holding the bodies to put at the names.
+    symbols: &'r Map<FullName, Symbol>,
+    /// How many parameters each global lambda takes, for `inline_local`.
+    global_lambda_to_arity: &'r Map<FullName, usize>,
+    /// The entry point and the exported values, which are kept although nothing names them.
+    root_value_names: &'r [FullName],
+    /// The symbols the rounds before found nothing left to substitute into.
+    stable_symbols: &'r Set<FullName>,
+}
 
-        let mut cost_calculator = InlineCostCalculator::new(name.clone());
-        cost_calculator.traverse(expr);
-        costs.add_cost_calculation_result(cost_calculator);
+/// What one round of `run` did with one symbol.
+enum SymbolOutcome {
+    /// Nothing in the program names the symbol, and it is neither the entry point nor an exported
+    /// value, so it is dropped.
+    Discarded,
+    /// The symbol stays in the program.
+    Kept {
+        /// The symbol as the round left it.
+        sym: Symbol,
+        /// Whether the round substituted anything into it.
+        changed: bool,
+        /// Whether it has reached its end state, so that the rounds after pass it through.
+        stable: bool,
+    },
+}
 
-        let cost = costs.get_mut(name);
-
-        // Count what a copy of the expression costs the compiler, which is every node of it,
-        // including the kinds `complexity` counts as nothing.
-        cost.node_count = expr.node_count();
-
-        // An expression that takes no parameter is the operation itself, and a copy of it costs what
-        // the operation costs, which `is_free_to_duplicate` answers.
-        let (params, body) = expr.destructure_lam_sequence();
-        cost.is_builtin_lam = !params.is_empty() && body.is_builtin();
-
-        if expr.is_builtin() {
-            let op = &expr.get_builtin().op;
-            let is_free_to_duplicate = op.is_free_to_duplicate();
-            // An operation whose result holds a boxed part allocates that part, so a copy of it
-            // allocates once more, unless every boxed part is a constant in the program's data,
-            // which the operation declares non-local. So an operation declared free to duplicate
-            // answers with a type unboxed throughout, or declares its whole result non-local.
-            assert!(
-                !is_free_to_duplicate
-                    || sym.ty.is_fully_unboxed(&type_env)
-                    || op.result_locality(&sym.ty, &[], &type_env)
-                        == ExtShape::always(&sym.ty, &type_env),
-                "the builtin operation `{}` declares a copy of itself free while it answers \
-                 with `{}`, which holds a boxed part it may allocate",
-                op.name(),
-                sym.ty.to_string()
-            );
-            cost.is_free_to_duplicate = is_free_to_duplicate;
+impl<'r> SymbolRound<'r> {
+    /// Substitute into the symbol `name` once, or discard it if nothing names it.
+    fn run_on_symbol(&self, name: &FullName, sym: &Symbol) -> SymbolOutcome {
+        // If nothing in the program names the symbol, and it is neither the entry point nor an
+        // exported value, discard it.
+        if self.costs.get_use_count(name) == 0 && !self.root_value_names.contains(name) {
+            return SymbolOutcome::Discarded;
         }
 
-        cost.is_std_fix = is_std_fix(name);
+        let mut sym = sym.clone();
 
-        if expr.is_var() {
-            assert!(expr.get_var().name.is_global());
-            cost.is_alias = true;
+        // If the symbol is known to be stable, skip it.
+        if self.stable_symbols.contains(name) {
+            return SymbolOutcome::Kept {
+                sym,
+                changed: false,
+                stable: false,
+            };
+        }
+
+        // A symbol whose expression names nothing has nothing to substitute into it.
+        if sym.expr.as_ref().unwrap().free_vars().is_empty() {
+            return SymbolOutcome::Kept {
+                sym,
+                changed: false,
+                stable: true,
+            };
+        }
+
+        let mut inliner = Inliner {
+            costs: self.costs,
+            symbols: self.symbols,
+            budget: 0,
+            refused_for_budget: false,
+        };
+        let res = inliner.substitute_into(&sym.expr.as_ref().unwrap());
+
+        let mut stable = false;
+        if res.changed {
+            sym.expr = Some(res.expr);
+            inline_local::run_on_symbol(&mut sym, self.global_lambda_to_arity);
+        } else if !inliner.refused_for_budget {
+            // A round that substituted nothing and refused nothing has reached the symbol's end
+            // state. A symbol whose round refused a body it could not afford is asked again next
+            // round: the body may come back smaller, since `inline_local` reduces what the
+            // substitution left in every symbol the round changed.
+            stable = true;
+        }
+
+        // The round may have left an expression that names nothing, which is the same end state.
+        if sym.expr.as_ref().unwrap().free_vars().is_empty() {
+            stable = true;
+        }
+
+        SymbolOutcome::Kept {
+            sym,
+            changed: res.changed,
+            stable,
         }
     }
+}
+
+/// Measure every symbol of the program: how large its expression is, how many times the program
+/// names it, and the shapes of that expression which decide where it may be inlined. The symbols
+/// are measured on up to `num_threads` threads.
+fn calculate_inline_costs(prg: &Program, num_threads: usize) -> InlineCosts {
+    let type_env = prg.type_env();
+    let measures =
+        map_on_compiler_threads(prg.symbols.iter().collect(), num_threads, |(name, sym)| {
+            measure_symbol(name, sym, &type_env)
+        });
+    let mut costs = InlineCosts::new();
+    for (name, measure) in measures {
+        costs.add_symbol_measure(name, measure);
+    }
     costs
+}
+
+/// What the walk of one symbol found.
+struct SymbolMeasure {
+    /// What the symbol itself costs, with `use_count` left at 0: how often the symbol is named is
+    /// counted over the other symbols.
+    cost: InlineCost,
+    /// For each global name, how many times the symbol names it.
+    use_count: Map<FullName, usize>,
+}
+
+/// Measure the symbol `name`, whose definition is `sym`: what a copy of its expression costs, the
+/// shapes of that expression, and the global names it uses.
+fn measure_symbol(name: &FullName, sym: &Symbol, type_env: &TypeEnv) -> (FullName, SymbolMeasure) {
+    let expr = sym.expr.as_ref().unwrap();
+
+    let mut cost_calculator = InlineCostCalculator::new(name.clone());
+    cost_calculator.traverse(expr);
+
+    let mut cost = InlineCost::new();
+    cost.complexity = cost_calculator.complexity;
+    cost.is_self_recursive = cost_calculator.is_self_recursive;
+    cost.is_lambda = cost_calculator.is_lambda;
+
+    // Count what a copy of the expression costs the compiler, which is every node of it,
+    // including the kinds `complexity` counts as nothing.
+    cost.node_count = expr.node_count();
+
+    // An expression that takes no parameter is the operation itself, and a copy of it costs what
+    // the operation costs, which `is_free_to_duplicate` answers.
+    let (params, body) = expr.destructure_lam_sequence();
+    cost.is_builtin_lam = !params.is_empty() && body.is_builtin();
+
+    if expr.is_builtin() {
+        let op = &expr.get_builtin().op;
+        let is_free_to_duplicate = op.is_free_to_duplicate();
+        // An operation whose result holds a boxed part allocates that part, so a copy of it
+        // allocates once more, unless every boxed part is a constant in the program's data,
+        // which the operation declares non-local. So an operation declared free to duplicate
+        // answers with a type unboxed throughout, or declares its whole result non-local.
+        assert!(
+            !is_free_to_duplicate
+                || sym.ty.is_fully_unboxed(type_env)
+                || op.result_locality(&sym.ty, &[], type_env)
+                    == ExtShape::always(&sym.ty, type_env),
+            "the builtin operation `{}` declares a copy of itself free while it answers \
+             with `{}`, which holds a boxed part it may allocate",
+            op.name(),
+            sym.ty.to_string()
+        );
+        cost.is_free_to_duplicate = is_free_to_duplicate;
+    }
+
+    cost.is_std_fix = is_std_fix(name);
+
+    if expr.is_var() {
+        assert!(expr.get_var().name.is_global());
+        cost.is_alias = true;
+    }
+
+    (
+        name.clone(),
+        SymbolMeasure {
+            cost,
+            use_count: cost_calculator.use_count,
+        },
+    )
 }
 
 /// What one symbol costs to inline, and the shapes of its expression that decide where it may
@@ -340,14 +442,6 @@ impl InlineCosts {
             .unwrap_or_else(|| Self::panic_no_cost_recorded(name))
     }
 
-    /// The cost recorded for the symbol named `name`, to write to. Every name the program defines
-    /// has one, as `get` says.
-    fn get_mut(&mut self, name: &FullName) -> &mut InlineCost {
-        self.costs
-            .get_mut(name)
-            .unwrap_or_else(|| Self::panic_no_cost_recorded(name))
-    }
-
     /// Fail, naming the symbol whose cost was asked for and not found.
     fn panic_no_cost_recorded(name: &FullName) -> ! {
         panic!("no inline cost is recorded for `{}`", name.to_string())
@@ -365,20 +459,17 @@ impl InlineCosts {
         self.get(name).use_count
     }
 
-    /// Take in what the walk of one symbol found: every global name that symbol uses has its use
-    /// count raised, and the symbol itself gets the size, the self-reference and the lambda shape the
-    /// walk measured.
-    fn add_cost_calculation_result(&mut self, calculator: InlineCostCalculator) {
-        // Raise the use count of each global name the walked symbol uses.
-        for (sym, count) in calculator.use_count {
-            self.get_or_insert(sym).use_count += count;
+    /// Take in what the walk of the symbol `name` found: every global name that symbol uses has its
+    /// use count raised, and the symbol itself gets the cost the walk measured.
+    fn add_symbol_measure(&mut self, name: FullName, measure: SymbolMeasure) {
+        for (used, count) in measure.use_count {
+            self.get_or_insert(used).use_count += count;
         }
-
-        // Set other fields for the symbol itself that `InlineCostCalculator` has traversed.
-        let inline_cost = self.get_or_insert(calculator.name);
-        inline_cost.complexity = calculator.complexity;
-        inline_cost.is_self_recursive = calculator.is_self_recursive;
-        inline_cost.is_lambda = calculator.is_lambda;
+        let cost = self.get_or_insert(name);
+        *cost = InlineCost {
+            use_count: cost.use_count,
+            ..measure.cost
+        };
     }
 }
 
@@ -575,7 +666,7 @@ struct Inliner<'c> {
     /// What each global of the program costs to inline, and where it may be inlined.
     costs: &'c InlineCosts,
     /// The symbols of the program, holding the bodies to put at the names.
-    symbols: Map<FullName, Symbol>,
+    symbols: &'c Map<FullName, Symbol>,
     /// How many nodes the symbol being traversed may still gain this round. `substitute_into` sets
     /// it to `MAX_NODES_SUBSTITUTED_PER_ROUND` before each symbol, every substitution spends the
     /// nodes of the body it copies, and a body larger than what is left is refused.

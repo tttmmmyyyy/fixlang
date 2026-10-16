@@ -66,7 +66,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_unwrap_newtype_optimization(),
         "unwrap_newtype",
-        unwrap_newtype::run,
+        |prg| unwrap_newtype::run(prg, config.num_worker_thread),
     );
 
     // Defunctionalize `Std::fix` into directly self-recursive global functions. It runs before
@@ -86,7 +86,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_inline_optimization(),
         "inline",
-        inline::run,
+        |prg| inline::run(prg, config.num_worker_thread),
     );
 
     run_pass(
@@ -94,7 +94,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_inline_local_optimization(),
         "inline_local",
-        inline_local::run,
+        |prg| inline_local::run(prg, config.num_worker_thread),
     );
 
     // Give a function that takes a struct a twin taking one argument per field of it, so that a
@@ -118,7 +118,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_split_struct_args() && config.enable_inline_optimization(),
         "inline",
-        inline::run,
+        |prg| inline::run(prg, config.num_worker_thread),
     );
 
     // Read every construction the code taking it apart can see. That is what turns the two lines a
@@ -129,7 +129,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_collapse_constructions(),
         "collapse_constructions",
-        collapse_constructions::run,
+        |prg| collapse_constructions::run(prg, config.num_worker_thread),
     );
 
     run_pass(
@@ -137,7 +137,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_closure_specialization(),
         "closure_specialization",
-        |prg| closure_specialization::run(prg, config.verbose),
+        |prg| closure_specialization::run(prg, config.verbose, config.num_worker_thread),
     );
 
     // Move the capture list of the function given to a scope op such as
@@ -149,7 +149,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_decapture_scope_functions(),
         "decapture_scope_functions",
-        decapture_scope_functions::run,
+        |prg| decapture_scope_functions::run(prg, config.num_worker_thread),
     );
 
     // Read the tuple the pass above builds for the function whose body it put in place of a call
@@ -159,7 +159,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_decapture_scope_functions() && config.enable_collapse_constructions(),
         "collapse_constructions",
-        collapse_constructions::run,
+        |prg| collapse_constructions::run(prg, config.num_worker_thread),
     );
 
     run_pass(
@@ -167,7 +167,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_uncurry_optimization(),
         "uncurry",
-        uncurry::run,
+        |prg| uncurry::run(prg, config.num_worker_thread),
     );
 
     run_pass(
@@ -195,7 +195,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
             && config.enable_uncurry_optimization()
             && config.enable_inline_local_optimization(),
         "inline_local",
-        inline_local::run,
+        |prg| inline_local::run(prg, config.num_worker_thread),
     );
 
     if config.emit_symbols {
