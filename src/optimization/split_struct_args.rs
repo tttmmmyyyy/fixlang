@@ -516,9 +516,17 @@ impl ExprVisitor for DestructuringRemover<'_> {
 /// A boxed struct is left alone: its fields sit behind a pointer, so handing them over one by one
 /// would copy what the program means to share. So is a struct with a field punched out, whose hole
 /// holds no value to hand over.
+///
+/// The type checker has accepted the program, so `type_env` declares every type constructor `ty`
+/// can be headed by; the function panics on one it does not.
 fn splittable_struct(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<TyCon>> {
     let tycon = ty.toplevel_tycon()?;
-    let info = type_env.tycons().get(tycon.as_ref())?;
+    let info = type_env.tycons().get(tycon.as_ref()).unwrap_or_else(|| {
+        panic!(
+            "the type `{}` of a function's argument is undeclared",
+            tycon.to_string()
+        )
+    });
     if info.variant != TyConVariant::Struct || !info.is_unbox || info.fields.is_empty() {
         return None;
     }

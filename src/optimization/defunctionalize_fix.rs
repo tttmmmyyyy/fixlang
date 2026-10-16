@@ -27,9 +27,7 @@
 
 use crate::{
     ast::{
-        expr::{
-            expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_local, Expr, ExprNode,
-        },
+        expr::{expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_var, Expr, ExprNode},
         name::FullName,
         program::{Program, Symbol},
         traverse::{ExprVisitor, StartVisitResult, VisitState},
@@ -246,11 +244,10 @@ impl FixDefunctionalizer {
         // itself be an outer lift's `#fixcap..` parameter that this lambda closed over, so `cap`'s
         // destructure would bind a variable of that name and shadow this parameter — then `G(cap)`
         // would forward the captured struct in place of this one.
-        let cap_param = (0..)
-            .map(|counter: u32| format!("{}{}", FIX_CAP_PARAM_PREFIX, counter))
-            .find(|name| !cap_fields.iter().any(|(n, _)| n.to_string() == *name))
+        let cap_param_name = (0..)
+            .map(|counter: u32| FullName::local(&format!("{}{}", FIX_CAP_PARAM_PREFIX, counter)))
+            .find(|name| !cap_fields.iter().any(|(field, _)| field == name))
             .unwrap();
-        let cap_param_name = FullName::local(&cap_param);
 
         // The recursive value `G(cap)`, of type `a -> b`.
         let g_ref =
@@ -267,11 +264,11 @@ impl FixDefunctionalizer {
         // `G = |cap| let FixCap { .. } = cap; body`.
         let g_body = expr_let_typed(
             cap.pattern(),
-            expr_var(cap_param_name, None).set_type(cap.ty.clone()),
+            expr_var(cap_param_name.clone(), None).set_type(cap.ty.clone()),
             body,
         );
         let g_expr = internalize_let_to_var_at_head(&expr_abs_typed(
-            var_local(&cap_param),
+            var_var(cap_param_name),
             cap.ty.clone(),
             g_body,
         ));
