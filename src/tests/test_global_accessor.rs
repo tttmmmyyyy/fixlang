@@ -3,6 +3,7 @@ use crate::tests::test_util::{
     build_program, build_run_and_read_rc_ir, emitted_llvm_ir, emitted_llvm_ir_modules, fix_build_source_command,
     llvm_function_bodies, EmittedIr,
 };
+use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
 
@@ -427,7 +428,7 @@ fn test_a_global_string_literal_read_from_many_compilation_units_is_held_once() 
         None,
         "a global string literal read from many compilation units",
     );
-    let program_bytes = std::fs::metadata(&program)
+    let program_bytes = fs::metadata(&program)
         .expect("Failed to read the size of the program")
         .len();
     assert!(
