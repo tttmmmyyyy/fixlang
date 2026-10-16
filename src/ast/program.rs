@@ -42,8 +42,7 @@ use crate::graph::Graph;
 use crate::hash::HashSource;
 use crate::metafiles::project_file::ProjectName;
 use crate::misc::{
-    collect_results, insert_to_map_vec_many, join_compiler_threads, spawn_compiler_thread,
-    to_absolute_path, Map, Set,
+    collect_results, insert_to_map_vec_many, map_on_compiler_threads, to_absolute_path, Map, Set,
 };
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
@@ -56,7 +55,7 @@ use std::fs::File;
 use std::io::Write;
 use std::mem::replace;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::vec;
 
 /// A Fix value at one concrete type, under a name of its own. A generic definition becomes one
@@ -1331,53 +1330,49 @@ impl Program {
             /// The tolerated diagnostics the check produced.
             errors: Errors,
         }
-        /// One value to check, as a closure a worker thread can run.
-        struct CheckTask {
+        /// One value to check: its expression and the type scheme it is checked against, and the
+        /// place in `self` its result belongs to.
+        struct CheckTask<'p> {
             /// The global value to check.
-            val_name: FullName,
-            /// Resolves namespaces in the value's expression and type-checks it.
-            task: Box<dyn FnOnce() -> Result<CheckTaskOutput, Errors> + Send>,
+            val_name: &'p FullName,
             /// Which implementation of the trait method to check; `None` for a simple value.
             method_impl_idx: Option<usize>,
+            /// The expression to resolve namespaces in and type-check.
+            te: &'p TypedExpr,
+            /// The type scheme the expression is checked against.
+            scm: &'p Arc<Scheme>,
+            /// The module the expression is defined in.
+            def_mod: ModuleInfo,
+            /// The hash the type-checking cache keys the result by.
+            version_hash: String,
+            /// For a trait method implementation, what its signature is checked against first.
+            trait_member: Option<TraitMemberSignature<'p>>,
+        }
+        /// The trait member definition that the signature of a trait method implementation must
+        /// agree with.
+        struct TraitMemberSignature<'p> {
+            /// The type scheme obtained from the trait member definition.
+            scm_via_defn: &'p Arc<Scheme>,
+            /// Where the trait member is declared.
+            decl_src: &'p Option<Span>,
         }
         let mut tasks: Vec<CheckTask> = vec![];
 
         // Create tasks.
         for val_name in val_names {
-            let gv = self.global_values.get(&val_name).unwrap();
+            let gv = self.global_values.get(val_name).unwrap();
             match &gv.expr {
                 SymbolExpr::Simple(e) => {
-                    // Create a task for simple value.
-                    let te = e.clone();
-                    let scm = gv.scm.clone();
-                    let val_name_clone = val_name.clone(); // For move into closure.
-                    let def_mod = self.find_mod(&val_name.module()).unwrap().clone();
-                    let mut nrctx = NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
+                    let def_mod = self.find_mod(&val_name.module()).unwrap();
                     let version_hash = self.module_dependency_hash(&def_mod.name, config)?;
-                    let tc = tc.clone();
-                    let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
-                        // Perform type-checking.
-                        let (te, errors) = Program::resolve_namespace_and_check_type_sub(
-                            te,
-                            &scm,
-                            &val_name_clone,
-                            &def_mod,
-                            &mut nrctx,
-                            &version_hash,
-                            tc,
-                        )?;
-                        let output = CheckTaskOutput {
-                            te,
-                            import_required: nrctx.import_required,
-                            errors,
-                        };
-                        Ok(output)
-                    });
-
                     tasks.push(CheckTask {
-                        val_name: val_name.clone(),
-                        task,
+                        val_name,
                         method_impl_idx: None,
+                        te: e,
+                        scm: &gv.scm,
+                        def_mod,
+                        version_hash,
+                        trait_member: None,
                     });
                 }
                 SymbolExpr::Method(impls) => {
@@ -1386,65 +1381,25 @@ impl Program {
                         if !method_impl_filter(impl_)? {
                             continue;
                         }
-
-                        // Create a task for method implementation.
-                        let te = impl_.expr.clone();
-                        let scm = impl_.scm.clone();
-                        let scm_via_defn = impl_.scm_via_defn.clone();
-                        let impl_src = impl_.expr.expr.source.clone();
-                        let decl_src = gv.decl_src.clone();
-                        let val_name_clone = val_name.clone(); // For move into closure.
-                        let def_mod = self.find_mod(&impl_.define_module).unwrap().clone();
-                        let mut nrctx =
-                            NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
+                        let def_mod = self.find_mod(&impl_.define_module).unwrap();
                         let version_hash = self.module_dependency_hash(&def_mod.name, config)?;
-                        let tc = tc.clone();
-                        let task = Box::new(move || -> Result<CheckTaskOutput, Errors> {
-                            // Check that the type signature given by implementor is equivalent to
-                            // the type scheme obtained from the trait member definition.
-                            if UnifOrOtherErr::extract_others(tc.check_scheme_equivalent(
-                                &scm,
-                                &scm_via_defn,
-                                &[],
-                            ))?
-                            .is_err()
-                            {
-                                return Err(impl_signature_mismatch_error(
-                                    &scm,
-                                    &scm_via_defn,
-                                    &impl_src.as_ref().map(|s| s.to_head_character()),
-                                    &decl_src.as_ref().map(|s| s.to_head_character()),
-                                ));
-                            }
-                            // Perform type-checking.
-                            let (te, errors) = Program::resolve_namespace_and_check_type_sub(
-                                te,
-                                &scm,
-                                &val_name_clone,
-                                &def_mod,
-                                &mut nrctx,
-                                &version_hash,
-                                tc,
-                            )?;
-                            let output = CheckTaskOutput {
-                                te,
-                                import_required: nrctx.import_required,
-                                errors,
-                            };
-                            Ok(output)
-                        });
-
                         tasks.push(CheckTask {
-                            val_name: val_name.clone(),
-                            task,
+                            val_name,
                             method_impl_idx: Some(i),
+                            te: &impl_.expr,
+                            scm: &impl_.scm,
+                            def_mod,
+                            version_hash,
+                            trait_member: Some(TraitMemberSignature {
+                                scm_via_defn: &impl_.scm_via_defn,
+                                decl_src: &gv.decl_src,
+                            }),
                         });
                     }
                 }
             };
         }
 
-        // Run all tasks.
         /// What one task produced, together with the place in `self` it belongs to.
         struct CheckResult {
             /// The global value the task checked.
@@ -1455,51 +1410,57 @@ impl Program {
             /// value.
             method_impl_idx: Option<usize>,
         }
-        /// Runs `task` and pairs its output with the value the task checked, so that the typed
-        /// expression can be stored back where it came from.
-        fn run_check_task(task: CheckTask) -> CheckResult {
-            let output = (task.task)();
-            CheckResult {
-                val_name: task.val_name,
-                output,
-                method_impl_idx: task.method_impl_idx,
+        /// Resolves namespaces in the expression of `task` and type-checks it. For a trait method
+        /// implementation, first checks that its signature agrees with the trait member definition.
+        fn run_check_task(
+            task: &CheckTask,
+            nrenv: &Arc<NameResolutionEnv>,
+            tc: &TypeCheckContext,
+        ) -> Result<CheckTaskOutput, Errors> {
+            if let Some(trait_member) = &task.trait_member {
+                // Check that the type signature given by implementor is equivalent to the type
+                // scheme obtained from the trait member definition.
+                if UnifOrOtherErr::extract_others(tc.check_scheme_equivalent(
+                    task.scm,
+                    trait_member.scm_via_defn,
+                    &[],
+                ))?
+                .is_err()
+                {
+                    return Err(impl_signature_mismatch_error(
+                        task.scm,
+                        trait_member.scm_via_defn,
+                        &task.te.expr.source.as_ref().map(|s| s.to_head_character()),
+                        &trait_member
+                            .decl_src
+                            .as_ref()
+                            .map(|s| s.to_head_character()),
+                    ));
+                }
             }
+            let mut nrctx = NameResolutionContext::new(task.def_mod.name.clone(), nrenv.clone());
+            let (te, errors) = Program::resolve_namespace_and_check_type_sub(
+                task.te.clone(),
+                task.scm,
+                task.val_name,
+                &task.def_mod,
+                &mut nrctx,
+                &task.version_hash,
+                tc.clone(),
+            )?;
+            Ok(CheckTaskOutput {
+                te,
+                import_required: nrctx.import_required,
+                errors,
+            })
         }
-        let results: Vec<CheckResult> = if tc.num_worker_threads <= 1 || tasks.len() <= 1 {
-            // Run tasks in the main thread.
-            tasks.into_iter().map(run_check_task).collect()
-        } else {
-            // Run tasks in parallel via a shared work queue: every
-            // worker thread pops the next task from the same `Vec`
-            // until it is empty, so an idle worker immediately picks
-            // up whatever is left.
-            //
-            // Per-gv typecheck cost is highly uneven (cache hits cost
-            // ~30 μs, misses ~300 ms), so a static per-thread shard
-            // would leave cores idle whenever the misses cluster on
-            // one shard.
-            let queue = Arc::new(Mutex::new(tasks));
-            let mut threads = vec![];
-            for _ in 0..tc.num_worker_threads {
-                let queue = queue.clone();
-                let thread = spawn_compiler_thread(move || {
-                    let mut results = vec![];
-                    loop {
-                        let task = match queue.lock().unwrap().pop() {
-                            Some(task) => task,
-                            None => break,
-                        };
-                        results.push(run_check_task(task));
-                    }
-                    results
-                });
-                threads.push(thread);
-            }
-            join_compiler_threads(threads)
-                .into_iter()
-                .flatten()
-                .collect()
-        };
+        // The cost of checking one value is highly uneven (a cache hit costs ~30 μs, a miss
+        // ~300 ms), so each thread takes the next task as soon as it finishes one.
+        let results = map_on_compiler_threads(tasks, tc.num_worker_threads, |task| CheckResult {
+            output: run_check_task(&task, &nrenv, tc),
+            val_name: task.val_name.clone(),
+            method_impl_idx: task.method_impl_idx,
+        });
 
         // Store the results into members of `self`.
         let mut errors = Errors::empty();

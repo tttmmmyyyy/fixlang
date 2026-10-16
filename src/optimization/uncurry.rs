@@ -20,47 +20,24 @@ use crate::{
     },
     constants::{FUNPTR_ARGS_MAX, INSTANCIATED_NAME_SEPARATOR, STD_NAME},
     fixstd::stdlib::FIX_NAME,
-    misc::{Map, Set},
+    misc::{for_each_on_compiler_threads, map_on_compiler_threads, Map, Set},
     optimization::eta_expansion,
 };
 use std::{mem, sync::Arc, usize};
 
 /// Defines a function pointer version of each global for one, two, ... arguments, then rewrites the
 /// calls, export statements and entry IO value of the program onto the version matching the number
-/// of arguments they supply.
-pub fn run(fix_mod: &mut Program) {
+/// of arguments they supply. The symbols are rewritten on up to `num_threads` threads.
+pub fn run(fix_mod: &mut Program, num_threads: usize) {
     // First, define uncurried version of global symbols.
     let syms = mem::replace(&mut fix_mod.symbols, Default::default());
-    for (sym_name, sym) in syms {
-        fix_mod.symbols.insert(sym_name.clone(), sym.clone());
-
-        // Add function pointer version as long as possible.
-        for n_args in 1..(FUNPTR_ARGS_MAX + 1) {
-            let mut expr = funptr_lambda(
-                &sym.generic_name,
-                sym.expr.as_ref().unwrap(),
-                n_args as usize,
-            );
-            if expr.is_none() {
-                break;
-            }
-            let expr = expr.take().unwrap();
-            let ty = expr.type_.clone().unwrap();
-            let mut name = sym_name.clone();
-            convert_to_funptr_name(name.name_as_mut(), n_args as usize);
-            let mut generic_name = sym.generic_name.clone();
-            convert_to_funptr_name(generic_name.name_as_mut(), n_args as usize);
-            fix_mod.symbols.insert(
-                name.clone(),
-                Symbol {
-                    name: name.clone(),
-                    generic_name,
-                    ty,
-                    expr: Some(expr.clone()),
-                    inline_into_callers: false,
-                },
-            );
-        }
+    let versions_of_syms = map_on_compiler_threads(
+        syms.into_iter().collect(),
+        num_threads,
+        |(sym_name, sym)| with_funptr_versions(sym_name, sym),
+    );
+    for (name, sym) in versions_of_syms.into_iter().flatten() {
+        fix_mod.symbols.insert(name, sym);
     }
 
     // Replace application expressions so that they use uncurried pointers.
@@ -68,11 +45,11 @@ pub fn run(fix_mod: &mut Program) {
     for (name, _sym) in &fix_mod.symbols {
         symbol_names.insert(name.clone());
     }
-    for (_name, sym) in &mut fix_mod.symbols {
+    for_each_on_compiler_threads(fix_mod.symbols.values_mut().collect(), num_threads, |sym| {
         let expr =
             replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), &symbol_names);
         sym.expr = Some(expr);
-    }
+    });
 
     // Replace export statements so that they use uncurried functions.
     for export in &mut fix_mod.export_statements {
@@ -102,6 +79,35 @@ pub fn run(fix_mod: &mut Program) {
                 Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
         }
     }
+}
+
+/// The symbol `sym_name`, whose definition is `sym`, followed by its function pointer versions taking
+/// one argument, two arguments, and so on, as many as its leading lambdas allow.
+fn with_funptr_versions(sym_name: FullName, sym: Symbol) -> Vec<(FullName, Symbol)> {
+    let mut versions = vec![];
+    for n_args in 1..=FUNPTR_ARGS_MAX as usize {
+        let Some(expr) = funptr_lambda(&sym.generic_name, sym.expr.as_ref().unwrap(), n_args)
+        else {
+            break;
+        };
+        let ty = expr.type_.clone().unwrap();
+        let mut name = sym_name.clone();
+        convert_to_funptr_name(name.name_as_mut(), n_args);
+        let mut generic_name = sym.generic_name.clone();
+        convert_to_funptr_name(generic_name.name_as_mut(), n_args);
+        versions.push((
+            name.clone(),
+            Symbol {
+                name,
+                generic_name,
+                ty,
+                expr: Some(expr),
+                inline_into_callers: false,
+            },
+        ));
+    }
+    versions.insert(0, (sym_name, sym));
+    versions
 }
 
 /// The uncurried symbol to use in place of `value`, an expression referring to a global value.

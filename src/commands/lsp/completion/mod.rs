@@ -32,7 +32,7 @@ use crate::elaboration::typecheck::TypeCheckContext;
 use crate::elaboration::typecheckcache::SharedTypeCheckCache;
 use crate::error::Errors;
 use crate::metafiles::project_file::ProjectFile;
-use crate::misc::{to_absolute_path, Map, Set};
+use crate::misc::{map_on_compiler_threads, to_absolute_path, Map, Set};
 use crate::parse::parser::parse_source_file;
 use crate::parse::sourcefile::{SourceFile, Span};
 use crate::write_log;
@@ -43,7 +43,6 @@ use lsp_types::{
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::thread;
 
 /// Payload stashed in `CompletionItem::data`, carried from
 /// `textDocument/completion` to `completionItem/resolve`.
@@ -289,12 +288,16 @@ fn tiers_in_parallel(
     tc: &TypeCheckContext,
     memo: &PredMemo,
 ) -> Vec<Tier> {
-    let n = names.len();
     // Below this many candidates the thread setup costs more than just
     // running the probes sequentially.
     const PARALLEL_THRESHOLD: usize = 64;
-    let workers = num_cpus::get();
-    let tier_of = |name: &FullName| {
+    let num_threads = if names.len() < PARALLEL_THRESHOLD {
+        1
+    } else {
+        num_cpus::get()
+    };
+    // The memo is a `Mutex`, so the workers share one cache.
+    map_on_compiler_threads(names.to_vec(), num_threads, |name| {
         assign_tier(
             name,
             &ranking.index,
@@ -303,36 +306,7 @@ fn tiers_in_parallel(
             tc,
             memo,
         )
-    };
-    if workers <= 1 || n < PARALLEL_THRESHOLD {
-        return names.iter().map(|&name| tier_of(name)).collect();
-    }
-
-    // Even chunks; the last chunk absorbs the remainder. `scope`
-    // guarantees every worker finishes before the borrowed
-    // `names`/`ranking`/`program`/`tc`/`memo` go out of scope, so plain
-    // shared references suffice (no `Arc`/clone needed to hand them to
-    // threads); the memo is a `Mutex`, so the workers share one cache.
-    let chunk_size = n.div_ceil(workers);
-    let mut tiers = Vec::with_capacity(n);
-    thread::scope(|s| {
-        let handles: Vec<_> = names
-            .chunks(chunk_size)
-            .map(|chunk| {
-                let tier_of = &tier_of;
-                s.spawn(move || {
-                    chunk
-                        .iter()
-                        .map(|&name| tier_of(name))
-                        .collect::<Vec<Tier>>()
-                })
-            })
-            .collect();
-        for h in handles {
-            tiers.extend(h.join().expect("completion ranking worker thread panicked"));
-        }
-    });
-    tiers
+    })
 }
 
 /// Bundle of the data the dot-completion ranking flow needs: the

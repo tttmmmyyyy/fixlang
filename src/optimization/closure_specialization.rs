@@ -1,6 +1,7 @@
 use super::{
-    capture_struct::{fresh_global_name, CaptureStruct},
+    capture_struct::CaptureStruct,
     find_usage_of_name::{self, UsageType},
+    minted_names::{insert_minted_symbol, names_of_globals, MintedNames},
     move_bodies::move_bodies_into_callers,
     pull_let,
     rename::rename_free_names,
@@ -565,14 +566,23 @@ impl LiftedLambdas {
 /// before anything is keyed on it. The table of what is worth copying is then solved once over the
 /// program lifting left behind. Only then are copies made, from that same program, so that a copy's
 /// body names the functions the table answers for.
-pub fn run(prg: &mut Program, show_build_times: bool) {
+///
+/// The bodies of the lambdas the copies are specialized on are moved into the copies on up to
+/// `num_threads` threads.
+pub fn run(prg: &mut Program, show_build_times: bool, num_threads: usize) {
     let _sw = StopWatch::new("closure_specialization::run", show_build_times);
 
     let lifted = Rc::new(RefCell::new(LiftedLambdas::default()));
     lift_all(prg, &lifted, show_build_times);
 
     let specializable_slots = Rc::new(find_specializable_slots(&prg.symbols, &lifted.borrow()));
-    realize_all(prg, &lifted, specializable_slots, show_build_times);
+    realize_all(
+        prg,
+        &lifted,
+        specializable_slots,
+        show_build_times,
+        num_threads,
+    );
 }
 
 /// Lift every lambda in the program to a global function, until lifting one leaves nothing more to
@@ -592,7 +602,7 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
         let mut changed = false;
         let symbols = mem::take(&mut prg.symbols);
         let mut new_symbols: Map<FullName, Symbol> = Map::default();
-        let mut global_names = symbols.keys().cloned().collect::<Set<_>>();
+        let existing_names = names_of_globals(&symbols);
 
         for (name, mut sym) in symbols {
             if stable.contains(&name) {
@@ -603,7 +613,11 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
                 name.clone(),
                 nothing_specializable.clone(),
                 lifted.clone(),
-                global_names.clone(),
+                Some(MintedNames::new(
+                    existing_names.clone(),
+                    name.clone(),
+                    CLOSURE_LAM_SUFFIX,
+                )),
                 Pinned::default(),
                 budget.clone(),
                 name.clone(),
@@ -618,7 +632,7 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
             }
             changed = true;
             sym.expr = Some(trav_res.expr);
-            register_lifted_lambdas(visitor.new_symbols, &mut new_symbols, &mut global_names);
+            register_lifted_lambdas(visitor.new_symbols, &mut new_symbols);
             new_symbols.insert(name, sym);
         }
 
@@ -636,16 +650,19 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
 ///
 /// The bodies every copy is made from are the ones lifting left behind, so a copy names the same
 /// functions its original does and the table answers for all of them.
+///
+/// The bodies of the lambdas the copies are specialized on are moved into the copies on up to
+/// `num_threads` threads.
 fn realize_all(
     prg: &mut Program,
     lifted: &Rc<RefCell<LiftedLambdas>>,
     specializable_slots: Rc<SpecializableSlots>,
     show_build_times: bool,
+    num_threads: usize,
 ) {
     let _sw = StopWatch::new("closure_specialization::realize_all", show_build_times);
 
     let originals = mem::take(&mut prg.symbols);
-    let mut global_names = originals.keys().cloned().collect::<Set<_>>();
     let mut symbols: Map<FullName, Symbol> = Map::default();
     let budget = Rc::new(RefCell::new(CopyBudget::default()));
     // The lambdas each copy is specialized on, as the functions the copy calls them through. Their
@@ -687,7 +704,7 @@ fn realize_all(
             name.clone(),
             specializable_slots.clone(),
             lifted.clone(),
-            global_names.clone(),
+            None,
             request.pinned.clone(),
             budget.clone(),
             request.func_copy.origin.clone(),
@@ -728,7 +745,6 @@ fn realize_all(
         if !lambdas.is_empty() {
             specialized_lambdas.insert(name.clone(), lambdas);
         }
-        global_names.insert(name);
         queue.extend(visitor.required_specializations);
     }
 
@@ -743,7 +759,7 @@ fn realize_all(
     // been offered a body: the value a loop body returns each round, for one, is built in the lambda
     // and taken apart in the copy of `Std::loop` that calls it, and the simplifier cancels the two
     // only once they stand in one function.
-    move_bodies_into_callers(&mut symbols, &specialized_lambdas);
+    move_bodies_into_callers(&mut symbols, &specialized_lambdas, num_threads);
 
     prg.symbols = symbols;
 }
@@ -798,14 +814,9 @@ fn known_arguments(
 }
 
 /// Register the global function each lambda lifted by a walk became.
-fn register_lifted_lambdas(
-    new_symbols: Vec<Symbol>,
-    symbols: &mut Map<FullName, Symbol>,
-    global_names: &mut Set<FullName>,
-) {
+fn register_lifted_lambdas(new_symbols: Vec<Symbol>, symbols: &mut Map<FullName, Symbol>) {
     for sym in new_symbols {
-        global_names.insert(sym.name.clone());
-        symbols.insert(sym.name.clone(), sym);
+        insert_minted_symbol(symbols, sym);
     }
 }
 
@@ -1067,15 +1078,13 @@ struct ClosureSpecializationVisitor {
     /// Copies this walk asks for
     required_specializations: Vec<SpecializationRequest>,
 
-    /* Name generation */
-    /// Advances at each lambda this walk lifts, so that the names minted for one symbol stay
-    /// distinct.
-    lam_func_counter: u32,
-    /// The symbol this walk is over, under the name it carries now. Every name this walk mints is
-    /// formed from it.
+    /// The symbol this walk is over, under the name it carries now, for the walk's panic messages
+    /// to name.
     current_symbol: FullName,
-    /// The global names already taken. A name minted here is one they leave free, and joins them.
-    global_names: Set<FullName>,
+
+    /* Name generation */
+    /// The names this walk gives the lambdas it lifts. `None` for a walk that lifts no lambda.
+    minted_names: Option<MintedNames>,
 
     /* Termination */
     /// What the chain reaching the symbol being walked has committed to.
@@ -1120,7 +1129,7 @@ impl ClosureSpecializationVisitor {
         current_symbol: FullName,
         specializable_slots: Rc<SpecializableSlots>,
         lifted: Rc<RefCell<LiftedLambdas>>,
-        global_names: Set<FullName>,
+        minted_names: Option<MintedNames>,
         pinned: Pinned,
         budget: Rc<RefCell<CopyBudget>>,
         walking_origin: FullName,
@@ -1132,9 +1141,8 @@ impl ClosureSpecializationVisitor {
             narrowed_capture_list: None,
             specializable_slots,
             required_specializations: Vec::new(),
-            lam_func_counter: 0,
             current_symbol,
-            global_names,
+            minted_names,
             pinned,
             budget,
             walking_origin,
@@ -1407,12 +1415,11 @@ impl ClosureSpecializationVisitor {
 
         // Name the lifted function first: the capture list is named after it, so that a value of
         // that capture list says which function consumes it.
-        let lambda_func_name = fresh_global_name(
-            &self.current_symbol,
-            CLOSURE_LAM_SUFFIX,
-            &mut self.lam_func_counter,
-            &mut self.global_names,
-        );
+        let lambda_func_name = self
+            .minted_names
+            .as_mut()
+            .expect("a walk given no names to mint lifts a lambda")
+            .fresh();
 
         // Build the capture list struct that threads the captured environment into the lifted
         // function.

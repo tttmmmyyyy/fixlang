@@ -14,6 +14,7 @@ use std::{
     mem,
     panic::resume_unwind,
     path::{Path, PathBuf},
+    sync::Mutex,
     thread::{self, JoinHandle},
 };
 
@@ -60,23 +61,36 @@ where
     F: FnOnce() -> T + Send + 'static,
     T: Send + 'static,
 {
-    thread::Builder::new()
-        .stack_size(COMPILER_THREAD_STACK_SIZE)
+    compiler_thread_builder()
         .spawn(f)
         .expect("failed to spawn a compiler thread")
 }
 
+/// A builder of a thread whose stack (`COMPILER_THREAD_STACK_SIZE`) is large enough for the
+/// compiler's recursion over deeply nested user expressions.
+fn compiler_thread_builder() -> thread::Builder {
+    thread::Builder::new().stack_size(COMPILER_THREAD_STACK_SIZE)
+}
+
 /// The values the given threads returned, in the order the threads are given.
+///
+/// A thread that panicked carries its panic on from here, once **every** thread has been joined.
+pub fn join_compiler_threads<T>(threads: Vec<JoinHandle<T>>) -> Vec<T> {
+    values_or_first_panic(threads.into_iter().map(|thread| thread.join()))
+}
+
+/// The values of the joined threads `results`, in their order, consuming every one of them before
+/// carrying on a panic.
 ///
 /// A thread that panicked carries its panic on from here, once **every** thread has been joined:
 /// unwinding tears down the state the compiler works on, and a thread still running under it reads
 /// and writes memory that is being freed, which crashes the process on top of the panic that was
 /// meant to be reported.
-pub fn join_compiler_threads<T>(threads: Vec<JoinHandle<T>>) -> Vec<T> {
+fn values_or_first_panic<T>(results: impl Iterator<Item = thread::Result<T>>) -> Vec<T> {
     let mut values = vec![];
     let mut panic_payload = None;
-    for thread in threads {
-        match thread.join() {
+    for result in results {
+        match result {
             Ok(value) => values.push(value),
             // Of the threads that panicked, the earliest in the list is the one whose payload is
             // carried on, by `resume_unwind`: that thread has already reported through the panic
@@ -89,6 +103,66 @@ pub fn join_compiler_threads<T>(threads: Vec<JoinHandle<T>>) -> Vec<T> {
         resume_unwind(payload);
     }
     values
+}
+
+/// Runs `f` on each of `items`, on up to `num_threads` compiler threads, or on the calling thread
+/// alone when `num_threads` is 1 or less. Each thread takes the next remaining item as soon as
+/// it finishes one.
+pub fn for_each_on_compiler_threads<T: Send>(
+    items: Vec<T>,
+    num_threads: usize,
+    f: impl Fn(T) + Sync,
+) {
+    map_on_compiler_threads(items, num_threads, f);
+}
+
+/// `f` applied to each of `items`, in the order of `items`, computed on up to `num_threads`
+/// compiler threads, or on the calling thread alone when `num_threads` is 1 or less.
+///
+/// Each thread takes the next item left as soon as it finishes one, so an item that costs far more
+/// than the rest holds up one thread and leaves the others working. The results come back in the
+/// order of `items` however the threads interleave, so a caller that puts them into a `Map` one by
+/// one builds the same map as a sequential loop does.
+pub fn map_on_compiler_threads<T, R>(
+    items: Vec<T>,
+    num_threads: usize,
+    f: impl Fn(T) -> R + Sync,
+) -> Vec<R>
+where
+    T: Send,
+    R: Send,
+{
+    if num_threads <= 1 || items.len() <= 1 {
+        return items.into_iter().map(f).collect();
+    }
+    let item_count = items.len();
+    let queue = Mutex::new(items.into_iter().enumerate());
+    let (queue, f) = (&queue, &f);
+    let indexed_results = thread::scope(|scope| {
+        let threads = (0..num_threads.min(item_count))
+            .map(|_| {
+                compiler_thread_builder()
+                    .spawn_scoped(scope, move || {
+                        let mut results = vec![];
+                        loop {
+                            let next = queue.lock().unwrap().next();
+                            let Some((idx, item)) = next else {
+                                break;
+                            };
+                            results.push((idx, f(item)));
+                        }
+                        results
+                    })
+                    .expect("failed to spawn a compiler thread")
+            })
+            .collect::<Vec<_>>();
+        values_or_first_panic(threads.into_iter().map(|thread| thread.join()))
+    });
+    let mut results = (0..item_count).map(|_| None).collect::<Vec<Option<R>>>();
+    for (idx, result) in indexed_results.into_iter().flatten() {
+        results[idx] = Some(result);
+    }
+    results.into_iter().map(Option::unwrap).collect()
 }
 
 /// The name a source is saved under in the temporary directory: `file_name` with `hash` — a digest
@@ -469,9 +543,9 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        char_pos_to_utf16_pos, join_compiler_threads, spawn_compiler_thread,
-        split_at_name_boundaries, split_string_by_space_not_quated, upper_camel_to_lower_snake,
-        utf16_pos_to_utf8_byte_pos, Set,
+        char_pos_to_utf16_pos, join_compiler_threads, map_on_compiler_threads,
+        spawn_compiler_thread, split_at_name_boundaries, split_string_by_space_not_quated,
+        upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos, Set,
     };
     use crate::error::any_to_string;
     use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -519,6 +593,37 @@ mod tests {
 
         let payload = catch_unwind(AssertUnwindSafe(|| join_compiler_threads(threads)))
             .expect_err("the worker's panic is carried on");
+        assert_eq!(any_to_string(&*payload), MESSAGE);
+    }
+
+    /// The results come back in the order of the items, whatever order the threads finish them in.
+    #[test]
+    fn test_map_on_compiler_threads_returns_results_in_the_order_of_the_items() {
+        const ITEM_COUNT: u64 = 8;
+        let items = (0..ITEM_COUNT).collect::<Vec<_>>();
+        let results = map_on_compiler_threads(items.clone(), 4, |i| {
+            // The earlier an item, the longer it takes, so the threads finish the items in an order
+            // other than theirs.
+            thread::sleep(Duration::from_millis(50 * (ITEM_COUNT - i)));
+            i * 10
+        });
+        assert_eq!(results, items.iter().map(|i| i * 10).collect::<Vec<_>>());
+    }
+
+    /// A panic of `f` on one item is carried on with its own payload, so the renderer the compiler
+    /// reports through still finds the message in it.
+    #[test]
+    fn test_map_on_compiler_threads_carries_the_panic_of_f_with_its_payload() {
+        const MESSAGE: &str = "f panics on purpose";
+        let payload = catch_unwind(AssertUnwindSafe(|| {
+            map_on_compiler_threads((0..8).collect(), 4, |i| {
+                if i == 5 {
+                    panic!("{}", MESSAGE);
+                }
+                i
+            })
+        }))
+        .expect_err("the panic of f is carried on");
         assert_eq!(any_to_string(&*payload), MESSAGE);
     }
 

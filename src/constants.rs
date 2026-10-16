@@ -150,6 +150,16 @@ pub const BOUND_FIELD_PREFIX: &str = "#field";
 /// The suffix, followed by a counter, of the global function taking one argument per field of a
 /// struct argument of the function it is named after.
 pub const SPLIT_ARG_SUFFIX: &str = "#split_arg";
+/// The suffix, followed by a counter, of the global function the argument of an application of
+/// `Std::fix` is lifted to.
+pub const FIX_DEFUNCT_SUFFIX: &str = "#fix_defunct";
+/// The prefix of the type constructor naming a capture struct that `defunctionalize_fix` builds. The
+/// struct carries the values that the argument of an application of `Std::fix` captures to the
+/// global function that argument is lifted to.
+pub const FIX_CAP_PREFIX: &str = "#FixCap";
+/// The prefix, followed by a counter, of the parameter through which a function lifted from an
+/// application of `Std::fix` receives its capture struct.
+pub const FIX_CAP_PARAM_PREFIX: &str = "#fixcap";
 /// The prefix of the type variable standing for the concrete type behind an opaque type. The rest of
 /// the name is the name of the opaque type's TyCon, which the type checker reads back off it.
 pub const WRAP_OPAQUE_TYVAR_PREFIX: &str = "#wrap_opaque_tyvar_";
@@ -411,12 +421,13 @@ pub const WHOLE_PROGRAM_IN_ONE_UNIT: usize = usize::MAX;
 /// What `--cu-size` is given to ask for `WHOLE_PROGRAM_IN_ONE_UNIT`.
 pub const WHOLE_PROGRAM_IN_ONE_UNIT_STR: &str = "inf";
 
-/// Stack size, in bytes, of each compiler worker thread. Parallel type checking and per-unit code
-/// generation recurse over the user program's expression tree, whose nesting depth (deeply nested
-/// `let` or `;;` chains) is unbounded, so a worker needs far more stack than the default thread
-/// stack gives. The stack is reserved as virtual address space and backed by physical memory only
-/// for the pages a thread actually touches, so this large reservation costs real memory only in
-/// proportion to the recursion depth reached.
+/// Stack size, in bytes, of each compiler worker thread. Parallel type checking, the optimization
+/// passes rewriting each symbol, and per-unit code generation recurse over the user program's
+/// expression tree, whose nesting depth (deeply nested `let` or `;;` chains) is unbounded, so a
+/// worker needs far more stack than the default thread stack gives. The stack is reserved as
+/// virtual address space and backed by physical memory only for the pages a thread actually
+/// touches, so this large reservation costs real memory only in proportion to the recursion depth
+/// reached.
 pub const COMPILER_THREAD_STACK_SIZE: usize = 256 * 1024 * 1024;
 
 /// The characters an identifier in a Fix source file may be built from, as one string.

@@ -32,6 +32,10 @@
 - #812, #818: A value, a field or a variant can no longer be named with `_` followed by a capital letter, such as `_NN` or `_NotMatch`, since such a name is now the name of a type, a trait, a namespace or a module. Write a lowercase letter or another `_` after the leading `_`, as in `__NN` or `_not_match`.
 - #813: An array literal whose elements are all number literals, such as `[1, 2, 3]`, is now a constant in the program's data. Evaluating it no longer allocates the array or writes its elements, and a change to it, such as `set` or `push_back`, copies it first. `Debug::assert_unique_array` therefore no longer reports it as unique, the same as the bytes of a string literal.
 
+#### Tool
+
+- #841: The type errors of a program are now reported in the same order on every build. The order used to change from one run to the next when the program had several of them.
+
 #### Std
 
 - #828: The license of Fix, the MIT License, now has a runtime library exception: a program you build with Fix can be distributed without the copyright notice and the permission notice of the parts of Fix the compiler puts into it, such as the standard library and the runtime. See `LICENSE`.

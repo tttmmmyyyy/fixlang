@@ -1,17 +1,13 @@
 // Shared machinery for passing what a lambda captures as a value: the unboxed struct that carries
-// the captured variables, and generation of a collision-free global name for a function a lambda is
-// lifted to.
+// the captured variables to the global function the lambda is lifted to.
 
-use crate::{
-    ast::{
-        expr::{expr_make_struct, expr_var, var_var, ExprNode},
-        name::FullName,
-        pattern::PatternNode,
-        traverse::VisitState,
-        typedecl::Field,
-        types::{kind_star, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode},
-    },
-    misc::Set,
+use crate::ast::{
+    expr::{expr_make_struct, expr_var, var_var, ExprNode},
+    name::FullName,
+    pattern::PatternNode,
+    traverse::VisitState,
+    typedecl::Field,
+    types::{kind_star, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode},
 };
 use std::sync::Arc;
 
@@ -113,23 +109,4 @@ pub fn captured_fields(lam: &Arc<ExprNode>, state: &VisitState) -> Vec<(FullName
             (name, ty)
         })
         .collect()
-}
-
-// A fresh global name for a lifted function, derived from `base` (the symbol being processed) plus
-// `suffix` and `counter`. `counter` advances and the chosen name is inserted into `global_names`, so
-// repeated calls stay collision-free against existing globals and against each other.
-pub fn fresh_global_name(
-    base: &FullName,
-    suffix: &str,
-    counter: &mut u32,
-    global_names: &mut Set<FullName>,
-) -> FullName {
-    loop {
-        let mut name = base.clone();
-        *name.name_as_mut() += &format!("{}{}", suffix, *counter);
-        *counter += 1;
-        if global_names.insert(name.clone()) {
-            return name;
-        }
-    }
 }

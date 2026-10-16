@@ -79,8 +79,9 @@ use std::sync::Arc;
 
 /// Moves the capture list of every function given to an op declaring `BuiltinOp::env_operand` into the
 /// op's environment operand, where the function is a global function applied to its capture list,
-/// bound by `let` and used nowhere else.
-pub fn run(prg: &mut Program) {
+/// bound by `let` and used nowhere else. The bodies of the global functions those functions now
+/// call are then put in place of the calls, on up to `num_threads` threads.
+pub fn run(prg: &mut Program, num_threads: usize) {
     // For each symbol, the global functions the functions it gives to ops now call.
     let mut callees_by_caller: Map<FullName, Vec<FullName>> = Map::default();
     for (name, sym) in &mut prg.symbols {
@@ -104,7 +105,7 @@ pub fn run(prg: &mut Program) {
             callees_by_caller.insert(name.clone(), mover.callees);
         }
     }
-    move_bodies_into_callers(&mut prg.symbols, &callees_by_caller);
+    move_bodies_into_callers(&mut prg.symbols, &callees_by_caller, num_threads);
 }
 
 /// The name an op declaring `BuiltinOp::env_operand` applies as a function, if `builtin` is such an

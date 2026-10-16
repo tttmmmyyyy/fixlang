@@ -9,7 +9,7 @@ use super::{
 };
 use crate::{
     ast::{expr::ExprNode, name::FullName, program::Symbol},
-    misc::Map,
+    misc::{map_on_compiler_threads, Map},
 };
 use std::sync::Arc;
 
@@ -22,12 +22,15 @@ use std::sync::Arc;
 /// therefore bounded by the bodies listed, and a function that reaches itself through the bodies it
 /// receives is placed once.
 ///
+/// The callers are rewritten independently of one another, on up to `num_threads` threads.
+///
 /// # Arguments
 /// * `callees_by_caller` - for each symbol, the functions whose bodies are to be put where it calls
 ///   them.
 pub fn move_bodies_into_callers(
     symbols: &mut Map<FullName, Symbol>,
     callees_by_caller: &Map<FullName, Vec<FullName>>,
+    num_threads: usize,
 ) {
     let bodies = callees_by_caller
         .iter()
@@ -57,32 +60,40 @@ pub fn move_bodies_into_callers(
     // argument for all of them.
     let arity_map = create_global_lambda_to_arity_map(symbols);
 
-    for (caller, callees) in callees_by_caller {
-        // The body goes in where that is a move rather than a copy: the caller is the only symbol
-        // naming the function, and it names it as the callee of one saturated call, so the body ends
-        // up in one place and the function itself falls to dead-symbol elimination. Where the
-        // function is named anywhere else, or called more than once, placing the body would
-        // duplicate it, and how much duplication is worth its gain is the judgement `inline` makes.
-        let caller_expr = symbols[caller].expr.as_ref().unwrap().clone();
-        let moved_bodies = callees
-            .iter()
-            .filter(|callee| {
-                is_moved_by_placing(callee, &caller_expr, &naming_symbol_counts, &arity_map)
-            })
-            .map(|callee| (callee.clone(), bodies[callee].clone()))
-            .collect::<Map<FullName, Arc<ExprNode>>>();
-        if moved_bodies.is_empty() {
-            continue;
-        }
-        // The function is named by the call alone, so putting the body where its name stands leaves
-        // the body applied to the arguments the call supplies.
-        let expr = substitute_free_names(&caller_expr, moved_bodies);
-        let sym = symbols.get_mut(caller).unwrap();
-        sym.expr = Some(expr);
-        // Reduce what the substitution left: a lambda applied to the arguments the call supplies.
-        // Left standing, that application is a closure the program builds on the heap and calls
-        // through.
-        inline_local::run_on_symbol(sym, &arity_map);
+    let rewritten_callers = map_on_compiler_threads(
+        callees_by_caller.iter().collect(),
+        num_threads,
+        |(caller, callees)| {
+            // The body goes in where that is a move rather than a copy: the caller is the only
+            // symbol naming the function, and it names it as the callee of one saturated call, so
+            // the body ends up in one place and the function itself falls to dead-symbol
+            // elimination. Where the function is named anywhere else, or called more than once,
+            // placing the body would duplicate it, and how much duplication is worth its gain is the
+            // judgement `inline` makes.
+            let caller_expr = symbols[caller].expr.as_ref().unwrap();
+            let moved_bodies = callees
+                .iter()
+                .filter(|callee| {
+                    is_moved_by_placing(callee, caller_expr, &naming_symbol_counts, &arity_map)
+                })
+                .map(|callee| (callee.clone(), bodies[callee].clone()))
+                .collect::<Map<FullName, Arc<ExprNode>>>();
+            if moved_bodies.is_empty() {
+                return None;
+            }
+            // The function is named by the call alone, so putting the body where its name stands
+            // leaves the body applied to the arguments the call supplies.
+            let mut sym = symbols[caller].clone();
+            sym.expr = Some(substitute_free_names(caller_expr, moved_bodies));
+            // Reduce what the substitution left: a lambda applied to the arguments the call
+            // supplies. Left standing, that application is a closure the program builds on the heap
+            // and calls through.
+            inline_local::run_on_symbol(&mut sym, &arity_map);
+            Some((caller, sym))
+        },
+    );
+    for (caller, sym) in rewritten_callers.into_iter().flatten() {
+        *symbols.get_mut(caller).unwrap() = sym;
     }
 }
 

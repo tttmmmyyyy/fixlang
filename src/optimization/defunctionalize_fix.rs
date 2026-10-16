@@ -35,10 +35,12 @@ use crate::{
         traverse::{ExprVisitor, StartVisitResult, VisitState},
         types::{type_fun, TyCon, TyConInfo},
     },
+    constants::{FIX_CAP_PARAM_PREFIX, FIX_CAP_PREFIX, FIX_DEFUNCT_SUFFIX},
     misc::{Map, Set},
     optimization::{
-        capture_struct::{captured_fields, fresh_global_name, CaptureStruct},
+        capture_struct::{captured_fields, CaptureStruct},
         let_elimination,
+        minted_names::{insert_minted_symbol, names_of_globals, MintedNames},
         rename::substitute_free_name,
         uncurry::{internalize_let_to_var_at_head, is_std_fix},
         unique_local_names,
@@ -105,7 +107,7 @@ fn run_one(
     // single substitution below reaches them all.
     let arity_map = let_elimination::create_global_lambda_to_arity_map(&prg.symbols);
     let symbols = mem::take(&mut prg.symbols);
-    let mut global_names: Set<FullName> = symbols.keys().cloned().collect();
+    let existing_names = names_of_globals(&symbols);
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let mut new_tycons: Map<TyCon, TyConInfo> = Map::default();
 
@@ -134,8 +136,7 @@ fn run_one(
         let expr = normalize_for_lift(sym.expr.as_ref().unwrap(), &arity_map);
 
         let mut visitor = FixDefunctionalizer::new(
-            name.clone(),
-            global_names.clone(),
+            MintedNames::new(existing_names.clone(), name.clone(), FIX_DEFUNCT_SUFFIX),
             global_lambdas.clone(),
             global_fix_refs.clone(),
         );
@@ -152,12 +153,11 @@ fn run_one(
         changed = true;
         sym.expr = Some(res.expr);
         for lifted in visitor.lifted {
-            global_names.insert(lifted.func_name.clone());
             new_tycons.insert(
                 lifted.cap.tycon.as_ref().clone(),
                 lifted.cap.tycon_info.clone(),
             );
-            new_symbols.insert(lifted.func_name.clone(), lifted.into_symbol());
+            insert_minted_symbol(&mut new_symbols, lifted.into_symbol());
         }
         new_symbols.insert(name, sym);
     }
@@ -189,36 +189,33 @@ impl LiftedFix {
     }
 }
 
+/// The traversal of one symbol that lifts the argument of each application of `fix` it meets to a
+/// global function.
 struct FixDefunctionalizer {
-    // The symbol being processed; lifted-function names are derived from it.
-    current_symbol: FullName,
-    // Global names in use, to keep generated names collision-free.
-    global_names: Set<FullName>,
-    // Counter feeding the generated names.
-    counter: u32,
-    // Functions lifted out during this traversal.
+    /// The names of the functions this traversal lifts.
+    minted_names: MintedNames,
+    /// Functions lifted out during this traversal.
     lifted: Vec<LiftedFix>,
-    // Local lambda bindings `let name = |..| ..`, so `fix(name)` — a `fix` whose argument is a
-    // let-bound lambda that could not be inlined into the call (e.g. it is used more than once) —
-    // resolves to the lambda. Names are unique across the symbol (`unique_local_names` ran), so one
-    // flat map needs no scoping.
+    /// The lambda each local `let name = |..| ..` binds, so that `fix(name)` resolves to the lambda.
+    /// Such a `fix` remains where the lambda could not be inlined into the call, e.g. because it is
+    /// used more than once. `unique_local_names` has made local names unique across the symbol, so
+    /// one flat map covers every scope.
     local_lambdas: Map<FullName, Arc<ExprNode>>,
-    // Global lambda definitions and the deduplicated fixpoints built for them, shared across symbols.
+    /// The lambda defining each global function, shared across symbols.
     global_lambdas: GlobalLambdas,
+    /// The fixpoint built for each global function applied to `fix`, shared across symbols.
     global_fix_refs: GlobalFixRefs,
 }
 
 impl FixDefunctionalizer {
+    /// A traversal that has lifted nothing yet.
     fn new(
-        current_symbol: FullName,
-        global_names: Set<FullName>,
+        minted_names: MintedNames,
         global_lambdas: GlobalLambdas,
         global_fix_refs: GlobalFixRefs,
     ) -> Self {
         Self {
-            current_symbol,
-            global_names,
-            counter: 0,
+            minted_names,
             lifted: vec![],
             local_lambdas: Map::default(),
             global_lambdas,
@@ -243,24 +240,16 @@ impl FixDefunctionalizer {
         let cap_fields = captured_fields(f, state);
         // Name the lifted function first: the capture struct is named after it, so that a value of
         // that capture struct says which function consumes it.
-        let func_name = fresh_global_name(
-            &self.current_symbol,
-            "#fix_defunct",
-            &mut self.counter,
-            &mut self.global_names,
-        );
-        let cap = CaptureStruct::new("#FixCap", &func_name, &cap_fields);
+        let func_name = self.minted_names.fresh();
+        let cap = CaptureStruct::new(FIX_CAP_PREFIX, &func_name, &cap_fields);
         // The capture parameter must not clash with a captured field name. A captured field can
         // itself be an outer lift's `#fixcap..` parameter that this lambda closed over, so `cap`'s
         // destructure would bind a variable of that name and shadow this parameter — then `G(cap)`
         // would forward the captured struct in place of this one.
-        let cap_param = loop {
-            let name = format!("#fixcap{}", self.counter);
-            self.counter += 1;
-            if !cap_fields.iter().any(|(n, _)| n.to_string() == name) {
-                break name;
-            }
-        };
+        let cap_param = (0..)
+            .map(|counter: u32| format!("{}{}", FIX_CAP_PARAM_PREFIX, counter))
+            .find(|name| !cap_fields.iter().any(|(n, _)| n.to_string() == *name))
+            .unwrap();
         let cap_param_name = FullName::local(&cap_param);
 
         // The recursive value `G(cap)`, of type `a -> b`.

@@ -33,20 +33,21 @@ use crate::{
     fixstd::builtin::{
         make_tuple_name_abs, make_unit_ty, StructPlugInOp, StructPunchOp, StructSetOp,
     },
-    misc::{Map, Set},
+    misc::{for_each_on_compiler_threads, Map, Set},
 };
 use std::sync::Arc;
 
 /// Replaces every unwrappable newtype of `prg` with the type of its one field, in the types
-/// recorded throughout the program and in the field types the type environment answers with.
-pub fn run(prg: &mut Program) {
+/// recorded throughout the program and in the field types the type environment answers with. The
+/// symbols are rewritten on up to `num_threads` threads.
+pub fn run(prg: &mut Program, num_threads: usize) {
     let unwrappable_tycons = unwrappable_tycons(&prg.type_env.tycons());
     prg.type_env.unwrap_newtypes(unwrappable_tycons);
 
     let type_env = prg.type_env.clone();
-    for (_name, sym) in &mut prg.symbols {
-        run_on_symbol(sym, &type_env);
-    }
+    for_each_on_compiler_threads(prg.symbols.values_mut().collect(), num_threads, |sym| {
+        run_on_symbol(sym, &type_env)
+    });
     run_on_exported_statements(prg, &type_env);
     run_on_entry_io_value(prg, &type_env);
 }

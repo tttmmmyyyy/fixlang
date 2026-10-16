@@ -12,6 +12,7 @@ mod find_usage_of_name;
 mod inline;
 mod inline_local;
 mod let_elimination;
+mod minted_names;
 mod move_bodies;
 pub mod optimization;
 mod optimize_act;

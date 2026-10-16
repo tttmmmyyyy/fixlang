@@ -21,7 +21,7 @@
 //! lines into the callers, where the struct a caller builds meets the pattern taking it apart and
 //! the two cancel, leaving the fields handed over one by one.
 
-use super::capture_struct::fresh_global_name;
+use super::minted_names::{insert_minted_symbol, names_of_globals, MintedNames};
 use super::rename::generate_new_names;
 use super::unique_local_names;
 use crate::{
@@ -38,7 +38,7 @@ use crate::{
         types::{type_fun, TyCon, TyConVariant, TypeNode},
     },
     constants::SPLIT_ARG_SUFFIX,
-    misc::{Map, Set},
+    misc::{map_on_compiler_threads, Map, Set},
 };
 use std::mem;
 use std::sync::Arc;
@@ -55,32 +55,39 @@ const MAX_ARGS: usize = 24;
 /// One round splits one struct argument per global. A field that is itself a struct becomes an
 /// argument of the twin, and the round after that splits it in turn, so a nested value flattens one
 /// level per round.
-pub fn run(prg: &mut Program) {
+pub fn run(prg: &mut Program, num_threads: usize) {
     // What a split leaves behind takes the struct apart and hands the fields on, which is the very
     // shape a split looks for, so a wrapper split again would produce another wrapper without end.
     // Whatever is left to split is in the twin.
     let mut wrappers = Set::default();
-    while run_once(prg, &mut wrappers) {}
+    while run_once(prg, &mut wrappers, num_threads) {}
 }
 
 /// Split one struct argument of each global that has one, and report whether anything was split.
-fn run_once(prg: &mut Program, wrappers: &mut Set<FullName>) -> bool {
+/// The globals are split independently of one another, on up to `num_threads` threads.
+fn run_once(prg: &mut Program, wrappers: &mut Set<FullName>, num_threads: usize) -> bool {
     let symbols = mem::take(&mut prg.symbols);
-    let mut global_names = symbols.keys().cloned().collect::<Set<_>>();
+    let existing_names = names_of_globals(&symbols);
+    let splits =
+        map_on_compiler_threads(symbols.into_iter().collect(), num_threads, |(name, sym)| {
+            let split = if wrappers.contains(&name) {
+                None
+            } else {
+                let mut minted_names =
+                    MintedNames::new(existing_names.clone(), name.clone(), SPLIT_ARG_SUFFIX);
+                split_one_argument(&sym, &prg.type_env, &mut minted_names)
+            };
+            (name, sym, split)
+        });
+
     let mut new_symbols = Map::default();
     let mut changed = false;
-
-    for (name, sym) in symbols {
-        if wrappers.contains(&name) {
-            new_symbols.insert(name, sym);
-            continue;
-        }
-        match split_one_argument(&sym, &prg.type_env, &mut global_names) {
+    for (name, sym, split) in splits {
+        match split {
             Some((twin, wrapper)) => {
                 changed = true;
-                global_names.insert(twin.name.clone());
                 wrappers.insert(name.clone());
-                new_symbols.insert(twin.name.clone(), twin);
+                insert_minted_symbol(&mut new_symbols, twin);
                 new_symbols.insert(name, wrapper);
             }
             None => {
@@ -100,7 +107,7 @@ fn run_once(prg: &mut Program, wrappers: &mut Set<FullName>) -> bool {
 fn split_one_argument(
     sym: &Symbol,
     type_env: &TypeEnv,
-    global_names: &mut Set<FullName>,
+    minted_names: &mut MintedNames,
 ) -> Option<(Symbol, Symbol)> {
     // The names the pattern taking the struct apart binds become parameters of the twin, which stand
     // over the whole body rather than over what follows that pattern. A name bound twice in the body
@@ -140,8 +147,7 @@ fn split_one_argument(
          index, and every place a field is handed over reads the two together",
         taken_apart.tycon.to_string()
     );
-    let mut counter = 0;
-    let twin_name = fresh_global_name(&sym.name, SPLIT_ARG_SUFFIX, &mut counter, global_names);
+    let twin_name = minted_names.fresh();
 
     // The twin's arguments: the ones the original takes, with the struct replaced by its fields.
     let mut twin_params = params.clone();
