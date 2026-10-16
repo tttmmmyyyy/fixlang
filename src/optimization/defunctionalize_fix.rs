@@ -35,7 +35,7 @@ use crate::{
         traverse::{ExprVisitor, StartVisitResult, VisitState},
         types::{type_fun, TyCon, TyConInfo},
     },
-    constants::FIX_DEFUNCT_SUFFIX,
+    constants::{FIX_CAP_PARAM_PREFIX, FIX_CAP_PREFIX, FIX_DEFUNCT_SUFFIX},
     misc::{Map, Set},
     optimization::{
         capture_struct::{captured_fields, CaptureStruct},
@@ -243,13 +243,13 @@ impl FixDefunctionalizer {
         // Name the lifted function first: the capture struct is named after it, so that a value of
         // that capture struct says which function consumes it.
         let func_name = self.minted_names.fresh();
-        let cap = CaptureStruct::new("#FixCap", &func_name, &cap_fields);
+        let cap = CaptureStruct::new(FIX_CAP_PREFIX, &func_name, &cap_fields);
         // The capture parameter must not clash with a captured field name. A captured field can
         // itself be an outer lift's `#fixcap..` parameter that this lambda closed over, so `cap`'s
         // destructure would bind a variable of that name and shadow this parameter — then `G(cap)`
         // would forward the captured struct in place of this one.
         let cap_param = loop {
-            let name = format!("#fixcap{}", self.cap_param_counter);
+            let name = format!("{}{}", FIX_CAP_PARAM_PREFIX, self.cap_param_counter);
             self.cap_param_counter += 1;
             if !cap_fields.iter().any(|(n, _)| n.to_string() == name) {
                 break name;

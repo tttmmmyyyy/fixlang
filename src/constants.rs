@@ -153,6 +153,12 @@ pub const SPLIT_ARG_SUFFIX: &str = "#split_arg";
 /// The suffix, followed by a counter, of the global function the argument of an application of
 /// `Std::fix` is lifted to.
 pub const FIX_DEFUNCT_SUFFIX: &str = "#fix_defunct";
+/// The prefix of the type constructor naming the capture struct that carries what the argument of an
+/// application of `Std::fix` captures to the global function it is lifted to.
+pub const FIX_CAP_PREFIX: &str = "#FixCap";
+/// The prefix, followed by a counter, of the parameter through which a function lifted from an
+/// application of `Std::fix` receives its capture struct.
+pub const FIX_CAP_PARAM_PREFIX: &str = "#fixcap";
 /// The prefix of the type variable standing for the concrete type behind an opaque type. The rest of
 /// the name is the name of the opaque type's TyCon, which the type checker reads back off it.
 pub const WRAP_OPAQUE_TYVAR_PREFIX: &str = "#wrap_opaque_tyvar_";
