@@ -44,6 +44,8 @@ An aspect **edits inside the diff hunks** and **reads anywhere**:
 
 What an aspect notices outside the hunks reaches the orchestrator as a finding, and the orchestrator decides what becomes of it — see *Act on the findings*. Existing code the change made stale is reshaped with the change, on the branch under review. A refactoring of other existing code goes on a cleanup branch of its own, so the diff the author reads for the change carries the change and its consequences alone.
 
+**Cleanup candidates.** What an aspect notices about existing code the change neither wrote, bent around, nor made stale — an undocumented item, a `//` where the file's docs use `///`, a duplicate, a wildcard import — it returns as a cleanup candidate, in a list of its own beside its findings. The separate list keeps that old code from burying the findings the change is responsible for, and it reaches the orchestrator as material for the cleanup branch.
+
 ## Aspect Sequence
 
 Run these aspects in this order, each in its own subagent. The **flag-only** aspects (they leave the tree as they found it; they report findings, and `test-sufficiency` hands back test bodies and their runs with them) run first; then the **editing** aspects (they modify files, and each is committed on its own — see the Procedure):
@@ -102,15 +104,15 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 
    An aspect that changed nothing produces no commit. **Per-aspect, fine-grained commits are the goal — never bundle several into one commit.**
 6. **Apply `cargo fmt` to the branch under review as a standalone commit.** Run `cargo fmt`; if `git status --porcelain` then reports changes, commit them on their own — `git commit -am "Apply cargo fmt"`. If nothing changed, make no commit and note the code was already formatted.
-7. **Act on the findings** — see the section of that name below. The fixes the change is responsible for go on the branch under review, each in a commit of its own, and the whole suite then runs once over all of them. When refactorings of other existing code remain:
+7. **Act on the findings** — read the section of that name below from this file again before sorting, since a summary of this file carried across a long session can stop partway through it. The fixes the change is responsible for go on the branch under review, each in a commit of its own, and the whole suite then runs once over all of them. When refactorings of other existing code remain:
    - Cut the cleanup branch from the branch under review at its current tip: `git switch -c cleanup/<branch-under-review>`. No new worktree is needed; the tree is the one already checked out.
    - Commit each refactoring on its own — `code-review: <what it does> — cleanup near the change` — then `cargo fmt` as a standalone commit, and run the whole suite once over all of them.
    - Push the branch and open a pull request **into the branch under review**, whose body follows the `devdoc` skill: what each refactoring is, which finding it comes from, and why it preserves behavior. A pull request whose base is a working branch rather than `main` carries the number of that branch's own pull request in its title (e.g. `レビュー清掃 (#228): ...`), so the pull-request list shows which change it belongs to.
    - `git switch -` back to the branch under review, so the working tree is where the summary describes it.
 
    When the branch under review **is** `main`, there is no split: the refactorings commit there too.
-8. **Record the checkpoint.** Take `git rev-parse --short HEAD` on the branch under review and write it to the `code-review-checkpoints` memory under that branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. Record the cleanup pull request's number on the same line when there is one. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
-9. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); say what each test you committed pins, and name each proposal you dropped with the reason; say which findings you fixed, on which branch, and what each now does; surface the findings you left, each with the reason it is the author's; list every commit created, with its short hash and which branch it is on; and state the base ref the review covered, the cleanup pull request opened, and the checkpoint now recorded.
+8. **Record the checkpoint.** Take `git rev-parse --short HEAD` on the branch under review and write it to the `code-review-checkpoints` memory under that branch, in the format given in *Review Checkpoints* — replacing that branch's existing line, and adding the `MEMORY.md` pointer when the memory file is new. Record the cleanup pull request's number on the same line when there is one, and give each finding the line names as left the pile it went to. A branch whose review found nothing to change still gets its line updated: the point of the record is how far the review reached, and that advanced regardless.
+9. **Summarize.** For each editing aspect, give a one-line description of what it changed (or note it changed nothing); say what each test you committed pins, and name each proposal you dropped with the reason; say which findings you fixed, on which branch, and what each now does; surface the findings you left, each with the pile it went to — left as a finding, or reported — and the reason it is the author's; list every commit created, with its short hash and which branch it is on; and state the base ref the review covered, the cleanup pull request opened, and the checkpoint now recorded.
 10. **Stop on failure.** If any subagent reports an error (aspect couldn't run, build broke, etc.), stop and surface the failure; do not continue, and leave the checkpoint at its previous value. If `cargo fmt` itself fails, surface that and skip the formatting commit.
 
 ## Act on the findings
@@ -136,7 +138,7 @@ Read every finding the review produced — from the flag-only aspects and from t
 - a property the suite does not measure — performance, memory, concurrency, a platform this machine is not;
 - a redesign, where what the author settles is the direction rather than the risk: a rewritten pipeline, a different data structure carrying the same information, a rule imposed on the language.
 
-**Refactor it, on the cleanup branch**, when it is about existing code the change did not write, did not bend around, and did not make stale — code that would want the same edit had the change never happened — and the edit preserves behavior: a rename, a move, a split, a signature every caller reaches from inside this repository, a duplicate folded into one function, a comment or doc comment. It is improvement to code that was already there, so it goes in a pull request of its own, based on the branch under review, and the diff the author reads for the change stays the change.
+**Refactor it, on the cleanup branch**, when it is about existing code the change did not write, did not bend around, and did not make stale — code that would want the same edit had the change never happened — and the edit preserves behavior: a rename, a move, a split, a signature every caller reaches from inside this repository, a duplicate folded into one function, a comment or doc comment. It is improvement to code that was already there, so it goes in a pull request of its own, based on the branch under review, and the diff the author reads for the change stays the change. The cleanup candidates the aspects return start in this pile. That the code already existed is what sends a finding here; it is never the reason to leave one.
 
 **Report it, and edit nothing,** when it is about such existing code and the edit would change behavior — a fallback turned into a hard failure, an assertion turned on, a changed answer. That is past a refactoring, and it wants a change of its own. A defect there that a user can reach — a program compiled into the wrong code, a diagnostic reported at the wrong place or missing, a `fix` command answering wrongly — is filed as an issue, since that change owes a changelog entry and a regression test.
 
@@ -162,7 +164,8 @@ find the files and hunks to operate on.
 
 Edit inside the diff hunks only. Read the rest of the touched files and
 of the project wherever the aspect needs to, and report what you notice
-there as findings.
+there as findings — or, for existing code the change neither wrote, bent
+around, nor made stale, as cleanup candidates.
 
 ----- BEGIN RADIUS RULES -----
 <paste the full text of the `## Review Radius` section here>
@@ -184,9 +187,10 @@ code, run `cargo check` afterwards to confirm the project still builds.
 Report back in under 100 words: which files you touched and a one-line
 summary of the change in each. Report separately, and in full, every
 finding the aspect asks you to flag, and every test it asks you to
-propose — body and runs included, verbatim. The word limit governs the
-summary of your edits; findings and proposed tests are added on top of
-it.
+propose — body and runs included, verbatim. Then list the cleanup
+candidates, each with its file, what it is, and the edit it wants. The
+word limit governs the summary of your edits; findings, proposed tests
+and cleanup candidates are added on top of it.
 ```
 
 ## What NOT to do
@@ -360,7 +364,7 @@ The litmus test: **explain the resulting code to someone who never saw the diff.
 
 ### Consequences to look for
 
-The second question looks outward from the change, at existing code the change did not touch and has made stale. The predicate: **would someone who knows the change write this existing code differently now?** When the answer is yes because of the change, the stale code is part of the change's work. When the code would want the same edit had the change never happened, it is not this aspect's — that is ordinary old code, and it waits for a change of its own.
+The second question looks outward from the change, at existing code the change did not touch and has made stale. The predicate: **would someone who knows the change write this existing code differently now?** When the answer is yes because of the change, the stale code is part of the change's work. When the code would want the same edit had the change never happened, it is ordinary old code: a cleanup candidate, returned in the list of its own the radius rules describe.
 
 - **An existing item the new one subsumes.** The change added a helper, a type, or a pass that does what an older one does and more. The older one's callers belong on the new one, and the older one is deleted once it has none.
 - **Existing code re-deriving what the change now provides.** A new type carries an invariant, a new helper computes a value, a new field stores a fact — and code elsewhere still works it out by hand.
@@ -371,7 +375,7 @@ The second question looks outward from the change, at existing code the change d
 ### Discipline
 
 - **Flag only, never refactor.** No edits.
-- **Anchor every finding on the change** — a scar in the new code (the duplicate, the flag, the adapter, the wrapper, the stranded path), or existing code the change made stale, named together with what in the change made it so. Pre-existing mess that the change neither created, bent around, nor made stale is outside this aspect; raising it here buries the findings that the diff is actually responsible for.
+- **Anchor every finding on the change** — a scar in the new code (the duplicate, the flag, the adapter, the wrapper, the stranded path), or existing code the change made stale, named together with what in the change made it so. Pre-existing mess that the change neither created, bent around, nor made stale is a cleanup candidate, returned in its own list so that it leaves the findings the diff is actually responsible for in plain view.
 - **Price the ripple.** A finding must say what the refactor would touch: which files, roughly how many call sites, which tests. "Generalize this" with no estimate leaves the author no basis to decide.
 - **Name the compatibility cost.** Some existing items have consumers outside this repository — Fix standard-library signatures, the LSP protocol surface, APIs that external Fix projects call. Reshaping those is a compatibility decision; flag it all the same, and state that cost as part of the finding.
 - **An author who priced it already has answered.** When a commit message or a comment states why the existing code was left as it is, treat that as the decision and skip the finding.
@@ -962,7 +966,7 @@ Function comment shape. Aim the comment so that the name, the signature and the 
 Test comment shape (for `#[test]` functions): the comment must state *what perspective the test exercises* — which behavior, edge case, or invariant it validates — not just "tests `foo`." Example: `/// Verifies that rename across an import boundary updates both the definition and the qualified callsite.`
 
 **Excluded:**
-- Pre-existing undocumented items in the same file — this aspect covers the items the diff introduces or whose signature it modifies.
+- Pre-existing undocumented items in the same file — this aspect writes docs for the items the diff introduces or whose signature it modifies, and returns the others it notices as cleanup candidates.
 - Fix sample programs under `src/tests/test_*/cases/` (these are `.fix` files; this aspect only walks `.rs` anyway).
 - Items generated by `derive` macros or build scripts.
 
