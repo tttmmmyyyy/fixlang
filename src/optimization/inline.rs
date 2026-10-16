@@ -22,7 +22,8 @@ use crate::{
     },
     misc::{Map, Set},
     optimization::{
-        inline_local, let_elimination::create_global_lambda_to_arity_map, uncurry::is_std_fix,
+        inline_local, let_elimination::create_global_lambda_to_arity_map,
+        rename::substitute_free_names, uncurry::is_std_fix,
     },
     rc_ir::locality::ExtShape,
 };
@@ -90,26 +91,62 @@ const MAX_ROUNDS: usize = 10;
 /// is neither the entry point nor exported, is dropped along the way.
 ///
 /// A global whose body is an operation a copy of which costs no more than the operation itself
-/// (`is_free_to_duplicate`), and a global that is one name standing for another, go wherever the
-/// name occurs; a lambda small enough (`INLINE_COST_THRESHOLD`) and one wrapping a builtin
-/// operation go into the calls of it. A body that calls itself stays where it is.
-pub fn run(prg: &mut Program) {
+/// (`is_free_to_duplicate`), a lambda wrapping a builtin operation, and a global that is one name
+/// standing for another go wherever the name occurs, the operands of builtin operations included;
+/// a lambda small enough (`INLINE_COST_THRESHOLD`) goes into the calls of it. A body that calls
+/// itself stays where it is.
+///
+/// Under `develop_mode`, each round also substitutes into the symbols it passes through untouched,
+/// and fails where that would change one.
+pub fn run(prg: &mut Program, develop_mode: bool) {
     let mut stable_symbols = Set::default();
+    let mut rewritten = Set::default();
     for _ in 0..MAX_ROUNDS {
-        if !run_one(prg, &mut stable_symbols) {
+        unmark_stable_symbols_naming(prg, &rewritten, &mut stable_symbols);
+        rewritten.clear();
+        if !run_one(prg, develop_mode, &mut stable_symbols, &mut rewritten) {
             break;
         }
     }
+}
+
+/// Take out of `stable_symbols` each symbol that names a symbol in `rewritten`.
+///
+/// Whether a body may be put at a name, and how much of a round's budget a copy of it takes, are
+/// read from the expression of the symbol the name names (`calculate_inline_costs`). So a symbol
+/// that a round left unchanged without a refusal stays unchanged until a symbol it names gets a new
+/// expression.
+fn unmark_stable_symbols_naming(
+    prg: &Program,
+    rewritten: &Set<FullName>,
+    stable_symbols: &mut Set<FullName>,
+) {
+    if rewritten.is_empty() {
+        return;
+    }
+    stable_symbols.retain(|name| match prg.symbols.get(name) {
+        Some(sym) => !sym.expr.as_ref().unwrap().has_free_var_in(rewritten),
+        // A symbol the program dropped is passed through by no round.
+        None => false,
+    });
 }
 
 /// One round of `run`: substitute into each symbol once and discard the symbols nothing names.
 /// Returns whether the program changed.
 ///
 /// # Arguments
-/// * `stable_symbols` — the symbols with nothing left to substitute into them, carried from round to
-///   round: a symbol listed here is passed through untouched, and a symbol this round leaves
-///   unchanged joins it.
-fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
+/// * `develop_mode` — whether to substitute into each symbol of `stable_symbols` too, and fail where
+///   that would change it.
+/// * `stable_symbols` — the symbols with nothing to substitute into them until a symbol they name
+///   gets a new expression, carried from round to round: a symbol listed here is passed through
+///   untouched, and a symbol this round leaves unchanged joins it.
+/// * `rewritten` — receives the name of each symbol this round substitutes into.
+fn run_one(
+    prg: &mut Program,
+    develop_mode: bool,
+    stable_symbols: &mut Set<FullName>,
+    rewritten: &mut Set<FullName>,
+) -> bool {
     let mut changed = false;
 
     let costs = calculate_inline_costs(prg);
@@ -134,6 +171,14 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
 
         // If the symbol is known to be stable, skip it.
         if stable_symbols.contains(&name) {
+            if develop_mode {
+                let res = inliner.substitute_into(sym.expr.as_ref().unwrap());
+                assert!(
+                    !res.changed && !inliner.refused_for_budget,
+                    "`{}` is passed through as stable while this round would substitute into it",
+                    name.to_string()
+                );
+            }
             new_symbols.insert(name, sym);
             continue;
         }
@@ -149,17 +194,18 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>) -> bool {
 
         if res.changed {
             changed = true;
+            rewritten.insert(name.clone());
             sym.expr = Some(res.expr);
             inline_local::run_on_symbol(&mut sym, &global_lambda_to_arity);
         } else if !inliner.refused_for_budget {
-            // A round that substituted nothing and refused nothing has reached the symbol's end
-            // state. A symbol whose round refused a body it could not afford is asked again next
-            // round: the body may come back smaller, since `inline_local` reduces what the
-            // substitution left in every symbol the round changed.
+            // A round that substituted nothing and refused nothing leaves the symbol as it is
+            // until a symbol it names gets a new expression. A symbol whose round refused a body it
+            // could not afford is asked again next round: the body may come back smaller, since
+            // `inline_local` reduces what the substitution left in every symbol the round changed.
             stable_symbols.insert(name.clone());
         }
 
-        // The round may have left an expression that names nothing, which is the same end state.
+        // The round may have left an expression that names nothing, which nothing changes again.
         if sym.expr.as_ref().unwrap().free_vars().is_empty() {
             stable_symbols.insert(name.clone());
         }
@@ -610,28 +656,41 @@ impl<'c> Inliner<'c> {
         self.budget = left;
         true
     }
+
+    /// Returns the expression of the symbol `name` names, to put where the program names it
+    /// outside a call. Returns it where `name` is global, its symbol may be inlined wherever it is
+    /// named, and the round's budget covers a copy of it; the copy's nodes are then taken out of
+    /// `budget`.
+    fn take_body_for_non_call_site(&mut self, name: &FullName) -> Option<Arc<ExprNode>> {
+        if name.is_local() {
+            return None;
+        }
+        if !self.costs.get(name).may_be_inlined_at_non_call_site() {
+            return None;
+        }
+        if !self.take_budget_for(name) {
+            return None;
+        }
+        Some(
+            self.symbols
+                .get(name)
+                .unwrap()
+                .expr
+                .as_ref()
+                .unwrap()
+                .clone(),
+        )
+    }
 }
 
 impl<'c> ExprVisitor for Inliner<'c> {
     /// Replaces a global name with the expression of the symbol it names, where that symbol may be
     /// inlined wherever it is named and the round's budget covers a copy of it.
     fn end_visit_var(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-        // If the variable is global, then try to inline the variable.
-        let var_name = &expr.get_var().name;
-        if var_name.is_local() {
-            return EndVisitResult::unchanged(expr);
+        match self.take_body_for_non_call_site(&expr.get_var().name) {
+            Some(body) => EndVisitResult::changed(body),
+            None => EndVisitResult::unchanged(expr),
         }
-
-        if !self.costs.get(var_name).may_be_inlined_at_non_call_site() {
-            return EndVisitResult::unchanged(expr);
-        }
-        if !self.take_budget_for(var_name) {
-            return EndVisitResult::unchanged(expr);
-        }
-
-        let sym = self.symbols.get(var_name).unwrap();
-        let expr = sym.expr.as_ref().unwrap();
-        EndVisitResult::changed(expr.clone())
     }
 
     /// Replaces the function a call names with the expression of that global, where it may be
@@ -655,5 +714,29 @@ impl<'c> ExprVisitor for Inliner<'c> {
         let func_expr = self.symbols.get(func_name).unwrap().expr.as_ref().unwrap();
         let expr = expr.set_app_func(func_expr.clone());
         EndVisitResult::changed(expr)
+    }
+
+    /// Replaces each global name a builtin operation reads with the expression of the symbol it
+    /// names, where `take_body_for_non_call_site` gives one. An operand is a name: a body that is
+    /// a name takes the operand's place, and any other body is bound to a fresh local name, which
+    /// the operation reads in its place.
+    fn end_visit_builtin(
+        &mut self,
+        expr: &Arc<ExprNode>,
+        _state: &mut VisitState,
+    ) -> EndVisitResult {
+        let mut bodies = Map::default();
+        for name in expr.get_builtin().op.free_vars() {
+            if bodies.contains_key(&name) {
+                continue;
+            }
+            if let Some(body) = self.take_body_for_non_call_site(&name) {
+                bodies.insert(name, body);
+            }
+        }
+        if bodies.is_empty() {
+            return EndVisitResult::unchanged(expr);
+        }
+        EndVisitResult::changed(substitute_free_names(expr, bodies))
     }
 }
