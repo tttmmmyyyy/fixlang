@@ -81,13 +81,10 @@ pub fn insert_minted_symbol(symbols: &mut Map<FullName, Symbol>, sym: Symbol) {
 mod tests {
     use super::*;
 
-    /// The first `n` names `GlobalNames::fresh` mints for `symbol` in a program with no globals.
-    fn names_minted_among_no_globals(
-        symbol: &FullName,
-        suffix: &'static str,
-        n: usize,
-    ) -> Vec<FullName> {
-        let mut names = GlobalNames::new(Arc::new(Set::default()), symbol.clone(), suffix);
+    /// The first `n` names `GlobalNames::fresh` mints for `symbol` with the suffix `#lam`, in a
+    /// program whose globals are `existing`.
+    fn names_minted(existing: Set<FullName>, symbol: &FullName, n: usize) -> Vec<FullName> {
+        let mut names = GlobalNames::new(Arc::new(existing), symbol.clone(), "#lam");
         (0..n).map(|_| names.fresh()).collect()
     }
 
@@ -96,11 +93,10 @@ mod tests {
     #[test]
     fn fresh_passes_over_the_existing_globals() {
         let symbol = FullName::from_strs(&["Main"], "f");
-        let existing: Set<FullName> = names_minted_among_no_globals(&symbol, "#lam", 2)
+        let existing: Set<FullName> = names_minted(Set::default(), &symbol, 2)
             .into_iter()
             .collect();
-        let mut names = GlobalNames::new(Arc::new(existing.clone()), symbol, "#lam");
-        let minted: Vec<FullName> = (0..3).map(|_| names.fresh()).collect();
+        let minted = names_minted(existing.clone(), &symbol, 3);
         for name in &minted {
             assert!(
                 !existing.contains(name),
@@ -123,7 +119,7 @@ mod tests {
         ];
         let mut minted: Set<FullName> = Set::default();
         for symbol in &symbols {
-            for name in names_minted_among_no_globals(symbol, "#lam", 20) {
+            for name in names_minted(Set::default(), symbol, 20) {
                 assert!(
                     minted.insert(name.clone()),
                     "`{}` is minted from two symbols",
