@@ -75,8 +75,8 @@ impl UsageFinder<'_> {
 }
 
 impl ExprVisitor for UsageFinder<'_> {
-    // Whether the walk enters `expr`: only where the name occurs free in it. A subexpression the name
-    // is not free in holds no use of it, or only uses of an inner binding of the same name.
+    /// Whether the walk enters `expr`: only where the name occurs free in it. A subexpression the
+    /// name is not free in holds no use of it, or only uses of an inner binding of the same name.
     fn should_visit(&self, expr: &Arc<ExprNode>) -> bool {
         expr.has_free_var(self.name)
     }

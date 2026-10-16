@@ -1299,8 +1299,8 @@ impl ExprNode {
         !(name.is_local() && name.name == CAP_NAME)
     }
 
-    /// Does a name `names` holds as a key occur free in this expression? Looks each name of the
-    /// smaller of the two sets up in the other.
+    /// Does a key of `names` occur free in this expression? Looks up each name of the smaller of the
+    /// two sets in the other.
     pub fn has_free_var_in<V>(&self, names: &Map<FullName, V>) -> bool {
         self.with_free_vars(|free_vars| {
             if names.len() < free_vars.len() {

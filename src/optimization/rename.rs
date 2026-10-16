@@ -68,7 +68,7 @@ struct Substitutor {
 struct ScopeBackup {
     /// The entries the binder took out of `map`.
     removed: Vec<(FullName, Arc<ExprNode>)>,
-    /// The names of the entries the binder put into `map`, one per binder it renamed.
+    /// The names the binder renamed, whose entries it put into `map`.
     inserted: Vec<FullName>,
 }
 
