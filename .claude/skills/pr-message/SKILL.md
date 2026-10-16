@@ -1,6 +1,6 @@
 ---
 name: pr-message
-description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain the role, the change, and the purpose of every item the diff touches, show the diff of each changed item, bounded to that item, link every item the change adds or modifies to its implementation on GitHub, cover the tests in a section of their own saying what each pins and what it does without the change, quote every text the change shows to a user, and explain a bug fix by tracing the program state through the failing run and the fixed run. Use when: writing or revising a pull request body.'
+description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain what every item the diff touches is, what the change did to it, and why, show the diff of each changed item, bounded to that item, link every item the change adds or modifies to its implementation on GitHub, cover the tests in a section of their own saying what each pins and what it does without the change, quote every text the change shows to a user, and explain a bug fix by tracing the program state through the failing run and the fixed run. Use when: writing or revising a pull request body.'
 ---
 
 # Writing a pull request body
@@ -26,16 +26,18 @@ An issue that stays open after its work has shipped is the failure this prevents
 
 The body is read before the diff, and it has to make the diff make sense. So the body covers every item the diff touches — a function, a method, a type, a trait, a trait method, a field, an enum variant, a constant. Functions are the most numerous, not the most consequential: a type the change introduces settles more about the code than most of the functions around it, and a body that walks past it leaves the reader to reconstruct it from the places it is used.
 
-**A test belongs to the tests section instead.** The items here are the ones the change puts into the program, and a test is read for the behavior it pins rather than for what it does — which is what *The tests the change adds* below says about it. An entry here would fill its three labels with one fact, that the harness runs it once, and carry a diff repeating the file its link already opens. This holds of everything a test file adds to serve its tests as well: a helper, a fixture, a builder.
+**A test belongs to the tests section instead.** The items here are the ones the change puts into the program, and a test is read for the behavior it pins rather than for what it does — which is what *The tests the change adds* below says about it. An entry here would fill its parts with one fact, that the harness runs it once, and carry a diff repeating the file its link already opens. This holds of everything a test file adds to serve its tests as well: a helper, a fixture, a builder.
 
-- **A changed item**: its **role**, written for a reader who has never opened the file; the **change** — what the diff means for it, stated in prose, since the diff shows only the text; the **purpose** — what the change contributes to the pull request; and **its diff**, bounded to the item itself (see *Show a changed item's diff, bounded to the item*).
-- **An added item**: its **role**, written the same way, and its **callers** — the functions that call an added function. An item arrives in the body as a loose thing until the reader is told what reaches it; naming the callers puts it back in the flow it was written for, and it is also what says whether the function runs once per program, once per symbol, or once per node of a walk. An added item that is not called has the same part under the word that fits it: the code that builds an added type, the implementors of an added trait, the code that reads an added constant.
+- **A changed item**: its **description**, written for a reader who has never opened the file; the **change** — what the diff means for it, stated in prose, since the diff shows only the text; the **purpose** — what the change contributes to the pull request; and **its diff**, bounded to the item itself (see *Show a changed item's diff, bounded to the item*).
+- **An added item**: its **description**, written the same way, and its **uses** — the places that use it: the functions that call an added function, the code that builds an added type, the implementors of an added trait, the code that reads an added constant. An item arrives in the body as a loose thing until the reader is told what reaches it; naming its uses puts it back in the flow it was written for, and for a function it is also what says whether the function runs once per program, once per symbol, or once per node of a walk.
 
-  Naming the callers is the opposite of the rule a doc comment follows, and deliberately so: a doc comment is read for as long as the item lives, and a list of callers in it goes stale on the next caller added, while a pull request body is read once, against a diff that is fixed.
+  Naming the uses is the opposite of the rule a doc comment follows, and deliberately so: a doc comment is read for as long as the item lives, and a list of uses in it goes stale on the next use added, while a pull request body is read once, against a diff that is fixed.
 
-**A labelled part opens its own line.** Run `**Role**:`, `**Change**:` and `**Purpose**:` together into one paragraph and the reader has to find where each ends before reading it; each on its own line is found at a glance, and the entry can then be read by label rather than front to back.
+**The description is the paragraph under the item's heading, with no label.** An entry opens with a heading naming the item, and the paragraph right under a heading reads as what the heading names; a label there adds a word the reader has to read and says nothing the position does not.
 
-**Role** is the one word that means something different per kind of item:
+**Each other part carries a label and opens its own line.** The labels are `**変更**：`, `**目的**：` and `**利用箇所**：` in a Japanese body, and `**Change**:`, `**Purpose**:` and `**Used in**:` in an English one. Run the parts together into one paragraph and the reader has to find where each ends before reading it; each on its own line is found at a glance, and the entry can then be read by label rather than front to back.
+
+The description is the one part that says something different per kind of item:
 
 - a function or a method — the processing it performs;
 - a type — what one of its values stands for, and the invariant it keeps across its fields;
@@ -142,7 +144,7 @@ A body that leaves this out sends the reviewer into the diff to find the words, 
 
 A bug fix is understood when the reader sees both mechanisms: the one by which the defect arose in the old code, and the one by which the new code keeps it from arising. The body states both, and the instrument for both is a **state trace** — a walk along the execution:
 
-1. **The functions involved.** Give each its role, as in the section above.
+1. **The functions involved.** Describe each, as in the section above.
 2. **The failing run.** Step along the execution that failed: which function runs, and how the state it works on — local variables, member fields, heap or storage data — changes at each step. Point at the step where the state first goes wrong, and follow the wrong state forward to the observed failure.
 3. **The fixed run.** Step along the same execution in the fixed code, point at the step where it now diverges from the failing run, and show why the state stays correct from there to the end.
 
