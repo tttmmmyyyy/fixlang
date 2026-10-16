@@ -34,7 +34,7 @@
 
 #### Tool
 
-- The type errors of a program are now reported in the same order on every build. The order used to change from one run to the next when the program had several of them.
+- #841: The type errors of a program are now reported in the same order on every build. The order used to change from one run to the next when the program had several of them.
 
 #### Std
 
