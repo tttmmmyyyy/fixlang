@@ -549,14 +549,10 @@ mod tests {
 /// bytes, or `None` where the platform does not report it (the figure is read from `/proc`, so only
 /// Linux answers). Fails the test unless the build finishes within `timeout` and exits successfully.
 ///
-/// Use this for a test whose subject is how much memory a build takes: a compiler that builds a term
-/// it goes on to discard shows it here, where the time it takes may stay within the noise of the code
-/// generation around it.
-///
 /// # Arguments
 /// * `description` — what is being compiled, as a phrase that reads after "compiling": it is what a
 ///   failure names, e.g. "a nest of 256 matches".
-pub fn build_peak_memory(
+fn build_peak_memory(
     source: &str,
     opt_level: &str,
     timeout: Duration,
@@ -613,6 +609,10 @@ pub fn build_peak_memory(
 /// Builds `source` at `opt_level` and asserts that the compiler held less than `bound` bytes of
 /// resident memory, where the platform reports the figure (see `build_peak_memory`). Fails the test
 /// unless the build finishes within `timeout` and exits successfully.
+///
+/// Use this for a test whose subject is how much memory a build takes: a compiler that builds a term
+/// it goes on to discard shows it here, where the time it takes may stay within the noise of the code
+/// generation around it.
 ///
 /// # Arguments
 /// * `description` — what is being compiled, as a phrase that reads after "compiling": it is what a
