@@ -1,7 +1,7 @@
 use crate::env_vars::MAX_OPT_LEVEL_VAR;
 use crate::tests::test_util::{
-    build_program, build_run_and_read_rc_ir, emitted_llvm_ir, emitted_llvm_ir_modules, fix_build_source_command,
-    llvm_function_bodies, EmittedIr,
+    build_program, build_run_and_read_rc_ir, emitted_llvm_ir, emitted_llvm_ir_modules,
+    fix_build_source_command, llvm_function_bodies, EmittedIr,
 };
 use std::fs;
 use std::path::Path;
