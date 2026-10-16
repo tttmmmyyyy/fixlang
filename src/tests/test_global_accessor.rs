@@ -439,8 +439,7 @@ const SCALAR_GLOBALS: [(&str, &str); 2] =
 /// A global whose body is a scalar literal is put at every name.
 ///
 /// Its value is held in a register, so a copy of the literal at each name costs what the name
-/// costs, and the global it would otherwise stand in puts an initialization flag and a load in
-/// front of every read.
+/// costs. Reading a global tests an initialization flag and loads the storage on every read.
 #[test]
 fn test_a_global_scalar_literal_is_put_at_every_name() {
     let dump = build_run_and_read_rc_ir(
