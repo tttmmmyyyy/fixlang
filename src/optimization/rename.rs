@@ -106,7 +106,7 @@ impl Substitutor {
             .iter()
             .filter_map(|name| self.map.remove_entry(name))
             .collect::<Vec<_>>();
-        if !body.has_free_var_in(&self.map) {
+        if !body.has_free_var_in_keys(&self.map) {
             self.map.extend(removed);
             return None;
         }
@@ -172,7 +172,7 @@ impl ExprVisitor for Substitutor {
     /// else in `expr` changes, a binder included, since a binder is renamed only so that a
     /// replacement under it does not capture it.
     fn should_visit(&self, expr: &Arc<ExprNode>) -> bool {
-        expr.has_free_var_in(&self.map)
+        expr.has_free_var_in_keys(&self.map)
     }
 
     /// Replaces a variable occurrence with the expression its name maps to, giving the replacement

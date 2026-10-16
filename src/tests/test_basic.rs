@@ -15895,3 +15895,55 @@ pub fn test_a_write_to_the_bytes_of_a_global_string_leaves_the_global_alone() {
         "#;
     test_source(&source, Configuration::develop_mode());
 }
+
+/// Checks that a global function whose body is one builtin operation, named through an alias as the
+/// payload of a union, and a literal global read through an alias as both operands of one
+/// operation, compute what the program says.
+#[test]
+pub fn test_a_global_builtin_function_named_through_an_alias_as_an_operand() {
+    let source = r#"
+            module Main;
+
+            type U = union { a : I64 -> I64, b : I64 -> I64 -> I64 };
+
+            negate_it : I64 -> I64;
+            negate_it = |x| -x;
+
+            negate_alias : I64 -> I64;
+            negate_alias = negate_it;
+
+            plus : I64 -> I64 -> I64;
+            plus = Std::Add::add;
+
+            plus_alias : I64 -> I64 -> I64;
+            plus_alias = plus;
+
+            three : I64;
+            three = 3;
+
+            three_alias : I64;
+            three_alias = three;
+
+            u : U;
+            u = U::a(negate_alias);
+
+            w : U;
+            w = U::b(plus_alias);
+
+            apply_u : U -> I64 -> I64;
+            apply_u = |u, i| if u.is_a { (u.as_a)(i) } else { (u.as_b)(i, three_alias) };
+
+            main : IO ();
+            main = (
+                let v = U::a(negate_alias);
+                let x = U::b(plus_alias);
+                let acc = range(0, 1000).fold(0, |i, acc|
+                    acc + apply_u(u, i) + apply_u(w, i) + apply_u(v, i) * three_alias + apply_u(x, i)
+                        + (three_alias - 1) * three_alias
+                );
+                assert_eq(|_|"fail: the sum", acc, -987000);;
+                pure()
+            );
+        "#;
+    test_source(&source, Configuration::develop_mode());
+}

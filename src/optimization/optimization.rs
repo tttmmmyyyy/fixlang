@@ -86,7 +86,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_inline_optimization(),
         "inline",
-        |prg| inline::run(prg, config.num_worker_thread),
+        |prg| inline::run(prg, config.develop_mode, config.num_worker_thread),
     );
 
     run_pass(
@@ -118,7 +118,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_split_struct_args() && config.enable_inline_optimization(),
         "inline",
-        |prg| inline::run(prg, config.num_worker_thread),
+        |prg| inline::run(prg, config.develop_mode, config.num_worker_thread),
     );
 
     // Read every construction the code taking it apart can see. That is what turns the two lines a
