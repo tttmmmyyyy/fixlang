@@ -1301,13 +1301,13 @@ impl ExprNode {
 
     /// Does a key of `names` occur free in this expression? Looks up each name of the smaller of the
     /// two sets in the other.
-    pub fn has_free_var_in<V>(&self, names: &Map<FullName, V>) -> bool {
+    pub fn has_free_var_in_keys<V>(&self, names: &Map<FullName, V>) -> bool {
         self.has_free_var_of(names.keys(), |name| names.contains_key(name))
     }
 
     /// Does a name of `names` occur free in this expression? Looks up each name of the smaller of
     /// the two sets in the other.
-    pub fn has_free_var_among(&self, names: &Set<FullName>) -> bool {
+    pub fn has_free_var_in(&self, names: &Set<FullName>) -> bool {
         self.has_free_var_of(names.iter(), |name| names.contains(name))
     }
 

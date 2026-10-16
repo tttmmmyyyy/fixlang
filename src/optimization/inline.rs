@@ -101,7 +101,7 @@ pub fn run(prg: &mut Program, develop_mode: bool) {
     let mut stable_symbols = Set::default();
     let mut rewritten = Set::default();
     for _ in 0..MAX_ROUNDS {
-        thaw_symbols_naming(prg, &rewritten, &mut stable_symbols);
+        unmark_stable_symbols_naming(prg, &rewritten, &mut stable_symbols);
         rewritten.clear();
         if !run_one(prg, develop_mode, &mut stable_symbols, &mut rewritten) {
             break;
@@ -115,7 +115,7 @@ pub fn run(prg: &mut Program, develop_mode: bool) {
 /// read from the expression of the symbol the name names (`calculate_inline_costs`). So a symbol
 /// that a round left unchanged without a refusal stays unchanged until a symbol it names gets a new
 /// expression.
-fn thaw_symbols_naming(
+fn unmark_stable_symbols_naming(
     prg: &Program,
     rewritten: &Set<FullName>,
     stable_symbols: &mut Set<FullName>,
@@ -124,7 +124,7 @@ fn thaw_symbols_naming(
         return;
     }
     stable_symbols.retain(|name| match prg.symbols.get(name) {
-        Some(sym) => !sym.expr.as_ref().unwrap().has_free_var_among(rewritten),
+        Some(sym) => !sym.expr.as_ref().unwrap().has_free_var_in(rewritten),
         // A symbol the program dropped is passed through by no round.
         None => false,
     });
