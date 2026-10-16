@@ -91,9 +91,10 @@ const MAX_ROUNDS: usize = 10;
 /// is neither the entry point nor exported, is dropped along the way.
 ///
 /// A global whose body is an operation a copy of which costs no more than the operation itself
-/// (`is_free_to_duplicate`), and a global that is one name standing for another, go wherever the
-/// name occurs; a lambda small enough (`INLINE_COST_THRESHOLD`) and one wrapping a builtin
-/// operation go into the calls of it. A body that calls itself stays where it is.
+/// (`is_free_to_duplicate`), a lambda wrapping a builtin operation, and a global that is one name
+/// standing for another go wherever the name occurs, the operands of builtin operations included;
+/// a lambda small enough (`INLINE_COST_THRESHOLD`) goes into the calls of it. A body that calls
+/// itself stays where it is.
 ///
 /// Under `develop_mode`, each round also substitutes into the symbols it passes through untouched,
 /// and fails where that would change one.
@@ -716,8 +717,9 @@ impl<'c> ExprVisitor for Inliner<'c> {
     }
 
     /// Replaces each global name a builtin operation reads with the expression of the symbol it
-    /// names, where `take_body_for_non_call_site` gives one. An operand is a name, so each
-    /// expression is bound to a fresh local name, which the operation reads in its place.
+    /// names, where `take_body_for_non_call_site` gives one. An operand is a name: a body that is
+    /// a name takes the operand's place, and any other body is bound to a fresh local name, which
+    /// the operation reads in its place.
     fn end_visit_builtin(
         &mut self,
         expr: &Arc<ExprNode>,
