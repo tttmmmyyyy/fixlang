@@ -167,21 +167,20 @@ pub fn build_program(
     (temp_dir, program_path)
 }
 
-/// Builds, at `-O max` with each function in a compilation unit of its own, a program whose global
-/// `name` is read by twelve exported functions, and asserts that the program holds the global's
-/// `held_bytes` bytes once. Each unit reading the global defines its storage, so that the unit
-/// sees what it holds, and the linker keeps one of those definitions.
+/// Builds, at `-O max` with each function in a compilation unit of its own, a program in which
+/// twelve exported functions read the global `global` defines, and asserts that the program holds
+/// what the global holds once: it takes less than twice `held_bytes`. Each unit reading the global
+/// defines its storage, so that the unit sees what it holds, and the linker keeps one of those
+/// definitions.
+///
+/// The bound holds the program's own code as well, so `held_bytes` has to dwarf it: a few hundred
+/// kilobytes and up.
 ///
 /// # Arguments
-/// * `global` - the declaration and the definition of the global `name`.
+/// * `global` - the declaration and the definition of the global the readers read.
 /// * `reader_body` - the body of a reader, an `I64 -> I64` function, given a stride that differs
 ///   per reader, so that no two readers are the same function.
 /// * `description` - what is being compiled, as a phrase that reads after "compiling".
-///
-/// # Examples
-/// With `global` `"table : Array U64;\ntable = [1_U64, 2_U64];"`, `reader_body` writing
-/// `|i| table.@(i % 2).i64`, and `held_bytes` 16, the program fails the assertion where it takes
-/// 32 bytes or more.
 pub fn assert_global_read_from_many_units_is_held_once(
     global: &str,
     reader_body: impl Fn(usize) -> String,
