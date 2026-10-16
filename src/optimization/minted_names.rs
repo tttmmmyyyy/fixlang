@@ -82,7 +82,9 @@ pub fn insert_minted_symbol(symbols: &mut Map<FullName, Symbol>, sym: Symbol) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::MintedNames;
+    use crate::{ast::name::FullName, misc::Set};
+    use std::sync::Arc;
 
     /// The first `n` names `MintedNames::fresh` mints for `symbol` with the suffix `#lam`, in a
     /// program whose globals are `existing`.
