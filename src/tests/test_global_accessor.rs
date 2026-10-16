@@ -401,11 +401,11 @@ fn test_a_global_string_literal_read_from_many_compilation_units_is_held_once() 
         .map(|k| {
             format!(
                 "reader{k} : I64 -> I64;\n\
-                 reader{k} = |i| long.get_bytes.@((i * {step}) % {count}).i64;\n\
+                 reader{k} = |i| long.get_bytes.@((i * {step}) % {size}).i64;\n\
                  FFI_EXPORT[reader{k}, fixtest_reader{k}];\n",
                 k = k,
                 step = k + 3,
-                count = LITERAL_BYTES
+                size = LITERAL_BYTES
             )
         })
         .collect::<Vec<_>>()
