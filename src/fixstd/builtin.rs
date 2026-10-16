@@ -1261,8 +1261,10 @@ fn global_storage_array_locality(array_ty: &Arc<TypeNode>, type_env: &TypeEnv) -
 /// null terminator, read out of a constant in the program's data.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct StringBufOp {
-    /// The literal's bytes, without the null terminator.
-    string: String,
+    /// The literal's bytes, without the null terminator. Shared, so that a copy of the op costs the
+    /// same however long the literal is: the optimizer copies an op wherever it copies or rewrites
+    /// the expression holding it.
+    string: Arc<str>,
 }
 
 #[typetag::serde]
@@ -1282,6 +1284,12 @@ impl BuiltinOp for StringBufOp {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![]
+    }
+
+    /// The array is a constant in the program's data, so a copy of the literal where the value is
+    /// named costs what naming it costs.
+    fn is_free_to_duplicate(&self) -> bool {
+        true
     }
 
     fn result_prov(
@@ -1316,7 +1324,9 @@ pub fn make_string_lit(string: String, source: Option<Span>) -> Arc<ExprNode> {
         vec![(
             "_data".to_string(),
             expr_builtin(
-                Box::new(StringBufOp { string }),
+                Box::new(StringBufOp {
+                    string: string.into(),
+                }),
                 byte_array_ty,
                 source.clone(),
             ),
@@ -5725,8 +5735,10 @@ impl NumberLiteral {
 /// first, as a write into the bytes of a string literal does.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ConstantArrayLitOp {
-    /// The elements, in order. There is at least one.
-    pub elements: Vec<NumberLiteral>,
+    /// The elements, in order. There is at least one. Shared, so that a copy of the op costs the
+    /// same however many elements the literal has: the optimizer copies an op wherever it copies or
+    /// rewrites the expression holding it.
+    pub elements: Arc<[NumberLiteral]>,
 }
 
 #[typetag::serde]

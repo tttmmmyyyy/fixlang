@@ -50,7 +50,9 @@ impl ExprVisitor for ConstantArrayLiteralMaker {
             .expect("an array literal is typed by the time the program is optimized");
         EndVisitResult::changed(
             expr_builtin(
-                Box::new(ConstantArrayLitOp { elements }),
+                Box::new(ConstantArrayLitOp {
+                    elements: elements.into(),
+                }),
                 ty.clone(),
                 expr.source.clone(),
             )

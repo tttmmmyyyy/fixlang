@@ -167,6 +167,63 @@ pub fn build_program(
     (temp_dir, program_path)
 }
 
+/// Builds, at `-O max` with each function in a compilation unit of its own, a program in which
+/// twelve exported functions read the global `global` defines, and asserts that the program holds
+/// what the global holds once: it takes less than twice `held_bytes`. Each unit reading the global
+/// defines its storage, so that the unit sees what it holds, and the linker keeps one of those
+/// definitions.
+///
+/// The program's own code counts toward the bound as well, so `held_bytes` has to be much larger
+/// than the code: a few hundred kilobytes or more.
+///
+/// # Arguments
+/// * `global` - the declaration and the definition of the global the readers read.
+/// * `reader_body` - the body of a reader, an `I64 -> I64` function, given a stride that differs
+///   per reader, so that no two readers are the same function.
+/// * `description` - what is being compiled, as a phrase that reads after "compiling".
+pub fn assert_global_read_from_many_units_is_held_once(
+    global: &str,
+    reader_body: impl Fn(usize) -> String,
+    held_bytes: u64,
+    description: &str,
+) {
+    const READER_COUNT: usize = 12;
+    // Each reader is exported, so that it keeps a unit of its own at `--cu-size 1`.
+    let readers = (0..READER_COUNT)
+        .map(|k| {
+            format!(
+                "reader{k} : I64 -> I64;\n\
+                 reader{k} = {body};\n\
+                 FFI_EXPORT[reader{k}, fixtest_reader{k}];\n",
+                body = reader_body(k + 3)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let source = format!(
+        "module Main;\n\
+         \n\
+         {global}\n\
+         \n\
+         {readers}\n\
+         main : IO ();\n\
+         main = println(reader0(1).to_string);\n"
+    );
+    let (_temp_dir, program) =
+        build_program(&source, "max", &["--cu-size", "1"], None, description);
+    let program_bytes = fs::metadata(&program)
+        .expect("Failed to read the size of the program")
+        .len();
+    assert!(
+        program_bytes < 2 * held_bytes,
+        "compiling {}: the program takes {} bytes, which holds the global's {} bytes more than \
+         once",
+        description,
+        program_bytes,
+        held_bytes
+    );
+}
+
 /// Builds `source` at `opt_level` and runs the program it produces, returning what the program
 /// printed with the surrounding whitespace removed. Fails the test unless the build finishes
 /// within `timeout` and both the build and the program exit successfully.
@@ -492,14 +549,10 @@ mod tests {
 /// bytes, or `None` where the platform does not report it (the figure is read from `/proc`, so only
 /// Linux answers). Fails the test unless the build finishes within `timeout` and exits successfully.
 ///
-/// Use this for a test whose subject is how much memory a build takes: a compiler that builds a term
-/// it goes on to discard shows it here, where the time it takes may stay within the noise of the code
-/// generation around it.
-///
 /// # Arguments
 /// * `description` — what is being compiled, as a phrase that reads after "compiling": it is what a
 ///   failure names, e.g. "a nest of 256 matches".
-pub fn build_peak_memory(
+fn build_peak_memory(
     source: &str,
     opt_level: &str,
     timeout: Duration,
@@ -551,6 +604,72 @@ pub fn build_peak_memory(
         fs::read_to_string(&log_path).expect("Failed to read the build log")
     );
     peak
+}
+
+/// Builds `source` at `opt_level` and asserts that the compiler held less than `bound` bytes of
+/// resident memory. The figure is read from `/proc`, so the assertion runs on Linux alone. Fails the
+/// test unless the build finishes within `timeout` and exits successfully.
+///
+/// Use this for a test whose subject is how much memory a build takes: a compiler that builds a term
+/// it goes on to discard shows it here, where the time it takes may stay within the noise of the code
+/// generation around it.
+///
+/// # Arguments
+/// * `description` — what is being compiled, as a phrase that reads after "compiling": it is what a
+///   failure names, e.g. "a nest of 256 matches".
+pub fn assert_build_peak_memory_below(
+    source: &str,
+    opt_level: &str,
+    timeout: Duration,
+    bound: u64,
+    description: &str,
+) {
+    let Some(peak) = build_peak_memory(source, opt_level, timeout, description) else {
+        return;
+    };
+    assert!(
+        peak < bound,
+        "compiling {} held {} MB, over the {} MB this shape is allowed",
+        description,
+        peak / (1024 * 1024),
+        bound / (1024 * 1024)
+    );
+}
+
+/// Builds, at `-O max`, a program whose `main` sums `read_count` reads of the global `global`
+/// defines, and asserts that the compiler held less than 1500 MB of resident memory. The figure is
+/// read from `/proc`, so the assertion runs on Linux alone.
+///
+/// # Arguments
+/// * `global` - the declaration and the definition of the global the reads read.
+/// * `read` - a read, an `I64` expression of the program's argument count `n`, given a stride that
+///   differs per read, so that no two reads are the same expression.
+/// * `description` - what is being compiled, as a phrase that reads after "compiling".
+pub fn assert_global_read_many_times_builds_in_little_memory(
+    global: &str,
+    read: impl Fn(usize) -> String,
+    read_count: usize,
+    description: &str,
+) {
+    let reads = (0..read_count)
+        .map(|k| read(k + 3))
+        .collect::<Vec<_>>()
+        .join(" + ");
+    let source = format!(
+        "module Main;\n\
+         \n\
+         {global}\n\
+         \n\
+         main : IO ();\n\
+         main = (let n = (*get_args).@size; println(({reads}).to_string));\n"
+    );
+    assert_build_peak_memory_below(
+        &source,
+        "max",
+        Duration::from_secs(120),
+        1500 * 1024 * 1024,
+        description,
+    );
 }
 
 /// The highest resident memory the process `pid` has held, in bytes, read from `/proc/<pid>/status`.
