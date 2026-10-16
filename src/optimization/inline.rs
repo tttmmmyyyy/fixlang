@@ -112,9 +112,9 @@ pub fn run(prg: &mut Program, develop_mode: bool) {
 /// Take out of `stable_symbols` each symbol that names a symbol in `rewritten`.
 ///
 /// Whether a body may be put at a name, and how much of a round's budget a copy of it takes, are
-/// read from the expression of the symbol the name names (`calculate_inline_costs`). So a symbol a
-/// round passed through without a substitution or a refusal stays that way until a symbol it names
-/// gets another expression.
+/// read from the expression of the symbol the name names (`calculate_inline_costs`). So a symbol
+/// that a round left unchanged without a refusal stays unchanged until a symbol it names gets a new
+/// expression.
 fn thaw_symbols_naming(
     prg: &Program,
     rewritten: &Set<FullName>,
@@ -656,9 +656,10 @@ impl<'c> Inliner<'c> {
         true
     }
 
-    /// The expression of the symbol `name` names, to put where the program names it outside a
-    /// call: given where `name` is global, its symbol may be inlined wherever it is named, and the
-    /// round's budget covers a copy of it, whose nodes it takes out of `budget`.
+    /// Returns the expression of the symbol `name` names, to put where the program names it
+    /// outside a call. Returns it where `name` is global, its symbol may be inlined wherever it is
+    /// named, and the round's budget covers a copy of it; the copy's nodes are then taken out of
+    /// `budget`.
     fn take_body_for_non_call_site(&mut self, name: &FullName) -> Option<Arc<ExprNode>> {
         if name.is_local() {
             return None;
