@@ -613,7 +613,11 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
                 name.clone(),
                 nothing_specializable.clone(),
                 lifted.clone(),
-                Some(GlobalNames::new(existing_names.clone())),
+                Some(GlobalNames::new(
+                    existing_names.clone(),
+                    name.clone(),
+                    CLOSURE_LAM_SUFFIX,
+                )),
                 Pinned::default(),
                 budget.clone(),
                 name.clone(),
@@ -1075,9 +1079,6 @@ struct ClosureSpecializationVisitor {
     required_specializations: Vec<SpecializationRequest>,
 
     /* Name generation */
-    /// Advances at each lambda this walk lifts, so that the names minted for one symbol stay
-    /// distinct.
-    lam_func_counter: u32,
     /// The symbol this walk is over, under the name it carries now. Every name this walk mints is
     /// formed from it.
     current_symbol: FullName,
@@ -1140,7 +1141,6 @@ impl ClosureSpecializationVisitor {
             narrowed_capture_list: None,
             specializable_slots,
             required_specializations: Vec::new(),
-            lam_func_counter: 0,
             current_symbol,
             global_names,
             pinned,
@@ -1419,11 +1419,7 @@ impl ClosureSpecializationVisitor {
             .global_names
             .as_mut()
             .expect("a walk given no global names to mint against lifts a lambda")
-            .fresh(
-                &self.current_symbol,
-                CLOSURE_LAM_SUFFIX,
-                &mut self.lam_func_counter,
-            );
+            .fresh();
 
         // Build the capture list struct that threads the captured environment into the lifted
         // function.

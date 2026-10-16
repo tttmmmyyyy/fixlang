@@ -73,7 +73,8 @@ fn run_once(prg: &mut Program, wrappers: &mut Set<FullName>, num_threads: usize)
             let split = if wrappers.contains(&name) {
                 None
             } else {
-                let mut global_names = GlobalNames::new(existing_names.clone());
+                let mut global_names =
+                    GlobalNames::new(existing_names.clone(), name.clone(), SPLIT_ARG_SUFFIX);
                 split_one_argument(&sym, &prg.type_env, &mut global_names)
             };
             (name, sym, split)
@@ -146,8 +147,7 @@ fn split_one_argument(
          index, and every place a field is handed over reads the two together",
         taken_apart.tycon.to_string()
     );
-    let mut counter = 0;
-    let twin_name = global_names.fresh(&sym.name, SPLIT_ARG_SUFFIX, &mut counter);
+    let twin_name = global_names.fresh();
 
     // The twin's arguments: the ones the original takes, with the struct replaced by its fields.
     let mut twin_params = params.clone();
