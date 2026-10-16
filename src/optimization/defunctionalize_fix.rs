@@ -190,9 +190,9 @@ impl LiftedFix {
 }
 
 struct FixDefunctionalizer {
-    // The names of the functions this traversal lifts.
+    /// The names of the functions this traversal lifts.
     minted_names: MintedNames,
-    // Counter feeding the names of the capture parameters.
+    /// The counter the name of the next capture parameter is tried with.
     cap_param_counter: u32,
     // Functions lifted out during this traversal.
     lifted: Vec<LiftedFix>,

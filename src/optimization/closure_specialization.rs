@@ -1078,8 +1078,8 @@ struct ClosureSpecializationVisitor {
     /// Copies this walk asks for
     required_specializations: Vec<SpecializationRequest>,
 
-    /// The symbol this walk is over, under the name it carries now, which the walk's assertions
-    /// name.
+    /// The symbol this walk is over, under the name it carries now, for the walk's panic messages
+    /// to name.
     current_symbol: FullName,
 
     /* Name generation */

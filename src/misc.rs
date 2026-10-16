@@ -106,8 +106,8 @@ fn values_or_first_panic<T>(results: impl Iterator<Item = thread::Result<T>>) ->
 }
 
 /// Runs `f` on each of `items`, on up to `num_threads` compiler threads, or on the calling thread
-/// alone when `num_threads` is 1 or less. Each thread takes the next item left as soon as it
-/// finishes one.
+/// alone when `num_threads` is 1 or less. Each thread takes the next remaining item as soon as
+/// it finishes one.
 pub fn for_each_on_compiler_threads<T: Send>(
     items: Vec<T>,
     num_threads: usize,

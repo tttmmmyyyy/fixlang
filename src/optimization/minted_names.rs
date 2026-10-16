@@ -6,8 +6,8 @@ use crate::{
 };
 use std::sync::Arc;
 
-/// The names a walk over one symbol gives the global functions it creates, kept apart from the
-/// globals of the program as the walk found them, which the walks over every symbol share.
+/// The names a walk over one symbol gives the global functions it creates. Each name differs from
+/// the globals of the program as the walk found them, which the walks over all symbols share.
 ///
 /// A minted name is the walk's symbol, then the suffix, whose last character is not a digit, then a
 /// counter. So the digits at its end are the counter, and what precedes the suffix is the symbol.
@@ -26,8 +26,8 @@ pub struct MintedNames {
 }
 
 impl MintedNames {
-    /// The names a walk over `symbol` mints, followed by `suffix`, in a program whose globals are
-    /// `existing`.
+    /// The names a walk over `symbol` mints, each made of `symbol`, `suffix` and a counter, in a
+    /// program whose globals are `existing`.
     pub fn new(existing: Arc<Set<FullName>>, symbol: FullName, suffix: &'static str) -> Self {
         assert!(
             suffix.ends_with(|c: char| !c.is_ascii_digit()),
