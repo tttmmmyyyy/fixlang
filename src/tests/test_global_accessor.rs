@@ -1,11 +1,10 @@
 use crate::env_vars::MAX_OPT_LEVEL_VAR;
 use crate::tests::test_util::{
-    assert_build_peak_memory_below, assert_global_read_from_many_units_is_held_once,
-    build_run_and_read_rc_ir, emitted_llvm_ir, emitted_llvm_ir_modules, fix_build_source_command,
+    assert_global_read_from_many_units_is_held_once,
+    assert_global_read_many_times_builds_in_little_memory, build_run_and_read_rc_ir, emitted_llvm_ir, emitted_llvm_ir_modules, fix_build_source_command,
     llvm_function_bodies, EmittedIr,
 };
 use std::path::Path;
-use std::time::Duration;
 use tempfile::TempDir;
 
 /// A program with two globals the compiler decides differently about.
@@ -414,24 +413,10 @@ fn test_a_long_global_string_literal_read_many_times_builds_in_little_memory() {
     const LITERAL_BYTES: usize = 1000000;
     const READS: usize = 100;
     let literal = "0123456789".repeat(LITERAL_BYTES / 10);
-    let reads = (0..READS)
-        .map(|k| format!("text.get_bytes.@((n * {}) % {}).i64", k + 3, LITERAL_BYTES))
-        .collect::<Vec<_>>()
-        .join(" + ");
-    let source = format!(
-        "module Main;\n\
-         \n\
-         text : String;\n\
-         text = \"{literal}\";\n\
-         \n\
-         main : IO ();\n\
-         main = (let n = (*get_args).@size; println(({reads}).to_string));\n"
-    );
-    assert_build_peak_memory_below(
-        &source,
-        "max",
-        Duration::from_secs(120),
-        1500 * 1024 * 1024,
+    assert_global_read_many_times_builds_in_little_memory(
+        &format!("text : String;\ntext = \"{literal}\";"),
+        |step| format!("text.get_bytes.@((n * {step}) % {LITERAL_BYTES}).i64"),
+        READS,
         &format!(
             "a {}-byte global string literal read {} times",
             LITERAL_BYTES, READS

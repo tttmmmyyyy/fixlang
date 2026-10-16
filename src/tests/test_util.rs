@@ -636,6 +636,42 @@ pub fn assert_build_peak_memory_below(
     );
 }
 
+/// Builds, at `-O max`, a program whose `main` sums `read_count` reads of the global `global`
+/// defines, and asserts that the compiler held less than 1500 MB of resident memory (see
+/// `assert_build_peak_memory_below`).
+///
+/// # Arguments
+/// * `global` - the declaration and the definition of the global the reads read.
+/// * `read` - a read, an `I64` expression of the program's argument count `n`, given a stride that
+///   differs per read, so that no two reads are the same expression.
+/// * `description` - what is being compiled, as a phrase that reads after "compiling".
+pub fn assert_global_read_many_times_builds_in_little_memory(
+    global: &str,
+    read: impl Fn(usize) -> String,
+    read_count: usize,
+    description: &str,
+) {
+    let reads = (0..read_count)
+        .map(|k| read(k + 3))
+        .collect::<Vec<_>>()
+        .join(" + ");
+    let source = format!(
+        "module Main;\n\
+         \n\
+         {global}\n\
+         \n\
+         main : IO ();\n\
+         main = (let n = (*get_args).@size; println(({reads}).to_string));\n"
+    );
+    assert_build_peak_memory_below(
+        &source,
+        "max",
+        Duration::from_secs(120),
+        1500 * 1024 * 1024,
+        description,
+    );
+}
+
 /// The highest resident memory the process `pid` has held, in bytes, read from `/proc/<pid>/status`.
 /// `None` where that file does not exist — the process has exited, or the platform has no `/proc`.
 fn peak_resident_bytes(pid: u32) -> Option<u64> {

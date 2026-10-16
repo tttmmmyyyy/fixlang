@@ -7,8 +7,8 @@
 mod tests {
     use crate::configuration::{Configuration, FixOptimizationLevel};
     use crate::tests::test_util::{
-        assert_build_peak_memory_below, assert_global_read_from_many_units_is_held_once,
-        build_run_and_read_rc_ir, build_within_and_run, test_source,
+        assert_global_read_from_many_units_is_held_once,
+        assert_global_read_many_times_builds_in_little_memory, build_run_and_read_rc_ir, build_within_and_run, test_source,
     };
     use std::time::Duration;
 
@@ -221,24 +221,10 @@ mod tests {
             .map(|i| format!("{}_U64", i * 7919))
             .collect::<Vec<_>>()
             .join(", ");
-        let reads = (0..READS)
-            .map(|k| format!("table.@((n * {}) % {}).i64", k + 3, ELEMENT_COUNT))
-            .collect::<Vec<_>>()
-            .join(" + ");
-        let source = format!(
-            "module Main;\n\
-             \n\
-             table : Array U64;\n\
-             table = [{elements}];\n\
-             \n\
-             main : IO ();\n\
-             main = (let n = (*get_args).@size; println(({reads}).to_string));\n"
-        );
-        assert_build_peak_memory_below(
-            &source,
-            "max",
-            Duration::from_secs(120),
-            1500 * 1024 * 1024,
+        assert_global_read_many_times_builds_in_little_memory(
+            &format!("table : Array U64;\ntable = [{elements}];"),
+            |step| format!("table.@((n * {step}) % {ELEMENT_COUNT}).i64"),
+            READS,
             &format!(
                 "a global array literal of {} numbers read {} times",
                 ELEMENT_COUNT, READS
