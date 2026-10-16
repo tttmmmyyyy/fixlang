@@ -28,14 +28,14 @@ mod tests {
         (names, program.stringify_symbols().to_string())
     }
 
-    /// Optimizing on several threads leaves the program optimizing on one thread leaves, over a
-    /// program every pass that runs on the worker threads rewrites: globals to inline, struct
+    /// Optimizing on several threads leaves the same program as optimizing on one thread, for a
+    /// program that every pass running on the worker threads rewrites: globals to inline, struct
     /// arguments to split, constructions to read, closures to specialize and lift, and functions to
     /// uncurry.
     ///
-    /// A pass whose result depends on the order the threads happen to take the symbols in fails here
-    /// on the runs where that order differs from the single thread's, so a pass of this test is
-    /// evidence rather than proof; each thread count is a further chance to see the difference.
+    /// A pass whose result depends on the order the threads take the symbols in fails here only on
+    /// the runs where that order differs from the single thread's; each thread count is one more
+    /// chance to catch it.
     #[test]
     fn test_optimizing_on_worker_threads_leaves_the_program_one_thread_leaves() {
         let source = r#"

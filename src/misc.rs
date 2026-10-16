@@ -74,8 +74,7 @@ fn compiler_thread_builder() -> thread::Builder {
 
 /// The values the given threads returned, in the order the threads are given.
 ///
-/// A thread that panicked carries its panic on from here, once **every** thread has been joined, as
-/// `values_or_first_panic` says.
+/// A thread that panicked carries its panic on from here, once **every** thread has been joined.
 pub fn join_compiler_threads<T>(threads: Vec<JoinHandle<T>>) -> Vec<T> {
     values_or_first_panic(threads.into_iter().map(|thread| thread.join()))
 }
@@ -106,8 +105,9 @@ fn values_or_first_panic<T>(results: impl Iterator<Item = thread::Result<T>>) ->
     values
 }
 
-/// Run `f` on each of `items`, on up to `num_threads` compiler threads, or on the calling thread
-/// alone when `num_threads` is 1 or less, as `map_on_compiler_threads` does.
+/// Runs `f` on each of `items`, on up to `num_threads` compiler threads, or on the calling thread
+/// alone when `num_threads` is 1 or less. Each thread takes the next item left as soon as it
+/// finishes one.
 pub fn for_each_on_compiler_threads<T: Send>(
     items: Vec<T>,
     num_threads: usize,

@@ -6,22 +6,23 @@ use crate::{
 };
 use std::sync::Arc;
 
-// The global names a walk over one symbol mints new ones against: the globals of the program as the
-// walk found them, shared by the walks over every symbol, and the names this walk has minted.
-//
-// A minted name is the walk's symbol followed by a suffix ending in a letter and a counter, so the
-// digits at its end are the counter and what precedes the suffix is the symbol. Names minted from
-// two different symbols therefore differ, and the walks over different symbols mint against the
-// program's globals alone, without seeing what one another minted.
+/// The names a walk over one symbol must keep new global names apart from: the globals of the
+/// program as the walk found them, shared by the walks over every symbol, and the names this walk
+/// has minted.
+///
+/// A minted name is the walk's symbol, then a suffix whose last character is not a digit, then a
+/// counter. So the digits at its end are the counter, and what precedes the suffix is the symbol.
+/// Names minted from two different symbols therefore differ, and each walk checks its names against
+/// the program's globals alone, without seeing what the other walks minted.
 pub struct GlobalNames {
-    // The globals of the program as the walks found them.
+    /// The globals of the program as the walks found them.
     existing: Arc<Set<FullName>>,
-    // The names minted through this value.
+    /// The names minted through this value.
     minted: Set<FullName>,
 }
 
 impl GlobalNames {
-    // The names to mint against for a walk over a program whose globals are `existing`.
+    /// The names to keep apart from, for a walk over a program whose globals are `existing`.
     pub fn new(existing: Arc<Set<FullName>>) -> Self {
         GlobalNames {
             existing,
@@ -29,9 +30,12 @@ impl GlobalNames {
         }
     }
 
-    // A fresh global name for a lifted function, derived from `base` (the symbol being processed)
-    // plus `suffix` and `counter`. `counter` advances and the chosen name joins the minted ones, so
-    // repeated calls stay collision-free against existing globals and against each other.
+    /// A fresh global name for a lifted function, made of `base` (the symbol being processed),
+    /// `suffix` and `counter`. `counter` advances and the chosen name joins the minted ones, so
+    /// repeated calls give names that differ from the existing globals and from each other.
+    ///
+    /// # Examples
+    /// `fresh(Main::f, "#lam", 0)` gives `Main::f#lam0` and leaves the counter at 1.
     pub fn fresh(&mut self, base: &FullName, suffix: &str, counter: &mut u32) -> FullName {
         assert!(
             suffix.ends_with(|c: char| !c.is_ascii_digit()),
@@ -49,14 +53,14 @@ impl GlobalNames {
     }
 }
 
-// The names of the globals `symbols` defines, which the walks over them share as what they mint
-// against.
+/// The names of the globals `symbols` defines, for the walks over them to share.
 pub fn names_of_globals(symbols: &Map<FullName, Symbol>) -> Arc<Set<FullName>> {
     Arc::new(symbols.keys().cloned().collect())
 }
 
-// Add `sym`, a function named by `GlobalNames::fresh`, to `symbols`, which hold the globals the
-// names were minted against and the functions minted from them so far.
+/// Adds `sym`, a function named by `GlobalNames::fresh`, to `symbols`, which hold the globals the
+/// names were minted against and the functions minted so far. Panics if `symbols` already holds a
+/// global of that name.
 pub fn insert_minted_symbol(symbols: &mut Map<FullName, Symbol>, sym: Symbol) {
     let name = sym.name.clone();
     assert!(

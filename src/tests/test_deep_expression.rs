@@ -1,8 +1,8 @@
 // The compiler handles a deeply nested expression without overflowing its own
 // stack. Type checking, the optimization passes and code generation recurse to
 // the expression's nesting depth, and so does reading such an expression back
-// out of the type-check cache; all of them run on worker threads sized for that recursion via
-// `COMPILER_THREAD_STACK_SIZE`, and the whole compilation runs on a
+// out of the type-check cache; all of them run on worker threads sized for
+// that recursion via `COMPILER_THREAD_STACK_SIZE`, and the whole compilation runs on a
 // thread of the same size, so a deep `let`/`;;` chain compiles rather than
 // aborting with a stack overflow.
 

@@ -1348,7 +1348,8 @@ impl Program {
             /// For a trait method implementation, what its signature is checked against first.
             trait_member: Option<TraitMemberSignature<'p>>,
         }
-        /// What the signature an implementation of a trait method gives has to agree with.
+        /// The trait member definition that the signature of a trait method implementation must
+        /// agree with.
         struct TraitMemberSignature<'p> {
             /// The type scheme obtained from the trait member definition.
             scm_via_defn: &'p Arc<Scheme>,
@@ -1409,8 +1410,8 @@ impl Program {
             /// value.
             method_impl_idx: Option<usize>,
         }
-        /// Resolves namespaces in the expression of `task` and type-checks it, after checking the
-        /// signature of a trait method implementation against the trait member definition.
+        /// Resolves namespaces in the expression of `task` and type-checks it. For a trait method
+        /// implementation, first checks that its signature agrees with the trait member definition.
         fn run_check_task(
             task: &CheckTask,
             nrenv: &Arc<NameResolutionEnv>,
@@ -1453,8 +1454,8 @@ impl Program {
                 errors,
             })
         }
-        // Per-gv typecheck cost is highly uneven (cache hits cost ~30 μs, misses ~300 ms), which is
-        // what the work queue of `map_on_compiler_threads` absorbs.
+        // The cost of checking one value is highly uneven (a cache hit costs ~30 μs, a miss
+        // ~300 ms), so each thread takes the next task as soon as it finishes one.
         let results = map_on_compiler_threads(tasks, tc.num_worker_threads, |task| CheckResult {
             output: run_check_task(&task, &nrenv, tc),
             val_name: task.val_name.clone(),
