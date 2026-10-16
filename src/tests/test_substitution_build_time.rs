@@ -1,10 +1,9 @@
 // Putting an expression where a name stands walks only the subexpressions the name is free in, and
 // the bodies a symbol receives go in together, so the cost of a substitution follows the places it
-// changes. A function calling a scope builtin
-// many times is where that matters: the optimizer moves the body of each call's function into the
-// caller and looks for each name's uses there, and a walk over all of the caller for each of them
-// takes a time that grows with the square of the calls. The deadline on the build is what measures
-// that.
+// changes. A function calling a scope builtin many times is where that matters: the optimizer moves
+// the body of each call's function into the caller and looks for each name's uses there, and a walk
+// over all of the caller for each of them takes a time that grows with the square of the calls. The
+// deadline on the build is what measures that.
 
 #[cfg(test)]
 mod tests {
