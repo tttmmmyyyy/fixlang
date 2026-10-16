@@ -68,7 +68,7 @@ Run these aspects in this order, each in its own subagent. The **flag-only** asp
 
 ## Procedure
 
-**Running an aspect** (used in the steps below): extract its section from this file — everything from `## Aspect: <aspect-name>` up to (but not including) the next `## Aspect:` heading or end of file, all `### ...` sub-sections included — then launch one subagent via `Agent` (subagent_type: `general-purpose`), brief it with the prompt template below (substitute the aspect name, the base ref, the *Review Radius* section, and the extracted aspect text inline; do **not** tell it to open `SKILL.md`), and **wait** for it to finish before starting the next. Never use `run_in_background`.
+**Running an aspect** (used in the steps below): extract its section from this file — everything from `## Aspect: <aspect-name>` up to (but not including) the next `## Aspect:` heading or end of file, all `### ...` sub-sections included — then launch one subagent via `Agent` (subagent_type: `general-purpose`), brief it with the prompt template below (substitute the aspect name, the base ref, the *Review Radius* section, and the extracted aspect text inline, and for `comment-style` the *Wording* section of `.claude/skills/devdoc/SKILL.md` as well — from `## Wording` up to the next `## ` heading; do **not** tell it to open `SKILL.md`), and **wait** for it to finish before starting the next. Never use `run_in_background`.
 
 1. **Resolve the base ref** from the argument:
    - empty → ask the user which scope they want using `AskUserQuestion`. Offer four options; the free-text option the tool adds covers any git ref the user wants to name:
@@ -172,14 +172,22 @@ around, nor made stale, as cleanup candidates.
 ----- END RADIUS RULES -----
 
 The full instructions for this aspect follow between the BEGIN/END
-markers. Treat them, together with the radius rules, as your sole
-instructions. Do not look elsewhere for additional conventions.
+markers. Treat them, together with the radius rules and the devdoc
+wording conventions when they are given, as your sole instructions. Do
+not look elsewhere for additional conventions.
 
 ----- BEGIN ASPECT INSTRUCTIONS -----
 <paste the full text of `## Aspect: <aspect-name>` here, including all
 its `### ...` sub-sections, up to but not including the next
 `## Aspect:` heading or the end of file>
 ----- END ASPECT INSTRUCTIONS -----
+
+<for comment-style only:>
+----- BEGIN DEVDOC WORDING -----
+<paste the full text of the `## Wording` section of
+.claude/skills/devdoc/SKILL.md here, including its `### ...`
+sub-sections>
+----- END DEVDOC WORDING -----
 
 Apply the edits the aspect prescribes inside the hunks. If you modified
 code, run `cargo check` afterwards to confirm the project still builds.
@@ -907,7 +915,9 @@ Comments are read by people coming to the code fresh. They want to know *what th
 
 **Rewrite**: drop the historical narrative. State the current behavior on its own terms.
 
-**Keep** a "why" reference to history *only* when the implementation departs from what a reader would naturally expect, and the past explains the departure — e.g., "we don't use approach X here because of bug #1234" or "the obvious recursion is unrolled to avoid stack overflow on deeply nested input." The test: would a fresh reader, seeing the code, be surprised by the choice and benefit from knowing why?
+**Keep** a "why" reference to history *only* when the implementation departs from what a reader would naturally expect, and the past explains the departure — e.g., "walks the list twice, since a single pass reordered the effects (#1234)" or "the obvious recursion is unrolled to avoid stack overflow on deeply nested input." The test: would a fresh reader, seeing the code, be surprised by the choice and benefit from knowing why?
+
+**A changelog entry is outside this convention.** It records a change, so what the program did before is part of what it says; the **[Changelog]** conventions decide what it carries.
 
 #### The project's own text is in English — [Rust + Markdown]
 
@@ -973,40 +983,9 @@ Test comment shape (for `#[test]` functions): the comment must state *what persp
 **Apply**: when a Rust item appears in the diff hunks (newly added, or its signature line was modified) and has no `///` directly above it, write one in the shape above.
 **Flag instead of writing boilerplate.** If you cannot articulate the item's purpose without restating its name, surface it as a flagged item rather than writing filler — the missing description may signal the item itself is redundant or poorly named.
 
-#### Write in the affirmative — [Rust + Markdown]
+#### The wording conventions of the devdoc skill — [Rust + Markdown]
 
-State what *is*, not what *isn't*. Two anti-patterns to catch, both applying to Rust comments and Markdown prose alike:
-
-**(a) Negating a rejected alternative in a definition or explanation.** Forms like "not A but B", "B rather than A", "A is wrong; B" name a rejected option, an alternative term, or a passing misunderstanding (A) only to knock it down. A reader who never had A in mind gains nothing from "it's not A" — it just makes them wonder what A was. Describe B directly.
-- *Before*: `/// Not a deep copy — shares the backing buffer.`
-- *After*: `/// Shares the backing buffer.`
-
-**(b) Negating an unnecessary action in a procedure or guide.** Forms like "you don't need to do X" describe a non-action. State only what the reader must do.
-- *Before*: `The caller does not need to lock the mutex first.`
-- *After*: drop it, or if the locking discipline is load-bearing, `Acquires the mutex internally.`
-
-**Keep** genuine prohibitions and deprecations — "must not be called after `close()`", "callers should not rely on the ordering here". These regulate future behavior rather than negating a phantom alternative, so they belong.
-
-**Rewrite** (a) and (b) into the affirmative equivalent. When the negation carries no residual information once affirmed, drop the sentence.
-
-#### Name a thing the way the reader's own code names it — [Rust + Markdown]
-
-An identifier the reader's code carries is vocabulary they already share with the text, and a word they can search for. In a Rust comment that is the compiler's: write `FullName`, not "the full name"; `CTypeShape`, not "the shape a C declaration carries". A paraphrase makes a second name for one thing and cuts the way back to the code, and a translated paraphrase cuts it twice.
-
-**Which code that is follows from who reads the text.** A Fix programmer reading the manual or `CHANGELOG.md` shares Fix's names — `FFI_EXPORT`, `I8`, `Std::Array::get_size` — and shares nothing with the compiler's source, so a compiler identifier there names something they cannot reach. Say what they can see instead. (`Write changelog entries for the user` says the same of the changelog, from the other side.)
-
-Where the reader's code names nothing, say what the thing is rather than inventing a word for it. A word coined to carry a concept through a few paragraphs — a "position" for a parameter or a result, a "slot", a "unit" — means nothing to a reader who meets it once and has nowhere to look it up. The test: can the sentence be written without the coined word? It usually can, and is shorter for it.
-
-**Rewrite**: put the reader's identifier where a paraphrase of it stands, and what it stands for where a coined word stands.
-
-#### Reference by name, not by line or section number — [Rust + Markdown]
-
-Point at things by a name the reader can search for — a function, type, module, or a section's title — not by a line number or a numbered position ("line 214", "section 4.2", "the third bullet", "rule 5 above"). Line and section numbers drift the moment anything above them is edited, so the reference silently goes stale and points at the wrong place.
-
-- *Before*: `// see the check on line 214` / `// as described in section 4.2`
-- *After*: `// see resolve_symbol` / `// as described under "Scope Discipline"`
-
-**Rewrite**: replace the numeric locator with the name of the thing it points to.
+The *Wording* section of the `devdoc` skill, given below these instructions, holds three conventions for all prose in this repository: *Write in the affirmative*, *Name a thing the way the reader's own code names it*, and *Reference by name, not by line or section number*. Apply them here as conventions of this aspect, each with the rewrite it prescribes.
 
 #### Tell the user how to use the thing, not everything it does — [User docs]
 
@@ -1024,7 +1003,7 @@ The test, for each sentence the diff adds: **would a user who never reads it wri
 
 #### Write changelog entries for the user, and keep them short — [Changelog]
 
-A changelog entry is read by a Fix programmer working out what an upgrade means for their code, so it says what they can now observe or now have to do. Two anti-patterns to catch:
+A changelog entry is read by a Fix programmer working out what an upgrade means for their code, so it says what they can now observe or now have to do. The test, for each sentence: **does a Fix programmer need it to know what changed for their program, or what to do about it?** "It used to do X; it now does Y" passes. "It does Y because the compiler does W inside" fails: a reason that lies in the implementation is the developers' knowledge, and the user follows Y whatever its cause. Two anti-patterns the test catches most often:
 
 **(a) Compiler internals as the subject.** Names of compiler passes, IR stages, compiler modules, worker threads, data structures, and allocation strategies mean nothing to a reader who never opens the compiler's source, and they leave the entry saying nothing about the user's program. Describe the behavior the user sees; bring the mechanism in only where it decides what they do — a flag to pass, a construct to prefer, a workaround they can now drop.
 - *Before*: `The array read loop's bounds check is now folded away by the RC-IR simplifier before the LLVM vectorizer runs.`
@@ -1032,7 +1011,7 @@ A changelog entry is read by a Fix programmer working out what an upgrade means 
 
 **(b) Everything the author learned.** One change is one entry, in a sentence or two: what changed, and what the reader does about it. The investigation, the symptoms along the way, and the reasoning behind the design belong in the commit message and the PR.
 
-**Rewrite**: state the observable change, then cut every sentence that neither describes it nor tells the reader what to do.
+**Rewrite**: state the observable change, then cut every sentence that fails the test — one that neither describes the change nor tells the reader what to do, and one that explains the change by the compiler's inside.
 
 #### Leave out fixes for bugs that never shipped — [Changelog]
 
@@ -1056,7 +1035,7 @@ An entry states the change in a sentence or two; the numbers are what take a rea
 1. Run `git diff <base>` to find changed files and the touched line ranges. Three file kinds are in scope:
    - **Rust source** (`.rs`): all conventions apply.
    - **Hand-written Markdown docs** (`.md`) — e.g. `Document.md`, `README.md`, docs under `docs/`: only the **[Rust + Markdown]** and **[User docs]** conventions apply. **Exclude generated docs** under `std_doc/` (regenerated from source, so a hand edit would be overwritten) **and dev docs** under `dev-docs/` (written for the people working on the change, under the `devdoc` skill's conventions).
-   - **`CHANGELOG.md`**: the **[Rust + Markdown]** and **[Changelog]** conventions apply, within the `## [Unreleased]` section alone. Entries under a released version heading record what that release shipped, so they stay as written.
+   - **`CHANGELOG.md`**: the **[Rust + Markdown]** conventions other than *Don't narrate history* and the **[Changelog]** conventions apply, within the `## [Unreleased]` section alone. Entries under a released version heading record what that release shipped, so they stay as written.
 2. For each changed `.rs` file, examine:
    - (a) comments that appear in the diff hunks (added or modified lines), for the rewriting conventions;
    - (b) Rust items defined or whose signature was modified in the diff hunks, for the *Every Rust item must have a doc comment* convention.

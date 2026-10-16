@@ -43,7 +43,44 @@ Write the doc in the implementers' language. It does not have to be English.
 
 Where that language is English, write it plainly: a reader need not be a native speaker, and a long sentence or a rare word costs them more than it costs a native reader.
 
-Name a thing the way the reader's own code names it. A doc addressed to the implementers shares the compiler's names, so write `FullName`, not "the full name": an identifier is vocabulary they already have and can search for, while a paraphrase — a translated one above all — makes a second name for one thing. Where their code names nothing, say what the thing is rather than coining a word for it: a word invented for a few paragraphs gives the reader nowhere to look it up.
+## Wording
+
+The conventions of this section hold for every piece of prose in this repository: a dev doc, a pull request or issue body, a comment in the code, a hand-written Markdown document. The `code-review` skill's `comment-style` aspect applies them to comments and documents.
+
+### Write in the affirmative
+
+State what *is*, not what *isn't*. Two forms to catch:
+
+**(a) Negating a rejected alternative in a definition or explanation.** Forms like "not A but B", "B rather than A", "A is wrong; B" — in a Japanese text 「A ではなく B」「A というより B」「A は誤りで B」 — name a rejected option, an alternative term, or a passing misunderstanding (A) only to knock it down. A reader who never had A in mind gains nothing from "it's not A"; it only makes them wonder what A was. Describe B directly.
+- *Before*: `/// Not a deep copy — shares the backing buffer.`
+- *After*: `/// Shares the backing buffer.`
+
+**(b) Negating an unnecessary action in a procedure or guide.** Forms like "you don't need to do X" describe a non-action. State only what the reader must do.
+- *Before*: `The caller does not need to lock the mutex first.`
+- *After*: drop it, or if the locking discipline is load-bearing, `Acquires the mutex internally.`
+
+**Keep** genuine prohibitions and deprecations — "must not be called after `close()`", "callers should not rely on the ordering here". These regulate future behavior rather than negating a phantom alternative, so they belong.
+
+**Rewrite** (a) and (b) into the affirmative equivalent. When the negation carries no residual information once affirmed, drop the sentence.
+
+### Name a thing the way the reader's own code names it
+
+An identifier the reader's code carries is vocabulary they already share with the text, and a word they can search for. A text addressed to the people working on the compiler shares the compiler's names: write `FullName`, not "the full name"; `CTypeShape`, not "the shape a C declaration carries". A paraphrase makes a second name for one thing and cuts the way back to the code, and a translated paraphrase cuts it twice.
+
+**Which code that is follows from who reads the text.** A Fix programmer reading the manual or `CHANGELOG.md` shares Fix's names — `FFI_EXPORT`, `I8`, `Std::Array::get_size` — and shares nothing with the compiler's source, so a compiler identifier there names something they cannot reach. Say what they can see instead.
+
+Where the reader's code names nothing, say what the thing is rather than inventing a word for it. A word coined to carry a concept through a few paragraphs — a "position" for a parameter or a result, a "slot", a "unit" — means nothing to a reader who meets it once and has nowhere to look it up. The test: can the sentence be written without the coined word? It usually can, and is shorter for it.
+
+**Rewrite**: put the reader's identifier where a paraphrase of it stands, and what it stands for where a coined word stands.
+
+### Reference by name, not by line or section number
+
+Point at things by a name the reader can search for — a function, type, module, or a section's title — not by a line number or a numbered position ("line 214", "section 4.2", "the third bullet", "rule 5 above"). Line and section numbers drift the moment anything above them is edited, so the reference silently goes stale and points at the wrong place.
+
+- *Before*: `// see the check on line 214` / `// as described in section 4.2`
+- *After*: `// see resolve_symbol` / `// as described under "Scope Discipline"`
+
+**Rewrite**: replace the numeric locator with the name of the thing it points to.
 
 ## Audience and self-containedness
 
