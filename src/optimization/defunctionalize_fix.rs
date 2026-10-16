@@ -35,6 +35,7 @@ use crate::{
         traverse::{ExprVisitor, StartVisitResult, VisitState},
         types::{type_fun, TyCon, TyConInfo},
     },
+    constants::FIX_DEFUNCT_SUFFIX,
     misc::{Map, Set},
     optimization::{
         capture_struct::{captured_fields, CaptureStruct},
@@ -135,7 +136,7 @@ fn run_one(
         let expr = normalize_for_lift(sym.expr.as_ref().unwrap(), &arity_map);
 
         let mut visitor = FixDefunctionalizer::new(
-            GlobalNames::new(existing_names.clone(), name.clone(), "#fix_defunct"),
+            GlobalNames::new(existing_names.clone(), name.clone(), FIX_DEFUNCT_SUFFIX),
             global_lambdas.clone(),
             global_fix_refs.clone(),
         );

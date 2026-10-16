@@ -52,7 +52,10 @@ impl GlobalNames {
         loop {
             let mut name = self.symbol.clone();
             *name.name_as_mut() += &format!("{}{}", self.suffix, self.counter);
-            self.counter += 1;
+            self.counter = self
+                .counter
+                .checked_add(1)
+                .expect("a walk minted more names than its counter counts");
             if !self.existing.contains(&name) {
                 return name;
             }
