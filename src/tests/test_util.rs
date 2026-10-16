@@ -611,6 +611,32 @@ pub fn build_peak_memory(
     peak
 }
 
+/// Builds `source` at `opt_level` and asserts that the compiler held less than `bound` bytes of
+/// resident memory, where the platform reports the figure (see `build_peak_memory`). Fails the test
+/// unless the build finishes within `timeout` and exits successfully.
+///
+/// # Arguments
+/// * `description` — what is being compiled, as a phrase that reads after "compiling": it is what a
+///   failure names, e.g. "a nest of 256 matches".
+pub fn assert_build_peak_memory_below(
+    source: &str,
+    opt_level: &str,
+    timeout: Duration,
+    bound: u64,
+    description: &str,
+) {
+    let Some(peak) = build_peak_memory(source, opt_level, timeout, description) else {
+        return;
+    };
+    assert!(
+        peak < bound,
+        "compiling {} held {} MB, over the {} MB this shape is allowed",
+        description,
+        peak / (1024 * 1024),
+        bound / (1024 * 1024)
+    );
+}
+
 /// The highest resident memory the process `pid` has held, in bytes, read from `/proc/<pid>/status`.
 /// `None` where that file does not exist — the process has exited, or the platform has no `/proc`.
 fn peak_resident_bytes(pid: u32) -> Option<u64> {

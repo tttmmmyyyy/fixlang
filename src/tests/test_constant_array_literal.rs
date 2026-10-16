@@ -7,8 +7,8 @@
 mod tests {
     use crate::configuration::{Configuration, FixOptimizationLevel};
     use crate::tests::test_util::{
-        assert_global_read_from_many_units_is_held_once, build_run_and_read_rc_ir,
-        build_within_and_run, test_source,
+        assert_build_peak_memory_below, assert_global_read_from_many_units_is_held_once,
+        build_run_and_read_rc_ir, build_within_and_run, test_source,
     };
     use std::time::Duration;
 
@@ -205,6 +205,44 @@ mod tests {
             },
             (ELEMENT_COUNT * 8) as u64,
             "a table read from many compilation units",
+        );
+    }
+
+    /// A global array literal of 40,000 numbers, read seventy times by `main`, builds in memory
+    /// that does not grow with the literal. The literal is put at each of the seventy places, and
+    /// the optimizer copies an operation wherever it copies or rewrites the expression holding it,
+    /// so a copy of the literal's operation that copies its elements holds them once per copy,
+    /// several gigabytes in all.
+    #[test]
+    fn test_a_long_array_literal_read_many_times_builds_in_little_memory() {
+        const ELEMENT_COUNT: usize = 40000;
+        const READS: usize = 70;
+        let elements = (0..ELEMENT_COUNT)
+            .map(|i| format!("{}_U64", i * 7919))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let reads = (0..READS)
+            .map(|k| format!("table.@((n * {}) % {}).i64", k + 3, ELEMENT_COUNT))
+            .collect::<Vec<_>>()
+            .join(" + ");
+        let source = format!(
+            "module Main;\n\
+             \n\
+             table : Array U64;\n\
+             table = [{elements}];\n\
+             \n\
+             main : IO ();\n\
+             main = (let n = (*get_args).@size; println(({reads}).to_string));\n"
+        );
+        assert_build_peak_memory_below(
+            &source,
+            "max",
+            Duration::from_secs(120),
+            1500 * 1024 * 1024,
+            &format!(
+                "a global array literal of {} numbers read {} times",
+                ELEMENT_COUNT, READS
+            ),
         );
     }
 

@@ -1,9 +1,11 @@
 use crate::env_vars::MAX_OPT_LEVEL_VAR;
 use crate::tests::test_util::{
-    assert_global_read_from_many_units_is_held_once, build_run_and_read_rc_ir, emitted_llvm_ir,
-    emitted_llvm_ir_modules, fix_build_source_command, llvm_function_bodies, EmittedIr,
+    assert_build_peak_memory_below, assert_global_read_from_many_units_is_held_once,
+    build_run_and_read_rc_ir, emitted_llvm_ir, emitted_llvm_ir_modules, fix_build_source_command,
+    llvm_function_bodies, EmittedIr,
 };
 use std::path::Path;
+use std::time::Duration;
 use tempfile::TempDir;
 
 /// A program with two globals the compiler decides differently about.
@@ -399,6 +401,41 @@ fn test_a_global_string_literal_read_from_many_compilation_units_is_held_once() 
         |step| format!("|i| text.get_bytes.@((i * {step}) % {LITERAL_BYTES}).i64"),
         LITERAL_BYTES as u64,
         "a global string literal read from many compilation units",
+    );
+}
+
+/// A global string literal of a megabyte, read a hundred times by `main`, builds in memory that
+/// does not grow with the literal. The literal is put at each of the hundred places, and the
+/// optimizer copies an operation wherever it copies or rewrites the expression holding it, so a
+/// copy of the literal's operation that copies its bytes holds them once per copy, several
+/// gigabytes in all.
+#[test]
+fn test_a_long_global_string_literal_read_many_times_builds_in_little_memory() {
+    const LITERAL_BYTES: usize = 1000000;
+    const READS: usize = 100;
+    let literal = "0123456789".repeat(LITERAL_BYTES / 10);
+    let reads = (0..READS)
+        .map(|k| format!("text.get_bytes.@((n * {}) % {}).i64", k + 3, LITERAL_BYTES))
+        .collect::<Vec<_>>()
+        .join(" + ");
+    let source = format!(
+        "module Main;\n\
+         \n\
+         text : String;\n\
+         text = \"{literal}\";\n\
+         \n\
+         main : IO ();\n\
+         main = (let n = (*get_args).@size; println(({reads}).to_string));\n"
+    );
+    assert_build_peak_memory_below(
+        &source,
+        "max",
+        Duration::from_secs(120),
+        1500 * 1024 * 1024,
+        &format!(
+            "a {}-byte global string literal read {} times",
+            LITERAL_BYTES, READS
+        ),
     );
 }
 
