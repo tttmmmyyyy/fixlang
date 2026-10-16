@@ -670,7 +670,15 @@ impl<'c> Inliner<'c> {
         if !self.take_budget_for(name) {
             return None;
         }
-        Some(self.symbols.get(name).unwrap().expr.as_ref().unwrap().clone())
+        Some(
+            self.symbols
+                .get(name)
+                .unwrap()
+                .expr
+                .as_ref()
+                .unwrap()
+                .clone(),
+        )
     }
 }
 
