@@ -53,7 +53,6 @@ use crate::{
         program::Symbol,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
-    constants::CAP_NAME,
     misc::Map,
     optimization::rename::{rename_free_name, substitute_free_name},
 };
@@ -217,13 +216,11 @@ impl FreeOccurrenceProbe {
     /// A probe that has found nothing yet, for occurrences of `target_name`.
     fn new(target_name: FullName) -> Self {
         // The traversal locates occurrences by the free variables of each subexpression, so it can
-        // only probe a name that free variables account for. `CAP_NAME` is the one name they do
-        // not: a lambda expression binds it implicitly, and it is absent from the free variables of
-        // every lambda expression whose body reads it.
+        // only probe a name that free variables locate.
         assert!(
-            !(target_name.is_local() && target_name.name == CAP_NAME),
+            ExprNode::is_located_by_free_vars(&target_name),
             "occurrences of `{}` cannot be probed",
-            CAP_NAME
+            target_name.to_string()
         );
         Self {
             target_name,

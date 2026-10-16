@@ -33,6 +33,13 @@ pub enum UsageType {
 // written. An occurrence of a local `name` standing under an inner binding of the same name is a use
 // of that binding, and stays out of the result.
 pub fn run(expr: &Arc<ExprNode>, name: &FullName) -> Vec<UsageType> {
+    // The walk enters a subexpression only where `name` is free in it, so it can only look for a
+    // name that free variables locate.
+    assert!(
+        ExprNode::is_located_by_free_vars(name),
+        "the uses of `{}` cannot be found",
+        name.to_string()
+    );
     let mut usages = Vec::new();
     let mut finder = UsageFinder {
         name,
@@ -68,6 +75,12 @@ impl UsageFinder<'_> {
 }
 
 impl ExprVisitor for UsageFinder<'_> {
+    /// Whether the walk enters `expr`: only where the name occurs free in it. A subexpression the
+    /// name is not free in holds no use of it, or only uses of an inner binding of the same name.
+    fn should_visit(&self, expr: &Arc<ExprNode>) -> bool {
+        expr.has_free_var(self.name)
+    }
+
     // The name standing anywhere the calls and the struct expressions below did not already take it
     // from is held as a value there, which is what `Elsewhere` records.
     fn start_visit_var(
