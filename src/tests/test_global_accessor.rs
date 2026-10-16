@@ -365,8 +365,8 @@ const GREETING_GLOBAL: &str = "Main::greeting";
 /// A global whose body is a string literal is put at every name.
 ///
 /// The literal reads its bytes out of a constant in the program's data, so a copy of it at each
-/// name allocates nothing, and the global it would otherwise stand in puts an initialization flag
-/// and a load in front of every read.
+/// name allocates nothing. Reading a global tests an initialization flag and loads the storage on
+/// every read.
 #[test]
 fn test_a_global_string_literal_is_put_at_every_name() {
     let dump = build_run_and_read_rc_ir(
@@ -389,8 +389,9 @@ fn test_a_global_string_literal_is_put_at_every_name() {
     assert_no_global_is_kept_for(&dump, GREETING_GLOBAL);
 }
 
-/// A global string literal read from many compilation units is held once by the program. The
-/// literal is put at each name, so each unit reading it defines the literal's storage, and the
+/// A global string literal read from many compilation units is held once by the program.
+///
+/// The literal is put at each name, so each unit reading it defines the literal's storage, and the
 /// linker keeps one of those definitions.
 #[test]
 fn test_a_global_string_literal_read_from_many_compilation_units_is_held_once() {
