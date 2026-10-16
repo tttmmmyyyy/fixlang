@@ -196,10 +196,10 @@ struct FixDefunctionalizer {
     minted_names: MintedNames,
     /// Functions lifted out during this traversal.
     lifted: Vec<LiftedFix>,
-    /// Local lambda bindings `let name = |..| ..`, so `fix(name)` — a `fix` whose argument is a
-    /// let-bound lambda that could not be inlined into the call (e.g. it is used more than once) —
-    /// resolves to the lambda. Names are unique across the symbol (`unique_local_names` ran), so one
-    /// flat map needs no scoping.
+    /// The lambda each local `let name = |..| ..` binds, so that `fix(name)` resolves to the lambda.
+    /// Such a `fix` remains where the lambda could not be inlined into the call, e.g. because it is
+    /// used more than once. `unique_local_names` has made local names unique across the symbol, so
+    /// one flat map covers every scope.
     local_lambdas: Map<FullName, Arc<ExprNode>>,
     /// The lambda defining each global function, shared across symbols.
     global_lambdas: GlobalLambdas,
@@ -208,6 +208,7 @@ struct FixDefunctionalizer {
 }
 
 impl FixDefunctionalizer {
+    /// A traversal that has lifted nothing yet.
     fn new(
         minted_names: MintedNames,
         global_lambdas: GlobalLambdas,
