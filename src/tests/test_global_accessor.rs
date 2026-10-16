@@ -1,9 +1,8 @@
 use crate::env_vars::MAX_OPT_LEVEL_VAR;
 use crate::tests::test_util::{
-    build_program, build_run_and_read_rc_ir, emitted_llvm_ir, emitted_llvm_ir_modules,
-    fix_build_source_command, llvm_function_bodies, EmittedIr,
+    assert_global_read_from_many_units_is_held_once, build_run_and_read_rc_ir, emitted_llvm_ir,
+    emitted_llvm_ir_modules, fix_build_source_command, llvm_function_bodies, EmittedIr,
 };
-use std::fs;
 use std::path::Path;
 use tempfile::TempDir;
 
@@ -389,54 +388,17 @@ fn test_a_global_string_literal_is_put_at_every_name() {
     assert_no_global_is_kept_for(&dump, GREETING_GLOBAL);
 }
 
-/// A global string literal read from many compilation units is held once by the program.
-///
-/// The literal is put at each name, so each unit reading it defines the literal's storage, and the
-/// linker keeps one of those definitions.
+/// A global string literal read from many compilation units is held once by the program, as a
+/// literal put at each name has to be for the copies to cost nothing.
 #[test]
 fn test_a_global_string_literal_read_from_many_compilation_units_is_held_once() {
     const LITERAL_BYTES: usize = 160000;
-    const READER_COUNT: usize = 12;
     let literal = "0123456789".repeat(LITERAL_BYTES / 10);
-    // Each reader is exported, so that it keeps a unit of its own at `--cu-size 1`.
-    let readers = (0..READER_COUNT)
-        .map(|k| {
-            format!(
-                "reader{k} : I64 -> I64;\n\
-                 reader{k} = |i| long.get_bytes.@((i * {step}) % {size}).i64;\n\
-                 FFI_EXPORT[reader{k}, fixtest_reader{k}];\n",
-                k = k,
-                step = k + 3,
-                size = LITERAL_BYTES
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    let source = format!(
-        "module Main;\n\
-         \n\
-         long : String;\n\
-         long = \"{literal}\";\n\
-         \n\
-         {readers}\n\
-         main : IO ();\n\
-         main = println(reader0(1).to_string);\n"
-    );
-    let (_temp_dir, program) = build_program(
-        &source,
-        "max",
-        &["--cu-size", "1"],
-        None,
+    assert_global_read_from_many_units_is_held_once(
+        &format!("text : String;\ntext = \"{literal}\";"),
+        |step| format!("|i| text.get_bytes.@((i * {step}) % {LITERAL_BYTES}).i64"),
+        LITERAL_BYTES as u64,
         "a global string literal read from many compilation units",
-    );
-    let program_bytes = fs::metadata(&program)
-        .expect("Failed to read the size of the program")
-        .len();
-    assert!(
-        program_bytes < 2 * LITERAL_BYTES as u64,
-        "the program takes {} bytes, which holds the {}-byte literal more than once",
-        program_bytes,
-        LITERAL_BYTES
     );
 }
 
