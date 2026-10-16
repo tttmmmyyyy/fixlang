@@ -1006,8 +1006,8 @@ The test, for each sentence the diff adds: **would a user who never reads it wri
 A changelog entry is read by a Fix programmer working out what an upgrade means for their code, so it says what they can now observe or now have to do. The test, for each sentence: **does a Fix programmer need it to know what changed for their program, or what to do about it?** "It used to do X; it now does Y" passes. "It does Y because the compiler does W inside" fails: a reason that lies in the implementation is the developers' knowledge, and the user follows Y whatever its cause. Two anti-patterns the test catches most often:
 
 **(a) Compiler internals as the subject.** Names of compiler passes, IR stages, compiler modules, worker threads, data structures, and allocation strategies mean nothing to a reader who never opens the compiler's source, and they leave the entry saying nothing about the user's program. Describe the behavior the user sees; bring the mechanism in only where it decides what they do — a flag to pass, a construct to prefer, a workaround they can now drop.
-- *Before*: `The array read loop's bounds check is now folded away by the RC-IR simplifier before the LLVM vectorizer runs.`
-- *After*: `Loops that read array elements one by one are faster.`
+- *Before*: `The FFI_EXPORT name check now runs in the resolver before type checking, so the mangled-name table never sees two entries for one C name.`
+- *After*: `Two FFI_EXPORT declarations that give one C name are now reported as an error.`
 
 **(b) Everything the author learned.** One change is one entry, in a sentence or two: what changed, and what the reader does about it. The investigation, the symptoms along the way, and the reasoning behind the design belong in the commit message and the PR.
 
