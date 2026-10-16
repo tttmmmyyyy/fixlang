@@ -105,6 +105,7 @@ mod test_trait_implementable_type;
 mod test_type_node_identity;
 mod test_type_sign_in_trait_impl;
 mod test_typecheck_cache;
+mod test_typecheck_threads;
 mod test_unbox_destructure;
 mod test_undefined;
 mod test_undefined_bits;

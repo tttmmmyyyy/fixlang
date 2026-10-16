@@ -543,9 +543,9 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        char_pos_to_utf16_pos, join_compiler_threads, spawn_compiler_thread,
-        split_at_name_boundaries, split_string_by_space_not_quated, upper_camel_to_lower_snake,
-        utf16_pos_to_utf8_byte_pos, Set,
+        char_pos_to_utf16_pos, join_compiler_threads, map_on_compiler_threads,
+        spawn_compiler_thread, split_at_name_boundaries, split_string_by_space_not_quated,
+        upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos, Set,
     };
     use crate::error::any_to_string;
     use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -593,6 +593,37 @@ mod tests {
 
         let payload = catch_unwind(AssertUnwindSafe(|| join_compiler_threads(threads)))
             .expect_err("the worker's panic is carried on");
+        assert_eq!(any_to_string(&*payload), MESSAGE);
+    }
+
+    /// The results come back in the order of the items, whatever order the threads finish them in.
+    #[test]
+    fn test_map_on_compiler_threads_returns_results_in_the_order_of_the_items() {
+        const ITEM_COUNT: u64 = 8;
+        let items = (0..ITEM_COUNT).collect::<Vec<_>>();
+        let results = map_on_compiler_threads(items.clone(), 4, |i| {
+            // The earlier an item, the longer it takes, so the threads finish the items in an order
+            // other than theirs.
+            thread::sleep(Duration::from_millis(50 * (ITEM_COUNT - i)));
+            i * 10
+        });
+        assert_eq!(results, items.iter().map(|i| i * 10).collect::<Vec<_>>());
+    }
+
+    /// A panic of `f` on one item is carried on with its own payload, so the renderer the compiler
+    /// reports through still finds the message in it.
+    #[test]
+    fn test_map_on_compiler_threads_carries_the_panic_of_f_with_its_payload() {
+        const MESSAGE: &str = "f panics on purpose";
+        let payload = catch_unwind(AssertUnwindSafe(|| {
+            map_on_compiler_threads((0..8).collect(), 4, |i| {
+                if i == 5 {
+                    panic!("{}", MESSAGE);
+                }
+                i
+            })
+        }))
+        .expect_err("the panic of f is carried on");
         assert_eq!(any_to_string(&*payload), MESSAGE);
     }
 
