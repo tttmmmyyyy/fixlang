@@ -173,8 +173,8 @@ pub fn build_program(
 /// defines its storage, so that the unit sees what it holds, and the linker keeps one of those
 /// definitions.
 ///
-/// The bound holds the program's own code as well, so `held_bytes` has to dwarf it: a few hundred
-/// kilobytes and up.
+/// The program's own code counts toward the bound as well, so `held_bytes` has to be much larger
+/// than the code: a few hundred kilobytes or more.
 ///
 /// # Arguments
 /// * `global` - the declaration and the definition of the global the readers read.
@@ -607,8 +607,8 @@ fn build_peak_memory(
 }
 
 /// Builds `source` at `opt_level` and asserts that the compiler held less than `bound` bytes of
-/// resident memory, where the platform reports the figure (see `build_peak_memory`). Fails the test
-/// unless the build finishes within `timeout` and exits successfully.
+/// resident memory. The figure is read from `/proc`, so the assertion runs on Linux alone. Fails the
+/// test unless the build finishes within `timeout` and exits successfully.
 ///
 /// Use this for a test whose subject is how much memory a build takes: a compiler that builds a term
 /// it goes on to discard shows it here, where the time it takes may stay within the noise of the code
@@ -637,8 +637,8 @@ pub fn assert_build_peak_memory_below(
 }
 
 /// Builds, at `-O max`, a program whose `main` sums `read_count` reads of the global `global`
-/// defines, and asserts that the compiler held less than 1500 MB of resident memory (see
-/// `assert_build_peak_memory_below`).
+/// defines, and asserts that the compiler held less than 1500 MB of resident memory. The figure is
+/// read from `/proc`, so the assertion runs on Linux alone.
 ///
 /// # Arguments
 /// * `global` - the declaration and the definition of the global the reads read.

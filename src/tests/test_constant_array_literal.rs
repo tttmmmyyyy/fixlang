@@ -8,7 +8,8 @@ mod tests {
     use crate::configuration::{Configuration, FixOptimizationLevel};
     use crate::tests::test_util::{
         assert_global_read_from_many_units_is_held_once,
-        assert_global_read_many_times_builds_in_little_memory, build_run_and_read_rc_ir, build_within_and_run, test_source,
+        assert_global_read_many_times_builds_in_little_memory, build_run_and_read_rc_ir,
+        build_within_and_run, test_source,
     };
     use std::time::Duration;
 
