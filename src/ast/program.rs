@@ -42,8 +42,7 @@ use crate::graph::Graph;
 use crate::hash::HashSource;
 use crate::metafiles::project_file::ProjectName;
 use crate::misc::{
-    collect_results, insert_to_map_vec_many, join_compiler_threads, spawn_compiler_thread,
-    to_absolute_path, Map, Set,
+    collect_results, insert_to_map_vec_many, map_on_compiler_threads, to_absolute_path, Map, Set,
 };
 use crate::parse::sourcefile::{SourcePos, Span};
 use crate::printer::Text;
@@ -56,7 +55,7 @@ use std::fs::File;
 use std::io::Write;
 use std::mem::replace;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::vec;
 
 /// A Fix value at one concrete type, under a name of its own. A generic definition becomes one
@@ -1465,41 +1464,9 @@ impl Program {
                 method_impl_idx: task.method_impl_idx,
             }
         }
-        let results: Vec<CheckResult> = if tc.num_worker_threads <= 1 || tasks.len() <= 1 {
-            // Run tasks in the main thread.
-            tasks.into_iter().map(run_check_task).collect()
-        } else {
-            // Run tasks in parallel via a shared work queue: every
-            // worker thread pops the next task from the same `Vec`
-            // until it is empty, so an idle worker immediately picks
-            // up whatever is left.
-            //
-            // Per-gv typecheck cost is highly uneven (cache hits cost
-            // ~30 μs, misses ~300 ms), so a static per-thread shard
-            // would leave cores idle whenever the misses cluster on
-            // one shard.
-            let queue = Arc::new(Mutex::new(tasks));
-            let mut threads = vec![];
-            for _ in 0..tc.num_worker_threads {
-                let queue = queue.clone();
-                let thread = spawn_compiler_thread(move || {
-                    let mut results = vec![];
-                    loop {
-                        let task = match queue.lock().unwrap().pop() {
-                            Some(task) => task,
-                            None => break,
-                        };
-                        results.push(run_check_task(task));
-                    }
-                    results
-                });
-                threads.push(thread);
-            }
-            join_compiler_threads(threads)
-                .into_iter()
-                .flatten()
-                .collect()
-        };
+        // Per-gv typecheck cost is highly uneven (cache hits cost ~30 μs, misses ~300 ms), which is
+        // what the work queue of `map_on_compiler_threads` absorbs.
+        let results = map_on_compiler_threads(tasks, tc.num_worker_threads, run_check_task);
 
         // Store the results into members of `self`.
         let mut errors = Errors::empty();
