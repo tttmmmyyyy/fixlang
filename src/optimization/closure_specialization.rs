@@ -1,6 +1,7 @@
 use super::{
-    capture_struct::{CaptureStruct, GlobalNames},
+    capture_struct::CaptureStruct,
     find_usage_of_name::{self, UsageType},
+    global_names::GlobalNames,
     move_bodies::move_bodies_into_callers,
     pull_let,
     rename::rename_free_names,

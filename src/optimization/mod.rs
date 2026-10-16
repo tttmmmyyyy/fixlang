@@ -9,6 +9,7 @@ mod defunctionalize_fix;
 #[allow(dead_code)]
 mod eta_expansion;
 mod find_usage_of_name;
+mod global_names;
 mod inline;
 mod inline_local;
 mod let_elimination;

@@ -37,7 +37,8 @@ use crate::{
     },
     misc::{Map, Set},
     optimization::{
-        capture_struct::{captured_fields, CaptureStruct, GlobalNames},
+        capture_struct::{captured_fields, CaptureStruct},
+        global_names::GlobalNames,
         let_elimination,
         rename::substitute_free_name,
         uncurry::{internalize_let_to_var_at_head, is_std_fix},

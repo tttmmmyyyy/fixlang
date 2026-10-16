@@ -21,7 +21,7 @@
 //! lines into the callers, where the struct a caller builds meets the pattern taking it apart and
 //! the two cancel, leaving the fields handed over one by one.
 
-use super::capture_struct::GlobalNames;
+use super::global_names::GlobalNames;
 use super::rename::generate_new_names;
 use super::unique_local_names;
 use crate::{
