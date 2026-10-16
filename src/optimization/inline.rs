@@ -136,9 +136,9 @@ fn thaw_symbols_naming(
 /// # Arguments
 /// * `develop_mode` — whether to substitute into each symbol of `stable_symbols` too, and fail where
 ///   that would change it.
-/// * `stable_symbols` — the symbols with nothing left to substitute into them, carried from round to
-///   round: a symbol listed here is passed through untouched, and a symbol this round leaves
-///   unchanged joins it.
+/// * `stable_symbols` — the symbols with nothing to substitute into them until a symbol they name
+///   gets a new expression, carried from round to round: a symbol listed here is passed through
+///   untouched, and a symbol this round leaves unchanged joins it.
 /// * `rewritten` — receives the name of each symbol this round substitutes into.
 fn run_one(
     prg: &mut Program,
@@ -197,14 +197,14 @@ fn run_one(
             sym.expr = Some(res.expr);
             inline_local::run_on_symbol(&mut sym, &global_lambda_to_arity);
         } else if !inliner.refused_for_budget {
-            // A round that substituted nothing and refused nothing has reached the symbol's end
-            // state. A symbol whose round refused a body it could not afford is asked again next
-            // round: the body may come back smaller, since `inline_local` reduces what the
-            // substitution left in every symbol the round changed.
+            // A round that substituted nothing and refused nothing leaves the symbol as it is
+            // until a symbol it names gets a new expression. A symbol whose round refused a body it
+            // could not afford is asked again next round: the body may come back smaller, since
+            // `inline_local` reduces what the substitution left in every symbol the round changed.
             stable_symbols.insert(name.clone());
         }
 
-        // The round may have left an expression that names nothing, which is the same end state.
+        // The round may have left an expression that names nothing, which nothing changes again.
         if sym.expr.as_ref().unwrap().free_vars().is_empty() {
             stable_symbols.insert(name.clone());
         }
