@@ -1302,25 +1302,24 @@ impl ExprNode {
     /// Does a key of `names` occur free in this expression? Looks up each name of the smaller of the
     /// two sets in the other.
     pub fn has_free_var_in<V>(&self, names: &Map<FullName, V>) -> bool {
-        self.has_free_var_of(names.len(), names.keys(), |name| names.contains_key(name))
+        self.has_free_var_of(names.keys(), |name| names.contains_key(name))
     }
 
     /// Does a name of `names` occur free in this expression? Looks up each name of the smaller of
     /// the two sets in the other.
     pub fn has_free_var_among(&self, names: &Set<FullName>) -> bool {
-        self.has_free_var_of(names.len(), names.iter(), |name| names.contains(name))
+        self.has_free_var_of(names.iter(), |name| names.contains(name))
     }
 
-    /// Does one of `count` names occur free in this expression? `names` lists them and `contains`
-    /// answers whether a name is one of them.
+    /// Does one of `names` occur free in this expression? `contains` answers whether a name is one
+    /// of them.
     fn has_free_var_of<'a>(
         &self,
-        count: usize,
-        mut names: impl Iterator<Item = &'a FullName>,
+        mut names: impl ExactSizeIterator<Item = &'a FullName>,
         contains: impl Fn(&FullName) -> bool,
     ) -> bool {
         self.with_free_vars(|free_vars| {
-            if count < free_vars.len() {
+            if names.len() < free_vars.len() {
                 names.any(|name| free_vars.contains(name))
             } else {
                 free_vars.iter().any(|name| contains(name))
