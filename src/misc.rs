@@ -61,10 +61,15 @@ where
     F: FnOnce() -> T + Send + 'static,
     T: Send + 'static,
 {
-    thread::Builder::new()
-        .stack_size(COMPILER_THREAD_STACK_SIZE)
+    compiler_thread_builder()
         .spawn(f)
         .expect("failed to spawn a compiler thread")
+}
+
+/// A builder of a thread whose stack (`COMPILER_THREAD_STACK_SIZE`) is large enough for the
+/// compiler's recursion over deeply nested user expressions.
+fn compiler_thread_builder() -> thread::Builder {
+    thread::Builder::new().stack_size(COMPILER_THREAD_STACK_SIZE)
 }
 
 /// The values the given threads returned, in the order the threads are given.
@@ -136,8 +141,7 @@ where
     let indexed_results = thread::scope(|scope| {
         let threads = (0..num_threads.min(item_count))
             .map(|_| {
-                thread::Builder::new()
-                    .stack_size(COMPILER_THREAD_STACK_SIZE)
+                compiler_thread_builder()
                     .spawn_scoped(scope, move || {
                         let mut results = vec![];
                         loop {
