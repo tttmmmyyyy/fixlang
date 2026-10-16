@@ -80,7 +80,7 @@ impl Substitutor {
             // The walk enters a subexpression only where a replaced name is free in it, so it can
             // only replace a name that free variables locate.
             assert!(
-                ExprNode::free_vars_locate(from),
+                ExprNode::is_located_by_free_vars(from),
                 "occurrences of `{}` cannot be substituted",
                 from.to_string()
             );

@@ -36,7 +36,7 @@ pub fn run(expr: &Arc<ExprNode>, name: &FullName) -> Vec<UsageType> {
     // The walk enters a subexpression only where `name` is free in it, so it can only look for a
     // name that free variables locate.
     assert!(
-        ExprNode::free_vars_locate(name),
+        ExprNode::is_located_by_free_vars(name),
         "the uses of `{}` cannot be found",
         name.to_string()
     );

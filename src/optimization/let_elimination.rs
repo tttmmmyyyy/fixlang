@@ -218,7 +218,7 @@ impl FreeOccurrenceProbe {
         // The traversal locates occurrences by the free variables of each subexpression, so it can
         // only probe a name that free variables locate.
         assert!(
-            ExprNode::free_vars_locate(&target_name),
+            ExprNode::is_located_by_free_vars(&target_name),
             "occurrences of `{}` cannot be probed",
             target_name.to_string()
         );

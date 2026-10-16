@@ -1295,7 +1295,7 @@ impl ExprNode {
     /// Do the free variables of expressions locate the free occurrences of `name`? They do for every
     /// name but `CAP_NAME`: a lambda expression binds it implicitly, and it is absent from the free
     /// variables of every lambda expression whose body reads it.
-    pub fn free_vars_locate(name: &FullName) -> bool {
+    pub fn is_located_by_free_vars(name: &FullName) -> bool {
         !(name.is_local() && name.name == CAP_NAME)
     }
 
