@@ -38,7 +38,7 @@ use crate::{
     misc::{Map, Set},
     optimization::{
         capture_struct::{captured_fields, CaptureStruct},
-        global_names::GlobalNames,
+        global_names::{insert_minted_symbol, names_of_globals, GlobalNames},
         let_elimination,
         rename::substitute_free_name,
         uncurry::{internalize_let_to_var_at_head, is_std_fix},
@@ -106,7 +106,7 @@ fn run_one(
     // single substitution below reaches them all.
     let arity_map = let_elimination::create_global_lambda_to_arity_map(&prg.symbols);
     let symbols = mem::take(&mut prg.symbols);
-    let existing_names = GlobalNames::existing_in(&symbols);
+    let existing_names = names_of_globals(&symbols);
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let mut new_tycons: Map<TyCon, TyConInfo> = Map::default();
 
@@ -157,7 +157,7 @@ fn run_one(
                 lifted.cap.tycon.as_ref().clone(),
                 lifted.cap.tycon_info.clone(),
             );
-            GlobalNames::insert_minted(&mut new_symbols, lifted.into_symbol());
+            insert_minted_symbol(&mut new_symbols, lifted.into_symbol());
         }
         new_symbols.insert(name, sym);
     }

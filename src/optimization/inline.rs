@@ -118,7 +118,7 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>, num_threads: u
     let symbols = mem::take(&mut prg.symbols);
     let global_lambda_to_arity = create_global_lambda_to_arity_map(&symbols);
     let root_value_names = prg.root_value_names();
-    let round = SymbolRound {
+    let round = InlineRound {
         costs: &costs,
         symbols: &symbols,
         global_lambda_to_arity: &global_lambda_to_arity,
@@ -153,7 +153,7 @@ fn run_one(prg: &mut Program, stable_symbols: &mut Set<FullName>, num_threads: u
 }
 
 /// What one round of `run` reads while it rewrites each symbol: the program as the round found it.
-struct SymbolRound<'r> {
+struct InlineRound<'r> {
     /// What each global of the program costs to inline, and where it may be inlined.
     costs: &'r InlineCosts,
     /// The symbols of the program as the round found them, holding the bodies to put at the names.
@@ -182,7 +182,7 @@ enum SymbolOutcome {
     },
 }
 
-impl<'r> SymbolRound<'r> {
+impl<'r> InlineRound<'r> {
     /// Substitute into the symbol `name` once, or discard it if nothing names it.
     fn run_on_symbol(&self, name: &FullName, sym: &Symbol) -> SymbolOutcome {
         // If nothing in the program names the symbol, and it is neither the entry point nor an

@@ -21,7 +21,7 @@
 //! lines into the callers, where the struct a caller builds meets the pattern taking it apart and
 //! the two cancel, leaving the fields handed over one by one.
 
-use super::global_names::GlobalNames;
+use super::global_names::{insert_minted_symbol, names_of_globals, GlobalNames};
 use super::rename::generate_new_names;
 use super::unique_local_names;
 use crate::{
@@ -67,7 +67,7 @@ pub fn run(prg: &mut Program, num_threads: usize) {
 /// The globals are split independently of one another, on up to `num_threads` threads.
 fn run_once(prg: &mut Program, wrappers: &mut Set<FullName>, num_threads: usize) -> bool {
     let symbols = mem::take(&mut prg.symbols);
-    let existing_names = GlobalNames::existing_in(&symbols);
+    let existing_names = names_of_globals(&symbols);
     let splits =
         map_on_compiler_threads(symbols.into_iter().collect(), num_threads, |(name, sym)| {
             let split = if wrappers.contains(&name) {
@@ -86,7 +86,7 @@ fn run_once(prg: &mut Program, wrappers: &mut Set<FullName>, num_threads: usize)
             Some((twin, wrapper)) => {
                 changed = true;
                 wrappers.insert(name.clone());
-                GlobalNames::insert_minted(&mut new_symbols, twin);
+                insert_minted_symbol(&mut new_symbols, twin);
                 new_symbols.insert(name, wrapper);
             }
             None => {

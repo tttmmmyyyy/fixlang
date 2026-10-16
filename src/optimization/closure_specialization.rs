@@ -1,7 +1,7 @@
 use super::{
     capture_struct::CaptureStruct,
     find_usage_of_name::{self, UsageType},
-    global_names::GlobalNames,
+    global_names::{insert_minted_symbol, names_of_globals, GlobalNames},
     move_bodies::move_bodies_into_callers,
     pull_let,
     rename::rename_free_names,
@@ -602,7 +602,7 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
         let mut changed = false;
         let symbols = mem::take(&mut prg.symbols);
         let mut new_symbols: Map<FullName, Symbol> = Map::default();
-        let existing_names = GlobalNames::existing_in(&symbols);
+        let existing_names = names_of_globals(&symbols);
 
         for (name, mut sym) in symbols {
             if stable.contains(&name) {
@@ -812,7 +812,7 @@ fn known_arguments(
 /// Register the global function each lambda lifted by a walk became.
 fn register_lifted_lambdas(new_symbols: Vec<Symbol>, symbols: &mut Map<FullName, Symbol>) {
     for sym in new_symbols {
-        GlobalNames::insert_minted(symbols, sym);
+        insert_minted_symbol(symbols, sym);
     }
 }
 

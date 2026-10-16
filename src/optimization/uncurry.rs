@@ -34,7 +34,7 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) {
     let versions_of_syms = map_on_compiler_threads(
         syms.into_iter().collect(),
         num_threads,
-        |(sym_name, sym)| funptr_versions(sym_name, sym),
+        |(sym_name, sym)| with_funptr_versions(sym_name, sym),
     );
     for (name, sym) in versions_of_syms.into_iter().flatten() {
         fix_mod.symbols.insert(name, sym);
@@ -83,7 +83,7 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) {
 
 /// The symbol `sym_name`, whose definition is `sym`, followed by its function pointer versions taking
 /// one argument, two arguments, and so on, as many as its leading lambdas allow.
-fn funptr_versions(sym_name: FullName, sym: Symbol) -> Vec<(FullName, Symbol)> {
+fn with_funptr_versions(sym_name: FullName, sym: Symbol) -> Vec<(FullName, Symbol)> {
     let mut versions = vec![];
     for n_args in 1..=FUNPTR_ARGS_MAX as usize {
         let Some(expr) = funptr_lambda(&sym.generic_name, sym.expr.as_ref().unwrap(), n_args)
