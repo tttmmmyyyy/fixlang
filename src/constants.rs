@@ -411,8 +411,9 @@ pub const WHOLE_PROGRAM_IN_ONE_UNIT: usize = usize::MAX;
 /// What `--cu-size` is given to ask for `WHOLE_PROGRAM_IN_ONE_UNIT`.
 pub const WHOLE_PROGRAM_IN_ONE_UNIT_STR: &str = "inf";
 
-/// Stack size, in bytes, of each compiler worker thread. Parallel type checking and per-unit code
-/// generation recurse over the user program's expression tree, whose nesting depth (deeply nested
+/// Stack size, in bytes, of each compiler worker thread. Parallel type checking, the optimization
+/// passes rewriting each symbol, and per-unit code generation recurse over the user program's
+/// expression tree, whose nesting depth (deeply nested
 /// `let` or `;;` chains) is unbounded, so a worker needs far more stack than the default thread
 /// stack gives. The stack is reserved as virtual address space and backed by physical memory only
 /// for the pages a thread actually touches, so this large reservation costs real memory only in
