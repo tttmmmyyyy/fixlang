@@ -86,7 +86,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_inline_optimization(),
         "inline",
-        inline::run,
+        |prg| inline::run(prg, config.develop_mode),
     );
 
     run_pass(
@@ -118,7 +118,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_split_struct_args() && config.enable_inline_optimization(),
         "inline",
-        inline::run,
+        |prg| inline::run(prg, config.develop_mode),
     );
 
     // Read every construction the code taking it apart can see. That is what turns the two lines a

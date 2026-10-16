@@ -487,6 +487,49 @@ fn test_a_global_scalar_literal_is_put_at_every_name() {
     }
 }
 
+/// A program reading two literal globals each through a global standing for it, as an operand of
+/// a builtin operation.
+///
+/// `answer_alias + 1` puts the body of `answer_alias`, which is the name `answer`, where the body of
+/// `Std::Add::add` reads its second argument; the bytes of `greeting_alias` reach the operation
+/// reading an array's size the same way.
+const ALIASED_LITERALS_SOURCE: &str = r#"
+    module Main;
+
+    answer : I64;
+    answer = 42;
+
+    answer_alias : I64;
+    answer_alias = answer;
+
+    greeting : String;
+    greeting = "hello";
+
+    greeting_alias : String;
+    greeting_alias = greeting;
+
+    main : IO ();
+    main = println((1 + answer_alias + greeting_alias.get_bytes.@size).to_string);
+"#;
+
+/// A global whose body is a literal is put where a builtin operation reads it as an operand.
+///
+/// Reading a global tests an initialization flag and loads the storage on every read, which in a
+/// loop keeps LLVM from folding the read away.
+#[test]
+fn test_a_global_literal_read_by_a_builtin_operation_is_put_there() {
+    let dump = build_run_and_read_rc_ir(
+        ALIASED_LITERALS_SOURCE,
+        "max",
+        "49",
+        "two literal globals read as operands through globals standing for them",
+    );
+
+    for global in ["Main::answer", "Main::greeting"] {
+        assert_no_global_is_kept_for(&dump, global);
+    }
+}
+
 /// A program whose `main` performs three IO actions.
 const IO_ACTIONS_SOURCE: &str = r#"
     module Main;
