@@ -194,8 +194,6 @@ impl LiftedFix {
 struct FixDefunctionalizer {
     /// The names of the functions this traversal lifts.
     minted_names: MintedNames,
-    /// The counter the name of the next capture parameter is tried with.
-    cap_param_counter: u32,
     /// Functions lifted out during this traversal.
     lifted: Vec<LiftedFix>,
     /// Local lambda bindings `let name = |..| ..`, so `fix(name)` — a `fix` whose argument is a
@@ -217,7 +215,6 @@ impl FixDefunctionalizer {
     ) -> Self {
         Self {
             minted_names,
-            cap_param_counter: 0,
             lifted: vec![],
             local_lambdas: Map::default(),
             global_lambdas,
@@ -248,13 +245,10 @@ impl FixDefunctionalizer {
         // itself be an outer lift's `#fixcap..` parameter that this lambda closed over, so `cap`'s
         // destructure would bind a variable of that name and shadow this parameter — then `G(cap)`
         // would forward the captured struct in place of this one.
-        let cap_param = loop {
-            let name = format!("{}{}", FIX_CAP_PARAM_PREFIX, self.cap_param_counter);
-            self.cap_param_counter += 1;
-            if !cap_fields.iter().any(|(n, _)| n.to_string() == name) {
-                break name;
-            }
-        };
+        let cap_param = (0..)
+            .map(|counter: u32| format!("{}{}", FIX_CAP_PARAM_PREFIX, counter))
+            .find(|name| !cap_fields.iter().any(|(n, _)| n.to_string() == *name))
+            .unwrap();
         let cap_param_name = FullName::local(&cap_param);
 
         // The recursive value `G(cap)`, of type `a -> b`.
