@@ -14,7 +14,7 @@ use std::sync::Arc;
 /// The counter only grows, so the names one walk mints differ from one another; names minted from
 /// two different symbols differ as well, so each walk checks its names against the program's
 /// globals alone, without seeing what the other walks minted.
-pub struct GlobalNames {
+pub struct MintedNames {
     /// The globals of the program as the walks found them.
     existing: Arc<Set<FullName>>,
     /// The symbol the walk is over, which every minted name begins with.
@@ -25,7 +25,7 @@ pub struct GlobalNames {
     counter: u32,
 }
 
-impl GlobalNames {
+impl MintedNames {
     /// The names a walk over `symbol` mints, followed by `suffix`, in a program whose globals are
     /// `existing`.
     pub fn new(existing: Arc<Set<FullName>>, symbol: FullName, suffix: &'static str) -> Self {
@@ -34,7 +34,7 @@ impl GlobalNames {
             "the suffix `{}` of a minted name ends in a digit, which runs it into the counter",
             suffix
         );
-        GlobalNames {
+        MintedNames {
             existing,
             symbol,
             suffix,
@@ -68,7 +68,7 @@ pub fn names_of_globals(symbols: &Map<FullName, Symbol>) -> Arc<Set<FullName>> {
     Arc::new(symbols.keys().cloned().collect())
 }
 
-/// Adds `sym`, a function named by `GlobalNames::fresh`, to `symbols`, which hold the globals the
+/// Adds `sym`, a function named by `MintedNames::fresh`, to `symbols`, which hold the globals the
 /// names were minted against and the functions minted so far. Panics if `symbols` already holds a
 /// global of that name.
 pub fn insert_minted_symbol(symbols: &mut Map<FullName, Symbol>, sym: Symbol) {
@@ -84,10 +84,10 @@ pub fn insert_minted_symbol(symbols: &mut Map<FullName, Symbol>, sym: Symbol) {
 mod tests {
     use super::*;
 
-    /// The first `n` names `GlobalNames::fresh` mints for `symbol` with the suffix `#lam`, in a
+    /// The first `n` names `MintedNames::fresh` mints for `symbol` with the suffix `#lam`, in a
     /// program whose globals are `existing`.
     fn names_minted(existing: Set<FullName>, symbol: &FullName, n: usize) -> Vec<FullName> {
-        let mut names = GlobalNames::new(Arc::new(existing), symbol.clone(), "#lam");
+        let mut names = MintedNames::new(Arc::new(existing), symbol.clone(), "#lam");
         (0..n).map(|_| names.fresh()).collect()
     }
 

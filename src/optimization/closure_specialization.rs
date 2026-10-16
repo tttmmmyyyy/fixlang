@@ -1,7 +1,7 @@
 use super::{
     capture_struct::CaptureStruct,
     find_usage_of_name::{self, UsageType},
-    global_names::{insert_minted_symbol, names_of_globals, GlobalNames},
+    minted_names::{insert_minted_symbol, names_of_globals, MintedNames},
     move_bodies::move_bodies_into_callers,
     pull_let,
     rename::rename_free_names,
@@ -613,7 +613,7 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
                 name.clone(),
                 nothing_specializable.clone(),
                 lifted.clone(),
-                Some(GlobalNames::new(
+                Some(MintedNames::new(
                     existing_names.clone(),
                     name.clone(),
                     CLOSURE_LAM_SUFFIX,
@@ -1084,7 +1084,7 @@ struct ClosureSpecializationVisitor {
 
     /* Name generation */
     /// The names this walk gives the lambdas it lifts. `None` for a walk that lifts no lambda.
-    global_names: Option<GlobalNames>,
+    minted_names: Option<MintedNames>,
 
     /* Termination */
     /// What the chain reaching the symbol being walked has committed to.
@@ -1129,7 +1129,7 @@ impl ClosureSpecializationVisitor {
         current_symbol: FullName,
         specializable_slots: Rc<SpecializableSlots>,
         lifted: Rc<RefCell<LiftedLambdas>>,
-        global_names: Option<GlobalNames>,
+        minted_names: Option<MintedNames>,
         pinned: Pinned,
         budget: Rc<RefCell<CopyBudget>>,
         walking_origin: FullName,
@@ -1142,7 +1142,7 @@ impl ClosureSpecializationVisitor {
             specializable_slots,
             required_specializations: Vec::new(),
             current_symbol,
-            global_names,
+            minted_names,
             pinned,
             budget,
             walking_origin,
@@ -1416,9 +1416,9 @@ impl ClosureSpecializationVisitor {
         // Name the lifted function first: the capture list is named after it, so that a value of
         // that capture list says which function consumes it.
         let lambda_func_name = self
-            .global_names
+            .minted_names
             .as_mut()
-            .expect("a walk given no global names to mint against lifts a lambda")
+            .expect("a walk given no names to mint lifts a lambda")
             .fresh();
 
         // Build the capture list struct that threads the captured environment into the lifted

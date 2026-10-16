@@ -39,8 +39,8 @@ use crate::{
     misc::{Map, Set},
     optimization::{
         capture_struct::{captured_fields, CaptureStruct},
-        global_names::{insert_minted_symbol, names_of_globals, GlobalNames},
         let_elimination,
+        minted_names::{insert_minted_symbol, names_of_globals, MintedNames},
         rename::substitute_free_name,
         uncurry::{internalize_let_to_var_at_head, is_std_fix},
         unique_local_names,
@@ -136,7 +136,7 @@ fn run_one(
         let expr = normalize_for_lift(sym.expr.as_ref().unwrap(), &arity_map);
 
         let mut visitor = FixDefunctionalizer::new(
-            GlobalNames::new(existing_names.clone(), name.clone(), FIX_DEFUNCT_SUFFIX),
+            MintedNames::new(existing_names.clone(), name.clone(), FIX_DEFUNCT_SUFFIX),
             global_lambdas.clone(),
             global_fix_refs.clone(),
         );
@@ -190,10 +190,10 @@ impl LiftedFix {
 }
 
 struct FixDefunctionalizer {
-    // Global names in use, to keep generated names collision-free.
-    global_names: GlobalNames,
+    // The names of the functions this traversal lifts.
+    minted_names: MintedNames,
     // Counter feeding the names of the capture parameters.
-    counter: u32,
+    cap_param_counter: u32,
     // Functions lifted out during this traversal.
     lifted: Vec<LiftedFix>,
     // Local lambda bindings `let name = |..| ..`, so `fix(name)` — a `fix` whose argument is a
@@ -208,13 +208,13 @@ struct FixDefunctionalizer {
 
 impl FixDefunctionalizer {
     fn new(
-        global_names: GlobalNames,
+        minted_names: MintedNames,
         global_lambdas: GlobalLambdas,
         global_fix_refs: GlobalFixRefs,
     ) -> Self {
         Self {
-            global_names,
-            counter: 0,
+            minted_names,
+            cap_param_counter: 0,
             lifted: vec![],
             local_lambdas: Map::default(),
             global_lambdas,
@@ -239,15 +239,15 @@ impl FixDefunctionalizer {
         let cap_fields = captured_fields(f, state);
         // Name the lifted function first: the capture struct is named after it, so that a value of
         // that capture struct says which function consumes it.
-        let func_name = self.global_names.fresh();
+        let func_name = self.minted_names.fresh();
         let cap = CaptureStruct::new("#FixCap", &func_name, &cap_fields);
         // The capture parameter must not clash with a captured field name. A captured field can
         // itself be an outer lift's `#fixcap..` parameter that this lambda closed over, so `cap`'s
         // destructure would bind a variable of that name and shadow this parameter — then `G(cap)`
         // would forward the captured struct in place of this one.
         let cap_param = loop {
-            let name = format!("#fixcap{}", self.counter);
-            self.counter += 1;
+            let name = format!("#fixcap{}", self.cap_param_counter);
+            self.cap_param_counter += 1;
             if !cap_fields.iter().any(|(n, _)| n.to_string() == name) {
                 break name;
             }

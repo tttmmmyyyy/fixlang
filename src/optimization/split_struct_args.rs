@@ -21,7 +21,7 @@
 //! lines into the callers, where the struct a caller builds meets the pattern taking it apart and
 //! the two cancel, leaving the fields handed over one by one.
 
-use super::global_names::{insert_minted_symbol, names_of_globals, GlobalNames};
+use super::minted_names::{insert_minted_symbol, names_of_globals, MintedNames};
 use super::rename::generate_new_names;
 use super::unique_local_names;
 use crate::{
@@ -73,9 +73,9 @@ fn run_once(prg: &mut Program, wrappers: &mut Set<FullName>, num_threads: usize)
             let split = if wrappers.contains(&name) {
                 None
             } else {
-                let mut global_names =
-                    GlobalNames::new(existing_names.clone(), name.clone(), SPLIT_ARG_SUFFIX);
-                split_one_argument(&sym, &prg.type_env, &mut global_names)
+                let mut minted_names =
+                    MintedNames::new(existing_names.clone(), name.clone(), SPLIT_ARG_SUFFIX);
+                split_one_argument(&sym, &prg.type_env, &mut minted_names)
             };
             (name, sym, split)
         });
@@ -107,7 +107,7 @@ fn run_once(prg: &mut Program, wrappers: &mut Set<FullName>, num_threads: usize)
 fn split_one_argument(
     sym: &Symbol,
     type_env: &TypeEnv,
-    global_names: &mut GlobalNames,
+    minted_names: &mut MintedNames,
 ) -> Option<(Symbol, Symbol)> {
     // The names the pattern taking the struct apart binds become parameters of the twin, which stand
     // over the whole body rather than over what follows that pattern. A name bound twice in the body
@@ -147,7 +147,7 @@ fn split_one_argument(
          index, and every place a field is handed over reads the two together",
         taken_apart.tycon.to_string()
     );
-    let twin_name = global_names.fresh();
+    let twin_name = minted_names.fresh();
 
     // The twin's arguments: the ones the original takes, with the struct replaced by its fields.
     let mut twin_params = params.clone();
