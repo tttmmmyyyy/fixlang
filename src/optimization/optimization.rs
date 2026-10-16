@@ -107,7 +107,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config,
         config.enable_split_struct_args(),
         "split_struct_args",
-        split_struct_args::run,
+        |prg| split_struct_args::run(prg, config.num_worker_thread),
     );
 
     // Inline again, which is what puts the two lines a split leaves behind into the callers: there

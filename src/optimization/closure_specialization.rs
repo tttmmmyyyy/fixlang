@@ -1,5 +1,5 @@
 use super::{
-    capture_struct::{fresh_global_name, CaptureStruct},
+    capture_struct::{CaptureStruct, GlobalNames},
     find_usage_of_name::{self, UsageType},
     move_bodies::move_bodies_into_callers,
     pull_let,
@@ -601,7 +601,7 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
         let mut changed = false;
         let symbols = mem::take(&mut prg.symbols);
         let mut new_symbols: Map<FullName, Symbol> = Map::default();
-        let mut global_names = symbols.keys().cloned().collect::<Set<_>>();
+        let existing_names = Arc::new(symbols.keys().cloned().collect::<Set<_>>());
 
         for (name, mut sym) in symbols {
             if stable.contains(&name) {
@@ -612,7 +612,7 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
                 name.clone(),
                 nothing_specializable.clone(),
                 lifted.clone(),
-                global_names.clone(),
+                GlobalNames::new(existing_names.clone()),
                 Pinned::default(),
                 budget.clone(),
                 name.clone(),
@@ -627,7 +627,7 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
             }
             changed = true;
             sym.expr = Some(trav_res.expr);
-            register_lifted_lambdas(visitor.new_symbols, &mut new_symbols, &mut global_names);
+            register_lifted_lambdas(visitor.new_symbols, &mut new_symbols);
             new_symbols.insert(name, sym);
         }
 
@@ -658,7 +658,7 @@ fn realize_all(
     let _sw = StopWatch::new("closure_specialization::realize_all", show_build_times);
 
     let originals = mem::take(&mut prg.symbols);
-    let mut global_names = originals.keys().cloned().collect::<Set<_>>();
+    let mut existing_names = Arc::new(originals.keys().cloned().collect::<Set<_>>());
     let mut symbols: Map<FullName, Symbol> = Map::default();
     let budget = Rc::new(RefCell::new(CopyBudget::default()));
     // The lambdas each copy is specialized on, as the functions the copy calls them through. Their
@@ -700,7 +700,7 @@ fn realize_all(
             name.clone(),
             specializable_slots.clone(),
             lifted.clone(),
-            global_names.clone(),
+            GlobalNames::new(existing_names.clone()),
             request.pinned.clone(),
             budget.clone(),
             request.func_copy.origin.clone(),
@@ -741,8 +741,11 @@ fn realize_all(
         if !lambdas.is_empty() {
             specialized_lambdas.insert(name.clone(), lambdas);
         }
-        global_names.insert(name);
-        queue.extend(visitor.required_specializations);
+        queue.extend(mem::take(&mut visitor.required_specializations));
+        // Once the walk is dropped, the names are held here alone, so the copy joins them in place
+        // rather than in a copy of them.
+        drop(visitor);
+        Arc::make_mut(&mut existing_names).insert(name);
     }
 
     // The capture lists the copies receive are declared here, so that the types the copies carry are
@@ -811,14 +814,14 @@ fn known_arguments(
 }
 
 /// Register the global function each lambda lifted by a walk became.
-fn register_lifted_lambdas(
-    new_symbols: Vec<Symbol>,
-    symbols: &mut Map<FullName, Symbol>,
-    global_names: &mut Set<FullName>,
-) {
+fn register_lifted_lambdas(new_symbols: Vec<Symbol>, symbols: &mut Map<FullName, Symbol>) {
     for sym in new_symbols {
-        global_names.insert(sym.name.clone());
-        symbols.insert(sym.name.clone(), sym);
+        let name = sym.name.clone();
+        assert!(
+            symbols.insert(name.clone(), sym).is_none(),
+            "the lifted function `{}` is named like another global",
+            name.to_string()
+        );
     }
 }
 
@@ -1088,7 +1091,7 @@ struct ClosureSpecializationVisitor {
     /// formed from it.
     current_symbol: FullName,
     /// The global names already taken. A name minted here is one they leave free, and joins them.
-    global_names: Set<FullName>,
+    global_names: GlobalNames,
 
     /* Termination */
     /// What the chain reaching the symbol being walked has committed to.
@@ -1133,7 +1136,7 @@ impl ClosureSpecializationVisitor {
         current_symbol: FullName,
         specializable_slots: Rc<SpecializableSlots>,
         lifted: Rc<RefCell<LiftedLambdas>>,
-        global_names: Set<FullName>,
+        global_names: GlobalNames,
         pinned: Pinned,
         budget: Rc<RefCell<CopyBudget>>,
         walking_origin: FullName,
@@ -1420,11 +1423,10 @@ impl ClosureSpecializationVisitor {
 
         // Name the lifted function first: the capture list is named after it, so that a value of
         // that capture list says which function consumes it.
-        let lambda_func_name = fresh_global_name(
+        let lambda_func_name = self.global_names.fresh(
             &self.current_symbol,
             CLOSURE_LAM_SUFFIX,
             &mut self.lam_func_counter,
-            &mut self.global_names,
         );
 
         // Build the capture list struct that threads the captured environment into the lifted

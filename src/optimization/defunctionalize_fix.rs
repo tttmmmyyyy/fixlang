@@ -37,7 +37,7 @@ use crate::{
     },
     misc::{Map, Set},
     optimization::{
-        capture_struct::{captured_fields, fresh_global_name, CaptureStruct},
+        capture_struct::{captured_fields, CaptureStruct, GlobalNames},
         let_elimination,
         rename::substitute_free_name,
         uncurry::{internalize_let_to_var_at_head, is_std_fix},
@@ -105,7 +105,7 @@ fn run_one(
     // single substitution below reaches them all.
     let arity_map = let_elimination::create_global_lambda_to_arity_map(&prg.symbols);
     let symbols = mem::take(&mut prg.symbols);
-    let mut global_names: Set<FullName> = symbols.keys().cloned().collect();
+    let existing_names = Arc::new(symbols.keys().cloned().collect::<Set<FullName>>());
     let mut new_symbols: Map<FullName, Symbol> = Map::default();
     let mut new_tycons: Map<TyCon, TyConInfo> = Map::default();
 
@@ -135,7 +135,7 @@ fn run_one(
 
         let mut visitor = FixDefunctionalizer::new(
             name.clone(),
-            global_names.clone(),
+            GlobalNames::new(existing_names.clone()),
             global_lambdas.clone(),
             global_fix_refs.clone(),
         );
@@ -152,12 +152,18 @@ fn run_one(
         changed = true;
         sym.expr = Some(res.expr);
         for lifted in visitor.lifted {
-            global_names.insert(lifted.func_name.clone());
             new_tycons.insert(
                 lifted.cap.tycon.as_ref().clone(),
                 lifted.cap.tycon_info.clone(),
             );
-            new_symbols.insert(lifted.func_name.clone(), lifted.into_symbol());
+            let func_name = lifted.func_name.clone();
+            assert!(
+                new_symbols
+                    .insert(func_name.clone(), lifted.into_symbol())
+                    .is_none(),
+                "the lifted function `{}` is named like another global",
+                func_name.to_string()
+            );
         }
         new_symbols.insert(name, sym);
     }
@@ -193,7 +199,7 @@ struct FixDefunctionalizer {
     // The symbol being processed; lifted-function names are derived from it.
     current_symbol: FullName,
     // Global names in use, to keep generated names collision-free.
-    global_names: Set<FullName>,
+    global_names: GlobalNames,
     // Counter feeding the generated names.
     counter: u32,
     // Functions lifted out during this traversal.
@@ -211,7 +217,7 @@ struct FixDefunctionalizer {
 impl FixDefunctionalizer {
     fn new(
         current_symbol: FullName,
-        global_names: Set<FullName>,
+        global_names: GlobalNames,
         global_lambdas: GlobalLambdas,
         global_fix_refs: GlobalFixRefs,
     ) -> Self {
@@ -243,12 +249,9 @@ impl FixDefunctionalizer {
         let cap_fields = captured_fields(f, state);
         // Name the lifted function first: the capture struct is named after it, so that a value of
         // that capture struct says which function consumes it.
-        let func_name = fresh_global_name(
-            &self.current_symbol,
-            "#fix_defunct",
-            &mut self.counter,
-            &mut self.global_names,
-        );
+        let func_name =
+            self.global_names
+                .fresh(&self.current_symbol, "#fix_defunct", &mut self.counter);
         let cap = CaptureStruct::new("#FixCap", &func_name, &cap_fields);
         // The capture parameter must not clash with a captured field name. A captured field can
         // itself be an outer lift's `#fixcap..` parameter that this lambda closed over, so `cap`'s
