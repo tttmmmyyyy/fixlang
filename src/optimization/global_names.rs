@@ -76,3 +76,60 @@ pub fn insert_minted_symbol(symbols: &mut Map<FullName, Symbol>, sym: Symbol) {
         name.to_string()
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The first `n` names `GlobalNames::fresh` mints for `symbol` in a program with no globals.
+    fn names_minted_among_no_globals(
+        symbol: &FullName,
+        suffix: &'static str,
+        n: usize,
+    ) -> Vec<FullName> {
+        let mut names = GlobalNames::new(Arc::new(Set::default()), symbol.clone(), suffix);
+        (0..n).map(|_| names.fresh()).collect()
+    }
+
+    /// A name `fresh` would otherwise mint is passed over when a global already has it, and the
+    /// names minted after it stay distinct from one another.
+    #[test]
+    fn fresh_passes_over_the_existing_globals() {
+        let symbol = FullName::from_strs(&["Main"], "f");
+        let existing: Set<FullName> = names_minted_among_no_globals(&symbol, "#lam", 2)
+            .into_iter()
+            .collect();
+        let mut names = GlobalNames::new(Arc::new(existing.clone()), symbol, "#lam");
+        let minted: Vec<FullName> = (0..3).map(|_| names.fresh()).collect();
+        for name in &minted {
+            assert!(
+                !existing.contains(name),
+                "`{}` is minted although a global has it",
+                name.to_string()
+            );
+        }
+        let distinct: Set<FullName> = minted.iter().cloned().collect();
+        assert_eq!(distinct.len(), minted.len());
+    }
+
+    /// Two walks over different symbols mint different names, though neither sees the other's, even
+    /// where one symbol's name begins with the other's.
+    #[test]
+    fn names_minted_from_different_symbols_differ() {
+        let symbols = [
+            FullName::from_strs(&["Main"], "f"),
+            FullName::from_strs(&["Main"], "f1"),
+            FullName::from_strs(&["Main"], "f#lam1"),
+        ];
+        let mut minted: Set<FullName> = Set::default();
+        for symbol in &symbols {
+            for name in names_minted_among_no_globals(symbol, "#lam", 20) {
+                assert!(
+                    minted.insert(name.clone()),
+                    "`{}` is minted from two symbols",
+                    name.to_string()
+                );
+            }
+        }
+    }
+}
