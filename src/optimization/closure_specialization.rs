@@ -612,7 +612,7 @@ fn lift_all(prg: &mut Program, lifted: &Rc<RefCell<LiftedLambdas>>, show_build_t
                 name.clone(),
                 nothing_specializable.clone(),
                 lifted.clone(),
-                GlobalNames::new(existing_names.clone()),
+                Some(GlobalNames::new(existing_names.clone())),
                 Pinned::default(),
                 budget.clone(),
                 name.clone(),
@@ -658,7 +658,6 @@ fn realize_all(
     let _sw = StopWatch::new("closure_specialization::realize_all", show_build_times);
 
     let originals = mem::take(&mut prg.symbols);
-    let mut existing_names = Arc::new(originals.keys().cloned().collect::<Set<_>>());
     let mut symbols: Map<FullName, Symbol> = Map::default();
     let budget = Rc::new(RefCell::new(CopyBudget::default()));
     // The lambdas each copy is specialized on, as the functions the copy calls them through. Their
@@ -700,7 +699,7 @@ fn realize_all(
             name.clone(),
             specializable_slots.clone(),
             lifted.clone(),
-            GlobalNames::new(existing_names.clone()),
+            None,
             request.pinned.clone(),
             budget.clone(),
             request.func_copy.origin.clone(),
@@ -741,11 +740,7 @@ fn realize_all(
         if !lambdas.is_empty() {
             specialized_lambdas.insert(name.clone(), lambdas);
         }
-        queue.extend(mem::take(&mut visitor.required_specializations));
-        // Once the walk is dropped, the names are held here alone, so the copy joins them in place
-        // rather than in a copy of them.
-        drop(visitor);
-        Arc::make_mut(&mut existing_names).insert(name);
+        queue.extend(visitor.required_specializations);
     }
 
     // The capture lists the copies receive are declared here, so that the types the copies carry are
@@ -1091,7 +1086,8 @@ struct ClosureSpecializationVisitor {
     /// formed from it.
     current_symbol: FullName,
     /// The global names already taken. A name minted here is one they leave free, and joins them.
-    global_names: GlobalNames,
+    /// `None` for a walk that lifts no lambda, which mints no name.
+    global_names: Option<GlobalNames>,
 
     /* Termination */
     /// What the chain reaching the symbol being walked has committed to.
@@ -1136,7 +1132,7 @@ impl ClosureSpecializationVisitor {
         current_symbol: FullName,
         specializable_slots: Rc<SpecializableSlots>,
         lifted: Rc<RefCell<LiftedLambdas>>,
-        global_names: GlobalNames,
+        global_names: Option<GlobalNames>,
         pinned: Pinned,
         budget: Rc<RefCell<CopyBudget>>,
         walking_origin: FullName,
@@ -1423,11 +1419,15 @@ impl ClosureSpecializationVisitor {
 
         // Name the lifted function first: the capture list is named after it, so that a value of
         // that capture list says which function consumes it.
-        let lambda_func_name = self.global_names.fresh(
-            &self.current_symbol,
-            CLOSURE_LAM_SUFFIX,
-            &mut self.lam_func_counter,
-        );
+        let lambda_func_name = self
+            .global_names
+            .as_mut()
+            .expect("a walk given no global names to mint against lifts a lambda")
+            .fresh(
+                &self.current_symbol,
+                CLOSURE_LAM_SUFFIX,
+                &mut self.lam_func_counter,
+            );
 
         // Build the capture list struct that threads the captured environment into the lifted
         // function.

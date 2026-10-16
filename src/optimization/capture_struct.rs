@@ -122,7 +122,6 @@ pub fn captured_fields(lam: &Arc<ExprNode>, state: &VisitState) -> Vec<(FullName
 // digits at its end are the counter and what precedes the suffix is the symbol. Names minted from
 // two different symbols therefore differ, and the walks over different symbols mint against the
 // program's globals alone, without seeing what one another minted.
-#[derive(Clone)]
 pub struct GlobalNames {
     // The globals of the program as the walks found them.
     existing: Arc<Set<FullName>>,
