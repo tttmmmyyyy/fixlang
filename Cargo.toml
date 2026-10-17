@@ -54,6 +54,11 @@ path = "src/main.rs"
 [dev-dependencies]
 criterion = "0.5"
 
+# Counts the instructions a child `fix build` executes, which a test of the compiler's own cost
+# judges by: the count does not move with the load on the machine, where the time does.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+perf-event = "0.4.9"
+
 [[bench]]
 name = "typecheck"
 harness = false
