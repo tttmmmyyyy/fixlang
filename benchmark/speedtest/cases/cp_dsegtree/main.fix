@@ -1,0 +1,27 @@
+module Main;
+
+import CPLib.DSegtree;
+import Speedtest;
+
+// The `dsegtree` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let n = 200000; let q = 200000;
+    let init = rands(n, 1000000000, 1_U64);
+    let ts = rands(q, 2, 2_U64); let aa = rands(q, n, 3_U64); let bb = rands(q, n, 4_U64);
+    let xs = rands(q, 1000000000, 5_U64);
+    let acc = *control.measure(|_|
+        let tree = DSegtree::build(init, I64::minimum, |(x, y)| max(x, y));
+        range(0, q).fold((tree, 0), |i, (tree, acc)|
+            let a = aa.@(i); let b = bb.@(i);
+            if ts.@(i) == 0 { (tree.set(a, xs.@(i)), acc) };
+            let (l, r) = if a < b { (a, b) } else { (b, a) };
+            (tree, acc + tree.fold(l, r + 1))
+        ).@1
+    );
+    assert_eq(|_|"dsegtree", acc.to_string, "100142147228725");;
+    pure()
+);

@@ -1,0 +1,22 @@
+module Main;
+
+import CPLib.MaxFlow;
+import Speedtest;
+
+// The `maxflow` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let l = 50000; let m = 200000;
+    let us = rands(m, l, 1_U64); let vs = rands(m, l, 2_U64);
+    let s = 2 * l; let t = 2 * l + 1;
+    let f = *control.measure(|_|
+        let g = range(0, l).fold(MaxFlowGraph::create(2 * l + 2), |i, g| g.add_edge(s, i, 1).add_edge(l + i, t, 1));
+        let g = range(0, m).fold(g, |i, g| g.add_edge(us.@(i), l + vs.@(i), 1));
+        g.maximize_flow(s, t).@1
+    );
+    assert_eq(|_|"maxflow", f.to_string, "48869");;
+    pure()
+);

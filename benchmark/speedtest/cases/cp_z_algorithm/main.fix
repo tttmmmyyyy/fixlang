@@ -1,0 +1,17 @@
+module Main;
+
+import CPLib.String;
+import Speedtest;
+
+// The `z_algorithm` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let n = 10000000;
+    let s = from_bytes(rands(n, 2, 1_U64).map(|c| ('a' + c.u8)).push_back(0_U8)).as_ok : String;
+    let z = *control.measure(|_| calc_z_array(s));
+    assert_eq(|_|"z_algorithm", z.to_iter.fold(0, |x, acc| acc + x).to_string, "20006181");;
+    pure()
+);

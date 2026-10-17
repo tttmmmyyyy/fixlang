@@ -1,0 +1,22 @@
+module Main;
+
+import CPLib.MinCostFlow;
+import Speedtest;
+
+// The `mincostflow` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let n = 200;
+    let cs = rands(n * n, 1000000000, 1_U64);
+    let s = 2 * n; let t = 2 * n + 1;
+    let (_, f, c) = *control.measure(|_|
+        let g = range(0, n).fold(MinCostFlowGraph::create(2 * n + 2), |i, g| g.add_edge(s, i, 1, 0).add_edge(n + i, t, 1, 0));
+        let g = range(0, n * n).fold(g, |k, g| g.add_edge(k / n, n + k % n, 1, cs.@(k)));
+        g.maximize_flow_min_cost(s, t)
+    );
+    assert_eq(|_|"mincostflow", f.to_string + " " + c.to_string, "200 1548180538");;
+    pure()
+);

@@ -1,0 +1,25 @@
+module Main;
+
+import CPLib.Misc;
+import Speedtest;
+
+// The `next_permutation` of cp-library, run on the input `ref.cpp` gives `std::next_permutation`. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let n = 11;
+    let arr = range(0, n).to_array;
+    let acc = *control.measure(|_|
+        loop((arr, 0), |(arr, acc)|
+            let acc = acc + arr.@(0) * arr.@(n - 1);
+            match arr.next_permutation(0, n) {
+                some(arr) => continue $ (arr, acc),
+                none(_) => break $ acc
+            }
+        )
+    );
+    assert_eq(|_|"next_permutation", acc.to_string, "958003200");;
+    pure()
+);

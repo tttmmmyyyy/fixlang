@@ -1,0 +1,23 @@
+module Main;
+
+import CPLib.UnionFind;
+import Speedtest;
+
+// The `unionfind` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let n = 2000000; let q = 2000000;
+    let ts = rands(q, 2, 2_U64); let aa = rands(q, n, 3_U64); let bb = rands(q, n, 4_U64);
+    let acc = *control.measure(|_|
+        range(0, q).fold((UnionFind::create(n), 0), |i, (uf, acc)|
+            if ts.@(i) == 0 { (uf.unite(aa.@(i), bb.@(i)), acc) };
+            let (uf, u) = uf.is_united(aa.@(i), bb.@(i));
+            (uf, acc + if u { 1 } else { 0 })
+        ).@1
+    );
+    assert_eq(|_|"unionfind", acc.to_string, "5");;
+    pure()
+);

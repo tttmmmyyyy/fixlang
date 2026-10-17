@@ -1,0 +1,27 @@
+module Main;
+
+import CPLib.TwoSat;
+import Speedtest;
+
+// The `twosat` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let n = 100000; let m = 200000;
+    // Every clause is one that the assignment `sol` satisfies.
+    let sol = rands(n, 2, 1_U64);
+    let ii = rands(m, n, 2_U64); let jj = rands(m, n, 3_U64);
+    let ff = rands(m, 2, 4_U64); let gg = rands(m, 2, 5_U64);
+    let fs = range(0, m).map(|k|
+        let i = ii.@(k); let j = jj.@(k);
+        if sol.@(i) != ff.@(k) && sol.@(j) != gg.@(k) { sol.@(i) } else { ff.@(k) }
+    ).to_array;
+    let ok = *control.measure(|_|
+        let ts = range(0, m).fold(TwoSat::create(n), |k, ts| ts.add_clause(ii.@(k), fs.@(k) == 1, jj.@(k), gg.@(k) == 1));
+        ts.solve.is_some
+    );
+    assert_eq(|_|"twosat", if ok { "1" } else { "0" }, "1");;
+    pure()
+);

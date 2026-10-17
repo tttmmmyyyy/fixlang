@@ -41,11 +41,14 @@ logging an estimate.
     python3 perf_counters.py --cpu
 """
 
+import atexit
 import os
 import re
 import resource
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from typing import NamedTuple
 
@@ -110,6 +113,21 @@ MINIMUM_WINDOW_SECONDS = 0.2
 # to the caller's environment, one unchanged binary reported 70,765 splits from one shell and
 # 170,766 from another.
 MEASUREMENT_ENV = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
+
+# The FIFOs through which a program may tell perf which part of the run to count, as
+# `cases/_support/speedtest.fix` and `speedtest.hpp` do: it writes `enable` or `disable` to the
+# first, and reads perf's answer from the second before it goes on. perf counts from the start, so
+# a program that writes nothing is counted whole. They live in a directory of their own, whose
+# name `mkdtemp` makes the same length every time, so that the environment block -- and with it
+# the stack -- is the same size from one run to the next.
+CONTROL_DIR = tempfile.mkdtemp(prefix="speedtest-perf-")
+atexit.register(shutil.rmtree, CONTROL_DIR, ignore_errors=True)
+CONTROL_FIFO = os.path.join(CONTROL_DIR, "ctl")
+ACK_FIFO = os.path.join(CONTROL_DIR, "ack")
+os.mkfifo(CONTROL_FIFO)
+os.mkfifo(ACK_FIFO)
+MEASUREMENT_ENV["SPEEDTEST_PERF_CTL"] = CONTROL_FIFO
+MEASUREMENT_ENV["SPEEDTEST_PERF_ACK"] = ACK_FIFO
 
 # What this program exits with when the program it measures exits non-zero, which a caller reads
 # apart from the 1 that says the counters could not be read. Every caller spells this number
@@ -231,7 +249,8 @@ def read_counters(argv):
         # ASLR off: the split count depends on where the allocator puts the data, so a moving
         # heap would move the number.
         ["setarch", ARCH, "-R", "perf", "stat", "-x,",
-         "-e", ",".join(ALL_EVENTS), "--"] + argv,
+         "-e", ",".join(ALL_EVENTS), "--control", f"fifo:{CONTROL_FIFO},{ACK_FIFO}",
+         "--"] + argv,
         stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
         env=MEASUREMENT_ENV,
     )

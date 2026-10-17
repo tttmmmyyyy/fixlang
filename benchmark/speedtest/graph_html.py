@@ -29,7 +29,7 @@ except ImportError:
 # count: a split-access column is interesting precisely when it collapses by orders of
 # magnitude, and zero -- the value a fixed case reaches -- has no ratio.
 # A case may carry a counterpart in these languages, measured the same way.
-REFERENCE_LANGUAGES = ["c", "rust"]
+REFERENCE_LANGUAGES = ["c", "rust", "cpp"]
 
 METRICS = [
     ("inst", "perf instructions",
@@ -456,7 +456,7 @@ function render() {
     if (!measured) continue;
     const segments = parts.filter((p) => p[0] === "M").length;
     const d = parts.join("");
-    // The C and Rust counterparts of this case, on the same input and the same measurement.
+    // The C, Rust and C++ counterparts of this case, on the same input and the same measurement.
     for (const [language, value] of Object.entries(s.refs)) {
       const y = toY(metric.kind === "ratio" ? value / s.base : value);
       el("line", { class: "reference", stroke: s.color,

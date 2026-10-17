@@ -1,0 +1,21 @@
+[general]
+name = "myproject"
+version = "0.1.0"
+fix_version = "1.6.0"
+
+[build]
+files = ["main.fix"]
+
+[build.test]
+files = ["test.fix"]
+
+# cp-library 0.15.0 carries no tag yet, so the dependency is pinned to a commit.
+[[dependencies]]
+name = "cp-library"
+version = "0.15.0"
+git = { url = "https://github.com/tttmmmyyyy/cp-library.git", rev = "7b06f0150d3226603fba83353f45c5580fccc4fa" }
+
+[[dependencies]]
+name = "speedtest-support"
+version = "0.1.0"
+path = "../_support"

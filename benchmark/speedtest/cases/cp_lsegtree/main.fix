@@ -1,0 +1,31 @@
+module Main;
+
+import CPLib.LSegtree;
+import CPLib.Monoid;
+import CPLib.ZP;
+import Speedtest;
+
+// The `lsegtree` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let n = 200000; let q = 200000;
+    let init = rands(n, 998244353, 1_U64);
+    let ts = rands(q, 2, 2_U64); let aa = rands(q, n, 3_U64); let bb = rands(q, n, 4_U64);
+    let cs = rands(q, 998244353, 5_U64); let ds = rands(q, 998244353, 6_U64);
+    let init = init.map(|v| WeightedSum::make_single(make(v)));
+    let acc = *control.measure(|_|
+        let tree = LSegtree::build(init) : LSegtree (WeightedSum (ZP P998244353)) (RangeAffine WeightedSum (ZP P998244353));
+        range(0, q).fold((tree, 0), |i, (tree, acc)|
+            let a = aa.@(i); let b = bb.@(i);
+            let (l, r) = if a < b { (a, b) } else { (b, a) };
+            if ts.@(i) == 0 { (tree.act_range(l, r + 1, RangeAffine { a : make(cs.@(i)), b : make(ds.@(i)) }), acc) };
+            let (tree, x) = tree.fold(l, r + 1);
+            (tree, acc + x.@v.@value.i64)
+        ).@1
+    );
+    assert_eq(|_|"lsegtree", acc.to_string, "50032478004588");;
+    pure()
+);

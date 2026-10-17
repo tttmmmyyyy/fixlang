@@ -1,0 +1,20 @@
+module Main;
+
+import CPLib.Bipartite;
+import Speedtest;
+
+// The `bipartite` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let l = 50000; let m = 200000;
+    let us = rands(m, l, 1_U64); let vs = rands(m, l, 2_U64);
+    let matching = *control.measure(|_|
+        let g = range(0, m).fold(BipartiteGraph::create(l, l), |i, g| g.add_edge(us.@(i), vs.@(i)));
+        g.maximize_flow.get_max_matching
+    );
+    assert_eq(|_|"bipartite", matching.to_iter.filter(|b| b).get_size.to_string, "48869");;
+    pure()
+);

@@ -1,0 +1,35 @@
+module Main;
+
+import CPLib.LDSegtree;
+import CPLib.ZP;
+import Speedtest;
+
+// The `ldsegtree` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let n = 200000; let q = 200000;
+    let init = rands(n, 998244353, 1_U64);
+    let ts = rands(q, 2, 2_U64); let aa = rands(q, n, 3_U64); let bb = rands(q, n, 4_U64);
+    let cs = rands(q, 998244353, 5_U64); let ds = rands(q, 998244353, 6_U64);
+    let init = init.map(|v| (make(v), one)) : Array (ZP P998244353, ZP P998244353);
+    let acc = *control.measure(|_|
+        let tree = LDSegtree::build(
+            init,
+            (zero, zero), |((v1, w1), (v2, w2))| (v1 + v2, w1 + w2),
+            (one, zero), |((a1, b1), (a2, b2))| (a1 * a2, b1 * a2 + b2),
+            |((a, b), (v, w))| (a * v + b * w, w)
+        ) : LDSegtree (ZP P998244353, ZP P998244353) (ZP P998244353, ZP P998244353);
+        range(0, q).fold((tree, 0), |i, (tree, acc)|
+            let a = aa.@(i); let b = bb.@(i);
+            let (l, r) = if a < b { (a, b) } else { (b, a) };
+            if ts.@(i) == 0 { (tree.act_range(l, r + 1, (make(cs.@(i)), make(ds.@(i)))), acc) };
+            let (tree, (x, _)) = tree.fold(l, r + 1);
+            (tree, acc + x.@value.i64)
+        ).@1
+    );
+    assert_eq(|_|"ldsegtree", acc.to_string, "50032478004588");;
+    pure()
+);

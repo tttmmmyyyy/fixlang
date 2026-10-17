@@ -1,0 +1,7 @@
+[general]
+name = "speedtest-support"
+version = "0.1.0"
+fix_version = "1.6.0"
+
+[build]
+files = ["speedtest.fix"]

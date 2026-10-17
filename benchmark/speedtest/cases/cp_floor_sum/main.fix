@@ -1,0 +1,23 @@
+module Main;
+
+import CPLib.Arithmetic;
+import Speedtest;
+
+// The `floor_sum` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let q = 200000;
+    let ns = rands(q, 1000000000, 1_U64); let ms = rands(q, 1000000000, 2_U64);
+    let aa = rands(q, 1000000000, 3_U64); let bb = rands(q, 1000000000, 4_U64);
+    let acc = *control.measure(|_|
+        range(0, q).fold(0, |i, acc|
+            let m = ms.@(i) + 1;
+            acc.bit_xor(floor_sum(ns.@(i), m, aa.@(i) % m, bb.@(i) % m))
+        )
+    );
+    assert_eq(|_|"floor_sum", acc.to_string, "498075712894463097");;
+    pure()
+);

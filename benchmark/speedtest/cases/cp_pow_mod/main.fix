@@ -1,0 +1,17 @@
+module Main;
+
+import CPLib.Arithmetic;
+import Speedtest;
+
+// The `pow_mod` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let q = 1000000;
+    let xs = rands(q, 1000000000, 1_U64); let es = rands(q, 1000000000, 2_U64); let ms = rands(q, 1000000000, 3_U64);
+    let acc = *control.measure(|_| range(0, q).fold(0, |i, acc| acc.bit_xor(xs.@(i).pow_mod(es.@(i), ms.@(i) + 1))));
+    assert_eq(|_|"pow_mod", acc.to_string, "95675632");;
+    pure()
+);

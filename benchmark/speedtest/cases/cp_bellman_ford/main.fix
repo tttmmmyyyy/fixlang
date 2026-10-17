@@ -1,0 +1,26 @@
+module Main;
+
+import CPLib.Graph;
+import Speedtest;
+
+// The `bellman_ford` of cp-library, run on the input `ref.cpp` gives a plain C++ implementation. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let n = 20000; let m = 100000;
+    let us = rands(m, n, 1_U64); let vs = rands(m, n, 2_U64); let cs = rands(m, 1000000, 3_U64);
+    // Shifting the weights by the potentials `ps` gives negative edges but no negative cycle.
+    let ps = rands(n, 1000000, 4_U64);
+    let d = *control.measure(|_|
+        let g = range(0, m).fold(GraphBuilder::create(n), |i, g|
+            let u = us.@(i); let v = vs.@(i);
+            g.add_edge(u, v, cs.@(i) + ps.@(u) - ps.@(v))
+        );
+        g.build.bellman_ford(0)
+    );
+    let (cnt, sum) = d.to_iter.fold((0, 0), |x, (cnt, sum)| if x == I64::maximum { (cnt, sum) } else { (cnt + 1, sum + x) });
+    assert_eq(|_|"bellman_ford", cnt.to_string + " " + sum.to_string, "19876 39486003338");;
+    pure()
+);
