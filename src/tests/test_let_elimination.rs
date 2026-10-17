@@ -601,6 +601,57 @@ mod tests {
         test_source(source, Configuration::develop_mode());
     }
 
+    /// `r` reads the cell, and is read in the function of a dot-form call whose receiver hands the
+    /// cell to `unsafe_is_unique`. The binding stays ahead of the receiver, so the cell is unique
+    /// where the receiver reads it.
+    #[test]
+    fn test_binding_read_in_the_function_of_a_dot_call_stays_ahead_of_the_receiver() {
+        let source = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+
+        pair_with : I64 -> (Bool, Cell) -> (Bool, I64);
+        pair_with = |r, p| (p.@0, r + p.@1.@v);
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : k };
+            let r = cell.@v;
+            assert_eq(|_|"the receiver reads the cell while it is unique", cell.unsafe_is_unique.pair_with(r), (true, 2));;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// `r` reads the cell, and is read in the condition of an `if` applied to an argument that hands
+    /// the cell to `unsafe_is_unique`. The binding stays ahead of the argument, so the cell is
+    /// unique where the argument reads it.
+    #[test]
+    fn test_binding_read_in_an_if_applied_to_an_argument_stays_ahead_of_the_argument() {
+        let source = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+
+        pair_with : I64 -> (Bool, Cell) -> (Bool, I64);
+        pair_with = |r, p| (p.@0, r + p.@1.@v);
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : k };
+            let r = cell.@v;
+            let f = if r > 0 { pair_with(1) } else { pair_with(2) };
+            assert_eq(|_|"the argument reads the cell while it is unique", f(cell.unsafe_is_unique), (true, 2));;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
     /// A chain this long builds in a few seconds while the inspection of a binding is proportional
     /// to where its name is read, and in several minutes while it walks the whole body of every
     /// binding.
