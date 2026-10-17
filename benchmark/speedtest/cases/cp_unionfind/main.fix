@@ -1,7 +1,8 @@
 module Main;
 
-import CPLib.UnionFind;
-import Speedtest;
+import CPLib.UnionFind::{create, is_united, unite};
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{IO, Array::@, Iterator::{fold, range}, Monad::pure, ToString::to_string, Tuple2::@1};
 
 // The `unionfind` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.
@@ -18,6 +19,6 @@ main = (
             (uf, acc + if u { 1 } else { 0 })
         ).@1
     );
-    assert_eq(|_|"unionfind", acc.to_string, "5");;
+    check_answer("unionfind", acc.to_string, "5");;
     pure()
 );

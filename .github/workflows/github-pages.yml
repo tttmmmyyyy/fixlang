@@ -37,8 +37,7 @@ jobs:
         continue-on-error: true
         run: |
           mkdir -p _site/benchmark
-          python3 -m pip install --quiet markdown || true
-          python3 benchmark/speedtest/graph_html.py --out _site/benchmark/index.html
+          python3 benchmark/speedtest/comparison_html.py --out _site/benchmark/index.html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

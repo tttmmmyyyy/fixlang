@@ -1,6 +1,6 @@
-// What the cases that count part of themselves share: the input they generate, and the way they
-// tell `perf_counters.py` which part of the run to count. `speedtest.hpp` is the same for the
-// C++ counterparts.
+// What the cases share: the input they generate, the way they tell `perf_counters.py` which part
+// of the run to count, and the check of their answer. `speedtest.hpp` is the same for the C++
+// counterparts.
 module Speedtest;
 
 // The next state of the linear congruential generator `rands` draws from.
@@ -18,6 +18,16 @@ rands = |len, m, seed| (
         let r = _next_rand(r);
         (arr.push_back((r.shift_right(32_U64) * m.u64).shift_right(32_U64).i64), r)
     ).@0
+);
+
+// Exit with status 1, naming `label`, unless `actual` equals `expected`.
+//
+// A case built with `--no-runtime-check` checks its answer with this function. `assert_eq` aborts
+// through `undefined`, which that build compiles to an unreachable instruction, and the optimizer
+// may then assume the answer is right and delete the computation that produced it.
+check_answer : [a : Eq, a : ToString] String -> a -> a -> IO ();
+check_answer = |label, actual, expected| when(actual != expected,
+    exit_with_msg(1, label + ": expected " + expected.to_string + ", got " + actual.to_string)
 );
 
 // The two FIFOs through which `perf_counters.py` lets a program say which part of the run to

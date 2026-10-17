@@ -1,7 +1,11 @@
 module Main;
 
-import CPLib.Misc;
-import Speedtest;
+import CPLib.Misc::next_permutation;
+import Speedtest::{check_answer, PerfControl::{measure, start}};
+import Std::{
+    loop, IO, Array::@, Iterator::{range, to_array}, LoopState::{break, continue}, Monad::pure, 
+    ToString::to_string
+};
 
 // The `next_permutation` of cp-library, run on the input `ref.cpp` gives `std::next_permutation`. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.
@@ -20,6 +24,6 @@ main = (
             }
         )
     );
-    assert_eq(|_|"next_permutation", acc.to_string, "958003200");;
+    check_answer("next_permutation", acc.to_string, "958003200");;
     pure()
 );

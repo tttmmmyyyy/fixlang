@@ -1,8 +1,9 @@
 module Main;
 
+import Speedtest::check_answer;
 import Std::{
-    Array, Bool, I64, IO, U8, Array::{empty, fill, from_map, push_back, set, @, @size},
-    Debug::assert_eq, LessThan::min, LoopState::{break, continue}, Monad::pure, ToU8::u8, loop
+    loop, Array, I64, IO, U8, Array::{@, @size, empty, fill, from_map, push_back, set}, LessThan::min, 
+    LoopState::{break, continue}, Monad::pure, ToU8::u8
 };
 
 // Levenshtein distance between every unique pair of words: byte-array traversal
@@ -68,6 +69,6 @@ sum_distances = |words| (
 
 main : IO ();
 main = (
-    assert_eq(|_|"levenshtein", sum_distances(gen_words(1000)), 3648154);;
+    check_answer("levenshtein", sum_distances(gen_words(1000)), 3648154);;
     pure()
 );

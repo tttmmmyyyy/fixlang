@@ -1,7 +1,11 @@
 module Main;
 
-import CPLib.Graph;
-import Speedtest;
+import CPLib.Graph::{calc_sccs, GraphBuilder::{add_edge, build, create}};
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{
+    IO, Array::{@, @size, to_iter}, Iterator::{fold, range}, LessThan::max, Monad::pure, 
+    ToString::to_string
+};
 
 // The `scc` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.
@@ -16,6 +20,6 @@ main = (
         g.build.calc_sccs
     );
     let largest = sccs.to_iter.fold(0, |c, acc| max(acc, c.@size));
-    assert_eq(|_|"scc", sccs.@size.to_string + " " + largest.to_string, "40859 159142");;
+    check_answer("scc", sccs.@size.to_string + " " + largest.to_string, "40859 159142");;
     pure()
 );

@@ -1,7 +1,8 @@
 module Main;
 
-import CPLib.Graph;
-import Speedtest;
+import CPLib.Graph::{bellman_ford, GraphBuilder::{add_edge, build, create}};
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{IO, Array::{@, to_iter}, I64::maximum, Iterator::{fold, range}, Monad::pure, ToString::to_string};
 
 // The `bellman_ford` of cp-library, run on the input `ref.cpp` gives a plain C++ implementation. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.
@@ -21,6 +22,6 @@ main = (
         g.build.bellman_ford(0)
     );
     let (cnt, sum) = d.to_iter.fold((0, 0), |x, (cnt, sum)| if x == I64::maximum { (cnt, sum) } else { (cnt + 1, sum + x) });
-    assert_eq(|_|"bellman_ford", cnt.to_string + " " + sum.to_string, "19876 39486003338");;
+    check_answer("bellman_ford", cnt.to_string + " " + sum.to_string, "19876 39486003338");;
     pure()
 );

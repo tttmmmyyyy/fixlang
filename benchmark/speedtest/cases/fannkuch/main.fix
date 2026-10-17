@@ -1,8 +1,9 @@
 module Main;
 
+import Speedtest::check_answer;
 import Std::{
-    loop, Array, I64, IO, Array::{fill, from_map, set, @}, Debug::assert_eq,
-    LessThan::max, LoopState::{break, continue}, Monad::pure
+    loop, Array, I64, IO, Array::{@, fill, from_map, set}, LessThan::max, LoopState::{break, continue}, 
+    Monad::pure
 };
 
 // fannkuch-redux: heavy in-place integer-array mutation. `Array::set` and the
@@ -82,7 +83,7 @@ fannkuch = |n| (
 main : IO ();
 main = (
     let (checksum, maxflips) = fannkuch(10);
-    assert_eq(|_|"fannkuch: checksum", checksum, 73196);;
-    assert_eq(|_|"fannkuch: maxflips", maxflips, 38);;
+    check_answer("fannkuch: checksum", checksum, 73196);;
+    check_answer("fannkuch: maxflips", maxflips, 38);;
     pure()
 );

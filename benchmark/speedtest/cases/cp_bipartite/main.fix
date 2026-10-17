@@ -1,7 +1,8 @@
 module Main;
 
-import CPLib.Bipartite;
-import Speedtest;
+import CPLib.Bipartite::{BipartiteGraph::{add_edge, create, maximize_flow}, BipartiteGraphFlow::get_max_matching};
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{IO, Array::{@, to_iter}, Iterator::{filter, fold, get_size, range}, Monad::pure, ToString::to_string};
 
 // The `bipartite` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.
@@ -15,6 +16,6 @@ main = (
         let g = range(0, m).fold(BipartiteGraph::create(l, l), |i, g| g.add_edge(us.@(i), vs.@(i)));
         g.maximize_flow.get_max_matching
     );
-    assert_eq(|_|"bipartite", matching.to_iter.filter(|b| b).get_size.to_string, "48869");;
+    check_answer("bipartite", matching.to_iter.filter(|b| b).get_size.to_string, "48869");;
     pure()
 );

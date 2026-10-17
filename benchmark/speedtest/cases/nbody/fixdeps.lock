@@ -1,0 +1,6 @@
+proj_file_hash = "30c5c442e9a7c2182baaba1857af906e"
+
+[[dependencies]]
+name = "speedtest-support"
+version = "0.1.0"
+path = "../_support"

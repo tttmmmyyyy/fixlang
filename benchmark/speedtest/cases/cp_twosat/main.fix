@@ -1,7 +1,8 @@
 module Main;
 
-import CPLib.TwoSat;
-import Speedtest;
+import CPLib.TwoSat::{add_clause, create, solve};
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{IO, Array::@, Iterator::{fold, map, range, to_array}, Monad::pure, Option::is_some};
 
 // The `twosat` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.
@@ -22,6 +23,6 @@ main = (
         let ts = range(0, m).fold(TwoSat::create(n), |k, ts| ts.add_clause(ii.@(k), fs.@(k) == 1, jj.@(k), gg.@(k) == 1));
         ts.solve.is_some
     );
-    assert_eq(|_|"twosat", if ok { "1" } else { "0" }, "1");;
+    check_answer("twosat", if ok { "1" } else { "0" }, "1");;
     pure()
 );

@@ -1,8 +1,7 @@
 module Main;
 
-import Std::{
-    loop, I64, IO, F64, Debug::assert_eq, LoopState::{break, continue}, Monad::pure
-};
+import Speedtest::check_answer;
+import Std::{loop, F64, I64, IO, LoopState::{break, continue}, Monad::pure};
 
 // Float-heavy nested loops with no arrays: escape-time iteration over an n*n grid.
 // Coordinates are F64 accumulators (avoids an I64->F64 cast per pixel). Guards the
@@ -34,6 +33,6 @@ mandel = |n| (
 
 main : IO ();
 main = (
-    assert_eq(|_|"mandelbrot", mandel(1500), 254662);;
+    check_answer("mandelbrot", mandel(1500), 254662);;
     pure()
 );

@@ -1,6 +1,9 @@
 module Main;
 
-import Std;
+import Std::{
+    I64, IO, String, Array::{fill, push_back, to_iter}, Debug::assert_eq, Iterator::{fold, range}, 
+    Monad::pure, String::{_unsafe_from_c_str, get_bytes, get_sub}, ToI64::i64
+};
 
 // Repeated `String::get_sub`: slice a substring out of a long string many times
 // and sum its bytes, so the copied range is fully observed (neither dead-code

@@ -1,8 +1,9 @@
 module Main;
 
+import Speedtest::check_answer;
 import Std::{
-    loop, Array, I64, IO, Array::{fill, from_map, set, @}, Debug::assert_eq,
-    LessThan::max, LoopState::{break, continue}, Monad::pure
+    loop, Array, I64, IO, Array::{@, fill, from_map, set}, LessThan::max, LoopState::{break, continue}, 
+    Monad::pure
 };
 
 // fannkuch-redux over a scratch buffer the program carries itself, which is what the C and
@@ -87,7 +88,7 @@ fannkuch = |n| (
 main : IO ();
 main = (
     let (checksum, maxflips) = fannkuch(10);
-    assert_eq(|_|"fannkuch_scratch: checksum", checksum, 73196);;
-    assert_eq(|_|"fannkuch_scratch: maxflips", maxflips, 38);;
+    check_answer("fannkuch_scratch: checksum", checksum, 73196);;
+    check_answer("fannkuch_scratch: maxflips", maxflips, 38);;
     pure()
 );

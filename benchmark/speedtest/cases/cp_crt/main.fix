@@ -1,7 +1,8 @@
 module Main;
 
-import CPLib.Arithmetic;
-import Speedtest;
+import CPLib.Arithmetic::lift_crt;
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{IO, Array::@, I64::bit_xor, Iterator::{fold, range}, Monad::pure, ToString::to_string};
 
 // The `crt` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.
@@ -19,6 +20,6 @@ main = (
             acc.bit_xor(y).bit_xor(z)
         )
     );
-    assert_eq(|_|"crt", acc.to_string, "785281547879847128");;
+    check_answer("crt", acc.to_string, "785281547879847128");;
     pure()
 );

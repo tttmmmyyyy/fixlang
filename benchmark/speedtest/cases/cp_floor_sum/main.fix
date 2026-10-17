@@ -1,7 +1,8 @@
 module Main;
 
-import CPLib.Arithmetic;
-import Speedtest;
+import CPLib.Arithmetic::floor_sum;
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{IO, Array::@, I64::bit_xor, Iterator::{fold, range}, Monad::pure, ToString::to_string};
 
 // The `floor_sum` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.
@@ -18,6 +19,6 @@ main = (
             acc.bit_xor(floor_sum(ns.@(i), m, aa.@(i) % m, bb.@(i) % m))
         )
     );
-    assert_eq(|_|"floor_sum", acc.to_string, "498075712894463097");;
+    check_answer("floor_sum", acc.to_string, "498075712894463097");;
     pure()
 );

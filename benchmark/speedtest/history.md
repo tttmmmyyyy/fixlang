@@ -2,6 +2,16 @@
 
 Newer is above.
 
+**Rows from the first one carrying a `version` column on build the cases at `-O max`, where
+earlier rows built them at `-O experimental`, and the thirty-one cases with a C or C++ counterpart
+check their answer with `Speedtest::check_answer` in place of `assert_eq`.** The two levels differ
+only in shortening the suffixes the compiler adds to symbol names: built with one compiler,
+`30e482d`, at both levels, 38 of 102 instruction counts moved, none by more than 0.0023%. The nine
+cases with a C and a Rust counterpart read 2,170 to 6,388 instructions higher on the first of these
+rows than on the `d5c7df3` row, beyond the 1,304 below; the compiler differs between the two rows
+as well. The same rows add the `-unchecked` columns, which hold the cases with a C or C++
+counterpart built with `--no-runtime-check`, and the versions of the compilers.
+
 **Rows from the first one carrying `cp_unionfind` columns on read every case 1,304 instructions
 higher, with nothing in the cases changed.** That is where `perf_counters.py` began handing every
 program the two FIFOs through which a program may tell perf which part of its run to count, named in
@@ -11,8 +21,9 @@ instruction count rose by exactly 1,304 on all three, and the split count moved 
 
 The same rows replace the seven `cp_lib_*` cases other than `cp_lib_prime_list` with twenty-two
 `cp_*` cases, which count only the part of the run that calls cp-library and carry a C++
-counterpart, `ref.cpp`, that calls AtCoder Library on the same input. The `cp_lib_*` columns end
-there and the `cp_*` ones begin, so no line on the chart joins the two.
+counterpart, `ref.cpp`, that calls AtCoder Library on the same input, or the C++ standard library
+or a plain implementation for the three functions AtCoder Library does not have. The `cp_lib_*`
+columns end there and the `cp_*` ones begin, so no series joins the two.
 
 **LangArena rows measured before the pinned revision rose from `123412b` to `8dc7019` are not
 comparable with rows after it on six of the fifty programs, and no one compiler builds both
