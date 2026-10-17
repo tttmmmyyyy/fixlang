@@ -325,7 +325,9 @@ main = (
             );;
             pure $ if build_code == 0_U8 { built.push_back(lang) } else { built }
         );
-        let unchecked = built.to_iter.any(|lang| _unchecked_reference_languages.to_iter.any(|l| l == lang));
+        let unchecked = !built.to_iter.filter(|lang|
+            _unchecked_reference_languages.find_by(|l| l == lang).is_some
+        ).is_empty;
         when(unchecked,
             command.append(["--no-runtime-check", "-o", _unchecked_binary]).ez_run_o(config);;
             pure()
@@ -370,7 +372,7 @@ main = (
         // On a machine without the counters every column stays empty and the run carries on.
         let (log, case_contention) = *measure_case(config, dir, "./a.out", "", log);
         let max_contention = max(max_contention, case_contention);
-        let (log, max_contention) = *if !unchecked_dirs.to_iter.any(|d| d == dir) {
+        let (log, max_contention) = *if unchecked_dirs.find_by(|d| d == dir).is_none {
             (log, max_contention).pure
         } else {
             let (log, case_contention) = *measure_case(config, dir, "./" + _unchecked_binary,
