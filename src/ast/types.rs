@@ -280,7 +280,7 @@ impl TyCon {
         self: &TyCon,
         typechecker: &mut TypeCheckContext,
     ) -> Arc<TypeNode> {
-        let ti = typechecker.type_env.tycons().get(self).unwrap();
+        let ti = typechecker.type_env.tycon_info(self);
         assert!(ti.variant == TyConVariant::Struct || ti.variant == TyConVariant::Union);
 
         // Make type variables for type parameters.
@@ -1486,8 +1486,10 @@ impl TypeNode {
     /// absent from `type_env`.
     pub fn toplevel_tycon_info<'a>(&self, type_env: &'a TypeEnv) -> &'a TyConInfo {
         assert!(!self.is_closure());
-        let tycon = self.toplevel_tycon().unwrap();
-        type_env.tycons().get(&tycon).unwrap()
+        let tycon = self
+            .toplevel_tycon()
+            .unwrap_or_else(|| panic!("the type `{:?}` is headed by no type constructor", self));
+        type_env.tycon_info(&tycon)
     }
 
     /// Whether a value of this type is held in place, with its fields laid out where the value
