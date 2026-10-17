@@ -35,7 +35,7 @@ use crate::{
         program::{Program, Symbol},
         traverse::{ExprVisitor, StartVisitResult, VisitState},
         type_env::TypeEnv,
-        types::{type_fun, TyCon, TyConVariant, TypeNode},
+        types::{type_fun, TyCon, TyConInfo, TyConVariant, TypeNode},
     },
     constants::SPLIT_ARG_SUFFIX,
     misc::{map_on_compiler_threads, Map, Set},
@@ -128,13 +128,17 @@ fn split_one_argument(
     codom.collect_tycons(&mut returned_tycons);
 
     let (arg_idx, taken_apart) = params.iter().enumerate().find_map(|(arg_idx, param)| {
-        let tycon = splittable_struct(&doms[arg_idx], type_env)?;
+        let (tycon, declaration) = splittable_struct(&doms[arg_idx], type_env)?;
         // A function handing back a value of the kind it was given has that value put together
         // again by its caller, so taking it apart here only moves the work to the call site.
         if returned_tycons.contains(tycon.as_ref()) {
             return None;
         }
-        let declared = declared_field_names(&tycon, type_env);
+        let declared = declaration
+            .fields
+            .iter()
+            .map(|field| field.name.clone())
+            .collect::<Vec<_>>();
         let taken_apart = destructuring_of(&body, &param.name, &tycon, &declared)?;
         (params.len() + declared.len() - 1 <= MAX_ARGS).then_some((arg_idx, taken_apart))
     })?;
@@ -435,13 +439,18 @@ fn destructuring_of(
     };
     let removed = remover.traverse(body);
     let (pattern, pattern_fields, bound_names) = remover.found?;
+    // The pattern names as many fields as the struct declares, and the type checker accepted them
+    // as distinct fields of the struct, so it names every declared field.
     let bound_names = declared
         .iter()
         .map(|field| {
-            let idx = pattern_fields.iter().position(|name| name == field)?;
-            Some(bound_names[idx].clone())
+            let idx = pattern_fields
+                .iter()
+                .position(|name| name == field)
+                .unwrap_or_else(|| panic!("the pattern leaves out the field `{}`", field));
+            bound_names[idx].clone()
         })
-        .collect::<Option<Vec<_>>>()?;
+        .collect::<Vec<_>>();
     Some(Destructuring {
         tycon: tycon.clone(),
         pattern,
@@ -449,15 +458,6 @@ fn destructuring_of(
         bound_names,
         body: removed.expr,
     })
-}
-
-/// The name of each field the struct `tycon` declares, in the order it declares them.
-fn declared_field_names(tycon: &Arc<TyCon>, type_env: &TypeEnv) -> Vec<Name> {
-    type_env.tycons()[tycon.as_ref()]
-        .fields
-        .iter()
-        .map(|field| field.name.clone())
-        .collect()
 }
 
 /// The walk that finds the first `let` taking `param` apart and drops it from the body.
@@ -510,17 +510,25 @@ impl ExprVisitor for DestructuringRemover<'_> {
     }
 }
 
-/// The type constructor of `ty`, where a value of it is laid out as fields an argument list can
-/// stand in for.
+/// The type constructor of `ty` and its declaration, where a value of it is laid out as fields an
+/// argument list can stand in for.
 ///
 /// A boxed struct is left alone: its fields sit behind a pointer, so handing them over one by one
 /// would copy what the program means to share. So is a struct with a field punched out, whose hole
 /// holds no value to hand over.
 ///
-/// The type checker has accepted the program, so `type_env` declares every type constructor `ty`
-/// can be headed by; the function panics on one it does not.
-fn splittable_struct(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<TyCon>> {
-    let tycon = ty.toplevel_tycon()?;
+/// The program is monomorphic and accepted by the type checker, so `ty` is headed by a type
+/// constructor `type_env` declares; the function panics on any other `ty`.
+fn splittable_struct<'e>(
+    ty: &Arc<TypeNode>,
+    type_env: &'e TypeEnv,
+) -> Option<(Arc<TyCon>, &'e TyConInfo)> {
+    let tycon = ty.toplevel_tycon().unwrap_or_else(|| {
+        panic!(
+            "the argument type `{}` is headed by no type constructor",
+            ty.to_string()
+        )
+    });
     let info = type_env.declaration_of(&tycon);
     if info.variant != TyConVariant::Struct || !info.is_unbox || info.fields.is_empty() {
         return None;
@@ -528,7 +536,7 @@ fn splittable_struct(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<TyCon
     if info.punched_from.is_some() || info.fields.iter().any(|field| field.is_punched) {
         return None;
     }
-    Some(tycon)
+    Some((tycon, info))
 }
 
 /// `body` taken as a function of `params`, each standing at the type beside it.
