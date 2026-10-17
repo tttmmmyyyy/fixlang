@@ -213,6 +213,8 @@ impl ExprVisitor for PullLet {
         // `f(x, y)` nests as `f(x)(y)`, which puts the argument written first on the inner
         // application: settle the function position, then pull this one. `x.f(y)` nests as
         // `f(y)(x)`, which puts the argument written first on this application.
+        // `FreeOccurrenceProbe::target_is_evaluated_ahead_of_an_argument` in `let_elimination`
+        // relies on this order, so a change to it goes there too.
         if expr.app_order == AppSourceCodeOrderType::FX {
             if fun.is_let() {
                 return StartVisitResult::ReplaceAndRevisit(pull_let_out_of_function(expr));

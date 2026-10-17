@@ -48,8 +48,9 @@ and the cost for retaining and releasing an array is saved.
 
 use crate::{
     ast::{
-        expr::{collect_app, ExprNode},
+        expr::{collect_app, AppSourceCodeOrderType, Expr, ExprNode},
         name::FullName,
+        pattern::PatternNode,
         program::Symbol,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
@@ -237,6 +238,12 @@ impl FreeOccurrenceProbe {
         expr.has_free_var(&self.target_name)
     }
 
+    /// Does `pat` bind the target name? Under such a pattern, the target name no longer stands for
+    /// the binding under inspection.
+    fn rebinds_target(&self, pat: &PatternNode) -> bool {
+        pat.pattern.vars().contains(&self.target_name)
+    }
+
     /// Does one of `exprs` the target name is absent from read a local name? Asked of expressions
     /// evaluated as a group, such as the fields of a struct expression: any of them may be
     /// evaluated before the one holding the target name.
@@ -258,6 +265,44 @@ impl FreeOccurrenceProbe {
         later: impl IntoIterator<Item = &'a Arc<ExprNode>>,
     ) -> bool {
         later.into_iter().any(|expr| self.target_occurs_in(expr)) && earlier.has_free_local_var()
+    }
+
+    /// Is every occurrence of the target name in `func` evaluated ahead of a non-variable argument
+    /// that an application written `f(x)` applies `func` to?
+    ///
+    /// The arguments along the application spine of `func` are evaluated before the argument:
+    /// `pull_let` moves them ahead of it, and `application_inlining` binds each of them ahead of
+    /// the expression it pushes the argument into. Every other part of `func` may be evaluated
+    /// after the argument. `application_inlining` puts the argument's `let` outside an `if`, a
+    /// `match` or an `eval` at the root of the spine, and inside a `let` there, ahead of its value
+    /// expression. The bound expression of that `let` is no safer: eliminating the `let` before
+    /// `application_inlining` reaches it puts the bound expression into the value expression. A
+    /// name at the root may likewise come to stand for any of these expressions once its binding
+    /// is eliminated.
+    ///
+    /// This mirrors `AppInliner::end_visit_app` and `PullLet::start_visit_app`, so a change to
+    /// where either puts an argument's `let` comes here too.
+    fn target_is_evaluated_ahead_of_an_argument(&self, func: &Arc<ExprNode>) -> bool {
+        match func.expr.as_ref() {
+            Expr::App(inner_func, _args) => {
+                !self.target_occurs_in(inner_func)
+                    || self.target_is_evaluated_ahead_of_an_argument(inner_func)
+            }
+            Expr::Var(_)
+            | Expr::Let(_, _, _)
+            | Expr::If(_, _, _)
+            | Expr::Match(_, _)
+            | Expr::Eval(_, _)
+            | Expr::Lam(_, _)
+            | Expr::Builtin(_)
+            | Expr::TyAnno(_, _) => false,
+            Expr::ArrayLit(_) | Expr::MakeStruct(_, _) | Expr::FFICall(_, _, _, _, _, _) => {
+                unreachable!(
+                    "an expression whose type is never a function stands in the function position of an application: {}",
+                    func.expr.stringify().to_string()
+                );
+            }
+        }
     }
 }
 
@@ -309,20 +354,35 @@ impl ExprVisitor for FreeOccurrenceProbe {
     }
 
     /// A target name read in an argument of an application, while the function position or an
-    /// earlier argument reads a local name, leaves `used_before_any_other_local_names` false. The
-    /// function is evaluated first, and then the arguments from left to right.
+    /// earlier argument reads a local name, leaves `used_before_any_other_local_names` false. Code
+    /// generation evaluates the function first, and then the arguments from left to right.
+    ///
+    /// An application of one argument that is not a variable may be evaluated in another order.
+    /// `application_inlining` and `pull_let` move the argument into a `let` ahead of part of the
+    /// function, so a target name read in the function while the argument reads a local name also
+    /// leaves `used_before_any_other_local_names` false, unless the application is written `f(x)`
+    /// and `target_is_evaluated_ahead_of_an_argument` holds of the function.
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
+        let func = expr.get_app_func();
         let args = expr.get_app_args();
-        let read_after_a_local_name =
-            self.target_is_read_after_a_local_name(&expr.get_app_func(), args.iter())
-                || args.iter().enumerate().any(|(i, arg)| {
-                    self.target_is_read_after_a_local_name(arg, args[i + 1..].iter())
-                });
-        if read_after_a_local_name {
+        let read_after_a_local_name = self.target_is_read_after_a_local_name(&func, args.iter())
+            || args
+                .iter()
+                .enumerate()
+                .any(|(i, arg)| self.target_is_read_after_a_local_name(arg, args[i + 1..].iter()));
+        let read_after_a_moved_argument = match args.as_slice() {
+            [arg] if !arg.is_var() => {
+                self.target_is_read_after_a_local_name(arg, [&func])
+                    && !(expr.app_order == AppSourceCodeOrderType::FX
+                        && self.target_is_evaluated_ahead_of_an_argument(&func))
+            }
+            _ => false,
+        };
+        if read_after_a_local_name || read_after_a_moved_argument {
             self.used_before_any_other_local_names = false;
         }
 
@@ -360,11 +420,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        let target_rebound = expr
-            .get_let_pat()
-            .pattern
-            .vars()
-            .contains(&self.target_name);
+        let target_rebound = self.rebinds_target(&expr.get_let_pat());
 
         if !target_rebound
             && self
@@ -414,7 +470,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         let vals_not_rebinding_target = expr
             .get_match_pat_vals()
             .into_iter()
-            .filter(|(pat, _val)| !pat.pattern.vars().contains(&self.target_name))
+            .filter(|(pat, _val)| !self.rebinds_target(pat))
             .map(|(_pat, val)| val)
             .collect::<Vec<_>>();
 
