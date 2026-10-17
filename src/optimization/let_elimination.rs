@@ -263,13 +263,13 @@ impl FreeOccurrenceProbe {
     /// Is every occurrence of the target name in `func` evaluated ahead of a non-variable argument
     /// that an application written `f(x)` applies `func` to?
     ///
-    /// Such an application evaluates the arguments along the application spine of `func`, and the
-    /// bound expression of a `let` `func` is, before the argument: `pull_let` takes them first, and
-    /// `application_inlining` puts the argument's `let` under the `let` `func` is. The rest of
-    /// `func` may follow the argument. `application_inlining` puts the argument's `let` ahead of
-    /// the value expression of that `let`, and around an `if`, a `match` or an `eval` that `func`
-    /// is, and the name at the root of the spine may stand for one of them once a binding is
-    /// eliminated.
+    /// The arguments along the application spine of `func` are evaluated before the argument, and
+    /// so is the bound expression of a `let` at the root of the spine: `pull_let` moves them ahead
+    /// of it, and `application_inlining` puts the argument's `let` between the bound expression and
+    /// the value expression. Every other part of `func` may be evaluated after the argument:
+    /// `application_inlining` puts the argument's `let` outside an `if`, a `match` or an `eval` at
+    /// the root of the spine. A name at the root counts as such a part, since eliminating its
+    /// binding may put one of these expressions in its place.
     fn target_is_evaluated_ahead_of_an_argument(&self, func: &Arc<ExprNode>) -> bool {
         match func.expr.as_ref() {
             Expr::App(inner_func, _args) => {
@@ -350,8 +350,8 @@ impl ExprVisitor for FreeOccurrenceProbe {
     /// An application of one argument that is not a variable may be evaluated in another order.
     /// `application_inlining` and `pull_let` move the argument into a `let` ahead of part of the
     /// function, so a target name read in the function while the argument reads a local name also
-    /// leaves `used_before_any_other_local_names` false, unless
-    /// `target_is_evaluated_ahead_of_an_argument` holds of the function.
+    /// leaves `used_before_any_other_local_names` false, unless the application is written `f(x)`
+    /// and `target_is_evaluated_ahead_of_an_argument` holds of the function.
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
