@@ -416,8 +416,8 @@ struct Destructuring {
     body: Arc<ExprNode>,
 }
 
-/// Where `body` takes the struct named `param`, of the type constructor `tycon` declared by
-/// `tycon_info`, apart, where it does so by naming every field.
+/// Where `body` takes the struct named `param` apart by naming every field. The struct's type
+/// constructor is `tycon`, and `tycon_info` is its declaration.
 ///
 /// A pattern that leaves a field out, or binds one to a pattern rather than a name, gives the twin
 /// no argument to stand for it.
