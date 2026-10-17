@@ -50,6 +50,7 @@ use crate::{
     ast::{
         expr::{collect_app, AppSourceCodeOrderType, Expr, ExprNode},
         name::FullName,
+        pattern::PatternNode,
         program::Symbol,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
     },
@@ -237,6 +238,12 @@ impl FreeOccurrenceProbe {
         expr.has_free_var(&self.target_name)
     }
 
+    /// Does `pat` give the target name to a binding of its own? Under such a pattern, the target
+    /// name no longer stands for the binding under inspection.
+    fn rebinds_target(&self, pat: &PatternNode) -> bool {
+        pat.pattern.vars().contains(&self.target_name)
+    }
+
     /// Does one of `exprs` the target name is absent from read a local name? Asked of expressions
     /// evaluated as a group, such as the fields of a struct expression: any of them may be
     /// evaluated before the one holding the target name.
@@ -277,7 +284,7 @@ impl FreeOccurrenceProbe {
                     || self.target_is_evaluated_ahead_of_an_argument(inner_func)
             }
             Expr::Let(pat, _bound, value) => {
-                pat.pattern.vars().contains(&self.target_name) || !self.target_occurs_in(value)
+                self.rebinds_target(pat) || !self.target_occurs_in(value)
             }
             Expr::Var(_)
             | Expr::If(_, _, _)
@@ -410,11 +417,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
-        let target_rebound = expr
-            .get_let_pat()
-            .pattern
-            .vars()
-            .contains(&self.target_name);
+        let target_rebound = self.rebinds_target(&expr.get_let_pat());
 
         if !target_rebound
             && self
@@ -464,7 +467,7 @@ impl ExprVisitor for FreeOccurrenceProbe {
         let vals_not_rebinding_target = expr
             .get_match_pat_vals()
             .into_iter()
-            .filter(|(pat, _val)| !pat.pattern.vars().contains(&self.target_name))
+            .filter(|(pat, _val)| !self.rebinds_target(pat))
             .map(|(_pat, val)| val)
             .collect::<Vec<_>>();
 
