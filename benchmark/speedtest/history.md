@@ -2,6 +2,12 @@
 
 Newer is above.
 
+**From the `2750bb6` row on, the `cp_*` cases build on cp-library `5e9ca0d` in place of
+`7b06f01`.** Its `UnionFind` keeps parents and sizes in four-byte elements and finds a root by
+path halving, which moves `cp_unionfind` built with `--no-runtime-check` from 74,137,489
+instructions and 292,690,155 cycles to 50,007,813 and 118,238,831. No other case's instruction
+count moved by more than 0.001%.
+
 **Rows from the first one carrying a `version` column on build the cases at `-O max`, where
 earlier rows built them at `-O experimental`, and the thirty-one cases with a C or C++ counterpart
 check their answer with `Speedtest::check_answer` in place of `assert_eq`.** The two levels differ
