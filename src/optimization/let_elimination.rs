@@ -238,8 +238,8 @@ impl FreeOccurrenceProbe {
         expr.has_free_var(&self.target_name)
     }
 
-    /// Does `pat` give the target name to a binding of its own? Under such a pattern, the target
-    /// name no longer stands for the binding under inspection.
+    /// Does `pat` bind the target name? Under such a pattern, the target name no longer stands for
+    /// the binding under inspection.
     fn rebinds_target(&self, pat: &PatternNode) -> bool {
         pat.pattern.vars().contains(&self.target_name)
     }

@@ -731,8 +731,8 @@ mod tests {
 
     /// `x` reads the cell, and is read in the bound expression of a `let` applied to an argument
     /// that hands the cell to `unsafe_is_unique`; the value of that `let` is an `if`. The call of
-    /// `fix` sends `main` through the elimination of `defunctionalize_fix`, which eliminates the
-    /// `let` in the function position and leaves the argument to be evaluated ahead of the `if`.
+    /// `fix` makes `defunctionalize_fix` run let elimination on `main`, which eliminates the `let`
+    /// in the function position and leaves the argument to be evaluated ahead of the `if`.
     /// The binding of `x` stays ahead of the argument, so the cell is unique where the argument
     /// reads it.
     #[test]
