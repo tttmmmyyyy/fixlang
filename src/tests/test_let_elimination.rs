@@ -736,8 +736,8 @@ mod tests {
     /// The binding of `x` stays ahead of the argument, so the cell is unique where the argument
     /// reads it.
     #[test]
-    fn test_binding_read_in_the_bound_expression_of_a_let_applied_to_an_argument_stays_ahead_of_it()
-    {
+    fn test_binding_read_in_the_bound_expression_of_a_let_applied_to_an_argument_stays_ahead_of_the_argument(
+    ) {
         let source = r#"
         module Main;
 
@@ -755,7 +755,7 @@ mod tests {
             let cell = Cell { v : k };
             let c = flag;
             let x = cell.@v;
-            let res = (let p = pair_with(x) in if c { p } else { pair_with(0) })(cell.unsafe_is_unique);
+            let res = (let pair_with_x = pair_with(x) in if c { pair_with_x } else { pair_with(0) })(cell.unsafe_is_unique);
             let d = fix(|f, n| if n == 0 { 0 } else { f(n - 1) }, k);
             assert_eq(|_|"the argument reads the cell while it is unique", res, (true, k + k));;
             assert_eq(|_|"the recursion counts down to zero", d, 0);;
