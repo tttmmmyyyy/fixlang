@@ -887,7 +887,7 @@ In this case, keep one as a `use` import and qualify the other minimally, or qua
 
 ## Aspect: comment-style
 
-Scan the doc/inline comments touched by the diff — in Rust source, in the prose of hand-written Markdown docs, and in the changelog entries the change adds. Rewrite whatever violates a convention below; the *Every Rust item must have a doc comment* convention is the one that *adds* a missing comment rather than rewriting. Each convention is tagged with where it applies — **[Rust]** for Rust comments only, **[Rust + Markdown]** for prose in both, **[User docs]** for the documents the project publishes to its users, **[Changelog]** for entries in `CHANGELOG.md`.
+Scan the doc/inline comments touched by the diff — in Rust source, in the prose of hand-written Markdown docs, in the doc comments of Fix source, and in the changelog entries the change adds. Rewrite whatever violates a convention below; the *Every Rust item must have a doc comment* convention is the one that *adds* a missing comment rather than rewriting. Each convention is tagged with where it applies — **[Rust]** for Rust comments only, **[Rust + Markdown]** for prose in both, **[User docs]** for the documents the project publishes to its users, **[Changelog]** for entries in `CHANGELOG.md`.
 
 ### Conventions
 
@@ -1032,14 +1032,16 @@ An entry states the change in a sentence or two; the numbers are what take a rea
 
 ### Procedure
 
-1. Run `git diff <base>` to find changed files and the touched line ranges. Three file kinds are in scope:
+1. Run `git diff <base>` to find changed files and the touched line ranges. Four kinds of text are in scope:
    - **Rust source** (`.rs`): all conventions apply.
    - **Hand-written Markdown docs** (`.md`) — e.g. `Document.md`, `README.md`, docs under `docs/`: only the **[Rust + Markdown]** and **[User docs]** conventions apply. **Exclude generated docs** under `std_doc/` (regenerated from source, so a hand edit would be overwritten) **and dev docs** under `dev-docs/` (written for the people working on the change, under the `devdoc` skill's conventions).
+   - **Doc comments in Fix source** (`.fix`, `std.fix` above all, whose doc comments become the generated documentation users read): the **[Rust + Markdown]** and **[User docs]** conventions apply, and so does the test *Every Rust item must have a doc comment* gives a doc comment's content — leave out what the name and the type already make obvious, and put in the meaning they leave unsaid. A Fix item carries no duty to have a doc comment, so this kind is rewritten and never added to.
    - **`CHANGELOG.md`**: the **[Rust + Markdown]** conventions other than *Don't narrate history* and the **[Changelog]** conventions apply, within the `## [Unreleased]` section alone. Entries under a released version heading record what that release shipped, so they stay as written.
 2. For each changed `.rs` file, examine:
    - (a) comments that appear in the diff hunks (added or modified lines), for the rewriting conventions;
    - (b) Rust items defined or whose signature was modified in the diff hunks, for the *Every Rust item must have a doc comment* convention.
 3. For each changed hand-written `.md` file, examine the prose added or modified in the diff hunks for the **[Rust + Markdown]** and **[User docs]** conventions.
+   For each changed `.fix` file, examine the doc comments added or modified in the diff hunks the same way, together with the content test above.
    In `CHANGELOG.md`, read the entries the diff adds against the **[Changelog]** conventions as well.
 4. For each violation:
    - Identify which convention it is.
