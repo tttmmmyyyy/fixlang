@@ -360,9 +360,10 @@ impl ExprVisitor for FreeOccurrenceProbe {
         let func = expr.get_app_func();
         let args = expr.get_app_args();
         let read_after_a_local_name = self.target_is_read_after_a_local_name(&func, args.iter())
-            || args.iter().enumerate().any(|(i, arg)| {
-                self.target_is_read_after_a_local_name(arg, args[i + 1..].iter())
-            });
+            || args
+                .iter()
+                .enumerate()
+                .any(|(i, arg)| self.target_is_read_after_a_local_name(arg, args[i + 1..].iter()));
         let read_after_a_moved_argument = match args.as_slice() {
             [arg] if !arg.is_var() => {
                 self.target_is_read_after_a_local_name(arg, [&func])
