@@ -18,6 +18,6 @@ main = (
             (uf, acc + if u { 1 } else { 0 })
         ).@1
     );
-    assert_eq(|_|"unionfind", acc.to_string, "5");;
+    check_answer("unionfind", acc.to_string, "5");;
     pure()
 );

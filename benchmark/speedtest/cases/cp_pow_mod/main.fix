@@ -12,6 +12,6 @@ main = (
     let q = 1000000;
     let xs = rands(q, 1000000000, 1_U64); let es = rands(q, 1000000000, 2_U64); let ms = rands(q, 1000000000, 3_U64);
     let acc = *control.measure(|_| range(0, q).fold(0, |i, acc| acc.bit_xor(xs.@(i).pow_mod(es.@(i), ms.@(i) + 1))));
-    assert_eq(|_|"pow_mod", acc.to_string, "95675632");;
+    check_answer("pow_mod", acc.to_string, "95675632");;
     pure()
 );

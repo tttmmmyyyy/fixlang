@@ -12,6 +12,6 @@ main = (
     let n = 1000000;
     let s = from_bytes(rands(n, 26, 1_U64).map(|c| ('a' + c.u8)).push_back(0_U8)).as_ok : String;
     let lcp = *control.measure(|_| calc_lcp_array(calc_suffix_array(s), s));
-    assert_eq(|_|"lcp_array", lcp.to_iter.fold(0, |x, acc| acc + x).to_string, "3618210");;
+    check_answer("lcp_array", lcp.to_iter.fold(0, |x, acc| acc + x).to_string, "3618210");;
     pure()
 );

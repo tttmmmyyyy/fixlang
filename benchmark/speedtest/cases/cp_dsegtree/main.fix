@@ -22,6 +22,6 @@ main = (
             (tree, acc + tree.fold(l, r + 1))
         ).@1
     );
-    assert_eq(|_|"dsegtree", acc.to_string, "100142147228725");;
+    check_answer("dsegtree", acc.to_string, "100142147228725");;
     pure()
 );

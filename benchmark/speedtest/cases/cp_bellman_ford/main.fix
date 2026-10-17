@@ -21,6 +21,6 @@ main = (
         g.build.bellman_ford(0)
     );
     let (cnt, sum) = d.to_iter.fold((0, 0), |x, (cnt, sum)| if x == I64::maximum { (cnt, sum) } else { (cnt + 1, sum + x) });
-    assert_eq(|_|"bellman_ford", cnt.to_string + " " + sum.to_string, "19876 39486003338");;
+    check_answer("bellman_ford", cnt.to_string + " " + sum.to_string, "19876 39486003338");;
     pure()
 );

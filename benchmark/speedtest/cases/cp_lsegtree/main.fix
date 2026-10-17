@@ -26,6 +26,6 @@ main = (
             (tree, acc + x.@v.@value.i64)
         ).@1
     );
-    assert_eq(|_|"lsegtree", acc.to_string, "50032478004588");;
+    check_answer("lsegtree", acc.to_string, "50032478004588");;
     pure()
 );

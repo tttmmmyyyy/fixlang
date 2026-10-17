@@ -8,3 +8,8 @@ files = ["main.fix"]
 
 [build.test]
 files = ["test.fix"]
+
+[[dependencies]]
+name = "speedtest-support"
+version = "0.1.0"
+path = "../_support"

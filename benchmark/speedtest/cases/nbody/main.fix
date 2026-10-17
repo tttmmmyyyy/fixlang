@@ -2,8 +2,9 @@ module Main;
 
 import Std::{
     loop, Array, I64, IO, F64, U8, String, Array::{set, mod, @, @size},
-    Debug::assert_eq, F64::to_string_precision, LoopState::{break, continue}, Monad::pure
+    F64::to_string_precision, LoopState::{break, continue}, Monad::pure
 };
+import Speedtest;
 
 // N-body simulation: float-heavy, uses sqrt (via FFI to libm; linked through
 // `dynamic_links = ["m"]` in fixproj.toml) and an array of `Body` structs that is
@@ -98,6 +99,6 @@ main = (
         if s == steps { break $ bodies };
         continue $ (s + 1, advance(0.01, bodies))
     );
-    assert_eq(|_|"nbody", energy(bodies).to_string_precision(9_U8), "-0.171864733");;
+    check_answer("nbody", energy(bodies).to_string_precision(9_U8), "-0.171864733");;
     pure()
 );

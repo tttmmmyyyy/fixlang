@@ -16,6 +16,6 @@ main = (
         g.build.dijkstra(0)
     );
     let (cnt, sum) = d.to_iter.fold((0, 0), |x, (cnt, sum)| if x == I64::maximum { (cnt, sum) } else { (cnt + 1, sum + x) });
-    assert_eq(|_|"dijkstra", cnt.to_string + " " + sum.to_string, "178344 940675191237638");;
+    check_answer("dijkstra", cnt.to_string + " " + sum.to_string, "178344 940675191237638");;
     pure()
 );

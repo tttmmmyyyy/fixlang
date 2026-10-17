@@ -17,6 +17,6 @@ main = (
         let g = range(0, m).fold(g, |i, g| g.add_edge(us.@(i), l + vs.@(i), 1));
         g.maximize_flow(s, t).@1
     );
-    assert_eq(|_|"maxflow", f.to_string, "48869");;
+    check_answer("maxflow", f.to_string, "48869");;
     pure()
 );

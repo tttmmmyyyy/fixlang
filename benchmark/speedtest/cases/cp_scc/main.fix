@@ -16,6 +16,6 @@ main = (
         g.build.calc_sccs
     );
     let largest = sccs.to_iter.fold(0, |c, acc| max(acc, c.@size));
-    assert_eq(|_|"scc", sccs.@size.to_string + " " + largest.to_string, "40859 159142");;
+    check_answer("scc", sccs.@size.to_string + " " + largest.to_string, "40859 159142");;
     pure()
 );

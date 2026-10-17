@@ -20,6 +20,6 @@ main = (
             }
         )
     );
-    assert_eq(|_|"next_permutation", acc.to_string, "958003200");;
+    check_answer("next_permutation", acc.to_string, "958003200");;
     pure()
 );

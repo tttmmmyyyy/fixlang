@@ -24,6 +24,6 @@ main = (
             (tree, acc + tree.fold(l, r + 1).@v)
         ).@1
     );
-    assert_eq(|_|"segtree", acc.to_string, "100142147228725");;
+    check_answer("segtree", acc.to_string, "100142147228725");;
     pure()
 );

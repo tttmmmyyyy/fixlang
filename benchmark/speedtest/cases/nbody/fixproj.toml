@@ -9,3 +9,8 @@ dynamic_links = ["m"]
 
 [build.test]
 files = ["test.fix"]
+
+[[dependencies]]
+name = "speedtest-support"
+version = "0.1.0"
+path = "../_support"

@@ -30,6 +30,21 @@ _cargo_built_compiler = "../../target/debug/fix";
 _reference_languages : Array String;
 _reference_languages = ["c", "rust", "cpp"];
 
+// The reference languages whose programs index arrays without checking the bounds. A case with a
+// counterpart in one of them is also built with `--no-runtime-check`, as `_unchecked_binary`, so
+// that the comparison runs both sides without the checks. Rust checks its bounds, and is compared
+// with the case as it is built otherwise.
+_unchecked_reference_languages : Array String;
+_unchecked_reference_languages = ["c", "cpp"];
+
+// The program a case is built into with `--no-runtime-check`. Its counts go to the columns of the
+// case under the suffix `_unchecked_suffix`.
+_unchecked_binary : String;
+_unchecked_binary = "unchecked.out";
+
+_unchecked_suffix : String;
+_unchecked_suffix = "-unchecked";
+
 // What `perf_counters.py` exits with when the program it measured exited non-zero, apart from
 // the 1 it exits with when the counters could not be read. There it is `PROGRAM_FAILED`.
 _program_failed : U8;
@@ -126,15 +141,43 @@ namespace CSV {
 }
 
 // Put the counts of a `perf_counters.py` line into the log's last row, under the columns of
-// `case_name`. `language_suffix` names the language a counterpart was measured in, and is empty
-// for the case's own measurement. `fields` holds the whole line: the counts, and the contention
-// after them.
+// `case_name`. `suffix` follows the metric in each column name: it names the language a
+// counterpart was measured in, or `_unchecked_suffix` for the case built without runtime checks,
+// and is empty for the case as it is built otherwise. `fields` holds the whole line: the counts,
+// and the contention after them.
 set_latest_counts : String -> String -> Array String -> CSV -> CSV;
-set_latest_counts = |case_name, language_suffix, fields, log| (
+set_latest_counts = |case_name, suffix, fields, log| (
     let row = log.@size - 1;
     Iterator::range(0, _counter_column_suffixes.@size).fold(log, |i, log|
-        log.set(case_name + _counter_column_suffixes.@(i) + language_suffix, row, fields.@(i))
+        log.set(case_name + _counter_column_suffixes.@(i) + suffix, row, fields.@(i))
     )
+);
+
+// Read the hardware counters over `binary`, a build of the case `case_name` run from its
+// directory, and put the counts into the log's last row under the columns of the case, with
+// `suffix` after the metric. Returns the log and the contention `perf_counters.py` reported, or
+// zero where it read nothing.
+//
+// A case checks its own answer, so a case that exits non-zero is one whose answer moved. The run
+// stops there, since its empty columns would read as a machine that had nothing to count.
+measure_case : EZSConfig -> String -> String -> String -> CSV -> IO (CSV, F64);
+measure_case = |config, case_name, binary, suffix, log| (
+    let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "--windows", _windows,
+        binary].ez_run_oec(config);
+    if perf_code == _program_failed {
+        eprintln("error: " + binary + " of " + case_name + " failed its own check");;
+        exit(1)
+    };
+    if perf_code != 0_U8 { (log, 0.0).pure };
+    let perf_fields = perf.strip_spaces.split(",").to_array;
+    if perf_fields.@size != _counter_column_suffixes.@size + 1 {
+        undefined("error: perf_counters.py reported \"" + perf_fields.to_iter.join(",")
+            + "\" for " + binary + " of " + case_name)
+    };
+    let log = log.set_latest_counts(case_name, suffix, perf_fields);
+    // A figure the harness cannot make out leaves the row's `contention` at whatever the other
+    // cases reported, which is the honest reading: this case said nothing.
+    (log, perf_fields.@(_counter_column_suffixes.@size).read_number).pure
 );
 
 type Args = struct {
@@ -261,7 +304,7 @@ main = (
     // far the heaviest thing this program runs, and a cycle count is dropped on a machine
     // that is busy, so a build standing between two measurements is what costs a run its
     // cycle columns.
-    dirs.fold_m((), |dir, _|
+    let unchecked_dirs = *dirs.fold_m([], |dir, unchecked_dirs|
         ez_cd(config, dir);;
         let compiler = if args.@fix == "" { ["cargo", "run", "--"] } else { [args.@fix] };
         let command = compiler.append(["build", "-O", "experimental", "--emit-symbols", "--allow-preliminary-commands"]);
@@ -272,7 +315,7 @@ main = (
             command
         };
         command.ez_run_o(config);;
-        _reference_languages.to_iter.fold_m((), |lang, _|
+        let built = *_reference_languages.to_iter.fold_m([], |lang, built|
             let (_, _, build_code) = *["python3", "../../reference.py", "build", lang].ez_run_oec(config);
             // A counterpart that does not compile would otherwise reach the measurement as a
             // language this case does not carry, and leave the row short of its columns.
@@ -280,10 +323,16 @@ main = (
                 eprintln("error: the " + lang + " counterpart of " + dir + " does not build");;
                 exit(1)
             );;
+            pure $ if build_code == 0_U8 { built.push_back(lang) } else { built }
+        );
+        let unchecked = built.to_iter.any(|lang| _unchecked_reference_languages.to_iter.any(|l| l == lang));
+        when(unchecked,
+            command.append(["--no-runtime-check", "-o", _unchecked_binary]).ez_run_o(config);;
             pure()
         );;
-        ez_cd(config, "..")
-    );;
+        ez_cd(config, "..");;
+        pure $ if unchecked { unchecked_dirs.push_back(dir) } else { unchecked_dirs }
+    );
 
     // The LangArena programs are built here too, for the reason the cases are: every build stands
     // before every measurement. They come last because the compiler that built the cases is what
@@ -302,7 +351,6 @@ main = (
     // columns mean nothing without it.
     let (log, max_contention) = *dirs.fold_m((log, 0.0), |dir, (log, max_contention)|
         ez_cd(config, dir);;
-        let case_name = dir;
         // Every column of a case comes from one reading of the hardware counters. `-inst` counts
         // the instructions the program retired, which is the program's own figure and reaches the
         // log whatever the machine was doing. `-ram` counts the accesses that reached main memory:
@@ -320,27 +368,15 @@ main = (
         // fails. The `contention` column says how much of the machine the run had.
         //
         // On a machine without the counters every column stays empty and the run carries on.
-        let (perf, _, perf_code) = *["python3", "../../perf_counters.py", "--windows", _windows,
-            "./a.out"].ez_run_oec(config);
-        // A case checks its own answer, so a case that exits non-zero is one whose answer moved.
-        // The run stops here, since its empty columns would read as a machine that had nothing to
-        // count.
-        if perf_code == _program_failed {
-            eprintln("error: " + dir + " failed its own check");;
-            exit(1)
-        };
-        let (log, case_contention) = if perf_code != 0_U8 { (log, 0.0) } else {
-            let perf_fields = perf.strip_spaces.split(",").to_array;
-            if perf_fields.@size != _counter_column_suffixes.@size + 1 {
-                undefined("error: perf_counters.py reported \"" + perf_fields.to_iter.join(",")
-                    + "\" for " + dir)
-            };
-            let log = log.set_latest_counts(case_name, "", perf_fields);
-            // A figure the harness cannot make out leaves the row's `contention` at whatever
-            // the other cases reported, which is the honest reading: this case said nothing.
-            (log, perf_fields.@(_counter_column_suffixes.@size).read_number)
-        };
+        let (log, case_contention) = *measure_case(config, dir, "./a.out", "", log);
         let max_contention = max(max_contention, case_contention);
+        let (log, max_contention) = *if !unchecked_dirs.to_iter.any(|d| d == dir) {
+            (log, max_contention).pure
+        } else {
+            let (log, case_contention) = *measure_case(config, dir, "./" + _unchecked_binary,
+                _unchecked_suffix, log);
+            (log, max(max_contention, case_contention)).pure
+        };
         // A case may carry `ref.c`, `ref.rs` and `ref.cpp`: the same program on the same input,
         // read with the same counters, so the chart can show how far the Fix line is from C,
         // Rust and C++ on each of them. The column name keeps the language last, which is what
@@ -360,7 +396,7 @@ main = (
             // A machine without the counters leaves every field empty, and a column of empty
             // cells is one the log is better off without.
             if ref_out.@(0) == "" { (log, max_contention).pure };
-            let log = log.set_latest_counts(case_name, "-" + lang, ref_out);
+            let log = log.set_latest_counts(dir, "-" + lang, ref_out);
             (log, max(max_contention, ref_out.@(_counter_column_suffixes.@size).read_number)).pure
         );
         // Change back to the parent directory.

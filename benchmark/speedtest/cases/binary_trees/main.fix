@@ -1,8 +1,9 @@
 module Main;
 
 import Std::{
-    I64, IO, Debug::assert_eq, Monad::pure, Tuple2::{@0, @1}
+    I64, IO, Monad::pure, Tuple2::{@0, @1}
 };
+import Speedtest;
 
 // Allocation / refcount stress: build a full binary tree and count its nodes.
 // Each `node` is a heap-allocated (boxed) value, so building and dropping the tree
@@ -25,6 +26,6 @@ check = |t| (
 
 main : IO ();
 main = (
-    assert_eq(|_|"binary_trees", check(make(20)), 2097151);;
+    check_answer("binary_trees", check(make(20)), 2097151);;
     pure()
 );

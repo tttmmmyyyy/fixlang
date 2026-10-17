@@ -12,6 +12,6 @@ main = (
     let n = 1000000;
     let s = from_bytes(rands(n, 26, 1_U64).map(|c| ('a' + c.u8)).push_back(0_U8)).as_ok : String;
     let sa = *control.measure(|_| calc_suffix_array(s));
-    assert_eq(|_|"suffix_array", range(0, n).fold(0, |i, acc| acc + sa.@(i) * i).to_string, "249973518341177452");;
+    check_answer("suffix_array", range(0, n).fold(0, |i, acc| acc + sa.@(i) * i).to_string, "249973518341177452");;
     pure()
 );

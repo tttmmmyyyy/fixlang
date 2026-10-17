@@ -12,6 +12,6 @@ main = (
     let q = 1000000; let m = 1000000007;
     let xs = rands(q, m - 1, 1_U64);
     let acc = *control.measure(|_| range(0, q).fold(0, |i, acc| acc.bit_xor((xs.@(i) + 1).inv_mod(m))));
-    assert_eq(|_|"inv_mod", acc.to_string, "690247173");;
+    check_answer("inv_mod", acc.to_string, "690247173");;
     pure()
 );

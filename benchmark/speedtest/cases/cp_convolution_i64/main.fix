@@ -12,6 +12,6 @@ main = (
     let n = 200000;
     let a = rands(n, 1000000, 1_U64); let b = rands(n, 1000000, 2_U64);
     let c = *control.measure(|_| convolve_i64(a, b));
-    assert_eq(|_|"convolution_i64", c.to_iter.fold(0, |x, acc| acc.bit_xor(x)).to_string, "21474833636446616");;
+    check_answer("convolution_i64", c.to_iter.fold(0, |x, acc| acc.bit_xor(x)).to_string, "21474833636446616");;
     pure()
 );

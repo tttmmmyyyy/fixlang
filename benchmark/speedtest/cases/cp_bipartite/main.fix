@@ -15,6 +15,6 @@ main = (
         let g = range(0, m).fold(BipartiteGraph::create(l, l), |i, g| g.add_edge(us.@(i), vs.@(i)));
         g.maximize_flow.get_max_matching
     );
-    assert_eq(|_|"bipartite", matching.to_iter.filter(|b| b).get_size.to_string, "48869");;
+    check_answer("bipartite", matching.to_iter.filter(|b| b).get_size.to_string, "48869");;
     pure()
 );
