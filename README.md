@@ -34,7 +34,6 @@ A simple, fast, functional language.
   - Fix manages memory by reference counting, and its type system makes cyclic references impossible to construct. Every value is freed the moment it becomes unreachable, so Fix needs no tracing garbage collector, no `weak` references, and no cycle collector.
 - **Tools**
   - Dependency manager (`fix deps`)
-  - [Registry of packages](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) — regular-expression, JSON, hash-map, and GMP/MPFR/Cairo bindings among them
   - Document generator (`fix docs`)
   - Test runner (`fix test`), which also runs the [Fix examples](./Document.md#fix-examples-in-comments-experimental) in documentation comments
   - Language server with [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) extensions, and a [Neovim](https://github.com/ButterPeanuts/fix.nvim) plugin
@@ -100,6 +99,17 @@ main = (
 - [Iterators](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src2=bW9kdWxlIE1haW47DQoNCi8vIENhbGN1bGF0ZXMgZ3JlYXRlc3QgY29tbW9uIGRpdmlzb3Igb2YgdHdvIGludGVnZXJzLg0KZ2NkIDogSTY0IC0%2BIEk2NCAtPiBJNjQ7DQpnY2QgPSB8biwgbXwgKA0KICAgIGlmIG4gPiBtIHsgZ2NkKG0sIG4pIH07DQogICAgaWYgbiA9PSAwIHsgbSB9IGVsc2UgeyBnY2QobSAlIG4sIG4pIH0NCik7DQoNCi8vIENvdW50IGRpdmlzb3JzIG9mIGEgbnVtYmVyLg0KLy8gRm9yIGV4YW1wbGUsIGRpdmlzb3JzIG9mIDEwMCBhcmUgMSwgMiwgNCwgNSwgMTAsIDIwLCAyNSwgNTAsIDEwMCwgDQovLyB3aGljaCBjYW4gYmUgZ3JvdXBlZCBpbnRvIGFzIHsxLCAxMDB9LCB7MiwgNTB9LCB7NCwgMjV9LCB7MTB9Lg0KLy8gU28gYGNvdW50X2RpdnMoMTAwKSA9PSAyICsgMiArIDIgKyAyICsgMWAuIA0KY291bnRfZGl2cyA6IEk2NCAtPiBJNjQ7DQpjb3VudF9kaXZzID0gfG58ICgNCiAgICBJdGVyYXRvcjo6Y291bnRfdXAoMSkgLy8gR2VuZXJhdGUgYW4gaW5maW5pdGUgaXRlcmF0b3IgYDEsIDIsIDMsIC4uLmAgd2hpY2ggYXJlIGNhbmRpZGF0ZXMgZm9yIGRpdmlzb3JzIG9mIGBuYC4NCiAgICAgICAgLnRha2Vfd2hpbGUofGR8IGQqZCA8PSBuKSAvLyBUYWtlIGVsZW1lbnRzIGxlc3MgdGhhbiBvciBlcXVhbCB0byByb290IG9mIGBuYC4NCiAgICAgICAgLmZpbHRlcih8ZHwgbiVkID09IDApIC8vIFRha2Ugb25seSBkaXZpc29ycy4NCiAgICAgICAgLm1hcCh8ZHwgaWYgZCpkID09IG4geyAxIH0gZWxzZSB7IDIgfSkgLy8gQ29udmVydCBhIGRpdmlzb3IgaW50byB0aGUgc2l6ZSBvZiB0aGUgZ3JvdXAgaXQgYmVsb25ncyB0by4NCiAgICAgICAgLmZvbGQoMCwgQWRkOjphZGQpIC8vIFN1bSB1cCB0aGUgaXRlcmF0b3IuIGBmb2xkYCBmb2xkcyBhbiBpdGVyYXRvciBieSBhbiBvcGVyYXRvciAodHdvLXZhcmlhYmxlIGZ1bmN0aW9uKS4gDQogICAgICAgIC8vIGBBZGQ6OmFkZCA6IEk2NCAtPiBJNjQgLT4gSTY0YCBhZGRzIHR3byBpbnRlZ2Vycy4NCik7DQoNCi8vIEluZmluaXRlIGl0ZXJhdG9yIG9mIHBvc2l0aXZlIHJhdGlvbmFsIG51bWJlcnMgbGVzcyB0aGFuIDEuDQpyYXRpb25hbHMgOiBEeW5JdGVyYXRvciAoSTY0LCBJNjQpOyAvLyBQYWlyIG9mIG51bWVyYXRvciBhbmQgZGVub21pbmF0b3IuDQpyYXRpb25hbHMgPSAoDQogICAgSXRlcmF0b3I6OmNvdW50X3VwKDEpIC8vIEl0ZXJhdG9yIG9mIGRlbm9taW5hdG9ycw0KICAgICAgICAubWFwKHxkfCAoDQogICAgICAgICAgICBJdGVyYXRvcjo6cmFuZ2UoMSwgZCkgLy8gSXRlcmF0b3Igb2YgbnVtZXJhdG9ycw0KICAgICAgICAgICAgICAgIC5maWx0ZXIofG58IGdjZChuLCBkKSA9PSAxKSAvLyBGaWx0ZXIgb3V0IG51bWVyYXRvcnMgd2hpY2ggaGFzIGNvbW1vbiBmYWN0b3Igd2l0aCB0aGUgZGVub21pbmF0b3IuDQogICAgICAgICAgICAgICAgLm1hcCh8bnwgKG4sIGQpKSAvLyBNYWtlIHBhaXIgb2YgbnVtZXJhdG9yIGFuZCBkZW5vbWluYXRvci4NCiAgICAgICAgKSkNCiAgICAgICAgLmZsYXR0ZW4NCiAgICAgICAgLnRvX2R5bg0KKTsNCg0Kc3RyaW5naWZ5X3JhdGlvbmFsIDogKEk2NCwgSTY0KSAtPiBTdHJpbmc7DQpzdHJpbmdpZnlfcmF0aW9uYWwgPSB8KG4sIGQpfCBuLnRvX3N0cmluZyArICIvIiArIGQudG9fc3RyaW5nOw0KDQptYWluIDogSU8gKCk7DQptYWluID0gKA0KICAgIHByaW50bG4gJCAiTnVtYmVyIG9mIGRpdmlzb3JzIG9mIDEwMCBpcyAiICsgY291bnRfZGl2cygxMDApLnRvX3N0cmluZyArICIuIjs7DQogICAgcHJpbnRsbiAkICJGaXJzdCAxMDAgcmF0aW9uYWxzIDogIiArIHJhdGlvbmFscy50YWtlKDEwMCkubWFwKHN0cmluZ2lmeV9yYXRpb25hbCkuam9pbigiLCAiKTs7DQogICAgcHVyZSgpDQopOw0K)
 - [Index Syntax](https://tttmmmyyyy.github.io/fixlang-playground/index.html?src3=H4sIAAAAAAAACn2SwWvkIBjF74H8D4%2FSg4KkZnY6hwkDPfQyh6Ww3VtwSprYjpCoRMPSTvO%2FL8YmKZRdL5oX3%2Ffze9qZZmglflZKF2mSJv7NSvySta%2F0aytxgPP9UHtc0gQArHF7kONuy3DcbSmLqlPv8qucJuNUTHW2%2FVJsj9%2Fm0fdKv87lvHlyUTjgo5e1%2F8AVuYwMl5FeZdbYoa28JGX4ld1Z47LFwRDFwF5VQYs0GQO7q5TGHscHEIoDSAS20k8%2BhwPKKIWxnvHy2SJn4JTNneWcYcMpRvY%2FT37LsLldXT84wza4okkUcb65waP08GeJN9TG9I3SlZcwL5NmjVNeGT1%2Fv6jexUNHmjfI%2BfduprnkojxZ40R5ykWmnPQk53S6i0%2FyvRmeQ5GzxB%2FV%2BPNMcbI2ulkx%2FwLkojyF9kR54iJTnWlIN7RkQ1eK7ZX2rcZ1tKyXU6wBlMsqDBLizkPec9Lzy1o2LNmSXUyVLhvESh56SWia0OIv3V%2BEAdcCAAA%3D)
 - For more, see [examples](./examples/).
+
+## Packages
+
+A project adds a package from the [registry](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) with `fix deps add <name>`. The registry includes:
+
+- **Data structures**: hash maps and hash sets, tree maps and tree sets, ordered maps, deques, binary heaps, ring buffers, packed boolean arrays
+- **Text**: regular expressions, JSON, XML, a parser library, Unicode
+- **Math**: big integers and big floats, complex numbers, random number generators, bindings to GMP and MPFR
+- **System**: subprocesses, asynchronous tasks, thread pools and channels, TCP/IP and HTTP, the file system, time and date
+- **Graphics**: PNG images, bindings to Cairo and librsvg
+- **Others**: cryptography (AES, SHA-256, HMAC), BASE64, monad transformers, a command-line parser, and [cp-library](https://github.com/tttmmmyyyy/cp-library) for competitive programming
 
 ## Documents
 
