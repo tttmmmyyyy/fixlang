@@ -133,6 +133,54 @@ pub fn build_program(
     timeout: Option<Duration>,
     description: &str,
 ) -> (TempDir, PathBuf) {
+    build_program_running(source, opt_level, build_args, description, |command| {
+        let mut child = command.spawn().expect("Failed to execute fix build");
+        match timeout {
+            Some(timeout) => {
+                wait_within(&mut child, timeout, &format!("compiling {}", description))
+            }
+            None => child.wait().expect("Failed to wait for fix build"),
+        }
+    })
+}
+
+/// Builds `source` at `opt_level` as `build_program` does, with no timeout, and returns with the
+/// directory and the program the number of instructions the build executed in user space, over the
+/// `fix build` process and every thread it starts. The count is `None` where the machine does not
+/// let the test take it: on a system other than Linux, or where `perf_event_paranoid` forbids it.
+///
+/// Use this for a test whose subject is how much work a build does. The count stays where it is on
+/// a loaded or a slower machine, where the time of the same build moves severalfold.
+pub fn build_program_counting_instructions(
+    source: &str,
+    opt_level: &str,
+    description: &str,
+) -> (TempDir, PathBuf, Option<u64>) {
+    let mut instructions = None;
+    let (temp_dir, program_path) =
+        build_program_running(source, opt_level, &[], description, |command| {
+            let (status, count) = count_instructions(|| {
+                command
+                    .spawn()
+                    .expect("Failed to execute fix build")
+                    .wait()
+                    .expect("Failed to wait for fix build")
+            });
+            instructions = count;
+            status
+        });
+    (temp_dir, program_path, instructions)
+}
+
+/// Builds `source` as `build_program` describes, handing the build command to `run`, which spawns
+/// it, waits for it, and returns its exit status.
+fn build_program_running(
+    source: &str,
+    opt_level: &str,
+    build_args: &[&str],
+    description: &str,
+    run: impl FnOnce(&mut Command) -> ExitStatus,
+) -> (TempDir, PathBuf) {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let program_path = temp_dir.path().join("program");
 
@@ -151,11 +199,7 @@ pub fn build_program(
         .args(build_args)
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(log_for_stderr));
-    let mut child = command.spawn().expect("Failed to execute fix build");
-    let status = match timeout {
-        Some(timeout) => wait_within(&mut child, timeout, &format!("compiling {}", description)),
-        None => child.wait().expect("Failed to wait for fix build"),
-    };
+    let status = run(&mut command);
     assert!(
         status.success(),
         "compiling {} failed: {}\n{}",
@@ -165,6 +209,38 @@ pub fn build_program(
     );
 
     (temp_dir, program_path)
+}
+
+/// Runs `work` and returns its result together with the instructions executed in user space by the
+/// calling thread and by every process and thread it starts within `work`, or `None` where the
+/// machine does not let the count be taken. A child adds its count once it has exited, so `work`
+/// waits for the children whose instructions are to be counted.
+#[cfg(target_os = "linux")]
+fn count_instructions<T>(work: impl FnOnce() -> T) -> (T, Option<u64>) {
+    use perf_event::{events::Hardware, Builder};
+    let mut builder = Builder::new().kind(Hardware::INSTRUCTIONS);
+    builder.inherit(true);
+    let mut counter = match builder.build() {
+        Ok(counter) => counter,
+        Err(_) => return (work(), None),
+    };
+    counter
+        .enable()
+        .expect("Failed to enable the instruction counter");
+    let result = work();
+    counter
+        .disable()
+        .expect("Failed to disable the instruction counter");
+    let count = counter
+        .read()
+        .expect("Failed to read the instruction counter");
+    (result, Some(count))
+}
+
+/// Runs `work`. Counting instructions takes Linux's performance counters, so the count is `None`.
+#[cfg(not(target_os = "linux"))]
+fn count_instructions<T>(work: impl FnOnce() -> T) -> (T, Option<u64>) {
+    (work(), None)
 }
 
 /// Builds, at `-O max` with each function in a compilation unit of its own, a program in which
@@ -243,8 +319,33 @@ pub fn build_within_and_run(
 ) -> String {
     let (_temp_dir, program_path) =
         build_program(source, opt_level, &[], Some(timeout), description);
+    run_program(&program_path, description)
+}
 
-    let output = Command::new(&program_path)
+/// Builds `source` at `opt_level`, runs the program, and returns what it printed on stdout with the
+/// surrounding whitespace removed, together with the instructions the build executed, as
+/// `build_program_counting_instructions` counts them.
+///
+/// Use this for a test whose subject is how much work a build does: the test bounds the count.
+///
+/// # Arguments
+/// * `description` — what is being compiled, as a phrase that reads after "compiling": it is what
+///   a failure names, e.g. "a chain of 2400 `let`s".
+pub fn build_counting_instructions_and_run(
+    source: &str,
+    opt_level: &str,
+    description: &str,
+) -> (String, Option<u64>) {
+    let (_temp_dir, program_path, instructions) =
+        build_program_counting_instructions(source, opt_level, description);
+    (run_program(&program_path, description), instructions)
+}
+
+/// Runs the program at `program_path`, compiled from what `description` names, and returns what it
+/// printed on stdout with the surrounding whitespace removed. Fails the test unless it exits
+/// successfully.
+fn run_program(program_path: &Path, description: &str) -> String {
+    let output = Command::new(program_path)
         .output()
         .expect("Failed to run the compiled program");
     assert!(
