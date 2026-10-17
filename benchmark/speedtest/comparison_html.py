@@ -116,7 +116,7 @@ COMPARISONS = [
         "<p>C++ does not check array bounds, so the Fix programs are built with "
         "<code>--no-runtime-check</code>. The C++ programs are built with {compiler} <code>-O3 "
         "-march=native -std=gnu++20</code>.</p>"
-        "<p>AtCoder's judge runs Fix 1.2.0, and the compiler has become much faster since then, "
+        "<p>AtCoder's judge runs Fix 1.1.0, and the compiler has become much faster since then, "
         "so these numbers are not reached there.</p>"),
     Comparison(
         "cpp", "cpp", "cp-library vs C++", "C++", "g++", "-unchecked",

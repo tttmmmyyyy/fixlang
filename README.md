@@ -41,7 +41,7 @@ A simple, fast, functional language.
 ## Try Fix
 
 - [Fix playground](https://tttmmmyyyy.github.io/fixlang-playground/): write and run Fix programs in your browser, without installing anything. The programs listed under [Examples](#examples) open in it.
-- [AtCoder](https://atcoder.jp/), a major competitive programming site, has Fix as one of its judge languages. The judge runs Fix 1.2.0, so the features and optimizations added since then are not available there.
+- [AtCoder](https://atcoder.jp/), a major competitive programming site, has Fix as one of its judge languages. The judge runs Fix 1.1.0, so the features and optimizations added since then are not available there.
 
 ## Installation
 
