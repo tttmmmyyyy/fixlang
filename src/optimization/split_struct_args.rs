@@ -439,8 +439,8 @@ fn destructuring_of(
     };
     let removed = remover.traverse(body);
     let (pattern, pattern_fields, bound_names) = remover.found?;
-    // The pattern names as many fields as the struct declares, and the type checker accepted them
-    // as distinct fields of the struct, so it names every declared field.
+    // The remover takes only a pattern naming as many fields as the struct declares, and the type
+    // checker rejects a pattern naming a field twice, so the pattern names every declared field.
     let bound_names = declared
         .iter()
         .map(|field| {
@@ -518,7 +518,7 @@ impl ExprVisitor for DestructuringRemover<'_> {
 /// holds no value to hand over.
 ///
 /// The program is monomorphic and accepted by the type checker, so `ty` is headed by a type
-/// constructor `type_env` declares; the function panics on any other `ty`.
+/// constructor `type_env` declares. Panics on any other `ty`.
 fn splittable_struct<'e>(
     ty: &Arc<TypeNode>,
     type_env: &'e TypeEnv,

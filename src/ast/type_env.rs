@@ -147,8 +147,7 @@ impl TypeEnv {
         &self.tycons
     }
 
-    /// The `TyConInfo` this environment holds for `tycon`, which the caller knows it holds. Panics,
-    /// naming `tycon`, if it does not.
+    /// The `TyConInfo` this environment holds for `tycon`. Panics, naming `tycon`, if it holds none.
     pub fn tycon_info(&self, tycon: &TyCon) -> &TyConInfo {
         self.tycons
             .get(tycon)
