@@ -118,7 +118,7 @@ impl TypeEnv {
         if !self.unwrapped_newtypes.contains(tycon) {
             return None;
         }
-        Some(self.tycons.get(tycon).unwrap())
+        Some(self.declaration_of(tycon))
     }
 
     /// Whether a value of `tycon` has become a value of its one field.
@@ -150,12 +150,9 @@ impl TypeEnv {
     /// The declaration of `tycon`, which the caller knows this environment holds. Panics, naming
     /// `tycon`, if it does not.
     pub fn declaration_of(&self, tycon: &TyCon) -> &TyConInfo {
-        self.tycons.get(tycon).unwrap_or_else(|| {
-            panic!(
-                "the type constructor `{}` is undeclared",
-                tycon.to_string()
-            )
-        })
+        self.tycons
+            .get(tycon)
+            .unwrap_or_else(|| panic!("the type constructor `{}` is undeclared", tycon.to_string()))
     }
 
     /// The kind of every name this environment gives a meaning to, type constructors and type

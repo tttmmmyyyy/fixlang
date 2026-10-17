@@ -903,7 +903,7 @@ fn type_declarations_reached(
 
     let mut pending: Vec<TyCon> = tycons.iter().cloned().collect();
     while let Some(tycon) = pending.pop() {
-        for field in &declaration_of(&tycon, type_env).fields {
+        for field in &type_env.declaration_of(&tycon).fields {
             let mut field_tycons: Set<TyCon> = Set::default();
             field.ty.collect_tycons(&mut field_tycons);
             for reached in field_tycons {
@@ -919,7 +919,7 @@ fn type_declarations_reached(
         .map(|tycon| {
             (
                 tycon.to_string(),
-                declaration_digest(declaration_of(tycon, type_env)),
+                declaration_digest(type_env.declaration_of(tycon)),
             )
         })
         .collect();
@@ -960,17 +960,6 @@ fn debug_positions(funcs: &[&RcFunc], globals: &[&RcGlobalInit]) -> u64 {
         for_each_var(&global.init, &mut |var| note(&var.source));
     }
     hasher.finish()
-}
-
-/// The declaration `type_env` holds for `tycon`, which every type the generated code is laid out by
-/// has.
-fn declaration_of<'a>(tycon: &TyCon, type_env: &'a TypeEnv) -> &'a TyConInfo {
-    type_env.tycons().get(tycon).unwrap_or_else(|| {
-        panic!(
-            "the type `{}` the code is generated from is undeclared",
-            tycon.to_string()
-        )
-    })
 }
 
 /// The digest of what a declaration decides about the values of the type: how wide one is, where

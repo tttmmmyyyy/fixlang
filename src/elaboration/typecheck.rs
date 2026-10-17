@@ -851,7 +851,7 @@ impl TypeCheckContext {
                 &[&cond.source],
             ));
         };
-        let cond_ti = self.type_env.tycons().get(&cond_tycon).unwrap().clone();
+        let cond_ti = self.type_env.declaration_of(&cond_tycon).clone();
         if cond_ti.variant != TyConVariant::Union {
             return Err(Errors::from_msg_srcs(
                 format!(
