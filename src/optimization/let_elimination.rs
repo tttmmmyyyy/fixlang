@@ -285,10 +285,13 @@ impl FreeOccurrenceProbe {
             | Expr::Eval(_, _)
             | Expr::Lam(_, _)
             | Expr::Builtin(_)
-            | Expr::TyAnno(_, _)
-            | Expr::ArrayLit(_)
-            | Expr::MakeStruct(_, _)
-            | Expr::FFICall(_, _, _, _, _, _) => false,
+            | Expr::TyAnno(_, _) => false,
+            Expr::ArrayLit(_) | Expr::MakeStruct(_, _) | Expr::FFICall(_, _, _, _, _, _) => {
+                unreachable!(
+                    "an expression whose type is never a function stands in the function position of an application: {}",
+                    func.expr.stringify().to_string()
+                );
+            }
         }
     }
 }
