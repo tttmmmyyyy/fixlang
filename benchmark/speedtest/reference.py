@@ -1,9 +1,10 @@
-"""Build and measure a case's C or Rust counterpart the way the case itself is measured.
+"""Build and measure a case's C, Rust or C++ counterpart the way the case itself is measured.
 
-A case may carry `ref.c` and `ref.rs`: the same program on the same input, checking the
-same answer. Read with the same hardware counters, they give the Fix line a reference to be
+A case may carry `ref.c`, `ref.rs` and `ref.cpp`: the same program on the same input, checking
+the same answer. Read with the same hardware counters, they give the Fix line a reference to be
 read against -- how far the language is from C on that program, tracked over time rather
-than sampled once.
+than sampled once. The `cp_*` cases carry `ref.cpp` alone, which runs AtCoder Library, kept in
+`ac-library/`, where the case runs cp-library.
 
 Building and measuring are separate commands so that the harness can get every build out
 of the way before it reads a counter: a cycle count other work could have moved is dropped,
@@ -12,8 +13,8 @@ and a compiler running between two measurements is that other work.
 Run from inside a case directory. Exits 2 when the case carries no counterpart for the
 language asked for.
 
-    python3 reference.py build <c|rust>
-    python3 reference.py measure <c|rust> [--windows N]
+    python3 reference.py build <c|rust|cpp>
+    python3 reference.py measure <c|rust|cpp> [--windows N]
 
 `measure` prints `<inst>,<ram>,<splits>,<cycles>,<contention>`. Every field but the last comes
 back empty where the hardware counters are out of reach, and the last `0.00`, as they do for the
@@ -36,12 +37,15 @@ NO_COUNTERPART = 2
 
 # The Fix case is built for this host with every feature it has. The counterparts get the same
 # deal, so the comparison is between the languages rather than between the instruction sets they
-# were allowed to use. `../crosslang/build.sh` builds the same three programs for its own
+# were allowed to use. `../crosslang/build.sh` builds the C and Rust programs for its own
 # question, and spells the same two recipes.
 BUILD = {
     "c": (["gcc", "-O3", "-march=native", "ref.c", "-o", "ref_c", "-lm"], "ref.c", "ref_c"),
     "rust": (["rustc", "-O", "-C", "target-cpu=native", "ref.rs", "-o", "ref_rust"],
              "ref.rs", "ref_rust"),
+    "cpp": (["g++", "-O3", "-march=native", "-std=gnu++20", "-I", str(HERE / "ac-library"),
+             "-I", str(HERE / "cases" / "_support"), "ref.cpp", "-o", "ref_cpp"],
+            "ref.cpp", "ref_cpp"),
 }
 
 
@@ -92,8 +96,8 @@ def main():
         windows = int(argv[-1])
         argv = argv[:-2]
     if len(argv) != 2 or argv[0] not in ("build", "measure") or argv[1] not in BUILD:
-        sys.exit("usage: reference.py build <c|rust>\n"
-                 "       reference.py measure <c|rust> [--windows N]")
+        sys.exit("usage: reference.py build <c|rust|cpp>\n"
+                 "       reference.py measure <c|rust|cpp> [--windows N]")
     if argv[0] == "build":
         build(argv[1])
     else:

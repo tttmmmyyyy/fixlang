@@ -1,0 +1,24 @@
+module Main;
+
+import CPLib.Arithmetic;
+import Speedtest;
+
+// The `crt` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let q = 200000;
+    let m1s = rands(q, 1000000000, 1_U64); let m2s = rands(q, 1000000000, 2_U64);
+    let r1s = rands(q, 1000000000, 3_U64); let r2s = rands(q, 1000000000, 4_U64);
+    let acc = *control.measure(|_|
+        range(0, q).fold(0, |i, acc|
+            let m1 = m1s.@(i) + 1; let m2 = m2s.@(i) + 1;
+            let (y, z) = lift_crt([r1s.@(i) % m1, r2s.@(i) % m2], [m1, m2]);
+            acc.bit_xor(y).bit_xor(z)
+        )
+    );
+    assert_eq(|_|"crt", acc.to_string, "785281547879847128");;
+    pure()
+);

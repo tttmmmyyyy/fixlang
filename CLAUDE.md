@@ -45,7 +45,7 @@ This project implements the Fix programming language compiler and related tools 
   output is a neutral change and needs no measurement. Delete `.fixlang` before building. Where
   they differ, read `--emit-llvm`'s `_optimized.ll`.
 - **A change that could not be shown neutral is measured before the pull request**, with
-  `benchmark/speedtest` run as `--langarena` so that all 106 programs land in one row.
+  `benchmark/speedtest` run as `--langarena` so that all 121 programs land in one row.
 - **The primary metric is the instruction count (`instructions:u`).** Conclusions rest on it. It
   depends on neither the load on the machine nor where the code lands in `.text`.
 - **The cycle count is the secondary metric**, reported beside the instruction count in the pull

@@ -1,0 +1,85 @@
+// What the cases that count part of themselves share: the input they generate, and the way they
+// tell `perf_counters.py` which part of the run to count. `speedtest.hpp` is the same for the
+// C++ counterparts.
+module Speedtest;
+
+// The next state of the linear congruential generator `rands` draws from.
+_next_rand : U64 -> U64;
+_next_rand = |x| x * 6364136223846793005_U64 + 1442695040888963407_U64;
+
+// `len` pseudo-random values in [0, m), for `m` at most 2^32, from the generator seeded with
+// `seed`.
+//
+// The upper 32 bits of the generator are scaled to the range by a multiplication and a shift
+// rather than reduced by a division, so that generating the input costs Fix and C++ the same.
+rands : I64 -> I64 -> U64 -> Array I64;
+rands = |len, m, seed| (
+    range(0, len).fold((Array::empty(len), seed), |_, (arr, r)|
+        let r = _next_rand(r);
+        (arr.push_back((r.shift_right(32_U64) * m.u64).shift_right(32_U64).i64), r)
+    ).@0
+);
+
+// The two FIFOs through which `perf_counters.py` lets a program say which part of the run to
+// count. The program writes `enable` or `disable` to the first, and reads perf's answer from the
+// second before it goes on, by which time the counters have changed state.
+//
+// A program run outside the harness has no FIFOs, and every operation on it does nothing.
+type PerfControl = unbox struct { _fifos : Option (IOHandle, IOHandle) };
+
+namespace PerfControl {
+    // Open the FIFOs whose paths `perf_counters.py` puts in `SPEEDTEST_PERF_CTL` and
+    // `SPEEDTEST_PERF_ACK`, and stop the counters, so that what the program does before
+    // `measure` -- generating its input, above all -- is left out of the counts.
+    //
+    // The counters run from the start of the process until this stops them, so the counts
+    // include the start-up of the process, about 150,000 instructions.
+    start : IO PerfControl;
+    start = (
+        let ctl = *_get_env("SPEEDTEST_PERF_CTL");
+        let ack = *_get_env("SPEEDTEST_PERF_ACK");
+        if ctl.is_none || ack.is_none { pure $ PerfControl { _fifos : none() } };
+        let ctl = *open_file(ctl.as_some, "w").try(exit_with_msg(1));
+        let ack = *open_file(ack.as_some, "r").try(exit_with_msg(1));
+        let control = PerfControl { _fifos : some $ (ctl, ack) };
+        control._send("disable");;
+        pure $ control
+    );
+
+    // Count the evaluation of `work`, and nothing else.
+    measure : Lazy a -> PerfControl -> IO a;
+    measure = |work, control| (
+        control._send("enable");;
+        // Evaluating `work` as an I/O action puts it between the two messages, where a plain
+        // `let` could be moved to the place its value is used.
+        let result = *IO::from_runner(|ios| (ios, work()));
+        control._send("disable");;
+        pure $ result
+    );
+
+    // Send `command` to perf, and wait for its answer.
+    //
+    // perf answers with `ack\n` and the NUL that ends it, `_ack_size` bytes. The answer is read as
+    // bytes: read as lines, the NUL would begin the next one.
+    _send : String -> PerfControl -> IO ();
+    _send = |command, control| (
+        if control.@_fifos.is_none { pure() };
+        let (ctl, ack) = control.@_fifos.as_some;
+        write_string(ctl, command + "\n").try(exit_with_msg(1));;
+        let _ = *flush(ctl);
+        let _ = *read_n_bytes(ack, _ack_size).try(exit_with_msg(1));
+        pure()
+    );
+}
+
+// How many bytes perf answers a command with: `ack\n` and its NUL.
+_ack_size : I64;
+_ack_size = 5;
+
+// The value of the environment variable `name`, or none where it is not set.
+_get_env : String -> IO (Option String);
+_get_env = |name| name.borrow_c_str_io(|name_ptr|
+    let value_ptr = *FFI_CALL_IO[Ptr getenv(Ptr), name_ptr];
+    if value_ptr == nullptr { pure $ none() };
+    pure $ some $ *unsafe_from_c_str_ptr_io(value_ptr)
+);

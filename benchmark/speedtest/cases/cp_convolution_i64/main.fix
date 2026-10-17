@@ -1,0 +1,17 @@
+module Main;
+
+import CPLib.Convolution;
+import Speedtest;
+
+// The `convolution_i64` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let n = 200000;
+    let a = rands(n, 1000000, 1_U64); let b = rands(n, 1000000, 2_U64);
+    let c = *control.measure(|_| convolve_i64(a, b));
+    assert_eq(|_|"convolution_i64", c.to_iter.fold(0, |x, acc| acc.bit_xor(x)).to_string, "21474833636446616");;
+    pure()
+);

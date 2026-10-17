@@ -2,6 +2,18 @@
 
 Newer is above.
 
+**Rows from the first one carrying `cp_unionfind` columns on read every case 1,304 instructions
+higher, with nothing in the cases changed.** That is where `perf_counters.py` began handing every
+program the two FIFOs through which a program may tell perf which part of its run to count, named in
+two environment variables, and starting the process takes the longer for them. Measured on
+`nbody`, `iter_flatten` and `arrayrw` with the scripts before and after, on one binary each: the
+instruction count rose by exactly 1,304 on all three, and the split count moved by one or none.
+
+The same rows replace the seven `cp_lib_*` cases other than `cp_lib_prime_list` with twenty-two
+`cp_*` cases, which count only the part of the run that calls cp-library and carry a C++
+counterpart, `ref.cpp`, that calls AtCoder Library on the same input. The `cp_lib_*` columns end
+there and the `cp_*` ones begin, so no line on the chart joins the two.
+
 **LangArena rows measured before the pinned revision rose from `123412b` to `8dc7019` are not
 comparable with rows after it on six of the fifty programs, and no one compiler builds both
 sides.** `8dc7019` builds on `std-experimental` 0.3.1, which calls the writers of floating

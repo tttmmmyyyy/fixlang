@@ -1,0 +1,19 @@
+module Main;
+
+import CPLib.Convolution;
+import CPLib.ZP;
+import Speedtest;
+
+// The `convolution` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let n = 200000;
+    let a = rands(n, 998244353, 1_U64).map(make) : Array (ZP P998244353);
+    let b = rands(n, 998244353, 2_U64).map(make) : Array (ZP P998244353);
+    let c = *control.measure(|_| convolve_zp(a, b));
+    assert_eq(|_|"convolution", c.to_iter.fold(0, |x, acc| acc + x.@value.i64).to_string, "199293543703014");;
+    pure()
+);

@@ -1,0 +1,21 @@
+module Main;
+
+import CPLib.Graph;
+import Speedtest;
+
+// The `dijkstra` of cp-library, run on the input `ref.cpp` gives a plain C++ implementation on `std::priority_queue`. Only the part
+// that calls the library is counted: `PerfControl` leaves generating the input out.
+
+main : IO ();
+main = (
+    let control = *PerfControl::start;
+    let n = 200000; let m = 500000;
+    let us = rands(m, n, 1_U64); let vs = rands(m, n, 2_U64); let ws = rands(m, 1000000000, 3_U64);
+    let d = *control.measure(|_|
+        let g = range(0, m).fold(GraphBuilder::create(n), |i, g| g.add_edge(us.@(i), vs.@(i), ws.@(i)));
+        g.build.dijkstra(0)
+    );
+    let (cnt, sum) = d.to_iter.fold((0, 0), |x, (cnt, sum)| if x == I64::maximum { (cnt, sum) } else { (cnt + 1, sum + x) });
+    assert_eq(|_|"dijkstra", cnt.to_string + " " + sum.to_string, "178344 940675191237638");;
+    pure()
+);
