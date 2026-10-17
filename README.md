@@ -10,7 +10,7 @@ A simple, fast, functional language.
 - **Fast**
   - [Benchmarks against C, Rust and C++](https://tttmmmyyyy.github.io/fixlang/benchmark/): Fix runs as fast as C and Rust on common benchmark programs, and [cp-library](https://github.com/tttmmmyyyy/cp-library), a Fix library for competitive programming, runs as fast as [AtCoder Library](https://github.com/atcoder/ac-library) (C++).
   - In-place update: reference counting lets Fix update a uniquely referenced value in place rather than clone it, without giving up purity. In the Fibonacci program under [Examples](#examples), `set` never clones the array — so algorithms over arrays and hash tables can be written the natural way, with no copying.
-  - Fix is compiled ahead of time to a native binary, through LLVM. One of its goals is to turn high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
+  - One of Fix's goals is to turn high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
 - **Functional**
   - Fix is a purely functional language, like Haskell: functions are pure (except through the FFI), and effects — including I/O — are expressed as monadic values.
   - Higher-kinded types, traits, and associated types give the type system the abstractions a purely functional language needs to abstract uniformly over containers and computations.
