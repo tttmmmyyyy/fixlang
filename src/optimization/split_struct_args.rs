@@ -427,19 +427,19 @@ fn destructuring_of(
     tycon: &Arc<TyCon>,
     tycon_info: &TyConInfo,
 ) -> Option<Destructuring> {
+    let mut remover = DestructuringRemover {
+        param,
+        tycon,
+        field_count: tycon_info.fields.len(),
+        found: None,
+    };
+    let removed = remover.traverse(body);
+    let (pattern, pattern_fields, bound_names) = remover.found?;
     let declared = tycon_info
         .fields
         .iter()
         .map(|field| field.name.clone())
         .collect::<Vec<_>>();
-    let mut remover = DestructuringRemover {
-        param,
-        tycon,
-        field_count: declared.len(),
-        found: None,
-    };
-    let removed = remover.traverse(body);
-    let (pattern, pattern_fields, bound_names) = remover.found?;
     // The remover takes only a pattern naming as many fields as the struct declares, and the type
     // checker rejects a pattern naming a field twice, so the pattern names every declared field.
     let bound_names = declared
