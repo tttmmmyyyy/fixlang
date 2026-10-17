@@ -238,8 +238,8 @@ impl FreeOccurrenceProbe {
         expr.has_free_var(&self.target_name)
     }
 
-    /// Does `pat` give the target name to a binding of its own? Under such a pattern, the target
-    /// name no longer stands for the binding under inspection.
+    /// Does `pat` bind the target name? Under such a pattern, the target name no longer stands for
+    /// the binding under inspection.
     fn rebinds_target(&self, pat: &PatternNode) -> bool {
         pat.pattern.vars().contains(&self.target_name)
     }
@@ -270,13 +270,15 @@ impl FreeOccurrenceProbe {
     /// Is every occurrence of the target name in `func` evaluated ahead of a non-variable argument
     /// that an application written `f(x)` applies `func` to?
     ///
-    /// The arguments along the application spine of `func` are evaluated before the argument, and
-    /// so is the bound expression of a `let` at the root of the spine: `pull_let` moves them ahead
-    /// of it, and `application_inlining` puts the argument's `let` between the bound expression and
-    /// the value expression. Every other part of `func` may be evaluated after the argument:
-    /// `application_inlining` puts the argument's `let` outside an `if`, a `match` or an `eval` at
-    /// the root of the spine. A name at the root counts as such a part, since eliminating its
-    /// binding may put one of these expressions in its place.
+    /// The arguments along the application spine of `func` are evaluated before the argument:
+    /// `pull_let` moves them ahead of it, and `application_inlining` binds each of them ahead of
+    /// the expression it pushes the argument into. Every other part of `func` may be evaluated
+    /// after the argument. `application_inlining` puts the argument's `let` outside an `if`, a
+    /// `match` or an `eval` at the root of the spine, and inside a `let` there, ahead of its value
+    /// expression. The bound expression of that `let` is no safer: eliminating the `let` before
+    /// `application_inlining` reaches it puts the bound expression into the value expression. A
+    /// name at the root may likewise come to stand for any of these expressions once its binding
+    /// is eliminated.
     ///
     /// This mirrors `AppInliner::end_visit_app` and `PullLet::start_visit_app`, so a change to
     /// where either puts an argument's `let` comes here too.
@@ -286,10 +288,8 @@ impl FreeOccurrenceProbe {
                 !self.target_occurs_in(inner_func)
                     || self.target_is_evaluated_ahead_of_an_argument(inner_func)
             }
-            Expr::Let(pat, _bound, value) => {
-                self.rebinds_target(pat) || !self.target_occurs_in(value)
-            }
             Expr::Var(_)
+            | Expr::Let(_, _, _)
             | Expr::If(_, _, _)
             | Expr::Match(_, _)
             | Expr::Eval(_, _)

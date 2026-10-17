@@ -704,6 +704,67 @@ mod tests {
         test_source(source, Configuration::develop_mode());
     }
 
+    /// `r` reads the cell, and is read in the condition of a `match` applied to an argument that
+    /// hands the cell to `unsafe_is_unique`. The binding stays ahead of the argument, so the cell is
+    /// unique where the argument reads it.
+    #[test]
+    fn test_binding_read_in_a_match_applied_to_an_argument_stays_ahead_of_the_argument() {
+        let source = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+
+        pair_with : I64 -> (Bool, Cell) -> (Bool, I64);
+        pair_with = |r, p| (p.@0, r + p.@1.@v);
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : k };
+            let r = cell.@v;
+            assert_eq(|_|"the argument reads the cell while it is unique", (match (r, 3) { (a, b) => if a > b { pair_with(a) } else { pair_with(b + 1) } })(cell.unsafe_is_unique), (true, 5));;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// `x` reads the cell, and is read in the bound expression of a `let` applied to an argument
+    /// that hands the cell to `unsafe_is_unique`; the value of that `let` is an `if`. The call of
+    /// `fix` makes `defunctionalize_fix` run let elimination on `main`, which eliminates the `let`
+    /// in the function position and leaves the argument to be evaluated ahead of the `if`.
+    /// The binding of `x` stays ahead of the argument, so the cell is unique where the argument
+    /// reads it.
+    #[test]
+    fn test_binding_read_in_the_bound_expression_of_a_let_applied_to_an_argument_stays_ahead_of_the_argument(
+    ) {
+        let source = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+
+        pair_with : I64 -> (Bool, Cell) -> (Bool, I64);
+        pair_with = |r, p| (p.@0, r + p.@1.@v);
+
+        flag : Bool;
+        flag = FFI_CALL[I32 getpid()] > 0.i32;
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : k };
+            let c = flag;
+            let x = cell.@v;
+            let res = (let pair_with_x = pair_with(x) in if c { pair_with_x } else { pair_with(0) })(cell.unsafe_is_unique);
+            let d = fix(|f, n| if n == 0 { 0 } else { f(n - 1) }, k);
+            assert_eq(|_|"the argument reads the cell while it is unique", res, (true, k + k));;
+            assert_eq(|_|"the recursion counts down to zero", d, 0);;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
     /// A chain this long builds in a few seconds while the inspection of a binding is proportional
     /// to where its name is read, and in several minutes while it walks the whole body of every
     /// binding.
