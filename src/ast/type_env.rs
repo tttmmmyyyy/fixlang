@@ -147,6 +147,17 @@ impl TypeEnv {
         &self.tycons
     }
 
+    /// The declaration of `tycon`, which the caller knows this environment holds. Panics, naming
+    /// `tycon`, if it does not.
+    pub fn declaration_of(&self, tycon: &TyCon) -> &TyConInfo {
+        self.tycons.get(tycon).unwrap_or_else(|| {
+            panic!(
+                "the type constructor `{}` is undeclared",
+                tycon.to_string()
+            )
+        })
+    }
+
     /// The kind of every name this environment gives a meaning to, type constructors and type
     /// aliases together in one table.
     pub fn kinds(&self) -> Map<TyCon, Arc<Kind>> {

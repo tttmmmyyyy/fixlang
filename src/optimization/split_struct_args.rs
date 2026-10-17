@@ -521,12 +521,7 @@ impl ExprVisitor for DestructuringRemover<'_> {
 /// can be headed by; the function panics on one it does not.
 fn splittable_struct(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Option<Arc<TyCon>> {
     let tycon = ty.toplevel_tycon()?;
-    let info = type_env.tycons().get(tycon.as_ref()).unwrap_or_else(|| {
-        panic!(
-            "the type `{}` of a function's argument is undeclared",
-            tycon.to_string()
-        )
-    });
+    let info = type_env.declaration_of(&tycon);
     if info.variant != TyConVariant::Struct || !info.is_unbox || info.fields.is_empty() {
         return None;
     }
