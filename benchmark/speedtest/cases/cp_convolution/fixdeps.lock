@@ -1,4 +1,4 @@
-proj_file_hash = "c9bc83fd14f3998d72d32706df07c94d"
+proj_file_hash = "54b78e16ed0ef4648c24d19b676bef3f"
 
 [[dependencies]]
 name = "binary-heap"
@@ -25,7 +25,7 @@ path = ".fixlang/deps/cp-library_0.15.0"
 
 [dependencies.git]
 repo = "https://github.com/tttmmmyyyy/cp-library.git"
-rev = "5e9ca0d65eb66f11227c5b8f4bd3445fa404ef5e"
+rev = "cdc501f044f5ab3b0a3164cbbce4301473123834"
 
 [[dependencies]]
 name = "hash"

@@ -2,6 +2,15 @@
 
 Newer is above.
 
+**The second `2750bb6` row builds the `cp_*` cases on cp-library `cdc501f` in place of
+`5e9ca0d`.** Its suffix array, LCP array and `Graph` keep their working arrays in four-byte
+elements. Built with `--no-runtime-check`, `cp_suffix_array` moves from 393,932,266 cycles to
+265,480,281, `cp_lcp_array` from 489,030,183 to 315,943,798, `cp_scc` from 90,455,040 to
+69,089,697 and `cp_twosat` from 76,604,043 to 62,634,299. The instruction counts of
+`cp_lcp_array`, `cp_suffix_array`, `cp_twosat`, `cp_scc` and `cp_dijkstra` rise by 14.66%,
+6.51%, 6.61%, 1.15% and 0.86%, from converting between four- and eight-byte elements, and
+`cp_bellman_ford`'s falls by 3.24%; no other case's moved by more than 0.001%.
+
 **From the `2750bb6` row on, the `cp_*` cases build on cp-library `5e9ca0d` in place of
 `7b06f01`.** Its `UnionFind` keeps parents and sizes in four-byte elements and finds a root by
 path halving, which moves `cp_unionfind` built with `--no-runtime-check` from 74,137,489
