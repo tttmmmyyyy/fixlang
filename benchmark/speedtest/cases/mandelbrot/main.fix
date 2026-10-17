@@ -1,9 +1,7 @@
 module Main;
 
-import Std::{
-    loop, I64, IO, F64, LoopState::{break, continue}, Monad::pure
-};
-import Speedtest;
+import Speedtest::check_answer;
+import Std::{loop, F64, I64, IO, LoopState::{break, continue}, Monad::pure};
 
 // Float-heavy nested loops with no arrays: escape-time iteration over an n*n grid.
 // Coordinates are F64 accumulators (avoids an I64->F64 cast per pixel). Guards the

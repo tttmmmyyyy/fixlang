@@ -1,9 +1,7 @@
 module Main;
 
-import Std::{
-    I64, IO, Monad::pure, Tuple2::{@0, @1}
-};
-import Speedtest;
+import Speedtest::check_answer;
+import Std::{I64, IO, Monad::pure, Tuple2::{@0, @1}};
 
 // Allocation / refcount stress: build a full binary tree and count its nodes.
 // Each `node` is a heap-allocated (boxed) value, so building and dropping the tree

@@ -1,7 +1,8 @@
 module Main;
 
-import CPLib.MaxFlow;
-import Speedtest;
+import CPLib.MaxFlow::MaxFlowGraph::{add_edge, create, maximize_flow};
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{IO, Array::@, Iterator::{fold, range}, Monad::pure, ToString::to_string, Tuple2::@1};
 
 // The `maxflow` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.

@@ -1,7 +1,11 @@
 module Main;
 
-import CPLib.String;
-import Speedtest;
+import CPLib.String::calc_suffix_array;
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{
+    IO, String, Array::{@, push_back}, FromBytes::from_bytes, Functor::map, Iterator::{fold, range}, 
+    Monad::pure, Result::as_ok, ToString::to_string, ToU8::u8
+};
 
 // The `suffix_array` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.

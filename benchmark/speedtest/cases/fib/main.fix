@@ -1,7 +1,7 @@
 module Main;
 
-import Std::{I64, IO, IO::get_args, Monad::pure, Array::@size};
-import Speedtest;
+import Speedtest::check_answer;
+import Std::{I64, IO, Array::@size, IO::get_args, Monad::pure};
 
 // Naive recursive Fibonacci, the function-call-overhead micro-benchmark that public
 // cross-language benchmark suites all carry. Nothing here allocates or touches an

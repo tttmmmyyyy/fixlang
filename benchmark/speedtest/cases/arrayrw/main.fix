@@ -1,10 +1,7 @@
 module Main;
 
-import Std::{
-    loop, Array, I64, IO, Array::{fill, set, @},
-    LoopState::{break, continue}, Monad::pure
-};
-import Speedtest;
+import Speedtest::check_answer;
+import Std::{loop, IO, Array::{@, fill, set}, LoopState::{break, continue}, Monad::pure};
 
 // Tight in-place array read+write: `arr.set(i, arr.@(i) + 1)` over a 1000-element
 // array, repeated many times. The array is only ever held by the loop state, so

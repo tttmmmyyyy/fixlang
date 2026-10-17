@@ -1,10 +1,10 @@
 module Main;
 
+import Speedtest::check_answer;
 import Std::{
-    Array, Bool, I64, IO, U8, Array::{empty, fill, from_map, push_back, set, @, @size},
-    LessThan::min, LoopState::{break, continue}, Monad::pure, ToU8::u8, loop
+    loop, Array, I64, IO, U8, Array::{@, @size, empty, fill, from_map, push_back, set}, LessThan::min, 
+    LoopState::{break, continue}, Monad::pure, ToU8::u8
 };
-import Speedtest;
 
 // Levenshtein distance between every unique pair of words: byte-array traversal
 // driving a two-row dynamic-programming table, with the two rows allocated per

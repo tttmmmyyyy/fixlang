@@ -1,6 +1,16 @@
 module Main;
 
-import EZS;
+import EZS::{ez_cd, ez_run_o, ez_run_oec, EZSConfig, EZSConfig::{default, set_execution_trace}};
+import Std::{
+    loop, undefined, Array, Bool, ErrMsg, F64, I64, IO, Option, Result, String, ToString, U8, 
+    Array::{@, @size, append, fill, find_by, get_sub, is_empty, mod, push_back, resize, set, to_iter}, 
+    F64::to_string_precision, FromString::from_string, Functor::map, 
+    IO::{eprintln, exit, exit_with_msg, get_args, println, write_file_string, IOFail::try}, 
+    Iterator::{filter, filter_map, fold, fold_m, get_size, is_empty, map, range, to_array}, 
+    LessThan::max, LoopState::{break, continue}, Monad::{pure, unless, when}, 
+    Option::{as_some, is_none, is_some, none, some}, Result::{as_ok, is_err}, 
+    String::{@size, ends_with, find, get_bytes, get_sub, join, split, strip_spaces}, ToString::to_string
+};
 
 _cases_path : String;
 _cases_path = "cases";
@@ -26,6 +36,11 @@ _langarena_bench = "../langarena/bench.py";
 _cargo_built_compiler : String;
 _cargo_built_compiler = "../../target/debug/fix";
 
+// The optimization level the cases are built at: the one `fix build` works at when none is given,
+// so that a case is measured as a user's program is built.
+_opt_level : String;
+_opt_level = "max";
+
 // The languages a case may carry a counterpart in, as a `ref.*` source beside its `main.fix`.
 _reference_languages : Array String;
 _reference_languages = ["c", "rust", "cpp"];
@@ -44,6 +59,26 @@ _unchecked_binary = "unchecked.out";
 
 _unchecked_suffix : String;
 _unchecked_suffix = "-unchecked";
+
+// The compilers that build the counterparts: the column of the log that holds each one's version,
+// and the command that prints it.
+_reference_compilers : Array (String, Array String);
+_reference_compilers = [
+    ("version-gcc", ["gcc", "-dumpfullversion"]),
+    ("version-g++", ["g++", "-dumpfullversion"]),
+    ("version-rustc", ["rustc", "--version"]),
+];
+
+// The first word of `text` that starts with a digit: the version number in what a compiler prints
+// for its version, `13.3.0` and `rustc 1.93.1 (01f6ddf75 2026-02-11)` alike.
+_version_number : String -> Option String;
+_version_number = |text| (
+    let words = text.strip_spaces.split(" ").filter(|word|
+        word.@size > 0 && word.get_bytes.@(0) >= '0' && word.get_bytes.@(0) <= '9'
+    ).to_array;
+    if words.is_empty { none() };
+    some(words.@(0))
+);
 
 // What `perf_counters.py` exits with when the program it measured exited non-zero, apart from
 // the 1 it exits with when the counters could not be read. There it is `PROGRAM_FAILED`.
@@ -307,7 +342,7 @@ main = (
     let unchecked_dirs = *dirs.fold_m([], |dir, unchecked_dirs|
         ez_cd(config, dir);;
         let compiler = if args.@fix == "" { ["cargo", "run", "--"] } else { [args.@fix] };
-        let command = compiler.append(["build", "-O", "experimental", "--emit-symbols", "--allow-preliminary-commands"]);
+        let command = compiler.append(["build", "-O", _opt_level, "--emit-symbols", "--allow-preliminary-commands"]);
         let command = if args.@llvm_passes_file != "" {
             command.push_back("--llvm-passes-file")
                    .push_back("../../" + args.@llvm_passes_file)
@@ -340,12 +375,30 @@ main = (
     // before every measurement. They come last because the compiler that built the cases is what
     // builds them, and the build above is what puts that compiler where `--fix` names it.
     ez_cd(config, "..");;
-    let langarena_compiler = if args.@fix == "" { _cargo_built_compiler } else { args.@fix };
+    let built_compiler = if args.@fix == "" { _cargo_built_compiler } else { args.@fix };
     when(args.@langarena,
         ["python3", _langarena_bench, "prepare"].ez_run_o(config);;
-        ["python3", _langarena_bench, "build", "--fix", langarena_compiler].ez_run_o(config);;
+        ["python3", _langarena_bench, "build", "--fix", built_compiler].ez_run_o(config);;
         pure()
     );;
+
+    // The version of the compiler that built the cases. `--version` prints
+    // `fix <version> (<commit>)`, and the commit is already in the row.
+    let version = *[built_compiler, "--version"].ez_run_o(config);
+    let version = version.strip_spaces.split(" ").to_array;
+    if version.@size < 2 {
+        undefined("error: " + built_compiler + " --version printed " + version.to_iter.join(" "))
+    };
+    let log = log.set("version", log.@size - 1, version.@(1));
+
+    // The versions of the compilers that built the counterparts. A machine without one of them
+    // leaves its column empty.
+    let log = *_reference_compilers.to_iter.fold_m(log, |(column, command), log|
+        let (printed, _, code) = *command.ez_run_oec(config);
+        let number = _version_number(printed);
+        if code != 0_U8 || number.is_none { pure $ log };
+        pure $ log.set(column, log.@size - 1, number.as_some)
+    );
     ez_cd(config, _cases_path);;
 
     // The most CPU other work took while the hardware counters were read, carried alongside

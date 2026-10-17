@@ -1,7 +1,8 @@
 module Main;
 
-import CPLib.Arithmetic;
-import Speedtest;
+import CPLib.Arithmetic::pow_mod;
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{IO, Array::@, I64::bit_xor, Iterator::{fold, range}, Monad::pure, ToString::to_string};
 
 // The `pow_mod` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.

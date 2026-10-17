@@ -1,8 +1,12 @@
 module Main;
 
-import CPLib.Segtree;
-import CPLib.Monoid;
-import Speedtest;
+import CPLib.Monoid::{Max, Max::@v};
+import CPLib.Segtree::{build, fold, set, Segtree};
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{
+    I64, IO, Array::@, Functor::map, Iterator::{fold, range}, Monad::pure, ToString::to_string, 
+    Tuple2::@1
+};
 
 // The `segtree` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.

@@ -1,10 +1,10 @@
 module Main;
 
+import Speedtest::check_answer;
 import Std::{
-    loop, Array, I64, IO, Array::{fill, from_map, set, @},
-    LessThan::max, LoopState::{break, continue}, Monad::pure
+    loop, Array, I64, IO, Array::{@, fill, from_map, set}, LessThan::max, LoopState::{break, continue}, 
+    Monad::pure
 };
-import Speedtest;
 
 // fannkuch-redux: heavy in-place integer-array mutation. `Array::set` and the
 // struct field modifiers update in place while the reference is unique, so this

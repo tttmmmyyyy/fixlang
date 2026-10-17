@@ -1,7 +1,8 @@
 module Main;
 
-import CPLib.TwoSat;
-import Speedtest;
+import CPLib.TwoSat::{add_clause, create, solve};
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{IO, Array::@, Iterator::{fold, map, range, to_array}, Monad::pure, Option::is_some};
 
 // The `twosat` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.

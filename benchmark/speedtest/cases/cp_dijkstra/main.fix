@@ -1,7 +1,8 @@
 module Main;
 
-import CPLib.Graph;
-import Speedtest;
+import CPLib.Graph::{dijkstra, GraphBuilder::{add_edge, build, create}};
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{IO, Array::{@, to_iter}, I64::maximum, Iterator::{fold, range}, Monad::pure, ToString::to_string};
 
 // The `dijkstra` of cp-library, run on the input `ref.cpp` gives a plain C++ implementation on `std::priority_queue`. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.

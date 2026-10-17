@@ -1,9 +1,7 @@
 module Main;
 
-import Std::{
-    loop, I64, IO, LoopState::{break, continue}, Monad::pure
-};
-import Speedtest;
+import Speedtest::check_answer;
+import Std::{loop, I64, IO, LoopState::{break, continue}, Monad::pure};
 
 // A tight integer loop whose accumulator carries a modulo. The modulo is what makes this
 // case measure the cost of one iteration: a plain running sum has a closed form the

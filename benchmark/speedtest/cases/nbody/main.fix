@@ -1,10 +1,10 @@
 module Main;
 
+import Speedtest::check_answer;
 import Std::{
-    loop, Array, I64, IO, F64, U8, String, Array::{set, mod, @, @size},
-    F64::to_string_precision, LoopState::{break, continue}, Monad::pure
+    loop, Array, F64, IO, Array::{@, @size, mod, set}, F64::to_string_precision, 
+    LoopState::{break, continue}, Monad::pure
 };
-import Speedtest;
 
 // N-body simulation: float-heavy, uses sqrt (via FFI to libm; linked through
 // `dynamic_links = ["m"]` in fixproj.toml) and an array of `Body` structs that is

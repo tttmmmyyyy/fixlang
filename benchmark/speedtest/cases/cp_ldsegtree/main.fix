@@ -1,8 +1,12 @@
 module Main;
 
-import CPLib.LDSegtree;
-import CPLib.ZP;
-import Speedtest;
+import CPLib.LDSegtree::{act_range, build, fold, LDSegtree};
+import CPLib.ZP::{make, P998244353, ZP, ZP::@value};
+import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
+import Std::{
+    Array, IO, Array::@, Functor::map, Iterator::{fold, range}, Monad::pure, One::one, ToI64::i64, 
+    ToString::to_string, Tuple2::@1, Zero::zero
+};
 
 // The `ldsegtree` of cp-library, run on the input `ref.cpp` gives ac-library. Only the part
 // that calls the library is counted: `PerfControl` leaves generating the input out.
