@@ -626,11 +626,64 @@ mod tests {
         test_source(source, Configuration::develop_mode());
     }
 
-    /// `r` reads the cell, and is read in the condition of an `if` applied to an argument that hands
-    /// the cell to `unsafe_is_unique`. The binding stays ahead of the argument, so the cell is
-    /// unique where the argument reads it.
+    /// `f` is bound to an `if` that reads the cell, and is applied to an argument that hands the
+    /// cell to `unsafe_is_unique`. The binding stays ahead of the argument, so the cell is unique
+    /// where the argument reads it.
     #[test]
-    fn test_binding_read_in_an_if_applied_to_an_argument_stays_ahead_of_the_argument() {
+    fn test_name_of_an_if_applied_to_an_argument_stays_ahead_of_the_argument() {
+        let source = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+
+        pair_with : I64 -> (Bool, Cell) -> (Bool, I64);
+        pair_with = |r, p| (p.@0, r + p.@1.@v);
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : k };
+            let f = if cell.@v > 0 { pair_with(1) } else { pair_with(2) };
+            assert_eq(|_|"the argument reads the cell while it is unique", f(cell.unsafe_is_unique), (true, 2));;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// `r` reads the cell, and is read in the condition of an `if` that is applied first to a
+    /// number and then to an argument that hands the cell to `unsafe_is_unique`. The binding stays
+    /// ahead of the argument, so the cell is unique where the argument reads it.
+    #[test]
+    fn test_binding_read_in_an_if_on_the_spine_of_a_call_stays_ahead_of_the_last_argument() {
+        let source = r#"
+        module Main;
+
+        type Cell = box struct { v : I64 };
+
+        pair_with : I64 -> (Bool, Cell) -> (Bool, I64);
+        pair_with = |r, p| (p.@0, r + p.@1.@v);
+
+        pair_with_negated : I64 -> (Bool, Cell) -> (Bool, I64);
+        pair_with_negated = |r, p| (p.@0, p.@1.@v - r);
+
+        main : IO ();
+        main = (
+            let k = (*get_args).@size;
+            let cell = Cell { v : k };
+            let r = cell.@v;
+            assert_eq(|_|"the argument reads the cell while it is unique", (if r > 0 { pair_with } else { pair_with_negated })(k + 1)(cell.unsafe_is_unique), (true, 3));;
+            pure()
+        );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// `r` reads the cell, and is read in the side expression of an `eval` applied to an argument
+    /// that hands the cell to `unsafe_is_unique`. The binding stays ahead of the argument, so the
+    /// cell is unique where the argument reads it.
+    #[test]
+    fn test_binding_read_in_an_eval_applied_to_an_argument_stays_ahead_of_the_argument() {
         let source = r#"
         module Main;
 
@@ -644,8 +697,7 @@ mod tests {
             let k = (*get_args).@size;
             let cell = Cell { v : k };
             let r = cell.@v;
-            let f = if r > 0 { pair_with(1) } else { pair_with(2) };
-            assert_eq(|_|"the argument reads the cell while it is unique", f(cell.unsafe_is_unique), (true, 2));;
+            assert_eq(|_|"the argument reads the cell while it is unique", (eval assert(|_|"r is positive", r > 0); pair_with(1))(cell.unsafe_is_unique), (true, 2));;
             pure()
         );
         "#;
