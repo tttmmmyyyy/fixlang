@@ -117,7 +117,7 @@ COMPARISONS = [
         "<code>--no-runtime-check</code>. The C++ programs are built with {compiler} <code>-O3 "
         "-march=native -std=gnu++20</code>.</p>"
         "<p>AtCoder's judge runs Fix 1.2.0, and the compiler has become much faster since then, "
-        "so these numbers are not reached there. cp-library requires Fix 1.6.0 or later.</p>"),
+        "so these numbers are not reached there.</p>"),
     Comparison(
         "cpp", "cpp", "cp-library vs C++", "C++", "g++", "-unchecked",
         "Fix built with --no-runtime-check",
