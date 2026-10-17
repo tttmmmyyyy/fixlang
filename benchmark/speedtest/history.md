@@ -2,6 +2,26 @@
 
 Newer is above.
 
+**LangArena rows measured before the pinned revision rose from `8dc7019` to `34fedbb` are
+comparable with rows after it on forty-six of the fifty programs.** `34fedbb` builds on
+`std-experimental` 0.5.0, whose `Format` writes into a monad the caller chooses so that `printf` can
+write as it goes, and on `json` 0.9.0, the release of `json` built on it. Both sides were measured
+with one compiler, `7978400`: of the two `7978400` rows in `log.csv`, the first is the last one on
+`8dc7019` and the second is the first one on `34fedbb`. No other program moved by more than
+0.006%.
+
+| program | instructions | instructions in one unit (`--cu-size inf`) |
+| --- | --- | --- |
+| `Json::Generate` | **-1.48%** | -0.02% |
+| `Etc::CacheSimulation` | **+1.07%** | +0.35% |
+| `CSV::Parse` | +0.28% | -0.00% |
+| `Template::Parse` | +0.01% | -0.00% |
+
+Built as one compilation unit, three of the four do not move: what moved them at the default
+division is which unit each function lands in. `Etc::CacheSimulation` keeps +0.35%, which the cost
+of `format` does not explain, since a call of `format` on a short template takes 4.3% fewer
+instructions on `std-experimental` 0.5.0 than on 0.3.1.
+
 **The second `2750bb6` row builds the `cp_*` cases on cp-library `cdc501f` in place of
 `5e9ca0d`.** Its suffix array, LCP array and `Graph` keep their working arrays in four-byte
 elements. Built with `--no-runtime-check`, `cp_suffix_array` moves from 393,932,266 cycles to
