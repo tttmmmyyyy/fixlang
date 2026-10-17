@@ -134,13 +134,8 @@ fn split_one_argument(
         if returned_tycons.contains(tycon.as_ref()) {
             return None;
         }
-        let declared = tycon_info
-            .fields
-            .iter()
-            .map(|field| field.name.clone())
-            .collect::<Vec<_>>();
-        let taken_apart = destructuring_of(&body, &param.name, &tycon, &declared)?;
-        (params.len() + declared.len() - 1 <= MAX_ARGS).then_some((arg_idx, taken_apart))
+        let taken_apart = destructuring_of(&body, &param.name, &tycon, tycon_info)?;
+        (params.len() + tycon_info.fields.len() - 1 <= MAX_ARGS).then_some((arg_idx, taken_apart))
     })?;
 
     let field_tys = doms[arg_idx].field_types(type_env);
@@ -421,7 +416,8 @@ struct Destructuring {
     body: Arc<ExprNode>,
 }
 
-/// Where `body` takes the struct named `param` apart, where it does so by naming every field.
+/// Where `body` takes the struct named `param`, of the type constructor `tycon` declared by
+/// `tycon_info`, apart, where it does so by naming every field.
 ///
 /// A pattern that leaves a field out, or binds one to a pattern rather than a name, gives the twin
 /// no argument to stand for it.
@@ -429,8 +425,13 @@ fn destructuring_of(
     body: &Arc<ExprNode>,
     param: &FullName,
     tycon: &Arc<TyCon>,
-    declared: &[Name],
+    tycon_info: &TyConInfo,
 ) -> Option<Destructuring> {
+    let declared = tycon_info
+        .fields
+        .iter()
+        .map(|field| field.name.clone())
+        .collect::<Vec<_>>();
     let mut remover = DestructuringRemover {
         param,
         tycon,
@@ -454,7 +455,7 @@ fn destructuring_of(
     Some(Destructuring {
         tycon: tycon.clone(),
         pattern,
-        declared_fields: declared.to_vec(),
+        declared_fields: declared,
         bound_names,
         body: removed.expr,
     })
