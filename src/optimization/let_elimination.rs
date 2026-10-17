@@ -277,6 +277,9 @@ impl FreeOccurrenceProbe {
     /// `application_inlining` puts the argument's `let` outside an `if`, a `match` or an `eval` at
     /// the root of the spine. A name at the root counts as such a part, since eliminating its
     /// binding may put one of these expressions in its place.
+    ///
+    /// This mirrors `AppInliner::end_visit_app` and `PullLet::start_visit_app`, so a change to
+    /// where either puts an argument's `let` comes here too.
     fn target_is_evaluated_ahead_of_an_argument(&self, func: &Arc<ExprNode>) -> bool {
         match func.expr.as_ref() {
             Expr::App(inner_func, _args) => {

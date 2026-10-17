@@ -131,6 +131,10 @@ impl ExprVisitor for AppInliner {
     /// Rewrites an application whose function is a lambda, a `let`, an `if`, a `match` or an
     /// `eval`, and asks for the result to be visited again, so that the application the rewrite
     /// moves inward is rewritten in turn.
+    ///
+    /// Where each arm puts the argument's `let` decides which parts of the function are evaluated
+    /// before the argument. `FreeOccurrenceProbe::target_is_evaluated_ahead_of_an_argument` in
+    /// `let_elimination` relies on these placements, so a change to one of them goes there too.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Get the argument of the application. An application carries one argument until uncurrying
         // rewrites the call onto a function pointer, and a call it has rewritten names the function
