@@ -13,7 +13,7 @@ files = ["test.fix"]
 [[dependencies]]
 name = "cp-library"
 version = "0.15.0"
-git = { url = "https://github.com/tttmmmyyyy/cp-library.git", rev = "5e9ca0d65eb66f11227c5b8f4bd3445fa404ef5e" }
+git = { url = "https://github.com/tttmmmyyyy/cp-library.git", rev = "cdc501f044f5ab3b0a3164cbbce4301473123834" }
 
 [[dependencies]]
 name = "speedtest-support"
