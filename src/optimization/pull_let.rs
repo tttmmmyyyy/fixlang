@@ -166,7 +166,16 @@ fn has_something_to_pull(fun: &Arc<ExprNode>) -> bool {
             args.iter().any(|arg| !arg.is_var()) || has_something_to_pull(inner_fun)
         }
         Expr::Let(_, _, _) => true,
-        _ => false,
+        Expr::Var(_)
+        | Expr::Builtin(_)
+        | Expr::Lam(_, _)
+        | Expr::If(_, _, _)
+        | Expr::Match(_, _)
+        | Expr::TyAnno(_, _)
+        | Expr::ArrayLit(_)
+        | Expr::MakeStruct(_, _)
+        | Expr::FFICall(_, _, _, _, _, _)
+        | Expr::Eval(_, _) => false,
     }
 }
 

@@ -3,11 +3,11 @@
 
 ## Overview
 
-This optimization transforms `let x = {e0} in {e1}` into `{e1}[x:={e0}]` if one of the following conditions hold:
+This optimization transforms `let x = {e0} in {e1}` into `{e1}[x:={e0}]` if one of the following conditions holds:
 1. `e0` is just a name (variable).
-2. `x` is used only once in `e1`, not appear as arguments to a builtin expression, and any of the following sub-conditions hold:
+2. `x` is used only once in `e1`, does not appear as an argument of a builtin expression, and one of the following sub-conditions holds:
 2-a. {e0} is a lambda expression and the occurrence of `x` is in an application
-2-b. {e0} is strictly partial application (i.e. # of args < n) of names to a global lambda expression with n-arguments `f = |a1,...,an| ...`,
+2-b. {e0} applies names to a global lambda expression `f = |a1,...,an| ...` of n parameters, fewer than n of them,
      and the occurrence of `x` is in an application
 2-c. {e1} evaluates `x` "before any other local names", and `x` is not captured by a lambda expression in {e1}
 3. `x`  does not appear in {e1}
@@ -244,7 +244,7 @@ impl FreeOccurrenceProbe {
         pat.pattern.vars().contains(&self.target_name)
     }
 
-    /// Does one of `exprs` the target name is absent from read a local name? Asked of expressions
+    /// Does an expression in `exprs` that lacks the target name read a local name? Asked of expressions
     /// evaluated as a group, such as the fields of a struct expression: any of them may be
     /// evaluated before the one holding the target name.
     fn another_local_name_is_read_in<'a>(

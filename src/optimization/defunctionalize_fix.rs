@@ -361,8 +361,8 @@ impl ExprVisitor for FixDefunctionalizer {
 // let-elimination to a fixpoint. Uniquifying keeps the capture destructuring `let FixCap { .. } = cap`
 // collision-free; let-elimination collapses the `let user_name = #param` aliases the elaborator
 // inserts so each self-reference names the `fix` parameter directly, letting one substitution reach
-// them all. `arity_map` additionally lets let-elimination inline saturated global-lambda
-// applications; pass an empty map to collapse aliases only.
+// them all. `arity_map` additionally lets let-elimination put a strictly partial application of
+// names to a global lambda where it is applied; pass an empty map to collapse aliases only.
 fn normalize_for_lift(expr: &Arc<ExprNode>, arity_map: &Map<FullName, usize>) -> Arc<ExprNode> {
     let mut expr = unique_local_names::run_on_expr(expr, Set::default());
     while let_elimination::run_on_expr_once(&mut expr, arity_map) {}

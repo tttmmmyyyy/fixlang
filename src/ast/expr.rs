@@ -39,8 +39,7 @@ pub struct ExprNode {
     /// For lambda expressions: the source of the parameter.
     /// For MakeStruct expressions: the source of the type constructor name.
     pub aux_src: Option<Span>,
-    /// In an application expression, the order of function and argument in the source code. In the
-    /// case of `f(x)` or `f $ x`, it is `FX`, and in the case of `x.f`, it is `XDotF`.
+    /// In an application expression, how the application is written.
     pub app_order: AppSourceCodeOrderType,
     /// Whether this is a name generated from index syntax for `act_{field}` functions.
     pub struct_act_func_in_index_syntax: bool,
@@ -76,14 +75,14 @@ impl ExprNode {
         }
     }
 
-    // Set source
+    /// This node with its source replaced by `src`.
     pub fn set_source(&self, src: Option<Span>) -> Arc<Self> {
         let mut ret = self.clone_all();
         ret.source = src;
         Arc::new(ret)
     }
 
-    // Set source for the auxiliary purpose (e.g., parameter of a lambda expression or type constructor name of a MakeStruct expression).
+    /// This node with `aux_src` replaced by `src`.
     #[allow(dead_code)]
     pub fn set_aux_src(&self, src: Option<Span>) -> Arc<Self> {
         let mut ret = self.clone_all();
@@ -91,28 +90,29 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    // Set app order
+    /// This node with `app_order` replaced.
     pub fn set_app_order(&self, app_order: AppSourceCodeOrderType) -> Arc<Self> {
         let mut ret = self.clone_all();
         ret.app_order = app_order;
         Arc::new(ret)
     }
 
-    // Set struct_act_func_in_index_syntax
+    /// This node with `struct_act_func_in_index_syntax` replaced by `value`.
     pub fn set_struct_act_func_in_index_syntax(&self, value: bool) -> Arc<Self> {
         let mut ret = self.clone_all();
         ret.struct_act_func_in_index_syntax = value;
         Arc::new(ret)
     }
 
-    // Set inferred type.
+    /// This node with its inferred type set to `ty`.
     pub fn set_type(&self, ty: Arc<TypeNode>) -> Arc<Self> {
         let mut ret = self.clone_all();
         ret.type_ = Some(ty);
         Arc::new(ret)
     }
 
-    // Replace expression, resetting free_vars.
+    /// This node with its expression replaced by `expr`, leaving the free variables to be calculated
+    /// again.
     #[allow(dead_code)]
     pub fn set_expr(&self, expr: Arc<Expr>) -> Arc<Self> {
         let mut ret = self.clone_except_fvs();
