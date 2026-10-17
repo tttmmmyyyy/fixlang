@@ -23,19 +23,19 @@ A simple, fast, functional language.
 - **Fast**
   - In-place update: reference counting lets Fix update a uniquely referenced value in place rather than clone it, without giving up purity. In the Fibonacci program under [Examples](#examples), `set` never clones the array — so algorithms over arrays and hash tables can be written the natural way, with no copying.
   - Fix is compiled ahead of time to a native binary, through LLVM. One of its goals is to turn high-level code into high-performance code without introducing low-level concepts such as "reference" and "lifetime" into the language.
-  - [Benchmark history](https://tttmmmyyyy.github.io/fixlang/benchmark/)
+  - [Benchmarks against C, Rust and C++](https://tttmmmyyyy.github.io/fixlang/benchmark/): Fix runs as fast as C and Rust on common benchmark programs, and [cp-library](https://github.com/tttmmmyyyy/cp-library), a Fix library for competitive programming, runs as fast as AtCoder Library (C++).
 - **Other features**
   - [fixlang-asynctask](https://github.com/tttmmmyyyy/fixlang-asynctask) is a reference implementation for multithreading
   - Foreign function interface (FFI)
 - **Safety**
   - Outside its `unsafe_` functions and the FFI, Fix is memory safe: array indices and union variants are checked at run time, unless the program is built with `--no-runtime-check`.
-  - Fix's values are immutable, so thread safety follows: nothing shared between threads can be seen mutating. A multithreaded program turns on the `threaded` flag, which makes reference counts atomic at some run-time cost.
+  - Fix's values are immutable, so thread safety follows: nothing shared between threads can be seen mutating.
 - **Memory management**
   - Fix manages memory by reference counting, and its type system makes cyclic references impossible to construct. Every value is freed the moment it becomes unreachable, so Fix needs no tracing garbage collector, no `weak` references, and no cycle collector.
 - **Tools**
-  - Dependency manager
+  - Dependency manager (`fix deps`)
   - [Registry of packages](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) — regular-expression, JSON, hash-map, and GMP/MPFR/Cairo bindings among them
-  - Document generator
+  - Document generator (`fix docs`)
   - Language server with [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) extensions, and a [Neovim](https://github.com/ButterPeanuts/fix.nvim) plugin
 
 ## Installation
