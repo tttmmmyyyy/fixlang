@@ -38,9 +38,12 @@ A simple, fast, functional language.
   - Document generator (`fix docs`)
   - Language server with [VSCode](https://marketplace.visualstudio.com/items?itemName=tttmmmyyyy.fixlang-language-client) and [Zed](https://github.com/tttmmmyyyy/zed-fixlang-support) extensions, and a [Neovim](https://github.com/ButterPeanuts/fix.nvim) plugin
 
-## Installation
+## Try Fix
 
-You can try Fix without installing it, in the [Fix playground](https://tttmmmyyyy.github.io/fixlang-playground/); it's also one of the judge languages on [AtCoder](https://atcoder.jp/), a major competitive programming site.
+- [Fix playground](https://tttmmmyyyy.github.io/fixlang-playground/): write and run Fix programs in your browser, without installing anything. The programs listed under [Examples](#examples) open in it.
+- [AtCoder](https://atcoder.jp/), a major competitive programming site, has Fix as one of its judge languages. The judge runs Fix 1.2.0, so the features and optimizations added since then are not available there.
+
+## Installation
 
 Fix provides prebuilt binaries for:
 
