@@ -1,6 +1,6 @@
 ---
 name: pr-message
-description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain what every item the diff touches is, what the change did to it, and why, show the diff of each changed item, bounded to that item, link every item the change adds or modifies to its implementation on GitHub, cover the tests in a section of their own saying what each pins and what it does without the change, quote every text the change shows to a user, and explain a bug fix by tracing the program state through the failing run and the fixed run. Use when: writing or revising a pull request body.'
+description: 'Conventions for writing a pull request body, added on top of the devdoc skill: explain what every item the diff touches is, what the change did to it, and why, show the diff of each changed item, bounded to that item, and the code of each added one that carries logic, link every item the change adds or modifies to its implementation on GitHub, cover the tests in a section of their own saying what each pins and what it does without the change, quote every text the change shows to a user, and explain a bug fix by tracing the program state through the failing run and the fixed run. Use when: writing or revising a pull request body.'
 ---
 
 # Writing a pull request body
@@ -104,7 +104,9 @@ The result goes in a fenced `diff` block, under the prose for that item.
 
 **This one is embedded rather than linked.** GitHub renders a diff per file, never per item, so no URL bounds a diff the way the item needs. The link the section above requires still applies — it points at the item as it now stands, which is what a reader who wants the surroundings opens.
 
-**An added item carries no diff**, only its link: every line of it is new, so the diff would repeat the file the link already opens.
+**An added item carries its code, folded.** A link sends the reader to another page and leaves the body, so the body embeds the code of an added item the reader has to read with care: one that carries logic — a function, a method, a type whose invariant the code keeps. Put it in a fenced block of the item's language inside `<details>`, folded from the start, with a `<summary>` naming the item. The link stays beside it, for the surroundings.
+
+Leave out what the reader does not read line by line: test code, which the tests section covers by what it pins; a large table or data literal; and code generated or written out mechanically, such as a list of trivial getters.
 
 **An example written here belongs in the code as well.** The `devdoc` skill's *An example of input and output* applies to these entries, so an entry often carries one input and the output it produces. That pair was judged worth a reader's attention — and the reader of the pull request meets it once, where the reader of the code meets the item on every reading. So put it in the item's doc comment too, under `# Examples`, in the shape the `code-review` skill's `comment-style` aspect gives. Writing the example is the moment to check that the code has one; nothing later looks back at the item.
 
