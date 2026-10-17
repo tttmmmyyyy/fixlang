@@ -104,12 +104,13 @@ main = (
 
 A project adds a package from the [registry](https://tttmmmyyyy.github.io/fixlang-docpage-generator/) with `fix deps add <name>`. The registry includes:
 
+- **Competitive programming**: [cp-library](https://github.com/tttmmmyyyy/cp-library), with segment trees (lazy ones included), union-find, max flow and min-cost flow, bipartite matching, strongly connected components, 2-SAT, suffix arrays, convolution, modular arithmetic and number theory
 - **Data structures**: hash maps and hash sets, tree maps and tree sets, ordered maps, deques, binary heaps, ring buffers, packed boolean arrays
 - **Text**: regular expressions, JSON, XML, a parser library, Unicode
 - **Math**: big integers and big floats, complex numbers, random number generators, bindings to GMP and MPFR
 - **System**: subprocesses, asynchronous tasks, thread pools and channels, TCP/IP and HTTP, the file system, time and date
 - **Graphics**: PNG images, bindings to Cairo and librsvg
-- **Others**: cryptography (AES, SHA-256, HMAC), BASE64, monad transformers, a command-line parser, and [cp-library](https://github.com/tttmmmyyyy/cp-library) for competitive programming
+- **Others**: cryptography (AES, SHA-256, HMAC), BASE64, monad transformers, and a command-line parser
 
 ## Documents
 
