@@ -128,13 +128,13 @@ fn split_one_argument(
     codom.collect_tycons(&mut returned_tycons);
 
     let (arg_idx, taken_apart) = params.iter().enumerate().find_map(|(arg_idx, param)| {
-        let (tycon, declaration) = splittable_struct(&doms[arg_idx], type_env)?;
+        let (tycon, tycon_info) = splittable_struct(&doms[arg_idx], type_env)?;
         // A function handing back a value of the kind it was given has that value put together
         // again by its caller, so taking it apart here only moves the work to the call site.
         if returned_tycons.contains(tycon.as_ref()) {
             return None;
         }
-        let declared = declaration
+        let declared = tycon_info
             .fields
             .iter()
             .map(|field| field.name.clone())
@@ -510,7 +510,7 @@ impl ExprVisitor for DestructuringRemover<'_> {
     }
 }
 
-/// The type constructor of `ty` and its declaration, where a value of it is laid out as fields an
+/// The type constructor of `ty` and its `TyConInfo`, where a value of it is laid out as fields an
 /// argument list can stand in for.
 ///
 /// A boxed struct is left alone: its fields sit behind a pointer, so handing them over one by one
@@ -529,7 +529,7 @@ fn splittable_struct<'e>(
             ty.to_string()
         )
     });
-    let info = type_env.declaration_of(&tycon);
+    let info = type_env.tycon_info(&tycon);
     if info.variant != TyConVariant::Struct || !info.is_unbox || info.fields.is_empty() {
         return None;
     }

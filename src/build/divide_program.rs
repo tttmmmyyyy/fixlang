@@ -903,7 +903,7 @@ fn type_declarations_reached(
 
     let mut pending: Vec<TyCon> = tycons.iter().cloned().collect();
     while let Some(tycon) = pending.pop() {
-        for field in &type_env.declaration_of(&tycon).fields {
+        for field in &type_env.tycon_info(&tycon).fields {
             let mut field_tycons: Set<TyCon> = Set::default();
             field.ty.collect_tycons(&mut field_tycons);
             for reached in field_tycons {
@@ -919,7 +919,7 @@ fn type_declarations_reached(
         .map(|tycon| {
             (
                 tycon.to_string(),
-                declaration_digest(type_env.declaration_of(tycon)),
+                declaration_digest(type_env.tycon_info(tycon)),
             )
         })
         .collect();

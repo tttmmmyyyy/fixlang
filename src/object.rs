@@ -1651,7 +1651,7 @@ pub fn ty_to_object_ty(
             "A value of `{}` is laid out, though a value of this newtype has become a value of its one field.",
             ty.to_string()
         );
-        let ti = type_env.declaration_of(&tc);
+        let ti = type_env.tycon_info(&tc);
         match ti.variant {
             TyConVariant::Primitive => {
                 assert!(capture.is_empty());
