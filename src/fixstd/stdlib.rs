@@ -827,7 +827,10 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         let lexicographic_impl = |trait_name: &str, method: &str, op: &str, if_equal: &str| {
             let mut imp = impl_head(&|i| format!("t{i} : Eq, t{i} : {trait_name}"), trait_name);
             imp += &format!("    {method} = |{xs}, {ys}| (\n");
-            imp += &join_items(&|i| format!("        if x{i} != y{i} {{ x{i} {op} y{i} }};\n"), "");
+            imp += &join_items(
+                &|i| format!("        if x{i} != y{i} {{ x{i} {op} y{i} }};\n"),
+                "",
+            );
             imp += &format!("        {if_equal}\n");
             imp += "    );\n";
             imp += "}\n\n";
