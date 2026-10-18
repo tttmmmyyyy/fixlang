@@ -1,5 +1,5 @@
 /*
-Uncurrying optimizaion
+Uncurrying optimization
 
 Convert globally defined lambda expressions `|x1,...,xn| (...) : T1 -> ... -> Tn -> R` to function pointer expressions `[x1,...,xn] (...) : [T1,...,Tn] R`.
 Also, convert lambda expression call expressions `f(a1, a2, ..., an)` to function pointer expression call expressions `f[a1,a2,...,an]`.
@@ -7,7 +7,7 @@ Also, convert lambda expression call expressions `f(a1, a2, ..., an)` to functio
 For each lambda expression, define multiple function pointer expressions such as one-variable function pointer expression, two-variable function pointer expression, etc.,
 and select the appropriate one according to the call site.
 
-NOTE: I hope to implement higher-order uncurrying optimization (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) in a future!
+Higher-order uncurrying (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) is not implemented.
 */
 
 use super::rename::rename_lam_param_avoiding;
@@ -20,39 +20,38 @@ use crate::{
     },
     constants::{FUNPTR_ARGS_MAX, INSTANCIATED_NAME_SEPARATOR, STD_NAME},
     fixstd::stdlib::FIX_NAME,
-    misc::{for_each_on_compiler_threads, map_on_compiler_threads, Map, Set},
+    misc::{for_each_on_compiler_threads, map_on_compiler_threads, Map},
     optimization::eta_expansion,
 };
-use std::{mem, sync::Arc, usize};
+use std::{mem, sync::Arc};
 
 /// Defines a function pointer version of each global for one, two, ... arguments, then rewrites the
 /// calls, export statements and entry IO value of the program onto the version matching the number
 /// of arguments they supply. The symbols are rewritten on up to `num_threads` threads.
-pub fn run(fix_mod: &mut Program, num_threads: usize) {
-    // First, define uncurried version of global symbols.
-    let syms = mem::replace(&mut fix_mod.symbols, Default::default());
+///
+/// Returns the versions it defined, which a later `replace_calls_with_funptr_versions` takes.
+pub fn run(prg: &mut Program, num_threads: usize) -> FunptrVersions {
+    // Define the function pointer versions of each global.
+    let syms = mem::replace(&mut prg.symbols, Default::default());
     let versions_of_syms = map_on_compiler_threads(
         syms.into_iter().collect(),
         num_threads,
         |(sym_name, sym)| with_funptr_versions(sym_name, sym),
     );
-    for (name, sym) in versions_of_syms.into_iter().flatten() {
-        fix_mod.symbols.insert(name, sym);
+    let mut versions = FunptrVersions::default();
+    for global_and_versions in versions_of_syms {
+        let global = global_and_versions[0].0.clone();
+        for (n_args, (name, _)) in global_and_versions.iter().enumerate().skip(1) {
+            versions.insert(name.clone(), (global.clone(), n_args));
+        }
+        prg.symbols.extend(global_and_versions);
     }
 
-    // Replace application expressions so that they use uncurried pointers.
-    let mut symbol_names: Set<FullName> = Default::default();
-    for (name, _sym) in &fix_mod.symbols {
-        symbol_names.insert(name.clone());
-    }
-    for_each_on_compiler_threads(fix_mod.symbols.values_mut().collect(), num_threads, |sym| {
-        let expr =
-            replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), &symbol_names);
-        sym.expr = Some(expr);
-    });
+    // Rewrite the calls onto the function pointer versions.
+    replace_calls_with_funptr_versions(prg, &versions, num_threads);
 
     // Replace export statements so that they use uncurried functions.
-    for export in &mut fix_mod.export_statements {
+    for export in &mut prg.export_statements {
         let exported_value = export.value_expr.as_ref().unwrap();
         let n_args = exported_value
             .type_
@@ -61,8 +60,7 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) {
             .collect_app_src(usize::MAX)
             .0
             .len();
-        let Some(uncurried_value) = uncurried_symbol(&fix_mod.symbols, exported_value, n_args)
-        else {
+        let Some(uncurried_value) = uncurried_symbol(&prg.symbols, exported_value, n_args) else {
             continue;
         };
         export.value_name = uncurried_value.name.clone();
@@ -71,15 +69,54 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) {
     }
 
     // Replace entry IO value so that it uses uncurried function.
-    if let Some(entry_io_value) = &fix_mod.entry_io_value {
+    if let Some(entry_io_value) = &prg.entry_io_value {
         // The entry IO value has the unwrapped `IO` type, i.e., the `IOState -> (IOState, a)` type,
         // so it takes one argument.
-        if let Some(sym) = uncurried_symbol(&fix_mod.symbols, entry_io_value, 1) {
-            fix_mod.entry_io_value =
-                Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
+        if let Some(sym) = uncurried_symbol(&prg.symbols, entry_io_value, 1) {
+            prg.entry_io_value = Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
         }
     }
+
+    versions
 }
+
+/// Rewrites every call of a global in the program onto the function pointer version matching the
+/// number of arguments it supplies, on up to `num_threads` threads.
+///
+/// A call of a version whose result is applied to more arguments is merged into one call of a
+/// longer version. So running this again after other passes rewrites the calls those passes bring
+/// together.
+///
+/// # Examples
+/// `g(a)(b)` becomes `g#funptr2(a, b)`, and so does `g#funptr1(a)(b)`.
+///
+/// # Arguments
+/// * `versions` — the versions `run` defined, each of which must still be in the program.
+pub fn replace_calls_with_funptr_versions(
+    prg: &mut Program,
+    versions: &FunptrVersions,
+    num_threads: usize,
+) {
+    for version in versions.keys() {
+        assert!(
+            prg.symbols.contains_key(version),
+            "the function pointer version `{}` is no longer in the program",
+            version.to_string()
+        );
+    }
+    for_each_on_compiler_threads(prg.symbols.values_mut().collect(), num_threads, |sym| {
+        let expr =
+            replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), versions);
+        sym.expr = Some(expr);
+    });
+}
+
+/// The function pointer versions defined in a program: the name of each, mapped to the name of the
+/// global it is a version of and the number of arguments it takes.
+///
+/// # Examples
+/// `g#funptr2` maps to `(g, 2)`.
+pub type FunptrVersions = Map<FullName, (FullName, usize)>;
 
 /// The symbol `sym_name`, whose definition is `sym`, followed by its function pointer versions taking
 /// one argument, two arguments, and so on, as many as its leading lambdas allow.
@@ -147,6 +184,9 @@ pub fn is_std_fix(name: &FullName) -> bool {
 
 /// Rewrites `name` in place into the name carried by the uncurried version taking `n_args`
 /// arguments.
+///
+/// # Examples
+/// `g` with 2 arguments becomes `g#funptr2`.
 fn convert_to_funptr_name(name: &mut Name, n_args: usize) {
     *name += &format!("#funptr{}", n_args);
 }
@@ -218,17 +258,14 @@ fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<E
 /// Replace "call closure" expression to "call function pointer" expression.
 ///
 /// # Arguments
-/// * `symbol_names` — the names of every global defined in the program, including the uncurried
-///   ones. A call is rewritten only when the uncurried version it would name is among them.
+/// * `versions` — the function pointer versions the program defines. A call is rewritten only when
+///   the version it would name is among them.
 fn replace_closure_call_to_funptr_call(
     expr: &Arc<ExprNode>,
-    symbol_names: &Set<FullName>,
+    versions: &FunptrVersions,
 ) -> Arc<ExprNode> {
     let (fun, args) = collect_app(expr);
     let fun_ty = fun.type_.as_ref().unwrap();
-    if fun_ty.is_funptr() {
-        return expr.clone();
-    }
     match &*fun.expr {
         Expr::Var(v) => {
             if v.name.is_local() {
@@ -241,8 +278,31 @@ fn replace_closure_call_to_funptr_call(
                 return expr.clone();
             }
             let mut f_funptr = v.as_ref().clone();
+            if fun_ty.is_funptr() {
+                // A version of a global, called with its arguments and then the arguments of what
+                // it returns: `g#funptrN(a1, ..., aN)(b1, ..., bM)` becomes
+                // `g#funptr(N+M)(a1, ..., aN, b1, ..., bM)`.
+                let Some((global, n_args)) = versions.get(&f_funptr.name) else {
+                    unreachable!(
+                        "the global `{}` of a function pointer type is not a version `run` defined",
+                        f_funptr.name.to_string()
+                    );
+                };
+                let n_args = *n_args;
+                assert!(
+                    args.len() >= n_args,
+                    "`{}` takes {} arguments but is applied to {}",
+                    f_funptr.name.to_string(),
+                    n_args,
+                    args.len()
+                );
+                if args.len() == n_args {
+                    return expr.clone();
+                }
+                f_funptr.name = global.clone();
+            }
             convert_to_funptr_name(&mut f_funptr.name.name, args.len());
-            if !symbol_names.contains(&f_funptr.name) {
+            if !versions.contains_key(&f_funptr.name) {
                 // If function pointer version is not defined, do not apply uncurry.
                 return expr.clone();
             }
@@ -262,62 +322,44 @@ fn replace_closure_call_to_funptr_call(
 /// Replace all "call closure" subexpressions to "call function pointer" expression.
 fn replace_closure_call_to_funptr_call_subexprs(
     expr: &Arc<ExprNode>,
-    symbol_names: &Set<FullName>,
+    versions: &FunptrVersions,
 ) -> Arc<ExprNode> {
-    let expr = replace_closure_call_to_funptr_call(expr, symbol_names);
+    let expr = replace_closure_call_to_funptr_call(expr, versions);
     match &*expr.expr {
         Expr::Var(_) => expr.clone(),
         Expr::Builtin(_) => expr.clone(),
         Expr::App(fun, args) => {
             let args = args
                 .iter()
-                .map(|arg| replace_closure_call_to_funptr_call_subexprs(arg, symbol_names))
+                .map(|arg| replace_closure_call_to_funptr_call_subexprs(arg, versions))
                 .collect();
-            expr.set_app_func(replace_closure_call_to_funptr_call_subexprs(
-                fun,
-                symbol_names,
-            ))
-            .set_app_args(args)
+            expr.set_app_func(replace_closure_call_to_funptr_call_subexprs(fun, versions))
+                .set_app_args(args)
         }
-        Expr::Lam(_, val) => expr.set_lam_body(replace_closure_call_to_funptr_call_subexprs(
-            val,
-            symbol_names,
-        )),
+        Expr::Lam(_, val) => {
+            expr.set_lam_body(replace_closure_call_to_funptr_call_subexprs(val, versions))
+        }
         Expr::Let(_, bound, val) => expr
             .set_let_bound(replace_closure_call_to_funptr_call_subexprs(
-                bound,
-                symbol_names,
+                bound, versions,
             ))
-            .set_let_value(replace_closure_call_to_funptr_call_subexprs(
-                val,
-                symbol_names,
-            )),
+            .set_let_value(replace_closure_call_to_funptr_call_subexprs(val, versions)),
         Expr::If(c, t, e) => expr
-            .set_if_cond(replace_closure_call_to_funptr_call_subexprs(
-                c,
-                symbol_names,
-            ))
-            .set_if_then(replace_closure_call_to_funptr_call_subexprs(
-                t,
-                symbol_names,
-            ))
-            .set_if_else(replace_closure_call_to_funptr_call_subexprs(
-                e,
-                symbol_names,
-            )),
+            .set_if_cond(replace_closure_call_to_funptr_call_subexprs(c, versions))
+            .set_if_then(replace_closure_call_to_funptr_call_subexprs(t, versions))
+            .set_if_else(replace_closure_call_to_funptr_call_subexprs(e, versions)),
         Expr::Match(cond, pat_vals) => {
-            let cond = replace_closure_call_to_funptr_call_subexprs(cond, symbol_names);
+            let cond = replace_closure_call_to_funptr_call_subexprs(cond, versions);
             let mut new_pat_vals = vec![];
             for (pat, val) in pat_vals {
-                let val = replace_closure_call_to_funptr_call_subexprs(val, symbol_names);
+                let val = replace_closure_call_to_funptr_call_subexprs(val, versions);
                 new_pat_vals.push((pat.clone(), val));
             }
             expr.set_match_cond(cond).set_match_pat_vals(new_pat_vals)
         }
-        Expr::TyAnno(e, _) => expr.set_tyanno_expr(replace_closure_call_to_funptr_call_subexprs(
-            e,
-            symbol_names,
-        )),
+        Expr::TyAnno(e, _) => {
+            expr.set_tyanno_expr(replace_closure_call_to_funptr_call_subexprs(e, versions))
+        }
         Expr::MakeStruct(_, fields) => expr.set_make_struct_fields(
             fields
                 .iter()
@@ -325,7 +367,7 @@ fn replace_closure_call_to_funptr_call_subexprs(
                     (
                         field_name.clone(),
                         field_src.clone(),
-                        replace_closure_call_to_funptr_call_subexprs(field_expr, symbol_names),
+                        replace_closure_call_to_funptr_call_subexprs(field_expr, versions),
                     )
                 })
                 .collect(),
@@ -333,23 +375,17 @@ fn replace_closure_call_to_funptr_call_subexprs(
         Expr::ArrayLit(elems) => expr.set_array_lit_elems(
             elems
                 .iter()
-                .map(|e| replace_closure_call_to_funptr_call_subexprs(e, symbol_names))
+                .map(|e| replace_closure_call_to_funptr_call_subexprs(e, versions))
                 .collect(),
         ),
         Expr::FFICall(_, _, _, _, args, _) => expr.set_ffi_call_args(
             args.iter()
-                .map(|e| replace_closure_call_to_funptr_call_subexprs(e, symbol_names))
+                .map(|e| replace_closure_call_to_funptr_call_subexprs(e, versions))
                 .collect(),
         ),
         Expr::Eval(side, main) => expr
-            .set_eval_side(replace_closure_call_to_funptr_call_subexprs(
-                side,
-                symbol_names,
-            ))
-            .set_eval_main(replace_closure_call_to_funptr_call_subexprs(
-                main,
-                symbol_names,
-            )),
+            .set_eval_side(replace_closure_call_to_funptr_call_subexprs(side, versions))
+            .set_eval_main(replace_closure_call_to_funptr_call_subexprs(main, versions)),
     }
 }
 
@@ -412,7 +448,7 @@ pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{is_std_fix, FullName, FIX_NAME, INSTANCIATED_NAME_SEPARATOR, STD_NAME};
 
     /// The name a global of `namespace` called `name` carries, once instantiated at some type.
     fn instance_of(namespace: &str, name: &str) -> FullName {

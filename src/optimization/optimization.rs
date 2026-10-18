@@ -162,20 +162,12 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| collapse_constructions::run(prg, config.num_worker_thread),
     );
 
-    run_pass(
+    let funptr_versions = run_pass(
         prg,
         config,
         config.enable_uncurry_optimization(),
         "uncurry",
         |prg| uncurry::run(prg, config.num_worker_thread),
-    );
-
-    run_pass(
-        prg,
-        config,
-        config.enable_dead_symbol_elimination(),
-        "dead_symbol_elimination",
-        dead_symbol_elimination::run,
     );
 
     // Inline the local functions once more. Specializing a closure puts the body of the function a
@@ -188,14 +180,46 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     // expansion closes that gap, leaving the application where the name bound to the `if` is read
     // first. `let_elimination` then moves the `if` to the application, and `application_inlining`
     // pushes the application into its branches.
+    let inline_local_after_uncurry = config.enable_closure_specialization()
+        && config.enable_uncurry_optimization()
+        && config.enable_inline_local_optimization();
     run_pass(
         prg,
         config,
-        config.enable_closure_specialization()
-            && config.enable_uncurry_optimization()
-            && config.enable_inline_local_optimization(),
+        inline_local_after_uncurry,
         "inline_local",
         |prg| inline_local::run(prg, config.num_worker_thread),
+    );
+
+    // Rewrite the calls onto the function pointer versions once more. A call of a version bound to a
+    // name outside a lambda reaches the place where the lambda applies its result only when the
+    // local functions are inlined above. So `g#funptr1(a)` and its application to `b` meet only
+    // here, and this rewrites them into `g#funptr2(a, b)`, which builds no closure.
+    run_pass(
+        prg,
+        config,
+        inline_local_after_uncurry,
+        "replace_calls_with_funptr_versions",
+        |prg| {
+            uncurry::replace_calls_with_funptr_versions(
+                prg,
+                funptr_versions
+                    .as_ref()
+                    .expect("the rewrite runs only where uncurrying ran"),
+                config.num_worker_thread,
+            )
+        },
+    );
+
+    // Drop the symbols nothing reaches, such as the function pointer versions no call uses. This
+    // runs after the rewrite above, because the rewrite can make a call of a version that had no
+    // call before.
+    run_pass(
+        prg,
+        config,
+        config.enable_dead_symbol_elimination(),
+        "dead_symbol_elimination",
+        dead_symbol_elimination::run,
     );
 
     if config.emit_symbols {
@@ -207,21 +231,23 @@ pub fn run(prg: &mut Program, config: &Configuration) {
 }
 
 /// Runs the pass named `pass_name` on `prg` if `enabled`, timing it and emitting the symbols it
-/// leaves behind as one optimization step.
-fn run_pass(
+/// leaves behind as one optimization step. Returns what the pass returns, or `None` if it did not
+/// run.
+fn run_pass<R>(
     prg: &mut Program,
     config: &Configuration,
     enabled: bool,
     pass_name: &str,
-    pass: impl FnOnce(&mut Program),
-) {
+    pass: impl FnOnce(&mut Program) -> R,
+) -> Option<R> {
     if !enabled {
-        return;
+        return None;
     }
     let _sw = StopWatch::new(&format!("{}::run", pass_name), config.verbose);
-    pass(prg);
+    let result = pass(prg);
     if config.emit_symbols {
         prg.emit_symbols(&format!("{}.{}", prg.optimization_step, pass_name));
         prg.optimization_step += 1;
     }
+    Some(result)
 }

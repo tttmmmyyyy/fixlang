@@ -433,6 +433,15 @@ pub fn rc_ir_function_bodies(dump: &str, name_part: &str) -> Vec<String> {
     bodies
 }
 
+/// Whether the RC IR function `body`, as `rc_ir_function_bodies` gives it, builds no closure that
+/// stores something. A closure that captures nothing carries a null capture pointer and allocates
+/// nothing, so it passes.
+pub fn builds_no_closure_storing_anything(body: &str) -> bool {
+    body.lines()
+        .filter(|line| line.contains("= closure "))
+        .all(|line| line.trim_end().ends_with("[]"))
+}
+
 /// Builds `source` at `opt_level` with `build_args` on the build command, runs the program it
 /// produces, and returns what the program printed with the surrounding whitespace removed. Fails
 /// the test unless the program exits successfully within `timeout`.
