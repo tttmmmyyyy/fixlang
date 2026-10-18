@@ -262,9 +262,19 @@ fn replace_closure_call_to_funptr_call(
                 // it returns: `g#funptrN(a1, ..., aN)(b1, ..., bM)` becomes
                 // `g#funptr(N+M)(a1, ..., aN, b1, ..., bM)`.
                 let Some((base_name, n_args)) = split_funptr_name(&f_funptr.name.name) else {
-                    return expr.clone();
+                    unreachable!(
+                        "the global `{}` of a function pointer type is not a version `run` defined",
+                        f_funptr.name.to_string()
+                    );
                 };
-                if args.len() <= n_args {
+                assert!(
+                    args.len() >= n_args,
+                    "`{}` takes {} arguments but is applied to {}",
+                    f_funptr.name.to_string(),
+                    n_args,
+                    args.len()
+                );
+                if args.len() == n_args {
                     return expr.clone();
                 }
                 f_funptr.name.name = base_name;
