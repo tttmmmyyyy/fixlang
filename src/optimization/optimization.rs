@@ -162,13 +162,12 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| collapse_constructions::run(prg, config.num_worker_thread),
     );
 
-    let mut funptr_versions = Default::default();
-    run_pass(
+    let funptr_versions = run_pass(
         prg,
         config,
         config.enable_uncurry_optimization(),
         "uncurry",
-        |prg| funptr_versions = uncurry::run(prg, config.num_worker_thread),
+        |prg| uncurry::run(prg, config.num_worker_thread),
     );
 
     // Inline the local functions once more. Specializing a closure puts the body of the function a
@@ -204,7 +203,9 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| {
             uncurry::replace_calls_with_funptr_versions(
                 prg,
-                &funptr_versions,
+                funptr_versions
+                    .as_ref()
+                    .expect("the rewrite runs only where uncurrying ran"),
                 config.num_worker_thread,
             )
         },
@@ -230,21 +231,23 @@ pub fn run(prg: &mut Program, config: &Configuration) {
 }
 
 /// Runs the pass named `pass_name` on `prg` if `enabled`, timing it and emitting the symbols it
-/// leaves behind as one optimization step.
-fn run_pass(
+/// leaves behind as one optimization step. Returns what the pass returns, or `None` if it did not
+/// run.
+fn run_pass<R>(
     prg: &mut Program,
     config: &Configuration,
     enabled: bool,
     pass_name: &str,
-    pass: impl FnOnce(&mut Program),
-) {
+    pass: impl FnOnce(&mut Program) -> R,
+) -> Option<R> {
     if !enabled {
-        return;
+        return None;
     }
     let _sw = StopWatch::new(&format!("{}::run", pass_name), config.verbose);
-    pass(prg);
+    let result = pass(prg);
     if config.emit_symbols {
         prg.emit_symbols(&format!("{}.{}", prg.optimization_step, pass_name));
         prg.optimization_step += 1;
     }
+    Some(result)
 }
