@@ -5,7 +5,7 @@
 mod tests {
     use crate::{
         configuration::Configuration,
-        tests::test_util::{test_source, test_source_fail},
+        tests::test_util::{deprecation_report, run_source_capture, test_source, test_source_fail},
     };
 
     /// The definitions the tests share: checks comparing with `to_string` and with `format`, a user
@@ -69,6 +69,16 @@ check_write_format : [args : FormatArgs] String -> String -> args -> String -> I
     let written = *written_to_file(|h| _write_format(h, ending, values, template));
     assert_eq(|_|name, written, template.format(values) + ending)
 );"##;
+
+    /// The lines of `stderr` the program wrote, each followed by a newline. A program runs under
+    /// valgrind in development mode, and the lines valgrind writes start with `==`.
+    fn program_stderr(stderr: &str) -> String {
+        stderr
+            .lines()
+            .filter(|line| !line.starts_with("=="))
+            .map(|line| format!("{}\n", line))
+            .collect()
+    }
 
     /// Builds and runs a program made of `HELPERS` and `test`, whose `main` runs the value
     /// `test_name` that `test` defines.
@@ -451,6 +461,93 @@ test_flush_if_full : IO () = (
             source,
             Configuration::develop_mode(),
             "[Std::String::format] The template has a \"}\" that is neither a placeholder nor an escape: \"a } b\"",
+        );
+    }
+    /// `format` takes a tuple of more than twelve values, since the implementation of `FormatArgs`
+    /// is generated for every tuple size a program uses.
+    #[test]
+    fn test_more_than_twelve_values() {
+        run_format_test(
+            r##"// Tests that `format` takes a tuple of more than twelve values, of different types.
+test_more_than_twelve_values : IO () = (
+    assert_eq(|_|"13 values", "{}{}{}{}{}{}{}{}{}{}{}{}{}".format((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, "13")), "12345678910111213");;
+    assert_eq(|_|"20 values", "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, [20])), "12345678910111213141516171819[20]");;
+    pure()
+);"##,
+            "test_more_than_twelve_values",
+        );
+    }
+
+    /// `printf` and `printfln` write to the standard output, `eprintf` and `eprintfln` to the
+    /// standard error, and the `ln` ones add a newline.
+    #[test]
+    fn test_printf_streams() {
+        let source = r##"
+module Main;
+
+main : IO () = (
+    "a{}|".printf((1,));;
+    "b{}".printfln((2,));;
+    "c{}|".eprintf((3,));;
+    "d{}".eprintfln((4,));;
+    pure()
+);
+"##;
+        let output = run_source_capture(source, Configuration::develop_mode());
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        assert!(
+            output.status.success(),
+            "stdout: {}\nstderr: {}",
+            stdout,
+            stderr
+        );
+        assert_eq!(stdout, "a1|b2\n", "stderr: {}", stderr);
+        assert_eq!(program_stderr(&stderr), "c3|d4\n", "stderr: {}", stderr);
+    }
+
+    /// `debug_printf` and `debug_printfln` write to the standard output, `debug_eprintf` and
+    /// `debug_eprintfln` to the standard error, and the `ln` ones add a newline.
+    #[test]
+    fn test_debug_printf_streams() {
+        let source = r##"
+module Main;
+
+main : IO () = (
+    eval "a{}|".debug_printf((1,));
+    eval "b{}".debug_printfln((2,));
+    eval "c{}|".debug_eprintf((3,));
+    eval "d{}".debug_eprintfln((4,));
+    pure()
+);
+"##;
+        let output = run_source_capture(source, Configuration::develop_mode());
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        assert!(
+            output.status.success(),
+            "stdout: {}\nstderr: {}",
+            stdout,
+            stderr
+        );
+        assert_eq!(stdout, "a1|b2\n", "stderr: {}", stderr);
+        assert_eq!(program_stderr(&stderr), "c3|d4\n", "stderr: {}", stderr);
+    }
+
+    /// Naming `String::populate` is reported as deprecated, with the message its `DEPRECATED`
+    /// pragma carries pointing at `format`.
+    #[test]
+    fn test_populate_is_deprecated() {
+        let source = r#"
+module Main;
+
+main : IO () = println("{}".populate(["x"]));
+"#;
+        let report = deprecation_report(source);
+        assert!(
+            report.contains("Use `Std::String::format` instead."),
+            "naming `populate` should be reported with the message its pragma carries:\n{}",
+            report,
         );
     }
 }
