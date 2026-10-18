@@ -100,6 +100,13 @@ pub fn replace_calls_with_funptr_versions(
     versions: &FunptrVersions,
     num_threads: usize,
 ) {
+    for version in versions.keys() {
+        assert!(
+            fix_mod.symbols.contains_key(version),
+            "the function pointer version `{}` is no longer in the program",
+            version.to_string()
+        );
+    }
     for_each_on_compiler_threads(fix_mod.symbols.values_mut().collect(), num_threads, |sym| {
         let expr =
             replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), versions);
