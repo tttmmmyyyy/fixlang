@@ -542,4 +542,36 @@ main : IO () = println("{}".populate(["x"]));
             report,
         );
     }
+    /// A width that the text is longer than writes the text unchanged, the least `I64` included.
+    #[test]
+    fn test_width_at_least_i64() {
+        run_format_test(
+            r##"// Tests that a width at or near `I64::minimum`, which every text is wider than, writes the text
+// unchanged.
+test_width_at_least_i64 : IO () = (
+    let n = (*IO::get_args).@size.i64;
+    let w = I64::minimum + n - 1;
+    assert_eq(|_|"right_aligned_to", "[{}]".format((42.right_aligned_to(w),)), "[42]");;
+    assert_eq(|_|"left_aligned_to", "[{}]".format((42.left_aligned_to(w),)), "[42]");;
+    assert_eq(|_|"zero_padded_to", "[{}]".format((42.zero_padded_to(w),)), "[42]");;
+    assert_eq(|_|"right_aligned_to, one above", "[{}]".format((42.right_aligned_to(w + 1),)), "[42]");;
+    pure()
+);"##,
+            "test_width_at_least_i64",
+        );
+    }
+
+    /// A width too large for any array to hold stops the program with a message saying so.
+    #[test]
+    fn test_width_too_large_for_an_array() {
+        let source = r##"
+        module Main;
+        main : IO () = println("[{}]".format((42.right_aligned_to(I64::maximum),)));
+        "##;
+        test_source_fail(
+            source,
+            Configuration::develop_mode(),
+            "[Std::Format] The text is too long for an array to hold.",
+        );
+    }
 }
