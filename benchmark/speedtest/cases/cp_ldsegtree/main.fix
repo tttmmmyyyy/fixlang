@@ -1,7 +1,7 @@
 module Main;
 
 import CPLib.LDSegtree::{act_range, build, fold, LDSegtree};
-import CPLib.ZP::{make, P998244353, ZP, ZP::@value};
+import CPLib.ZP::{zp, P998244353, ZP, ZP::@value};
 import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
 import Std::{
     Array, IO, Array::@, Functor::map, Iterator::{fold, range}, Monad::pure, One::one, ToI64::i64, 
@@ -18,7 +18,7 @@ main = (
     let init = rands(n, 998244353, 1_U64);
     let ts = rands(q, 2, 2_U64); let aa = rands(q, n, 3_U64); let bb = rands(q, n, 4_U64);
     let cs = rands(q, 998244353, 5_U64); let ds = rands(q, 998244353, 6_U64);
-    let init = init.map(|v| (make(v), one)) : Array (ZP P998244353, ZP P998244353);
+    let init = init.map(|v| (zp(v), one)) : Array (ZP P998244353, ZP P998244353);
     let acc = *control.measure(|_|
         let tree = LDSegtree::build(
             init,
@@ -29,7 +29,7 @@ main = (
         range(0, q).fold((tree, 0), |i, (tree, acc)|
             let a = aa.@(i); let b = bb.@(i);
             let (l, r) = if a < b { (a, b) } else { (b, a) };
-            if ts.@(i) == 0 { (tree.act_range(l, r + 1, (make(cs.@(i)), make(ds.@(i)))), acc) };
+            if ts.@(i) == 0 { (tree.act_range(l, r + 1, (zp(cs.@(i)), zp(ds.@(i)))), acc) };
             let (tree, (x, _)) = tree.fold(l, r + 1);
             (tree, acc + x.@value.i64)
         ).@1

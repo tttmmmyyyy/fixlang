@@ -1,7 +1,7 @@
 module Main;
 
 import CPLib.Convolution::convolve_zp;
-import CPLib.ZP::{make, P998244353, ZP, ZP::@value};
+import CPLib.ZP::{zp, P998244353, ZP, ZP::@value};
 import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
 import Std::{
     Array, IO, Array::to_iter, Functor::map, Iterator::fold, Monad::pure, ToI64::i64, 
@@ -15,8 +15,8 @@ main : IO ();
 main = (
     let control = *PerfControl::start;
     let n = 200000;
-    let a = rands(n, 998244353, 1_U64).map(make) : Array (ZP P998244353);
-    let b = rands(n, 998244353, 2_U64).map(make) : Array (ZP P998244353);
+    let a = rands(n, 998244353, 1_U64).map(zp) : Array (ZP P998244353);
+    let b = rands(n, 998244353, 2_U64).map(zp) : Array (ZP P998244353);
     let c = *control.measure(|_| convolve_zp(a, b));
     check_answer("convolution", c.to_iter.fold(0, |x, acc| acc + x.@value.i64).to_string, "199293543703014");;
     pure()
