@@ -6,7 +6,8 @@
 #[cfg(test)]
 mod tests {
     use crate::tests::test_util::{
-        build_run_and_read_rc_ir, build_within_and_run, rc_ir_function_bodies,
+        build_run_and_read_rc_ir, build_within_and_run, builds_no_closure_storing_anything,
+        rc_ir_function_bodies,
     };
     use std::time::Duration;
 
@@ -53,9 +54,7 @@ mod tests {
         );
         for body in &bodies {
             assert!(
-                body.lines()
-                    .filter(|line| line.contains("= closure "))
-                    .all(|line| line.trim_end().ends_with("[]")),
+                builds_no_closure_storing_anything(body),
                 "`Main::run` should build no closure that stores something, but its body is:\n{}",
                 body
             );
