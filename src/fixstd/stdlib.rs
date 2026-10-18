@@ -16,7 +16,8 @@ use crate::{
         C_UNSIGNED_INT_NAME, C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME,
         C_UNSIGNED_SHORT_NAME, DESTRUCTOR_NAME, F32_NAME, F64_NAME, FFI_NAME, HOLE_NAME, I16_NAME,
         I32_NAME, I64_NAME, I8_NAME, IOSTATE_NAME, IO_NAME, MARK_THREADED_NAME, PTR_NAME,
-        PUNCHED_ARRAY_NAME, STD_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME, WITH_RETAINED_NAME,
+        PUNCHED_ARRAY_NAME, STD_NAME, TUPLE_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
+        WITH_RETAINED_NAME,
     },
     error::Errors,
     fixstd::builtin::{
@@ -894,13 +895,14 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         );
         src += "}\n\n";
 
-        // Impl `TuepleN t0 ... t(N-1) : Functor`:
+        // Implement `Functor` trait for `TupleN t0 ... t(N-2)`.
         // For example, if N = 2,
         // impl Tuple2 t0 : Functor {
         //     map = |f, (x0, x1)| (x0, f(x1));
         // }
         src += &format!(
-            "impl Tuple{} {}: Functor {{ \n",
+            "impl {}{} {}: Functor {{ \n",
+            TUPLE_NAME,
             size,
             (0..size - 1)
                 .map(|i| format!("t{}", i))
