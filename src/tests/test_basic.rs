@@ -10481,8 +10481,8 @@ pub fn test_tuple_functor() {
 }
 
 /// The compiler writes the `ToString`, `Eq`, `LessThan`, `LessThanOrEq`, `Format`, `FormatArgs` and
-/// `Functor` instances of a tuple for each size the program uses, so a size far above the ones the other tests reach
-/// carries the same behavior as a small one.
+/// `Functor` instances of a tuple for each size the program uses, so a size far above the ones the
+/// other tests reach carries the same behavior as a small one.
 #[test]
 pub fn test_instances_of_a_tuple_of_many_components() {
     let source = r##"

@@ -3423,7 +3423,8 @@ namespace String {
     _decimal_chunk_length = 19;
 
     // `10 ^ _decimal_chunk_length`, the number `_write_decimal_integer_128` and
-    // `_decimal_integer_length_128` divide a magnitude by to cut a chunk off its end. It must stay in sync with `_decimal_chunk_length`.
+    // `_decimal_integer_length_128` divide a magnitude by to cut a chunk off its end. It must stay in
+    // sync with `_decimal_chunk_length`.
     _decimal_chunk_divisor : U128;
     _decimal_chunk_divisor = 10000000000000000000_U128;
 
@@ -3944,8 +3945,8 @@ namespace String {
     strip_spaces : String -> String;
     strip_spaces = |str| str.strip_last_spaces.strip_first_spaces;
 
-    // Populate strings into a template string. Deprecated: use `String::format`, which takes values of
-    // any types implementing `Format`.
+    // Populate strings into a template string. `String::format` does the same with values of any
+    // types implementing `Format`.
     //
     // i-th "{}" in the template string is replaced by i-th string.
     //
