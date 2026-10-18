@@ -2,6 +2,22 @@
 
 Newer is above.
 
+**The third `7978400` row builds the `cp_*` cases on cp-library `eec82f2` in place of
+`cdc501f`.** In between, cp-library checks the arguments of its segment trees, `TwoSat`,
+`bellman_ford`, `pow_mod`, `lift_crt` and `bit_combinations` with `undefined`, computes `inv_mod`
+with the loop it uses for `lift_crt`, convolves an input of at most 40 elements directly, starts
+`isqrt` near the root, and renames several functions, the cases moving to the new names
+(`ZP::zp`, `BipartiteGraph::calc_flow`). Built with `--no-runtime-check`, `cp_inv_mod` moves
+from 422,758,180 instructions to 318,029,943 (-24.77%) and from 757,323,311 cycles to 556,899,458,
+`cp_crt` by -4.34% instructions, `cp_lsegtree` by +0.89%, `cp_segtree` by -0.49%, `cp_dsegtree`
+by -0.33% and `cp_twosat` by -0.21%; no other case's instruction count moved by more than
+0.001%. Built with the checks, `cp_inv_mod` moves by -24.95%, `cp_crt` by -3.74%, `cp_segtree`
+by -2.21%, `cp_twosat` by -0.90%, `cp_dsegtree` by +0.84%, `cp_lcp_array` by +0.50%, `cp_pow_mod`
+by +0.37%, `cp_lsegtree` by +0.27%, `cp_ldsegtree` by +0.13% and `cp_bellman_ford` by -0.005%.
+Apart from `cp_inv_mod`, these moves can come from the compilation units being divided
+differently: built with `--cu-size inf`, `cp_ldsegtree` with the checks added and without them
+runs the same 770,034,719 instructions.
+
 **LangArena rows measured before the pinned revision rose from `8dc7019` to `34fedbb` are
 comparable with rows after it on forty-six of the fifty programs.** `34fedbb` builds on
 `std-experimental` 0.5.0, whose `Format` writes into a monad the caller chooses so that `printf` can
