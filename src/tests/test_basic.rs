@@ -10500,6 +10500,8 @@ pub fn test_instances_of_a_tuple_of_many_components() {
             assert_eq(|_|"", a <= a, true);;
             assert_eq(|_|"", b <= a, false);;
             assert_eq(|_|"", a.map(|x| x + 1), b);;
+            assert_eq(|_|"", "{}".format((a,)), "(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)");;
+            assert_eq(|_|"", "{}{}{}{}{}{}{}{}{}{}{}{}".format(a), "123456789101112");;
 
             pure()
         );
