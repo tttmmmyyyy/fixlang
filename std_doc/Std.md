@@ -3778,8 +3778,7 @@ Type: `[args : Std::FormatArgs] Std::IO::IOHandle -> args -> Std::String -> Std:
 
 Formats `values` into `template`, as `format` does, and writes the result to `handle`.
 
-Like `printf`, it writes the text in parts, so a long text is never held in memory whole. A
-write that fails stops the writing, and its error is returned.
+A write that fails stops the writing, and its error is returned.
 
 ##### Examples
 
@@ -8815,11 +8814,7 @@ Writes each element with `write_text`, and calls `flush_if_full` after it.
 
 ### impl `[a : Std::Format] Std::Format::LeftAligned a : Std::Format`
 
-Writes the value in `Identity`, so that its whole text is in `out` when it is measured.
-
 ### impl `[a : Std::Format] Std::Format::RightAligned a : Std::Format`
-
-Writes the value in `Identity`, so that its whole text is in `out` when it is measured and moved.
 
 ### impl `Std::Format::WithExpPrecision Std::F32 : Std::Format`
 
@@ -8830,8 +8825,6 @@ Writes the value in `Identity`, so that its whole text is in `out` when it is me
 ### impl `Std::Format::WithPrecision Std::F64 : Std::Format`
 
 ### impl `[a : Std::Format] Std::Format::ZeroPadded a : Std::Format`
-
-Writes the value in `Identity`, so that its whole text is in `out` when it is measured and moved.
 
 ### impl `Std::I128 : Std::Add`
 

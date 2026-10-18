@@ -12894,8 +12894,7 @@ namespace IO {
 
     // Formats `values` into `template`, as `format` does, and writes the result to `handle`.
     //
-    // Like `printf`, it writes the text in parts, so a long text is never held in memory whole. A
-    // write that fails stops the writing, and its error is returned.
+    // A write that fails stops the writing, and its error is returned.
     //
     // # Examples
     //
@@ -13644,8 +13643,8 @@ namespace Format {
     right_aligned_to : I64 -> a -> RightAligned a = |width, value| RightAligned { _width : width, _value : value };
 }
 
-// Writes the value in `Identity`, so that its whole text is in `out` when it is measured and moved.
 impl [a : Format] RightAligned a : Format {
+    // Writes the value in `Identity`, so that its whole text is in `out` when it is measured and moved.
     write_text = |aligned, out| pure $ (
         let start = out.@_bytes.@size;
         let Identity { data : out } = out.write_text(aligned.@_value);
@@ -13675,8 +13674,8 @@ namespace Format {
     zero_padded_to : I64 -> a -> ZeroPadded a = |width, value| ZeroPadded { _width : width, _value : value };
 }
 
-// Writes the value in `Identity`, so that its whole text is in `out` when it is measured and moved.
 impl [a : Format] ZeroPadded a : Format {
+    // Writes the value in `Identity`, so that its whole text is in `out` when it is measured and moved.
     write_text = |padded, out| pure $ (
         let start = out.@_bytes.@size;
         let Identity { data : out } = out.write_text(padded.@_value);
@@ -13706,8 +13705,8 @@ namespace Format {
     left_aligned_to : I64 -> a -> LeftAligned a = |width, value| LeftAligned { _width : width, _value : value };
 }
 
-// Writes the value in `Identity`, so that its whole text is in `out` when it is measured.
 impl [a : Format] LeftAligned a : Format {
+    // Writes the value in `Identity`, so that its whole text is in `out` when it is measured.
     write_text = |aligned, out| pure $ (
         let start = out.@_bytes.@size;
         let Identity { data : out } = out.write_text(aligned.@_value);
