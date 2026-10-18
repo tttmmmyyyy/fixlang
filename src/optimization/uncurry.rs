@@ -39,12 +39,12 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) -> FunptrVersions {
         |(sym_name, sym)| with_funptr_versions(sym_name, sym),
     );
     let mut versions = FunptrVersions::default();
-    for syms in versions_of_syms {
-        let global = syms[0].0.clone();
-        for (n_args, (name, _)) in syms.iter().enumerate().skip(1) {
+    for global_and_versions in versions_of_syms {
+        let global = global_and_versions[0].0.clone();
+        for (n_args, (name, _)) in global_and_versions.iter().enumerate().skip(1) {
             versions.insert(name.clone(), (global.clone(), n_args));
         }
-        fix_mod.symbols.extend(syms);
+        fix_mod.symbols.extend(global_and_versions);
     }
 
     // Replace application expressions so that they use uncurried pointers.
