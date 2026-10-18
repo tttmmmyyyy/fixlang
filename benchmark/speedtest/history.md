@@ -2,6 +2,13 @@
 
 Newer is above.
 
+**The fourth `7978400` row builds `cp_lib_prime_list` on the same cp-library as the `cp_*` cases,
+`416a75f`, in place of the 0.14.0 revision `935ae29` it was pinned to, and the `cp_*` cases on
+`416a75f` in place of `eec82f2`.** The case calls `calc_prime_list`, the new name of
+`create_prime_list`. Its instruction count stays at 4,523.72 million, and no case's instruction
+count moved by more than 0.01%; the cycle counts that moved, by up to 17%, did so with the
+instructions held, which is where the code landed.
+
 **The third `7978400` row builds the `cp_*` cases on cp-library `eec82f2` in place of
 `cdc501f`.** In between, cp-library checks the arguments of its segment trees, `TwoSat`,
 `bellman_ford`, `pow_mod`, `lift_crt` and `bit_combinations` with `undefined`, computes `inv_mod`
