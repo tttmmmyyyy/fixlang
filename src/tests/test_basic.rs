@@ -3011,7 +3011,7 @@ test_sort_stability = |sort_method| (
     cases.to_iter.zip(count_up(1)).fold_m((), |(case, case_n), _|
         let xs = case.to_iter.zip(count_up(0)).to_array;
         let ys = xs.sort_method;
-        assert(|_| "case {}-stability".populate([case_n.to_string]), ys.is_increasing);;
+        assert(|_| "case {}-stability".format((case_n,)), ys.is_increasing);;
 
         pure()
     )

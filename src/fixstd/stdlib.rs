@@ -937,6 +937,69 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         src += "    );\n";
         src += "}\n\n";
 
+        // Implement `Format` trait. For example, if N = 2,
+        // impl [t0 : Format, t1 : Format] (t0, t1) : Format {
+        //     write_text = |(x0, x1), out| out.write_text("(").bind(write_text(x0))
+        //         .bind(write_text(", ")).bind(write_text(x1)).bind(write_text(")"));
+        // }
+        // The text is the one `ToString` writes: `(x0, x1)`, and `(x0,)` for one element.
+        src += "impl [";
+        src += &(0..*size)
+            .map(|i| format!("t{} : Format", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        src += "] (";
+        src += &(0..*size)
+            .map(|i| format!("t{}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        src += tuple_close;
+        src += " : Format { \n";
+        src += "    write_text = |(";
+        src += &(0..*size)
+            .map(|i| format!("x{}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        src += tuple_close;
+        src += ", out| out.Format::write_text(\"(\")";
+        for i in 0..*size {
+            if i > 0 {
+                src += ".bind(Format::write_text(\", \"))";
+            }
+            src += &format!(".bind(Format::write_text(x{}))", i);
+        }
+        src += &format!(".bind(Format::write_text(\"{}\"));\n", tuple_close);
+        src += "}\n\n";
+
+        // Implement `FormatArgs` trait. For example, if N = 2,
+        // impl [t0 : Format, t1 : Format] (t0, t1) : FormatArgs {
+        //     write_args = |(x0, x1), cursor| pure(cursor).bind(_put_next(x0)).bind(_put_next(x1));
+        // }
+        src += "impl [";
+        src += &(0..*size)
+            .map(|i| format!("t{} : Format", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        src += "] (";
+        src += &(0..*size)
+            .map(|i| format!("t{}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        src += tuple_close;
+        src += " : FormatArgs { \n";
+        src += "    write_args = |(";
+        src += &(0..*size)
+            .map(|i| format!("x{}", i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        src += tuple_close;
+        src += ", cursor| pure(cursor)";
+        for i in 0..*size {
+            src += &format!(".bind(FormatArgs::TemplateCursor::_put_next(x{}))", i);
+        }
+        src += ";\n";
+        src += "}\n\n";
+
         // Impl `TuepleN t0 ... t(N-1) : Functor`:
         // For example, if N = 2,
         // impl Tuple2 t0 : Functor {
@@ -1118,7 +1181,7 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
 }
 
 /// A module holding the trait instances tuples carry — `ToString`, `Eq`, `LessThan`,
-/// `LessThanOrEq` and `Functor` — for tuples of each of the given sizes.
+/// `LessThanOrEq`, `Format`, `FormatArgs` and `Functor` — for tuples of each of the given sizes.
 pub fn make_tuple_traits_mod(sizes: &[u32], config: &Configuration) -> Result<Program, Errors> {
     let src = make_tuple_traits_source(sizes);
     parse_and_save_to_temporary_file(&src, "std_tuple_traits", config)

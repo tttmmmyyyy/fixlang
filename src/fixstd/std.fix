@@ -3464,20 +3464,52 @@ namespace String {
     // * `magnitude` - The absolute value of the integer.
     _from_decimal_integer_128 : Bool -> U128 -> String;
     _from_decimal_integer_128 = |negative, magnitude| (
+        let length = _decimal_integer_length_128(negative, magnitude);
+        let bytes = Array::empty(length + 1)._unsafe_grow_size(length + 1);
+        let bytes = bytes._write_decimal_integer_128(length, negative, magnitude);
+        String { _data : bytes.unsafe_set_bounds_unchecked(length, 0_U8) }
+    );
+
+    // Counts the bytes `_write_decimal_integer_128` writes for the integer whose sign is `negative`
+    // and whose magnitude is `magnitude`, as `_decimal_integer_length` does for magnitudes up to
+    // those of the 128-bit integers.
+    //
+    // # Parameters
+    // * `negative` - Whether the integer is below zero.
+    // * `magnitude` - The absolute value of the integer.
+    _decimal_integer_length_128 : Bool -> U128 -> I64;
+    _decimal_integer_length_128 = |negative, magnitude| (
         // Chunks of `_decimal_chunk_length` digits are cut off the end until the leading digits fit
         // in a `U64`.
         let (chunk_count, leading) = loop((0, magnitude), |(count, rest)| (
             if rest <= U64::maximum.u128 { break $ (count, rest.u64) };
             continue $ (count + 1, rest / _decimal_chunk_divisor)
         ));
-        let length = _decimal_integer_length(negative, leading) + _decimal_chunk_length * chunk_count;
-        let bytes = Array::empty(length + 1)._unsafe_grow_size(length + 1);
-        let bytes = loop((length, magnitude, bytes), |(end, rest, bytes)| (
+        _decimal_integer_length(negative, leading) + _decimal_chunk_length * chunk_count
+    );
+
+    // Writes the integer whose sign is `negative` and whose magnitude is `magnitude` into `bytes` in
+    // decimal, so that its text ends just before `end`, as `_write_decimal_integer` does for
+    // magnitudes up to those of the 128-bit integers. The text starts at
+    // `end - _decimal_integer_length_128(negative, magnitude)`.
+    //
+    // `bytes` must be unshared and hold at least `end` bytes, and `end` must leave room for the whole
+    // text before it. This function checks neither, and violating them causes undefined behavior.
+    //
+    // # Parameters
+    // * `end` - The index just after the last digit.
+    // * `negative` - Whether the integer is below zero.
+    // * `magnitude` - The absolute value of the integer.
+    // * `bytes` - The array to write into.
+    _write_decimal_integer_128 : I64 -> Bool -> U128 -> Array U8 -> Array U8;
+    _write_decimal_integer_128 = |end, negative, magnitude, bytes| (
+        // The digits are written from the last one: a chunk of `_decimal_chunk_length` digits at a
+        // time, until the leading digits fit in a `U64`.
+        loop((end, magnitude, bytes), |(end, rest, bytes)| (
             if rest <= U64::maximum.u128 { break $ bytes._write_decimal_integer(end, negative, rest.u64) };
             let bytes = bytes._write_padded_decimal_digits(end, _decimal_chunk_length, (rest % _decimal_chunk_divisor).u64);
             continue $ (end - _decimal_chunk_length, rest / _decimal_chunk_divisor, bytes)
-        ));
-        String { _data : bytes.unsafe_set_bounds_unchecked(length, 0_U8) }
+        ))
     );
 
     // Creates the decimal text of `v`, with `-` before the digits where `v` is below zero.
@@ -3974,6 +4006,7 @@ namespace String {
 
         String { _data : out.push_back('\0') }
     );
+    DEPRECATED[populate, "Use `Std::String::format` instead."];
 }
 
 // The empty string.
@@ -12784,6 +12817,889 @@ namespace F64 {
 }
 
 // Returns "()".
+namespace String {
+    // Replaces the placeholders `{}` in a template with values.
+    //
+    // Each `{}` is replaced with the text of the next value, as `Format` writes it. `{{` and `}}` are
+    // written as `{` and `}`.
+    //
+    // Pass the values as a tuple. The values may have different types. Write `(x,)` for one value and
+    // `()` for none.
+    //
+    // The program aborts if the number of placeholders differs from the number of values, or if the
+    // template has a `{` or `}` that is not part of a placeholder or an escape.
+    //
+    // `IO::printf` writes the same text to the standard output, and `IO::write_format` writes it to
+    // any handle, such as a file. A wrapper such as `with_precision` or `right_aligned_to` changes how
+    // a value is written, and one wrapper can wrap another:
+    // `"[{}]".format((3.14159.with_precision(2_U8).right_aligned_to(6),))` is `"[  3.14]"`.
+    //
+    // # Examples
+    //
+    // ```fix
+    // assert_eq(|_|"", "{} + {} = {}".format((1, 2.5, "three")), "1 + 2.5 = three");;
+    // assert_eq(|_|"", "x = {}".format((42,)), "x = 42");;
+    // assert_eq(|_|"", "{{{}}}".format((1,)), "{1}")
+    // ```
+    //
+    // # Parameters
+    // * `values` - The values to write, in order.
+    // * `template` - The template.
+    format : [args : FormatArgs] args -> String -> String = |values, template| (
+        let cursor = _start_template(template, TextOut { _bytes : Array::empty(_initial_capacity(template)) });
+        let Identity { data : cursor } = cursor.write_args(values);
+        // A `TextOut` contains no null byte, so the string ends at the null added here.
+        String { _data : cursor._finish.@_bytes.push_back('\0') }
+    );
+}
+
+namespace IO {
+    // Formats `values` into `template`, as `format` does, and writes the result to the standard
+    // output.
+    //
+    // # Examples
+    //
+    // ```fix
+    // # module DocTest;
+    // #
+    // main : IO () = "{} + {} = {}\n".printf((1, 2.5, "three"));
+    // ```
+    //
+    // # Parameters
+    // * `values` - The values to write, in order.
+    // * `template` - The template.
+    printf : [args : FormatArgs] args -> String -> IO () = |values, template| _write_format(stdout, "", values, template);
+
+    // Same as `printf`, but adds a newline at the end.
+    //
+    // # Parameters
+    // * `values` - The values to write, in order.
+    // * `template` - The template.
+    printfln : [args : FormatArgs] args -> String -> IO () = |values, template| _write_format(stdout, "\n", values, template);
+
+    // Same as `printf`, but writes to the standard error.
+    //
+    // # Parameters
+    // * `values` - The values to write, in order.
+    // * `template` - The template.
+    eprintf : [args : FormatArgs] args -> String -> IO () = |values, template| _write_format(stderr, "", values, template);
+
+    // Same as `printf`, but writes to the standard error and adds a newline at the end.
+    //
+    // # Parameters
+    // * `values` - The values to write, in order.
+    // * `template` - The template.
+    eprintfln : [args : FormatArgs] args -> String -> IO () = |values, template| _write_format(stderr, "\n", values, template);
+
+    // Formats `values` into `template`, as `format` does, and writes the result to `handle`.
+    //
+    // The text is written as `printf` writes it, so a long text is never held in memory as one
+    // text. If a write fails, the rest of the text is not written, and the error is returned.
+    //
+    // # Examples
+    //
+    // ```fix
+    // # module DocTest;
+    // #
+    // main : IO () = write_format(stdout, (1, 2.5), "{} + {}\n").try(eprintln);
+    // ```
+    //
+    // # Parameters
+    // * `handle` - The handle to write to.
+    // * `values` - The values to write, in order.
+    // * `template` - The template.
+    write_format : [args : FormatArgs] IOHandle -> args -> String -> IOFail () = |handle, values, template| (
+        let cursor = _start_template(template, TextOut { _bytes : Array::empty(_initial_capacity(template)) });
+        let writer : _IOFailWriter TemplateCursor = cursor.write_args(values);
+        let cursor = *(writer.@_run)(handle);
+        write_bytes(handle, cursor._finish.@_bytes)
+    );
+
+    // Formats `values` into `template`, and writes the result and then `ending` to `handle`. Write
+    // errors are ignored, as in `print`.
+    //
+    // # Parameters
+    // * `handle` - The handle to write to.
+    // * `ending` - The text to write after the text of the template.
+    // * `values` - The values to write, in order.
+    // * `template` - The template.
+    _write_format : [args : FormatArgs] IOHandle -> String -> args -> String -> IO () = |handle, ending, values, template| (
+        let cursor = _start_template(template, TextOut { _bytes : Array::empty(_initial_capacity(template)) });
+        let writer : _HandleWriter TemplateCursor = cursor.write_args(values);
+        let cursor = *(writer.@_run)(handle);
+        let bytes = cursor._finish.@_bytes.append(ending.get_bytes).pop_back;
+        write_bytes(handle, bytes).to_result;;
+        pure()
+    );
+}
+
+namespace Debug {
+    // Same as `printf`, but runs outside `IO` and flushes the standard output, like `debug_print`.
+    //
+    // NOTE: This function is not pure and should only be used for temporary debugging purposes.
+    //
+    // # Parameters
+    // * `values` - The values to write, in order.
+    // * `template` - The template.
+    debug_printf : [args : FormatArgs] args -> String -> () = |values, template| (
+        template.printf(values);; stdout.flush;; pure()
+    ).unsafe_perform;
+
+    // Same as `printfln`, but runs outside `IO` and flushes the standard output, like
+    // `debug_println`.
+    //
+    // NOTE: This function is not pure and should only be used for temporary debugging purposes.
+    //
+    // # Parameters
+    // * `values` - The values to write, in order.
+    // * `template` - The template.
+    debug_printfln : [args : FormatArgs] args -> String -> () = |values, template| (
+        template.printfln(values);; stdout.flush;; pure()
+    ).unsafe_perform;
+
+    // Same as `eprintf`, but runs outside `IO` and flushes the standard error, like `debug_eprint`.
+    //
+    // NOTE: This function is not pure and should only be used for temporary debugging purposes.
+    //
+    // # Parameters
+    // * `values` - The values to write, in order.
+    // * `template` - The template.
+    debug_eprintf : [args : FormatArgs] args -> String -> () = |values, template| (
+        template.eprintf(values);; stderr.flush;; pure()
+    ).unsafe_perform;
+
+    // Same as `eprintfln`, but runs outside `IO` and flushes the standard error, like
+    // `debug_eprintln`.
+    //
+    // NOTE: This function is not pure and should only be used for temporary debugging purposes.
+    //
+    // # Parameters
+    // * `values` - The values to write, in order.
+    // * `template` - The template.
+    debug_eprintfln : [args : FormatArgs] args -> String -> () = |values, template| (
+        template.eprintfln(values);; stderr.flush;; pure()
+    ).unsafe_perform;
+}
+
+namespace Format {
+    // Text that has been written but not yet flushed. `Format::write_text` appends to it, and
+    // `TextWriter::flush_if_full` flushes it.
+    type TextOut = struct {
+        // The text. It contains no null byte.
+        _bytes : Array U8
+    };
+
+    // `printf` and the other output functions flush the text once it is longer than this many
+    // bytes.
+    _buffer_size : I64 = 8192;
+}
+
+namespace Format::TextOut {
+    // Reserves `max_length` bytes at the end of `out` for a writer of `Std` that writes a text from
+    // an index, such as `F64::_write_shortest_text`, and answers with that index and the bytes.
+    // `_finish_write` takes what the writer answers.
+    //
+    // # Parameters
+    // * `max_length` - The most bytes the writer writes.
+    // * `out` - The text written so far.
+    _reserve_to_write : I64 -> TextOut -> (I64, Array U8) = |max_length, out| (
+        let size = out.@_bytes.@size;
+        // `_unsafe_grow_size` copies the array if it is shared, so the writer writes only to this
+        // array. The added bytes are not initialized; the writer fills the ones that are kept.
+        (size, out._reserve_to_append(max_length)._unsafe_grow_size(size + max_length))
+    );
+
+    // Takes the bytes a writer of `Std` wrote into the bytes `_reserve_to_write` reserved, keeping
+    // them up to the index the writer stopped at.
+    //
+    // # Parameters
+    // * `(end, bytes)` - The index the writer stopped at, and the bytes.
+    _finish_write : (I64, Array U8) -> TextOut = |(end, bytes)| TextOut { _bytes : bytes.truncate(end) };
+
+    // Appends the decimal text of the integer whose sign is `negative` and whose magnitude is
+    // `magnitude`: `-` where `negative` is true, then the digits.
+    //
+    // # Parameters
+    // * `negative` - Whether the integer is below zero.
+    // * `magnitude` - The absolute value of the integer.
+    // * `out` - The text written so far.
+    _write_decimal_integer : Bool -> U64 -> TextOut -> TextOut = |negative, magnitude, out| (
+        let length = String::_decimal_integer_length(negative, magnitude);
+        let end = out.@_bytes.@size + length;
+        // The added bytes are not initialized; `_write_decimal_integer` fills all of them.
+        let bytes = out._reserve_to_append(length)._unsafe_grow_size(end);
+        TextOut { _bytes : bytes._write_decimal_integer(end, negative, magnitude) }
+    );
+
+    // Appends the decimal text of `v`, with `-` before the digits where `v` is below zero.
+    //
+    // # Parameters
+    // * `v` - The integer to write.
+    // * `out` - The text written so far.
+    _write_signed_decimal_integer : I64 -> TextOut -> TextOut = |v, out| (
+        let (negative, magnitude) = v._sign_and_magnitude;
+        out._write_decimal_integer(negative, magnitude)
+    );
+
+    // Appends the decimal text of the integer whose sign is `negative` and whose magnitude is
+    // `magnitude`, as `_write_decimal_integer` does, with magnitudes up to those of the 128-bit
+    // integers.
+    //
+    // # Parameters
+    // * `negative` - Whether the integer is below zero.
+    // * `magnitude` - The absolute value of the integer.
+    // * `out` - The text written so far.
+    _write_decimal_integer_128 : Bool -> U128 -> TextOut -> TextOut = |negative, magnitude, out| (
+        let length = String::_decimal_integer_length_128(negative, magnitude);
+        let end = out.@_bytes.@size + length;
+        // The added bytes are not initialized; `_write_decimal_integer_128` fills all of them.
+        let bytes = out._reserve_to_append(length)._unsafe_grow_size(end);
+        TextOut { _bytes : bytes.String::_write_decimal_integer_128(end, negative, magnitude) }
+    );
+
+    // Appends the address `ptr` holds, as sixteen hexadecimal digits.
+    //
+    // # Parameters
+    // * `ptr` - The pointer whose address is written.
+    // * `out` - The text written so far.
+    _write_address : Ptr -> TextOut -> TextOut = |ptr, out| (
+        let end = out.@_bytes.@size + String::_address_length;
+        // The added bytes are not initialized; `_write_address` fills all of them.
+        let bytes = out._reserve_to_append(String::_address_length)._unsafe_grow_size(end);
+        TextOut { _bytes : bytes._write_address(end - String::_address_length, ptr) }
+    );
+
+    // Inserts `count` copies of `byte` at index `at` of the text, moving the bytes from `at` on to
+    // the right. Nothing is inserted if `count` is less than 1.
+    //
+    // # Parameters
+    // * `at` - The index to insert at. It must be at most the size of the text.
+    // * `count` - The number of bytes to insert.
+    // * `byte` - The byte to insert.
+    // * `out` - The text written so far.
+    _insert_bytes : I64 -> I64 -> U8 -> TextOut -> TextOut = |at, count, byte, out| (
+        if count <= 0 { out };
+        // Grow the text by `count` bytes, move the bytes from `at` on to the right, starting from
+        // the last one, and then fill the gap.
+        let bytes = out._write_spaces(count).@_bytes;
+        let end = bytes.@size - count;
+        let bytes = loop((end, bytes), |(i, bytes)|
+            if i == at { break $ bytes };
+            let i = i - 1;
+            let c = bytes.@(i);
+            continue $ (i, bytes.set(i + count, c))
+        );
+        let bytes = range(at, at + count).fold(bytes, |i, bytes| bytes.set(i, byte));
+        TextOut { _bytes : bytes }
+    );
+
+    // Appends `count` spaces. Nothing is appended if `count` is less than 1.
+    //
+    // # Parameters
+    // * `count` - The number of spaces.
+    // * `out` - The text written so far.
+    _write_spaces : I64 -> TextOut -> TextOut = |count, out| (
+        if count <= 0 { out };
+        let size = out.@_bytes.@size;
+        TextOut { _bytes : out._reserve_to_append(count).resize(size + count, ' ') }
+    );
+
+    // Appends the text of `str`.
+    //
+    // # Parameters
+    // * `str` - The string to write.
+    // * `out` - The text written so far.
+    _write_string : String -> TextOut -> TextOut = |str, out| (
+        // `append` copies the bytes of `str`, so removing the null afterwards does not change `str`.
+        TextOut { _bytes : out.@_bytes.append(str.get_bytes).pop_back }
+    );
+
+    // Makes room for `count` more bytes at the end of `out`, so that appending them does not
+    // reallocate, and returns the bytes of `out`.
+    //
+    // If the capacity is too small, it grows to at least twice its current value, as in
+    // `Array::push_back` and `Array::append`. So writing a long text in many small pieces
+    // reallocates only a few times.
+    //
+    // # Parameters
+    // * `count` - The number of bytes to be appended.
+    // * `out` - The text written so far.
+    _reserve_to_append : I64 -> TextOut -> Array U8 = |count, out| (
+        let bytes = out.@_bytes;
+        let size = bytes.@size + count;
+        if size <= bytes.@capacity { bytes };
+        bytes.reserve(max(size, 2 * bytes.@capacity))
+    );
+
+    // Counts the Unicode code points in the text of `out`, from byte `start` to the end.
+    //
+    // # Parameters
+    // * `start` - The byte to start counting from. It must be the first byte of a code point.
+    // * `out` - The text written so far.
+    _count_code_points_from : I64 -> TextOut -> I64 = |start, out| (
+        let bytes = out.@_bytes;
+        // Count the bytes that start a code point: those that are not continuation bytes
+        // `0b10xxxxxx`.
+        range(start, bytes.@size).fold(0, |i, count|
+            if bytes.@(i).bit_and(0xC0_U8) == 0x80_U8 { count };
+            count + 1
+        )
+    );
+}
+
+// A destination for text: the monad in which `Format::write_text` runs.
+//
+// Writers append text to a `TextOut`, and may call `flush_if_full` to let the destination write it
+// out.
+trait [m : *->*] m : TextWriter {
+    // If `out` is longer than a threshold, writes it to the destination and returns an empty
+    // `TextOut`. Otherwise returns `out` unchanged. Each implementation of this trait sets its own
+    // threshold.
+    //
+    // # Parameters
+    // * `out` - The text written so far.
+    flush_if_full : TextOut -> m TextOut;
+}
+
+// `format` runs in `Identity`, which keeps the whole text.
+impl Identity : TextWriter {
+    flush_if_full = |out| pure(out);
+}
+
+namespace Format {
+    // An action that writes text to the handle it is given, ignoring write errors as `print` does.
+    // `printf` runs in it.
+    type _HandleWriter a = struct { _run : IOHandle -> IO a };
+
+    // An action that writes text to the handle it is given, and fails where a write fails.
+    // `write_format` runs in it.
+    type _IOFailWriter a = struct { _run : IOHandle -> IOFail a };
+}
+
+impl _HandleWriter : Functor {
+    map = |f, writer| _HandleWriter { _run : |handle| (writer.@_run)(handle).map(f) };
+}
+
+impl _HandleWriter : Monad {
+    pure = |x| _HandleWriter { _run : |_| pure(x) };
+    bind = |f, writer| _HandleWriter { _run : |handle| (writer.@_run)(handle).bind(|x| (f(x).@_run)(handle)) };
+}
+
+// Writes the text to the handle once it is longer than `_buffer_size`.
+impl _HandleWriter : TextWriter {
+    flush_if_full = |out| _HandleWriter { _run : |handle| (
+        let bytes = out.@_bytes;
+        if bytes.@size <= _buffer_size { pure(out) };
+        // Write errors are ignored, as in `print`.
+        write_bytes(handle, bytes).to_result;;
+        pure $ TextOut { _bytes : bytes.truncate(0) }
+    ) };
+}
+
+impl _IOFailWriter : Functor {
+    map = |f, writer| _IOFailWriter { _run : |handle| (writer.@_run)(handle).map(f) };
+}
+
+impl _IOFailWriter : Monad {
+    pure = |x| _IOFailWriter { _run : |_| pure(x) };
+    bind = |f, writer| _IOFailWriter { _run : |handle| (writer.@_run)(handle).bind(|x| (f(x).@_run)(handle)) };
+}
+
+// Writes the text to the handle once it is longer than `_buffer_size`.
+impl _IOFailWriter : TextWriter {
+    flush_if_full = |out| _IOFailWriter { _run : |handle| (
+        let bytes = out.@_bytes;
+        if bytes.@size <= _buffer_size { pure(out) };
+        write_bytes(handle, bytes);;
+        pure $ TextOut { _bytes : bytes.truncate(0) }
+    ) };
+}
+
+// A type whose values `format` and `printf` can write.
+//
+// `write_text` appends the text of a value to `out` and returns the new `out` in the monad `m`. To
+// implement it, write the parts of the value one by one:
+//
+// ```fix
+// # module DocTest;
+// #
+// # type Point = struct { x : I64, y : I64 };
+// #
+// impl Point : Format {
+//     write_text = |p, out| (
+//         let out = *out.write_text("(");
+//         let out = *out.write_text(p.@x);
+//         let out = *out.write_text(", ");
+//         let out = *out.write_text(p.@y);
+//         out.write_text(")")
+//     );
+// }
+// #
+// # main : IO () = assert_eq(|_|"", "{}".format((Point { x : 1, y : 2 },)), "(1, 2)");
+// ```
+//
+// Calling `TextWriter::flush_if_full` flushes `out` if it is longer than the threshold: the text is
+// written out, or moved to a lower-level buffer. So when writing a large value, call
+// `flush_if_full` at suitable points to keep memory use low. For reference, `printf` and the other
+// output functions use a threshold of 8192 bytes. For example, the implementation of `Format` for
+// `Joined`, which also writes arrays and slices, calls it after each element.
+//
+// The implementations in `Std` write the same text as `to_string`.
+trait a : Format {
+    // Appends the text of `value` to `out`.
+    //
+    // # Parameters
+    // * `value` - The value to write.
+    // * `out` - The text written so far.
+    write_text : [m : Monad, m : TextWriter] a -> TextOut -> m TextOut;
+}
+
+// The values that `format` writes into a template: `()`, or a tuple of values whose types
+// implement `Format`.
+trait args : FormatArgs {
+    // Writes each value into the next placeholder of the template, after the template text before
+    // that placeholder.
+    //
+    // # Parameters
+    // * `values` - The values.
+    // * `cursor` - The template and how much of it has been written.
+    write_args : [m : Monad, m : TextWriter] args -> TemplateCursor -> m TemplateCursor;
+}
+
+namespace FormatArgs {
+    // A template that `format` is filling in: the template, the position up to which it has been
+    // written, and the text written so far.
+    type TemplateCursor = struct { _template : String, _at : I64, _out : TextOut };
+}
+
+namespace FormatArgs::TemplateCursor {
+    // The capacity to start the text of `template` with: room for the template and for a few short
+    // values, so that a short text is written without growing the array.
+    //
+    // # Parameters
+    // * `template` - The template.
+    _initial_capacity : String -> I64 = |template| 2 * template.@size + 64;
+
+    // A cursor at the start of `template`. The text of the template is appended to `out`.
+    //
+    // # Parameters
+    // * `template` - The template.
+    // * `out` - The text written so far.
+    _start_template : String -> TextOut -> TemplateCursor = |template, out| (
+        TemplateCursor { _template : template, _at : 0, _out : out }
+    );
+
+    // Writes the template text up to the next placeholder, then the text of `value` in place of the
+    // placeholder, and calls `flush_if_full`.
+    //
+    // # Parameters
+    // * `value` - The value to write in place of the placeholder.
+    // * `cursor` - The template and how much of it has been written.
+    _put_next : [a : Format, m : Monad, m : TextWriter] a -> TemplateCursor -> m TemplateCursor = |value, cursor| (
+        let TemplateCursor { _template : template, _at : at, _out : out } = cursor;
+        let (at, out) = _write_literal(template, at, out);
+        if at == template.@size {
+            undefined("[Std::String::format] The template has fewer placeholders than the values: \"" + template + "\"")
+        };
+        let out = *out.write_text(value);
+        let out = *out.flush_if_full;
+        pure $ TemplateCursor { _template : template, _at : at + 2, _out : out }
+    );
+
+    // Writes the rest of the template and returns the text.
+    //
+    // # Parameters
+    // * `cursor` - The template and how much of it has been written.
+    _finish : TemplateCursor -> TextOut = |cursor| (
+        let TemplateCursor { _template : template, _at : at, _out : out } = cursor;
+        let (at, out) = _write_literal(template, at, out);
+        if at < template.@size {
+            undefined("[Std::String::format] The template has more placeholders than the values: \"" + template + "\"")
+        };
+        out
+    );
+
+    // Writes the text of `template` from byte `at` up to the next placeholder or the end. Each escape
+    // is written as the brace it stands for.
+    //
+    // Returns the position of the placeholder, or the size of `template` if there is none, together
+    // with the text written.
+    //
+    // # Parameters
+    // * `template` - The template.
+    // * `at` - The byte to start from.
+    // * `out` - The text written so far.
+    _write_literal : String -> I64 -> TextOut -> (I64, TextOut) = |template, at, out| (
+        let size = template.@size;
+        if at == size { (at, out) };
+        let bytes = template.get_bytes;
+        // The text written is at most the rest of the template, so room for it is made once, and
+        // each byte is written without checking the room. The room left over is cut off at the end.
+        let start = out.@_bytes.@size;
+        let room = size - at;
+        let bytes_out = out._reserve_to_append(room)._unsafe_grow_size(start + room);
+        let (at, end, bytes_out) = loop((at, start, bytes_out), |(i, j, bytes_out)|
+            if i == size { break $ (i, j, bytes_out) };
+            let c = bytes.@(i);
+            if c != '{' && c != '}' { continue $ (i + 1, j + 1, bytes_out.unsafe_set_bounds_unchecked(j, c)) };
+            // A brace is always followed by another byte, since `bytes` ends with a null.
+            let d = bytes.@(i + 1);
+            if c == '{' && d == '}' { break $ (i, j, bytes_out) };
+            if c == d { continue $ (i + 2, j + 1, bytes_out.unsafe_set_bounds_unchecked(j, c)) };
+            undefined("[Std::String::format] The template has a \"" + String::from_U8(c) + "\" that is neither a placeholder nor an escape: \"" + template + "\"")
+        );
+        (at, TextOut { _bytes : bytes_out.truncate(end) })
+    );
+}
+
+impl () : FormatArgs {
+    write_args = |_, cursor| pure(cursor);
+}
+
+// Writes `true` or `false`, as `to_string` does.
+impl Bool : Format {
+    write_text = |b, out| (
+        if b { out.write_text("true") };
+        out.write_text("false")
+    );
+}
+
+impl String : Format {
+    write_text = |s, out| pure $ out._write_string(s);
+}
+
+// Writes `()`, as `to_string` does.
+impl () : Format {
+    write_text = |_, out| out.write_text("()");
+}
+
+impl U8 : Format {
+    write_text = |v, out| pure $ out._write_decimal_integer(false, v.u64);
+}
+
+impl I8 : Format {
+    write_text = |v, out| pure $ out._write_signed_decimal_integer(v.i64);
+}
+
+impl U16 : Format {
+    write_text = |v, out| pure $ out._write_decimal_integer(false, v.u64);
+}
+
+impl I16 : Format {
+    write_text = |v, out| pure $ out._write_signed_decimal_integer(v.i64);
+}
+
+impl U32 : Format {
+    write_text = |v, out| pure $ out._write_decimal_integer(false, v.u64);
+}
+
+impl I32 : Format {
+    write_text = |v, out| pure $ out._write_signed_decimal_integer(v.i64);
+}
+
+impl U64 : Format {
+    write_text = |v, out| pure $ out._write_decimal_integer(false, v);
+}
+
+impl I64 : Format {
+    write_text = |v, out| pure $ out._write_signed_decimal_integer(v);
+}
+
+impl U128 : Format {
+    write_text = |v, out| pure $ out._write_decimal_integer_128(false, v);
+}
+
+impl I128 : Format {
+    write_text = |v, out| (
+        let (negative, magnitude) = v._sign_and_magnitude;
+        pure $ out._write_decimal_integer_128(negative, magnitude)
+    );
+}
+
+// Writes sixteen hexadecimal digits, as `to_string` does.
+impl Ptr : Format {
+    write_text = |v, out| pure $ out._write_address(v);
+}
+
+// Writes the shortest decimal text that reads back as the same number, as `to_string` does.
+impl F32 : Format {
+    write_text = |v, out| (
+        let (at, bytes) = out._reserve_to_write(F32::_shortest_text_max_length);
+        pure $ _finish_write $ bytes.F32::_write_shortest_text(at, v)
+    );
+}
+
+// Writes the shortest decimal text that reads back as the same number, as `to_string` does.
+impl F64 : Format {
+    write_text = |v, out| (
+        let (at, bytes) = out._reserve_to_write(F64::_shortest_text_max_length);
+        pure $ _finish_write $ bytes.F64::_write_shortest_text(at, v)
+    );
+}
+
+// Writes `some(x)` or `none()`, as `to_string` does.
+impl [a : Format] Option a : Format {
+    write_text = |opt, out| (
+        if opt.is_none { out.write_text("none()") };
+        out.write_text("some(").bind(write_text(opt.as_some)).bind(write_text(")"))
+    );
+}
+
+// Writes `ok(x)` or `err(e)`, as `to_string` does.
+impl [e : Format, a : Format] Result e a : Format {
+    write_text = |res, out| (
+        if res.is_ok { out.write_text("ok(").bind(write_text(res.as_ok)).bind(write_text(")")) };
+        out.write_text("err(").bind(write_text(res.as_err)).bind(write_text(")"))
+    );
+}
+
+// Writes the elements between `[` and `]`, separated by `, `, as `to_string` does.
+impl [a : Format] Array a : Format {
+    write_text = |arr, out| out.write_text("[").bind(write_text(arr.to_iter.joined_with(", "))).bind(write_text("]"));
+}
+
+namespace Format {
+    // A floating-point number written with a fixed number of digits after the decimal point. Created by
+    // `F32::with_precision` or `F64::with_precision`.
+    type WithPrecision a = struct { _precision : U8, _value : a };
+}
+
+namespace F32 {
+    // Wraps `v` so that `format` writes it with `precision` digits after the decimal point, as
+    // `F32::to_string_precision` does.
+    //
+    // # Examples
+    //
+    // ```fix
+    // assert_eq(|_|"", "{}".format((3.14159_F32.with_precision(2_U8),)), "3.14")
+    // ```
+    //
+    // # Parameters
+    // * `precision` - The number of digits after the decimal point.
+    // * `v` - The number.
+    with_precision : U8 -> F32 -> WithPrecision F32 = |precision, v| WithPrecision { _precision : precision, _value : v };
+}
+
+namespace F64 {
+    // Wraps `v` so that `format` writes it with `precision` digits after the decimal point, as
+    // `F64::to_string_precision` does.
+    //
+    // # Examples
+    //
+    // ```fix
+    // assert_eq(|_|"", "{}".format((3.14159.with_precision(2_U8),)), "3.14")
+    // ```
+    //
+    // # Parameters
+    // * `precision` - The number of digits after the decimal point.
+    // * `v` - The number.
+    with_precision : U8 -> F64 -> WithPrecision F64 = |precision, v| WithPrecision { _precision : precision, _value : v };
+}
+
+impl WithPrecision F32 : Format {
+    write_text = |w, out| (
+        let precision = w.@_precision;
+        let v = w.@_value;
+        let (at, bytes) = out._reserve_to_write(F32::_fixed_text_max_length(precision));
+        pure $ _finish_write $ bytes.F32::_write_fixed_text(at, precision, v)
+    );
+}
+
+impl WithPrecision F64 : Format {
+    write_text = |w, out| (
+        let precision = w.@_precision;
+        let v = w.@_value;
+        let (at, bytes) = out._reserve_to_write(F64::_fixed_text_max_length(precision));
+        pure $ _finish_write $ bytes.F64::_write_fixed_text(at, precision, v)
+    );
+}
+
+namespace Format {
+    // A floating-point number written with one digit before the decimal point, a fixed number of
+    // digits after it, and a power of ten. Created by `F32::with_exp_precision` or
+    // `F64::with_exp_precision`.
+    type WithExpPrecision a = struct { _precision : U8, _value : a };
+}
+
+namespace F32 {
+    // Wraps `v` so that `format` writes it with one digit before the decimal point, `precision`
+    // digits after it, and a power of ten, as `F32::to_string_exp_precision` does.
+    //
+    // # Examples
+    //
+    // ```fix
+    // assert_eq(|_|"", "{}".format((123.456_F32.with_exp_precision(2_U8),)), "1.23e2")
+    // ```
+    //
+    // # Parameters
+    // * `precision` - The number of digits after the decimal point.
+    // * `v` - The number.
+    with_exp_precision : U8 -> F32 -> WithExpPrecision F32 = |precision, v| WithExpPrecision { _precision : precision, _value : v };
+}
+
+namespace F64 {
+    // Wraps `v` so that `format` writes it with one digit before the decimal point, `precision`
+    // digits after it, and a power of ten, as `F64::to_string_exp_precision` does.
+    //
+    // # Examples
+    //
+    // ```fix
+    // assert_eq(|_|"", "{}".format((123.456.with_exp_precision(2_U8),)), "1.23e2")
+    // ```
+    //
+    // # Parameters
+    // * `precision` - The number of digits after the decimal point.
+    // * `v` - The number.
+    with_exp_precision : U8 -> F64 -> WithExpPrecision F64 = |precision, v| WithExpPrecision { _precision : precision, _value : v };
+}
+
+impl WithExpPrecision F32 : Format {
+    write_text = |w, out| (
+        let precision = w.@_precision;
+        let v = w.@_value;
+        let (at, bytes) = out._reserve_to_write(F32::_exp_text_max_length(precision));
+        pure $ _finish_write $ bytes.F32::_write_exp_text(at, precision, v)
+    );
+}
+
+impl WithExpPrecision F64 : Format {
+    write_text = |w, out| (
+        let precision = w.@_precision;
+        let v = w.@_value;
+        let (at, bytes) = out._reserve_to_write(F64::_exp_text_max_length(precision));
+        pure $ _finish_write $ bytes.F64::_write_exp_text(at, precision, v)
+    );
+}
+
+namespace Format {
+    // The elements of an iterator, written with a separator between them. Created by
+    // `Iterator::joined_with`.
+    type Joined it = struct { _separator : String, _elements : it };
+}
+
+namespace Iterator {
+    // Wraps `elements` so that `format` writes them with `separator` between them, as `String::join`
+    // joins strings.
+    //
+    // # Examples
+    //
+    // ```fix
+    // assert_eq(|_|"", "{}".format(([1, 2, 3].to_iter.joined_with(", "),)), "1, 2, 3")
+    // ```
+    //
+    // # Parameters
+    // * `separator` - The text to write between two elements.
+    // * `elements` - The elements.
+    joined_with : String -> it -> Joined it = |separator, elements| Joined { _separator : separator, _elements : elements };
+}
+
+// Writes each element with `write_text`, and calls `flush_if_full` after it.
+impl [it : Iterator, Item it = a, a : Format] Joined it : Format {
+    write_text = |joined, out| (
+        let separator = joined.@_separator;
+        loop_m((joined.@_elements, out, true), |(elements, out, first)|
+            let next = elements.advance;
+            if next.is_none { break_m $ out };
+            let (elements, element) = next.as_some;
+            let out = if first { out } else { out._write_string(separator) };
+            let out = *out.write_text(element);
+            let out = *out.flush_if_full;
+            continue_m $ (elements, out, false)
+        )
+    );
+}
+
+namespace Format {
+    // A value padded with spaces on the left to a width. Created by `right_aligned_to`.
+    type RightAligned a = struct { _width : I64, _value : a };
+
+    // Wraps `value` so that `format` pads its text with spaces on the left to `width` Unicode code
+    // points. A text that already has `width` code points or more is written unchanged.
+    //
+    // # Examples
+    //
+    // ```fix
+    // assert_eq(|_|"", "[{}]".format((42.right_aligned_to(5),)), "[   42]")
+    // ```
+    //
+    // # Parameters
+    // * `width` - The minimum width, in Unicode code points.
+    // * `value` - The value to write.
+    right_aligned_to : I64 -> a -> RightAligned a = |width, value| RightAligned { _width : width, _value : value };
+}
+
+// Writes the value in `Identity`, so that its whole text is in `out` when it is measured and moved.
+impl [a : Format] RightAligned a : Format {
+    write_text = |aligned, out| pure $ (
+        let start = out.@_bytes.@size;
+        let Identity { data : out } = out.write_text(aligned.@_value);
+        let padding = aligned.@_width - out._count_code_points_from(start);
+        out._insert_bytes(start, padding, ' ')
+    );
+}
+
+namespace Format {
+    // A value padded with zeros on the left to a width, after its minus sign if it has one. Created
+    // by `zero_padded_to`.
+    type ZeroPadded a = struct { _width : I64, _value : a };
+
+    // Wraps `value` so that `format` pads its text with `0` to `width` Unicode code points. The
+    // zeros go after the `-` that the text starts with, if it starts with one, and before the text
+    // otherwise. A text that already has `width` code points or more is written unchanged.
+    //
+    // # Examples
+    //
+    // ```fix
+    // assert_eq(|_|"", "{}:{}".format((9.zero_padded_to(2), 5.zero_padded_to(2))), "09:05");;
+    // assert_eq(|_|"", "{}".format(((-5).zero_padded_to(3),)), "-05")
+    // ```
+    //
+    // # Parameters
+    // * `width` - The minimum width, in Unicode code points.
+    // * `value` - The value to write.
+    zero_padded_to : I64 -> a -> ZeroPadded a = |width, value| ZeroPadded { _width : width, _value : value };
+}
+
+// Writes the value in `Identity`, so that its whole text is in `out` when it is measured and moved.
+impl [a : Format] ZeroPadded a : Format {
+    write_text = |padded, out| pure $ (
+        let start = out.@_bytes.@size;
+        let Identity { data : out } = out.write_text(padded.@_value);
+        let padding = padded.@_width - out._count_code_points_from(start);
+        let bytes = out.@_bytes;
+        let at = if start < bytes.@size && bytes.@(start) == '-' { start + 1 } else { start };
+        out._insert_bytes(at, padding, '0')
+    );
+}
+
+namespace Format {
+    // A value padded with spaces on the right to a width. Created by `left_aligned_to`.
+    type LeftAligned a = struct { _width : I64, _value : a };
+
+    // Wraps `value` so that `format` pads its text with spaces on the right to `width` Unicode code
+    // points. A text that already has `width` code points or more is written unchanged.
+    //
+    // # Examples
+    //
+    // ```fix
+    // assert_eq(|_|"", "[{}]".format((42.left_aligned_to(5),)), "[42   ]")
+    // ```
+    //
+    // # Parameters
+    // * `width` - The minimum width, in Unicode code points.
+    // * `value` - The value to write.
+    left_aligned_to : I64 -> a -> LeftAligned a = |width, value| LeftAligned { _width : width, _value : value };
+}
+
+// Writes the value in `Identity`, so that its whole text is in `out` when it is measured.
+impl [a : Format] LeftAligned a : Format {
+    write_text = |aligned, out| pure $ (
+        let start = out.@_bytes.@size;
+        let Identity { data : out } = out.write_text(aligned.@_value);
+        out._write_spaces(aligned.@_width - out._count_code_points_from(start))
+    );
+}
+
 impl () : ToString {
     to_string = |_| "()";
 }
