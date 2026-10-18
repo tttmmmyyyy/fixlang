@@ -1,6 +1,10 @@
 # This file is used by cargo-about to generate the third-party licenses page.
 # `cargo about generate third-party-licenses/about.hbs > third-party-licenses/third-party-licenses.html`
 
+# The page lists the crates the `fix` binary is built from, so the crates only tests and benchmarks use
+# are left out.
+ignore-dev-dependencies = true
+
 accepted = [
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
