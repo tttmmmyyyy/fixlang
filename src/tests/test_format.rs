@@ -542,14 +542,15 @@ main : IO () = println("{}".populate(["x"]));
             report,
         );
     }
+
     /// Verifies that a width below the length of the text, down to `I64::minimum`, writes the text
     /// unchanged.
     #[test]
-    fn test_width_at_least_i64() {
+    fn test_width_near_i64_minimum() {
         run_format_test(
             r##"// Tests that a width at or near `I64::minimum`, which every text is wider than, writes the text
 // unchanged.
-test_width_at_least_i64 : IO () = (
+test_width_near_i64_minimum : IO () = (
     let n = (*IO::get_args).@size.i64;
     let w = I64::minimum + n - 1;
     assert_eq(|_|"right_aligned_to", "[{}]".format((42.right_aligned_to(w),)), "[42]");;
@@ -558,7 +559,7 @@ test_width_at_least_i64 : IO () = (
     assert_eq(|_|"right_aligned_to, one above", "[{}]".format((42.right_aligned_to(w + 1),)), "[42]");;
     pure()
 );"##,
-            "test_width_at_least_i64",
+            "test_width_near_i64_minimum",
         );
     }
 
