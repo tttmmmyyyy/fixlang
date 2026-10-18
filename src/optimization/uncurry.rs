@@ -23,7 +23,7 @@ use crate::{
     misc::{for_each_on_compiler_threads, map_on_compiler_threads, Map},
     optimization::eta_expansion,
 };
-use std::{mem, sync::Arc, usize};
+use std::{mem, sync::Arc};
 
 /// Defines a function pointer version of each global for one, two, ... arguments, then rewrites the
 /// calls, export statements and entry IO value of the program onto the version matching the number
@@ -438,7 +438,7 @@ pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{is_std_fix, FullName, FIX_NAME, INSTANCIATED_NAME_SEPARATOR, STD_NAME};
 
     /// The name a global of `namespace` called `name` carries, once instantiated at some type.
     fn instance_of(namespace: &str, name: &str) -> FullName {
