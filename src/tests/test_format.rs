@@ -542,7 +542,8 @@ main : IO () = println("{}".populate(["x"]));
             report,
         );
     }
-    /// A width that the text is longer than writes the text unchanged, the least `I64` included.
+    /// Verifies that a width below the length of the text, down to `I64::minimum`, writes the text
+    /// unchanged.
     #[test]
     fn test_width_at_least_i64() {
         run_format_test(

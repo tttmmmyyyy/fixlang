@@ -13133,9 +13133,9 @@ namespace Format::TextOut {
         bytes.reserve(max(size, 2 * bytes.@capacity))
     );
 
-    // The number of code points to pad the text of `out` from byte `start` with, so that it has
-    // `width` code points: 0 if it already has `width` or more. Stops the program if the text padded
-    // that much would be longer than an array can hold.
+    // The number of code points to add to the text of `out` from byte `start` so that it has `width`
+    // code points, or 0 if it already has `width` or more. Stops the program if the text with that
+    // many more bytes would be longer than an array can hold.
     //
     // # Parameters
     // * `width` - The number of code points the text should have.
