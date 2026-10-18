@@ -3417,13 +3417,13 @@ namespace String {
         String { _data : bytes.unsafe_set_bounds_unchecked(length, 0_U8) }
     );
 
-    // The number of decimal digits `_from_decimal_integer_128` writes from each chunk it cuts off the
+    // The number of decimal digits `_write_decimal_integer_128` writes from each chunk it cuts off the
     // end of a 128-bit magnitude: the most digits a `U64` holds every value of.
     _decimal_chunk_length : I64;
     _decimal_chunk_length = 19;
 
-    // `10 ^ _decimal_chunk_length`, the number `_from_decimal_integer_128` divides a magnitude by to
-    // cut a chunk off its end. It must stay in sync with `_decimal_chunk_length`.
+    // `10 ^ _decimal_chunk_length`, the number `_write_decimal_integer_128` and
+    // `_decimal_integer_length_128` divide a magnitude by to cut a chunk off its end. It must stay in sync with `_decimal_chunk_length`.
     _decimal_chunk_divisor : U128;
     _decimal_chunk_divisor = 10000000000000000000_U128;
 
@@ -3944,7 +3944,8 @@ namespace String {
     strip_spaces : String -> String;
     strip_spaces = |str| str.strip_last_spaces.strip_first_spaces;
 
-    // Populate strings into a template string, similar to "format" function in other languages.
+    // Populate strings into a template string. Deprecated: use `String::format`, which takes values of
+    // any types implementing `Format`.
     //
     // i-th "{}" in the template string is replaced by i-th string.
     //
@@ -12816,7 +12817,6 @@ namespace F64 {
     ];
 }
 
-// Returns "()".
 namespace String {
     // Replaces the placeholders `{}` in a template with values.
     //
@@ -12846,7 +12846,7 @@ namespace String {
     // * `values` - The values to write, in order.
     // * `template` - The template.
     format : [args : FormatArgs] args -> String -> String = |values, template| (
-        let cursor = _start_template(template, TextOut { _bytes : Array::empty(_initial_capacity(template)) });
+        let cursor = _start_template(template);
         let Identity { data : cursor } = cursor.write_args(values);
         // A `TextOut` contains no null byte, so the string ends at the null added here.
         String { _data : cursor._finish.@_bytes.push_back('\0') }
@@ -12909,8 +12909,8 @@ namespace IO {
     // * `values` - The values to write, in order.
     // * `template` - The template.
     write_format : [args : FormatArgs] IOHandle -> args -> String -> IOFail () = |handle, values, template| (
-        let cursor = _start_template(template, TextOut { _bytes : Array::empty(_initial_capacity(template)) });
-        let writer : _IOFailWriter TemplateCursor = cursor.write_args(values);
+        let cursor = _start_template(template);
+        let writer : _HandleWriter IOFail TemplateCursor = cursor.write_args(values);
         let cursor = *(writer.@_run)(handle);
         write_bytes(handle, cursor._finish.@_bytes)
     );
@@ -12924,8 +12924,8 @@ namespace IO {
     // * `values` - The values to write, in order.
     // * `template` - The template.
     _write_format : [args : FormatArgs] IOHandle -> String -> args -> String -> IO () = |handle, ending, values, template| (
-        let cursor = _start_template(template, TextOut { _bytes : Array::empty(_initial_capacity(template)) });
-        let writer : _HandleWriter TemplateCursor = cursor.write_args(values);
+        let cursor = _start_template(template);
+        let writer : _HandleWriter IO TemplateCursor = cursor.write_args(values);
         let cursor = *(writer.@_run)(handle);
         let bytes = cursor._finish.@_bytes.append(ending.get_bytes).pop_back;
         write_bytes(handle, bytes).to_result;;
@@ -12990,8 +12990,8 @@ namespace Format {
     };
 
     // `printf` and the other output functions flush the text once it is longer than this many
-    // bytes.
-    _buffer_size : I64 = 8192;
+    // bytes. The documentation of the trait `Format` gives this value, so change it there as well.
+    _flush_threshold : I64 = 8192;
 }
 
 namespace Format::TextOut {
@@ -13167,49 +13167,38 @@ impl Identity : TextWriter {
 }
 
 namespace Format {
-    // An action that writes text to the handle it is given, ignoring write errors as `print` does.
-    // `printf` runs in it.
-    type _HandleWriter a = struct { _run : IOHandle -> IO a };
-
-    // An action that writes text to the handle it is given, and fails where a write fails.
-    // `write_format` runs in it.
-    type _IOFailWriter a = struct { _run : IOHandle -> IOFail a };
+    // An action in the monad `m` that writes text to the handle it is given. `printf` runs in
+    // `_HandleWriter IO`, which ignores write errors as `print` does, and `write_format` runs in
+    // `_HandleWriter IOFail`, which fails where a write fails.
+    type [m : *->*] _HandleWriter m a = struct { _run : IOHandle -> m a };
 }
 
-impl _HandleWriter : Functor {
+impl [m : Functor] _HandleWriter m : Functor {
     map = |f, writer| _HandleWriter { _run : |handle| (writer.@_run)(handle).map(f) };
 }
 
-impl _HandleWriter : Monad {
+impl [m : Monad] _HandleWriter m : Monad {
     pure = |x| _HandleWriter { _run : |_| pure(x) };
     bind = |f, writer| _HandleWriter { _run : |handle| (writer.@_run)(handle).bind(|x| (f(x).@_run)(handle)) };
 }
 
-// Writes the text to the handle once it is longer than `_buffer_size`.
-impl _HandleWriter : TextWriter {
+// Writes the text to the handle once it is longer than `_flush_threshold`. Write errors are ignored,
+// as in `print`.
+impl _HandleWriter IO : TextWriter {
     flush_if_full = |out| _HandleWriter { _run : |handle| (
         let bytes = out.@_bytes;
-        if bytes.@size <= _buffer_size { pure(out) };
-        // Write errors are ignored, as in `print`.
+        if bytes.@size <= _flush_threshold { pure(out) };
         write_bytes(handle, bytes).to_result;;
         pure $ TextOut { _bytes : bytes.truncate(0) }
     ) };
 }
 
-impl _IOFailWriter : Functor {
-    map = |f, writer| _IOFailWriter { _run : |handle| (writer.@_run)(handle).map(f) };
-}
-
-impl _IOFailWriter : Monad {
-    pure = |x| _IOFailWriter { _run : |_| pure(x) };
-    bind = |f, writer| _IOFailWriter { _run : |handle| (writer.@_run)(handle).bind(|x| (f(x).@_run)(handle)) };
-}
-
-// Writes the text to the handle once it is longer than `_buffer_size`.
-impl _IOFailWriter : TextWriter {
-    flush_if_full = |out| _IOFailWriter { _run : |handle| (
+// Writes the text to the handle once it is longer than `_flush_threshold`. A write that fails makes
+// the action fail.
+impl _HandleWriter IOFail : TextWriter {
+    flush_if_full = |out| _HandleWriter { _run : |handle| (
         let bytes = out.@_bytes;
-        if bytes.@size <= _buffer_size { pure(out) };
+        if bytes.@size <= _flush_threshold { pure(out) };
         write_bytes(handle, bytes);;
         pure $ TextOut { _bytes : bytes.truncate(0) }
     ) };
@@ -13242,7 +13231,7 @@ impl _IOFailWriter : TextWriter {
 // written out, or moved to a lower-level buffer. So when writing a large value, call
 // `flush_if_full` at suitable points to keep memory use low. For reference, `printf` and the other
 // output functions use a threshold of 8192 bytes. For example, the implementation of `Format` for
-// `Joined`, which also writes arrays and slices, calls it after each element.
+// `Joined`, which also writes arrays, calls it after each element.
 //
 // The implementations in `Std` write the same text as `to_string`.
 trait a : Format {
@@ -13280,12 +13269,13 @@ namespace FormatArgs::TemplateCursor {
     // * `template` - The template.
     _initial_capacity : String -> I64 = |template| 2 * template.@size + 64;
 
-    // A cursor at the start of `template`. The text of the template is appended to `out`.
+    // A cursor at the start of `template`, with no text written yet. The text starts with room for
+    // `_initial_capacity(template)` bytes.
     //
     // # Parameters
     // * `template` - The template.
-    // * `out` - The text written so far.
-    _start_template : String -> TextOut -> TemplateCursor = |template, out| (
+    _start_template : String -> TemplateCursor = |template| (
+        let out = TextOut { _bytes : Array::empty(_initial_capacity(template)) };
         TemplateCursor { _template : template, _at : 0, _out : out }
     );
 
@@ -13700,6 +13690,7 @@ impl [a : Format] LeftAligned a : Format {
     );
 }
 
+// Returns "()".
 impl () : ToString {
     to_string = |_| "()";
 }

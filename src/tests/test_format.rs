@@ -4,7 +4,7 @@
 #[cfg(test)]
 mod tests {
     use crate::{
-        configuration::Configuration,
+        configuration::{Configuration, ValgrindTool},
         tests::test_util::{deprecation_report, run_source_capture, test_source, test_source_fail},
     };
 
@@ -70,20 +70,13 @@ check_write_format : [args : FormatArgs] String -> String -> args -> String -> I
     assert_eq(|_|name, written, template.format(values) + ending)
 );"##;
 
-    /// The lines of `stderr` the program wrote, each followed by a newline. A program runs under
-    /// valgrind in development mode, and the lines valgrind writes start with `==`.
-    fn program_stderr(stderr: &str) -> String {
-        stderr
-            .lines()
-            .filter(|line| !line.starts_with("=="))
-            .map(|line| format!("{}\n", line))
-            .collect()
-    }
-
     /// Builds and runs `source`, and checks that it succeeds and writes `stdout` to the standard
-    /// output and the lines `stderr` to the standard error.
+    /// output and `stderr` to the standard error. The program runs without valgrind, whose report
+    /// would go to the standard error as well.
     fn assert_writes(source: &str, stdout: &str, stderr: &str) {
-        let output = run_source_capture(source, Configuration::develop_mode());
+        let mut config = Configuration::develop_mode();
+        config.set_valgrind(ValgrindTool::None);
+        let output = run_source_capture(source, config);
         let written_stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let written_stderr = String::from_utf8_lossy(&output.stderr).to_string();
         assert!(
@@ -93,7 +86,7 @@ check_write_format : [args : FormatArgs] String -> String -> args -> String -> I
             written_stderr
         );
         assert_eq!(written_stdout, stdout, "stderr: {}", written_stderr);
-        assert_eq!(program_stderr(&written_stderr), stderr, "stderr: {}", written_stderr);
+        assert_eq!(written_stderr, stderr);
     }
 
     /// Builds and runs a program made of `HELPERS` and `test`, whose `main` runs the value
@@ -391,28 +384,30 @@ test_write_format_to_handle : IO () = (
         );
     }
 
-    /// `flush_if_full` of the writer `printf` runs in writes out a text longer than `_buffer_size`, and that of the writer `write_format` runs in returns the error of a write that fails.
+    /// `flush_if_full` of the writer `printf` runs in writes out a text longer than
+    /// `_flush_threshold`, and that of the writer `write_format` runs in returns the error of a write
+    /// that fails.
     #[test]
     fn test_flush_if_full() {
         run_format_test(
-            r##"// Tests that `flush_if_full` of `_HandleWriter` keeps a text of up to `_buffer_size` bytes, and
-// writes out a longer one and returns it emptied, and that `flush_if_full` of `_IOFailWriter`
-// returns the error of a write that fails.
+            r##"// Tests that `flush_if_full` of `_HandleWriter IO` keeps a text of up to `_flush_threshold`
+// bytes, and writes out a longer one and returns it emptied, and that `flush_if_full` of
+// `_HandleWriter IOFail` returns the error of a write that fails.
 test_flush_if_full : IO () = (
-    let short = TextOut { _bytes : Array::fill(_buffer_size, 'a') };
+    let short = TextOut { _bytes : Array::fill(_flush_threshold, 'a') };
     let written = *written_to_file(|h|
-        let out = *((short.flush_if_full : _HandleWriter TextOut).@_run)(h);
-        assert_eq(|_|"short: kept", out.@_bytes.@size, _buffer_size)
+        let out = *((short.flush_if_full : _HandleWriter IO TextOut).@_run)(h);
+        assert_eq(|_|"short: kept", out.@_bytes.@size, _flush_threshold)
     );
     assert_eq(|_|"short: not written", written, "");;
-    let long = TextOut { _bytes : Array::fill(_buffer_size + 1, 'a') };
+    let long = TextOut { _bytes : Array::fill(_flush_threshold + 1, 'a') };
     let written = *written_to_file(|h|
-        let out = *((long.flush_if_full : _HandleWriter TextOut).@_run)(h);
+        let out = *((long.flush_if_full : _HandleWriter IO TextOut).@_run)(h);
         assert_eq(|_|"long: emptied", out.@_bytes.@size, 0)
     );
-    assert_eq(|_|"long: written", written.@size, _buffer_size + 1);;
+    assert_eq(|_|"long: written", written.@size, _flush_threshold + 1);;
     // The writer of `write_format` returns the error of a write that fails.
-    let failed = *((long.flush_if_full : _IOFailWriter TextOut).@_run)(stdin).to_result;
+    let failed = *((long.flush_if_full : _HandleWriter IOFail TextOut).@_run)(stdin).to_result;
     assert_eq(|_|"long: the error is returned", failed.is_err, true);;
     pure()
 );"##,
@@ -479,18 +474,19 @@ test_flush_if_full : IO () = (
             "[Std::String::format] The template has a \"}\" that is neither a placeholder nor an escape: \"a } b\"",
         );
     }
+
     /// `format` takes a tuple of thirteen or twenty values, since the implementation of
     /// `FormatArgs` is generated for every tuple size a program uses.
     #[test]
-    fn test_more_than_twelve_values() {
+    fn test_thirteen_and_twenty_values() {
         run_format_test(
             r##"// Tests that `format` takes a tuple of thirteen or twenty values, of different types.
-test_more_than_twelve_values : IO () = (
+test_thirteen_and_twenty_values : IO () = (
     assert_eq(|_|"13 values", "{}{}{}{}{}{}{}{}{}{}{}{}{}".format((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, "13")), "12345678910111213");;
     assert_eq(|_|"20 values", "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, [20])), "12345678910111213141516171819[20]");;
     pure()
 );"##,
-            "test_more_than_twelve_values",
+            "test_thirteen_and_twenty_values",
         );
     }
 

@@ -10480,8 +10480,8 @@ pub fn test_tuple_functor() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// The compiler writes the `ToString`, `Eq`, `LessThan`, `LessThanOrEq` and `Functor` instances of
-/// a tuple for each size the program uses, so a size far above the ones the other tests reach
+/// The compiler writes the `ToString`, `Eq`, `LessThan`, `LessThanOrEq`, `Format`, `FormatArgs` and
+/// `Functor` instances of a tuple for each size the program uses, so a size far above the ones the other tests reach
 /// carries the same behavior as a small one.
 #[test]
 pub fn test_instances_of_a_tuple_of_many_components() {
