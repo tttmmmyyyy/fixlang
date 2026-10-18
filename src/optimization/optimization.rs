@@ -199,7 +199,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         prg,
         config,
         inline_local_after_uncurry,
-        "uncurry::replace_calls_with_funptr_versions",
+        "replace_calls_with_funptr_versions",
         |prg| {
             uncurry::replace_calls_with_funptr_versions(
                 prg,
