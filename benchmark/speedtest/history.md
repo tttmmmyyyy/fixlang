@@ -2,6 +2,17 @@
 
 Newer is above.
 
+**LangArena rows measured before the pinned revision rose from `34fedbb` to `3d43841` are
+comparable with rows after it on forty-nine of the fifty programs.** `3d43841` takes
+`String::format` and the trait `Format` from `Std`, which has them since #888, in place of
+`std-experimental`, and builds on `json` 0.10.0, which does the same. Both sides were measured with
+one compiler, `25fef64`: of the two `25fef64` rows in `log.csv`, the first is the last one on
+`34fedbb` and the second is the first one on `3d43841`. `Json::Generate` moved by -1.52% in
+instructions; no other program moved by more than 0.01%. Built as one compilation unit
+(`--cu-size inf`) with `25fef64`, `Json::Generate` runs the same number of instructions on both
+sides, 4,883,103,305 and 4,883,103,285, so what moved it at the default division is which unit each
+function lands in.
+
 **The fifth `7978400` row builds the `cp_*` cases and `cp_lib_prime_list` on cp-library `5fd757b`
 in place of `416a75f`.** In between, the lazy segment trees' `fold` returns the folded value alone
 and leaves the tree as it was, and the two cases call it in that form. `cp_lsegtree` moves from
