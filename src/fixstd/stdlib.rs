@@ -798,104 +798,56 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         if *size == 0 {
             continue;
         }
-        let tuple_close = if *size == 1 { ",)" } else { ")" };
+        let size = *size;
+        let tuple_close = if size == 1 { ",)" } else { ")" };
+        // `items(f, sep)` joins `f(0)`, ..., `f(size - 1)` with `sep`, and `tuple(prefix)` is the
+        // tuple `(prefix0, ..., prefix{size - 1})`, written `(prefix0,)` for one element.
+        let items =
+            |f: &dyn Fn(u32) -> String, sep: &str| (0..size).map(f).collect::<Vec<_>>().join(sep);
+        let tuple = |prefix: &str| {
+            format!(
+                "({}{}",
+                items(&|i| format!("{}{}", prefix, i), ", "),
+                tuple_close
+            )
+        };
+        // The head of an implementation of `trait_name` for the tuple of `t0`, ..., whose
+        // constraints on `t{i}` are `constraints(i)`.
+        let impl_head = |constraints: &dyn Fn(u32) -> String, trait_name: &str| {
+            format!(
+                "impl [{}] {} : {} {{ \n",
+                items(constraints, ", "),
+                tuple("t"),
+                trait_name
+            )
+        };
+        let xs = tuple("x");
+        let ys = tuple("y");
+
         // Implement `ToString` trait.
-        src += "impl [";
-        src += &(0..*size)
-            .into_iter()
-            .map(|i| format!("t{} : ToString", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += "] ";
-        src += "(";
-        src += &(0..*size)
-            .map(|i| format!("t{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += " : ToString { \n";
-        src += "    to_string = |(";
-        src += &(0..*size)
-            .map(|i| format!("x{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += "| \"(\" + ";
-        src += &(0..*size)
-            .into_iter()
-            .map(|i| format!("x{}.to_string", i))
-            .collect::<Vec<_>>()
-            .join(" + \", \" + ");
-        src += " + \"";
-        src += tuple_close;
-        src += "\";\n";
+        src += &impl_head(&|i| format!("t{} : ToString", i), "ToString");
+        src += &format!(
+            "    to_string = |{}| \"(\" + {} + \"{}\";\n",
+            xs,
+            items(&|i| format!("x{}.to_string", i), " + \", \" + "),
+            tuple_close
+        );
         src += "}\n\n";
 
         // Implement `Eq` trait.
-        src += "impl [";
-        src += &(0..*size)
-            .into_iter()
-            .map(|i| format!("t{} : Eq", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += "] ";
-        src += "(";
-        src += &(0..*size)
-            .map(|i| format!("t{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += " : Eq { \n";
-        src += "    eq = |(";
-        src += &(0..*size)
-            .map(|i| format!("x{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += ", (";
-        src += &(0..*size)
-            .map(|i| format!("y{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += "| ";
-        src += &(0..*size)
-            .into_iter()
-            .map(|i| format!("x{} == y{}", i, i))
-            .collect::<Vec<_>>()
-            .join(" && ");
-        src += ";\n";
+        src += &impl_head(&|i| format!("t{} : Eq", i), "Eq");
+        src += &format!(
+            "    eq = |{}, {}| {};\n",
+            xs,
+            ys,
+            items(&|i| format!("x{} == y{}", i, i), " && ")
+        );
         src += "}\n\n";
 
         // Implement `LessThan` trait.
-        src += "impl [";
-        src += &(0..*size)
-            .into_iter()
-            .map(|i| format!("t{} : Eq, t{} : LessThan", i, i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += "] ";
-        src += "(";
-        src += &(0..*size)
-            .map(|i| format!("t{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += " : LessThan { \n";
-        src += "    less_than = |(";
-        src += &(0..*size)
-            .map(|i| format!("x{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += ", (";
-        src += &(0..*size)
-            .map(|i| format!("y{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += "| (\n";
-        for i in 0..*size {
+        src += &impl_head(&|i| format!("t{} : Eq, t{} : LessThan", i, i), "LessThan");
+        src += &format!("    less_than = |{}, {}| (\n", xs, ys);
+        for i in 0..size {
             src += &format!("        if x{} != y{} {{ x{} < y{} }};\n", i, i, i, i);
         }
         src += "        false\n";
@@ -903,34 +855,12 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         src += "}\n\n";
 
         // Implement `LessThanOrEq` trait.
-        src += "impl [";
-        src += &(0..*size)
-            .into_iter()
-            .map(|i| format!("t{} : Eq, t{} : LessThanOrEq", i, i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += "] ";
-        src += "(";
-        src += &(0..*size)
-            .map(|i| format!("t{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += " : LessThanOrEq { \n";
-        src += "    less_than_or_eq = |(";
-        src += &(0..*size)
-            .map(|i| format!("x{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += ", (";
-        src += &(0..*size)
-            .map(|i| format!("y{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += "| (\n";
-        for i in 0..*size {
+        src += &impl_head(
+            &|i| format!("t{} : Eq, t{} : LessThanOrEq", i, i),
+            "LessThanOrEq",
+        );
+        src += &format!("    less_than_or_eq = |{}, {}| (\n", xs, ys);
+        for i in 0..size {
             src += &format!("        if x{} != y{} {{ x{} <= y{} }};\n", i, i, i, i);
         }
         src += "        true\n";
@@ -943,61 +873,31 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         //         .bind(write_text(", ")).bind(write_text(x1)).bind(write_text(")"));
         // }
         // The text is the one `ToString` writes: `(x0, x1)`, and `(x0,)` for one element.
-        src += "impl [";
-        src += &(0..*size)
-            .map(|i| format!("t{} : Format", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += "] (";
-        src += &(0..*size)
-            .map(|i| format!("t{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += " : Format { \n";
-        src += "    write_text = |(";
-        src += &(0..*size)
-            .map(|i| format!("x{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += ", out| out.Format::write_text(\"(\")";
-        for i in 0..*size {
-            if i > 0 {
-                src += ".bind(Format::write_text(\", \"))";
-            }
-            src += &format!(".bind(Format::write_text(x{}))", i);
-        }
-        src += &format!(".bind(Format::write_text(\"{}\"));\n", tuple_close);
+        src += &impl_head(&|i| format!("t{} : Format", i), "Format");
+        src += &format!(
+            "    write_text = |{}, out| out.Format::write_text(\"(\"){}.bind(Format::write_text(\"{}\"));\n",
+            xs,
+            items(
+                &|i| format!("{}.bind(Format::write_text(x{}))", if i > 0 { ".bind(Format::write_text(\", \"))" } else { "" }, i),
+                ""
+            ),
+            tuple_close
+        );
         src += "}\n\n";
 
         // Implement `FormatArgs` trait. For example, if N = 2,
         // impl [t0 : Format, t1 : Format] (t0, t1) : FormatArgs {
         //     write_args = |(x0, x1), cursor| pure(cursor).bind(_put_next(x0)).bind(_put_next(x1));
         // }
-        src += "impl [";
-        src += &(0..*size)
-            .map(|i| format!("t{} : Format", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += "] (";
-        src += &(0..*size)
-            .map(|i| format!("t{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += " : FormatArgs { \n";
-        src += "    write_args = |(";
-        src += &(0..*size)
-            .map(|i| format!("x{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        src += tuple_close;
-        src += ", cursor| pure(cursor)";
-        for i in 0..*size {
-            src += &format!(".bind(FormatArgs::TemplateCursor::_put_next(x{}))", i);
-        }
-        src += ";\n";
+        src += &impl_head(&|i| format!("t{} : Format", i), "FormatArgs");
+        src += &format!(
+            "    write_args = |{}, cursor| pure(cursor){};\n",
+            xs,
+            items(
+                &|i| format!(".bind(FormatArgs::TemplateCursor::_put_next(x{}))", i),
+                ""
+            )
+        );
         src += "}\n\n";
 
         // Impl `TuepleN t0 ... t(N-1) : Functor`:
@@ -1005,36 +905,27 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         // impl Tuple2 t0 : Functor {
         //     map = |f, (x0, x1)| (x0, f(x1));
         // }
-        src += "impl ";
-        src += format!("Tuple{} ", size).as_str();
-        src += &(0..*size - 1)
-            .map(|i| format!("t{}", i))
-            .collect::<Vec<_>>()
-            .join(" ");
-        src += ": Functor { \n";
-        src += "    map = |f, (";
-        src += &(0..*size)
-            .map(|i| format!("x{}", i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        if *size == 1 {
-            src += ",";
-        }
-        src += ")| (";
-        src += &(0..*size)
-            .map(|i| {
-                if i != *size - 1 {
+        src += &format!(
+            "impl Tuple{} {}: Functor {{ \n",
+            size,
+            (0..size - 1)
+                .map(|i| format!("t{}", i))
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
+        src += &format!(
+            "    map = |f, {}| ({}{});\n",
+            xs,
+            items(
+                &|i| if i != size - 1 {
                     format!("x{}", i)
                 } else {
                     format!("f(x{})", i)
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
-        if *size == 1 {
-            src += ",";
-        }
-        src += ");\n";
+                },
+                ", "
+            ),
+            if size == 1 { "," } else { "" }
+        );
         src += "}\n\n";
     }
 
