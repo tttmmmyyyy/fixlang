@@ -29,7 +29,7 @@ use std::{mem, sync::Arc, usize};
 /// calls, export statements and entry IO value of the program onto the version matching the number
 /// of arguments they supply. The symbols are rewritten on up to `num_threads` threads.
 ///
-/// Returns the versions it defined, for `replace_calls_with_funptr_versions` to run on later.
+/// Returns the versions it defined, which a later `replace_calls_with_funptr_versions` takes.
 pub fn run(fix_mod: &mut Program, num_threads: usize) -> FunptrVersions {
     // First, define uncurried version of global symbols.
     let syms = mem::replace(&mut fix_mod.symbols, Default::default());
@@ -93,8 +93,7 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) -> FunptrVersions {
 /// `g(a)(b)` becomes `g#funptr2(a, b)`, and so does `g#funptr1(a)(b)`.
 ///
 /// # Arguments
-/// * `versions` — the versions `run` defined. The passes between `run` and this call leave every
-///   one of them in the program.
+/// * `versions` — the versions `run` defined, each of which must still be in the program.
 pub fn replace_calls_with_funptr_versions(
     fix_mod: &mut Program,
     versions: &FunptrVersions,
@@ -116,6 +115,9 @@ pub fn replace_calls_with_funptr_versions(
 
 /// The function pointer versions defined in a program: the name of each, mapped to the name of the
 /// global it is a version of and the number of arguments it takes.
+///
+/// # Examples
+/// `g#funptr2` maps to `(g, 2)`.
 pub type FunptrVersions = Map<FullName, (FullName, usize)>;
 
 /// The symbol `sym_name`, whose definition is `sym`, followed by its function pointer versions taking
@@ -184,6 +186,9 @@ pub fn is_std_fix(name: &FullName) -> bool {
 
 /// Rewrites `name` in place into the name carried by the uncurried version taking `n_args`
 /// arguments.
+///
+/// # Examples
+/// `g` with 2 arguments becomes `g#funptr2`.
 fn convert_to_funptr_name(name: &mut Name, n_args: usize) {
     *name += &format!("#funptr{}", n_args);
 }
