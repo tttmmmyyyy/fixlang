@@ -1,5 +1,5 @@
 /*
-Uncurrying optimizaion
+Uncurrying optimization
 
 Convert globally defined lambda expressions `|x1,...,xn| (...) : T1 -> ... -> Tn -> R` to function pointer expressions `[x1,...,xn] (...) : [T1,...,Tn] R`.
 Also, convert lambda expression call expressions `f(a1, a2, ..., an)` to function pointer expression call expressions `f[a1,a2,...,an]`.
@@ -7,7 +7,7 @@ Also, convert lambda expression call expressions `f(a1, a2, ..., an)` to functio
 For each lambda expression, define multiple function pointer expressions such as one-variable function pointer expression, two-variable function pointer expression, etc.,
 and select the appropriate one according to the call site.
 
-NOTE: I hope to implement higher-order uncurrying optimization (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) in a future!
+Higher-order uncurrying (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) is not implemented.
 */
 
 use super::rename::rename_lam_param_avoiding;
@@ -23,16 +23,16 @@ use crate::{
     misc::{for_each_on_compiler_threads, map_on_compiler_threads, Map},
     optimization::eta_expansion,
 };
-use std::{mem, sync::Arc, usize};
+use std::{mem, sync::Arc};
 
 /// Defines a function pointer version of each global for one, two, ... arguments, then rewrites the
 /// calls, export statements and entry IO value of the program onto the version matching the number
 /// of arguments they supply. The symbols are rewritten on up to `num_threads` threads.
 ///
 /// Returns the versions it defined, which a later `replace_calls_with_funptr_versions` takes.
-pub fn run(fix_mod: &mut Program, num_threads: usize) -> FunptrVersions {
-    // First, define uncurried version of global symbols.
-    let syms = mem::replace(&mut fix_mod.symbols, Default::default());
+pub fn run(prg: &mut Program, num_threads: usize) -> FunptrVersions {
+    // Define the function pointer versions of each global.
+    let syms = mem::replace(&mut prg.symbols, Default::default());
     let versions_of_syms = map_on_compiler_threads(
         syms.into_iter().collect(),
         num_threads,
@@ -44,14 +44,14 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) -> FunptrVersions {
         for (n_args, (name, _)) in global_and_versions.iter().enumerate().skip(1) {
             versions.insert(name.clone(), (global.clone(), n_args));
         }
-        fix_mod.symbols.extend(global_and_versions);
+        prg.symbols.extend(global_and_versions);
     }
 
-    // Replace application expressions so that they use uncurried pointers.
-    replace_calls_with_funptr_versions(fix_mod, &versions, num_threads);
+    // Rewrite the calls onto the function pointer versions.
+    replace_calls_with_funptr_versions(prg, &versions, num_threads);
 
     // Replace export statements so that they use uncurried functions.
-    for export in &mut fix_mod.export_statements {
+    for export in &mut prg.export_statements {
         let exported_value = export.value_expr.as_ref().unwrap();
         let n_args = exported_value
             .type_
@@ -60,8 +60,7 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) -> FunptrVersions {
             .collect_app_src(usize::MAX)
             .0
             .len();
-        let Some(uncurried_value) = uncurried_symbol(&fix_mod.symbols, exported_value, n_args)
-        else {
+        let Some(uncurried_value) = uncurried_symbol(&prg.symbols, exported_value, n_args) else {
             continue;
         };
         export.value_name = uncurried_value.name.clone();
@@ -70,12 +69,11 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) -> FunptrVersions {
     }
 
     // Replace entry IO value so that it uses uncurried function.
-    if let Some(entry_io_value) = &fix_mod.entry_io_value {
+    if let Some(entry_io_value) = &prg.entry_io_value {
         // The entry IO value has the unwrapped `IO` type, i.e., the `IOState -> (IOState, a)` type,
         // so it takes one argument.
-        if let Some(sym) = uncurried_symbol(&fix_mod.symbols, entry_io_value, 1) {
-            fix_mod.entry_io_value =
-                Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
+        if let Some(sym) = uncurried_symbol(&prg.symbols, entry_io_value, 1) {
+            prg.entry_io_value = Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
         }
     }
 
@@ -95,18 +93,18 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) -> FunptrVersions {
 /// # Arguments
 /// * `versions` — the versions `run` defined, each of which must still be in the program.
 pub fn replace_calls_with_funptr_versions(
-    fix_mod: &mut Program,
+    prg: &mut Program,
     versions: &FunptrVersions,
     num_threads: usize,
 ) {
     for version in versions.keys() {
         assert!(
-            fix_mod.symbols.contains_key(version),
+            prg.symbols.contains_key(version),
             "the function pointer version `{}` is no longer in the program",
             version.to_string()
         );
     }
-    for_each_on_compiler_threads(fix_mod.symbols.values_mut().collect(), num_threads, |sym| {
+    for_each_on_compiler_threads(prg.symbols.values_mut().collect(), num_threads, |sym| {
         let expr =
             replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), versions);
         sym.expr = Some(expr);
@@ -450,7 +448,7 @@ pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{is_std_fix, FullName, FIX_NAME, INSTANCIATED_NAME_SEPARATOR, STD_NAME};
 
     /// The name a global of `namespace` called `name` carries, once instantiated at some type.
     fn instance_of(namespace: &str, name: &str) -> FullName {
