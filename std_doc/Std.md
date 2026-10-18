@@ -1984,22 +1984,6 @@ assert_eq(|_|"", "{}".format(((-5).zero_padded_to(3),)), "-05")
 * `width` - The minimum width, in Unicode code points.
 * `value` - The value to write.
 
-### namespace Std::FormatArgs
-
-#### write_args
-
-Type: `[args : Std::FormatArgs, m : Std::Monad, m : Std::TextWriter] args -> Std::FormatArgs::TemplateCursor -> m Std::FormatArgs::TemplateCursor`
-
-Trait member of `Std::FormatArgs`
-
-Writes each value into the next placeholder of the template, after the template text before
-that placeholder.
-
-##### Parameters
-
-* `values` - The values.
-* `cursor` - The template and how much of it has been written.
-
 ### namespace Std::FromBytes
 
 #### from_bytes
@@ -7512,15 +7496,6 @@ Defined as: `type ZeroPadded a = unbox struct { ...fields... }`
 A value padded with zeros on the left to a width, after its minus sign if it has one. Created
 by `zero_padded_to`.
 
-### namespace Std::FormatArgs
-
-#### TemplateCursor
-
-Defined as: `type TemplateCursor = unbox struct { ...fields... }`
-
-A template that `format` is filling in: the template, the position up to which it has been
-written, and the text written so far.
-
 ### namespace Std::IO
 
 #### IOFail
@@ -8002,18 +7977,6 @@ Appends the text of `value` to `out`.
 
 The values that `format` writes into a template: `()`, or a tuple of values whose types
 implement `Format`.
-
-##### method `write_args`
-
-Type: `[m : Std::Monad, m : Std::TextWriter] args -> Std::FormatArgs::TemplateCursor -> m Std::FormatArgs::TemplateCursor`
-
-Writes each value into the next placeholder of the template, after the template text before
-that placeholder.
-
-###### Parameters
-
-* `values` - The values.
-* `cursor` - The template and how much of it has been written.
 
 #### trait `a : FromBytes`
 

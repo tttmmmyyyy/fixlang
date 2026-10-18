@@ -12848,7 +12848,7 @@ namespace String {
     // * `template` - The template.
     format : [args : FormatArgs] args -> String -> String = |values, template| (
         let cursor = _start_template(template);
-        let Identity { data : cursor } = cursor.write_args(values);
+        let Identity { data : cursor } = cursor._write_args(values);
         // A `TextOut` contains no null byte, so the string ends at the null added here.
         String { _data : cursor._finish.@_bytes.push_back('\0') }
     );
@@ -12911,7 +12911,7 @@ namespace IO {
     // * `template` - The template.
     write_format : [args : FormatArgs] IOHandle -> args -> String -> IOFail () = |handle, values, template| (
         let cursor = _start_template(template);
-        let writer : _HandleWriter IOFail TemplateCursor = cursor.write_args(values);
+        let writer : _HandleWriter IOFail _TemplateCursor = cursor._write_args(values);
         let cursor = *(writer.@_run)(handle);
         write_bytes(handle, cursor._finish.@_bytes)
     );
@@ -12926,7 +12926,7 @@ namespace IO {
     // * `template` - The template.
     _write_format : [args : FormatArgs] IOHandle -> String -> args -> String -> IO () = |handle, ending, values, template| (
         let cursor = _start_template(template);
-        let writer : _HandleWriter IO TemplateCursor = cursor.write_args(values);
+        let writer : _HandleWriter IO _TemplateCursor = cursor._write_args(values);
         let cursor = *(writer.@_run)(handle);
         let bytes = cursor._finish.@_bytes.append(ending.get_bytes).pop_back;
         write_bytes(handle, bytes).to_result;;
@@ -13275,16 +13275,16 @@ trait args : FormatArgs {
     // # Parameters
     // * `values` - The values.
     // * `cursor` - The template and how much of it has been written.
-    write_args : [m : Monad, m : TextWriter] args -> TemplateCursor -> m TemplateCursor;
+    _write_args : [m : Monad, m : TextWriter] args -> _TemplateCursor -> m _TemplateCursor;
 }
 
 namespace FormatArgs {
     // A template that `format` is filling in: the template, the position up to which it has been
     // written, and the text written so far.
-    type TemplateCursor = struct { _template : String, _at : I64, _out : TextOut };
+    type _TemplateCursor = struct { _template : String, _at : I64, _out : TextOut };
 }
 
-namespace FormatArgs::TemplateCursor {
+namespace FormatArgs::_TemplateCursor {
     // The capacity to start the text of `template` with: room for the template and for a few short
     // values, so that a short text is written without growing the array.
     //
@@ -13297,9 +13297,9 @@ namespace FormatArgs::TemplateCursor {
     //
     // # Parameters
     // * `template` - The template.
-    _start_template : String -> TemplateCursor = |template| (
+    _start_template : String -> _TemplateCursor = |template| (
         let out = TextOut { _bytes : Array::empty(_initial_capacity(template)) };
-        TemplateCursor { _template : template, _at : 0, _out : out }
+        _TemplateCursor { _template : template, _at : 0, _out : out }
     );
 
     // Writes the template text up to the next placeholder, then the text of `value` in place of the
@@ -13308,23 +13308,23 @@ namespace FormatArgs::TemplateCursor {
     // # Parameters
     // * `value` - The value to write in place of the placeholder.
     // * `cursor` - The template and how much of it has been written.
-    _put_next : [a : Format, m : Monad, m : TextWriter] a -> TemplateCursor -> m TemplateCursor = |value, cursor| (
-        let TemplateCursor { _template : template, _at : at, _out : out } = cursor;
+    _put_next : [a : Format, m : Monad, m : TextWriter] a -> _TemplateCursor -> m _TemplateCursor = |value, cursor| (
+        let _TemplateCursor { _template : template, _at : at, _out : out } = cursor;
         let (at, out) = _write_literal(template, at, out);
         if at == template.@size {
             undefined("[Std::String::format] The template has fewer placeholders than the values: \"" + template + "\"")
         };
         let out = *out.write_text(value);
         let out = *out.flush_if_full;
-        pure $ TemplateCursor { _template : template, _at : at + 2, _out : out }
+        pure $ _TemplateCursor { _template : template, _at : at + 2, _out : out }
     );
 
     // Writes the rest of the template and returns the text.
     //
     // # Parameters
     // * `cursor` - The template and how much of it has been written.
-    _finish : TemplateCursor -> TextOut = |cursor| (
-        let TemplateCursor { _template : template, _at : at, _out : out } = cursor;
+    _finish : _TemplateCursor -> TextOut = |cursor| (
+        let _TemplateCursor { _template : template, _at : at, _out : out } = cursor;
         let (at, out) = _write_literal(template, at, out);
         if at < template.@size {
             undefined("[Std::String::format] The template has more placeholders than the values: \"" + template + "\"")
@@ -13366,7 +13366,7 @@ namespace FormatArgs::TemplateCursor {
 }
 
 impl () : FormatArgs {
-    write_args = |_, cursor| pure(cursor);
+    _write_args = |_, cursor| pure(cursor);
 }
 
 // Writes `true` or `false`, as `to_string` does.
