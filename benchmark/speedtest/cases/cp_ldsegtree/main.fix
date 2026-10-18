@@ -30,7 +30,7 @@ main = (
             let a = aa.@(i); let b = bb.@(i);
             let (l, r) = if a < b { (a, b) } else { (b, a) };
             if ts.@(i) == 0 { (tree.act_range(l, r + 1, (zp(cs.@(i)), zp(ds.@(i)))), acc) };
-            let (tree, (x, _)) = tree.fold(l, r + 1);
+            let (x, _) = tree.fold(l, r + 1);
             (tree, acc + x.@value.i64)
         ).@1
     );

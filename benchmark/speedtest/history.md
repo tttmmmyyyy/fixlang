@@ -2,6 +2,16 @@
 
 Newer is above.
 
+**The fifth `7978400` row builds the `cp_*` cases and `cp_lib_prime_list` on cp-library `5fd757b`
+in place of `416a75f`.** In between, the lazy segment trees' `fold` returns the folded value alone
+and leaves the tree as it was, and the two cases call it in that form. `cp_lsegtree` moves from
+885,749,729 instructions to 723,359,419 (-18.33%) and from 432,903,490 cycles to 364,517,473
+(-15.80%); `cp_ldsegtree` from 908,481,352 instructions to 819,965,620 (-9.74%) and from
+427,170,995 cycles to 406,742,526 (-4.78%). Built with `--no-runtime-check`, they move by -21.91%
+and -7.02% instructions. No other case's instruction count moved by more than 0.01%; the cycle
+counts that moved, by up to 9.6% (`cp_bellman_ford`), did so with the instructions held, which is
+where the code landed.
+
 **The fourth `7978400` row builds `cp_lib_prime_list` on the same cp-library as the `cp_*` cases,
 `416a75f`, in place of the 0.14.0 revision `935ae29` it was pinned to, and the `cp_*` cases on
 `416a75f` in place of `eec82f2`.** The case calls `calc_prime_list`, the new name of
