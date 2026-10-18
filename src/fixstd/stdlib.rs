@@ -799,14 +799,14 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
             continue;
         }
         let tuple_close = if size == 1 { ",)" } else { ")" };
-        // `items(f, sep)` joins `f(0)`, ..., `f(size - 1)` with `sep`, and `tuple(prefix)` is the
-        // tuple `(prefix0, ..., prefix{size - 1})`, written `(prefix0,)` for one element.
-        let items =
+        // `join_items(f, sep)` joins `f(0)`, ..., `f(size - 1)` with `sep`, and `tuple(prefix)` is
+        // the tuple `(prefix0, ..., prefix{size - 1})`, written `(prefix0,)` for one element.
+        let join_items =
             |f: &dyn Fn(u32) -> String, sep: &str| (0..size).map(f).collect::<Vec<_>>().join(sep);
         let tuple = |prefix: &str| {
             format!(
                 "({}{}",
-                items(&|i| format!("{}{}", prefix, i), ", "),
+                join_items(&|i| format!("{}{}", prefix, i), ", "),
                 tuple_close
             )
         };
@@ -815,7 +815,7 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         let impl_head = |constraints: &dyn Fn(u32) -> String, trait_name: &str| {
             format!(
                 "impl [{}] {} : {} {{ \n",
-                items(constraints, ", "),
+                join_items(constraints, ", "),
                 tuple("t"),
                 trait_name
             )
@@ -827,7 +827,7 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         let lexicographic_impl = |trait_name: &str, method: &str, op: &str, if_equal: &str| {
             let mut imp = impl_head(&|i| format!("t{i} : Eq, t{i} : {trait_name}"), trait_name);
             imp += &format!("    {method} = |{xs}, {ys}| (\n");
-            imp += &items(&|i| format!("        if x{i} != y{i} {{ x{i} {op} y{i} }};\n"), "");
+            imp += &join_items(&|i| format!("        if x{i} != y{i} {{ x{i} {op} y{i} }};\n"), "");
             imp += &format!("        {if_equal}\n");
             imp += "    );\n";
             imp += "}\n\n";
@@ -839,7 +839,7 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         src += &format!(
             "    to_string = |{}| \"(\" + {} + \"{}\";\n",
             xs,
-            items(&|i| format!("x{}.to_string", i), " + \", \" + "),
+            join_items(&|i| format!("x{}.to_string", i), " + \", \" + "),
             tuple_close
         );
         src += "}\n\n";
@@ -850,7 +850,7 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
             "    eq = |{}, {}| {};\n",
             xs,
             ys,
-            items(&|i| format!("x{} == y{}", i, i), " && ")
+            join_items(&|i| format!("x{} == y{}", i, i), " && ")
         );
         src += "}\n\n";
 
@@ -868,7 +868,7 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         src += &format!(
             "    write_text = |{}, out| out.Format::write_text(\"(\"){}.bind(Format::write_text(\"{}\"));\n",
             xs,
-            items(
+            join_items(
                 &|i| format!("{}.bind(Format::write_text(x{}))", if i > 0 { ".bind(Format::write_text(\", \"))" } else { "" }, i),
                 ""
             ),
@@ -884,7 +884,7 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         src += &format!(
             "    _write_args = |{}, cursor| pure(cursor){};\n",
             xs,
-            items(
+            join_items(
                 &|i| format!(".bind(FormatArgs::_TemplateCursor::_put_next(x{}))", i),
                 ""
             )
@@ -907,7 +907,7 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         src += &format!(
             "    map = |f, {}| ({}{};\n",
             xs,
-            items(
+            join_items(
                 &|i| if i != size - 1 {
                     format!("x{}", i)
                 } else {
