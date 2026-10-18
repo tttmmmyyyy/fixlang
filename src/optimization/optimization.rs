@@ -197,9 +197,11 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     run_pass(
         prg,
         config,
-        config.enable_uncurry_optimization(),
-        "uncurry::replace_calls",
-        |prg| uncurry::replace_calls(prg, config.num_worker_thread),
+        config.enable_closure_specialization()
+            && config.enable_uncurry_optimization()
+            && config.enable_inline_local_optimization(),
+        "uncurry::replace_calls_with_funptr_versions",
+        |prg| uncurry::replace_calls_with_funptr_versions(prg, config.num_worker_thread),
     );
 
     // Drop the symbols nothing reaches, such as the function pointer versions no call uses. This
