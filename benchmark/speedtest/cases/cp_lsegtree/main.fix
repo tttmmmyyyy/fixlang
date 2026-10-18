@@ -26,7 +26,7 @@ main = (
             let a = aa.@(i); let b = bb.@(i);
             let (l, r) = if a < b { (a, b) } else { (b, a) };
             if ts.@(i) == 0 { (tree.act_range(l, r + 1, RangeAffine { a : zp(cs.@(i)), b : zp(ds.@(i)) }), acc) };
-            let (tree, x) = tree.fold(l, r + 1);
+            let x = tree.fold(l, r + 1);
             (tree, acc + x.@v.@value.i64)
         ).@1
     );
