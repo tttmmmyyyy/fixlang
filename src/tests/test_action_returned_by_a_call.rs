@@ -1,7 +1,7 @@
-// An action that a call of a global returns, run where the call is made, is run without building a
-// closure for it. Uncurrying gives a global a version per number of arguments, and a call supplying
-// the arguments of the global and the state the action takes calls the version taking them all, which
-// runs the action in place of answering with it.
+// A call of a global that returns an action, run right where the call is made, builds no closure
+// for the action. Uncurrying gives a global one version for each number of arguments. A call that
+// supplies both the arguments of the global and the state the action takes calls the version taking
+// all of them, and that version runs the action directly.
 
 #[cfg(test)]
 mod tests {
@@ -33,11 +33,10 @@ mod tests {
     /// What `ACTION_RETURNED_BY_A_CALL` prints: a round per iteration.
     const ACTION_RETURNED_BY_A_CALL_OUTPUT: &str = "abcabc";
 
-    /// The function returning the action builds no closure that stores something. Left built, it is
-    /// one heap allocation per call, freed as soon as the caller has run it.
+    /// The function returning the action builds no closure that stores something. Such a closure
+    /// costs one heap allocation per call, freed as soon as the caller has run it.
     ///
-    /// The dump is what this asserts against because the program cannot observe it: the program
-    /// prints the same either way.
+    /// The test reads the RC IR dump, because the program prints the same output either way.
     #[test]
     fn test_an_action_returned_by_a_call_builds_no_closure() {
         let dump = build_run_and_read_rc_ir(
@@ -63,7 +62,7 @@ mod tests {
         }
     }
 
-    /// The program answers the same at every optimization level, uncurrying or not.
+    /// The program prints the same output at every optimization level, with or without uncurrying.
     #[test]
     fn test_an_action_returned_by_a_call_answers_the_same_at_every_level() {
         for opt_level in ["none", "basic", "max"] {

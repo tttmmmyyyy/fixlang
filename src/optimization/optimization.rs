@@ -190,10 +190,10 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| inline_local::run(prg, config.num_worker_thread),
     );
 
-    // Rewrite the calls onto the function pointer versions once more. Inlining the local functions
-    // above moves a call of a version, bound to a name outside a lambda, to where the lambda applies
-    // what it returns, so `g#funptr1(a)` and its application to `b` meet only now, and become
-    // `g#funptr2(a, b)` instead of building the closure `g#funptr1(a)` returns.
+    // Rewrite the calls onto the function pointer versions once more. A call of a version bound to a
+    // name outside a lambda reaches the place where the lambda applies its result only when the
+    // local functions are inlined above. So `g#funptr1(a)` and its application to `b` meet only
+    // here, and this rewrites them into `g#funptr2(a, b)`, which builds no closure.
     run_pass(
         prg,
         config,
@@ -202,8 +202,9 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| uncurry::replace_calls(prg, config.num_worker_thread),
     );
 
-    // Drop the symbols nothing reaches, the function pointer versions no call uses above all. It
-    // runs after the rewrite above, which can call a version no call used until then.
+    // Drop the symbols nothing reaches, such as the function pointer versions no call uses. This
+    // runs after the rewrite above, because the rewrite can make a call of a version that had no
+    // call before.
     run_pass(
         prg,
         config,

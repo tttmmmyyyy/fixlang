@@ -76,10 +76,12 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) {
 /// Rewrites every call of a global in the program onto the function pointer version matching the
 /// number of arguments it supplies, on up to `num_threads` threads.
 ///
-/// `run` does this once it has defined the versions. Passes after it can bring a call of a version
-/// next to an application of what it returns, as in `g#funptr1(a)(b)`, which this rewrites into
-/// `g#funptr2(a, b)`; running this again after them keeps the closure `g#funptr1(a)` returns from
-/// being built.
+/// A call of a version whose result is applied to more arguments is merged into one call of a
+/// longer version. So running this again after other passes rewrites the calls those passes bring
+/// together.
+///
+/// # Examples
+/// `g(a)(b)` becomes `g#funptr2(a, b)`, and so does `g#funptr1(a)(b)`.
 pub fn replace_calls(fix_mod: &mut Program, num_threads: usize) {
     let symbol_names: Set<FullName> = fix_mod.symbols.keys().cloned().collect();
     for_each_on_compiler_threads(fix_mod.symbols.values_mut().collect(), num_threads, |sym| {
@@ -153,7 +155,8 @@ pub fn is_std_fix(name: &FullName) -> bool {
     }
 }
 
-/// The suffix that `convert_to_funptr_name` appends, before the number of arguments.
+/// The text between the name of a global and the number of arguments in the name of its function
+/// pointer version, as in `g#funptr2`.
 const FUNPTR_NAME_SUFFIX: &str = "#funptr";
 
 /// Rewrites `name` in place into the name carried by the uncurried version taking `n_args`
@@ -162,8 +165,11 @@ fn convert_to_funptr_name(name: &mut Name, n_args: usize) {
     *name += &format!("{}{}", FUNPTR_NAME_SUFFIX, n_args);
 }
 
-/// The name of the global that `name`, a name built by `convert_to_funptr_name`, is a version of,
-/// and the number of arguments the version takes. `None` if `name` is not such a name.
+/// Splits the name of a function pointer version into the name of the global it is a version of and
+/// the number of arguments it takes.
+///
+/// # Examples
+/// `split_funptr_name("g#funptr2")` is `Some(("g", 2))`.
 fn split_funptr_name(name: &Name) -> Option<(Name, usize)> {
     let at = name.rfind(FUNPTR_NAME_SUFFIX)?;
     let n_args = name[at + FUNPTR_NAME_SUFFIX.len()..].parse().ok()?;
