@@ -28,7 +28,9 @@ use std::{mem, sync::Arc};
 /// Defines a function pointer version of each global for one, two, ... arguments, then rewrites the
 /// calls, export statements and entry IO value of the program onto the version matching the number
 /// of arguments they supply. The symbols are rewritten on up to `num_threads` threads.
-pub fn run(prg: &mut Program, num_threads: usize) {
+///
+/// Returns the versions it defined, which a later `replace_calls_with_funptr_versions` takes.
+pub fn run(prg: &mut Program, num_threads: usize) -> FunptrVersions {
     // Define the function pointer versions of each global.
     let syms = mem::replace(&mut prg.symbols, Default::default());
     let versions_of_syms = map_on_compiler_threads(
@@ -36,12 +38,17 @@ pub fn run(prg: &mut Program, num_threads: usize) {
         num_threads,
         |(sym_name, sym)| with_funptr_versions(sym_name, sym),
     );
-    for (name, sym) in versions_of_syms.into_iter().flatten() {
-        prg.symbols.insert(name, sym);
+    let mut versions = FunptrVersions::default();
+    for global_and_versions in versions_of_syms {
+        let global = global_and_versions[0].0.clone();
+        for (n_args, (name, _)) in global_and_versions.iter().enumerate().skip(1) {
+            versions.insert(name.clone(), (global.clone(), n_args));
+        }
+        prg.symbols.extend(global_and_versions);
     }
 
     // Rewrite the calls onto the function pointer versions.
-    replace_calls_with_funptr_versions(prg, num_threads);
+    replace_calls_with_funptr_versions(prg, &versions, num_threads);
 
     // Replace export statements so that they use uncurried functions.
     for export in &mut prg.export_statements {
@@ -69,6 +76,8 @@ pub fn run(prg: &mut Program, num_threads: usize) {
             prg.entry_io_value = Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
         }
     }
+
+    versions
 }
 
 /// Rewrites every call of a global in the program onto the function pointer version matching the
@@ -80,34 +89,34 @@ pub fn run(prg: &mut Program, num_threads: usize) {
 ///
 /// # Examples
 /// `g(a)(b)` becomes `g#funptr2(a, b)`, and so does `g#funptr1(a)(b)`.
-pub fn replace_calls_with_funptr_versions(prg: &mut Program, num_threads: usize) {
-    let versions = funptr_versions(&prg.symbols);
+///
+/// # Arguments
+/// * `versions` — the versions `run` defined, each of which must still be in the program.
+pub fn replace_calls_with_funptr_versions(
+    prg: &mut Program,
+    versions: &FunptrVersions,
+    num_threads: usize,
+) {
+    for version in versions.keys() {
+        assert!(
+            prg.symbols.contains_key(version),
+            "the function pointer version `{}` is no longer in the program",
+            version.to_string()
+        );
+    }
     for_each_on_compiler_threads(prg.symbols.values_mut().collect(), num_threads, |sym| {
         let expr =
-            replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), &versions);
+            replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), versions);
         sym.expr = Some(expr);
     });
 }
 
 /// The function pointer versions defined in a program: the name of each, mapped to the name of the
 /// global it is a version of and the number of arguments it takes.
-type FunptrVersions = Map<FullName, (FullName, usize)>;
-
-/// The function pointer versions among `symbols`, found by naming each version every symbol could
-/// have and keeping the names `symbols` defines.
-fn funptr_versions(symbols: &Map<FullName, Symbol>) -> FunptrVersions {
-    let mut versions = FunptrVersions::default();
-    for global in symbols.keys() {
-        for n_args in 1..=FUNPTR_ARGS_MAX as usize {
-            let mut version = global.clone();
-            convert_to_funptr_name(version.name_as_mut(), n_args);
-            if symbols.contains_key(&version) {
-                versions.insert(version, (global.clone(), n_args));
-            }
-        }
-    }
-    versions
-}
+///
+/// # Examples
+/// `g#funptr2` maps to `(g, 2)`.
+pub type FunptrVersions = Map<FullName, (FullName, usize)>;
 
 /// The symbol `sym_name`, whose definition is `sym`, followed by its function pointer versions taking
 /// one argument, two arguments, and so on, as many as its leading lambdas allow.
@@ -175,6 +184,9 @@ pub fn is_std_fix(name: &FullName) -> bool {
 
 /// Rewrites `name` in place into the name carried by the uncurried version taking `n_args`
 /// arguments.
+///
+/// # Examples
+/// `g` with 2 arguments becomes `g#funptr2`.
 fn convert_to_funptr_name(name: &mut Name, n_args: usize) {
     *name += &format!("#funptr{}", n_args);
 }
