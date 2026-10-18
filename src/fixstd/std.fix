@@ -13127,9 +13127,26 @@ namespace Format::TextOut {
     // * `out` - The text written so far.
     _reserve_to_append : I64 -> TextOut -> Array U8 = |count, out| (
         let bytes = out.@_bytes;
+        if count > I64::maximum - bytes.@size {
+            undefined("[Std::Format] The text is too long for an array to hold.")
+        };
         let size = bytes.@size + count;
         if size <= bytes.@capacity { bytes };
         bytes.reserve(max(size, 2 * bytes.@capacity))
+    );
+
+    // The number of code points to pad the text of `out` from byte `start` with, so that it has
+    // `width` code points: 0 if it already has `width` or more.
+    //
+    // # Parameters
+    // * `width` - The number of code points the text should have.
+    // * `start` - The byte the text starts at. It must be the first byte of a code point.
+    // * `out` - The text written so far.
+    _padding_to : I64 -> I64 -> TextOut -> I64 = |width, start, out| (
+        let count = out._count_code_points_from(start);
+        // Compared first, so that a width far below the count does not wrap around when subtracted.
+        if width <= count { 0 };
+        width - count
     );
 
     // Counts the Unicode code points in the text of `out`, from byte `start` to the end.
@@ -13629,8 +13646,7 @@ impl [a : Format] RightAligned a : Format {
     write_text = |aligned, out| pure $ (
         let start = out.@_bytes.@size;
         let Identity { data : out } = out.write_text(aligned.@_value);
-        let padding = aligned.@_width - out._count_code_points_from(start);
-        out._insert_bytes(start, padding, ' ')
+        out._insert_bytes(start, out._padding_to(aligned.@_width, start), ' ')
     );
 }
 
@@ -13661,7 +13677,7 @@ impl [a : Format] ZeroPadded a : Format {
     write_text = |padded, out| pure $ (
         let start = out.@_bytes.@size;
         let Identity { data : out } = out.write_text(padded.@_value);
-        let padding = padded.@_width - out._count_code_points_from(start);
+        let padding = out._padding_to(padded.@_width, start);
         let bytes = out.@_bytes;
         let at = if start < bytes.@size && bytes.@(start) == '-' { start + 1 } else { start };
         out._insert_bytes(at, padding, '0')
@@ -13692,7 +13708,7 @@ impl [a : Format] LeftAligned a : Format {
     write_text = |aligned, out| pure $ (
         let start = out.@_bytes.@size;
         let Identity { data : out } = out.write_text(aligned.@_value);
-        out._write_spaces(aligned.@_width - out._count_code_points_from(start))
+        out._write_spaces(out._padding_to(aligned.@_width, start))
     );
 }
 
