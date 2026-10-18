@@ -80,6 +80,22 @@ check_write_format : [args : FormatArgs] String -> String -> args -> String -> I
             .collect()
     }
 
+    /// Builds and runs `source`, and checks that it succeeds and writes `stdout` to the standard
+    /// output and the lines `stderr` to the standard error.
+    fn assert_writes(source: &str, stdout: &str, stderr: &str) {
+        let output = run_source_capture(source, Configuration::develop_mode());
+        let written_stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let written_stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        assert!(
+            output.status.success(),
+            "stdout: {}\nstderr: {}",
+            written_stdout,
+            written_stderr
+        );
+        assert_eq!(written_stdout, stdout, "stderr: {}", written_stderr);
+        assert_eq!(program_stderr(&written_stderr), stderr, "stderr: {}", written_stderr);
+    }
+
     /// Builds and runs a program made of `HELPERS` and `test`, whose `main` runs the value
     /// `test_name` that `test` defines.
     fn run_format_test(test: &str, test_name: &str) {
@@ -493,17 +509,7 @@ main : IO () = (
     pure()
 );
 "##;
-        let output = run_source_capture(source, Configuration::develop_mode());
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        assert!(
-            output.status.success(),
-            "stdout: {}\nstderr: {}",
-            stdout,
-            stderr
-        );
-        assert_eq!(stdout, "a1|b2\n", "stderr: {}", stderr);
-        assert_eq!(program_stderr(&stderr), "c3|d4\n", "stderr: {}", stderr);
+        assert_writes(source, "a1|b2\n", "c3|d4\n");
     }
 
     /// `debug_printf` and `debug_printfln` write to the standard output, `debug_eprintf` and
@@ -521,17 +527,7 @@ main : IO () = (
     pure()
 );
 "##;
-        let output = run_source_capture(source, Configuration::develop_mode());
-        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        assert!(
-            output.status.success(),
-            "stdout: {}\nstderr: {}",
-            stdout,
-            stderr
-        );
-        assert_eq!(stdout, "a1|b2\n", "stderr: {}", stderr);
-        assert_eq!(program_stderr(&stderr), "c3|d4\n", "stderr: {}", stderr);
+        assert_writes(source, "a1|b2\n", "c3|d4\n");
     }
 
     /// Naming `String::populate` is reported as deprecated, with the message its `DEPRECATED`
