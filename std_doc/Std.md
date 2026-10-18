@@ -3794,8 +3794,8 @@ Type: `[args : Std::FormatArgs] Std::IO::IOHandle -> args -> Std::String -> Std:
 
 Formats `values` into `template`, as `format` does, and writes the result to `handle`.
 
-The text is written as `printf` writes it, so a long text is never held in memory as one
-text. If a write fails, the rest of the text is not written, and the error is returned.
+Like `printf`, it writes the text in parts, so a long text is never held in memory whole. A
+write that fails stops the writing, and its error is returned.
 
 ##### Examples
 
@@ -5168,7 +5168,8 @@ If the string is empty, this function does nothing.
 
 Type: `Std::Array Std::String -> Std::String -> Std::String`
 
-Populate strings into a template string, similar to "format" function in other languages.
+Populate strings into a template string. `String::format` does the same with values of any
+types implementing `Format`.
 
 i-th "{}" in the template string is replaced by i-th string.
 
@@ -7982,7 +7983,7 @@ Calling `TextWriter::flush_if_full` flushes `out` if it is longer than the thres
 written out, or moved to a lower-level buffer. So when writing a large value, call
 `flush_if_full` at suitable points to keep memory use low. For reference, `printf` and the other
 output functions use a threshold of 8192 bytes. For example, the implementation of `Format` for
-`Joined`, which also writes arrays and slices, calls it after each element.
+`Joined`, which also writes arrays, calls it after each element.
 
 The implementations in `Std` write the same text as `to_string`.
 
@@ -8540,6 +8541,8 @@ Writes `()`, as `to_string` does.
 ### impl `() : Std::FormatArgs`
 
 ### impl `() : Std::ToString`
+
+Returns "()".
 
 ### impl `[t0 : Std::Eq, t1 : Std::Eq] (t0, t1) : Std::Eq`
 
