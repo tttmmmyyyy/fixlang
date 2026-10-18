@@ -13182,26 +13182,31 @@ impl [m : Monad] _HandleWriter m : Monad {
     bind = |f, writer| _HandleWriter { _run : |handle| (writer.@_run)(handle).bind(|x| (f(x).@_run)(handle)) };
 }
 
+namespace Format::_HandleWriter {
+    // If `out` is longer than `_flush_threshold`, writes it to the handle with `write` and returns an
+    // empty `TextOut`. Otherwise returns `out` unchanged.
+    //
+    // # Parameters
+    // * `write` - The action that writes bytes to a handle.
+    // * `out` - The text written so far.
+    _flush_if_full_with : [m : Monad] (IOHandle -> Array U8 -> m b) -> TextOut -> _HandleWriter m TextOut = |write, out| _HandleWriter { _run : |handle| (
+        let bytes = out.@_bytes;
+        if bytes.@size <= _flush_threshold { pure(out) };
+        write(handle, bytes);;
+        pure $ TextOut { _bytes : bytes.truncate(0) }
+    ) };
+}
+
 // Writes the text to the handle once it is longer than `_flush_threshold`. Write errors are ignored,
 // as in `print`.
 impl _HandleWriter IO : TextWriter {
-    flush_if_full = |out| _HandleWriter { _run : |handle| (
-        let bytes = out.@_bytes;
-        if bytes.@size <= _flush_threshold { pure(out) };
-        write_bytes(handle, bytes).to_result;;
-        pure $ TextOut { _bytes : bytes.truncate(0) }
-    ) };
+    flush_if_full = _flush_if_full_with(|handle, bytes| write_bytes(handle, bytes).to_result);
 }
 
 // Writes the text to the handle once it is longer than `_flush_threshold`. A write that fails makes
 // the action fail.
 impl _HandleWriter IOFail : TextWriter {
-    flush_if_full = |out| _HandleWriter { _run : |handle| (
-        let bytes = out.@_bytes;
-        if bytes.@size <= _flush_threshold { pure(out) };
-        write_bytes(handle, bytes);;
-        pure $ TextOut { _bytes : bytes.truncate(0) }
-    ) };
+    flush_if_full = _flush_if_full_with(write_bytes);
 }
 
 // A type whose values `format` and `printf` can write.
