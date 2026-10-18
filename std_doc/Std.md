@@ -904,6 +904,33 @@ NOTE: This function is not pure and should only be used for temporary debugging 
 
 * `msg` - The string to be printed.
 
+#### debug_eprintf
+
+Type: `[args : Std::FormatArgs] args -> Std::String -> ()`
+
+Same as `eprintf`, but runs outside `IO` and flushes the standard error, like `debug_eprint`.
+
+NOTE: This function is not pure and should only be used for temporary debugging purposes.
+
+##### Parameters
+
+* `values` - The values to write, in order.
+* `template` - The template.
+
+#### debug_eprintfln
+
+Type: `[args : Std::FormatArgs] args -> Std::String -> ()`
+
+Same as `eprintfln`, but runs outside `IO` and flushes the standard error, like
+`debug_eprintln`.
+
+NOTE: This function is not pure and should only be used for temporary debugging purposes.
+
+##### Parameters
+
+* `values` - The values to write, in order.
+* `template` - The template.
+
 #### debug_eprintln
 
 Type: `Std::String -> ()`
@@ -927,6 +954,33 @@ NOTE: This function is not pure and should only be used for temporary debugging 
 ##### Parameters
 
 * `msg` - The string to be printed.
+
+#### debug_printf
+
+Type: `[args : Std::FormatArgs] args -> Std::String -> ()`
+
+Same as `printf`, but runs outside `IO` and flushes the standard output, like `debug_print`.
+
+NOTE: This function is not pure and should only be used for temporary debugging purposes.
+
+##### Parameters
+
+* `values` - The values to write, in order.
+* `template` - The template.
+
+#### debug_printfln
+
+Type: `[args : Std::FormatArgs] args -> Std::String -> ()`
+
+Same as `printfln`, but runs outside `IO` and flushes the standard output, like
+`debug_println`.
+
+NOTE: This function is not pure and should only be used for temporary debugging purposes.
+
+##### Parameters
+
+* `values` - The values to write, in order.
+* `template` - The template.
 
 #### debug_println
 
@@ -1246,6 +1300,42 @@ assert_eq(|_|"", 3.14159_F32.to_string_precision(2_U8), "3.14");;
 assert_eq(|_|"", 2.5_F32.to_string_precision(0_U8), "2")
 ```
 
+#### with_exp_precision
+
+Type: `Std::U8 -> Std::F32 -> Std::Format::WithExpPrecision Std::F32`
+
+Wraps `v` so that `format` writes it with one digit before the decimal point, `precision`
+digits after it, and a power of ten, as `F32::to_string_exp_precision` does.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", "{}".format((123.456_F32.with_exp_precision(2_U8),)), "1.23e2")
+```
+
+##### Parameters
+
+* `precision` - The number of digits after the decimal point.
+* `v` - The number.
+
+#### with_precision
+
+Type: `Std::U8 -> Std::F32 -> Std::Format::WithPrecision Std::F32`
+
+Wraps `v` so that `format` writes it with `precision` digits after the decimal point, as
+`F32::to_string_precision` does.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", "{}".format((3.14159_F32.with_precision(2_U8),)), "3.14")
+```
+
+##### Parameters
+
+* `precision` - The number of digits after the decimal point.
+* `v` - The number.
+
 ### namespace Std::F64
 
 #### abs
@@ -1522,6 +1612,42 @@ assert_eq(|_|"", 3.14159.to_string_precision(2_U8), "3.14");;
 assert_eq(|_|"", 2.5.to_string_precision(0_U8), "2")
 ```
 
+#### with_exp_precision
+
+Type: `Std::U8 -> Std::F64 -> Std::Format::WithExpPrecision Std::F64`
+
+Wraps `v` so that `format` writes it with one digit before the decimal point, `precision`
+digits after it, and a power of ten, as `F64::to_string_exp_precision` does.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", "{}".format((123.456.with_exp_precision(2_U8),)), "1.23e2")
+```
+
+##### Parameters
+
+* `precision` - The number of digits after the decimal point.
+* `v` - The number.
+
+#### with_precision
+
+Type: `Std::U8 -> Std::F64 -> Std::Format::WithPrecision Std::F64`
+
+Wraps `v` so that `format` writes it with `precision` digits after the decimal point, as
+`F64::to_string_precision` does.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", "{}".format((3.14159.with_precision(2_U8),)), "3.14")
+```
+
+##### Parameters
+
+* `precision` - The number of digits after the decimal point.
+* `v` - The number.
+
 ### namespace Std::FFI
 
 #### borrow_boxed
@@ -1786,6 +1912,77 @@ This is similar to `mutate_unique`, but the `ctor` and `action` is executed in t
 * `ctor` - The copy constructor function of the resource.
 * `action` - The action to be performed on the resource.
 * `dtor` - The destructor value.
+
+### namespace Std::Format
+
+#### left_aligned_to
+
+Type: `Std::I64 -> a -> Std::Format::LeftAligned a`
+
+Wraps `value` so that `format` pads its text with spaces on the right to `width` Unicode code
+points. A text that already has `width` code points or more is written unchanged.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", "[{}]".format((42.left_aligned_to(5),)), "[42   ]")
+```
+
+##### Parameters
+
+* `width` - The minimum width, in Unicode code points.
+* `value` - The value to write.
+
+#### right_aligned_to
+
+Type: `Std::I64 -> a -> Std::Format::RightAligned a`
+
+Wraps `value` so that `format` pads its text with spaces on the left to `width` Unicode code
+points. A text that already has `width` code points or more is written unchanged.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", "[{}]".format((42.right_aligned_to(5),)), "[   42]")
+```
+
+##### Parameters
+
+* `width` - The minimum width, in Unicode code points.
+* `value` - The value to write.
+
+#### write_text
+
+Type: `[a : Std::Format, m : Std::Monad, m : Std::TextWriter] a -> Std::Format::TextOut -> m Std::Format::TextOut`
+
+Trait member of `Std::Format`
+
+Appends the text of `value` to `out`.
+
+##### Parameters
+
+* `value` - The value to write.
+* `out` - The text written so far.
+
+#### zero_padded_to
+
+Type: `Std::I64 -> a -> Std::Format::ZeroPadded a`
+
+Wraps `value` so that `format` pads its text with `0` to `width` Unicode code points. The
+zeros go after the `-` that the text starts with, if it starts with one, and before the text
+otherwise. A text that already has `width` code points or more is written unchanged.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", "{}:{}".format((9.zero_padded_to(2), 5.zero_padded_to(2))), "09:05");;
+assert_eq(|_|"", "{}".format(((-5).zero_padded_to(3),)), "-05")
+```
+
+##### Parameters
+
+* `width` - The minimum width, in Unicode code points.
+* `value` - The value to write.
 
 ### namespace Std::FromBytes
 
@@ -3202,6 +3399,28 @@ Prints a string to stderr.
 
 * `msg` - The string to be printed.
 
+#### eprintf
+
+Type: `[args : Std::FormatArgs] args -> Std::String -> Std::IO ()`
+
+Same as `printf`, but writes to the standard error.
+
+##### Parameters
+
+* `values` - The values to write, in order.
+* `template` - The template.
+
+#### eprintfln
+
+Type: `[args : Std::FormatArgs] args -> Std::String -> Std::IO ()`
+
+Same as `printf`, but writes to the standard error and adds a newline at the end.
+
+##### Parameters
+
+* `values` - The values to write, in order.
+* `template` - The template.
+
 #### eprintln
 
 Type: `Std::String -> Std::IO ()`
@@ -3371,6 +3590,35 @@ Prints a string to stdout.
 
 * `msg` - The string to be printed.
 
+#### printf
+
+Type: `[args : Std::FormatArgs] args -> Std::String -> Std::IO ()`
+
+Formats `values` into `template`, as `format` does, and writes the result to the standard
+output.
+
+##### Examples
+
+```fix
+main : IO () = "{} + {} = {}\n".printf((1, 2.5, "three"));
+```
+
+##### Parameters
+
+* `values` - The values to write, in order.
+* `template` - The template.
+
+#### printfln
+
+Type: `[args : Std::FormatArgs] args -> Std::String -> Std::IO ()`
+
+Same as `printf`, but adds a newline at the end.
+
+##### Parameters
+
+* `values` - The values to write, in order.
+* `template` - The template.
+
 #### println
 
 Type: `Std::String -> Std::IO ()`
@@ -3523,6 +3771,26 @@ Writes a string into a file.
 
 * `path` - The path to the file to be written.
 * `content` - The string to be written.
+
+#### write_format
+
+Type: `[args : Std::FormatArgs] Std::IO::IOHandle -> args -> Std::String -> Std::IO::IOFail ()`
+
+Formats `values` into `template`, as `format` does, and writes the result to `handle`.
+
+Stops at the first write that fails, and returns its error.
+
+##### Examples
+
+```fix
+main : IO () = write_format(stdout, (1, 2.5), "{} + {}\n").try(eprintln);
+```
+
+##### Parameters
+
+* `handle` - The handle to write to.
+* `values` - The values to write, in order.
+* `template` - The template.
 
 #### write_string
 
@@ -4073,6 +4341,24 @@ Compare two iterators by their elements.
 
 * `iter1` - The first iterator to be compared.
 * `iter2` - The second iterator to be compared.
+
+#### joined_with
+
+Type: `Std::String -> it -> Std::Format::Joined it`
+
+Wraps `elements` so that `format` writes them with `separator` between them, as `String::join`
+joins strings.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", "{}".format(([1, 2, 3].to_iter.joined_with(", "),)), "1, 2, 3")
+```
+
+##### Parameters
+
+* `separator` - The text to write between two elements.
+* `elements` - The elements.
 
 #### loop_iter
 
@@ -4711,6 +4997,39 @@ assert_eq(|_|"", "abcabc".find("bc", 0), some(1));;
 assert_eq(|_|"", "abcabc".find("bc", 2), some(4))
 ```
 
+#### format
+
+Type: `[args : Std::FormatArgs] args -> Std::String -> Std::String`
+
+Replaces the placeholders `{}` in a template with values.
+
+Each `{}` is replaced with the text of the next value, as `Format` writes it. `{{` and `}}` are
+written as `{` and `}`.
+
+Pass the values as a tuple. The values may have different types. Write `(x,)` for one value and
+`()` for none.
+
+The program aborts if the number of placeholders differs from the number of values, or if the
+template has a `{` or `}` that is not part of a placeholder or an escape.
+
+`IO::printf` writes the same text to the standard output, and `IO::write_format` writes it to
+any handle, such as a file. A wrapper such as `with_precision` or `right_aligned_to` changes how
+a value is written, and one wrapper can wrap another:
+`"[{}]".format((3.14159.with_precision(2_U8).right_aligned_to(6),))` is `"[  3.14]"`.
+
+##### Examples
+
+```fix
+assert_eq(|_|"", "{} + {} = {}".format((1, 2.5, "three")), "1 + 2.5 = three");;
+assert_eq(|_|"", "x = {}".format((42,)), "x = 42");;
+assert_eq(|_|"", "{{{}}}".format((1,)), "{1}")
+```
+
+##### Parameters
+
+* `values` - The values to write, in order.
+* `template` - The template.
+
 #### from_U8
 
 Type: `Std::U8 -> Std::String`
@@ -4828,9 +5147,12 @@ If the string is empty, this function does nothing.
 
 #### populate
 
+**Deprecated**: Use `Std::String::format` instead.
+
 Type: `Std::Array Std::String -> Std::String -> Std::String`
 
-Populate strings into a template string, similar to "format" function in other languages.
+Populate strings into a template string. `String::format` does the same with values of any
+types implementing `Format`.
 
 i-th "{}" in the template string is replaced by i-th string.
 
@@ -5005,6 +5327,22 @@ Subtracts a value from another value. An expression `x - y` is translated to `su
 
 * `lhs`
 * `rhs`
+
+### namespace Std::TextWriter
+
+#### flush_if_full
+
+Type: `[m : Std::TextWriter] Std::Format::TextOut -> m Std::Format::TextOut`
+
+Trait member of `Std::TextWriter`
+
+If `out` is longer than a threshold, writes it to the destination and returns an empty
+`TextOut`. Otherwise returns `out` unchanged. Each implementation of this trait sets its own
+threshold.
+
+##### Parameters
+
+* `out` - The text written so far.
 
 ### namespace Std::ToBytes
 
@@ -7107,6 +7445,56 @@ The following are some examples of such precautions, but not all:
 - Creating multiple `Destructor`s from a handle to a single resource will cause double-free.
 - Copying a handle to a single resource, putting one in a `Destructor` and continuing to use the other directly, may result in accessing a released resource.
 
+### namespace Std::Format
+
+#### Joined
+
+Defined as: `type Joined it = unbox struct { ...fields... }`
+
+The elements of an iterator, written with a separator between them. Created by
+`Iterator::joined_with`.
+
+#### LeftAligned
+
+Defined as: `type LeftAligned a = unbox struct { ...fields... }`
+
+A value padded with spaces on the right to a width. Created by `left_aligned_to`.
+
+#### RightAligned
+
+Defined as: `type RightAligned a = unbox struct { ...fields... }`
+
+A value padded with spaces on the left to a width. Created by `right_aligned_to`.
+
+#### TextOut
+
+Defined as: `type TextOut = unbox struct { ...fields... }`
+
+Text that has been written but not yet flushed. `Format::write_text` appends to it, and
+`TextWriter::flush_if_full` flushes it.
+
+#### WithExpPrecision
+
+Defined as: `type WithExpPrecision a = unbox struct { ...fields... }`
+
+A floating-point number written with one digit before the decimal point, a fixed number of
+digits after it, and a power of ten. Created by `F32::with_exp_precision` or
+`F64::with_exp_precision`.
+
+#### WithPrecision
+
+Defined as: `type WithPrecision a = unbox struct { ...fields... }`
+
+A floating-point number written with a fixed number of digits after the decimal point. Created by
+`F32::with_precision` or `F64::with_precision`.
+
+#### ZeroPadded
+
+Defined as: `type ZeroPadded a = unbox struct { ...fields... }`
+
+A value padded with zeros on the left to a width, after its minus sign if it has one. Created
+by `zero_padded_to`.
+
 ### namespace Std::IO
 
 #### IOFail
@@ -7546,6 +7934,49 @@ Checks equality of two values. An expression `x == y` is translated to `eq(x, y)
 * `lhs`
 * `rhs`
 
+#### trait `a : Format`
+
+A type whose values `format` and `printf` can write.
+
+`write_text` appends the text of a value to `out` and returns the new `out` in the monad `m`. To
+implement it, write the parts of the value one by one:
+
+```fix
+impl Point : Format {
+    write_text = |p, out| (
+        let out = *out.write_text("(");
+        let out = *out.write_text(p.@x);
+        let out = *out.write_text(", ");
+        let out = *out.write_text(p.@y);
+        out.write_text(")")
+    );
+}
+```
+
+Calling `TextWriter::flush_if_full` flushes `out` if it is longer than the threshold: the text is
+written out, or moved to a lower-level buffer. So when writing a large value, call
+`flush_if_full` at suitable points to keep memory use low. For reference, `printf` and the other
+output functions use a threshold of 8192 bytes. For example, the implementation of `Format` for
+`Joined`, which also writes arrays, calls it after each element.
+
+The implementations in `Std` write the same text as `to_string`.
+
+##### method `write_text`
+
+Type: `[m : Std::Monad, m : Std::TextWriter] a -> Std::Format::TextOut -> m Std::Format::TextOut`
+
+Appends the text of `value` to `out`.
+
+###### Parameters
+
+* `value` - The value to write.
+* `out` - The text written so far.
+
+#### trait `args : FormatArgs`
+
+The values that `format` writes into a template: `()`, or a tuple of values whose types
+implement `Format`.
+
 #### trait `a : FromBytes`
 
 ##### method `from_bytes`
@@ -7781,6 +8212,25 @@ Subtracts a value from another value. An expression `x - y` is translated to `su
 
 * `lhs`
 * `rhs`
+
+#### trait `[m : *->*] m : TextWriter`
+
+A destination for text: the monad in which `Format::write_text` runs.
+
+Writers append text to a `TextOut`, and may call `flush_if_full` to let the destination write it
+out.
+
+##### method `flush_if_full`
+
+Type: `Std::Format::TextOut -> m Std::Format::TextOut`
+
+If `out` is longer than a threshold, writes it to the destination and returns an empty
+`TextOut`. Otherwise returns `out` unchanged. Each implementation of this trait sets its own
+threshold.
+
+###### Parameters
+
+* `out` - The text written so far.
 
 #### trait `a : ToBytes`
 
@@ -8046,11 +8496,21 @@ Type: `a`
 
 ### impl `() : Std::Eq`
 
+### impl `() : Std::Format`
+
+Writes `()`, as `to_string` does.
+
+### impl `() : Std::FormatArgs`
+
 ### impl `() : Std::ToString`
 
 Returns "()".
 
 ### impl `[t0 : Std::Eq, t1 : Std::Eq] (t0, t1) : Std::Eq`
+
+### impl `[t0 : Std::Format, t1 : Std::Format] (t0, t1) : Std::Format`
+
+### impl `[t0 : Std::Format, t1 : Std::Format] (t0, t1) : Std::FormatArgs`
 
 ### impl `[t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan] (t0, t1) : Std::LessThan`
 
@@ -8060,6 +8520,10 @@ Returns "()".
 
 ### impl `[t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq] (t0, t1, t2) : Std::Eq`
 
+### impl `[t0 : Std::Format, t1 : Std::Format, t2 : Std::Format] (t0, t1, t2) : Std::Format`
+
+### impl `[t0 : Std::Format, t1 : Std::Format, t2 : Std::Format] (t0, t1, t2) : Std::FormatArgs`
+
 ### impl `[t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan] (t0, t1, t2) : Std::LessThan`
 
 ### impl `[t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq, t2 : Std::Eq, t2 : Std::LessThanOrEq] (t0, t1, t2) : Std::LessThanOrEq`
@@ -8067,6 +8531,10 @@ Returns "()".
 ### impl `[t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString] (t0, t1, t2) : Std::ToString`
 
 ### impl `[t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq, t3 : Std::Eq] (t0, t1, t2, t3) : Std::Eq`
+
+### impl `[t0 : Std::Format, t1 : Std::Format, t2 : Std::Format, t3 : Std::Format] (t0, t1, t2, t3) : Std::Format`
+
+### impl `[t0 : Std::Format, t1 : Std::Format, t2 : Std::Format, t3 : Std::Format] (t0, t1, t2, t3) : Std::FormatArgs`
 
 ### impl `[t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan, t3 : Std::Eq, t3 : Std::LessThan] (t0, t1, t2, t3) : Std::LessThan`
 
@@ -8076,6 +8544,10 @@ Returns "()".
 
 ### impl `[t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq, t3 : Std::Eq, t4 : Std::Eq] (t0, t1, t2, t3, t4) : Std::Eq`
 
+### impl `[t0 : Std::Format, t1 : Std::Format, t2 : Std::Format, t3 : Std::Format, t4 : Std::Format] (t0, t1, t2, t3, t4) : Std::Format`
+
+### impl `[t0 : Std::Format, t1 : Std::Format, t2 : Std::Format, t3 : Std::Format, t4 : Std::Format] (t0, t1, t2, t3, t4) : Std::FormatArgs`
+
 ### impl `[t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan, t3 : Std::Eq, t3 : Std::LessThan, t4 : Std::Eq, t4 : Std::LessThan] (t0, t1, t2, t3, t4) : Std::LessThan`
 
 ### impl `[t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq, t2 : Std::Eq, t2 : Std::LessThanOrEq, t3 : Std::Eq, t3 : Std::LessThanOrEq, t4 : Std::Eq, t4 : Std::LessThanOrEq] (t0, t1, t2, t3, t4) : Std::LessThanOrEq`
@@ -8083,6 +8555,10 @@ Returns "()".
 ### impl `[t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString, t3 : Std::ToString, t4 : Std::ToString] (t0, t1, t2, t3, t4) : Std::ToString`
 
 ### impl `[t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq, t3 : Std::Eq, t4 : Std::Eq, t5 : Std::Eq] (t0, t1, t2, t3, t4, t5) : Std::Eq`
+
+### impl `[t0 : Std::Format, t1 : Std::Format, t2 : Std::Format, t3 : Std::Format, t4 : Std::Format, t5 : Std::Format] (t0, t1, t2, t3, t4, t5) : Std::Format`
+
+### impl `[t0 : Std::Format, t1 : Std::Format, t2 : Std::Format, t3 : Std::Format, t4 : Std::Format, t5 : Std::Format] (t0, t1, t2, t3, t4, t5) : Std::FormatArgs`
 
 ### impl `[t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan, t3 : Std::Eq, t3 : Std::LessThan, t4 : Std::Eq, t4 : Std::LessThan, t5 : Std::Eq, t5 : Std::LessThan] (t0, t1, t2, t3, t4, t5) : Std::LessThan`
 
@@ -8092,6 +8568,10 @@ Returns "()".
 
 ### impl `[t0 : Std::Eq, t1 : Std::Eq, t2 : Std::Eq, t3 : Std::Eq, t4 : Std::Eq, t5 : Std::Eq, t6 : Std::Eq] (t0, t1, t2, t3, t4, t5, t6) : Std::Eq`
 
+### impl `[t0 : Std::Format, t1 : Std::Format, t2 : Std::Format, t3 : Std::Format, t4 : Std::Format, t5 : Std::Format, t6 : Std::Format] (t0, t1, t2, t3, t4, t5, t6) : Std::Format`
+
+### impl `[t0 : Std::Format, t1 : Std::Format, t2 : Std::Format, t3 : Std::Format, t4 : Std::Format, t5 : Std::Format, t6 : Std::Format] (t0, t1, t2, t3, t4, t5, t6) : Std::FormatArgs`
+
 ### impl `[t0 : Std::Eq, t0 : Std::LessThan, t1 : Std::Eq, t1 : Std::LessThan, t2 : Std::Eq, t2 : Std::LessThan, t3 : Std::Eq, t3 : Std::LessThan, t4 : Std::Eq, t4 : Std::LessThan, t5 : Std::Eq, t5 : Std::LessThan, t6 : Std::Eq, t6 : Std::LessThan] (t0, t1, t2, t3, t4, t5, t6) : Std::LessThan`
 
 ### impl `[t0 : Std::Eq, t0 : Std::LessThanOrEq, t1 : Std::Eq, t1 : Std::LessThanOrEq, t2 : Std::Eq, t2 : Std::LessThanOrEq, t3 : Std::Eq, t3 : Std::LessThanOrEq, t4 : Std::Eq, t4 : Std::LessThanOrEq, t5 : Std::Eq, t5 : Std::LessThanOrEq, t6 : Std::Eq, t6 : Std::LessThanOrEq] (t0, t1, t2, t3, t4, t5, t6) : Std::LessThanOrEq`
@@ -8099,6 +8579,10 @@ Returns "()".
 ### impl `[t0 : Std::ToString, t1 : Std::ToString, t2 : Std::ToString, t3 : Std::ToString, t4 : Std::ToString, t5 : Std::ToString, t6 : Std::ToString] (t0, t1, t2, t3, t4, t5, t6) : Std::ToString`
 
 ### impl `[t0 : Std::Eq] (t0,) : Std::Eq`
+
+### impl `[t0 : Std::Format] (t0,) : Std::Format`
+
+### impl `[t0 : Std::Format] (t0,) : Std::FormatArgs`
 
 ### impl `[t0 : Std::Eq, t0 : Std::LessThan] (t0,) : Std::LessThan`
 
@@ -8115,6 +8599,10 @@ Returns "()".
 Concatenates two arrays.
 
 ### impl `[a : Std::Eq] Std::Array a : Std::Eq`
+
+### impl `[a : Std::Format] Std::Array a : Std::Format`
+
+Writes the elements between `[` and `]`, separated by `, `, as `to_string` does.
 
 ### impl `Std::Array a : Std::Indexable`
 
@@ -8142,6 +8630,10 @@ The empty array with zero capacity.
 
 ### impl `Std::Bool : Std::Eq`
 
+### impl `Std::Bool : Std::Format`
+
+Writes `true` or `false`, as `to_string` does.
+
 ### impl `Std::Bool : Std::Not`
 
 ### impl `Std::Bool : Std::ToString`
@@ -8155,6 +8647,10 @@ The empty array with zero capacity.
 ### impl `Std::F32 : Std::Div`
 
 ### impl `Std::F32 : Std::Eq`
+
+### impl `Std::F32 : Std::Format`
+
+Writes the shortest decimal text that reads back as the same number, as `to_string` does.
 
 ### impl `Std::F32 : Std::FromBytes`
 
@@ -8234,6 +8730,10 @@ The empty array with zero capacity.
 
 ### impl `Std::F64 : Std::Eq`
 
+### impl `Std::F64 : Std::Format`
+
+Writes the shortest decimal text that reads back as the same number, as `to_string` does.
+
 ### impl `Std::F64 : Std::FromBytes`
 
 ### impl `Std::F64 : Std::FromString`
@@ -8308,11 +8808,31 @@ The empty array with zero capacity.
 
 ### impl `Std::FFI::Destructor a : Std::Boxed`
 
+### impl `[it : Std::Iterator, a : Std::Format] Std::Format::Joined it : Std::Format`
+
+Writes each element with `write_text`, and calls `flush_if_full` after it.
+
+### impl `[a : Std::Format] Std::Format::LeftAligned a : Std::Format`
+
+### impl `[a : Std::Format] Std::Format::RightAligned a : Std::Format`
+
+### impl `Std::Format::WithExpPrecision Std::F32 : Std::Format`
+
+### impl `Std::Format::WithExpPrecision Std::F64 : Std::Format`
+
+### impl `Std::Format::WithPrecision Std::F32 : Std::Format`
+
+### impl `Std::Format::WithPrecision Std::F64 : Std::Format`
+
+### impl `[a : Std::Format] Std::Format::ZeroPadded a : Std::Format`
+
 ### impl `Std::I128 : Std::Add`
 
 ### impl `Std::I128 : Std::Div`
 
 ### impl `Std::I128 : Std::Eq`
+
+### impl `Std::I128 : Std::Format`
 
 ### impl `Std::I128 : Std::FromBytes`
 
@@ -8394,6 +8914,8 @@ The empty array with zero capacity.
 
 ### impl `Std::I16 : Std::Eq`
 
+### impl `Std::I16 : Std::Format`
+
 ### impl `Std::I16 : Std::FromBytes`
 
 ### impl `Std::I16 : Std::FromString`
@@ -8473,6 +8995,8 @@ The empty array with zero capacity.
 ### impl `Std::I32 : Std::Div`
 
 ### impl `Std::I32 : Std::Eq`
+
+### impl `Std::I32 : Std::Format`
 
 ### impl `Std::I32 : Std::FromBytes`
 
@@ -8554,6 +9078,8 @@ The empty array with zero capacity.
 
 ### impl `Std::I64 : Std::Eq`
 
+### impl `Std::I64 : Std::Format`
+
 ### impl `Std::I64 : Std::FromBytes`
 
 ### impl `Std::I64 : Std::FromString`
@@ -8633,6 +9159,8 @@ The empty array with zero capacity.
 ### impl `Std::I8 : Std::Div`
 
 ### impl `Std::I8 : Std::Eq`
+
+### impl `Std::I8 : Std::Format`
 
 ### impl `Std::I8 : Std::FromBytes`
 
@@ -8720,6 +9248,10 @@ The empty array with zero capacity.
 
 ### impl `Std::Identity : Std::Monad`
 
+### impl `Std::Identity : Std::TextWriter`
+
+`format` runs in `Identity`, which keeps the whole text.
+
 ### impl `[i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::AppendIterator i1 i2 : Std::Iterator`
 
 ### impl `Std::Iterator::ArrayIterator a : Std::Iterator`
@@ -8780,11 +9312,19 @@ Creates an empty dynamic iterator.
 
 ### impl `[a : Std::Eq] Std::Option a : Std::Eq`
 
+### impl `[a : Std::Format] Std::Option a : Std::Format`
+
+Writes `some(x)` or `none()`, as `to_string` does.
+
 ### impl `[a : Std::ToString] Std::Option a : Std::ToString`
 
 ### impl `Std::Option::OptionIterator (Std::Option a) : Std::Iterator`
 
 ### impl `Std::Ptr : Std::Eq`
+
+### impl `Std::Ptr : Std::Format`
+
+Writes sixteen hexadecimal digits, as `to_string` does.
 
 ### impl `Std::Ptr : Std::ToString`
 
@@ -8794,6 +9334,10 @@ Creates an empty dynamic iterator.
 
 ### impl `[e : Std::Eq, a : Std::Eq] Std::Result e a : Std::Eq`
 
+### impl `[e : Std::Format, a : Std::Format] Std::Result e a : Std::Format`
+
+Writes `ok(x)` or `err(e)`, as `to_string` does.
+
 ### impl `[e : Std::ToString, a : Std::ToString] Std::Result e a : Std::ToString`
 
 ### impl `Std::String : Std::Add`
@@ -8801,6 +9345,8 @@ Creates an empty dynamic iterator.
 Concatenates two strings.
 
 ### impl `Std::String : Std::Eq`
+
+### impl `Std::String : Std::Format`
 
 ### impl `Std::String : Std::FromBytes`
 
@@ -8853,6 +9399,8 @@ The empty string.
 ### impl `Std::U128 : Std::Div`
 
 ### impl `Std::U128 : Std::Eq`
+
+### impl `Std::U128 : Std::Format`
 
 ### impl `Std::U128 : Std::FromBytes`
 
@@ -8934,6 +9482,8 @@ The empty string.
 
 ### impl `Std::U16 : Std::Eq`
 
+### impl `Std::U16 : Std::Format`
+
 ### impl `Std::U16 : Std::FromBytes`
 
 ### impl `Std::U16 : Std::FromString`
@@ -9013,6 +9563,8 @@ The empty string.
 ### impl `Std::U32 : Std::Div`
 
 ### impl `Std::U32 : Std::Eq`
+
+### impl `Std::U32 : Std::Format`
 
 ### impl `Std::U32 : Std::FromBytes`
 
@@ -9094,6 +9646,8 @@ The empty string.
 
 ### impl `Std::U64 : Std::Eq`
 
+### impl `Std::U64 : Std::Format`
+
 ### impl `Std::U64 : Std::FromBytes`
 
 ### impl `Std::U64 : Std::FromString`
@@ -9173,6 +9727,8 @@ The empty string.
 ### impl `Std::U8 : Std::Div`
 
 ### impl `Std::U8 : Std::Eq`
+
+### impl `Std::U8 : Std::Format`
 
 ### impl `Std::U8 : Std::FromBytes`
 

@@ -3011,7 +3011,7 @@ test_sort_stability = |sort_method| (
     cases.to_iter.zip(count_up(1)).fold_m((), |(case, case_n), _|
         let xs = case.to_iter.zip(count_up(0)).to_array;
         let ys = xs.sort_method;
-        assert(|_| "case {}-stability".populate([case_n.to_string]), ys.is_increasing);;
+        assert(|_| "case {}-stability".format((case_n,)), ys.is_increasing);;
 
         pure()
     )
@@ -10480,9 +10480,9 @@ pub fn test_tuple_functor() {
     test_source(&source, Configuration::develop_mode());
 }
 
-/// The compiler writes the `ToString`, `Eq`, `LessThan`, `LessThanOrEq` and `Functor` instances of
-/// a tuple for each size the program uses, so a size far above the ones the other tests reach
-/// carries the same behavior as a small one.
+/// The compiler writes the `ToString`, `Eq`, `LessThan`, `LessThanOrEq`, `Format`, `FormatArgs` and
+/// `Functor` instances of a tuple for each size the program uses, so a size far above the ones the
+/// other tests reach carries the same behavior as a small one.
 #[test]
 pub fn test_instances_of_a_tuple_of_many_components() {
     let source = r##"
@@ -10500,6 +10500,8 @@ pub fn test_instances_of_a_tuple_of_many_components() {
             assert_eq(|_|"", a <= a, true);;
             assert_eq(|_|"", b <= a, false);;
             assert_eq(|_|"", a.map(|x| x + 1), b);;
+            assert_eq(|_|"", "{}".format((a,)), "(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12)");;
+            assert_eq(|_|"", "{}{}{}{}{}{}{}{}{}{}{}{}".format(a), "123456789101112");;
 
             pure()
         );
