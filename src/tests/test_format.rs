@@ -1,5 +1,5 @@
 // `String::format`, `IO::printf`, `IO::write_format` and the rest of the trait `Format`: each
-// program checks the text a part of them writes against `to_string` or a literal.
+// program compares the text they write with `to_string` or with a literal.
 
 #[cfg(test)]
 mod tests {
@@ -134,7 +134,7 @@ test_placeholders : IO () = (
         );
     }
 
-    /// Each `Format` implementation of `Std`, the generated ones for tuples of more than twelve elements included, writes the same text as `to_string`.
+    /// Each `Format` implementation of `Std`, the generated ones for tuples included, writes the same text as `to_string`.
     #[test]
     fn test_same_text_as_to_string() {
         run_format_test(
@@ -247,7 +247,7 @@ test_joined_with : IO () = (
     assert_eq(|_|"several", "[{}]".format(([1, 2, 3].to_iter.joined_with(" | "),)), "[1 | 2 | 3]");;
     assert_eq(|_|"empty separator", "[{}]".format((["a", "b"].to_iter.joined_with(""),)), "[ab]");;
     assert_eq(|_|"mapped range", "{}".format((range(1, 4).map(|i| i * i).joined_with(", "),)), "1, 4, 9");;
-    // Many numbers make the text grow many times.
+    // Ten thousand numbers make the text outgrow its capacity many times.
     let many = Array::from_map(10000, |i| i);
     assert_eq(|_|"many", "{}".format((many.to_iter.joined_with(","),)), many.to_iter.map(to_string).join(","));;
     pure()
@@ -343,7 +343,7 @@ test_shared_out : IO () = (
     #[test]
     fn test_write_format() {
         run_format_test(
-            r##"// Tests that `_write_format`, which `printf` and the others are made of, writes the same text as
+            r##"// Tests that `_write_format`, which `printf` and the others call, writes the same text as
 // `format` followed by the ending, also where the text is long enough to be written out many times
 // along the way, even in the middle of a value, and that the text goes in order with what is
 // written to the handle before and after it.
@@ -391,13 +391,13 @@ test_write_format_to_handle : IO () = (
         );
     }
 
-    /// `flush_if_full` writes out a text longer than the buffer, and the one `write_format` runs in returns the error of a write that fails.
+    /// `flush_if_full` of the writer `printf` runs in writes out a text longer than `_buffer_size`, and that of the writer `write_format` runs in returns the error of a write that fails.
     #[test]
     fn test_flush_if_full() {
         run_format_test(
-            r##"// Tests that `flush_if_full` of a handle keeps a text of up to `_buffer_size` bytes, and writes out a
-// longer one and returns it emptied, and that the one `write_format` runs in returns the error of a
-// write that fails.
+            r##"// Tests that `flush_if_full` of `_HandleWriter` keeps a text of up to `_buffer_size` bytes, and
+// writes out a longer one and returns it emptied, and that `flush_if_full` of `_IOFailWriter`
+// returns the error of a write that fails.
 test_flush_if_full : IO () = (
     let short = TextOut { _bytes : Array::fill(_buffer_size, 'a') };
     let written = *written_to_file(|h|
@@ -479,12 +479,12 @@ test_flush_if_full : IO () = (
             "[Std::String::format] The template has a \"}\" that is neither a placeholder nor an escape: \"a } b\"",
         );
     }
-    /// `format` takes a tuple of more than twelve values, since the implementation of `FormatArgs`
-    /// is generated for every tuple size a program uses.
+    /// `format` takes a tuple of thirteen or twenty values, since the implementation of
+    /// `FormatArgs` is generated for every tuple size a program uses.
     #[test]
     fn test_more_than_twelve_values() {
         run_format_test(
-            r##"// Tests that `format` takes a tuple of more than twelve values, of different types.
+            r##"// Tests that `format` takes a tuple of thirteen or twenty values, of different types.
 test_more_than_twelve_values : IO () = (
     assert_eq(|_|"13 values", "{}{}{}{}{}{}{}{}{}{}{}{}{}".format((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, "13")), "12345678910111213");;
     assert_eq(|_|"20 values", "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}".format((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, [20])), "12345678910111213141516171819[20]");;

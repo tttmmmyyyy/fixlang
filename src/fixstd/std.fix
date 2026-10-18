@@ -12893,8 +12893,8 @@ namespace IO {
 
     // Formats `values` into `template`, as `format` does, and writes the result to `handle`.
     //
-    // The text is written as `printf` writes it, so a long text is never held in memory as one
-    // text. If a write fails, the rest of the text is not written, and the error is returned.
+    // Like `printf`, it writes the text in parts, so a long text is never held in memory whole. A
+    // write that fails stops the writing, and its error is returned.
     //
     // # Examples
     //
@@ -12996,8 +12996,8 @@ namespace Format {
 
 namespace Format::TextOut {
     // Reserves `max_length` bytes at the end of `out` for a writer of `Std` that writes a text from
-    // an index, such as `F64::_write_shortest_text`, and answers with that index and the bytes.
-    // `_finish_write` takes what the writer answers.
+    // an index, such as `F64::_write_shortest_text`, and returns that index and the bytes.
+    // `_finish_write` takes what the writer returns.
     //
     // # Parameters
     // * `max_length` - The most bytes the writer writes.
