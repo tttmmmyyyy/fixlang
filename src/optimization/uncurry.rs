@@ -28,23 +28,23 @@ use std::{mem, sync::Arc, usize};
 /// Defines a function pointer version of each global for one, two, ... arguments, then rewrites the
 /// calls, export statements and entry IO value of the program onto the version matching the number
 /// of arguments they supply. The symbols are rewritten on up to `num_threads` threads.
-pub fn run(fix_mod: &mut Program, num_threads: usize) {
+pub fn run(prg: &mut Program, num_threads: usize) {
     // First, define uncurried version of global symbols.
-    let syms = mem::replace(&mut fix_mod.symbols, Default::default());
+    let syms = mem::replace(&mut prg.symbols, Default::default());
     let versions_of_syms = map_on_compiler_threads(
         syms.into_iter().collect(),
         num_threads,
         |(sym_name, sym)| with_funptr_versions(sym_name, sym),
     );
     for (name, sym) in versions_of_syms.into_iter().flatten() {
-        fix_mod.symbols.insert(name, sym);
+        prg.symbols.insert(name, sym);
     }
 
     // Replace application expressions so that they use uncurried pointers.
-    replace_calls_with_funptr_versions(fix_mod, num_threads);
+    replace_calls_with_funptr_versions(prg, num_threads);
 
     // Replace export statements so that they use uncurried functions.
-    for export in &mut fix_mod.export_statements {
+    for export in &mut prg.export_statements {
         let exported_value = export.value_expr.as_ref().unwrap();
         let n_args = exported_value
             .type_
@@ -53,7 +53,7 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) {
             .collect_app_src(usize::MAX)
             .0
             .len();
-        let Some(uncurried_value) = uncurried_symbol(&fix_mod.symbols, exported_value, n_args)
+        let Some(uncurried_value) = uncurried_symbol(&prg.symbols, exported_value, n_args)
         else {
             continue;
         };
@@ -63,11 +63,11 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) {
     }
 
     // Replace entry IO value so that it uses uncurried function.
-    if let Some(entry_io_value) = &fix_mod.entry_io_value {
+    if let Some(entry_io_value) = &prg.entry_io_value {
         // The entry IO value has the unwrapped `IO` type, i.e., the `IOState -> (IOState, a)` type,
         // so it takes one argument.
-        if let Some(sym) = uncurried_symbol(&fix_mod.symbols, entry_io_value, 1) {
-            fix_mod.entry_io_value =
+        if let Some(sym) = uncurried_symbol(&prg.symbols, entry_io_value, 1) {
+            prg.entry_io_value =
                 Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
         }
     }
@@ -82,9 +82,9 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) {
 ///
 /// # Examples
 /// `g(a)(b)` becomes `g#funptr2(a, b)`, and so does `g#funptr1(a)(b)`.
-pub fn replace_calls_with_funptr_versions(fix_mod: &mut Program, num_threads: usize) {
-    let versions = funptr_versions(&fix_mod.symbols);
-    for_each_on_compiler_threads(fix_mod.symbols.values_mut().collect(), num_threads, |sym| {
+pub fn replace_calls_with_funptr_versions(prg: &mut Program, num_threads: usize) {
+    let versions = funptr_versions(&prg.symbols);
+    for_each_on_compiler_threads(prg.symbols.values_mut().collect(), num_threads, |sym| {
         let expr =
             replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), &versions);
         sym.expr = Some(expr);
