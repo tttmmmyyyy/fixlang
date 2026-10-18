@@ -1,6 +1,6 @@
 module Main;
 
-import CPLib.Bipartite::{BipartiteGraph::{add_edge, create, maximize_flow}, BipartiteGraphFlow::get_max_matching};
+import CPLib.Bipartite::{BipartiteGraph::{add_edge, calc_flow, create}, BipartiteGraphFlow::get_max_matching};
 import Speedtest::{check_answer, rands, PerfControl::{measure, start}};
 import Std::{IO, Array::{@, to_iter}, Iterator::{filter, fold, get_size, range}, Monad::pure, ToString::to_string};
 
@@ -14,7 +14,7 @@ main = (
     let us = rands(m, l, 1_U64); let vs = rands(m, l, 2_U64);
     let matching = *control.measure(|_|
         let g = range(0, m).fold(BipartiteGraph::create(l, l), |i, g| g.add_edge(us.@(i), vs.@(i)));
-        g.maximize_flow.get_max_matching
+        g.calc_flow.get_max_matching
     );
     check_answer("bipartite", matching.to_iter.filter(|b| b).get_size.to_string, "48869");;
     pure()
