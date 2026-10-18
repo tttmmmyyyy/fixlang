@@ -41,15 +41,7 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) {
     }
 
     // Replace application expressions so that they use uncurried pointers.
-    let mut symbol_names: Set<FullName> = Default::default();
-    for (name, _sym) in &fix_mod.symbols {
-        symbol_names.insert(name.clone());
-    }
-    for_each_on_compiler_threads(fix_mod.symbols.values_mut().collect(), num_threads, |sym| {
-        let expr =
-            replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), &symbol_names);
-        sym.expr = Some(expr);
-    });
+    replace_calls(fix_mod, num_threads);
 
     // Replace export statements so that they use uncurried functions.
     for export in &mut fix_mod.export_statements {
@@ -79,6 +71,22 @@ pub fn run(fix_mod: &mut Program, num_threads: usize) {
                 Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
         }
     }
+}
+
+/// Rewrites every call of a global in the program onto the function pointer version matching the
+/// number of arguments it supplies, on up to `num_threads` threads.
+///
+/// `run` does this once it has defined the versions. Passes after it can bring a call of a version
+/// next to an application of what it returns, as in `g#funptr1(a)(b)`, which this rewrites into
+/// `g#funptr2(a, b)`; running this again after them keeps the closure `g#funptr1(a)` returns from
+/// being built.
+pub fn replace_calls(fix_mod: &mut Program, num_threads: usize) {
+    let symbol_names: Set<FullName> = fix_mod.symbols.keys().cloned().collect();
+    for_each_on_compiler_threads(fix_mod.symbols.values_mut().collect(), num_threads, |sym| {
+        let expr =
+            replace_closure_call_to_funptr_call_subexprs(sym.expr.as_ref().unwrap(), &symbol_names);
+        sym.expr = Some(expr);
+    });
 }
 
 /// The symbol `sym_name`, whose definition is `sym`, followed by its function pointer versions taking
@@ -145,10 +153,21 @@ pub fn is_std_fix(name: &FullName) -> bool {
     }
 }
 
+/// The suffix that `convert_to_funptr_name` appends, before the number of arguments.
+const FUNPTR_NAME_SUFFIX: &str = "#funptr";
+
 /// Rewrites `name` in place into the name carried by the uncurried version taking `n_args`
 /// arguments.
 fn convert_to_funptr_name(name: &mut Name, n_args: usize) {
-    *name += &format!("#funptr{}", n_args);
+    *name += &format!("{}{}", FUNPTR_NAME_SUFFIX, n_args);
+}
+
+/// The name of the global that `name`, a name built by `convert_to_funptr_name`, is a version of,
+/// and the number of arguments the version takes. `None` if `name` is not such a name.
+fn split_funptr_name(name: &Name) -> Option<(Name, usize)> {
+    let at = name.rfind(FUNPTR_NAME_SUFFIX)?;
+    let n_args = name[at + FUNPTR_NAME_SUFFIX.len()..].parse().ok()?;
+    Some((name[..at].to_string(), n_args))
 }
 
 /// Convert lambda expression to function pointer taking `n_args` arguments.
@@ -226,9 +245,6 @@ fn replace_closure_call_to_funptr_call(
 ) -> Arc<ExprNode> {
     let (fun, args) = collect_app(expr);
     let fun_ty = fun.type_.as_ref().unwrap();
-    if fun_ty.is_funptr() {
-        return expr.clone();
-    }
     match &*fun.expr {
         Expr::Var(v) => {
             if v.name.is_local() {
@@ -241,6 +257,18 @@ fn replace_closure_call_to_funptr_call(
                 return expr.clone();
             }
             let mut f_funptr = v.as_ref().clone();
+            if fun_ty.is_funptr() {
+                // A version of a global, called with its arguments and then the arguments of what
+                // it returns: `g#funptrN(a1, ..., aN)(b1, ..., bM)` becomes
+                // `g#funptr(N+M)(a1, ..., aN, b1, ..., bM)`.
+                let Some((base_name, n_args)) = split_funptr_name(&f_funptr.name.name) else {
+                    return expr.clone();
+                };
+                if args.len() <= n_args {
+                    return expr.clone();
+                }
+                f_funptr.name.name = base_name;
+            }
             convert_to_funptr_name(&mut f_funptr.name.name, args.len());
             if !symbol_names.contains(&f_funptr.name) {
                 // If function pointer version is not defined, do not apply uncurry.

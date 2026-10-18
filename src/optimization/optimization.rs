@@ -170,14 +170,6 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| uncurry::run(prg, config.num_worker_thread),
     );
 
-    run_pass(
-        prg,
-        config,
-        config.enable_dead_symbol_elimination(),
-        "dead_symbol_elimination",
-        dead_symbol_elimination::run,
-    );
-
     // Inline the local functions once more. Specializing a closure puts the body of the function a
     // caller passed into the caller, so a body answering with a lambda leaves an application whose
     // function is an `if`, or a name bound to one, and the lambda of the branch taken is built at
@@ -196,6 +188,28 @@ pub fn run(prg: &mut Program, config: &Configuration) {
             && config.enable_inline_local_optimization(),
         "inline_local",
         |prg| inline_local::run(prg, config.num_worker_thread),
+    );
+
+    // Rewrite the calls onto the function pointer versions once more. Inlining the local functions
+    // above moves a call of a version, bound to a name outside a lambda, to where the lambda applies
+    // what it returns, so `g#funptr1(a)` and its application to `b` meet only now, and become
+    // `g#funptr2(a, b)` instead of building the closure `g#funptr1(a)` returns.
+    run_pass(
+        prg,
+        config,
+        config.enable_uncurry_optimization(),
+        "uncurry::replace_calls",
+        |prg| uncurry::replace_calls(prg, config.num_worker_thread),
+    );
+
+    // Drop the symbols nothing reaches, the function pointer versions no call uses above all. It
+    // runs after the rewrite above, which can call a version no call used until then.
+    run_pass(
+        prg,
+        config,
+        config.enable_dead_symbol_elimination(),
+        "dead_symbol_elimination",
+        dead_symbol_elimination::run,
     );
 
     if config.emit_symbols {
