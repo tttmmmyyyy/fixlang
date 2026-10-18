@@ -1,5 +1,5 @@
 /*
-Uncurrying optimizaion
+Uncurrying optimization
 
 Convert globally defined lambda expressions `|x1,...,xn| (...) : T1 -> ... -> Tn -> R` to function pointer expressions `[x1,...,xn] (...) : [T1,...,Tn] R`.
 Also, convert lambda expression call expressions `f(a1, a2, ..., an)` to function pointer expression call expressions `f[a1,a2,...,an]`.
@@ -7,7 +7,7 @@ Also, convert lambda expression call expressions `f(a1, a2, ..., an)` to functio
 For each lambda expression, define multiple function pointer expressions such as one-variable function pointer expression, two-variable function pointer expression, etc.,
 and select the appropriate one according to the call site.
 
-NOTE: I hope to implement higher-order uncurrying optimization (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) in a future!
+Higher-order uncurrying (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) is not implemented.
 */
 
 use super::rename::rename_lam_param_avoiding;
@@ -29,7 +29,7 @@ use std::{mem, sync::Arc};
 /// calls, export statements and entry IO value of the program onto the version matching the number
 /// of arguments they supply. The symbols are rewritten on up to `num_threads` threads.
 pub fn run(prg: &mut Program, num_threads: usize) {
-    // First, define uncurried version of global symbols.
+    // Define the function pointer versions of each global.
     let syms = mem::replace(&mut prg.symbols, Default::default());
     let versions_of_syms = map_on_compiler_threads(
         syms.into_iter().collect(),
@@ -40,7 +40,7 @@ pub fn run(prg: &mut Program, num_threads: usize) {
         prg.symbols.insert(name, sym);
     }
 
-    // Replace application expressions so that they use uncurried pointers.
+    // Rewrite the calls onto the function pointer versions.
     replace_calls_with_funptr_versions(prg, num_threads);
 
     // Replace export statements so that they use uncurried functions.
@@ -53,8 +53,7 @@ pub fn run(prg: &mut Program, num_threads: usize) {
             .collect_app_src(usize::MAX)
             .0
             .len();
-        let Some(uncurried_value) = uncurried_symbol(&prg.symbols, exported_value, n_args)
-        else {
+        let Some(uncurried_value) = uncurried_symbol(&prg.symbols, exported_value, n_args) else {
             continue;
         };
         export.value_name = uncurried_value.name.clone();
@@ -67,8 +66,7 @@ pub fn run(prg: &mut Program, num_threads: usize) {
         // The entry IO value has the unwrapped `IO` type, i.e., the `IOState -> (IOState, a)` type,
         // so it takes one argument.
         if let Some(sym) = uncurried_symbol(&prg.symbols, entry_io_value, 1) {
-            prg.entry_io_value =
-                Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
+            prg.entry_io_value = Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
         }
     }
 }
