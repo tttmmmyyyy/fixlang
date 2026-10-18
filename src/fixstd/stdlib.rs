@@ -872,8 +872,8 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
             "    write_text = |{}, out| out.Format::write_text(\"(\"){}.bind(Format::write_text(\"{}\"));\n",
             xs,
             join_items(
-                &|i| format!("{}.bind(Format::write_text(x{}))", if i > 0 { ".bind(Format::write_text(\", \"))" } else { "" }, i),
-                ""
+                &|i| format!(".bind(Format::write_text(x{}))", i),
+                ".bind(Format::write_text(\", \"))"
             ),
             tuple_close
         );
