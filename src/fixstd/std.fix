@@ -13123,20 +13123,19 @@ namespace Format::TextOut {
     // reallocates only a few times.
     //
     // # Parameters
-    // * `count` - The number of bytes to be appended.
+    // * `count` - The number of bytes to be appended. The size of the text plus `count` must not
+    //   exceed `I64::maximum`.
     // * `out` - The text written so far.
     _reserve_to_append : I64 -> TextOut -> Array U8 = |count, out| (
         let bytes = out.@_bytes;
-        if count > I64::maximum - bytes.@size {
-            undefined("[Std::Format] The text is too long for an array to hold.")
-        };
         let size = bytes.@size + count;
         if size <= bytes.@capacity { bytes };
         bytes.reserve(max(size, 2 * bytes.@capacity))
     );
 
     // The number of code points to pad the text of `out` from byte `start` with, so that it has
-    // `width` code points: 0 if it already has `width` or more.
+    // `width` code points: 0 if it already has `width` or more. Stops the program if the text padded
+    // that much would be longer than an array can hold.
     //
     // # Parameters
     // * `width` - The number of code points the text should have.
@@ -13146,7 +13145,11 @@ namespace Format::TextOut {
         let count = out._count_code_points_from(start);
         // Compared first, so that a width far below the count does not wrap around when subtracted.
         if width <= count { 0 };
-        width - count
+        let padding = width - count;
+        if padding > I64::maximum - out.@_bytes.@size {
+            undefined("[Std::Format] The text is too long for an array to hold.")
+        };
+        padding
     );
 
     // Counts the Unicode code points in the text of `out`, from byte `start` to the end.
