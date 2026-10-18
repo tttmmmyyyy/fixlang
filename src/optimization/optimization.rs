@@ -162,12 +162,13 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| collapse_constructions::run(prg, config.num_worker_thread),
     );
 
+    let mut funptr_versions = Default::default();
     run_pass(
         prg,
         config,
         config.enable_uncurry_optimization(),
         "uncurry",
-        |prg| uncurry::run(prg, config.num_worker_thread),
+        |prg| funptr_versions = uncurry::run(prg, config.num_worker_thread),
     );
 
     // Inline the local functions once more. Specializing a closure puts the body of the function a
@@ -180,12 +181,13 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     // expansion closes that gap, leaving the application where the name bound to the `if` is read
     // first. `let_elimination` then moves the `if` to the application, and `application_inlining`
     // pushes the application into its branches.
+    let inline_local_after_uncurry = config.enable_closure_specialization()
+        && config.enable_uncurry_optimization()
+        && config.enable_inline_local_optimization();
     run_pass(
         prg,
         config,
-        config.enable_closure_specialization()
-            && config.enable_uncurry_optimization()
-            && config.enable_inline_local_optimization(),
+        inline_local_after_uncurry,
         "inline_local",
         |prg| inline_local::run(prg, config.num_worker_thread),
     );
@@ -197,11 +199,15 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     run_pass(
         prg,
         config,
-        config.enable_closure_specialization()
-            && config.enable_uncurry_optimization()
-            && config.enable_inline_local_optimization(),
+        inline_local_after_uncurry,
         "uncurry::replace_calls_with_funptr_versions",
-        |prg| uncurry::replace_calls_with_funptr_versions(prg, config.num_worker_thread),
+        |prg| {
+            uncurry::replace_calls_with_funptr_versions(
+                prg,
+                &funptr_versions,
+                config.num_worker_thread,
+            )
+        },
     );
 
     // Drop the symbols nothing reaches, such as the function pointer versions no call uses. This
