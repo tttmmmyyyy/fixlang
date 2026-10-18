@@ -561,17 +561,23 @@ test_width_at_least_i64 : IO () = (
         );
     }
 
-    /// A width too large for any array to hold stops the program with a message saying so.
+    /// A width too large for any array to hold, given to `right_aligned_to`, `left_aligned_to` or
+    /// `zero_padded_to`, stops the program with a message saying so.
     #[test]
     fn test_width_too_large_for_an_array() {
-        let source = r##"
+        for wrapper in ["right_aligned_to", "left_aligned_to", "zero_padded_to"] {
+            let source = format!(
+                r##"
         module Main;
-        main : IO () = println("[{}]".format((42.right_aligned_to(I64::maximum),)));
-        "##;
-        test_source_fail(
-            source,
-            Configuration::develop_mode(),
-            "[Std::Format] The text is too long for an array to hold.",
-        );
+        main : IO () = println("[{{}}]".format((42.{}(I64::maximum),)));
+        "##,
+                wrapper
+            );
+            test_source_fail(
+                &source,
+                Configuration::develop_mode(),
+                "[Std::Format] The text is too long for an array to hold.",
+            );
+        }
     }
 }
