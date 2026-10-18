@@ -3778,7 +3778,7 @@ Type: `[args : Std::FormatArgs] Std::IO::IOHandle -> args -> Std::String -> Std:
 
 Formats `values` into `template`, as `format` does, and writes the result to `handle`.
 
-A write that fails stops the writing, and its error is returned.
+Stops at the first write that fails, and returns its error.
 
 ##### Examples
 
