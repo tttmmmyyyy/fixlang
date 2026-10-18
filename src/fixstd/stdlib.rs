@@ -793,12 +793,11 @@ fn c_numeric_type_document(name: &str) -> &'static str {
 /// Creates source code to define traits such as ToString or Eq for tuples of the given sizes.
 fn make_tuple_traits_source(sizes: &[u32]) -> String {
     let mut src = "module Std; \n\n".to_string();
-    for size in sizes {
+    for &size in sizes {
         // For unit type, we define necessary traits in "std.fix".
-        if *size == 0 {
+        if size == 0 {
             continue;
         }
-        let size = *size;
         let tuple_close = if size == 1 { ",)" } else { ")" };
         // `items(f, sep)` joins `f(0)`, ..., `f(size - 1)` with `sep`, and `tuple(prefix)` is the
         // tuple `(prefix0, ..., prefix{size - 1})`, written `(prefix0,)` for one element.
@@ -823,6 +822,17 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         };
         let xs = tuple("x");
         let ys = tuple("y");
+        // An implementation of the comparison `trait_name`, whose `method` compares the first
+        // elements that differ with `op`, and returns `if_equal` when every element is equal.
+        let lexicographic_impl = |trait_name: &str, method: &str, op: &str, if_equal: &str| {
+            let mut imp = impl_head(&|i| format!("t{i} : Eq, t{i} : {trait_name}"), trait_name);
+            imp += &format!("    {method} = |{xs}, {ys}| (\n");
+            imp += &items(&|i| format!("        if x{i} != y{i} {{ x{i} {op} y{i} }};\n"), "");
+            imp += &format!("        {if_equal}\n");
+            imp += "    );\n";
+            imp += "}\n\n";
+            imp
+        };
 
         // Implement `ToString` trait.
         src += &impl_head(&|i| format!("t{} : ToString", i), "ToString");
@@ -844,28 +854,9 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
         );
         src += "}\n\n";
 
-        // Implement `LessThan` trait.
-        src += &impl_head(&|i| format!("t{} : Eq, t{} : LessThan", i, i), "LessThan");
-        src += &format!("    less_than = |{}, {}| (\n", xs, ys);
-        for i in 0..size {
-            src += &format!("        if x{} != y{} {{ x{} < y{} }};\n", i, i, i, i);
-        }
-        src += "        false\n";
-        src += "    );\n";
-        src += "}\n\n";
-
-        // Implement `LessThanOrEq` trait.
-        src += &impl_head(
-            &|i| format!("t{} : Eq, t{} : LessThanOrEq", i, i),
-            "LessThanOrEq",
-        );
-        src += &format!("    less_than_or_eq = |{}, {}| (\n", xs, ys);
-        for i in 0..size {
-            src += &format!("        if x{} != y{} {{ x{} <= y{} }};\n", i, i, i, i);
-        }
-        src += "        true\n";
-        src += "    );\n";
-        src += "}\n\n";
+        // Implement `LessThan` and `LessThanOrEq` traits.
+        src += &lexicographic_impl("LessThan", "less_than", "<", "false");
+        src += &lexicographic_impl("LessThanOrEq", "less_than_or_eq", "<=", "true");
 
         // Implement `Format` trait. For example, if N = 2,
         // impl [t0 : Format, t1 : Format] (t0, t1) : Format {
@@ -914,7 +905,7 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
                 .join(" ")
         );
         src += &format!(
-            "    map = |f, {}| ({}{});\n",
+            "    map = |f, {}| ({}{};\n",
             xs,
             items(
                 &|i| if i != size - 1 {
@@ -924,7 +915,7 @@ fn make_tuple_traits_source(sizes: &[u32]) -> String {
                 },
                 ", "
             ),
-            if size == 1 { "," } else { "" }
+            tuple_close
         );
         src += "}\n\n";
     }
