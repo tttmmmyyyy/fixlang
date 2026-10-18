@@ -41,6 +41,7 @@
 
 #### Std
 
+- #885: A program that defines its own trait or value named like one `Std` now has, such as `Format`, `format` or `printf`, and leaves `Std` to be imported whole, now gets an error saying the name is ambiguous where it uses the name. Write the name with its namespace, such as `Main::Format`, or import from `Std` by name: `import Std::{IO, String};`.
 - #885: `String::populate` is deprecated in favor of `String::format`, which takes values of any types implementing `Format`: write `"{}, {}!".format(("Hello", "world"))` for `"{}, {}!".populate(["Hello", "world"])`. The old name will remain available for the foreseeable future to maintain backward compatibility.
 - #828: The license of Fix, the MIT License, now has a runtime library exception: a program you build with Fix can be distributed without the copyright notice and the permission notice of the parts of Fix the compiler puts into it, such as the standard library and the runtime. See `LICENSE`.
 - #792: `F64::to_string` and `F32::to_string` now write a number with a single significant digit and a power of ten as `1.0e300`, where they wrote `1e300`. The text they write for a finite number is now always a valid floating point literal of Fix, with `_F32` after it for an `F32`.

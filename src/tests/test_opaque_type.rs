@@ -1155,20 +1155,20 @@ pub fn test_opaque_with_higher_kinded_assoc_type() {
     let source = r##"
         module Main;
 
-        trait fmt : Format {
+        trait fmt : Formatter {
             type Repr fmt : * -> *;
             format_value : a -> fmt -> Repr fmt a;
         }
 
-        impl () : Format {
+        impl () : Formatter {
             type Repr () = Array;
             format_value = |x, _| [x];
         }
 
-        default_format : [?fmt : Format, Repr ?fmt = Array] () -> ?fmt;
+        default_format : [?fmt : Formatter, Repr ?fmt = Array] () -> ?fmt;
         default_format = |_| ();
 
-        wrap_pair : [fmt : Format] fmt -> a -> b -> (Repr fmt a, Repr fmt b);
+        wrap_pair : [fmt : Formatter] fmt -> a -> b -> (Repr fmt a, Repr fmt b);
         wrap_pair = |fmt, x, y| (format_value(x, fmt), format_value(y, fmt));
 
         main : IO ();
@@ -2448,18 +2448,18 @@ pub fn test_opaque_type_under_a_higher_kinded_associated_type_is_reported() {
     let source = r#"
         module Main;
 
-        trait fmt : Format {
+        trait fmt : Formatter {
             type Repr fmt : * -> *;
         }
 
-        impl () : Format {
+        impl () : Formatter {
             type Repr () = Array;
         }
 
-        take : [fmt : Format] fmt -> Repr fmt I64 -> I64;
+        take : [fmt : Formatter] fmt -> Repr fmt I64 -> I64;
         take = |_, _| 0;
 
-        use_it : [fmt : Format] fmt -> I64;
+        use_it : [fmt : Formatter] fmt -> I64;
         use_it = |f| take(f, [1, 2, 3].to_iter.map(|x| x + 1));
 
         main : IO ();

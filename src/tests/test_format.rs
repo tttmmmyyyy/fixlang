@@ -424,6 +424,21 @@ test_flush_if_full : IO () = (
         );
     }
 
+    /// An opening brace at the end of a template, with nothing after it to close it, stops the
+    /// program with a message naming the brace and the template.
+    #[test]
+    fn test_format_with_an_unclosed_brace() {
+        let source = r##"
+        module Main;
+        main : IO () = println("a {".format(()));
+        "##;
+        test_source_fail(
+            source,
+            Configuration::develop_mode(),
+            "[Std::String::format] The template has a \"{\" that is neither a placeholder nor an escape: \"a {\"",
+        );
+    }
+
     /// A brace that is neither part of a placeholder nor an escape stops the program with a message
     /// naming the brace and the template.
     #[test]
