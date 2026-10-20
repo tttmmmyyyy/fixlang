@@ -20,3 +20,5 @@ passes_optimizer.log
 # Python bytecode caches, from the scripts under dev-docs.
 __pycache__/
 *.pyc
+# Written by `fix docs` in the docs test cases.
+src/tests/test_docs/cases/*/docs/
