@@ -136,7 +136,14 @@ impl<K: CloneKey> CloneRegistry<K> {
     /// `pop` hands out the canonical key and the keys `request` named, so a key without a fresh name
     /// is the canonical one.
     pub fn finish_clone(&self, func: &RcFunc, key: &K, body: RcExprNode) -> RcFunc {
-        let Some(name) = self.clone_names.get(&(func.name.clone(), key.clone())) else {
+        let clone = (func.name.clone(), key.clone());
+        // A key past the clone budget has no fresh name either, and `request` never enqueues it.
+        assert!(
+            self.requested.contains(&clone),
+            "`{}` is finished under a key `pop` never handed out",
+            func.name.name.to_string()
+        );
+        let Some(name) = self.clone_names.get(&clone) else {
             return RcFunc {
                 body,
                 ..func.clone()
