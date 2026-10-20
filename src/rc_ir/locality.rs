@@ -688,10 +688,8 @@ impl<'a> Walk<'a> {
                 clones,
             } => {
                 specializable_callee(self.prog, callee, gate)?;
-                let g = &self.prog.funcs[cref];
                 let key: Vec<LocalityKey> = arg_shapes.iter().map(|s| s.resolve(inputs)).collect();
-                let is_canonical = key == canonical_key(g, self.type_env);
-                let name = clones.request(cref, key, is_canonical);
+                let name = clones.request(cref, key);
                 let mut c = callee.clone();
                 c.name = name.name;
                 Some(c)
@@ -1031,7 +1029,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 
     // Keep every function's canonical version, which receives every path into this compilation unit.
     for (fref, func) in prog.funcs.iter() {
-        clones.request(fref, canonical_key(func, type_env), true);
+        clones.keep_canonical(fref, canonical_key(func, type_env));
     }
 
     // A global initializer takes no argument, so its body resolves against no inputs.

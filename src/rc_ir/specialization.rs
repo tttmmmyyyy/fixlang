@@ -47,6 +47,9 @@ pub trait CloneKey: Clone + Eq + Hash {
 
 /// The clones a specializing pass has named and has yet to materialize.
 pub struct CloneRegistry<K> {
+    /// The canonical key of each function: the key on the least informative inputs, whose clone
+    /// keeps the function's name.
+    canonical_keys: Map<FuncRef, K>,
     /// The fresh name of each non-canonical clone `(function, key)`.
     clone_names: Map<(FuncRef, K), FuncRef>,
     /// Every fresh name in `clone_names`, so that `request` catches a second key that spells a name
@@ -67,6 +70,7 @@ impl<K: CloneKey> CloneRegistry<K> {
     /// from those another specializing pass minted.
     pub fn new(pass_tag: &'static str) -> CloneRegistry<K> {
         CloneRegistry {
+            canonical_keys: Map::default(),
             clone_names: Map::default(),
             minted_names: Set::default(),
             clone_counts: Map::default(),
@@ -76,13 +80,32 @@ impl<K: CloneKey> CloneRegistry<K> {
         }
     }
 
+    /// Record `key` as the canonical key of `fref` and enqueue the canonical version. A pass calls
+    /// this for every function of its program before it requests any clone, since every function
+    /// keeps its canonical version.
+    pub fn keep_canonical(&mut self, fref: &FuncRef, key: K) {
+        self.canonical_keys.insert(fref.clone(), key.clone());
+        self.enqueue(fref, key);
+    }
+
+    /// Whether `key` is the canonical key of `fref`, which `keep_canonical` recorded.
+    fn is_canonical(&self, fref: &FuncRef, key: &K) -> bool {
+        let canonical = self.canonical_keys.get(fref).unwrap_or_else(|| {
+            panic!(
+                "`{}` was given no canonical key before its clones were asked for",
+                fref.name.to_string()
+            )
+        });
+        canonical == key
+    }
+
     /// The output name of the clone `(fref, key)`, enqueuing it for materialization the first time
     /// it is asked for. The canonical clone keeps the original name; every other key gets a fresh
     /// name, minted once per key, until the function has as many as `MAX_CLONES_PER_FUNCTION`
     /// allows — past that the answer is the canonical name, which is always available and proves
     /// nothing, so the call it routes keeps every dispatch it had.
-    pub fn request(&mut self, fref: &FuncRef, key: K, is_canonical: bool) -> FuncRef {
-        if is_canonical {
+    pub fn request(&mut self, fref: &FuncRef, key: K) -> FuncRef {
+        if self.is_canonical(fref, &key) {
             self.enqueue(fref, key);
             return fref.clone();
         }
@@ -132,23 +155,24 @@ impl<K: CloneKey> CloneRegistry<K> {
     /// Assemble the clone of `func` keyed on `key`, which `pop` handed out, from its rewritten
     /// `body`. The canonical clone is the original function carrying the new body; a fresh clone
     /// additionally gets fresh local names, so that its names do not collide with the original's.
-    ///
-    /// `pop` hands out the canonical key and the keys `request` gave a fresh name, so a key without a
-    /// fresh name is the canonical one.
     pub fn finish_clone(&self, func: &RcFunc, key: &K, body: RcExprNode) -> RcFunc {
-        let clone = (func.name.clone(), key.clone());
-        // A key past the clone budget has no fresh name either, and `request` never enqueues it.
-        assert!(
-            self.requested.contains(&clone),
-            "`{}` is finished under a key `pop` never handed out",
-            func.name.name.to_string()
-        );
-        let Some(name) = self.clone_names.get(&clone) else {
+        if self.is_canonical(&func.name, key) {
             return RcFunc {
                 body,
                 ..func.clone()
             };
-        };
+        }
+        // `pop` hands out the canonical keys and the keys `request` gave a fresh name; a key past
+        // the clone budget is never enqueued.
+        let name = self
+            .clone_names
+            .get(&(func.name.clone(), key.clone()))
+            .unwrap_or_else(|| {
+                panic!(
+                    "`{}` is finished under a key `request` gave no fresh name",
+                    func.name.name.to_string()
+                )
+            });
         let (params, capture, body, rename) =
             fresh_rename_function(&func.params, &func.capture, &body, &self.suffix(key));
         RcFunc {
@@ -250,13 +274,15 @@ mod tests {
     #[test]
     fn test_a_clone_is_named_by_its_function_and_key_alone() {
         let mut alone: CloneRegistry<Vec<bool>> = CloneRegistry::new("t");
-        let named_alone = alone.request(&fref("f"), vec![true, false], false);
+        alone.keep_canonical(&fref("f"), vec![false, false]);
+        let named_alone = alone.request(&fref("f"), vec![true, false]);
 
         let mut after_others: CloneRegistry<Vec<bool>> = CloneRegistry::new("t");
-        after_others.request(&fref("g"), vec![true], false);
-        after_others.request(&fref("g"), vec![false], false);
-        after_others.request(&fref("f"), vec![false, false], false);
-        let named_after_others = after_others.request(&fref("f"), vec![true, false], false);
+        after_others.keep_canonical(&fref("g"), vec![false]);
+        after_others.keep_canonical(&fref("f"), vec![false, false]);
+        after_others.request(&fref("g"), vec![true]);
+        after_others.request(&fref("f"), vec![false, true]);
+        let named_after_others = after_others.request(&fref("f"), vec![true, false]);
 
         assert_eq!(
             named_alone.name.to_string(),
