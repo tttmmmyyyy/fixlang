@@ -49,8 +49,8 @@ pub trait CloneKey: Clone + Eq + Hash {
 pub struct CloneRegistry<K> {
     /// The fresh name of each non-canonical clone `(function, key)`.
     clone_names: Map<(FuncRef, K), FuncRef>,
-    /// Every fresh name `clone_names` holds, so that two keys spelling one name are caught where the
-    /// second is named.
+    /// Every fresh name in `clone_names`, so that `request` catches a second key that spells a name
+    /// already given out.
     minted_names: Set<FuncRef>,
     /// How many clones each function has been given, against `MAX_CLONES_PER_FUNCTION`.
     clone_counts: Map<FuncRef, usize>,
@@ -133,8 +133,8 @@ impl<K: CloneKey> CloneRegistry<K> {
     /// `body`. The canonical clone is the original function carrying the new body; a fresh clone
     /// additionally gets fresh local names, so that its names do not collide with the original's.
     ///
-    /// `pop` hands out the canonical key and the keys `request` named, so a key without a fresh name
-    /// is the canonical one.
+    /// `pop` hands out the canonical key and the keys `request` gave a fresh name, so a key without a
+    /// fresh name is the canonical one.
     pub fn finish_clone(&self, func: &RcFunc, key: &K, body: RcExprNode) -> RcFunc {
         let clone = (func.name.clone(), key.clone());
         // A key past the clone budget has no fresh name either, and `request` never enqueues it.
