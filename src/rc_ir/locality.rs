@@ -60,15 +60,6 @@ impl Locality {
         }
     }
 
-    /// The letter a clone's name spells this locality with (`CloneKey::spelling`).
-    fn letter(self) -> char {
-        match self {
-            Locality::DeepLocal => 'D',
-            Locality::RootLocal => 'R',
-            Locality::MayExt => 'M',
-        }
-    }
-
     /// The annotation a reference-counting node covering leaves of this locality carries.
     pub fn annotation(self) -> RcState {
         match self {
@@ -397,6 +388,17 @@ impl LocalityKey {
         self.0.at(path)
     }
 
+    /// The localities written one letter per boxed leaf, `D` for `DeepLocal`, `R` for `RootLocal`
+    /// and `M` for `MayExt`, in canonical path order. Keys of one shape spell strings of one length,
+    /// which differ wherever the localities do.
+    pub fn spelling(&self) -> String {
+        self.0.spell(|locality| match locality {
+            Locality::DeepLocal => 'D',
+            Locality::RootLocal => 'R',
+            Locality::MayExt => 'M',
+        })
+    }
+
     /// The key of a value of type `ty` about which nothing is proved — what an input reached from
     /// outside the analysis (an entry point, an indirect call, a call from outside this compilation
     /// unit) carries, and the key of every function's canonical version.
@@ -409,9 +411,7 @@ impl LocalityKey {
 /// shape, so the keys of one function spell strings that differ wherever the keys do.
 impl CloneKey for Vec<LocalityKey> {
     fn spelling(&self) -> String {
-        self.iter()
-            .map(|key| key.0.spell(Locality::letter))
-            .collect()
+        self.iter().map(LocalityKey::spelling).collect()
     }
 }
 
@@ -1057,8 +1057,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         let body = annotate(prog, type_env, &summaries, &gate, &inputs, &mut clones)
             .walk_func(&func)
             .1;
-        let name = clones.request(&fref, key.clone(), key == canonical_key(&func, type_env));
-        let clone = clones.finish_clone(&func, name, body);
+        let clone = clones.finish_clone(&func, &key, body);
         output_funcs.insert(clone.name.clone(), clone);
     }
 

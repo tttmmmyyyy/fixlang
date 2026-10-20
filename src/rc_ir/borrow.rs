@@ -51,7 +51,7 @@ use crate::rc_ir::ownership::{
     acted_references, all_owned_units, collect_consumes, destructure_consumes, origin, rc_units,
     rhs_consumes, truncate_to_unit, unit_step, units_under, References, UnitStep, VarTable,
 };
-use crate::rc_ir::rename::fresh_rename_function;
+use crate::rc_ir::rename::{copy_suffix, fresh_rename_function};
 use std::sync::Arc;
 
 /// The parameter leaves borrow inference found `Own`, keyed by the parameter variable's name and the
@@ -418,13 +418,16 @@ pub fn param_ownership_shapes(
 }
 
 /// The suffix a function's borrow version adds to the function's name and to the name of each of its
-/// variables. No lowered name ends in it.
-const BORROW_CLONE_SUFFIX: &str = "#borrow";
+/// variables. A function has at most one borrow version, so the suffix needs nothing to tell one
+/// borrow version of a function from another.
+fn borrow_clone_suffix() -> String {
+    copy_suffix("borrow", "")
+}
 
-/// The name of a function's borrow version: its name followed by `BORROW_CLONE_SUFFIX`.
+/// The name of a function's borrow version: its name followed by `borrow_clone_suffix`.
 fn borrow_funcref(name: &FuncRef) -> FuncRef {
     let mut borrow_name = name.name.clone();
-    borrow_name.name.push_str(BORROW_CLONE_SUFFIX);
+    borrow_name.name.push_str(&borrow_clone_suffix());
     FuncRef { name: borrow_name }
 }
 
@@ -761,13 +764,13 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
 // --- cloning a function with fresh names ---
 
 /// Clone a function as its borrow version: give every bound variable (parameters, capture, `let`
-/// bindings, destructure fields, match-arm payloads) its name followed by `BORROW_CLONE_SUFFIX`, and
+/// bindings, destructure fields, match-arm payloads) its name followed by `borrow_clone_suffix`, and
 /// rewrite all occurrences. A function has at most one borrow version, and its variables are bound
 /// nowhere else, so the names stay globally unique. References to top-level functions stay free
 /// here, for routing to retarget. Returns the clone and the binder renaming.
 fn clone_func(func: &RcFunc, new_ref: FuncRef) -> (RcFunc, Map<FullName, FullName>) {
     let (params, capture, body, rename) =
-        fresh_rename_function(&func.params, &func.capture, &func.body, BORROW_CLONE_SUFFIX);
+        fresh_rename_function(&func.params, &func.capture, &func.body, &borrow_clone_suffix());
     (
         RcFunc {
             name: new_ref,

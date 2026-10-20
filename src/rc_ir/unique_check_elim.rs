@@ -152,8 +152,7 @@ impl<'a> Specializer<'a> {
         let func = self.prog.funcs[fref].clone();
         let inputs = self.input_uniqueness(&func, key);
         let body = self.rewrite_expr(&func.body, &inputs);
-        let name = self.request_clone(fref, key.clone());
-        self.clones.finish_clone(&func, name, body)
+        self.clones.finish_clone(&func, key, body)
     }
 
     /// Rewrite a function body under `inputs` (the uniqueness of the enclosing clone's inputs),

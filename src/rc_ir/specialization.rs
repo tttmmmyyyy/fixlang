@@ -20,7 +20,7 @@
 
 use crate::misc::{Map, Set};
 use crate::rc_ir::ast::{FuncRef, RcExprNode, RcFunc, RcProgram, RcVar};
-use crate::rc_ir::rename::fresh_rename_function;
+use crate::rc_ir::rename::{copy_suffix, fresh_rename_function};
 use std::collections::VecDeque;
 use std::hash::Hash;
 
@@ -49,9 +49,9 @@ pub trait CloneKey: Clone + Eq + Hash {
 pub struct CloneRegistry<K> {
     /// The fresh name of each non-canonical clone `(function, key)`.
     clone_names: Map<(FuncRef, K), FuncRef>,
-    /// The suffix each fresh clone's name adds to its function's name, keyed by the clone's name. The
-    /// clone's local names take the same suffix.
-    clone_suffixes: Map<FuncRef, String>,
+    /// Every fresh name `clone_names` holds, so that two keys spelling one name are caught where the
+    /// second is named.
+    minted_names: Set<FuncRef>,
     /// How many clones each function has been given, against `MAX_CLONES_PER_FUNCTION`.
     clone_counts: Map<FuncRef, usize>,
     /// Every `(function, key)` already enqueued, so each is materialized once.
@@ -68,7 +68,7 @@ impl<K: CloneKey> CloneRegistry<K> {
     pub fn new(pass_tag: &'static str) -> CloneRegistry<K> {
         CloneRegistry {
             clone_names: Map::default(),
-            clone_suffixes: Map::default(),
+            minted_names: Set::default(),
             clone_counts: Map::default(),
             requested: Set::default(),
             worklist: VecDeque::new(),
@@ -96,13 +96,11 @@ impl<K: CloneKey> CloneRegistry<K> {
             return fref.clone();
         }
         *count += 1;
-        let suffix = format!("#{}{}", self.tag, key.spelling());
         let mut name = fref.name.clone();
-        name.name.push_str(&suffix);
+        name.name.push_str(&self.suffix(&key));
         let nref = FuncRef { name };
-        let previous = self.clone_suffixes.insert(nref.clone(), suffix);
         assert!(
-            previous.is_none(),
+            self.minted_names.insert(nref.clone()),
             "two keys of `{}` spell the same clone name `{}`",
             fref.name.to_string(),
             nref.name.to_string()
@@ -111,6 +109,11 @@ impl<K: CloneKey> CloneRegistry<K> {
             .insert((fref.clone(), key.clone()), nref.clone());
         self.enqueue(fref, key);
         nref
+    }
+
+    /// The suffix the clone keyed on `key` adds to its function's name and to each of its local names.
+    fn suffix(&self, key: &K) -> String {
+        copy_suffix(self.tag, &key.spelling())
     }
 
     /// Enqueue `(fref, key)` for materialization, the first time it is asked for.
@@ -126,24 +129,23 @@ impl<K: CloneKey> CloneRegistry<K> {
         self.worklist.pop_front()
     }
 
-    /// Assemble the clone of `func` named `name` from its rewritten `body`. The canonical clone is
-    /// the original function carrying the new body; a fresh clone additionally gets fresh local
-    /// names, so that its names do not collide with the original's.
-    pub fn finish_clone(&mut self, func: &RcFunc, name: FuncRef, body: RcExprNode) -> RcFunc {
-        if name == func.name {
+    /// Assemble the clone of `func` keyed on `key`, which `pop` handed out, from its rewritten
+    /// `body`. The canonical clone is the original function carrying the new body; a fresh clone
+    /// additionally gets fresh local names, so that its names do not collide with the original's.
+    ///
+    /// `pop` hands out the canonical key and the keys `request` named, so a key without a fresh name
+    /// is the canonical one.
+    pub fn finish_clone(&self, func: &RcFunc, key: &K, body: RcExprNode) -> RcFunc {
+        let Some(name) = self.clone_names.get(&(func.name.clone(), key.clone())) else {
             return RcFunc {
                 body,
                 ..func.clone()
             };
-        }
-        let (params, capture, body, rename) = fresh_rename_function(
-            &func.params,
-            &func.capture,
-            &body,
-            &self.clone_suffixes[&name],
-        );
+        };
+        let (params, capture, body, rename) =
+            fresh_rename_function(&func.params, &func.capture, &body, &self.suffix(key));
         RcFunc {
-            name,
+            name: name.clone(),
             fn_ty: func.fn_ty.clone(),
             params,
             capture,
