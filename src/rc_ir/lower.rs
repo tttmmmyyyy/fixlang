@@ -1013,20 +1013,20 @@ impl<'a> Lowerer<'a> {
     }
 }
 
-/// Record `source_name` as the debug name of the binding that just produced `var`, so code
+/// Record `ast_name` as the debug name of the binding that just produced `var`, so code
 /// generation can emit a debug local variable under it, and return whether it did. This applies only
 /// when that binding is the immediately preceding one and is not already named — i.e. `var` is the
 /// fresh result of a compound expression bound to a source `let`/pattern variable. It does not apply
 /// to an alias of a pre-existing variable (a rename, a global, or a parameter), which has no such
 /// binding.
 fn try_attach_debug_name(
-    source_name: &FullName,
+    ast_name: &FullName,
     var: &RcVar,
     bindings: &mut Vec<PendingBinding>,
 ) -> bool {
     if let Some(PendingBinding::Let(bound, _, _)) = bindings.last_mut() {
         if bound.name == var.name && bound.debug_name.is_none() {
-            bound.debug_name = Some(source_name.to_string());
+            bound.debug_name = Some(ast_name.to_string());
             return true;
         }
     }
