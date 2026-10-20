@@ -13,7 +13,21 @@ use std::sync::Arc;
 /// The suffix a copy's names take: `#`, the tag of the pass that makes the copy, and
 /// `distinguisher`, which tells the copy apart from the pass's other copies of the same code. No
 /// lowered name ends in this shape, which is what keeps the names the suffix makes fresh.
+///
+/// A tag is lowercase letters, and a distinguisher starts with anything else, so a suffix reads back
+/// as one tag and one distinguisher: two passes with different tags never make the same suffix.
 pub(crate) fn copy_suffix(tag: &str, distinguisher: &str) -> String {
+    assert!(
+        !tag.is_empty() && tag.chars().all(|c| c.is_ascii_lowercase()),
+        "the copy tag `{}` is not a run of lowercase letters",
+        tag
+    );
+    assert!(
+        !distinguisher.starts_with(|c: char| c.is_ascii_lowercase()),
+        "the distinguisher `{}` of a copy tagged `{}` starts with a lowercase letter",
+        distinguisher,
+        tag
+    );
     format!("#{}{}", tag, distinguisher)
 }
 
