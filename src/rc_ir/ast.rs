@@ -21,11 +21,12 @@ pub struct RcVar {
     /// out of the serialized form; see `divide_program::debug_information`.
     #[serde(skip)]
     pub source: Option<Span>,
-    /// The source-level name this variable denotes, when it is the binding of a `let`-pattern
+    /// The name the AST binds this variable under, when it is the binding of a `let`-pattern
     /// variable, a match-arm payload, or a projected capture. Code generation emits a debug local
-    /// variable under this name so a debugger can inspect it by its source name. `None` for the
-    /// compiler-introduced intermediates that have no source name. Left out of the serialized form;
-    /// see `divide_program::debug_information`.
+    /// variable under this name so a debugger can inspect it. It is the source name of a variable
+    /// the AST passes leave as written, and a `#v` name, numbered across the body, of one they
+    /// introduce or rename apart from another of the same name. `None` for the intermediates
+    /// lowering introduces. Left out of the serialized form; see `divide_program::debug_information`.
     #[serde(skip)]
     pub debug_name: Option<Name>,
     /// Whether a reference-count operation on this value may skip the null check. Set for a non-empty

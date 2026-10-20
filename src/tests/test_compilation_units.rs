@@ -583,10 +583,10 @@ main = (
 /// An edit that reshapes `main` regenerates the compilation units that a change of a literal in it
 /// regenerates, the unit holding the specialization of `loop` for the lambda `main` passes included.
 ///
-/// That specialization carries the lambda's variables along with the source names they are bound
-/// under in `main`. Reshaping `main` ahead of the lambda renumbers those names and leaves the code
-/// as it was, so a build that writes no debug information takes the specialization's unit from the
-/// build before the edit.
+/// That specialization carries the lambda's variables along with the names a debugger inspects
+/// them under, and the AST passes number those names across the body of `main`. Reshaping `main`
+/// ahead of the lambda renumbers them and leaves the code as it was, so a build that writes no debug
+/// information takes the specialization's unit from the build before the edit.
 #[test]
 fn test_an_edit_reshaping_main_regenerates_what_an_edit_of_a_literal_does() {
     const CU_SIZE: &str = "2";

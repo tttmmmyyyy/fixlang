@@ -761,8 +761,8 @@ struct GeneratedCode<'a> {
     declared: Vec<(FullName, u64)>,
     /// The declaration of each type the unit's code is laid out by, by name.
     type_declarations: Vec<(String, u64)>,
-    /// Where the unit's code is written and the source names its variables are inspected under,
-    /// for a build that compiles them into debug information. `None` for a build that writes none.
+    /// Where the unit's code is written and the names its variables are inspected under, for a
+    /// build that compiles them into debug information. `None` for a build that writes none.
     debug_information: Option<u64>,
     /// What the main unit builds beside its own code: the C entry point and the C function of each
     /// `FFI_EXPORT` statement. `None` for every other unit.
@@ -930,14 +930,15 @@ fn type_declarations_reached(
 }
 
 /// The digest of what the unit's code writes into debug information: the source of each function,
-/// of each expression node of its body, and of each variable it binds, and the source name each
-/// variable is inspected under.
+/// of each expression node of its body, and of each variable it binds, and the name each variable
+/// is inspected under.
 ///
 /// A build that writes debug information compiles these into it, so they decide the code it
 /// generates. A build that writes none generates the same code whatever they are, and a digest
 /// reading them there would regenerate a unit for an edit that moves none of its code: a byte
-/// inserted ahead of the code moves its positions, and an edit reshaping a body renumbers the source
-/// names of that body's variables, which a lambda specialized into another unit carries along.
+/// inserted ahead of the code moves its positions, and an edit reshaping a body renumbers the `#v`
+/// names the AST passes give that body's variables, which a lambda specialized into another unit
+/// carries along.
 fn debug_information(funcs: &[&RcFunc], globals: &[&RcGlobalInit]) -> u64 {
     fn note_source(source: &Option<Span>, hasher: &mut DefaultHasher) {
         source.is_some().hash(hasher);
