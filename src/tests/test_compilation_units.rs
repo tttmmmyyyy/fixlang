@@ -534,6 +534,79 @@ fn test_an_edit_reshaping_a_body_regenerates_what_an_edit_of_a_literal_does() {
     );
 }
 
+/// A project whose `main` passes `loop` a lambda too large to be inlined into the specialization of
+/// `loop` it gets. `k` is the expression `main` binds `k` to, which the lambda reads.
+fn write_large_loop_body_project(dir: &Path, k: &str) {
+    fs::write(
+        dir.join("fixproj.toml"),
+        r#"[general]
+name = "compilation-units"
+version = "0.1.0"
+[build]
+files = ["main.fix"]
+"#,
+    )
+    .expect("Failed to write the project file");
+    let steps: String = (0..60)
+        .map(|j| {
+            format!(
+                "            let z{} = (z{} * {} + i) % {};\n",
+                j + 1,
+                j,
+                j + 3,
+                2000 + j
+            )
+        })
+        .collect();
+    fs::write(
+        dir.join("main.fix"),
+        format!(
+            r#"module Main;
+
+main : IO ();
+main = (
+    let k = {k};
+    let total = loop((0, 0), |(i, acc)|
+        if i == 1000 {{ break $ acc }} else {{
+            let z0 = (i * 3 + acc + k) % 1009;
+{steps}            continue $ (i + 1, z60)
+        }}
+    );
+    println(total.to_string)
+);
+"#
+        ),
+    )
+    .expect("Failed to write the main module");
+}
+
+/// An edit that reshapes `main` regenerates the compilation units that a change of a literal in it
+/// regenerates, the unit holding the specialization of `loop` for the lambda `main` passes included.
+///
+/// That specialization carries the lambda's variables along with the names a debugger inspects
+/// them under, and the AST passes number those names across the body of `main`. Reshaping `main`
+/// ahead of the lambda renumbers them and leaves the code as it was, so a build that writes no debug
+/// information takes the specialization's unit from the build before the edit.
+#[test]
+fn test_an_edit_reshaping_main_regenerates_what_an_edit_of_a_literal_does() {
+    const CU_SIZE: &str = "2";
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let dir = temp_dir.path();
+
+    write_large_loop_body_project(dir, "2");
+    let (unit_count, _) = build_at_max_in(dir, CU_SIZE);
+
+    write_large_loop_body_project(dir, "3");
+    let (by_a_literal, _) = build_at_max_in(dir, CU_SIZE);
+    write_large_loop_body_project(dir, "2 * 1");
+    let (by_a_reshape, _) = build_at_max_in(dir, CU_SIZE);
+    assert_eq!(
+        by_a_reshape, by_a_literal,
+        "reshaping `main` should regenerate the units that changing a literal in it does ({} of {})",
+        by_a_literal, unit_count
+    );
+}
+
 /// A project of three modules: `Types`, which declares the types; `Lib`, which reads the second
 /// field of one of them; and `Main`, which builds a value and prints what `Lib` reads out of it.
 ///

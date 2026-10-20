@@ -18,13 +18,17 @@ pub struct RcVar {
     #[serde(serialize_with = "serialize_type_identity")]
     pub ty: Arc<TypeNode>,
     /// The source the value bound here is written at. `None` where no source spells it out. Left
-    /// out of the serialized form; see `divide_program::debug_positions`.
+    /// out of the serialized form; see `divide_program::debug_information_digest`.
     #[serde(skip)]
     pub source: Option<Span>,
-    /// The source-level name this variable denotes, when it is the binding of a `let`-pattern
+    /// The name the AST binds this variable under, when it is the binding of a `let`-pattern
     /// variable, a match-arm payload, or a projected capture. Code generation emits a debug local
-    /// variable under this name so a debugger can inspect it by its source name. `None` for the
-    /// compiler-introduced intermediates that have no source name.
+    /// variable under this name so a debugger can inspect it. It is the source name of a variable
+    /// the AST passes leave as written, and a `#v` name, numbered across the body, of one they
+    /// introduce or rename apart from another of the same name. `None` for the intermediates
+    /// lowering introduces. Left out of the serialized form; see
+    /// `divide_program::debug_information_digest`.
+    #[serde(skip)]
     pub debug_name: Option<Name>,
     /// Whether a reference-count operation on this value may skip the null check. Set for a non-empty
     /// capture object, the one value whose null check is worth removing: a possibly-empty capture is
@@ -85,7 +89,7 @@ pub struct RcFunc {
     pub body: RcExprNode,
     /// The source the lambda this function came from was written at, which code generation records
     /// as the function's debug location. `None` where no source spells the function out. Left out
-    /// of the serialized form; see `divide_program::debug_positions`.
+    /// of the serialized form; see `divide_program::debug_information_digest`.
     #[serde(skip)]
     pub source: Option<Span>,
     /// The reference-counting units this version borrows among its parameters and capture — the units
@@ -117,7 +121,7 @@ pub struct RcExprNode {
     /// clones whole bodies, so a deep-copying clone would overflow the stack.
     pub expr: Arc<RcExpr>,
     /// The source the expression is written at. `None` where no source spells it out. Left out of
-    /// the serialized form; see `divide_program::debug_positions`.
+    /// the serialized form; see `divide_program::debug_information_digest`.
     #[serde(skip)]
     pub source: Option<Span>,
 }

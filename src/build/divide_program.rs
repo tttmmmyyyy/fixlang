@@ -19,7 +19,7 @@ use crate::misc::{split_at_name_boundaries, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     collect_mentions, for_each_node, for_each_var, FuncRef, RcExprNode, RcFunc, RcGlobalInit,
-    RcProgram,
+    RcProgram, RcVar,
 };
 use crate::rc_ir::dead_code_elim::eliminate_unreachable;
 use crate::rc_ir::simplify::node_count;
@@ -761,9 +761,9 @@ struct GeneratedCode<'a> {
     declared: Vec<(FullName, u64)>,
     /// The declaration of each type the unit's code is laid out by, by name.
     type_declarations: Vec<(String, u64)>,
-    /// Where the unit's code is written, for a build that compiles that into debug information.
-    /// `None` for a build that writes none.
-    debug_positions: Option<u64>,
+    /// Where the unit's code is written and the names its variables are inspected under, for a
+    /// build that compiles them into debug information. `None` for a build that writes none.
+    debug_information: Option<u64>,
     /// What the main unit builds beside its own code: the C entry point and the C function of each
     /// `FFI_EXPORT` statement. `None` for every other unit.
     ///
@@ -843,7 +843,9 @@ pub fn generated_code_hash(
         .map(|(name, ty)| (name.clone(), ty.type_hash()))
         .collect();
     let type_declarations = type_declarations_reached(unit_program, &declared_types, type_env);
-    let debug_positions = config.debug_info.then(|| debug_positions(&funcs, &globals));
+    let debug_information = config
+        .debug_info
+        .then(|| debug_information_digest(&funcs, &globals));
 
     let settings = config.object_generation_hash();
     let code = GeneratedCode {
@@ -855,7 +857,7 @@ pub fn generated_code_hash(
         shared_globals,
         declared,
         type_declarations,
-        debug_positions,
+        debug_information,
         entry: program_for_the_entry.map(main_unit_entry),
     };
     let mut hash_source = HashSource::default();
@@ -927,37 +929,50 @@ fn type_declarations_reached(
     declarations
 }
 
-/// The digest of where the unit's code is written: the source of each function, of each expression
-/// node of its body, and of each variable it binds.
+/// The digest of what the unit's code writes into debug information: the source of each function,
+/// of each expression node of its body, and of each variable it binds, and the name each variable
+/// is inspected under.
 ///
-/// A build that writes debug information compiles these positions into it, so they decide the code
-/// it generates. A build that writes none generates the same code wherever the source sits, and a
-/// digest reading the positions there would regenerate a unit for an edit that inserts a byte ahead
-/// of them — a blank line, a comment, a longer name earlier in the file.
-fn debug_positions(funcs: &[&RcFunc], globals: &[&RcGlobalInit]) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    let mut note = |source: &Option<Span>| {
-        source.is_some().hash(&mut hasher);
+/// A build that writes debug information compiles these into it, so they decide the code it
+/// generates. A build that writes none generates the same code whatever they are, and a digest
+/// reading them there would regenerate a unit for an edit that leaves its code unchanged: a byte
+/// inserted ahead of the code moves its positions, and an edit that reshapes a body renumbers the
+/// `#v` names the AST passes give that body's variables, names that a lambda specialized into
+/// another unit carries along.
+fn debug_information_digest(funcs: &[&RcFunc], globals: &[&RcGlobalInit]) -> u64 {
+    /// Feeds whether the source is known and, when it is, its file and byte range.
+    fn note_source(source: &Option<Span>, hasher: &mut DefaultHasher) {
+        source.is_some().hash(hasher);
         if let Some(span) = source {
-            span.input.file_path.to_string_lossy().hash(&mut hasher);
-            span.start.hash(&mut hasher);
-            span.end.hash(&mut hasher);
+            span.input.file_path.to_string_lossy().hash(hasher);
+            span.start.hash(hasher);
+            span.end.hash(hasher);
         }
-    };
+    }
+    /// Feeds the variable's source and its debug name.
+    fn note_var(var: &RcVar, hasher: &mut DefaultHasher) {
+        note_source(&var.source, hasher);
+        var.debug_name.hash(hasher);
+    }
+    /// Feeds the source of each expression node of `body`, and the source and debug name of each
+    /// variable it binds.
+    fn note_body(body: &RcExprNode, hasher: &mut DefaultHasher) {
+        for_each_node(body, &mut |node| note_source(&node.source, hasher));
+        for_each_var(body, &mut |var| note_var(var, hasher));
+    }
+    let mut hasher = DefaultHasher::new();
     for func in funcs {
-        note(&func.source);
+        note_source(&func.source, &mut hasher);
         for param in &func.params {
-            note(&param.source);
+            note_var(param, &mut hasher);
         }
         if let Some(capture) = &func.capture {
-            note(&capture.source);
+            note_var(capture, &mut hasher);
         }
-        for_each_node(&func.body, &mut |node| note(&node.source));
-        for_each_var(&func.body, &mut |var| note(&var.source));
+        note_body(&func.body, &mut hasher);
     }
     for global in globals {
-        for_each_node(&global.init, &mut |node| note(&node.source));
-        for_each_var(&global.init, &mut |var| note(&var.source));
+        note_body(&global.init, &mut hasher);
     }
     hasher.finish()
 }
