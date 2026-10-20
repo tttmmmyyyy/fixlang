@@ -43,8 +43,8 @@ use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    for_each_node, for_each_var, FieldPath, FuncRef, Ownership, OwnershipShape, RcExpr, RcExprNode,
-    RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar, VarPath,
+    for_each_node, FieldPath, FuncRef, Ownership, OwnershipShape, RcExpr, RcExprNode, RcFunc,
+    RcGlobalInit, RcProgram, RcRhs, RcState, RcVar, VarPath,
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
@@ -274,10 +274,6 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
         }
     }
 
-    if develop_mode {
-        check_clone_names_are_fresh(prog, clones.iter().map(|(_, _, rename)| rename));
-    }
-
     // The parameter names and types of every output version, so a call site can read the ownership
     // of the routed callee's positions.
     let mut callee_params: Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>> = Map::default();
@@ -356,44 +352,6 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
         funcs,
         globals,
         roots: prog.roots.clone(),
-    }
-}
-
-/// Check that the names a clone mints are names the program does not already bind.
-///
-/// `fresh_rename_function` makes a name by appending a suffix, reading none of the program's names,
-/// so the name it makes is new only because no binder the earlier passes mint ends in that shape.
-/// Nothing establishes that, and a collision would give two bindings one name, which is what
-/// `origin` follows a value back to: cancellation would then pair a retain of one with a release of
-/// the other and delete both.
-///
-/// Walking every binder costs a pass over the program, so this runs where the test suite runs it.
-fn check_clone_names_are_fresh<'a>(
-    prog: &RcProgram,
-    renames: impl Iterator<Item = &'a Map<FullName, FullName>>,
-) {
-    let mut bound: Set<FullName> = Set::default();
-    for func in prog.funcs.values() {
-        for p in func.params.iter().chain(func.capture.iter()) {
-            bound.insert(p.name.clone());
-        }
-        for_each_var(&func.body, &mut |v| {
-            bound.insert(v.name.clone());
-        });
-    }
-    for global in &prog.globals {
-        for_each_var(&global.init, &mut |v| {
-            bound.insert(v.name.clone());
-        });
-    }
-    for rename in renames {
-        for fresh in rename.values() {
-            assert!(
-                !bound.contains(fresh),
-                "the clone's fresh name `{}` is already bound in the program",
-                fresh.to_string()
-            );
-        }
     }
 }
 
@@ -769,8 +727,12 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
 /// nowhere else, so the names stay globally unique. References to top-level functions stay free
 /// here, for routing to retarget. Returns the clone and the binder renaming.
 fn clone_func(func: &RcFunc, new_ref: FuncRef) -> (RcFunc, Map<FullName, FullName>) {
-    let (params, capture, body, rename) =
-        fresh_rename_function(&func.params, &func.capture, &func.body, &borrow_clone_suffix());
+    let (params, capture, body, rename) = fresh_rename_function(
+        &func.params,
+        &func.capture,
+        &func.body,
+        &borrow_clone_suffix(),
+    );
     (
         RcFunc {
             name: new_ref,

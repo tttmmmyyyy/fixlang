@@ -6,8 +6,8 @@
 //! produced it, on any input. That closes a gap the runtime checks leave: valgrind and a uniqueness
 //! assertion need a triggering input and reachable code, whereas this is static and total.
 //!
-//! It checks the structural invariants of the RC IR: within each function every bound name is
-//! unique (no shadowing), every variable use resolves to a binding in scope, or to a global — a
+//! It checks the structural invariants of the RC IR: every bound name is bound once in the whole
+//! program (no shadowing, and no name shared by two functions), every variable use resolves to a binding in scope, or to a global — a
 //! function or a global value, both referenceable by name (a direct call names its callee by that
 //! name) — every `Retain`/`Release` names one reference-counting unit of its variable; a function
 //! carries a capture parameter exactly for the closure ABI; every match has at least one arm, with
@@ -45,6 +45,7 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
         globals.insert(g.symbol.clone());
     }
     let capture_layouts = capture_layouts(prog, stage);
+    let mut bound_in: Map<FullName, String> = Map::default();
 
     for func in prog.funcs.values() {
         // A capture parameter is present exactly for the closure ABI: it is the trailing capture-
@@ -66,6 +67,7 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
             &capture_layouts,
             type_env,
             func.name.name.to_string(),
+            &mut bound_in,
         );
         for p in func.params.iter().chain(func.capture.iter()) {
             v.bind(&p.name);
@@ -80,6 +82,7 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
             &capture_layouts,
             type_env,
             g.symbol.to_string(),
+            &mut bound_in,
         );
         v.check_expr(&g.init);
     }
@@ -173,7 +176,7 @@ fn for_each_rhs(node: &RcExprNode, f: &mut impl FnMut(&RcRhs)) {
 }
 
 /// The state of the structural check over one function body or global initializer.
-struct Validator<'a> {
+struct Validator<'a, 'b> {
     /// The pass whose output is being checked, named in a failure message.
     stage: &'a str,
     /// The names a use may resolve to without a binding: the program's functions and global values.
@@ -187,8 +190,12 @@ struct Validator<'a> {
     type_env: &'a TypeEnv,
     /// The function or global whose body is being checked, named in a failure message.
     location: String,
-    /// Every name bound anywhere in this body; a second binding of one is a duplicate.
-    seen: Set<FullName>,
+    /// Every name bound so far anywhere in the program, with the function or global that binds it; a
+    /// second binding of one is a duplicate, in the same body or in another. Names are unique across
+    /// the whole program because the passes key facts about a variable by its name alone — the
+    /// ownership shape of every parameter (`param_ownership_shapes`) among them — so a name bound in
+    /// two places would give one variable the facts of the other.
+    bound_in: &'b mut Map<FullName, String>,
     /// The names bound to a value made by `NoStorageValueOp`. A value of a type that occupies no
     /// storage holds no boxed value, since a pointer takes storage, so no reference count acts on
     /// one. `lower_lam` leaves such a capture out of the closure on that ground, and this is where
@@ -199,7 +206,7 @@ struct Validator<'a> {
     scope: Set<FullName>,
 }
 
-impl<'a> Validator<'a> {
+impl<'a, 'b> Validator<'a, 'b> {
     /// A validator of one function body or global initializer, which `location` names in a failure
     /// message.
     fn new(
@@ -209,6 +216,7 @@ impl<'a> Validator<'a> {
         capture_layouts: &'a Map<FuncRef, Vec<Arc<TypeNode>>>,
         type_env: &'a TypeEnv,
         location: String,
+        bound_in: &'b mut Map<FullName, String>,
     ) -> Self {
         Validator {
             stage,
@@ -217,20 +225,22 @@ impl<'a> Validator<'a> {
             capture_layouts,
             type_env,
             location,
-            seen: Set::default(),
+            bound_in,
             made_without_storage: Set::default(),
             scope: Set::default(),
         }
     }
 
-    /// Introduce a binding: it must be unique within the function, and it enters scope.
+    /// Introduce a binding: it must be the only binding of its name in the program, and it enters
+    /// scope.
     fn bind(&mut self, name: &FullName) {
-        if !self.seen.insert(name.clone()) {
+        if let Some(first) = self.bound_in.insert(name.clone(), self.location.clone()) {
             panic!(
-                "[RC IR validate] {}: duplicate binding `{}` in `{}`",
+                "[RC IR validate] {}: duplicate binding `{}` in `{}`, which `{}` binds too",
                 self.stage,
                 name.to_string(),
-                self.location
+                self.location,
+                first
             );
         }
         self.scope.insert(name.clone());
@@ -650,6 +660,7 @@ mod tests {
         let type_env = type_env();
         let prog = empty_prog();
         let capture_layouts = Map::default();
+        let mut bound_in = Map::default();
         let mut v = Validator::new(
             "test",
             &globals,
@@ -657,6 +668,7 @@ mod tests {
             &capture_layouts,
             &type_env,
             "f".to_string(),
+            &mut bound_in,
         );
         for p in params {
             v.bind(&FullName::local(p));
