@@ -491,8 +491,8 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Whether the binding of `x` in tail position may fuse into the tail return, skipping a scoped
-    /// binding. It fuses for the compiler-introduced ANF temporaries, which carry no source name; in
-    /// a debug build it does NOT fuse a source-named binding, so a debugger can inspect that value —
+    /// binding. It fuses for the compiler-introduced ANF temporaries, which carry no debug name; in
+    /// a debug build it does NOT fuse a binding that carries one, so a debugger can inspect that value —
     /// matching the current back end, which materializes every source `let` binding as a scoped
     /// value. Genuine tail calls and tail recursion go through unnamed temporaries, so they still
     /// fuse in every build.
@@ -501,7 +501,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Emit a debug local variable for the binding of `var` to `obj`, when debug info is enabled and
-    /// `var` carries a source-level name. A debugger can then inspect the value under that name.
+    /// `var` carries a debug name. A debugger can then inspect the value under that name.
     fn emit_debug_local_variable(&mut self, var: &RcVar, obj: &Object<'c>) {
         if self.has_di() {
             if let Some(name) = &var.debug_name {

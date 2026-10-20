@@ -80,7 +80,7 @@ fn func_to_string(func: &RcFunc, ann: Annotations) -> String {
     out
 }
 
-/// A variable renders as its name annotated with its type, its source name in a binding position
+/// A variable renders as its name annotated with its type, its debug name in a binding position
 /// when it has one, and its provenance when a provenance map is supplied.
 fn var_to_string(var: &RcVar, ann: Annotations) -> String {
     let dbg = match &var.debug_name {

@@ -943,7 +943,7 @@ impl<'a> Lowerer<'a> {
     ) -> Vec<FullName> {
         match &pat.pattern {
             Pattern::Var(v, _) => {
-                // Bind the source variable to the value, carrying its source name for debug info.
+                // Bind the source variable to the value, carrying its AST name as the debug name.
                 let debug_named = try_attach_debug_name(&v.name, obj, bindings);
                 let already_debug_named = obj.debug_name == Some(v.name.to_string());
                 if debug_named || already_debug_named {
@@ -954,7 +954,7 @@ impl<'a> Lowerer<'a> {
                 } else {
                     // `obj` is a pre-existing variable (a rename such as `let j = i`, or a
                     // parameter), so it has no defining binding to name. Represent the rename
-                    // faithfully with a move binding, which carries the source name. The move is
+                    // faithfully with a move binding, which carries the debug name. The move is
                     // reference-count-neutral: RC insertion retains `obj` before it exactly when it
                     // is used after.
                     let mut renamed =
@@ -1013,7 +1013,7 @@ impl<'a> Lowerer<'a> {
     }
 }
 
-/// Record `source_name` as the source-level debug name of the binding that just produced `var`, so code
+/// Record `source_name` as the debug name of the binding that just produced `var`, so code
 /// generation can emit a debug local variable under it, and return whether it did. This applies only
 /// when that binding is the immediately preceding one and is not already named — i.e. `var` is the
 /// fresh result of a compound expression bound to a source `let`/pattern variable. It does not apply
