@@ -409,7 +409,9 @@ impl LocalityKey {
 /// shape, so the keys of one function spell strings that differ wherever the keys do.
 impl CloneKey for Vec<LocalityKey> {
     fn spelling(&self) -> String {
-        self.iter().map(|key| key.0.spell(Locality::letter)).collect()
+        self.iter()
+            .map(|key| key.0.spell(Locality::letter))
+            .collect()
     }
 }
 

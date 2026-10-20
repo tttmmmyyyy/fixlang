@@ -136,8 +136,12 @@ impl<K: CloneKey> CloneRegistry<K> {
                 ..func.clone()
             };
         }
-        let (params, capture, body, rename) =
-            fresh_rename_function(&func.params, &func.capture, &body, &self.clone_suffixes[&name]);
+        let (params, capture, body, rename) = fresh_rename_function(
+            &func.params,
+            &func.capture,
+            &body,
+            &self.clone_suffixes[&name],
+        );
         RcFunc {
             name,
             fn_ty: func.fn_ty.clone(),
@@ -218,7 +222,9 @@ mod tests {
     /// A key of one boolean fact per parameter, spelled `T` or `F` per parameter.
     impl CloneKey for Vec<bool> {
         fn spelling(&self) -> String {
-            self.iter().map(|fact| if *fact { 'T' } else { 'F' }).collect()
+            self.iter()
+                .map(|fact| if *fact { 'T' } else { 'F' })
+                .collect()
         }
     }
 
@@ -243,7 +249,13 @@ mod tests {
         after_others.request(&fref("f"), vec![false, false], false);
         let named_after_others = after_others.request(&fref("f"), vec![true, false], false);
 
-        assert_eq!(named_alone.name.to_string(), named_after_others.name.to_string());
-        assert_eq!(named_alone.name.to_string(), global_name("f#tTF").to_string());
+        assert_eq!(
+            named_alone.name.to_string(),
+            named_after_others.name.to_string()
+        );
+        assert_eq!(
+            named_alone.name.to_string(),
+            global_name("f#tTF").to_string()
+        );
     }
 }
