@@ -369,6 +369,52 @@ mod debug_info_tests {
         );
     }
 
+    /// Debug information names each local variable, so a build made after a variable was renamed
+    /// must name it by its new name. The two names here are of one length, so the rename moves no
+    /// code and no position, and the second build takes the object files of the first unless the
+    /// name takes part in naming them — leaving a debugger to inspect the variable under a name the
+    /// source no longer has.
+    #[test]
+    fn test_debug_info_names_a_variable_after_it_was_renamed() {
+        const BEFORE: &str = "before_rename";
+        const AFTER: &str = "after_renamed";
+        let source = |name: &str| {
+            format!(
+                r#"
+                module Main;
+
+                main : IO ();
+                main = (
+                    let {name} = 41;
+                    println(({name} + 1).to_string)
+                );
+                "#
+            )
+        };
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+
+        fs::write(dir.join("main.fix"), source(BEFORE)).expect("Failed to write main.fix");
+        build_with_g_in(dir, "main.fix", "before_rename", "none", &[]);
+        let before_rename = object_files(dir);
+
+        fs::write(dir.join("main.fix"), source(AFTER)).expect("Failed to write main.fix");
+        build_with_g_in(dir, "main.fix", "after_rename", "none", &[]);
+        let compiled_after_the_rename = object_files(dir)
+            .difference(&before_rename)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        assert!(
+            compiled_after_the_rename
+                .iter()
+                .any(|object| file_carries(object, AFTER)),
+            "no object file compiled after the rename names the variable \"{}\"; the build took \
+             the object files compiled for the variable's old name",
+            AFTER
+        );
+    }
+
     /// The compilation directory reaches the generated code through the debug information and
     /// nowhere else, which is what lets a build without debug information take the object files
     /// generated in another directory. One source built in one directory, with `-g` and without it,
