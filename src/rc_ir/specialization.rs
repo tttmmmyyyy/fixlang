@@ -105,7 +105,8 @@ impl<K: CloneKey> CloneRegistry<K> {
     }
 
     /// The output name of the clone `(fref, key)`, enqueuing it for materialization the first time
-    /// it is asked for. The canonical clone keeps the original name; every other key gets a fresh
+    /// it is asked for. `keep_canonical` must have recorded `fref` first. The canonical clone keeps
+    /// the original name; every other key gets a fresh
     /// name, minted once per key, until the function has as many as `MAX_CLONES_PER_FUNCTION`
     /// allows — past that the answer is the canonical name, which is always available and proves
     /// nothing, so the call it routes keeps every dispatch it had.
