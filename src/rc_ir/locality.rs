@@ -1047,7 +1047,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         });
     }
 
-    // Materialize every requested clone; each materialization may request further clones.
+    // Materialize every enqueued clone; each materialization may request further clones.
     let mut output_funcs: Map<FuncRef, RcFunc> = Map::default();
     while let Some((fref, key)) = clones.pop() {
         let func = prog.funcs[&fref].clone();
