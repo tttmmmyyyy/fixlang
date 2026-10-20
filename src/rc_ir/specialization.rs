@@ -207,3 +207,41 @@ pub fn specializable_callee(
     }
     Some(cref)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{CloneKey, CloneRegistry};
+    use crate::rc_ir::ast::FuncRef;
+    use crate::rc_ir::test_program::global_name;
+
+    /// A key of one boolean fact per parameter, spelled `T` or `F` per parameter.
+    impl CloneKey for Vec<bool> {
+        fn spelling(&self) -> String {
+            self.iter().map(|fact| if *fact { 'T' } else { 'F' }).collect()
+        }
+    }
+
+    fn fref(name: &str) -> FuncRef {
+        FuncRef {
+            name: global_name(name),
+        }
+    }
+
+    /// The name of a clone is decided by its function and its key, whatever the registry named
+    /// before it — so the clones of one function keep their names when an edit elsewhere in the
+    /// program asks for more clones, or for fewer, ahead of them.
+    #[test]
+    fn test_a_clone_is_named_by_its_function_and_key_alone() {
+        let mut alone: CloneRegistry<Vec<bool>> = CloneRegistry::new("t");
+        let named_alone = alone.request(&fref("f"), vec![true, false], false);
+
+        let mut after_others: CloneRegistry<Vec<bool>> = CloneRegistry::new("t");
+        after_others.request(&fref("g"), vec![true], false);
+        after_others.request(&fref("g"), vec![false], false);
+        after_others.request(&fref("f"), vec![false, false], false);
+        let named_after_others = after_others.request(&fref("f"), vec![true, false], false);
+
+        assert_eq!(named_alone.name.to_string(), named_after_others.name.to_string());
+        assert_eq!(named_alone.name.to_string(), global_name("f#tTF").to_string());
+    }
+}
