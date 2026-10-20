@@ -20,13 +20,13 @@ Type: `Std::String`
 
 A value inside namespace
 
-### namespace Main::MyCollect
+### namespace Main::MyAppendElems
 
-#### my_collect
+#### my_append_elems
 
-Type: `[a : Std::ToString, c : Main::MyCollect, it : Std::Iterator, Std::Iterator::Item it = a] it -> c -> Std::String`
+Type: `[a : Std::ToString, c : Main::MyAppendElems, it : Std::Iterator, Std::Iterator::Item it = a] it -> c -> Std::String`
 
-Trait member of `Main::MyCollect`
+Trait member of `Main::MyAppendElems`
 
 Writes the elements of the iterator after the value
 
@@ -112,11 +112,11 @@ Type: `Std::I64`
 
 ### namespace Main
 
-#### trait `c : MyCollect`
+#### trait `c : MyAppendElems`
 
 A trait whose member constrains an associated type
 
-##### method `my_collect`
+##### method `my_append_elems`
 
 Type: `[it : Std::Iterator, a : Std::ToString, Std::Iterator::Item it = a] it -> c -> Std::String`
 

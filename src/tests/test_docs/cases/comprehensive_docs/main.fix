@@ -37,9 +37,9 @@ impl MyStruct : MyTrait {
 }
 
 // A trait whose member constrains an associated type
-trait c : MyCollect {
+trait c : MyAppendElems {
     // Writes the elements of the iterator after the value
-    my_collect : [it : Iterator, Item it = a, a : ToString] it -> c -> String;
+    my_append_elems : [it : Iterator, Item it = a, a : ToString] it -> c -> String;
 }
 
 // A struct holding an iterator
