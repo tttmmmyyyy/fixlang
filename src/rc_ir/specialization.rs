@@ -84,7 +84,12 @@ impl<K: CloneKey> CloneRegistry<K> {
     /// this for every function of its program before it requests any clone, since every function
     /// keeps its canonical version.
     pub fn keep_canonical(&mut self, fref: &FuncRef, key: K) {
-        self.canonical_keys.insert(fref.clone(), key.clone());
+        let previous = self.canonical_keys.insert(fref.clone(), key.clone());
+        assert!(
+            previous.is_none(),
+            "`{}` is given a canonical key twice",
+            fref.name.to_string()
+        );
         self.enqueue(fref, key);
     }
 
@@ -106,7 +111,6 @@ impl<K: CloneKey> CloneRegistry<K> {
     /// nothing, so the call it routes keeps every dispatch it had.
     pub fn request(&mut self, fref: &FuncRef, key: K) -> FuncRef {
         if self.is_canonical(fref, &key) {
-            self.enqueue(fref, key);
             return fref.clone();
         }
         if let Some(name) = self.clone_names.get(&(fref.clone(), key.clone())) {
