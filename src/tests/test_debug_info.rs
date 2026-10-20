@@ -288,6 +288,11 @@ mod debug_info_tests {
             .collect()
     }
 
+    /// The object files a build in `dir` has compiled since `before` was read off it.
+    fn object_files_compiled_since(dir: &Path, before: &Set<PathBuf>) -> Vec<PathBuf> {
+        object_files(dir).difference(before).cloned().collect()
+    }
+
     /// Debug information names the file the code was compiled from, so a build made after its source
     /// moved must name the source where it is now. Nothing but the path differs between the two
     /// builds here, and the second one takes the object files of the first unless the path takes
@@ -309,10 +314,7 @@ mod debug_info_tests {
         fs::create_dir(dir.join("src")).expect("Failed to create the directory to move into");
         fs::rename(dir.join("main.fix"), dir.join("src/app.fix")).expect("Failed to move main.fix");
         build_with_g_in(dir, "src/app.fix", "after_move", "none", &[]);
-        let compiled_after_the_move = object_files(dir)
-            .difference(&before_move)
-            .cloned()
-            .collect::<Vec<_>>();
+        let compiled_after_the_move = object_files_compiled_since(dir, &before_move);
 
         assert!(
             !compiled_after_the_move.is_empty(),
@@ -400,10 +402,7 @@ mod debug_info_tests {
 
         fs::write(dir.join("main.fix"), source(AFTER)).expect("Failed to write main.fix");
         build_with_g_in(dir, "main.fix", "after_rename", "none", &[]);
-        let compiled_after_the_rename = object_files(dir)
-            .difference(&before_rename)
-            .cloned()
-            .collect::<Vec<_>>();
+        let compiled_after_the_rename = object_files_compiled_since(dir, &before_rename);
 
         assert!(
             compiled_after_the_rename
