@@ -222,6 +222,7 @@ mod tests {
         }
     }
 
+    /// A reference to the function named `name` in the namespace `Main`.
     fn fref(name: &str) -> FuncRef {
         FuncRef {
             name: global_name(name),
