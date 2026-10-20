@@ -41,7 +41,9 @@ const MAX_CLONES_PER_FUNCTION: usize = 16;
 
 /// A key a specializing pass clones a function on, which spells itself into the clone's name.
 pub trait CloneKey: Clone + Eq + Hash {
-    /// The key written as letters and digits. Two different keys of one function spell differently.
+    /// The key written as letters and digits, starting with anything but a lowercase letter, which
+    /// `copy_suffix` requires of the part after a pass's tag. Two different keys of one function
+    /// spell differently.
     fn spelling(&self) -> String;
 }
 
@@ -58,8 +60,8 @@ pub struct CloneRegistry<K> {
     /// How many clones each function has been given, against `MAX_CLONES_PER_FUNCTION`.
     clone_counts: Map<FuncRef, usize>,
     /// Every `(function, key)` already enqueued, so each is materialized once.
-    requested: Set<(FuncRef, K)>,
-    /// The requested clones not yet handed out for materialization.
+    enqueued: Set<(FuncRef, K)>,
+    /// The enqueued clones not yet handed out for materialization.
     worklist: VecDeque<(FuncRef, K)>,
     /// The letter marking this pass's fresh names apart from another pass's.
     tag: &'static str,
@@ -74,7 +76,7 @@ impl<K: CloneKey> CloneRegistry<K> {
             clone_names: Map::default(),
             minted_names: Set::default(),
             clone_counts: Map::default(),
-            requested: Set::default(),
+            enqueued: Set::default(),
             worklist: VecDeque::new(),
             tag: pass_tag,
         }
@@ -146,12 +148,12 @@ impl<K: CloneKey> CloneRegistry<K> {
 
     /// Enqueue `(fref, key)` for materialization, the first time it is asked for.
     fn enqueue(&mut self, fref: &FuncRef, key: K) {
-        if self.requested.insert((fref.clone(), key.clone())) {
+        if self.enqueued.insert((fref.clone(), key.clone())) {
             self.worklist.push_back((fref.clone(), key));
         }
     }
 
-    /// The next requested clone to materialize. Materializing one may request further clones, so the
+    /// The next enqueued clone to materialize. Materializing one may request further clones, so the
     /// caller drains this until it is empty.
     pub fn pop(&mut self) -> Option<(FuncRef, K)> {
         self.worklist.pop_front()
