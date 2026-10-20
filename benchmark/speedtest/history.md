@@ -6,9 +6,11 @@ Newer is above.
 (`9c22359`) in place of `5fd757b`.** In between, `factorize`, `factorize_flat`, `calc_totient` and
 `_calc_primitive_root` divide once per candidate divisor. None of the cases calls the first three,
 and every prime the cases use is one `calc_primitive_root` answers from its table, so the rewritten
-loops never run. Twenty-one of the twenty-three cases build to byte-identical code; `cp_convolution`
-and `cp_convolution_i64` differ because the initializer of `ZP::primitive_root` carries the inlined
-`_calc_primitive_root`. No program's instruction count moved by more than 0.01%. Cycle counts moved
+loops never run. Twenty-one of the twenty-three cases build to byte-identical code. `cp_convolution`
+and `cp_convolution_i64` differ, but built as one compilation unit (`--cu-size inf`) every function
+keeps its size and only the numbers in the symbol names move, so what differs at the default
+division is which unit each function lands in. No program's instruction count moved by more than
+0.01%. Cycle counts moved
 by up to 15.8% (`cp_twosat`), in cases whose code did not change.
 
 **LangArena rows measured before the pinned revision rose from `34fedbb` to `3d43841` are
