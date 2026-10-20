@@ -111,20 +111,25 @@ fn defined_and_declared_global_variables(ir: &str) -> (Set<String>, Set<String>)
     (defined, declared)
 }
 
+/// Write the project file of a project in `dir` named `name`, whose source files are `files`.
+fn write_project_file(dir: &Path, name: &str, files: &[&str]) {
+    let files: Vec<String> = files.iter().map(|file| format!("\"{}\"", file)).collect();
+    fs::write(
+        dir.join("fixproj.toml"),
+        format!(
+            "[general]\nname = \"{}\"\nversion = \"0.1.0\"\n[build]\nfiles = [{}]\n",
+            name,
+            files.join(", ")
+        ),
+    )
+    .expect("Failed to write the project file");
+}
+
 /// A project of two modules: `Worker`, which holds a table and a function reading one element of
 /// it, and `Main`, which calls that function. The function is small enough for the unit holding
 /// `Main` to take a copy of, and that copy is then the only code the program reads the table from.
 fn write_one_reader_global_project(dir: &Path) {
-    fs::write(
-        dir.join("fixproj.toml"),
-        r#"[general]
-name = "one-reader-global"
-version = "0.1.0"
-[build]
-files = ["main.fix", "worker.fix"]
-"#,
-    )
-    .expect("Failed to write the project file");
+    write_project_file(dir, "one-reader-global", &["main.fix", "worker.fix"]);
     fs::write(
         dir.join("worker.fix"),
         r#"module Worker;
@@ -259,16 +264,7 @@ fn test_a_unit_publishes_a_symbol_only_where_another_unit_names_it() {
 /// A project of two modules: `Worker`, whose globals are compiled from `Std` alone, and `Main`,
 /// which calls into it. `argument` is what `Main` passes.
 fn write_two_module_project(dir: &Path, argument: i64) {
-    fs::write(
-        dir.join("fixproj.toml"),
-        r#"[general]
-name = "compilation-units"
-version = "0.1.0"
-[build]
-files = ["main.fix", "worker.fix"]
-"#,
-    )
-    .expect("Failed to write the project file");
+    write_project_file(dir, "compilation-units", &["main.fix", "worker.fix"]);
     fs::write(
         dir.join("worker.fix"),
         r#"module Worker;
@@ -537,16 +533,7 @@ fn test_an_edit_reshaping_a_body_regenerates_what_an_edit_of_a_literal_does() {
 /// A project whose `main` passes `loop` a lambda too large to be inlined into the specialization of
 /// `loop` it gets. `k` is the expression `main` binds `k` to, which the lambda reads.
 fn write_large_loop_body_project(dir: &Path, k: &str) {
-    fs::write(
-        dir.join("fixproj.toml"),
-        r#"[general]
-name = "compilation-units"
-version = "0.1.0"
-[build]
-files = ["main.fix"]
-"#,
-    )
-    .expect("Failed to write the project file");
+    write_project_file(dir, "compilation-units", &["main.fix"]);
     let steps: String = (0..60)
         .map(|j| {
             format!(
@@ -616,16 +603,7 @@ fn test_an_edit_reshaping_main_regenerates_what_an_edit_of_a_literal_does() {
 /// # Arguments
 /// * `inner_carries_two_fields` — whether `Inner` holds a second field, which is the edit.
 fn write_nested_type_project(dir: &Path, inner_carries_two_fields: bool) {
-    fs::write(
-        dir.join("fixproj.toml"),
-        r#"[general]
-name = "nested-type"
-version = "0.1.0"
-[build]
-files = ["main.fix", "lib.fix", "types.fix"]
-"#,
-    )
-    .expect("Failed to write the project file");
+    write_project_file(dir, "nested-type", &["main.fix", "lib.fix", "types.fix"]);
 
     let (inner_fields, inner_literal) = if inner_carries_two_fields {
         ("{x : I64, y : I64}", "Inner{x : 100, y : 200}")
