@@ -2,6 +2,15 @@
 
 Newer is above.
 
+**The third `25fef64` row builds the `cp_*` cases and `cp_lib_prime_list` on cp-library 0.15.1
+(`9c22359`) in place of `5fd757b`.** In between, `factorize`, `factorize_flat`, `calc_totient` and
+`_calc_primitive_root` divide once per candidate divisor. None of the cases calls the first three,
+and every prime the cases use is one `calc_primitive_root` answers from its table, so the rewritten
+loops never run. Twenty-one of the twenty-three cases build to byte-identical code; `cp_convolution`
+and `cp_convolution_i64` differ because the initializer of `ZP::primitive_root` carries the inlined
+`_calc_primitive_root`. No program's instruction count moved by more than 0.01%. Cycle counts moved
+by up to 15.8% (`cp_twosat`), in cases whose code did not change.
+
 **LangArena rows measured before the pinned revision rose from `34fedbb` to `3d43841` are
 comparable with rows after it on forty-nine of the fifty programs.** `3d43841` takes
 `String::format` and the trait `Format` from `Std`, which has them since #888, in place of
