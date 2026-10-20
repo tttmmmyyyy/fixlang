@@ -260,6 +260,13 @@ impl<T: Copy> LeafKey<T> {
             .unwrap_or_else(|| unreachable!("{:?} is not a boxed leaf of this key", path))
     }
 
+    /// The facts written one letter per boxed leaf, in canonical path order, `letter` giving each
+    /// fact's letter. Keys of one shape spell strings of one length, which differ wherever the facts
+    /// do.
+    pub fn spell(&self, letter: impl Fn(T) -> char) -> String {
+        self.0.values().map(|fact| letter(*fact)).collect()
+    }
+
     /// The key of a value of type `ty` whose every boxed leaf carries `fact`.
     pub fn uniform(ty: &Arc<TypeNode>, type_env: &TypeEnv, fact: T) -> LeafKey<T> {
         LeafKey(

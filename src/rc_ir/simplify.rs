@@ -46,12 +46,11 @@ const PASS_TAG: &str = "cc";
 
 /// Simplify every function body and global initializer of `prog` to a fixpoint.
 pub fn simplify(prog: &mut RcProgram, config: &Configuration) {
-    let mut counter = 0;
     for func in prog.funcs.values_mut() {
-        func.body = simplify_to_fixpoint(&func.body, &mut counter, config);
+        func.body = simplify_to_fixpoint(&func.body, config);
     }
     for g in &mut prog.globals {
-        g.init = simplify_to_fixpoint(&g.init, &mut counter, config);
+        g.init = simplify_to_fixpoint(&g.init, config);
     }
 }
 
@@ -59,16 +58,15 @@ pub fn simplify(prog: &mut RcProgram, config: &Configuration) {
 /// fewer nodes than it found; a pass that leaves as many or more has broken that, and the body it
 /// produced is dropped in favour of the one before it, which stops the fixpoint. Development mode
 /// stops loudly instead, at the pass that broke it.
-fn simplify_to_fixpoint(
-    node: &RcExprNode,
-    counter: &mut u64,
-    config: &Configuration,
-) -> RcExprNode {
+fn simplify_to_fixpoint(node: &RcExprNode, config: &Configuration) -> RcExprNode {
+    // Numbers the copies the case-of-case move makes in this body. The binders of the body are bound
+    // nowhere else in the program, so numbering the copies per body keeps the names unique.
+    let mut counter = 0;
     let mut cur = node.clone();
     let mut size = node_count(&cur);
     loop {
         let mut changed = false;
-        let next = rewrite(&cur, counter, &mut changed);
+        let next = rewrite(&cur, &mut counter, &mut changed);
         if !changed {
             return cur;
         }
@@ -302,7 +300,8 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
             });
             // Fresh binders per arm, so an outer arm two inner arms reach does not put one name in
             // two places.
-            let moved = clone_fresh(&outer.body, PASS_TAG, counter);
+            *counter += 1;
+            let moved = clone_fresh(&outer.body, &format!("#{}{}", PASS_TAG, counter));
             substitute_expr(&moved, &single_subst(&outer.payload.name, &operand.name))
         });
         new_arms.push(arm.with_body(body));

@@ -33,7 +33,7 @@ use crate::rc_ir::ast::{
     RcState, RcTarget, RcVar,
 };
 use crate::rc_ir::leaf_map::{boxed_leaf_paths, LeafKey, LeafMap};
-use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneRegistry};
+use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneKey, CloneRegistry};
 use std::iter;
 use std::sync::Arc;
 
@@ -57,6 +57,15 @@ impl Locality {
             (Locality::MayExt, _) | (_, Locality::MayExt) => Locality::MayExt,
             (Locality::RootLocal, _) | (_, Locality::RootLocal) => Locality::RootLocal,
             (Locality::DeepLocal, Locality::DeepLocal) => Locality::DeepLocal,
+        }
+    }
+
+    /// The letter a clone's name spells this locality with (`CloneKey::spelling`).
+    fn letter(self) -> char {
+        match self {
+            Locality::DeepLocal => 'D',
+            Locality::RootLocal => 'R',
+            Locality::MayExt => 'M',
         }
     }
 
@@ -393,6 +402,14 @@ impl LocalityKey {
     /// unit) carries, and the key of every function's canonical version.
     pub fn all_may_ext(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> LocalityKey {
         LocalityKey(LeafKey::uniform(ty, type_env, Locality::MayExt))
+    }
+}
+
+/// A clone's key holds one `LocalityKey` per parameter of its function, each of that parameter's
+/// shape, so the keys of one function spell strings that differ wherever the keys do.
+impl CloneKey for Vec<LocalityKey> {
+    fn spelling(&self) -> String {
+        self.iter().map(|key| key.0.spell(Locality::letter)).collect()
     }
 }
 

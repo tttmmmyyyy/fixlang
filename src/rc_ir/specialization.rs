@@ -7,6 +7,11 @@
 //! the worklist so each `(function, key)` is materialized once, and giving a fresh clone fresh local
 //! names without losing its ownership annotation.
 //!
+//! A clone's name is its function's name followed by the pass's tag and the key's spelling
+//! (`CloneKey::spelling`), and the clone's local names take the same suffix. The name depends on
+//! nothing but the function and the key, so editing one function leaves the clones of every other
+//! function named as they were.
+//!
 //! The clone keyed on the least informative inputs keeps the original function's name and is called
 //! the *canonical* one. Every function keeps its canonical version, since a pass that routes calls
 //! reads no root set and so takes any function to be callable; specialization only adds the more
@@ -34,33 +39,39 @@ use std::hash::Hash;
 /// against the corpus, where the most-cloned function has four.
 const MAX_CLONES_PER_FUNCTION: usize = 16;
 
+/// A key a specializing pass clones a function on, which spells itself into the clone's name.
+pub trait CloneKey: Clone + Eq + Hash {
+    /// The key written as letters and digits. Two different keys of one function spell differently.
+    fn spelling(&self) -> String;
+}
+
 /// The clones a specializing pass has named and has yet to materialize.
 pub struct CloneRegistry<K> {
     /// The fresh name of each non-canonical clone `(function, key)`.
     clone_names: Map<(FuncRef, K), FuncRef>,
+    /// The suffix each fresh clone's name adds to its function's name, keyed by the clone's name. The
+    /// clone's local names take the same suffix.
+    clone_suffixes: Map<FuncRef, String>,
     /// How many clones each function has been given, against `MAX_CLONES_PER_FUNCTION`.
     clone_counts: Map<FuncRef, usize>,
     /// Every `(function, key)` already enqueued, so each is materialized once.
     requested: Set<(FuncRef, K)>,
     /// The requested clones not yet handed out for materialization.
     worklist: VecDeque<(FuncRef, K)>,
-    /// The source of the number distinguishing one fresh name from the next, shared by the clone
-    /// names and the local names a fresh clone's body is renamed to.
-    fresh_name_counter: u64,
     /// The letter marking this pass's fresh names apart from another pass's.
     tag: &'static str,
 }
 
-impl<K: Clone + Eq + Hash> CloneRegistry<K> {
+impl<K: CloneKey> CloneRegistry<K> {
     /// An empty registry whose fresh names carry `pass_tag`, which tells this pass's names apart
     /// from those another specializing pass minted.
     pub fn new(pass_tag: &'static str) -> CloneRegistry<K> {
         CloneRegistry {
             clone_names: Map::default(),
+            clone_suffixes: Map::default(),
             clone_counts: Map::default(),
             requested: Set::default(),
             worklist: VecDeque::new(),
-            fresh_name_counter: 0,
             tag: pass_tag,
         }
     }
@@ -85,10 +96,16 @@ impl<K: Clone + Eq + Hash> CloneRegistry<K> {
             return fref.clone();
         }
         *count += 1;
-        self.fresh_name_counter += 1;
+        let suffix = format!("#{}{}", self.tag, key.spelling());
         let mut name = fref.name.clone();
-        name.name = format!("{}#{}{}", name.name, self.tag, self.fresh_name_counter);
+        name.name.push_str(&suffix);
         let nref = FuncRef { name };
+        let previous = self.clone_suffixes.insert(nref.clone(), suffix);
+        assert!(
+            previous.is_none(),
+            "two keys of `{}` spell the same clone name",
+            fref.name.to_string()
+        );
         self.clone_names
             .insert((fref.clone(), key.clone()), nref.clone());
         self.enqueue(fref, key);
@@ -118,13 +135,8 @@ impl<K: Clone + Eq + Hash> CloneRegistry<K> {
                 ..func.clone()
             };
         }
-        let (params, capture, body, rename) = fresh_rename_function(
-            &func.params,
-            &func.capture,
-            &body,
-            self.tag,
-            &mut self.fresh_name_counter,
-        );
+        let (params, capture, body, rename) =
+            fresh_rename_function(&func.params, &func.capture, &body, &self.clone_suffixes[&name]);
         RcFunc {
             name,
             fn_ty: func.fn_ty.clone(),
