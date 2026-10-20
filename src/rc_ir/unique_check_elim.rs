@@ -62,8 +62,8 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     // Keep every function's all-`Dynamic` version: this pass reads no root set, so any function may
     // be the one called from outside. Specialization adds the more specific clones on top.
     for (fref, func) in prog.funcs.iter() {
-        let ck = spec.canonical_key(func);
-        spec.clones.keep_canonical(fref, ck);
+        spec.clones
+            .keep_canonical(fref, canonical_key(func, type_env));
     }
     // A global initializer has no parameters, so its body resolves against no inputs.
     let globals: Vec<RcGlobalInit> = prog
@@ -78,7 +78,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         })
         .collect();
 
-    // Materialize every requested clone; each materialization may request further clones.
+    // Materialize every enqueued clone; each materialization may request further clones.
     while let Some((fref, key)) = spec.clones.pop() {
         let clone = spec.materialize_clone(&fref, &key);
         spec.output_funcs.insert(clone.name.clone(), clone);
@@ -113,16 +113,16 @@ struct Specializer<'a> {
     output_funcs: Map<FuncRef, RcFunc>,
 }
 
-impl<'a> Specializer<'a> {
-    /// The all-`Dynamic` key of a function, built from its parameter types: nothing is known about
-    /// its inputs' uniqueness. The clone on this key keeps the original name.
-    fn canonical_key(&self, func: &RcFunc) -> SpecializationKey {
-        func.params
-            .iter()
-            .map(|p| Uniqueness::all_dynamic(&p.ty, self.type_env))
-            .collect()
-    }
+/// The all-`Dynamic` key of a function, built from its parameter types: nothing is known about its
+/// inputs' uniqueness. The clone on this key keeps the original name.
+fn canonical_key(func: &RcFunc, type_env: &TypeEnv) -> SpecializationKey {
+    func.params
+        .iter()
+        .map(|p| Uniqueness::all_dynamic(&p.ty, type_env))
+        .collect()
+}
 
+impl<'a> Specializer<'a> {
     /// The uniqueness of every input of the clone `(func, key)`: the key gives the parameters; a
     /// closure capture (the input past the parameters) is always all-`Dynamic`, since closures are not
     /// specialized.
