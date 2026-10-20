@@ -845,7 +845,7 @@ pub fn generated_code_hash(
     let type_declarations = type_declarations_reached(unit_program, &declared_types, type_env);
     let debug_information = config
         .debug_info
-        .then(|| debug_information(&funcs, &globals));
+        .then(|| debug_information_digest(&funcs, &globals));
 
     let settings = config.object_generation_hash();
     let code = GeneratedCode {
@@ -939,7 +939,7 @@ fn type_declarations_reached(
 /// inserted ahead of the code moves its positions, and an edit reshaping a body renumbers the `#v`
 /// names the AST passes give that body's variables, which a lambda specialized into another unit
 /// carries along.
-fn debug_information(funcs: &[&RcFunc], globals: &[&RcGlobalInit]) -> u64 {
+fn debug_information_digest(funcs: &[&RcFunc], globals: &[&RcGlobalInit]) -> u64 {
     fn note_source(source: &Option<Span>, hasher: &mut DefaultHasher) {
         source.is_some().hash(hasher);
         if let Some(span) = source {
