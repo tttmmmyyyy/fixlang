@@ -41,9 +41,10 @@ const MAX_CLONES_PER_FUNCTION: usize = 16;
 
 /// A key a specializing pass clones a function on, which spells itself into the clone's name.
 pub trait CloneKey: Clone + Eq + Hash {
-    /// The key written as letters and digits, starting with anything but a lowercase letter, which
-    /// `copy_suffix` requires of the part after a pass's tag. Two different keys of one function
-    /// spell differently.
+    /// The key written as letters and digits. It is empty or starts with a character other than a
+    /// lowercase letter, so that a clone's name splits into the pass's tag, a run of lowercase
+    /// letters, and the spelling in one way only; `copy_suffix` asserts this. Two different keys of
+    /// one function spell differently.
     fn spelling(&self) -> String;
 }
 
