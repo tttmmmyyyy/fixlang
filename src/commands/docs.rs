@@ -3,6 +3,7 @@ use crate::{
     ast::{
         name::{is_private_module_name, is_private_name, FullName, Name, NameSpace},
         program::Program,
+        qual_type::bracket_constraints,
         traits::KindSignature,
         typedecl::Field,
         types::{kind_star, Kind, TyConVariant, TyVar},
@@ -445,6 +446,19 @@ fn is_entry_should_be_documented(
     true
 }
 
+/// The kinds other than `*` given to the type variables in `kind_signs`, as a declaration writes
+/// them in front of itself: `[f : *->*] `. With no such kind, it is the empty string.
+fn kind_constraints_with_post_space<'a>(
+    kind_signs: impl Iterator<Item = (&'a Name, &'a Arc<Kind>)>,
+) -> String {
+    bracket_constraints(
+        kind_signs
+            .filter(|(_, kind)| **kind != kind_star())
+            .map(|(tyvar, kind)| format!("{} : {}", tyvar, kind.to_string()))
+            .collect(),
+    )
+}
+
 // Creates string of kind signature with pre-space, e.e, " : * -> *".
 // If the kind is `*`, returns empty string.
 fn kind_sign_with_pre_space(kind: &Arc<Kind>) -> String {
@@ -459,21 +473,9 @@ fn type_entries(
     mod_name: &Name,
     config: &DocsConfig,
 ) -> Result<Vec<Entry>, Errors> {
-    fn kind_constraints_with_post_space(tyvars: &Vec<Arc<TyVar>>) -> String {
-        if tyvars.is_empty() {
-            return String::new();
-        }
-        let mut consts = vec![];
-        for tyvar in tyvars.iter() {
-            if tyvar.kind == kind_star() {
-                continue;
-            }
-            consts.push(format!("{} : {}", tyvar.name, tyvar.kind.to_string()));
-        }
-        if consts.is_empty() {
-            return String::new();
-        }
-        format!("[{}] ", consts.join(", "))
+    /// The kinds of the type parameters `tyvars`, as `kind_constraints_with_post_space` writes them.
+    fn tyvar_kinds_with_post_space(tyvars: &[Arc<TyVar>]) -> String {
+        kind_constraints_with_post_space(tyvars.iter().map(|tv| (&tv.name, &tv.kind)))
     }
     fn tyvars_with_pre_space(tyvars: &Vec<Arc<TyVar>>) -> String {
         if tyvars.is_empty() {
@@ -526,7 +528,7 @@ fn type_entries(
 
         let defined_as = format!(
             "Defined as: `type {}{}{} = {} {}`",
-            kind_constraints_with_post_space(&ty_info.tyvars),
+            tyvar_kinds_with_post_space(&ty_info.tyvars),
             name.name,
             tyvars_with_pre_space(&ty_info.tyvars),
             box_or_unbox(ty_info.is_unbox),
@@ -578,7 +580,7 @@ fn type_entries(
         let mut doc = MarkdownSection::new(name.name.clone());
         let defined_as = format!(
             "Defined as: `type {}{}{} = {}`",
-            kind_constraints_with_post_space(&ty_info.tyvars),
+            tyvar_kinds_with_post_space(&ty_info.tyvars),
             name.name,
             tyvars_with_pre_space(&ty_info.tyvars),
             ty_info.value.to_string(),
@@ -628,21 +630,9 @@ fn trait_entries(
     mod_name: &Name,
     config: &DocsConfig,
 ) -> Result<Vec<Entry>, Errors> {
-    fn kind_constraints_with_post_space(kind_signs: &Vec<KindSignature>) -> String {
-        if kind_signs.is_empty() {
-            return String::new();
-        }
-        let mut consts = vec![];
-        for kind_sign in kind_signs.iter() {
-            if kind_sign.kind == kind_star() {
-                continue;
-            }
-            consts.push(kind_sign.to_string());
-        }
-        if consts.is_empty() {
-            return String::new();
-        }
-        format!("[{}] ", consts.join(", "))
+    /// The kind signatures `kind_signs`, as `kind_constraints_with_post_space` writes them.
+    fn kind_signs_with_post_space(kind_signs: &[KindSignature]) -> String {
+        kind_constraints_with_post_space(kind_signs.iter().map(|ks| (&ks.tyvar, &ks.kind)))
     }
 
     let mut entries = vec![];
@@ -654,7 +644,7 @@ fn trait_entries(
             continue;
         }
 
-        let kind_consts = kind_constraints_with_post_space(&info.kind_signs);
+        let kind_consts = kind_signs_with_post_space(&info.kind_signs);
         let title = format!(
             "trait `{}{} : {}`",
             kind_consts, info.type_var.name, name.name
@@ -682,7 +672,7 @@ fn trait_entries(
             let mut subsection = MarkdownSection::new(title);
             let defined_as = format!(
                 "Defined as: `{}{} {}{}`",
-                kind_constraints_with_post_space(&assoc_ty_defn.kind_signs),
+                kind_signs_with_post_space(&assoc_ty_defn.kind_signs),
                 assoc_ty_name,
                 params.join(" "),
                 kind_sign_with_pre_space(&assoc_ty_defn.kind_applied)
