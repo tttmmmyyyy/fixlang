@@ -713,6 +713,25 @@ mod tests {
         check(&body, &["p"]);
     }
 
+    /// A name two functions each bind is caught, as a name bound twice in one function is: the
+    /// passes key facts about a variable by its name alone, so a name bound in two functions would
+    /// give the variable of one the facts of the other.
+    #[test]
+    #[should_panic(expected = "duplicate binding")]
+    fn rejects_a_name_two_functions_bind() {
+        // f(p) = ret p;  g(p) = ret p   (p bound in both)
+        let ret_p = |name: &str| {
+            func(
+                name,
+                type_funptr(vec![make_i64_ty()], make_i64_ty()),
+                vec![var("p")],
+                None,
+                node(RcExpr::Ret(var("p"))),
+            )
+        };
+        validate_prog(vec![ret_p("f"), ret_p("g")]);
+    }
+
     /// A use that no binding in scope answers passes when it names a global, since a function or
     /// global value is referenceable by name from anywhere.
     #[test]
