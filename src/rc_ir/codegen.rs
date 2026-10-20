@@ -494,8 +494,8 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// binding. It fuses for the compiler-introduced ANF temporaries, which carry no debug name; in
     /// a debug build it does NOT fuse a binding that carries one, so a debugger can inspect that
     /// value — matching the current back end, which materializes every source `let` binding as a
-    /// scoped value. Genuine tail calls and tail recursion go through unnamed temporaries, so they still
-    /// fuse in every build.
+    /// scoped value. Genuine tail calls and tail recursion go through unnamed temporaries, so they
+    /// still fuse in every build.
     fn binding_fuses_into_return(&self, x: &RcVar, k: &RcExprNode, tail: bool) -> bool {
         tail && carries_var_to_return(k, &x.name) && !(self.has_di() && x.debug_name.is_some())
     }
