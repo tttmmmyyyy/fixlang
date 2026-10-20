@@ -159,12 +159,22 @@ pub fn constraints_to_string(
     preds: &[Predicate],
     eqs: &[Equality],
 ) -> String {
-    let constraints = kind_signs
-        .iter()
-        .map(|c| c.to_string())
-        .chain(preds.iter().map(|c| c.to_string()))
-        .chain(eqs.iter().map(|c| c.to_string()))
-        .collect::<Vec<_>>();
+    bracket_constraints(
+        kind_signs
+            .iter()
+            .map(|c| c.to_string())
+            .chain(preds.iter().map(|c| c.to_string()))
+            .chain(eqs.iter().map(|c| c.to_string()))
+            .collect(),
+    )
+}
+
+/// The constraints `constraints`, each already written out, joined in brackets and followed by a
+/// space, as they stand in front of a type. With no constraint, it is the empty string.
+///
+/// # Examples
+/// `["a : Eq", "Item it = a"]` becomes `[a : Eq, Item it = a] `.
+pub fn bracket_constraints(constraints: Vec<String>) -> String {
     if constraints.is_empty() {
         return String::new();
     }

@@ -3,6 +3,7 @@ use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::predicate::Predicate;
 use crate::ast::program::EndNode;
+use crate::ast::qual_type::bracket_constraints;
 use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::type_env::TypeEnv;
 use crate::ast::typedecl::Field;
@@ -2691,24 +2692,14 @@ impl Scheme {
         let ty = s.substitute_type(&self.ty);
 
         // Stringify.
-        let constraints_str = if preds.is_empty() && eqs.is_empty() {
-            "".to_string()
-        } else {
-            let mut constraint_strs = vec![];
-
-            let mut pred_strs = preds.iter().map(|p| p.to_string()).collect::<Vec<_>>();
-            pred_strs.sort();
-            pred_strs.dedup();
-            constraint_strs.extend(pred_strs);
-
-            let mut eq_strs = eqs.iter().map(|eq| eq.to_string()).collect::<Vec<_>>();
-            eq_strs.sort();
-            eq_strs.dedup();
-            constraint_strs.extend(eq_strs);
-
-            format!("[{}] ", constraint_strs.join(", "))
-        };
-        constraints_str + &ty.to_string()
+        let mut pred_strs = preds.iter().map(|p| p.to_string()).collect::<Vec<_>>();
+        pred_strs.sort();
+        pred_strs.dedup();
+        let mut eq_strs = eqs.iter().map(|eq| eq.to_string()).collect::<Vec<_>>();
+        eq_strs.sort();
+        eq_strs.dedup();
+        pred_strs.extend(eq_strs);
+        bracket_constraints(pred_strs) + &ty.to_string()
     }
 
     /// The scheme written out with its generalized variables renamed `a`, `b`, ... in the order
