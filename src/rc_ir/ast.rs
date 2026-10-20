@@ -26,7 +26,8 @@ pub struct RcVar {
     /// variable under this name so a debugger can inspect it. It is the source name of a variable
     /// the AST passes leave as written, and a `#v` name, numbered across the body, of one they
     /// introduce or rename apart from another of the same name. `None` for the intermediates
-    /// lowering introduces. Left out of the serialized form; see `divide_program::debug_information_digest`.
+    /// lowering introduces. Left out of the serialized form; see
+    /// `divide_program::debug_information_digest`.
     #[serde(skip)]
     pub debug_name: Option<Name>,
     /// Whether a reference-count operation on this value may skip the null check. Set for a non-empty
