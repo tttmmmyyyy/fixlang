@@ -14,8 +14,9 @@ use std::sync::Arc;
 /// `distinguisher`, which tells the copy apart from the pass's other copies of the same code. No
 /// lowered name ends in this shape, which is what keeps the names the suffix makes fresh.
 ///
-/// A tag is lowercase letters, and a distinguisher starts with anything else, so a suffix reads back
-/// as one tag and one distinguisher: two passes with different tags never make the same suffix.
+/// A tag is a run of lowercase letters, and a distinguisher is empty or starts with some other
+/// character. A suffix therefore splits into its tag and its distinguisher in one way only, so two
+/// passes with different tags never make the same suffix.
 pub(crate) fn copy_suffix(tag: &str, distinguisher: &str) -> String {
     assert!(
         !tag.is_empty() && tag.chars().all(|c| c.is_ascii_lowercase()),
