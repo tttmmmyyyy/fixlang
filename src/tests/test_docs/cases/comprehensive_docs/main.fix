@@ -52,6 +52,11 @@ impl [it : Iterator, Item it = a, a : ToString] MyIterHolder it : ToString {
     to_string = |h| h.@iter.map(to_string).join(", ");
 }
 
+// Implementation of MyTrait for MyIterHolder, whose elements are wrapped in a type constructor
+impl [f : * -> *, it : Iterator, Item it = f I64] MyIterHolder it : MyTrait {
+    my_method = |_| "MyIterHolder";
+}
+
 // A trait alias
 trait MyTraitAlias = ToString;
 

@@ -156,6 +156,10 @@ A trait alias inside namespace
 
 Implementation of InnerTrait for InnerStruct
 
+### impl `[f : *->*, it : Std::Iterator, Std::Iterator::Item it = f Std::I64] Main::MyIterHolder it : Main::MyTrait`
+
+Implementation of MyTrait for MyIterHolder, whose elements are wrapped in a type constructor
+
 ### impl `[it : Std::Iterator, a : Std::ToString, Std::Iterator::Item it = a] Main::MyIterHolder it : Std::ToString`
 
 Implementation of ToString for MyIterHolder, constraining the elements of the iterator
