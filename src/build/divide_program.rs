@@ -935,11 +935,12 @@ fn type_declarations_reached(
 ///
 /// A build that writes debug information compiles these into it, so they decide the code it
 /// generates. A build that writes none generates the same code whatever they are, and a digest
-/// reading them there would regenerate a unit for an edit that moves none of its code: a byte
-/// inserted ahead of the code moves its positions, and an edit reshaping a body renumbers the `#v`
-/// names the AST passes give that body's variables, which a lambda specialized into another unit
-/// carries along.
+/// reading them there would regenerate a unit for an edit that leaves its code unchanged: a byte
+/// inserted ahead of the code moves its positions, and an edit that reshapes a body renumbers the
+/// `#v` names the AST passes give that body's variables, names that a lambda specialized into
+/// another unit carries along.
 fn debug_information_digest(funcs: &[&RcFunc], globals: &[&RcGlobalInit]) -> u64 {
+    /// Feeds whether the source is known and, when it is, its file and byte range.
     fn note_source(source: &Option<Span>, hasher: &mut DefaultHasher) {
         source.is_some().hash(hasher);
         if let Some(span) = source {
@@ -948,10 +949,13 @@ fn debug_information_digest(funcs: &[&RcFunc], globals: &[&RcGlobalInit]) -> u64
             span.end.hash(hasher);
         }
     }
+    /// Feeds the variable's source and its debug name.
     fn note_var(var: &RcVar, hasher: &mut DefaultHasher) {
         note_source(&var.source, hasher);
         var.debug_name.hash(hasher);
     }
+    /// Feeds the source of each expression node of `body`, and the source and debug name of each
+    /// variable it binds.
     fn note_body(body: &RcExprNode, hasher: &mut DefaultHasher) {
         for_each_node(body, &mut |node| note_source(&node.source, hasher));
         for_each_var(body, &mut |var| note_var(var, hasher));
