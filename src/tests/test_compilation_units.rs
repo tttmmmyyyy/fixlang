@@ -257,7 +257,7 @@ fn test_a_unit_publishes_a_symbol_only_where_another_unit_names_it() {
 }
 
 /// A project of two modules: `Worker`, whose globals are compiled from `Std` alone, and `Main`,
-/// which calls into it. `argument` is what `Main` passes, and changing it is the edit.
+/// which calls into it. `argument` is what `Main` passes.
 fn write_two_module_project(dir: &Path, argument: i64) {
     fs::write(
         dir.join("fixproj.toml"),
