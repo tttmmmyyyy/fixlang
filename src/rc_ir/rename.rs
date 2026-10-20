@@ -1,8 +1,10 @@
-//! Fresh renaming of RC IR local variables for the passes that clone functions (`borrow`, and the
-//! specializing passes through `specialization`). Because RC IR names are globally unique, a clone must give every binder a fresh
-//! name so the clone's names do not collide with the original's. The single entry point,
-//! `fresh_rename_function`, clones a function's parameters, capture, and body this way; `pass_tag`
-//! distinguishes each cloning pass's fresh names from the others'.
+//! Fresh renaming of RC IR local variables for the passes that copy code: `borrow`, the specializing
+//! passes through `specialization`, and the case-of-case move of `simplify`. RC IR names are
+//! globally unique, so a copy gives every binder a fresh name, which it makes by appending a suffix
+//! to the binder's name. The caller chooses the suffix, and keeps the names unique by giving each
+//! copy of one binder a suffix of its own. The suffix is decided by what the copy is, never by how
+//! many copies the program made before it, so editing one function leaves the names in every other
+//! function as they were, and so does the code generated for them.
 
 use crate::ast::name::FullName;
 use crate::misc::{grow_stack, Map};
@@ -10,16 +12,14 @@ use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcRhs, RcVar};
 use std::sync::Arc;
 
 /// Clone a function's parameters, capture, and body, giving every bound variable (parameters,
-/// capture, `let` bindings, destructure fields, match-arm payloads) a fresh globally-unique name and
+/// capture, `let` bindings, destructure fields, match-arm payloads) its name followed by `suffix`, and
 /// rewriting every occurrence. Returns the renamed pieces together with the binder renaming, which
-/// callers use to remap side tables and to route recursive references. `pass_tag` distinguishes this
-/// cloning pass's fresh names from the others'.
+/// callers use to remap side tables and to route recursive references.
 pub(crate) fn fresh_rename_function(
     params: &[RcVar],
     cap: &Option<RcVar>,
     body: &RcExprNode,
-    pass_tag: &str,
-    counter: &mut u64,
+    suffix: &str,
 ) -> (
     Vec<RcVar>,
     Option<RcVar>,
@@ -28,25 +28,19 @@ pub(crate) fn fresh_rename_function(
 ) {
     let mut renaming: Map<FullName, FullName> = Map::default();
     for p in params.iter().chain(cap.iter()) {
-        assign_fresh_name(&p.name, pass_tag, &mut renaming, counter);
+        assign_fresh_name(&p.name, suffix, &mut renaming);
     }
-    assign_fresh_names_to_binders(body, pass_tag, &mut renaming, counter);
+    assign_fresh_names_to_binders(body, suffix, &mut renaming);
     let new_params = params.iter().map(|p| rename_var(p, &renaming)).collect();
     let new_cap = cap.as_ref().map(|c| rename_var(c, &renaming));
     let new_body = rename_expr(body, &renaming);
     (new_params, new_cap, new_body, renaming)
 }
 
-/// Assign `name` a fresh globally-unique name, suffixed with `pass_tag` and a counter.
-fn assign_fresh_name(
-    name: &FullName,
-    pass_tag: &str,
-    renaming: &mut Map<FullName, FullName>,
-    counter: &mut u64,
-) {
-    *counter += 1;
+/// Assign `name` the fresh name `name` followed by `suffix`.
+fn assign_fresh_name(name: &FullName, suffix: &str, renaming: &mut Map<FullName, FullName>) {
     let mut fresh = name.clone();
-    fresh.name = format!("{}#{}{}", fresh.name, pass_tag, counter);
+    fresh.name.push_str(suffix);
     // Names are unique within a function, so a second fresh name for one binder would merge two
     // variables of the clone into one.
     let previous = renaming.insert(name.clone(), fresh);
@@ -60,44 +54,42 @@ fn assign_fresh_name(
 /// Record a fresh name for every variable bound in a function body.
 fn assign_fresh_names_to_binders(
     node: &RcExprNode,
-    pass_tag: &str,
+    suffix: &str,
     renaming: &mut Map<FullName, FullName>,
-    counter: &mut u64,
 ) {
-    grow_stack(|| assign_fresh_names_to_binders_inner(node, pass_tag, renaming, counter))
+    grow_stack(|| assign_fresh_names_to_binders_inner(node, suffix, renaming))
 }
 
 /// Record the fresh name of every binder of one node, then descend into its continuation and arms.
 fn assign_fresh_names_to_binders_inner(
     node: &RcExprNode,
-    pass_tag: &str,
+    suffix: &str,
     renaming: &mut Map<FullName, FullName>,
-    counter: &mut u64,
 ) {
     match node.expr.as_ref() {
         RcExpr::Let(x, rhs, k) => {
-            assign_fresh_name(&x.name, pass_tag, renaming, counter);
+            assign_fresh_name(&x.name, suffix, renaming);
             // Every `RcRhs` variant is listed, so a new one that binds a name fails to compile here
             // instead of leaving that binder pointing at the original function's variable.
             match rhs {
                 RcRhs::Match(_, arms) => {
                     for arm in arms {
-                        assign_fresh_name(&arm.payload.name, pass_tag, renaming, counter);
-                        assign_fresh_names_to_binders(&arm.body, pass_tag, renaming, counter);
+                        assign_fresh_name(&arm.payload.name, suffix, renaming);
+                        assign_fresh_names_to_binders(&arm.body, suffix, renaming);
                     }
                 }
                 RcRhs::Var(_) | RcRhs::App(..) | RcRhs::Closure(..) | RcRhs::Builtin(..) => {}
             }
-            assign_fresh_names_to_binders(k, pass_tag, renaming, counter);
+            assign_fresh_names_to_binders(k, suffix, renaming);
         }
         RcExpr::Destructure(_, fields, _state, k) => {
             for (_, fv) in fields {
-                assign_fresh_name(&fv.name, pass_tag, renaming, counter);
+                assign_fresh_name(&fv.name, suffix, renaming);
             }
-            assign_fresh_names_to_binders(k, pass_tag, renaming, counter);
+            assign_fresh_names_to_binders(k, suffix, renaming);
         }
         RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) | RcExpr::Eval(_, k) => {
-            assign_fresh_names_to_binders(k, pass_tag, renaming, counter)
+            assign_fresh_names_to_binders(k, suffix, renaming)
         }
         RcExpr::Ret(_) => {}
     }
@@ -201,11 +193,10 @@ pub(crate) fn substitute_expr(node: &RcExprNode, subst: &Map<FullName, FullName>
     rename_expr(node, subst)
 }
 
-/// A deep clone of an arbitrary expression with every bound variable given a fresh globally-unique
-/// name. Free variables — those bound outside `node` — are left unchanged. `pass_tag` distinguishes
-/// this clone's fresh names from the ones other passes mint.
-pub(crate) fn clone_fresh(node: &RcExprNode, pass_tag: &str, counter: &mut u64) -> RcExprNode {
+/// A deep clone of an arbitrary expression with every bound variable given its name followed by
+/// `suffix`. Free variables — those bound outside `node` — are left unchanged.
+pub(crate) fn clone_fresh(node: &RcExprNode, suffix: &str) -> RcExprNode {
     let mut rename: Map<FullName, FullName> = Map::default();
-    assign_fresh_names_to_binders(node, pass_tag, &mut rename, counter);
+    assign_fresh_names_to_binders(node, suffix, &mut rename);
     rename_expr(node, &rename)
 }

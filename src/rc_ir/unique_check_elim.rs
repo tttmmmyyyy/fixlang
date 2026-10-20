@@ -32,12 +32,20 @@ use crate::rc_ir::ast::{
 use crate::rc_ir::provenance::{
     analyze_program, leaf_is_unique, resolve, ProvenanceAnalysis, Uniqueness,
 };
-use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneRegistry};
+use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneKey, CloneRegistry};
 use std::sync::Arc;
 
 /// What identifies one clone of a function: the uniqueness of each of its parameters. A closure
 /// capture is not part of it — `input_uniqueness` supplies the capture's, which is always dynamic.
 type SpecializationKey = Vec<Uniqueness>;
+
+/// A clone's key holds one `Uniqueness` per parameter of its function, each of that parameter's
+/// shape, so the keys of one function spell strings that differ wherever the keys do.
+impl CloneKey for SpecializationKey {
+    fn spelling(&self) -> String {
+        self.iter().map(Uniqueness::spelling).collect()
+    }
+}
 
 /// Specialize `prog` and eliminate the unique checks each specialization makes provable.
 pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {

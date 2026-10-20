@@ -254,7 +254,6 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
     // The owned parameter units of every output version, keyed by the version's own parameter names:
     // an original (`f_own`) owns all of them, a borrow clone (`f_borrow`) owns the inferred subset.
     let mut owned_units: Set<VarPath> = Set::default();
-    let mut rename_counter: u64 = 0;
     let mut clones: Vec<(FuncRef, RcFunc, Map<FullName, FullName>)> = vec![];
     for func in prog.funcs.values() {
         // `f_own`: every parameter and capture unit is owned.
@@ -262,7 +261,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
         // `f_borrow`: a fresh clone whose owned units are the inferred owned leaves, each truncated
         // to its unit.
         if let Some(borrow_version) = borrow_versions.get(&func.name) {
-            let (clone, rename) = clone_func(func, borrow_version.clone(), &mut rename_counter);
+            let (clone, rename) = clone_func(func, borrow_version.clone());
             for p in &func.params {
                 for leaf in boxed_leaf_paths(&p.ty, type_env) {
                     if owned_leaves.owns(&p.name, &leaf) {
@@ -362,9 +361,8 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
 
 /// Check that the names a clone mints are names the program does not already bind.
 ///
-/// `fresh_rename_function` makes a name by appending its pass tag and a counter, reading none of the
-/// program's names, so the name it makes is new only because no binder the earlier passes mint ends
-/// in that shape. Nothing establishes that, and a collision would give two bindings one name, which
+/// `fresh_rename_function` makes a name by appending a suffix, reading none of the program's names,
+/// so the name it makes is new only because no binder the earlier passes mint ends in that shape. Nothing establishes that, and a collision would give two bindings one name, which
 /// is what `origin` follows a value back to: cancellation would then pair a retain of one with a
 /// release of the other and delete both.
 ///
@@ -418,11 +416,14 @@ pub fn param_ownership_shapes(
     shapes
 }
 
-/// The name of a function's borrow version: its name with a `#borrow` suffix. No lowered name ends in
-/// `#borrow`, so this stays globally unique.
+/// The suffix a function's borrow version adds to the function's name and to the name of each of its
+/// variables. No lowered name ends in it.
+const BORROW_CLONE_SUFFIX: &str = "#borrow";
+
+/// The name of a function's borrow version: its name followed by `BORROW_CLONE_SUFFIX`.
 fn borrow_funcref(name: &FuncRef) -> FuncRef {
     let mut borrow_name = name.name.clone();
-    borrow_name.name.push_str("#borrow");
+    borrow_name.name.push_str(BORROW_CLONE_SUFFIX);
     FuncRef { name: borrow_name }
 }
 
@@ -758,17 +759,14 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
 
 // --- cloning a function with fresh names ---
 
-/// Clone a function as its borrow version: mint a fresh name for every bound variable (parameters,
-/// capture, `let` bindings, destructure fields, match-arm payloads) and rewrite all occurrences,
-/// keeping global name uniqueness. References to top-level functions stay free here, for routing to
-/// retarget. Returns the clone and the binder renaming.
-fn clone_func(
-    func: &RcFunc,
-    new_ref: FuncRef,
-    rename_counter: &mut u64,
-) -> (RcFunc, Map<FullName, FullName>) {
+/// Clone a function as its borrow version: give every bound variable (parameters, capture, `let`
+/// bindings, destructure fields, match-arm payloads) its name followed by `BORROW_CLONE_SUFFIX`, and
+/// rewrite all occurrences. A function has at most one borrow version, and its variables are bound
+/// nowhere else, so the names stay globally unique. References to top-level functions stay free here, for routing to retarget. Returns the
+/// clone and the binder renaming.
+fn clone_func(func: &RcFunc, new_ref: FuncRef) -> (RcFunc, Map<FullName, FullName>) {
     let (params, capture, body, rename) =
-        fresh_rename_function(&func.params, &func.capture, &func.body, "b", rename_counter);
+        fresh_rename_function(&func.params, &func.capture, &func.body, BORROW_CLONE_SUFFIX);
     (
         RcFunc {
             name: new_ref,

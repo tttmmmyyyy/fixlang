@@ -276,6 +276,16 @@ impl Uniqueness {
         self.0.at(path)
     }
 
+    /// The verdicts written one letter per boxed leaf, `U` for `Unique` and `D` for `Dynamic`, in
+    /// canonical path order. Uniquenesses of one shape spell strings of one length, which differ
+    /// wherever the verdicts do.
+    pub fn spelling(&self) -> String {
+        self.0.spell(|verdict| match verdict {
+            SharingVerdict::Unique => 'U',
+            SharingVerdict::Dynamic => 'D',
+        })
+    }
+
     /// The uniqueness shape of a value of type `ty` whose every boxed leaf is `Dynamic` — the input
     /// uniqueness of a function whose caller supplies no static information (an entry point, an
     /// indirectly reached function, or the baseline version of any function).

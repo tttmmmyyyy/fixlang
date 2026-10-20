@@ -494,6 +494,46 @@ fn test_a_comment_added_to_a_module_regenerates_no_unit() {
     );
 }
 
+/// An edit that reshapes the body of one function regenerates the compilation units that a change of
+/// a literal in that body regenerates.
+///
+/// Both edits change the code of `Worker::scaled` alone. Reshaping the body gives it another set of
+/// local variables, so the passes that copy code name another set of copies there; the names they
+/// give the copies of every other function stay as they were, and so does the code of every unit
+/// that holds none of `scaled`'s code.
+#[test]
+fn test_an_edit_reshaping_a_body_regenerates_what_an_edit_of_a_literal_does() {
+    const CU_SIZE: &str = "2";
+    const SCALED: &str = "(n - i) * 7 + i * i";
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let dir = temp_dir.path();
+
+    write_two_module_project(dir, 120);
+    let worker = dir.join("worker.fix");
+    let original = fs::read_to_string(&worker).expect("Failed to read the worker module");
+    assert!(
+        original.contains(SCALED),
+        "the worker module should define `scaled` as the edits below expect"
+    );
+    let (unit_count, _) = build_at_max_in(dir, CU_SIZE);
+
+    // Build the program with `SCALED` replaced by `edit`, and return how many units it generated.
+    // The object files of the first build stay where they are, so each edit is measured against it.
+    let regenerated_by = |edit: &str| {
+        fs::write(&worker, original.replace(SCALED, edit))
+            .expect("Failed to write the worker module");
+        build_at_max_in(dir, CU_SIZE).0
+    };
+    let by_a_literal = regenerated_by("(n - i) * 8 + i * i");
+    let by_a_reshape = regenerated_by("(n - i) * 7 + i * i * 1");
+    assert_eq!(
+        by_a_reshape, by_a_literal,
+        "reshaping the body of `scaled` should regenerate the units that changing a literal in it \
+         does ({} of {})",
+        by_a_literal, unit_count
+    );
+}
+
 /// A project of three modules: `Types`, which declares the types; `Lib`, which reads the second
 /// field of one of them; and `Main`, which builds a value and prints what `Lib` reads out of it.
 ///
