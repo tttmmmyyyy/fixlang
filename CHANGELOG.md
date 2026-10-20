@@ -68,7 +68,7 @@
 - #780: A failed download in `install.sh` now leaves `~/.local/bin/fix` as it was. It used to leave an empty or partly written `fix` there, and later runs then took it for an installed one and installed nothing. `install.sh` can now also upgrade `fix` while it is running, for example as your editor's language server.
 - #341, #811: The compiler now takes the widths of the C numeric types, such as `CLong`, from the target it builds for. It used to measure them on the first build, save them in `.fixlang/c_types.json` and use them from then on, so a project directory shared with a machine whose C types differ silently kept that machine's widths. The file is no longer read and can be deleted.
 - #813: An array literal of tens of thousands of numbers now compiles in seconds. The compiler took time that grew with the square of the number of elements of an array literal: a literal of 13,071 numbers took 25 seconds to compile.
-- #887: `fix docs` now writes the constraints on associated types, such as `Item it = a`, in the heading of a trait implementation and in the type of a trait member, as in `impl [it : Iterator, a : Format, Item it = a] Joined it : Format`. It used to leave them out. The names of implementations the language server lists as symbols now carry them too.
+- #887: `fix docs` now writes the constraints on associated types, such as `Item it = a`, in the heading of a trait implementation and in the type of a trait member, as in `impl [it : Iterator, a : Format, Item it = a] Joined it : Format`. It used to leave them out. The language server's workspace symbol search now shows them in the names of trait implementations too.
 
 ## [1.5.0] - 2026-09-27
 

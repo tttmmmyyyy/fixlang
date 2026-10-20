@@ -50,8 +50,8 @@ impl QualType {
         None
     }
 
-    /// The signature as a source line writes it: the constraints in brackets, as
-    /// `constraints_to_string` renders them, then the type.
+    /// The signature as a source line writes it: the kind signatures, the trait constraints and the
+    /// equality constraints in brackets, then the type.
     pub fn to_string(&self) -> String {
         constraints_to_string(&self.kind_signs, &self.preds, &self.eqs) + &self.ty.to_string()
     }

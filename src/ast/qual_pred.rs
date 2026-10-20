@@ -68,8 +68,8 @@ impl QualPred {
         }
     }
 
-    /// Renders this qualified predicate the way it is written in source: the constraints in
-    /// brackets, as `constraints_to_string` renders them, then the head.
+    /// Renders this qualified predicate the way it is written in source: the kind constraints, the
+    /// trait constraints and the equality constraints in brackets, then the head.
     ///
     /// # Examples
     /// The trait constraint `a : Eq` with the head `Array a : Eq` renders as
