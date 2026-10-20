@@ -20,6 +20,16 @@ Type: `Std::String`
 
 A value inside namespace
 
+### namespace Main::MyAppendElems
+
+#### my_append_elems
+
+Type: `[a : Std::ToString, c : Main::MyAppendElems, it : Std::Iterator, Std::Iterator::Item it = a] it -> c -> Std::String`
+
+Trait member of `Main::MyAppendElems`
+
+Writes the elements of the iterator after the value
+
 ### namespace Main::MyTrait
 
 #### my_method
@@ -33,6 +43,16 @@ Converts the value to a descriptive string
 ## Types and aliases
 
 ### namespace Main
+
+#### MyIterHolder
+
+Defined as: `type MyIterHolder it = unbox struct { ...fields... }`
+
+A struct holding an iterator
+
+##### field `iter`
+
+Type: `it`
 
 #### MyStruct
 
@@ -92,6 +112,16 @@ Type: `Std::I64`
 
 ### namespace Main
 
+#### trait `c : MyAppendElems`
+
+A trait whose member constrains an associated type
+
+##### method `my_append_elems`
+
+Type: `[it : Std::Iterator, a : Std::ToString, Std::Iterator::Item it = a] it -> c -> Std::String`
+
+Writes the elements of the iterator after the value
+
 #### trait `a : MyTrait`
 
 A trait with one member
@@ -125,6 +155,14 @@ A trait alias inside namespace
 ### impl `Main::Inner::InnerStruct : Main::Inner::InnerTrait`
 
 Implementation of InnerTrait for InnerStruct
+
+### impl `[f : *->*, it : Std::Iterator, Std::Iterator::Item it = f Std::I64] Main::MyIterHolder it : Main::MyTrait`
+
+Implementation of MyTrait for MyIterHolder, whose elements are wrapped in a type constructor
+
+### impl `[it : Std::Iterator, a : Std::ToString, Std::Iterator::Item it = a] Main::MyIterHolder it : Std::ToString`
+
+Implementation of ToString for MyIterHolder, constraining the elements of the iterator
 
 ### impl `Main::MyStruct : Main::MyTrait`
 

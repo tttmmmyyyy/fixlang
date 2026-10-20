@@ -36,6 +36,27 @@ impl MyStruct : MyTrait {
     my_method = |s| "MyStruct with field: " + s.@field.to_string;
 }
 
+// A trait whose member constrains an associated type
+trait c : MyAppendElems {
+    // Writes the elements of the iterator after the value
+    my_append_elems : [it : Iterator, Item it = a, a : ToString] it -> c -> String;
+}
+
+// A struct holding an iterator
+type MyIterHolder it = struct {
+    iter: it
+};
+
+// Implementation of ToString for MyIterHolder, constraining the elements of the iterator
+impl [it : Iterator, Item it = a, a : ToString] MyIterHolder it : ToString {
+    to_string = |h| h.@iter.map(to_string).join(", ");
+}
+
+// Implementation of MyTrait for MyIterHolder, whose elements are wrapped in a type constructor
+impl [f : * -> *, it : Iterator, Item it = f I64] MyIterHolder it : MyTrait {
+    my_method = |_| "MyIterHolder";
+}
+
 // A trait alias
 trait MyTraitAlias = ToString;
 

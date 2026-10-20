@@ -50,22 +50,10 @@ impl QualType {
         None
     }
 
-    /// The signature as a source line writes it: the kind annotations and the trait constraints in
-    /// brackets, then the type.
+    /// The signature as a source line writes it: the kind signatures, the trait constraints and the
+    /// equality constraints in brackets, then the type.
     pub fn to_string(&self) -> String {
-        let mut s = String::default();
-        if self.preds.len() > 0 || self.kind_signs.len() > 0 {
-            s += "[";
-        }
-        let mut preds = vec![];
-        preds.extend(self.kind_signs.iter().map(|p| p.to_string()));
-        preds.extend(self.preds.iter().map(|p| p.to_string()));
-        s += &preds.join(", ");
-        if self.preds.len() > 0 || self.kind_signs.len() > 0 {
-            s += "] ";
-        }
-        s += &self.ty.to_string();
-        s
+        constraints_to_string(&self.kind_signs, &self.preds, &self.eqs) + &self.ty.to_string()
     }
 
     /// Give every trait, type and associated type named in the constraints and in the type its full
@@ -157,4 +145,38 @@ impl QualType {
         }
         None
     }
+}
+
+/// The constraints written in front of a type or a predicate, as a source writes them: the kind
+/// signatures, the trait constraints and the equality constraints, in that order, in brackets and
+/// followed by a space. With no constraint at all, it is the empty string.
+///
+/// # Examples
+/// The trait constraints `it : Iterator` and `a : ToString` with the equality constraint
+/// `Item it = a` render as `[it : Iterator, a : ToString, Item it = a] `.
+pub fn constraints_to_string(
+    kind_signs: &[KindSignature],
+    preds: &[Predicate],
+    eqs: &[Equality],
+) -> String {
+    bracket_constraints(
+        kind_signs
+            .iter()
+            .map(|c| c.to_string())
+            .chain(preds.iter().map(|c| c.to_string()))
+            .chain(eqs.iter().map(|c| c.to_string()))
+            .collect(),
+    )
+}
+
+/// The constraints `constraints`, each already written out, joined in brackets and followed by a
+/// space, as they stand in front of a type. With no constraint, it is the empty string.
+///
+/// # Examples
+/// `["a : Eq", "Item it = a"]` becomes `[a : Eq, Item it = a] `.
+pub fn bracket_constraints(constraints: Vec<String>) -> String {
+    if constraints.is_empty() {
+        return String::new();
+    }
+    format!("[{}] ", constraints.join(", "))
 }

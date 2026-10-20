@@ -8808,7 +8808,7 @@ Writes the shortest decimal text that reads back as the same number, as `to_stri
 
 ### impl `Std::FFI::Destructor a : Std::Boxed`
 
-### impl `[it : Std::Iterator, a : Std::Format] Std::Format::Joined it : Std::Format`
+### impl `[it : Std::Iterator, a : Std::Format, Std::Iterator::Item it = a] Std::Format::Joined it : Std::Format`
 
 Writes each element with `write_text`, and calls `flush_if_full` after it.
 
@@ -9252,11 +9252,11 @@ Writes each element with `write_text`, and calls `flush_if_full` after it.
 
 `format` runs in `Identity`, which keeps the whole text.
 
-### impl `[i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::AppendIterator i1 i2 : Std::Iterator`
+### impl `[i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = a] Std::Iterator::AppendIterator i1 i2 : Std::Iterator`
 
 ### impl `Std::Iterator::ArrayIterator a : Std::Iterator`
 
-### impl `[i : Std::Iterator] Std::Iterator::ConsIterator i a : Std::Iterator`
+### impl `[i : Std::Iterator, Std::Iterator::Item i = a] Std::Iterator::ConsIterator i a : Std::Iterator`
 
 ### impl `Std::Iterator::CountUpIterator : Std::Iterator`
 
@@ -9280,29 +9280,29 @@ Creates an empty dynamic iterator.
 
 ### impl `[it : Std::Iterator] Std::Iterator::EnumerateIterator it : Std::Iterator`
 
-### impl `[i : Std::Iterator] Std::Iterator::FilterIterator i a : Std::Iterator`
+### impl `[i : Std::Iterator, Std::Iterator::Item i = a] Std::Iterator::FilterIterator i a : Std::Iterator`
 
-### impl `[i : Std::Iterator] Std::Iterator::FilterMapIterator i a b : Std::Iterator`
+### impl `[i : Std::Iterator, Std::Iterator::Item i = a] Std::Iterator::FilterMapIterator i a b : Std::Iterator`
 
-### impl `[i2 : Std::Iterator, i1 : Std::Iterator] Std::Iterator::FlattenIterator i2 i1 : Std::Iterator`
+### impl `[i2 : Std::Iterator, i1 : Std::Iterator, Std::Iterator::Item i2 = i1] Std::Iterator::FlattenIterator i2 i1 : Std::Iterator`
 
-### impl `[i : Std::Iterator] Std::Iterator::IntersperseIterator i a : Std::Iterator`
+### impl `[i : Std::Iterator, Std::Iterator::Item i = a] Std::Iterator::IntersperseIterator i a : Std::Iterator`
 
-### impl `[i : Std::Iterator] Std::Iterator::MapIterator i a b : Std::Iterator`
+### impl `[i : Std::Iterator, Std::Iterator::Item i = a] Std::Iterator::MapIterator i a b : Std::Iterator`
 
-### impl `[i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::ProductIterator i1 i2 a b : Std::Iterator`
+### impl `[i1 : Std::Iterator, i2 : Std::Iterator, Std::Iterator::Item i1 = a, Std::Iterator::Item i2 = b] Std::Iterator::ProductIterator i1 i2 a b : Std::Iterator`
 
 ### impl `Std::Iterator::RangeIterator : Std::Iterator`
 
 ### impl `Std::Iterator::RangeStepIterator : Std::Iterator`
 
-### impl `[i : Std::Iterator] Std::Iterator::ReverseIterator i a : Std::Iterator`
+### impl `[i : Std::Iterator, Std::Iterator::Item i = a] Std::Iterator::ReverseIterator i a : Std::Iterator`
 
 ### impl `Std::Iterator::StateIterator s a : Std::Iterator`
 
 ### impl `[i : Std::Iterator] Std::Iterator::TakeIterator i : Std::Iterator`
 
-### impl `[i : Std::Iterator] Std::Iterator::TakeWhileIterator i a : Std::Iterator`
+### impl `[i : Std::Iterator, Std::Iterator::Item i = a] Std::Iterator::TakeWhileIterator i a : Std::Iterator`
 
 ### impl `[i1 : Std::Iterator, i2 : Std::Iterator] Std::Iterator::ZipIterator i1 i2 : Std::Iterator`
 
