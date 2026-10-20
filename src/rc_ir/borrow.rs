@@ -254,7 +254,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
     // The owned parameter units of every output version, keyed by the version's own parameter names:
     // an original (`f_own`) owns all of them, a borrow clone (`f_borrow`) owns the inferred subset.
     let mut owned_units: Set<VarPath> = Set::default();
-    let mut clones: Vec<(FuncRef, RcFunc, Map<FullName, FullName>)> = vec![];
+    let mut clones: Vec<(FuncRef, RcFunc)> = vec![];
     for func in prog.funcs.values() {
         // `f_own`: every parameter and capture unit is owned.
         owned_units.extend(param_capture_units(func, type_env));
@@ -270,7 +270,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
                     }
                 }
             }
-            clones.push((borrow_version.clone(), clone, rename));
+            clones.push((borrow_version.clone(), clone));
         }
     }
 
@@ -280,7 +280,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
     for func in prog.funcs.values() {
         callee_params.insert(func.name.clone(), param_names_and_types(func));
     }
-    for (borrow_version, clone, _) in &clones {
+    for (borrow_version, clone) in &clones {
         callee_params.insert(borrow_version.clone(), param_names_and_types(clone));
     }
 
@@ -299,7 +299,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
         f_own.body = ctx.rewrite(&f_own.body);
         funcs.insert(f_own.name.clone(), f_own);
     }
-    for (borrow_version, mut clone, _) in clones {
+    for (borrow_version, mut clone) in clones {
         let ctx = RewriteCtx::new(
             &clone,
             true,
