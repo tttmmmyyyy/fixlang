@@ -1,10 +1,9 @@
-//! Fresh renaming of RC IR local variables for the passes that copy code: `borrow`, the specializing
-//! passes through `specialization`, and the case-of-case move of `simplify`. RC IR names are
-//! globally unique, so a copy gives every binder a fresh name, which it makes by appending a suffix
-//! to the binder's name. The caller chooses the suffix, and keeps the names unique by giving each
-//! copy of one binder a suffix of its own. The suffix is decided by what the copy is, never by how
-//! many copies the program made before it, so editing one function leaves the names in every other
-//! function as they were, and so does the code generated for them.
+//! Fresh renaming of RC IR local variables for the passes that copy code. RC IR names are globally
+//! unique, so a copy gives every binder a fresh name, which it makes by appending a suffix to the
+//! binder's name. The caller chooses the suffix, and keeps the names unique by giving each copy of
+//! one binder a suffix of its own. The suffix depends only on the function the copy belongs to and
+//! on what the copy is, so editing one function leaves the names in every other function, and the
+//! code generated for them, as they were.
 
 use crate::ast::name::FullName;
 use crate::misc::{grow_stack, Map};

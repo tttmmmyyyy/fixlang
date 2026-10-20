@@ -362,9 +362,10 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
 /// Check that the names a clone mints are names the program does not already bind.
 ///
 /// `fresh_rename_function` makes a name by appending a suffix, reading none of the program's names,
-/// so the name it makes is new only because no binder the earlier passes mint ends in that shape. Nothing establishes that, and a collision would give two bindings one name, which
-/// is what `origin` follows a value back to: cancellation would then pair a retain of one with a
-/// release of the other and delete both.
+/// so the name it makes is new only because no binder the earlier passes mint ends in that shape.
+/// Nothing establishes that, and a collision would give two bindings one name, which is what
+/// `origin` follows a value back to: cancellation would then pair a retain of one with a release of
+/// the other and delete both.
 ///
 /// Walking every binder costs a pass over the program, so this runs where the test suite runs it.
 fn check_clone_names_are_fresh<'a>(
@@ -762,8 +763,8 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
 /// Clone a function as its borrow version: give every bound variable (parameters, capture, `let`
 /// bindings, destructure fields, match-arm payloads) its name followed by `BORROW_CLONE_SUFFIX`, and
 /// rewrite all occurrences. A function has at most one borrow version, and its variables are bound
-/// nowhere else, so the names stay globally unique. References to top-level functions stay free here, for routing to retarget. Returns the
-/// clone and the binder renaming.
+/// nowhere else, so the names stay globally unique. References to top-level functions stay free
+/// here, for routing to retarget. Returns the clone and the binder renaming.
 fn clone_func(func: &RcFunc, new_ref: FuncRef) -> (RcFunc, Map<FullName, FullName>) {
     let (params, capture, body, rename) =
         fresh_rename_function(&func.params, &func.capture, &func.body, BORROW_CLONE_SUFFIX);
