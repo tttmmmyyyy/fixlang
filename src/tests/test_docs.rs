@@ -344,9 +344,11 @@ mod integration_tests {
         );
     }
 
-    /// The document `fix docs` generates for a project exercising structs, unions, traits and type
-    /// aliases matches `expected_docs/Main.md` character for character, so a change in how any of
-    /// those is rendered shows up as a difference against the file the repository carries.
+    /// The document `fix docs` generates for a project exercising structs, unions, traits, type
+    /// aliases, and a trait member and a trait implementation constrained by an equality on an
+    /// associated type, matches `expected_docs/Main.md` character for character, so a change in
+    /// how any of those is rendered shows up as a difference against the file the repository
+    /// carries.
     #[test]
     fn test_docs_comprehensive_output() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");

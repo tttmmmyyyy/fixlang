@@ -1,6 +1,7 @@
 use crate::ast::equality::Equality;
 use crate::ast::predicate::Predicate;
 use crate::ast::program::EndNode;
+use crate::ast::qual_type::constraints_to_string;
 use crate::ast::traits::KindSignature;
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TyVar;
@@ -67,27 +68,19 @@ impl QualPred {
         }
     }
 
-    /// Renders this qualified predicate the way it is written in source: the kind constraints and
-    /// the trait constraints in `[...]`, then the head.
+    /// Renders this qualified predicate the way it is written in source: the constraints in
+    /// brackets, as `constraints_to_string` renders them, then the head.
     ///
     /// # Examples
     /// The trait constraint `a : Eq` with the head `Array a : Eq` renders as
-    /// `[a : Eq] Array a : Eq`, and a head carrying no kind or trait constraint renders alone, as
+    /// `[a : Eq] Array a : Eq`, and a head carrying no constraint renders alone, as
     /// `Array I64 : Eq`.
     pub fn to_string(&self) -> String {
-        let mut s = String::default();
-        if self.pred_constraints.len() > 0 || self.kind_constraints.len() > 0 {
-            s += "[";
-        }
-        let mut constraints = vec![];
-        constraints.extend(self.kind_constraints.iter().map(|c| c.to_string()));
-        constraints.extend(self.pred_constraints.iter().map(|c| c.to_string()));
-        s += &constraints.join(", ");
-        if self.pred_constraints.len() > 0 || self.kind_constraints.len() > 0 {
-            s += "] ";
-        }
-        s += &self.predicate.to_string();
-        s
+        constraints_to_string(
+            &self.kind_constraints,
+            &self.pred_constraints,
+            &self.eq_constraints,
+        ) + &self.predicate.to_string()
     }
 
     /// Gives the names in the constraints and in the head the full names `ctx` resolves them to,
