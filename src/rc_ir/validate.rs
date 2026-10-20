@@ -533,17 +533,23 @@ impl<'a, 'b> Validator<'a, 'b> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{validate, Validator};
+    use crate::ast::name::FullName;
+    use crate::ast::type_env::TypeEnv;
     use crate::ast::typedecl::Field;
     use crate::ast::types::{
         kind_star, tycon, type_fun, type_funptr, type_tyapp, type_tycon, TyCon, TyConInfo,
-        TyConVariant,
+        TyConVariant, TypeNode,
     };
+    use crate::fixstd::builtin::CaptureProjectOp;
     use crate::fixstd::builtin::{
         bulitin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty, make_ptr_ty,
         NullPtrLitOp,
     };
+    use crate::misc::{Map, Set};
+    use crate::rc_ir::ast::{FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar};
     use crate::rc_ir::ast::{MatchArm, RcState};
+    use std::sync::Arc;
 
     /// A type environment holding the built-in type constructors, which a check consults to tell a
     /// boxed type from an unboxed one, and `Test::Pair`, an unboxed struct of an `Array I64` and an
