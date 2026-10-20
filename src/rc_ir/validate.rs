@@ -6,10 +6,10 @@
 //! produced it, on any input. That closes a gap the runtime checks leave: valgrind and a uniqueness
 //! assertion need a triggering input and reachable code, whereas this is static and total.
 //!
-//! It checks the structural invariants of the RC IR: every bound name is bound once in the whole
-//! program (no shadowing, and no name shared by two functions), every variable use resolves to a binding in scope, or to a global — a
-//! function or a global value, both referenceable by name (a direct call names its callee by that
-//! name) — every `Retain`/`Release` names one reference-counting unit of its variable; a function
+//! It checks the structural invariants of the RC IR: every name is bound once in the whole program
+//! (no shadowing, and no name shared by two functions or globals); every variable use resolves to a
+//! binding in scope, or to a global — a function or a global value, both referenceable by name (a
+//! direct call names its callee by that name); every `Retain`/`Release` names one reference-counting unit of its variable; a function
 //! carries a capture parameter exactly for the closure ABI; every match has at least one arm, with
 //! any catch-all arm last; a `Builtin` operation's embedded operand names match its argument list;
 //! a closure value stores the capture layout its target function projects; and a `Destructure` of an
@@ -209,6 +209,10 @@ struct Validator<'a, 'b> {
 impl<'a, 'b> Validator<'a, 'b> {
     /// A validator of one function body or global initializer, which `location` names in a failure
     /// message.
+    ///
+    /// # Arguments
+    /// * `bound_in` — the names the bodies checked before this one bind, each with the function or
+    ///   global that binds it. The validator adds this body's bindings to it.
     fn new(
         stage: &'a str,
         globals: &'a Set<FullName>,
