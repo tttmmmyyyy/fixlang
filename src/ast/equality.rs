@@ -159,6 +159,7 @@ impl Equality {
         Ok(())
     }
 
+    /// The equality as a source writes it: `Item it = a`.
     pub fn to_string(&self) -> String {
         format!("{} = {}", self.lhs().to_string(), self.value.to_string())
     }
