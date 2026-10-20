@@ -103,8 +103,9 @@ impl<K: CloneKey> CloneRegistry<K> {
         let previous = self.clone_suffixes.insert(nref.clone(), suffix);
         assert!(
             previous.is_none(),
-            "two keys of `{}` spell the same clone name",
-            fref.name.to_string()
+            "two keys of `{}` spell the same clone name `{}`",
+            fref.name.to_string(),
+            nref.name.to_string()
         );
         self.clone_names
             .insert((fref.clone(), key.clone()), nref.clone());
