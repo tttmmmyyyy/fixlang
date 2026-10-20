@@ -61,9 +61,8 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
 
     // Keep every function's all-`Dynamic` version: this pass reads no root set, so any function may
     // be the one called from outside. Specialization adds the more specific clones on top.
-    let frefs: Vec<FuncRef> = prog.funcs.keys().cloned().collect();
-    for fref in &frefs {
-        let ck = spec.canonical_key(fref);
+    for (fref, func) in prog.funcs.iter() {
+        let ck = spec.canonical_key(func);
         spec.clones.keep_canonical(fref, ck);
     }
     // A global initializer has no parameters, so its body resolves against no inputs.
@@ -115,14 +114,9 @@ struct Specializer<'a> {
 }
 
 impl<'a> Specializer<'a> {
-    /// The all-`Dynamic` key of a function: nothing is known about its inputs' uniqueness. The clone
-    /// on this key keeps the original name.
-    fn canonical_key(&self, fref: &FuncRef) -> SpecializationKey {
-        self.canonical_key_of(&self.prog.funcs[fref])
-    }
-
-    /// The all-`Dynamic` key built from a function's parameter types.
-    fn canonical_key_of(&self, func: &RcFunc) -> SpecializationKey {
+    /// The all-`Dynamic` key of a function, built from its parameter types: nothing is known about
+    /// its inputs' uniqueness. The clone on this key keeps the original name.
+    fn canonical_key(&self, func: &RcFunc) -> SpecializationKey {
         func.params
             .iter()
             .map(|p| Uniqueness::all_dynamic(&p.ty, self.type_env))
