@@ -952,6 +952,10 @@ fn debug_information(funcs: &[&RcFunc], globals: &[&RcGlobalInit]) -> u64 {
         note_source(&var.source, hasher);
         var.debug_name.hash(hasher);
     }
+    fn note_body(body: &RcExprNode, hasher: &mut DefaultHasher) {
+        for_each_node(body, &mut |node| note_source(&node.source, hasher));
+        for_each_var(body, &mut |var| note_var(var, hasher));
+    }
     let mut hasher = DefaultHasher::new();
     for func in funcs {
         note_source(&func.source, &mut hasher);
@@ -961,16 +965,10 @@ fn debug_information(funcs: &[&RcFunc], globals: &[&RcGlobalInit]) -> u64 {
         if let Some(capture) = &func.capture {
             note_var(capture, &mut hasher);
         }
-        for_each_node(&func.body, &mut |node| {
-            note_source(&node.source, &mut hasher)
-        });
-        for_each_var(&func.body, &mut |var| note_var(var, &mut hasher));
+        note_body(&func.body, &mut hasher);
     }
     for global in globals {
-        for_each_node(&global.init, &mut |node| {
-            note_source(&node.source, &mut hasher)
-        });
-        for_each_var(&global.init, &mut |var| note_var(var, &mut hasher));
+        note_body(&global.init, &mut hasher);
     }
     hasher.finish()
 }
