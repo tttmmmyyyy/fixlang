@@ -38,7 +38,7 @@ use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp};
 use crate::misc::{grow_stack, Map};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
-use crate::rc_ir::rename::{clone_fresh, substitute_expr};
+use crate::rc_ir::rename::{clone_fresh, copy_suffix, substitute_expr};
 use std::sync::Arc;
 
 /// The tag on the fresh names the case-of-case move mints, keeping them distinct from other passes'.
@@ -301,7 +301,7 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
             // Fresh binders per arm, so an outer arm two inner arms reach does not put one name in
             // two places.
             *counter += 1;
-            let moved = clone_fresh(&outer.body, &format!("#{}{}", PASS_TAG, counter));
+            let moved = clone_fresh(&outer.body, &copy_suffix(PASS_TAG, &counter.to_string()));
             substitute_expr(&moved, &single_subst(&outer.payload.name, &operand.name))
         });
         new_arms.push(arm.with_body(body));

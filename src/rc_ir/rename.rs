@@ -10,6 +10,13 @@ use crate::misc::{grow_stack, Map};
 use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcRhs, RcVar};
 use std::sync::Arc;
 
+/// The suffix a copy's names take: `#`, the tag of the pass that makes the copy, and
+/// `distinguisher`, which tells the copy apart from the pass's other copies of the same code. No
+/// lowered name ends in this shape, which is what keeps the names the suffix makes fresh.
+pub(crate) fn copy_suffix(tag: &str, distinguisher: &str) -> String {
+    format!("#{}{}", tag, distinguisher)
+}
+
 /// Clone a function's parameters, capture, and body, giving every bound variable (parameters,
 /// capture, `let` bindings, destructure fields, match-arm payloads) its name followed by `suffix`, and
 /// rewriting every occurrence. Returns the renamed pieces together with the binder renaming, which
