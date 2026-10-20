@@ -39,6 +39,7 @@ use crate::rc_ir::ast::{
     FieldPath, FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar,
 };
 use crate::rc_ir::leaf_map::{LeafKey, LeafMap};
+use std::fmt;
 use std::sync::Arc;
 
 /// The origin of one boxed leaf.
@@ -201,11 +202,11 @@ impl Provenance {
     }
 }
 
-impl std::fmt::Display for Provenance {
+impl fmt::Display for Provenance {
     /// A readable one-line rendering, for the RC IR dump: a value with no boxed leaf as `unboxed`, a
     /// boxed value (one leaf at the root) as its source, and anything else as its leaves rendered
     /// `π=source`, sorted by path, inside braces.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.0.is_empty() {
             return write!(f, "unboxed");
         }
