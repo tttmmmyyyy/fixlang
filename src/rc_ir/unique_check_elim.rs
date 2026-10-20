@@ -64,7 +64,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let frefs: Vec<FuncRef> = prog.funcs.keys().cloned().collect();
     for fref in &frefs {
         let ck = spec.canonical_key(fref);
-        spec.clones.request(fref, ck, true);
+        spec.clones.keep_canonical(fref, ck);
     }
     // A global initializer has no parameters, so its body resolves against no inputs.
     let globals: Vec<RcGlobalInit> = prog
@@ -138,12 +138,6 @@ impl<'a> Specializer<'a> {
             inputs.push(Uniqueness::all_dynamic(&cap.ty, self.type_env));
         }
         inputs
-    }
-
-    /// Request the clone `(fref, key)`, returning its output name.
-    fn request_clone(&mut self, fref: &FuncRef, key: SpecializationKey) -> FuncRef {
-        let is_canonical = key == self.canonical_key(fref);
-        self.clones.request(fref, key, is_canonical)
     }
 
     /// Materialize one clone: rewrite the original body under the clone's inputs, flipping the checks
@@ -235,7 +229,7 @@ impl<'a> Specializer<'a> {
         };
         let g = &self.prog.funcs[&cref];
         let key = self.callee_key(call, g, inputs);
-        let name = self.request_clone(&cref, key);
+        let name = self.clones.request(&cref, key);
         let mut c = callee.clone();
         c.name = name.name;
         c
