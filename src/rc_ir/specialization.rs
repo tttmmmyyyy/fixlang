@@ -142,7 +142,8 @@ impl<K: CloneKey> CloneRegistry<K> {
         nref
     }
 
-    /// The suffix the clone keyed on `key` adds to its function's name and to each of its local names.
+    /// The suffix the clone keyed on `key` adds to its function's name and to each of its local
+    /// names.
     ///
     /// # Examples
     /// In a registry tagged `u`, a function whose two parameters have one boxed leaf each, keyed
