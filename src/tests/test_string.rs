@@ -162,6 +162,15 @@ pub fn test_string_find() {
         assert_eq(|_|"20", "".find("xyz", 7), Option::none());;
         assert_eq(|_|"21", "".find("", 7), Option::some(0));;
 
+        // Negative start indices, counted down to at run time so that the compiler cannot fold the
+        // calls.
+        let minus_one = Iterator::range(0, 3).fold(2, |_, acc| acc - 1);
+        assert_eq(|_|"22", "abcdef".find("ab", minus_one), Option::some(0));;
+        assert_eq(|_|"23", "abcdef".find("ef", minus_one), Option::some(4));;
+        assert_eq(|_|"24", "abcdef".find("", minus_one), Option::some(0));;
+        assert_eq(|_|"25", "".find("", minus_one), Option::some(0));;
+        assert_eq(|_|"26", "abcdef".find("ab", minus_one * 100000), Option::some(0));;
+
         pure()
     );
     "#;

@@ -4979,7 +4979,7 @@ Checks if a string ends with a given suffix.
 Type: `Std::String -> Std::I64 -> Std::String -> Std::Option Std::I64`
 
 `str.find(token, start_idx)` finds the index where `token` first appears in `str`, searching
-from `start_idx`.
+from `start_idx`. A negative `start_idx` searches from the beginning of `str`.
 
 The index it answers with is at least `start_idx`, with one exception:
 `str.find("", start_idx)` with `start_idx >= str.@size` answers with `str.@size`.
