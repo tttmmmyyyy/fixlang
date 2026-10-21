@@ -313,7 +313,11 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
             ctx.check_ownership_is_levelled(&clone);
         }
         clone.body = ctx.rewrite(&clone.body);
-        funcs.insert(borrow_version, clone);
+        assert!(
+            funcs.insert(borrow_version.clone(), clone).is_none(),
+            "a borrow version takes the name `{}` of another function",
+            borrow_version.name.to_string()
+        );
     }
 
     // Globals are param-less function bodies: route and rewrite them the same way (as `f_own`).
