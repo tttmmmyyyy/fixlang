@@ -4,7 +4,7 @@ use crate::ast::program::EndNode;
 use crate::ast::qual_type::constraints_to_string;
 use crate::ast::traits::KindSignature;
 use crate::ast::type_env::TypeEnv;
-use crate::ast::types::{make_tyvar, TyVar};
+use crate::ast::types::{add_kind_signed_vars, TyVar};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
 use crate::parse::sourcefile::SourcePos;
@@ -73,11 +73,7 @@ impl QualPred {
     pub fn named_vars(&self) -> Vec<Arc<TyVar>> {
         let mut vars = vec![];
         self.free_vars_vec(&mut vars);
-        for kind_sign in &self.kind_constraints {
-            if !vars.iter().any(|tv| tv.name == kind_sign.tyvar) {
-                vars.push(make_tyvar(&kind_sign.tyvar, &kind_sign.kind));
-            }
-        }
+        add_kind_signed_vars(&mut vars, &self.kind_constraints);
         vars
     }
 

@@ -529,12 +529,9 @@ fn agreeing_signature_correspondence(
     let Some(via_defn_to_impl) = tc.instance_substitution(&impl_.scm_via_defn, &impl_.scm) else {
         return Ok(None);
     };
-    let mut via_defn_opaque_vars = vec![];
-    impl_.scm_via_defn.free_vars_to_vec(&mut via_defn_opaque_vars);
-    via_defn_opaque_vars.retain(|tv| is_opaque_tyvar(&tv.name));
     let mut renaming = Substitution::default();
     let mut renamed_to: Vec<Name> = vec![];
-    for tv in &via_defn_opaque_vars {
+    for tv in &impl_.scm_via_defn.opaque_vars() {
         let Some(written) = via_defn_to_impl.replacement_of(&tv.name) else {
             continue;
         };
@@ -552,10 +549,8 @@ fn agreeing_signature_correspondence(
     }
     let via_defn = renaming.substitute_scheme(&impl_.scm_via_defn);
 
-    let mut opaque_tyvars = vec![];
-    impl_.scm.free_vars_to_vec(&mut opaque_tyvars);
-    via_defn.free_vars_to_vec(&mut opaque_tyvars);
-    opaque_tyvars.retain(|tv| is_opaque_tyvar(&tv.name));
+    let mut opaque_tyvars = impl_.scm.opaque_vars();
+    opaque_tyvars.extend(via_defn.opaque_vars());
     let agrees = UnifOrOtherErr::extract_others(tc.check_scheme_equivalent(
         &impl_.scm,
         &via_defn,
