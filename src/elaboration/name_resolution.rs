@@ -100,15 +100,16 @@ impl NameResolutionContext {
         self.current_module = module;
     }
 
+    /// Records `names` as names the current module has to import.
     pub fn add_import_required(&mut self, names: Vec<FullName>) {
         misc::insert_to_map_vec_many(&mut self.import_required, &self.current_module, names);
     }
 
-    // Resolve the given short name to a full name.
-    //
-    // If there are multiple candidates, or no candidates, return an error.
-    //
-    // If the `short_name` is an absolute name, the returned full name will also be set as an absolute name.
+    /// Resolve the given short name to a full name.
+    ///
+    /// If there are multiple candidates, or no candidates, return an error.
+    ///
+    /// The returned full name is absolute exactly when `short_name` is.
     pub fn resolve(
         &mut self,
         short_name: &FullName,
@@ -131,17 +132,17 @@ impl NameResolutionContext {
                 if !short_name.is_suffix_of(full_name) {
                     return None;
                 }
-                // Absolute name are accepted without checking accessibility.
+                // Absolute names are accepted without checking accessibility.
                 let inaccessible = !short_name.is_absolute()
                     && !import::is_accessible(&self.valid_import_stmts(), full_name);
                 if inaccessible {
                     return None;
                 }
-                // Inherit the abosolute property from the short name.
+                // The result is absolute exactly when the short name is. A candidate registered
+                // under an absolute name, as `::Std::Arrow` is, still needs an import where it is
+                // written without the leading `::`.
                 let mut full_name = full_name.clone();
-                if short_name.is_absolute() {
-                    full_name.set_absolute();
-                }
+                full_name.namespace.is_absolute = short_name.is_absolute();
                 return Some(full_name);
             })
             .collect::<Vec<_>>();

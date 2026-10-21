@@ -1,0 +1,16 @@
+module Main;
+
+import Lib::{Greeting, Greeting::greeting};
+import Std::{IO, Monad::pure, ToString::to_string};
+
+type Obj = struct {};
+
+impl Obj : Greeting {
+    greeting = |_| "Hello";
+}
+
+main : IO ();
+main = (
+    eval Obj {}.greeting.to_string;
+    pure()
+);

@@ -508,13 +508,14 @@ pub const U128_TYPE: BuiltinTypeName = BuiltinTypeName {
     name: U128_NAME,
 };
 
+/// The name `::Std::Arrow` of the type constructor of function types, written as an absolute name.
 pub fn make_arrow_name_abs() -> FullName {
     let mut name = ARROW_TYPE.to_fullname();
     name.set_absolute();
     name
 }
 
-// The type constructor of function types: `a -> b` is this constructor applied to `a` and `b`.
+/// The type constructor of function types: `a -> b` is this constructor applied to `a` and `b`.
 pub fn make_arrow_tycon() -> TyCon {
     TyCon::new(make_arrow_name_abs())
 }

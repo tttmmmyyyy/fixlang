@@ -69,6 +69,8 @@
 - #341, #811: The compiler now takes the widths of the C numeric types, such as `CLong`, from the target it builds for. It used to measure them on the first build, save them in `.fixlang/c_types.json` and use them from then on, so a project directory shared with a machine whose C types differ silently kept that machine's widths. The file is no longer read and can be deleted.
 - #813: An array literal of tens of thousands of numbers now compiles in seconds. The compiler took time that grew with the square of the number of elements of an array literal: a literal of 13,071 numbers took 25 seconds to compile.
 - #887, #894: `fix docs` now writes the constraints on associated types, such as `Item it = a`, in the heading of a trait implementation and in the type of a trait member, as in `impl [it : Iterator, a : Format, Item it = a] Joined it : Format`. It used to leave them out. The language server now shows them too, in the names of trait implementations in the outline of a file and in the workspace symbol search.
+- #311, #909: A module that implements a trait of another module, where a member of the trait returns an opaque type as `greeting : [?s : ToString] a -> ?s` does, now builds when its imports list the items it uses, as in `import Lib::{Greeting, Greeting::greeting};`. It used to fail with ``Unknown name `Lib::Greeting::greeting::#wrap_opaque`.``, and `fix edit explicit-import` wrote that name into the import statement, which made the file fail to parse.
+- #907, #909: `fix edit explicit-import` now imports `Arrow` when a file writes a function type as `Arrow a b`. It used to leave `Arrow` out, and the rewritten file failed to build with ``Unknown type or associated type name `Arrow`.``
 
 ## [1.5.0] - 2026-09-27
 
