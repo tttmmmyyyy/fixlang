@@ -1,18 +1,18 @@
 // Tests for the RC IR locality inference, in two shapes.
 //
 // The integration tests read the `--emit-rc-ir` dump, which tags each kind of annotated site: a
-// `Retain` / `Release` proved local with `@local` and one whose whole reachable graph is proved
-// local with `@deeplocal`, an operation whose internal reference counting is proved local with a
-// trailing `@local` on its right-hand side, and likewise a `destructure` and a boxed-union `case`
-// arm. A small program with named `let`s therefore asserts the analysis end to end. The negative
-// cases are the point: an operation that reaches a global object may not be tagged, and each case
-// asserts on a site the dump really contains, so one that stopped producing that site would fail
-// rather than pass vacuously.
+// `Retain` / `Release` proved local with `@local`, one whose whole reachable graph is proved local
+// with `@deeplocal`, and one on a value read out of a global's graph with `@global`; an operation
+// whose internal reference counting is proved local with a trailing `@local` on its right-hand
+// side; and likewise a `destructure` and a boxed-union `case` arm. A small program with named
+// `let`s therefore asserts the analysis end to end. The negative cases are the point: an operation
+// that reaches a global object may not be tagged local, and each case asserts on a site the dump
+// really contains, so one that stopped producing that site would fail rather than pass vacuously.
 //
 // The in-process tests run the same programs under `Configuration::develop_mode()`, where every
-// annotated site carries the assertion that its object really is in the local state. The dump tests
-// pin what the analysis concluded; these pin that the conclusion holds at run time, which is what a
-// wrong hand-written `result_locality` declaration would break.
+// annotated site carries the assertion that its object really is in the state the annotation
+// names. The dump tests pin what the analysis concluded; these pin that the conclusion holds at run
+// time, which is what a wrong hand-written `result_locality` declaration would break.
 
 #[cfg(test)]
 mod integration_tests {
@@ -241,9 +241,14 @@ mod integration_tests {
         assert_rc_state(&dump, "mixed", "local");
         assert_rc_state(&dump, "elem", "");
 
-        // A field taken out of a global unboxed struct is part of the global's graph.
-        assert_rc_state(&dump, "p", "");
-        assert_rc_state(&dump, "q", "");
+        // A field taken out of a global unboxed struct is part of the global's graph, which
+        // reference counting skips.
+        assert_rc_state(&dump, "p", "global");
+        assert_rc_state(&dump, "q", "global");
+
+        // The global on one branch and an array built here on the other: only what holds of
+        // everything the value may be holds of it, so the release keeps its dispatch.
+        assert_rc_state(&dump, "either", "");
 
         // A value rebuilt from a retained pointer may name anything, including a global's graph or
         // an object another thread holds.
@@ -294,9 +299,9 @@ mod integration_tests {
     /// Verifies the annotation of the two nodes that take a value out of a boxed container without
     /// an operation — a `destructure` of a struct pattern and the variant arm of a `match`. The
     /// take-out rule decides both: only a container whose whole reachable graph is proved local
-    /// hands out a local field or payload, so the same source shape over a global keeps its
-    /// dispatch. Neither node emits a run-time state check where it is right, so the dump is the
-    /// only place a wrong answer here shows up.
+    /// hands out a local field or payload, and only a global container a global one, whose counting
+    /// the node drops. Neither node emits a run-time state check where it is right, so the dump is
+    /// the only place a wrong answer here shows up.
     #[test]
     fn test_locality_of_a_take_out_of_a_boxed_container() {
         let (_temp_dir, project_dir) = setup_test_env("containers");
@@ -308,8 +313,8 @@ mod integration_tests {
         assert_destructure_state(&dump, &local_pair[0], "local");
         assert_match_arm_state(&dump, &local_holder[0], "local");
 
-        assert_destructure_state(&dump, "Main::gpair#", "");
-        assert_match_arm_state(&dump, "Main::gholder#", "");
+        assert_destructure_state(&dump, "Main::gpair#", "global");
+        assert_match_arm_state(&dump, "Main::gholder#", "global");
     }
 
     /// Verifies that handing a callback a raw pointer into an array of boxed elements costs the array
@@ -482,12 +487,12 @@ mod integration_tests {
         );
     }
 
-    /// Verifies that the release borrow-ification leaves on a global keeps its runtime dispatch.
-    /// Reference counting is inserted for locals, but the borrow rewrite adds a release naming
-    /// whatever was passed at a borrowed position — a global included — so resolving an operand by
-    /// whether it is a local binding is what stands between the pass and a freed global.
+    /// Verifies that the release borrow-ification leaves on a global is dropped as global. Reference
+    /// counting is inserted for locals, but the borrow rewrite adds a release naming whatever was
+    /// passed at a borrowed position — a global included — so resolving an operand by whether it is
+    /// a local binding is what stands between the pass and a global counted as local.
     #[test]
-    fn test_release_of_a_global_keeps_its_dispatch() {
+    fn test_release_of_a_global_is_dropped() {
         let (_temp_dir, project_dir) = setup_test_env("global_release");
         let dump = emit_main_rc_ir(&project_dir);
 
@@ -510,8 +515,8 @@ mod integration_tests {
         );
         for line in &named_global {
             assert!(
-                !line.contains('@'),
-                "the reference counting on a global must keep its runtime dispatch:\n{}",
+                line.trim_end().ends_with(" @global"),
+                "the reference counting on a global must be dropped as global:\n{}",
                 line
             );
         }

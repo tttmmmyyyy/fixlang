@@ -14,6 +14,11 @@
 //! So `DeepLocal ⊑ RootLocal ⊑ MayExt`: the root fact is what an annotation needs, and the deep
 //! fact is what reading out of a container needs.
 //!
+//! A third fact runs the other way: a value read out of a global's graph is certainly global, root
+//! and all, and reference counting skips it, so an operation on it is dropped whole. It holds
+//! whatever the inputs are, so it takes no part in the cloning, and it is established inside one
+//! body only: a summary and an op's declaration never carry it.
+//!
 //! Two layers carry those facts, mirroring the provenance / uniqueness pair. The symbolic layer
 //! (`ExtCond`, `LeafCond`, `ExtShape`) states, for a function or an op, the condition on its inputs
 //! under which a result leaf is non-local; it is what a summary and an op's `result_locality` hold. The
@@ -188,8 +193,8 @@ impl ExtCond {
     }
 }
 
-/// The symbolic value of one boxed leaf: the condition under which its own object is non-local, and
-/// the condition under which something it reaches is.
+/// The symbolic value of one boxed leaf: the condition under which its own object is non-local, the
+/// condition under which something it reaches is, and whether it is certainly global.
 ///
 /// The invariant `root ⊑ deep` — a non-local root is something the leaf reaches — is established by
 /// the constructor, which joins `root` into `deep`. It leaves the lattice with a single order
@@ -201,13 +206,24 @@ pub struct LeafCond {
     pub root: ExtCond,
     /// When this leaf reaches a non-local object, its own included.
     pub deep: ExtCond,
+    /// Whether, whatever the inputs, the object this leaf points to and every object it reaches are
+    /// `RefcntState::GLOBAL`. A global's initializer marks its whole result graph global, and a
+    /// global object never changes, so this holds of a global and of what the body takes out of it
+    /// by a `Destructure` or a `Match`. Every other constructor leaves it false — an op's
+    /// declaration, a summary, a substitution — and a join keeps it only where both sides have it,
+    /// so it holds only where the body reads the value out of a global itself.
+    pub global: bool,
 }
 
 impl LeafCond {
     /// The leaf condition with the given root condition and a deep condition covering it.
     pub fn new(root: ExtCond, deep: ExtCond) -> LeafCond {
         let deep = deep.join(&root);
-        LeafCond { root, deep }
+        LeafCond {
+            root,
+            deep,
+            global: false,
+        }
     }
 
     /// Proved local, root and all, whatever the inputs.
@@ -220,6 +236,14 @@ impl LeafCond {
         LeafCond::new(ExtCond::Always, ExtCond::Always)
     }
 
+    /// A leaf of a global's graph: global, root and all, whatever the inputs.
+    pub fn global() -> LeafCond {
+        LeafCond {
+            global: true,
+            ..LeafCond::always()
+        }
+    }
+
     /// Input `input`'s own leaf at `path`, carried through unchanged.
     pub fn input_leaf(input: usize, path: FieldPath) -> LeafCond {
         LeafCond::new(
@@ -230,9 +254,13 @@ impl LeafCond {
 
     /// The value read out of a boxed container whose leaf is `container`. Reading out of a container
     /// promotes the container's deep fact to the result's root fact: a `RootLocal` container says
-    /// nothing about its contents, and a `DeepLocal` one hands out a `DeepLocal` value.
+    /// nothing about its contents, and a `DeepLocal` one hands out a `DeepLocal` value. A global
+    /// container hands out a global value.
     pub fn take_out_of(container: &LeafCond) -> LeafCond {
-        LeafCond::new(container.deep.clone(), container.deep.clone())
+        LeafCond {
+            global: container.global,
+            ..LeafCond::new(container.deep.clone(), container.deep.clone())
+        }
     }
 
     /// The condition this leaf offers for the given aspect.
@@ -245,7 +273,10 @@ impl LeafCond {
 
     /// Pointwise join: what holds of a leaf that is either of two.
     pub fn join(&self, other: &LeafCond) -> LeafCond {
-        LeafCond::new(self.root.join(&other.root), self.deep.join(&other.deep))
+        LeafCond {
+            global: self.global && other.global,
+            ..LeafCond::new(self.root.join(&other.root), self.deep.join(&other.deep))
+        }
     }
 
     /// Substitute the operands' shapes for the atoms of both conditions.
@@ -320,6 +351,11 @@ impl ExtShape {
     /// The result of an op whose value comes from outside the analysis.
     pub fn always(result_ty: &Arc<TypeNode>, type_env: &TypeEnv) -> ExtShape {
         ExtShape::uniform(result_ty, type_env, LeafCond::always())
+    }
+
+    /// A global's value: every leaf global, root and all.
+    pub fn global(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> ExtShape {
+        ExtShape::uniform(ty, type_env, LeafCond::global())
     }
 
     /// The bottom: every leaf proved local, root and all. It reads no operand, which is what an op
@@ -543,15 +579,15 @@ impl<'a> Walk<'a> {
     }
 
     /// The symbolic locality of an operand. A global's graph was marked global by its initializer —
-    /// one of the three operations that take an object out of the local state, and the only rule
-    /// that reads whether a name is local. It has to sit here, at the one place an operand is
-    /// resolved, because a global reaches every operand: the right-hand side of a `let`, an
-    /// argument, a scrutinee, a destructured container, and — after borrow-ification introduces a
-    /// release for a value the callee borrows — the target of a `Release`. A local is bound before
-    /// it is read, so the environment holds it.
+    /// one of the operations that take an object out of the local state — so every leaf of a global
+    /// is global. This is the only rule that reads whether a name is local. It has to sit here, at
+    /// the one place an operand is resolved, because a global reaches every operand: the right-hand
+    /// side of a `let`, an argument, a scrutinee, a destructured container, and — after
+    /// borrow-ification introduces a release for a value the callee borrows — the target of a
+    /// `Release`. A local is bound before it is read, so the environment holds it.
     fn shape_of(&self, var: &RcVar) -> ExtShape {
         if var.name.is_global() {
-            return ExtShape::always(&var.ty, self.type_env);
+            return ExtShape::global(&var.ty, self.type_env);
         }
         self.env
             .get(&var.name)
@@ -707,10 +743,13 @@ impl<'a> Walk<'a> {
 
     /// The annotation of a reference-counting node on the subtree of `v` at `path`. The node covers
     /// every boxed leaf under the path — several of them where the path stops at an unboxed union —
-    /// and may drop the state dispatch only where all of them are proved local, so the leaves'
-    /// localities join.
+    /// and is dropped where all of them are global, or drops the state dispatch where all of them
+    /// are proved local, so the leaves' localities join.
     fn annotate_rc_site(&mut self, v: &RcVar, path: &FieldPath) -> RcState {
         let shape = self.shape_of(v);
+        if shape.leaves_under(path).all(|leaf| leaf.global) {
+            return RcState::Global;
+        }
         let Some(inputs) = self.site_inputs(shape.leaves_under(path)) else {
             return RcState::Unknown;
         };
@@ -782,13 +821,17 @@ impl<'a> Walk<'a> {
     /// The annotation of a `Destructure`, which counts every reference the node itself moves. Out of
     /// a boxed container it releases the container and retains each named field, and the take-out
     /// rule makes the fields local only where the container is `DeepLocal` — which also covers the
-    /// container's own release. Out of an unboxed container, whose every field is named, it only moves
-    /// the leaves into the field variables and counts nothing.
+    /// container's own release — and global where the container is. Out of an unboxed container,
+    /// whose every field is named, it only moves the leaves into the field variables and counts
+    /// nothing.
     fn annotate_destructure(&mut self, container: &RcVar) -> RcState {
         if !container.ty.is_box(self.type_env) {
             return RcState::Local;
         }
         let shape = self.shape_of(container);
+        if shape.leaf_at(&[]).global {
+            return RcState::Global;
+        }
         let Some(inputs) = self.site_inputs(iter::once(shape.leaf_at(&[]))) else {
             return RcState::Unknown;
         };
@@ -835,13 +878,20 @@ impl<'a> Walk<'a> {
                 None => scrut_shape.clone(),
             };
             // A variant arm of a boxed union retains the payload out of the container, so the
-            // take-out rule decides it: only a `DeepLocal` container hands out a local payload. A
-            // catch-all arm binds the scrutinee itself and retains nothing.
+            // take-out rule decides it: only a `DeepLocal` container hands out a local payload, and
+            // only a global one a global payload. A catch-all arm binds the scrutinee itself and
+            // retains nothing.
             let payload_state = if arm.tag.is_some() && boxed {
                 let leaf = scrut_shape.leaf_at(&[]);
-                match self.site_inputs(iter::once(leaf)) {
-                    Some(inputs) if leaf.resolve(inputs) == Locality::DeepLocal => RcState::Local,
-                    _ => RcState::Unknown,
+                if leaf.global {
+                    RcState::Global
+                } else {
+                    match self.site_inputs(iter::once(leaf)) {
+                        Some(inputs) if leaf.resolve(inputs) == Locality::DeepLocal => {
+                            RcState::Local
+                        }
+                        _ => RcState::Unknown,
+                    }
                 }
             } else {
                 RcState::Unknown

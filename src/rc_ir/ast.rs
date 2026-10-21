@@ -251,7 +251,9 @@ pub enum RcState {
     DeepLocal,
     /// Known threaded: atomic increment/decrement, no state check.
     Threaded,
-    /// Known global: a no-op, emitting no code.
+    /// Known global, and so is everything reachable from it: reference counting skips the object,
+    /// so the operation counts nothing and emits no code outside development mode, which checks the
+    /// state instead.
     Global,
 }
 
@@ -261,10 +263,13 @@ impl RcState {
         match self {
             RcState::Unknown => true,
             RcState::Local | RcState::DeepLocal => false,
-            RcState::Threaded | RcState::Global => unreachable!(
+            RcState::Threaded => unreachable!(
                 "no pass produces {:?}; code generation for it is not implemented",
                 self
             ),
+            RcState::Global => {
+                unreachable!("a global object is not counted, so no count is built for it")
+            }
         }
     }
 
@@ -272,7 +277,9 @@ impl RcState {
     /// helpers and traversers are memoized by name, so this is what keys one per (type, state) and
     /// gives the states that generate the same code a single definition.
     pub fn name_suffix(self) -> &'static str {
-        if self.dispatches() {
+        if self == RcState::Global {
+            "_global"
+        } else if self.dispatches() {
             ""
         } else {
             // A `DeepLocal` release could also drop the dispatch on the objects it reaches; until
