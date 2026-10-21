@@ -14,7 +14,7 @@ use crate::{
         program::ModuleInfo,
         qual_pred::{QualPred, QualPredScheme},
         qual_type::QualType,
-        traits::{TraitEnv, TraitId},
+        traits::{KindSignature, TraitEnv, TraitId},
         type_env::TypeEnv,
         typedecl::describe_field_names,
         types::{
@@ -280,7 +280,7 @@ impl Substitution {
     }
 
     /// Replaces the type variables this substitution replaces throughout `scm`: in its type, its
-    /// predicates and its equalities.
+    /// predicates, its equalities and its kind signatures, the last as `substitute_kind_signs` does.
     ///
     /// Panics where this substitution replaces a variable the scheme generalizes, since such a
     /// variable stands for every type and no substitution may fix it to one.
@@ -297,9 +297,11 @@ impl Substitution {
         for eq in &mut eqs {
             self.substitute_equality(eq)
         }
+        let mut kind_signs = scm.kind_signs.clone();
+        self.substitute_kind_signs(&mut kind_signs);
         Scheme::new_arc(
             scm.gen_vars.clone(),
-            scm.kind_signs.clone(),
+            kind_signs,
             preds,
             eqs,
             self.substitute_type(&scm.ty),
@@ -307,11 +309,8 @@ impl Substitution {
     }
 
     /// Replaces the type variables this substitution replaces throughout `qual_type`: in its type,
-    /// in the predicates and equalities qualifying it, and in its kind signatures.
-    ///
-    /// A kind signature on a variable replaced by another variable moves to that variable. One on a
-    /// variable replaced by any other type is dropped: the signature states the kind of a variable,
-    /// and the type standing in its place has a kind of its own.
+    /// in the predicates and equalities qualifying it, and in its kind signatures, the last as
+    /// `substitute_kind_signs` does.
     pub fn substitute_qualtype(&self, qual_type: &mut QualType) {
         for pred in &mut qual_type.preds {
             self.substitute_predicate(pred);
@@ -320,7 +319,16 @@ impl Substitution {
             self.substitute_equality(eq);
         }
         qual_type.ty = self.substitute_type(&qual_type.ty);
-        qual_type.kind_signs.retain_mut(|kind_sign| {
+        self.substitute_kind_signs(&mut qual_type.kind_signs);
+    }
+
+    /// Replaces the type variables this substitution replaces in `kind_signs`.
+    ///
+    /// A kind signature on a variable replaced by another variable moves to that variable. One on a
+    /// variable replaced by any other type is dropped: the signature states the kind of a variable,
+    /// and the type standing in its place has a kind of its own.
+    pub fn substitute_kind_signs(&self, kind_signs: &mut Vec<KindSignature>) {
+        kind_signs.retain_mut(|kind_sign| {
             let Some(replacement) = self.data.get(&kind_sign.tyvar) else {
                 return true;
             };
