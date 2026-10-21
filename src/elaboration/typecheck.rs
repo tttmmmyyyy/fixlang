@@ -190,10 +190,7 @@ impl Substitution {
     ///
     /// Panics where `following` replaces a variable this substitution already replaces.
     pub fn compose(&mut self, following: &Self) {
-        for (_var, ty) in self.data.iter_mut() {
-            let new_ty = following.substitute_type(&ty);
-            *ty = new_ty;
-        }
+        self.apply_to_replacements(following);
         for (var, ty) in &following.data {
             assert!(!self.data.contains_key(var));
             self.data.insert(var.to_string(), ty.clone());
@@ -225,12 +222,15 @@ impl Substitution {
     /// # Examples
     /// `{c -> Array a}` followed by `{a -> I64, b -> Bool}` is `{c -> Array I64}`.
     pub fn followed_by(&self, following: &Self) -> Self {
-        Self {
-            data: self
-                .data
-                .iter()
-                .map(|(var, ty)| (var.clone(), following.substitute_type(ty)))
-                .collect(),
+        let mut followed = self.clone();
+        followed.apply_to_replacements(following);
+        followed
+    }
+
+    /// Applies `following` to every type this substitution replaces a variable by.
+    fn apply_to_replacements(&mut self, following: &Self) {
+        for (_var, ty) in self.data.iter_mut() {
+            *ty = following.substitute_type(ty);
         }
     }
 
@@ -367,7 +367,8 @@ impl Substitution {
     }
 
     /// Replaces the type variables this substitution replaces throughout `qual_pred`: in the
-    /// predicate it states and in the constraints that predicate is qualified by.
+    /// predicate it states and in the constraints that predicate is qualified by, the kind
+    /// constraints as `substitute_kind_signs` replaces them.
     pub fn substitute_qualpred(&self, qual_pred: &mut QualPred) {
         for pred in &mut qual_pred.pred_constraints {
             self.substitute_predicate(pred);
@@ -375,6 +376,7 @@ impl Substitution {
         for eq in &mut qual_pred.eq_constraints {
             self.substitute_equality(eq);
         }
+        self.substitute_kind_signs(&mut qual_pred.kind_constraints);
         self.substitute_predicate(&mut qual_pred.predicate);
     }
 
