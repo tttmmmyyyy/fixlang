@@ -16,8 +16,8 @@
 //!
 //! A third fact runs the other way: a value read out of a global's graph is certainly global, root
 //! and all, and reference counting skips it, so an operation on it is dropped whole. It holds
-//! whatever the inputs are, so it takes no part in the cloning, and it is established inside one
-//! body only: a summary and an op's declaration never carry it.
+//! whatever the inputs are, so it plays no part in specializing a clone on them. Only a body
+//! establishes it, for itself: a summary and an op's declaration never carry it.
 //!
 //! Two layers carry those facts, mirroring the provenance / uniqueness pair. The symbolic layer
 //! (`ExtCond`, `LeafCond`, `ExtShape`) states, for a function or an op, the condition on its inputs
@@ -743,8 +743,8 @@ impl<'a> Walk<'a> {
 
     /// The annotation of a reference-counting node on the subtree of `v` at `path`. The node covers
     /// every boxed leaf under the path — several of them where the path stops at an unboxed union —
-    /// and is dropped where all of them are global, or drops the state dispatch where all of them
-    /// are proved local, so the leaves' localities join.
+    /// and is dropped where all of them are global. Otherwise it may drop the state dispatch only
+    /// where all of them are proved local, so the leaves' localities join.
     fn annotate_rc_site(&mut self, v: &RcVar, path: &FieldPath) -> RcState {
         let shape = self.shape_of(v);
         let leaves: Vec<&LeafCond> = shape.leaves_under(path).collect();

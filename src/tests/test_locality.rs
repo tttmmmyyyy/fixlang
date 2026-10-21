@@ -321,8 +321,8 @@ mod integration_tests {
     }
 
     /// Verifies that what a `destructure` or the variant arm of a `match` takes out of a global's
-    /// boxed container is itself global, so the reference counting on it later is dropped too — not
-    /// only the node that takes it out.
+    /// boxed container is itself global, so the reference counting on it after that node is dropped
+    /// as well.
     #[test]
     fn test_a_value_taken_out_of_a_global_is_global() {
         let (_temp_dir, project_dir) = setup_test_env("containers");

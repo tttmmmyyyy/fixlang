@@ -1620,9 +1620,8 @@ impl<'c, 'm> Generator<'c, 'm> {
 
     /// Abort when the boxed object at `obj_ptr` is not in the global reference-counting state.
     ///
-    /// It stands in place of the count a `RcState::Global` annotation removes, the way
-    /// `build_assert_refcnt_state_local` stands in place of a dispatch: a count dropped from an
-    /// object that is counted would free it early or leak it, far from the operation.
+    /// It stands in place of the count a `RcState::Global` annotation removes: a count dropped from
+    /// an object that is counted would free it early or leak it, far from the operation.
     fn build_assert_refcnt_state_global(&mut self, obj_ptr: PointerValue<'c>) {
         self.build_assert_refcnt_state(
             obj_ptr,

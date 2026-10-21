@@ -251,9 +251,8 @@ pub enum RcState {
     DeepLocal,
     /// Known threaded: atomic increment/decrement, no state check.
     Threaded,
-    /// Known global, and so is everything reachable from it: reference counting skips the object,
-    /// so the operation counts nothing and emits no code outside development mode, which checks the
-    /// state instead.
+    /// Known global, along with everything it reaches. Reference counting skips such an object, so
+    /// the operation counts nothing and emits no code; in development mode it checks the state.
     Global,
 }
 
