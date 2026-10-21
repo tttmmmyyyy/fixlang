@@ -3636,7 +3636,7 @@ namespace String {
     empty = |capacity| String { _data : Array::empty(capacity+1).push_back(0_U8) };
 
     // `str.find(token, start_idx)` finds the index where `token` first appears in `str`, searching
-    // from `start_idx`.
+    // from `start_idx`. A negative `start_idx` searches from the beginning of `str`.
     // 
     // The index it answers with is at least `start_idx`, with one exception:
     // `str.find("", start_idx)` with `start_idx >= str.@size` answers with `str.@size`.
@@ -3655,7 +3655,7 @@ namespace String {
     find : String -> I64 -> String -> Option I64;
     find = |token, start_idx, str| (
         str.borrow_c_str(|c_str|
-            let start_idx = min(start_idx, str.@size);
+            let start_idx = max(0, min(start_idx, str.@size));
             let pos = token.borrow_c_str(|token_c_str| FFI_CALL[Ptr strstr(Ptr, Ptr), c_str.add_offset(start_idx), token_c_str]);
             if pos == nullptr {
                 Option::none()

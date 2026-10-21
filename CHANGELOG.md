@@ -72,6 +72,10 @@
 - #311, #909: A module that implements a trait of another module, where a member of the trait returns an opaque type as `greeting : [?s : ToString] a -> ?s` does, now builds when its imports list the items it uses, as in `import Lib::{Greeting, Greeting::greeting};`. It used to fail with ``Unknown name `Lib::Greeting::greeting::#wrap_opaque`.``, and `fix edit explicit-import` wrote that name into the import statement, which made the file fail to parse.
 - #907, #909: `fix edit explicit-import` now imports `Arrow` when a file writes a function type as `Arrow a b`. It used to leave `Arrow` out, and the rewritten file failed to build with ``Unknown type or associated type name `Arrow`.``
 
+#### Std
+
+- #718: `String::find` given a negative start index now searches from the beginning of the string: `"abcdef".find("ab", -1)` is `some(0)`. It used to read the memory before the string, which returned a wrong answer or crashed the program.
+
 ## [1.5.0] - 2026-09-27
 
 ### Performance
