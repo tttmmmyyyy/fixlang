@@ -4,7 +4,7 @@ use crate::ast::program::EndNode;
 use crate::ast::qual_type::constraints_to_string;
 use crate::ast::traits::KindSignature;
 use crate::ast::type_env::TypeEnv;
-use crate::ast::types::TyVar;
+use crate::ast::types::{make_tyvar, TyVar};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
 use crate::parse::sourcefile::SourcePos;
@@ -66,6 +66,19 @@ impl QualPred {
                 }
             }
         }
+    }
+
+    /// The type variables this qualified predicate names, each one once: those standing in the
+    /// constraints and in the head, and those it names in a kind constraint alone.
+    pub fn named_vars(&self) -> Vec<Arc<TyVar>> {
+        let mut vars = vec![];
+        self.free_vars_vec(&mut vars);
+        for kind_sign in &self.kind_constraints {
+            if !vars.iter().any(|tv| tv.name == kind_sign.tyvar) {
+                vars.push(make_tyvar(&kind_sign.tyvar, &kind_sign.kind));
+            }
+        }
+        vars
     }
 
     /// Renders this qualified predicate the way it is written in source: the kind constraints, the

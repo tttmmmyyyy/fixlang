@@ -10,7 +10,7 @@ use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::qual_type::QualType;
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{
-    is_opaque_tyvar, make_tyvar, type_from_tyvar, type_tyvar, unfixed_type_variable_error, AssocType, Kind,
+    is_opaque_tyvar, type_from_tyvar, type_tyvar, unfixed_type_variable_error, AssocType, Kind,
     Scheme, TyVar, TypeNode,
 };
 use crate::constants::ERR_MISSING_TRAIT_IMPL;
@@ -670,24 +670,13 @@ impl TraitImpl {
         // `map : (a -> b) -> f a -> f b` of `trait f : Functor` becomes
         // `(c -> b) -> Arrow a c -> Arrow a b` for `impl Arrow a : Functor`, where naming both
         // variables `a` would make the two one variable.
-        let mut impl_vars = vec![];
-        self.qual_pred.free_vars_vec(&mut impl_vars);
-        let mut impl_var_names: Set<Name> =
-            impl_vars.into_iter().map(|tv| tv.name.clone()).collect();
-        impl_var_names.extend(
-            self.qual_pred
-                .kind_constraints
-                .iter()
-                .map(|kind_sign| kind_sign.tyvar.clone()),
-        );
-        // A variable the declaration names in a kind signature alone is the member's too.
-        let mut member_vars = vec![];
-        member_qualty.free_vars_vec(&mut member_vars);
-        for kind_sign in &member_qualty.kind_signs {
-            if !member_vars.iter().any(|tv| tv.name == kind_sign.tyvar) {
-                member_vars.push(make_tyvar(&kind_sign.tyvar, &kind_sign.kind));
-            }
-        }
+        let impl_var_names: Set<Name> = self
+            .qual_pred
+            .named_vars()
+            .into_iter()
+            .map(|tv| tv.name.clone())
+            .collect();
+        let member_vars = member_qualty.named_vars();
         let colliding_vars: Vec<&Arc<TyVar>> = member_vars
             .iter()
             .filter(|tv| &tv.name != tyvar_name && impl_var_names.contains(&tv.name))
