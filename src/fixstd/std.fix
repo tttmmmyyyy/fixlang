@@ -266,7 +266,7 @@ namespace Array {
     // This function first clones the array if it is shared. The pointer is valid only while `io` runs.
     //
     // NOTE:
-    // The value a global value's initializer returns must not contain a boxed value that the rest of the program still holds.
+    // A global value's initializer must not put into the value it returns a boxed value that existed before the initializer started running, except one that belongs to another global value.
     // Inside an initializer, do not write such a value into the array through the pointer, for example one handed to C by `boxed_to_retained_ptr`; the behavior is undefined.
     //
     // # Parameters
@@ -979,7 +979,7 @@ namespace FFI {
     // This function first clones the value if `x` is not unique.
     //
     // NOTE:
-    // The value a global value's initializer returns must not contain a boxed value that the rest of the program still holds.
+    // A global value's initializer must not put into the value it returns a boxed value that existed before the initializer started running, except one that belongs to another global value.
     // Inside an initializer, do not write such a value into `x` through the pointer, for example one handed to C by `boxed_to_retained_ptr`; the behavior is undefined.
     //
     // See also: `borrow_boxed`, `mutate_boxed_io`, `mutate_boxed`.
@@ -1038,8 +1038,8 @@ namespace FFI {
     // It is the user's responsibility to ensure that the argument is actually a pointer to the type of the return value, and undefined behavior will occur if it is not.
     //
     // NOTE:
-    // The value a global value's initializer returns must not contain a boxed value that the rest of the program still holds.
-    // Inside an initializer, do not put a value restored here into the value the initializer returns while the rest of the program still holds it; the behavior is undefined.
+    // A global value's initializer must not put into the value it returns a boxed value that existed before the initializer started running, except one that belongs to another global value.
+    // Inside an initializer, do not put into the value it returns a value restored here from a pointer obtained before the initializer started, for example one made by `boxed_to_retained_ptr`; the behavior is undefined.
     //
     // # Parameters
     // 
