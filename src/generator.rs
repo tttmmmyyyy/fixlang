@@ -1651,7 +1651,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             expected,
             &format!("is_refcnt_state_{}@assert", state_name),
         );
-        let is_other = self
+        let is_unexpected = self
             .builder()
             .build_not(
                 is_expected,
@@ -1662,7 +1662,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             "A reference-counting operation inferred {0} reached a non-{0} object.\n",
             state_name
         );
-        self.build_panic_if(is_other, &format!("assert_{}", state_name), &message);
+        self.build_panic_if(is_unexpected, &format!("assert_{}", state_name), &message);
     }
 
     /// Print `message` and stop the program where `cond` holds; where `cond` fails, the program
