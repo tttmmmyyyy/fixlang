@@ -13,8 +13,10 @@ jobs:
       fail-fast: false
       matrix:
         # `ubuntu-24.04-arm` runs AArch64 Linux, the one runner whose C ABI leaves the bits above a
-        # narrow integer to the reader.
-        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
+        # narrow integer to the reader. `ubuntu-24.04` is named rather than `ubuntu-latest`: the step
+        # "Install valgrind" asks for valgrind 3.22, which the Ubuntu 24.04 archive carries and the
+        # Ubuntu 26.04 image behind `ubuntu-latest` does not offer.
+        os: [ubuntu-24.04, ubuntu-24.04-arm, macos-latest]
         opt-level: [max, basic, none]
     env:
       FIX_MAX_OPT_LEVEL: ${{ matrix.opt-level }}
