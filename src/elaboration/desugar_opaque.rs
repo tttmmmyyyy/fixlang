@@ -550,13 +550,13 @@ fn agreeing_signature_correspondence(
         renamed_to.push(written_tv.name.clone());
         assert!(renaming.merge(&Substitution::single(&tv.name, written.clone())));
     }
-    let via_defn = renaming.substitute_scheme(&impl_.scm_via_defn);
+    let renamed_via_defn = renaming.substitute_scheme(&impl_.scm_via_defn);
 
     let mut opaque_tyvars = impl_.scm.opaque_vars();
-    opaque_tyvars.extend(via_defn.opaque_vars());
+    opaque_tyvars.extend(renamed_via_defn.opaque_vars());
     let agrees = UnifOrOtherErr::extract_others(tc.check_scheme_equivalent(
         &impl_.scm,
-        &via_defn,
+        &renamed_via_defn,
         &opaque_tyvars,
     ))?
     .is_ok();
