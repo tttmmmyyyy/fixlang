@@ -9,11 +9,12 @@
 //! It checks the structural invariants of the RC IR: every name is bound once in the whole program
 //! (no shadowing, and no name shared by two functions or globals); every variable use resolves to a
 //! binding in scope, or to a global — a function or a global value, both referenceable by name (a
-//! direct call names its callee by that name); every `Retain`/`Release` names one reference-counting unit of its variable; a function
-//! carries a capture parameter exactly for the closure ABI; every match has at least one arm, with
-//! any catch-all arm last; a `Builtin` operation's embedded operand names match its argument list;
-//! a closure value stores the capture layout its target function projects; and a `Destructure` of an
-//! unboxed container names each of its fields.
+//! direct call names its callee by that name); every `Retain`/`Release` names one
+//! reference-counting unit of its variable; a function carries a capture parameter exactly for the
+//! closure ABI; every match has at least one arm, with any catch-all arm last; a `Builtin`
+//! operation's embedded operand names match its argument list; a closure value stores the capture
+//! layout its target function projects; and a `Destructure` of an unboxed container names each of
+//! its fields.
 
 use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
