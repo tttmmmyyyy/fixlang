@@ -64,7 +64,7 @@ pub struct CloneRegistry<K> {
     enqueued: Set<(FuncRef, K)>,
     /// The enqueued clones not yet handed out for materialization.
     worklist: VecDeque<(FuncRef, K)>,
-    /// The letter marking this pass's fresh names apart from another pass's.
+    /// The tag marking this pass's fresh names apart from another pass's; see `copy_suffix`.
     tag: &'static str,
 }
 
