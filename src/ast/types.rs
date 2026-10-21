@@ -2730,7 +2730,7 @@ impl Scheme {
     /// scheme leaves free, that is, all but the generalized ones.
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
         for tv in self.all_vars() {
-            if !self.gen_vars.iter().any(|tv0| tv0.name == tv.name) {
+            if !self.generalizes(&tv.name) {
                 buf.push(tv);
             }
         }
