@@ -1,0 +1,33 @@
+module Main;
+
+// String globals: literals (constant storage), computed strings, strings inside structs and tuples,
+// split, concatenated and compared.
+type Named = box struct { name : String, tags : Array String };
+
+glit : String = "literal-string";
+gcomp : String = glit + "-" + 42.to_string;
+gnamed : Named = Named { name : gcomp, tags : glit.split("-").to_array };
+gtup : (String, Array String, Named) = (glit, gnamed.@tags.push_back(gcomp), gnamed);
+gchars : Array U8 = glit.get_bytes;
+
+measure : String -> I64;
+measure = |s| (
+    let t = s + "!" + s;
+    t.get_size * 3 + t.get_bytes.to_iter.fold(0, |c, acc| acc + c.to_I64)
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let r1 = measure(glit) + measure(gcomp) + measure(glit + gcomp);
+    let Named { name : nm, tags : tg } = gnamed;
+    let r2 = measure(nm) + tg.to_iter.fold(0, |t, s| s + measure(t)) + measure(tg.@(n % tg.@size));
+    let (a, b, c) = gtup;
+    let Named { name : nm2, tags : _ } = c;
+    let r3 = measure(a) + b.to_iter.fold(0, |t, s| s + measure(t)) + measure(nm2) + measure(c.@name);
+    let r4 = gchars.push_back(33_U8).@size + gchars.@(n).to_I64 + measure(glit.get_sub(1, 5));
+    let r5 = if glit == gcomp { 1 } else { 2 } + (if a == glit { 10 } else { 20 });
+    let s = if n > 0 { glit } else { gcomp };
+    let r6 = measure(s) + measure(s) + s.find("str", 0).as_some_or(-1);
+    println $ [r1, r2, r3, r4, r5, r6].to_iter.map(to_string).join(",")
+);

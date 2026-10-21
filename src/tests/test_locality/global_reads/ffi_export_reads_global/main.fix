@@ -1,0 +1,25 @@
+module Main;
+
+// An `FFI_EXPORT`ed function that reads a global and is called back through `FFI_CALL`.
+
+ga : Array String;
+ga = Array::from_map(4, |i| "f" + i.to_string);
+
+gp : (Array String, I64);
+gp = (ga.push_back("e"), 7);
+
+size_of_global : I64 -> I64;
+size_of_global = |k| (
+    let (a, n) = gp;
+    a.@(k % a.@size).get_size + ga.@size + n
+);
+
+FFI_EXPORT[size_of_global, weird_size_of_global];
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let x = FFI_CALL[I64 weird_size_of_global(I64), k];
+    let y = FFI_CALL[I64 weird_size_of_global(I64), k + 3];
+    println $ x.to_string + " " + y.to_string + " " + size_of_global(k).to_string
+);

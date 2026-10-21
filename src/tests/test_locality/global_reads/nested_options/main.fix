@@ -1,0 +1,27 @@
+module Main;
+
+// Four nested Options, `Option (Box (Option ...))`, bind and flatten over global values.
+
+go : Option (Box (Option (Array (Option String))));
+go = some(Box::make(some([some("o1" + ""), none(), some("o3")])));
+
+gr : Result String (Option (Box (Array String)));
+gr = ok(some(Box::make(["r" + "1"])));
+
+gnest : Option (Option (Option (Option (Array I64))));
+gnest = some(some(some(some(Array::from_map(3, |i| i)))));
+
+flat4 : Option (Option (Option (Option (Array I64)))) -> Array I64;
+flat4 = |o| o.flatten.flatten.flatten.map_or([], |a| a);
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let a = go.map(|b| b.@value).flatten.map_or([], |arr| arr).to_iter.map(|o| o.map_or("_", |s| s)).to_array.to_iter.join("");
+    let b = go.bind(|b| b.@value).bind(|arr| arr.@(k + 1)).map_or("none", |s| s);
+    let c = gr.map(|o| o.map(|bx| bx.@value.push_back("x"))).as_ok.as_some.to_string;
+    let d = flat4(gnest).to_string + flat4(some(none())).to_string + flat4(if k > 0 { gnest } else { some(some(some(some([7])))) }).to_string;
+    let e = match gnest { some(o1) => match o1 { some(o2) => match o2 { some(o3) => o3.as_some.@(k), none() => -1 }, none() => -2 }, none() => -3 };
+    let f = gr.bind(|o| if o.is_some { ok(o.as_some) } else { err("no") }).map(|bx| bx.@value).as_ok.@(0);
+    println $ a + " " + b + " " + c + " " + d + " " + e.to_string + " " + f
+);

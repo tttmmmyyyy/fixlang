@@ -1,0 +1,31 @@
+module Main;
+
+// `act` with the IO and Option functors on fields and elements of globals: the global is shared, so
+// the container is cloned around the action, and the field handed to the action is the global's.
+type BS = box struct { a : Array I64, b : Array (Array I64) };
+type UBS = struct { ua : Array I64, ub : String };
+
+gbs : BS = BS { a : Array::from_map(3, |i| i + 1), b : Array::from_map(3, |i| Array::fill(2, i)) };
+gubs : UBS = UBS { ua : Array::from_map(4, |i| i * 6), ub : "ubs" + "!" };
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 4);
+    a.to_iter.fold(0, |x, s| s * 83 + x)
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let b1 = *gbs.act_a(|a| println(consume(a).to_string);; pure(a.push_back(n)));
+    let r1 = consume(b1.@a) + consume(gbs.@a);
+    let b2 = *gbs[^b][1].iact(|a| println(consume(a).to_string);; pure(a.set(0, 99)));
+    let r2 = b2.@b.to_iter.fold(0, |a, s| s + consume(a));
+    let b3 = gbs.act_a(|a| if a.@size > n { some(a.append(a)) } else { none() });
+    let r3 = match b3 { some(bs) => consume(bs.@a), none(_) => -1 };
+    let u1 = *gubs.act_ua(|a| println(consume(a).to_string);; pure(a.pop_back));
+    let r4 = consume(u1.@ua) + u1.@ub.get_size + consume(gubs.@ua);
+    let u2 = gubs[^ub].imod(|s| s + "?");
+    let r5 = u2.@ub.get_size + gubs.@ub.get_size;
+    println $ [r1, r2, r3, r4, r5].to_iter.map(to_string).join(",")
+);

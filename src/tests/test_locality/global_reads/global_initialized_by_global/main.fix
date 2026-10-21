@@ -1,0 +1,58 @@
+module Main;
+
+// Globals initialized directly by another global, by a field of one, by a string literal, and by a
+// constant array.
+
+g : Array String;
+g = Array::from_map(3, |i| "g" + i.to_string);
+
+h : Array String;
+h = g;
+
+gpair : (Array String, String);
+gpair = (h, "lit");
+
+h2 : Array String;
+h2 = gpair.@0;
+
+h3 : (Array String, Array String);
+h3 = (g, h2);
+
+lit : String;
+lit = "just a literal";
+
+lits : Array String;
+lits = ["a", "bb", "ccc"];
+
+numlits : Array I64;
+numlits = [1, 2, 3, 4];
+
+nested_lits : Array (Array I64);
+nested_lits = [[1], [2, 3], numlits];
+
+type W = box struct { s : String, a : Array String };
+
+gw : W;
+gw = W { s : lit, a : lits };
+
+gw2 : W;
+gw2 = (let W { s : s, a : a } = gw; W { s : s + "!", a : a });
+
+gstrs : (String, String, String);
+gstrs = (lit, gw.@s, "x");
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let (a, b) = h3;
+    let (c, d) = gpair;
+    let (s1, s2, s3) = gstrs;
+    let W { s : ws, a : wa } = gw;
+    let W { s : ws2, a : wa2 } = gw2;
+    let x = a.@(k) + b.@(k) + c.@(0) + d + h.@(2) + h2.@(1) + lit + lits.@(k) + s1 + s2 + s3 + ws + wa.@(2) + ws2 + wa2.@(0);
+    let y = numlits.@(k) + nested_lits.@(2).@(3) + nested_lits.@(k).@(0);
+    let z = lit.get_size + lit.find("lit", 0).as_some + (lit + lit).get_size;
+    let m = lits.set(k, lit).push_back(gw.@s);
+    let n = nested_lits.mod(k, |a| a.push_back(9)).set(0, numlits.push_back(5));
+    println $ x + " " + y.to_string + " " + z.to_string + " " + m.to_string + " " + n.to_string + " " + lits.to_string + nested_lits.to_string
+);

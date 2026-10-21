@@ -1,0 +1,41 @@
+module Main;
+
+// One small destructuring function called with a global, with a value built here, and with a join
+// of both; once it is inlined into each site the destructure sees the global by name in some sites
+// and a local in others. A recursive twin is never inlined.
+type BS = box struct { a : Array I64, b : Array I64 };
+type BU = box union { l : Array I64, r : BS };
+
+gbs : BS = BS { a : Array::from_map(3, |i| i + 1), b : Array::from_map(3, |i| i + 20) };
+gbu : BU = BU::r(gbs);
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 4);
+    a.to_iter.fold(0, |x, s| s * 101 + x)
+);
+
+split : BS -> (Array I64, Array I64);
+split = |bs| (let BS { a : x, b : y } = bs; (x, y));
+
+split_rec : I64 -> BS -> (Array I64, Array I64);
+split_rec = |k, bs| if k > 0 { split_rec(k - 1, bs) } else { (let BS { a : x, b : y } = bs; (y, x)) };
+
+open : BU -> BS;
+open = |u| match u { l(a) => BS { a : a, b : a }, r(bs) => bs };
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let local = BS { a : Array::fill(n + 2, 3), b : gbs.@a };
+    let (x1, y1) = split(gbs);
+    let (x2, y2) = split(local);
+    let (x3, y3) = split(if n > 1 { local } else { gbs });
+    let (x4, y4) = split_rec(n, gbs);
+    let (x5, y5) = split_rec(n, local);
+    let (x6, y6) = split(open(gbu));
+    let (x7, y7) = split(open(if n > 0 { gbu } else { BU::l(Array::fill(2, n)) }));
+    let r = [x1, y1, x2, y2, x3, y3, x4, y4, x5, y5, x6, y6, x7, y7].to_iter.fold(0, |a, s| s + consume(a));
+    let r2 = consume(x1) + consume(x6) + consume(y7) + consume(local.@a);
+    println $ [r, r2].to_iter.map(to_string).join(",")
+);

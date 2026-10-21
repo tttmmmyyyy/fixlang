@@ -1,0 +1,27 @@
+module Main;
+
+// A 40-field struct and a boxed struct holding it, destructured whole and with `_` for most fields.
+
+type Big = struct { f0 : Array I64, f1 : String, f2 : I64, f3 : Array I64, f4 : String, f5 : I64, f6 : Array I64, f7 : String, f8 : I64, f9 : Array I64, f10 : String, f11 : I64, f12 : Array I64, f13 : String, f14 : I64, f15 : Array I64, f16 : String, f17 : I64, f18 : Array I64, f19 : String, f20 : I64, f21 : Array I64, f22 : String, f23 : I64, f24 : Array I64, f25 : String, f26 : I64, f27 : Array I64, f28 : String, f29 : I64, f30 : Array I64, f31 : String, f32 : I64, f33 : Array I64, f34 : String, f35 : I64, f36 : Array I64, f37 : String, f38 : I64, f39 : Array I64 };
+type BigB = box struct { inner : Big, more : Array Big };
+
+gbig : Big;
+gbig = Big { f0 : Array::from_map(1, |j| j + 0), f1 : "s1" + "", f2 : 2, f3 : Array::from_map(4, |j| j + 3), f4 : "s4" + "", f5 : 5, f6 : Array::from_map(2, |j| j + 6), f7 : "s7" + "", f8 : 8, f9 : Array::from_map(5, |j| j + 9), f10 : "s10" + "", f11 : 11, f12 : Array::from_map(3, |j| j + 12), f13 : "s13" + "", f14 : 14, f15 : Array::from_map(1, |j| j + 15), f16 : "s16" + "", f17 : 17, f18 : Array::from_map(4, |j| j + 18), f19 : "s19" + "", f20 : 20, f21 : Array::from_map(2, |j| j + 21), f22 : "s22" + "", f23 : 23, f24 : Array::from_map(5, |j| j + 24), f25 : "s25" + "", f26 : 26, f27 : Array::from_map(3, |j| j + 27), f28 : "s28" + "", f29 : 29, f30 : Array::from_map(1, |j| j + 30), f31 : "s31" + "", f32 : 32, f33 : Array::from_map(4, |j| j + 33), f34 : "s34" + "", f35 : 35, f36 : Array::from_map(2, |j| j + 36), f37 : "s37" + "", f38 : 38, f39 : Array::from_map(5, |j| j + 39) };
+
+gbb : BigB;
+gbb = BigB { inner : gbig, more : [gbig, gbig.set_f0([7])] };
+
+all : Big -> I64;
+all = |Big { f0 : x0, f1 : x1, f2 : x2, f3 : x3, f4 : x4, f5 : x5, f6 : x6, f7 : x7, f8 : x8, f9 : x9, f10 : x10, f11 : x11, f12 : x12, f13 : x13, f14 : x14, f15 : x15, f16 : x16, f17 : x17, f18 : x18, f19 : x19, f20 : x20, f21 : x21, f22 : x22, f23 : x23, f24 : x24, f25 : x25, f26 : x26, f27 : x27, f28 : x28, f29 : x29, f30 : x30, f31 : x31, f32 : x32, f33 : x33, f34 : x34, f35 : x35, f36 : x36, f37 : x37, f38 : x38, f39 : x39 }| x0.@size + x1.get_size + x2 + x3.@size + x4.get_size + x5 + x6.@size + x7.get_size + x8 + x9.@size + x10.get_size + x11 + x12.@size + x13.get_size + x14 + x15.@size + x16.get_size + x17 + x18.@size + x19.get_size + x20 + x21.@size + x22.get_size + x23 + x24.@size + x25.get_size + x26 + x27.@size + x28.get_size + x29 + x30.@size + x31.get_size + x32 + x33.@size + x34.get_size + x35 + x36.@size + x37.get_size + x38 + x39.@size;
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let Big { f0 : x0, f1 : x1, f2 : _, f3 : _, f4 : _, f5 : _, f6 : _, f7 : _, f8 : _, f9 : _, f10 : _, f11 : _, f12 : _, f13 : _, f14 : _, f15 : _, f16 : _, f17 : _, f18 : _, f19 : _, f20 : _, f21 : _, f22 : _, f23 : _, f24 : _, f25 : _, f26 : _, f27 : _, f28 : _, f29 : _, f30 : _, f31 : _, f32 : _, f33 : _, f34 : _, f35 : _, f36 : _, f37 : _, f38 : _, f39 : x39 } = gbig;
+    let a = x0.@size + x1.get_size + x39.@size;
+    let b = all(gbig) + all(gbb.@inner) + all(gbb.@more.@(k)) + gbb.@more.to_iter.map(all).sum;
+    let BigB { inner : bi, more : bm } = gbb;
+    let c = all(bi.set_f3(bm.@(1).@f0)) + bm.@size;
+    let d = gbig.@f39.push_back(k).to_string + gbig.@f38.to_string + gbig.@f37;
+    println $ a.to_string + " " + b.to_string + " " + c.to_string + " " + d
+);

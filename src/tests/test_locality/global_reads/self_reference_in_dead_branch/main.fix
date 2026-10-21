@@ -1,0 +1,25 @@
+module Main;
+
+// Globals that reference themselves or each other in branches never taken, and a global closure that
+// calls itself.
+
+ga : Array String;
+ga = if get_args.unsafe_perform.@size > 100 { gb.@0 } else { ["a" + ""] };
+
+gb : (Array String, I64);
+gb = (ga.push_back("b"), ga.@size);
+
+gselfish : Array String;
+gselfish = if get_args.unsafe_perform.@size > 100 { gselfish.push_back("never") } else { Array::from_map(2, |i| i.to_string) };
+
+gloop : I64 -> Array String;
+gloop = (
+    let base = Array::from_map(3, |i| "c" + i.to_string);
+    |n| if n <= 0 { base } else { gloop(n - 1).push_back(n.to_string) }
+);
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    println $ ga.to_string + gb.@0.to_string + gb.@1.to_string + gselfish.to_string + gloop(k + 2).to_string + gloop(0).to_string
+);

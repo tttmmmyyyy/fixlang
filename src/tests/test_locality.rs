@@ -584,7 +584,15 @@ mod integration_tests {
 #[cfg(test)]
 mod runtime_tests {
     use crate::configuration::Configuration;
-    use crate::tests::test_util::test_source;
+    use crate::tests::test_util::{run_source_capture, test_source};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
+    use std::thread;
+
+    /// How many of the `global_reads` programs are compiled and run at once.
+    const GLOBAL_READS_WORKERS: usize = 6;
 
     /// Verifies that the annotations on a program walking all three doors out of the local state
     /// hold at run time — a global read directly, out of a container and out of a global struct, and
@@ -655,5 +663,52 @@ mod runtime_tests {
     fn test_annotations_of_leaf_keyed_shapes_hold_at_run_time() {
         let source = include_str!("test_locality/cases/shapes/main.fix");
         test_source(source, Configuration::develop_mode());
+    }
+
+    /// Verifies the programs under `test_locality/global_reads`, each reading globals in a shape
+    /// ordinary code does not take: odd type shapes, joins with local values, values passed through
+    /// ops, closures, destructors and recursion. Development mode puts a state check at every site
+    /// annotated global or local, and memcheck watches the run, so a site that drops the count of an
+    /// object that is counted stops the program; the output has to be the one recorded beside it in
+    /// `expected.txt`. A new program joins the set by adding its directory.
+    #[test]
+    fn test_unusual_reads_of_globals_hold_at_run_time() {
+        let dir =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/tests/test_locality/global_reads");
+        let mut cases: Vec<PathBuf> = fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.is_dir())
+            .collect();
+        cases.sort();
+        assert!(!cases.is_empty(), "no program under {}", dir.display());
+        let next = AtomicUsize::new(0);
+        let failures = Mutex::new(vec![]);
+        thread::scope(|scope| {
+            for _ in 0..GLOBAL_READS_WORKERS {
+                scope.spawn(|| loop {
+                    let i = next.fetch_add(1, Ordering::SeqCst);
+                    let Some(case) = cases.get(i) else {
+                        break;
+                    };
+                    let source = fs::read_to_string(case.join("main.fix")).unwrap();
+                    let expected = fs::read_to_string(case.join("expected.txt")).unwrap();
+                    let output = run_source_capture(&source, Configuration::develop_mode());
+                    let stdout = String::from_utf8_lossy(&output.stdout);
+                    if !output.status.success() || stdout != expected {
+                        failures.lock().unwrap().push(format!(
+                            "{}: {}\nstdout:\n{}\nexpected:\n{}\nstderr:\n{}",
+                            case.file_name().unwrap().to_string_lossy(),
+                            output.status,
+                            stdout,
+                            expected,
+                            String::from_utf8_lossy(&output.stderr)
+                        ));
+                    }
+                });
+            }
+        });
+        let failures = failures.into_inner().unwrap();
+        assert!(failures.is_empty(), "{}", failures.join("\n\n"));
     }
 }

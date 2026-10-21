@@ -1,0 +1,34 @@
+module Main;
+
+// A global box sent through `boxed_to_retained_ptr` and back through `boxed_from_retained_ptr`, and
+// read with `borrow_boxed`.
+
+gbox : Box (Array String);
+gbox = Box::make(Array::from_map(3, |i| "b" + i.to_string));
+
+garr : Array String;
+garr = ["r" + "1", "r2"];
+
+type Pair = box struct { x : Array String, y : Box (Array String) };
+
+gpair : Pair;
+gpair = Pair { x : garr, y : gbox };
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let p1 = *gbox.boxed_to_retained_ptr;
+    let p2 = *gbox.boxed_to_retained_ptr;
+    let b1 : Box (Array String) = *boxed_from_retained_ptr(p1);
+    let b2 : Box (Array String) = *boxed_from_retained_ptr(p2);
+    let p3 = *gpair.@y.boxed_to_retained_ptr;
+    let a3b : Box (Array String) = *boxed_from_retained_ptr(p3); let a3 = a3b.@value;
+    let p4 = *gpair.@y.boxed_to_retained_ptr;
+    let b4 : Box (Array String) = *boxed_from_retained_ptr(p4);
+    let p5 = *gpair.boxed_to_retained_ptr;
+    let pp : Pair = *boxed_from_retained_ptr(p5);
+    let Pair { x : px, y : py } = pp;
+    let s = b1.@value.@(k) + b2.@value.@size.to_string + a3.@(k) + b4.@value.@(2) + px.@(0) + py.@value.@(0);
+    let s2 = gbox.borrow_boxed(|ptr| ptr.to_string.get_size > 0).to_string;
+    println $ s + " " + s2 + " " + (gbox.@value == b1.@value).to_string
+);

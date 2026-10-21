@@ -1,0 +1,30 @@
+module Main;
+
+// split/find/sort/compare/from_bytes on global strings.
+
+gs : String;
+gs = "alpha,beta,,gamma," + Array::from_map(3, |i| i.to_string).to_iter.join(",");
+
+gparts : Array String;
+gparts = gs.split(",").to_array;
+
+gbytes : Array U8;
+gbytes = gs.get_bytes;
+
+gpair : (String, String);
+gpair = (gs, gparts.@(0));
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let a = gs.split(",").map(|s| s + "|").to_array.to_iter.join("");
+    let b = (gs == gpair.@0).to_string + (gparts.@(0) < gparts.@(1)).to_string + (gpair.@1 == gparts.@(k - 1)).to_string;
+    let c = gs.get_sub(k, 5) + gs.strip_first_spaces + gs.find("gamma", 0).as_some.to_string;
+    let d = (from_bytes(gbytes.push_back(0_U8)) : Result ErrMsg String).as_ok + gbytes.@size.to_string;
+    let e = gparts.to_iter.fold("", |s, acc| if s.is_empty { acc + "_" } else { acc + s.get_sub(0, 1) });
+    let f = gparts.sort_by(|(x, y)| x > y).to_iter.join(":");
+    let g = (if k > 0 { gpair.@1 } else { "loc" }) + gs.strip_last_spaces + gs.get_first_byte.as_some.to_string;
+    let (p, q) = gpair;
+    let h = p.get_size + q.get_size + (p + q).get_size;
+    println $ a + " " + b + " " + c + " " + d + " " + e + " " + f + " " + g + " " + h.to_string + " " + gparts.to_string
+);

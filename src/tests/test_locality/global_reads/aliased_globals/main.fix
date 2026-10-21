@@ -1,0 +1,38 @@
+module Main;
+
+// Globals that alias each other's objects: a global equal to another, a global equal to an element
+// or field of another, a global holding the same object twice, and a global array of a global.
+type BS = box struct { a : Array I64, b : Array I64 };
+
+g1 : Array I64 = Array::from_map(4, |i| i * 2 + 1);
+g2 : Array I64 = g1;
+g3 : BS = BS { a : g1, b : g2 };
+g4 : Array I64 = g3.@b;
+g5 : (BS, BS) = (g3, g3);
+g6 : Array BS = Array::fill(3, g3);
+g7 : BS = g6.@(1);
+g8 : Array I64 = (let BS { a : x, b : _ } = g7; x);
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 3);
+    a.to_iter.fold(0, |x, s| s * 67 + x)
+);
+
+take : BS -> I64;
+take = |bs| (let BS { a : x, b : y } = bs; consume(x) + consume(y));
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let r1 = consume(g1) + consume(g2) + consume(g4) + consume(g8);
+    let (p, q) = g5;
+    let r2 = take(p) + take(q) + take(g3) + take(g7);
+    let r3 = g6.to_iter.fold(0, |bs, s| s + take(bs));
+    let BS { a : x, b : y } = g7;
+    let BS { a : x2, b : y2 } = g6.@(n % 3);
+    let r4 = consume(x) + consume(y) + consume(x2) + consume(y2) + consume(x) + consume(g8);
+    let arr = g6.set(0, BS { a : Array::fill(2, n), b : g8 });
+    let r5 = arr.to_iter.fold(0, |bs, s| s + take(bs));
+    println $ [r1, r2, r3, r4, r5].to_iter.map(to_string).join(",")
+);

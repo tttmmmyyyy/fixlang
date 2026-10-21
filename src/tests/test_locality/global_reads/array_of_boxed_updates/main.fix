@@ -1,0 +1,38 @@
+module Main;
+
+// A global array of boxed elements modified through set / mod / act / ixchg / push_back / sort, each
+// of which clones because the global is shared, then read back and consumed.
+gaa : Array (Array I64) = Array::from_map(4, |i| Array::from_map(i + 1, |j| i * 10 + j));
+gs : Array String = Array::from_map(3, |i| "s" + i.to_string);
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 1);
+    a.to_iter.fold(0, |x, s| s * 19 + x)
+);
+
+total : Array (Array I64) -> I64;
+total = |aa| aa.to_iter.fold(0, |a, s| s + consume(a));
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let a1 = gaa.set(0, Array::fill(n + 1, 4));
+    let r1 = total(a1) + total(gaa) + consume(a1.@(1));
+    let a2 = gaa.mod(1, |x| x.push_back(n));
+    let r2 = total(a2) + consume(a2.@(1)) + consume(gaa.@(1));
+    let (a3, old) = gaa[2].ixchg([]);
+    let r3 = consume(old) + total(a3) + total(gaa);
+    let a4 = gaa.push_back(gaa.@(0));
+    let r4 = total(a4) + consume(a4.@(4));
+    let a5 = gaa.sort_by(|(x, y)| x.@size > y.@size);
+    let r5 = total(a5);
+    let a6 = gaa[1].imod(|x| x.set(0, 1000));
+    let r6 = total(a6) + consume(a6.@(1));
+    let r7 = gs.to_iter.fold(0, |s, acc| acc + (s + "!").get_size) + gs.@(n % 3).get_size;
+    let a8 = gaa.pop_back.pop_back;
+    let r8 = total(a8) + total(gaa.reverse) + total(gaa.to_iter.filter(|a| a.@size > 1).to_array);
+    let gaa = gaa.append(gaa);
+    let r9 = total(gaa);
+    println $ [r1, r2, r3, r4, r5, r6, r7, r8, r9].to_iter.map(to_string).join(",")
+);

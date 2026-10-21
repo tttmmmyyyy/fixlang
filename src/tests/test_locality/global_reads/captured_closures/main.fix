@@ -1,0 +1,57 @@
+module Main;
+
+// Global closures with captures, arrays of closures, partial applications, capture-less function
+// values, and `nullptr`.
+
+gcap : Array I64;
+gcap = Array::from_map(5, |i| i * 11);
+
+gf : I64 -> I64;
+gf = |x| x + gcap.@(x % 5);
+
+gclos : I64 -> String;
+gclos = (
+    let local = Array::from_map(4, |i| (i * 3).to_string);
+    let s = "pre" + local.@(1);
+    |x| s + local.@(x % 4)
+);
+
+gfns : Array (I64 -> String);
+gfns = [gclos, |x| x.to_string, |x| gclos(x + 1) + gclos(x + 2), (let a = ["a", "b"]; |x| a.@(x % 2))];
+
+gfptr : Ptr;
+gfptr = nullptr;
+
+gmaker : I64 -> (I64 -> Array String);
+gmaker = |n| (let arr = Array::from_map(n, |i| gclos(i)); |m| arr.push_back(m.to_string));
+
+gcurried : I64 -> I64 -> Array I64 -> Array I64;
+gcurried = |a, b, c| c.push_back(a).push_back(b).push_back(gcap.@(0));
+
+gpartial : Array I64 -> Array I64;
+gpartial = gcurried(1, 2);
+
+gpair_fn : (I64 -> I64, Array (I64 -> I64));
+gpair_fn = (gf, [gf, |x| gf(gf(x))]);
+
+returns_global : () -> Array I64;
+returns_global = |_| gcap;
+
+returns_lambda_of_global : I64 -> (I64 -> Array I64);
+returns_lambda_of_global = |k| if k > 0 { |i| gcap.push_back(i) } else { |i| [i] };
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let s = gfns.to_iter.map(|f| f(k)).to_array.to_iter.join(",");
+    let f2 = gfns.@(k + 1);
+    let f3 = if k > 0 { gfns.@(0) } else { |x| x.to_string };
+    let mk = gmaker(3);
+    let arr = mk(7) + mk(8);
+    let p = gpartial([k]) + gpartial(gcap);
+    let (f, fs) = gpair_fn;
+    let f0 = fs.@(0); let f1 = fs.@(1); let f9 = gpair_fn.@1.@(1);
+    let q = f(k) + f0(k) + f1(k) + f9(3);
+    let r = returns_global().push_back(1) + (returns_lambda_of_global(k))(9) + (returns_lambda_of_global(0))(9);
+    println $ s + " " + f2(k) + f3(5) + " " + arr.to_iter.join(",") + " " + p.to_string + " " + q.to_string + " " + r.to_string + " " + (gfptr == nullptr).to_string + gf(k).to_string
+);

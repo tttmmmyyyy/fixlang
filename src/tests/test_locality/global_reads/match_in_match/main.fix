@@ -1,0 +1,50 @@
+module Main;
+
+// A match on a global inside an arm of a match on the same global.
+
+type E = box union { lit : String, add : (E, E), neg : E, many : Array E };
+
+ge : E;
+ge = E::add((E::neg(E::lit("1" + "")), E::many([E::lit("2"), E::add((E::lit("3"), E::lit("4"))), E::neg(E::many([]))])));
+
+gu : Option E;
+gu = some(ge);
+
+show : E -> String;
+show = |e| match e {
+    lit(s) => s,
+    add((a, b)) => "(" + show(a) + "+" + show(b) + ")",
+    neg(a) => "-" + show(a),
+    many(es) => "[" + es.to_iter.map(show).to_array.to_iter.join(",") + "]"
+};
+
+weird : I64 -> String;
+weird = |k| match ge {
+    add((a, b)) => match ge {
+        add((c, _)) => match a {
+            neg(x) => show(x) + show(c) + match gu { some(e) => match e { add((_, d)) => show(d) + show(b), _ => "?" }, none() => "" },
+            _ => "a"
+        },
+        _ => "b"
+    },
+    neg(_) => show(ge),
+    _ => match gu { some(e) => show(e), none() => "" }
+};
+
+rebuild : E -> E;
+rebuild = |e| match e {
+    add((a, b)) => E::add((rebuild(b), a)),
+    neg(a) => a,
+    many(es) => E::many(es.push_back(ge)),
+    lit(_) => e
+};
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let s = weird(k);
+    let r = show(rebuild(ge)) + show(rebuild(rebuild(ge)));
+    let t = match (if k > 0 { gu } else { none() }) { some(e) => show(rebuild(e)), none() => "x" };
+    let u = match ge { many(_) => 0, lit(_) => 1, _ => 2 };
+    println $ s + " " + r + " " + t + " " + u.to_string
+);

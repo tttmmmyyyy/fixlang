@@ -1,0 +1,47 @@
+module Main;
+
+// Phantom type arguments, a triple `Wrap`, a union of functions, `Box (I64 -> I64)`, `Result () ()`.
+
+type Ph a = struct { n : I64 };
+type PhB a = box struct { n : I64 };
+type Wrap a = struct { w : a };
+type Fn = union { f0 : () -> (), f1 : I64 -> Box I64, f2 : Box (I64 -> I64) };
+
+gph : (Ph (Array String), PhB (Array String), Array (Ph String));
+gph = (Ph { n : 1 }, PhB { n : 2 }, [Ph { n : 3 }]);
+
+gwrap : Wrap (Wrap (Wrap (Array (Option ()))));
+gwrap = Wrap { w : Wrap { w : Wrap { w : [some(()), none(), some(())] } } };
+
+gfn : Array Fn;
+gfn = [Fn::f0(|_| ()), Fn::f1(|x| Box::make(x + 1)), Fn::f2(Box::make(|x| x * 3)), Fn::f1(Box::make)];
+
+gboxfn : Box (I64 -> I64);
+gboxfn = Box::make(|x| x + gph.@0.@n);
+
+gopt_unit_arr : Option (Array (Option ()));
+gopt_unit_arr = some(gwrap.@w.@w.@w);
+
+gresult_units : Result () ();
+gresult_units = ok(());
+
+gtuple_of_empty : (Array (), Array (Array ()), Box ());
+gtuple_of_empty = ([], [[]], Box::make(()));
+
+apply : Fn -> I64;
+apply = |f| match f { f0(g) => (let _ = g(); 0), f1(g) => g(5).@value, f2(b) => (b.@value)(5) };
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let (p, pb, pa) = gph;
+    let a = p.@n + pb.@n + pa.@(0).@n + pa.@size;
+    let Wrap { w : Wrap { w : Wrap { w : arr } } } = gwrap;
+    let b = arr.to_iter.filter(|o| o.is_some).to_array.@size + gopt_unit_arr.as_some.@size;
+    let c = gfn.to_iter.map(apply).sum + apply(gfn.@(k)) + (gboxfn.@value)(k);
+    let d = match gresult_units { ok(_) => 1, err(_) => 2 };
+    let (e0, e1, e2) = gtuple_of_empty;
+    let e = e0.push_back(()).@size + e1.@(0).@size + e1.push_back(e0).@size;
+    let _ = e2;
+    println $ a.to_string + " " + b.to_string + " " + c.to_string + " " + d.to_string + " " + e.to_string
+);

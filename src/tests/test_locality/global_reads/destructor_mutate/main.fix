@@ -1,0 +1,29 @@
+module Main;
+
+// A global holding Destructors around malloc'ed memory and around a boxed array; borrow and
+// mutate_unique (which must copy, since the global is shared) on them.
+type Res = box struct { buf : Destructor Ptr, data : Destructor (Array I64) };
+
+gres : Res = Res {
+    buf : Destructor::make(FFI_CALL[Ptr malloc(CSizeT), 64.to_CSizeT], |p| FFI_CALL_IO[() free(Ptr), p];; pure(nullptr)).unsafe_perform,
+    data : Destructor::make(Array::from_map(4, |i| i + 5), |a| pure(a)).unsafe_perform
+};
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 2);
+    a.to_iter.fold(0, |x, s| s * 41 + x)
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let Res { buf : b, data : d } = gres;
+    let r1 = d.borrow(consume) + b.borrow(|p| if p == nullptr { 0 } else { 1 });
+    let (d2, r2) = d.mutate_unique(|a| pure(a.push_back(n)), |a| pure(consume(a)));
+    let r3 = d2.borrow(consume) + gres.@data.borrow(consume);
+    let (b2, r4) = b.mutate_unique(|p| FFI_CALL_IO[Ptr malloc(CSizeT), 64.to_CSizeT], |p| pure(if p == nullptr { 0 } else { 2 }));
+    let r5 = b2.borrow(|p| if p == nullptr { 0 } else { 3 }) + gres.@buf.borrow(|p| if p == nullptr { 0 } else { 4 });
+    let r6 = Iterator::range(0, n + 3).fold(0, |i, s| s + gres.@data.borrow(|a| a.@(i % 4)));
+    println $ [r1, r2, r3, r4, r5, r6].to_iter.map(to_string).join(",")
+);

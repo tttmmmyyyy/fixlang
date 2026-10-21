@@ -1,0 +1,35 @@
+module Main;
+
+// A recursive boxed struct tree read from a global, taken apart in function-argument patterns and
+// rebuilt from the fields it yields.
+
+type Node = box struct { name : String, kids : Array Node, tag : I64, payload : (Array I64, String) };
+
+leaf : String -> I64 -> Node;
+leaf = |s, t| Node { name : s, kids : [], tag : t, payload : (Array::from_map(t, |i| i), s + s) };
+
+groot : Node;
+groot = Node { name : "root", kids : [leaf("a", 1), leaf("b", 2), Node { name : "c", kids : [leaf("d", 4)], tag : 3, payload : ([], "") }], tag : 0, payload : ([9, 9], "pp") };
+
+count : Node -> I64;
+count = |nd| nd.@kids.to_iter.fold(1, |k, acc| acc + count(k));
+
+names : Node -> String;
+names = |Node { name : nm, kids : ks, tag : _, payload : (p, q) }| nm + "(" + ks.to_iter.map(names).to_array.to_iter.join(",") + ")" + p.@size.to_string + q;
+
+steal : Node -> (Array Node, String);
+steal = |nd| (
+    let Node { name : nm, kids : ks, tag : t, payload : pl } = nd;
+    (ks, nm + t.to_string + pl.@1)
+);
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let (ks, s) = steal(groot);
+    let (ks2, s2) = steal(ks.@(k + 1));
+    let modified = groot.set_tag(5).mod_kids(|ks| ks.push_back(leaf("new", k)));
+    let rebuilt = Node { name : groot.@name, kids : groot.@kids.@(k + 1).@kids, tag : groot.@tag, payload : groot.@payload };
+    let rebuilt = rebuilt.set_payload(groot.@kids.@(0).@payload);
+    println $ count(groot).to_string + " " + names(groot) + " " + s + " " + ks.@size.to_string + " " + s2 + ks2.@size.to_string + " " + names(modified) + " " + names(rebuilt) + " " + names(groot)
+);

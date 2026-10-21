@@ -1,0 +1,51 @@
+module Main;
+
+// Globals whose types are type aliases and associated types.
+
+type Alias = Array String;
+type Alias2 a = (a, Array a);
+type Rec a = struct { r : Alias2 a };
+
+trait c : Container {
+    type Inner c;
+    inner : c -> Inner c;
+}
+
+type Holder = box struct { h : Array String };
+
+impl Holder : Container {
+    type Inner Holder = Array String;
+    inner = |h| h.@h;
+}
+
+galias : Alias;
+galias = Array::from_map(2, |i| "al" + i.to_string);
+
+galias2 : Alias2 String;
+galias2 = ("x" + "", galias);
+
+grec : Rec Alias;
+grec = Rec { r : (galias, [galias, galias]) };
+
+gelem : Elem (Array String);
+gelem = "elem" + "";
+
+ginner : Inner Holder;
+ginner = Holder { h : ["in" + ""] }.inner;
+
+gelems : Array (Elem (Array (Array String)));
+gelems = [galias, ginner];
+
+use_inner : [c : Container, Inner c = Array String] c -> String;
+use_inner = |c| c.inner.to_iter.join("");
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let (a, b) = galias2;
+    let Rec { r : (r0, r1) } = grec;
+    let s = a + b.@(k) + r0.@(0) + r1.@(k).@(1) + gelem + ginner.@(0) + gelems.@(k).@(0) + use_inner(Holder { h : galias });
+    let t = galias.push_back(gelem).to_string + ginner.push_back(gelem).to_string + gelems.push_back(ginner).to_string;
+    let u = if k > 0 { ginner } else { galias };
+    println $ s + " " + t + " " + u.to_string
+);

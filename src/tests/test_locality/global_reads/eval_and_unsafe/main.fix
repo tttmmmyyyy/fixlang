@@ -1,0 +1,38 @@
+module Main;
+
+// `eval`, `unsafe_perform`, a global IO action and a global lazy value.
+
+ga : Array String;
+ga = Array::from_map(3, |i| "e" + i.to_string);
+
+gio : IO ();
+gio = println("gio:" + ga.@(1));
+
+gio_arr : IO (Array String);
+gio_arr = pure $ ga.push_back("io");
+
+gread : Array String;
+gread = gio_arr.unsafe_perform;
+
+gs : String;
+gs = (eval ga.@(0); eval ga; let _ = ga.@(2); ga.@(1) + "s");
+
+glazy : Lazy (Array String);
+glazy = |_| ga.push_back("lazy");
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    eval ga;
+    eval ga.@(k);
+    eval gread;
+    gio;;
+    gio;;
+    let x = *gio_arr;
+    let y = *gio_arr;
+    let z = (pure(ga) : IO (Array String)).unsafe_perform;
+    let w = (println("inner:" + ga.@(k));; pure(ga.@(0))).unsafe_perform;
+    let v = (eval gio.unsafe_perform; gs);
+    let l = glazy() + glazy();
+    println $ x.to_string + y.to_string + z.to_string + w + v + gread.to_string + l.to_string
+);

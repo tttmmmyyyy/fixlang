@@ -1,0 +1,40 @@
+module Main;
+
+// `eval` of globals and of values taken out of them, with debug output, and globals whose
+// initializers use eval.
+type BS = box struct { a : Array I64, b : Array I64 };
+
+gbs : BS = (
+    let x = Array::from_map(3, |i| i + 1);
+    eval x.push_back(0);
+    BS { a : x, b : x.push_back(4) }
+);
+gside : Array I64 = (
+    eval gbs;
+    let BS { a : a, b : _ } = gbs;
+    eval a;
+    a.push_back(a.@size)
+);
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 2);
+    a.to_iter.fold(0, |x, s| s * 53 + x)
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    eval gbs;
+    let BS { a : a, b : b } = gbs;
+    eval a;
+    eval b;
+    eval debug_println(a.@size.to_string);
+    let r1 = consume(a) + consume(b);
+    eval gside;
+    eval consume(gside);
+    let r2 = consume(gside) + gside.@(n % 3);
+    eval (if n > 0 { a } else { b });
+    let r3 = consume(if n > 0 { a } else { b });
+    println $ [r1, r2, r3].to_iter.map(to_string).join(",")
+);

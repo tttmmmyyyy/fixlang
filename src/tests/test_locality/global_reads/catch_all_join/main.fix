@@ -1,0 +1,34 @@
+module Main;
+
+// Matches written in main on global boxed unions, where a catch-all arm returns the scrutinee or a
+// variant arm returns its payload, joined with arms that build values here, and the results taken
+// apart again.
+type BU = box union { one : Array I64, two : (Array I64, Array I64), none_ : () };
+
+g1 : BU = BU::one(Array::from_map(3, |i| i + 1));
+g2 : BU = BU::two((Array::from_map(2, |i| i + 5), Array::from_map(2, |i| i + 9)));
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 4);
+    a.to_iter.fold(0, |x, s| s * 103 + x)
+);
+
+total : BU -> I64;
+total = |u| match u { one(a) => consume(a), two(p) => consume(p.@0) + consume(p.@1), none_(_) => 0 };
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let u = match g2 { one(a) => BU::one(a.push_back(n)), _ => g2 };
+    let r1 = total(u) + total(u);
+    let w = match g1 { one(a) => if n > 3 { BU::one(a) } else { g1 }, _ => BU::none_() };
+    let r2 = total(w) + match w { one(a) => consume(a) + consume(a), _ => 0 };
+    let arr = match g2 { two(p) => if n % 2 == 0 { p.@0 } else { p.@1 }, one(a) => a, _ => [] };
+    let r3 = consume(arr) + consume(arr) + arr.@(0);
+    let arr2 = match g2 { two(p) => if n > 100 { Array::fill(1, 1) } else { p.@1 }, _ => [] };
+    let r4 = consume(arr2) + consume(arr2);
+    let pick = match (if n > 0 { g1 } else { g2 }) { one(a) => a, two(p) => p.@0, _ => [] };
+    let r5 = consume(pick) + consume(pick);
+    println $ [r1, r2, r3, r4, r5].to_iter.map(to_string).join(",")
+);

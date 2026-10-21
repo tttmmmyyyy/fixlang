@@ -1,0 +1,35 @@
+module Main;
+
+// Globals that are empty containers of boxed elements, unit-like boxed values, and zero-size
+// structs, grown and read.
+type E = box struct {};
+type W = box struct { e : E, arr : Array (Array I64) };
+
+gempty : Array (Array I64) = [];
+gemptys : Array String = Array::empty(0);
+ge : E = E {};
+gw : W = W { e : ge, arr : gempty };
+gopt_empty : Option (Array (Array I64)) = some(gempty);
+
+consume : Array (Array I64) -> I64;
+consume = |aa| (
+    let aa = aa.push_back(Array::fill(aa.@size + 1, 1));
+    aa.to_iter.fold(0, |a, s| s * 3 + a.@size)
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let r1 = consume(gempty) + consume(gempty) + gempty.@size;
+    let r2 = gemptys.push_back("x").@size + gemptys.@size;
+    let W { e : e, arr : arr } = gw;
+    let r0 = if e.boxed_to_retained_ptr.unsafe_perform == nullptr { 1 } else { 0 };
+    let r3 = consume(arr) + consume(arr.push_back(Array::fill(n, n)));
+    let r4 = match gopt_empty { some(aa) => consume(aa) + consume(aa), none(_) => 0 };
+    let w2 = gw.set_arr(gempty.push_back([1, 2]));
+    let W { e : e2, arr : arr2 } = w2;
+    let r5 = consume(arr2) + consume(gw.@arr);
+    let es = Array::fill(n + 2, ge);
+    let r6 = es.@size + es.to_iter.fold(0, |_e, s| s + 1);
+    println $ [r0, r1, r2, r3, r4, r5, r6].to_iter.map(to_string).join(",")
+);

@@ -1,0 +1,36 @@
+module Main;
+
+// A destructor function that reads a global for the first time.
+
+g1 : Array String;
+g1 = Array::from_map(3, |i| "d" + i.to_string);
+
+g2 : (Array String, Box (Array String));
+g2 = (g1.push_back("x"), Box::make(g1));
+
+g3 : Array (Array String);
+g3 = [g2.@0, g2.@1.@value, g1];
+
+type Res = box struct { own : Array String, tag : I64 };
+
+make_res : I64 -> Destructor Res;
+make_res = |t| Destructor::make(Res { own : [t.to_string], tag : t }, |r| (
+    let x = if r.@tag % 3 == 0 { g1 } else { if r.@tag % 3 == 1 { g2.@0 } else { g3.@(r.@tag % 3) } };
+    pure $ r.mod_own(|o| o + x)
+)).unsafe_perform;
+
+gres : Destructor Res;
+gres = Destructor::make(Res { own : g1, tag : 0 }, |r| (let _ = g3; pure(r))).unsafe_perform;
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let ds = Iterator::range(0, 10).map(|i| make_res(i + k)).to_array;
+    let s = ds.to_iter.map(|d| d.borrow(|r| r.@own.@(0))).to_array.to_iter.join("");
+    let ds = ds.set(3, gres).push_back(gres);
+    let t = ds.to_iter.map(|d| d.borrow(|r| r.@own.@size)).sum;
+    let ds2 = ds.to_iter.filter(|d| d.borrow(|r| r.@tag % 2 == 0)).to_array;
+    let u = ds2.@size;
+    let _ = ds;
+    println $ s + " " + t.to_string + " " + u.to_string + " " + g3.to_string
+);

@@ -1,0 +1,47 @@
+module Main;
+
+// An array of unboxed unions with boxed payloads, nested Option/Result, and joins of global and
+// local values before a match.
+
+type U = union { arr : Array String, pair : (String, Array I64), num : I64, nothing : (), nested : Option (Result (Array (Option String)) String) };
+
+gus : Array U;
+gus = [U::arr(["a", "b"]), U::pair(("p" + "q", [1, 2, 3])), U::num(7), U::nothing(), U::nested(some(ok("okv" + ""))), U::nested(some(err([some("e1"), none(), some("e3")]))), U::nested(none())];
+
+g0 : U;
+g0 = U::pair(("zz", Array::from_map(4, |i| i * i)));
+
+gres : Result (Option (Array String)) (Option (Option String));
+gres = err(some(["r", "s"]));
+
+describe : U -> String;
+describe = |u| match u {
+    arr(a) => a.to_iter.join("|"),
+    pair((s, a)) => s + a.to_string,
+    num(n) => n.to_string,
+    nothing() => "nothing",
+    nested(o) => match o {
+        some(r) => match r {
+            ok(s) => "ok:" + s,
+            err(xs) => xs.to_iter.map(|o| o.map_or("_", |s| s)).to_array.to_iter.join("")
+        },
+        none() => "none"
+    }
+};
+
+wild : U -> I64;
+wild = |u| match u { pair((_, a)) => a.@size, _ => -1 };
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let ds = gus.to_iter.map(describe).to_array.to_iter.join(";");
+    let w = gus.to_iter.map(wild).sum + wild(g0);
+    let d0 = describe(g0) + describe(g0);
+    let picked = if k > 0 { g0 } else { gus.@(1) };
+    let picked2 = if k > 5 { U::arr(["local"]) } else { picked };
+    let r = match gres { err(o) => match o { some(a) => a.@(k), none() => "" }, ok(o) => match o { some(o2) => match o2 { some(s) => s, _ => "" }, _ => "" } };
+    let r2 = match gres { ok(_) => 0, err(o) => o.map_or(0, |a| a.@size) };
+    let u2 = g0.mod_pair(|(s, a)| (s + "!", a.push_back(k)));
+    println $ ds + " " + w.to_string + " " + d0 + " " + describe(picked2) + " " + r + r2.to_string + " " + describe(u2) + describe(g0)
+);

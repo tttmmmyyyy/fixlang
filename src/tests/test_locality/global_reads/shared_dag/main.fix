@@ -1,0 +1,42 @@
+module Main;
+
+// A large global DAG in which one object is reachable along many paths, walked recursively with
+// patterns at every node, and partly rebuilt.
+type T = box union { leaf : Array I64, node : (T, T, Array I64) };
+
+build : I64 -> T;
+build = |d| if d == 0 { T::leaf(Array::from_map(3, |i| i + 1)) } else {
+    let sub = build(d - 1);
+    T::node((sub, sub, Array::fill(d, d)))
+};
+
+gt : T = build(12);
+gsmall : T = match gt { node(p) => p.@0, leaf(_) => gt };
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 4);
+    a.to_iter.fold(0, |x, s| (s * 107 + x) % 1000000007)
+);
+
+walk : T -> I64;
+walk = |t| match t {
+    leaf(a) => consume(a),
+    node(p) => (let (l, r, a) = p; (walk(l) + walk(r) + consume(a)) % 1000000007)
+};
+
+rebuild : I64 -> T -> T;
+rebuild = |k, t| match t {
+    leaf(a) => T::leaf(a.push_back(k)),
+    node(p) => (let (l, r, a) = p; if k % 3 == 0 { t } else { T::node((rebuild(k + 1, l), r, a)) })
+};
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let r1 = walk(gt) + walk(gsmall);
+    let t2 = rebuild(n + 1, gt);
+    let r2 = walk(t2) + walk(gt);
+    let r3 = match gsmall { node(p) => walk(p.@0) + walk(p.@1) + consume(p.@2), leaf(a) => consume(a) };
+    println $ [r1, r2, r3].to_iter.map(to_string).join(",")
+);

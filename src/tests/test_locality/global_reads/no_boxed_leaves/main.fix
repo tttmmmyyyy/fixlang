@@ -1,0 +1,35 @@
+module Main;
+
+// Globals without boxed leaves: Ptr, F64, function values, an unboxed union of scalars.
+
+type N = struct { x : I64, y : F64, p : Ptr, f : I64 -> I64, u : Option I64, t : (U8, (), Bool) };
+type NU = union { a : I64, b : F64, c : I64 -> I64, d : () };
+
+double : I64 -> I64;
+double = |x| x * 2;
+
+gn : N;
+gn = N { x : 3, y : 1.5, p : nullptr, f : double, u : some(4), t : (1_U8, (), true) };
+
+gnu : Array NU;
+gnu = [NU::a(1), NU::b(2.0), NU::c(double), NU::c(|x| x + 100), NU::d()];
+
+gn2 : (N, N, NU);
+gn2 = (gn, gn.set_f(|x| x - 1), NU::c(gn.@f));
+
+gfns : (I64 -> I64, I64 -> I64);
+gfns = (double, |x| x * x);
+
+run : NU -> I64;
+run = |u| match u { a(n) => n, b(f) => f.to_I64, c(f) => f(10), d() => -1 };
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let N { x : x, y : _, p : p, f : f, u : u, t : (t0, (), t2) } = gn;
+    let a = x + f(k) + u.as_some + t0.to_I64 + (if t2 { 1 } else { 0 }) + (if p == nullptr { 1 } else { 0 });
+    let b = gnu.to_iter.map(run).sum + run(gn2.@2) + (gn2.@1.@f)(k) + (gn2.@0.@f)(k);
+    let (f1, f2) = gfns;
+    let c = f1(f2(k + 2)) + (if k > 0 { f1 } else { f2 })(9);
+    println $ a.to_string + " " + b.to_string + " " + c.to_string
+);

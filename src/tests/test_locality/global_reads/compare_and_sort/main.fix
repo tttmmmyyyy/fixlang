@@ -1,0 +1,23 @@
+module Main;
+
+// `==`, `<` and `sort_by` on global arrays.
+
+ga : Array (Array String);
+ga = Array::from_map(5, |i| Array::from_map(5 - i, |j| (j * 7 % 5).to_string));
+
+gb : Array (Array String);
+gb = ga;
+
+gc : (Array (Array String), Option (Array String));
+gc = (ga, some(ga.@(0)));
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let a = (ga == gb).to_string + (ga.@(k) == gb.@(k)).to_string + (gc.@0 == ga).to_string + (gc.@1 == some(ga.@(0))).to_string + (ga.@(0) == ga.@(1)).to_string;
+    let b = ga.sort_by(|(x, y)| x.@size < y.@size).to_string;
+    let c = ga.to_iter.map(|row| row.sort_by(|(x, y)| x < y)).to_array.to_string;
+    let d = gc.@1.as_some.sort_by(|(x, y)| x > y).to_string + ga.@(0).to_string;
+    let e = (ga.@(k) < ga.@(0)).to_string;
+    println $ a + " " + b + " " + c + " " + d + " " + e
+);

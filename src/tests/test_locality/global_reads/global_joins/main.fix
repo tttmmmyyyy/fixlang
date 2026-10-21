@@ -1,0 +1,36 @@
+module Main;
+
+// Joins where both sides are globals, and joins that mix global and local values leaf by leaf.
+
+g1 : (Array String, Array String);
+g1 = (["g1a" + ""], ["g1b" + ""]);
+
+g2 : (Array String, Array String);
+g2 = (["g2a" + ""], Array::from_map(2, |i| "g2b" + i.to_string));
+
+type B = box struct { x : Array String, y : (Array String, Array String) };
+
+gb1 : B;
+gb1 = B { x : g1.@0, y : g2 };
+
+gb2 : B;
+gb2 = B { x : ["gb2" + ""], y : g1 };
+
+choose : I64 -> String;
+choose = |k| (
+    let p = if k % 2 == 0 { g1 } else { g2 };
+    let (a, b) = p;
+    let q = if k % 3 == 0 { (a, b) } else { if k % 3 == 1 { (b, a) } else { g1 } };
+    let r = if k % 5 == 0 { (q.@0, ["fresh" + k.to_string]) } else { q };
+    let bb = if k % 7 < 3 { gb1 } else { gb2 };
+    let B { x : bx, y : (by0, by1) } = bb;
+    let bb2 = if k % 4 == 0 { bb } else { B { x : by1, y : (bx, by0) } };
+    let B { x : cx, y : cy } = bb2;
+    r.@0.to_string + r.@1.to_string + cx.to_string + cy.@0.to_string + cy.@1.to_string
+);
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    println $ Iterator::range(0, 30).map(|i| choose(i + k)).to_array.to_iter.join(" ")
+);

@@ -1,0 +1,28 @@
+module Main;
+
+// A global `Array (IO ())` and `loop_m` states that alternate between global and local values.
+
+gmsgs : Array String;
+gmsgs = Array::from_map(4, |i| "msg" + i.to_string);
+
+gact : Array (IO ());
+gact = gmsgs.to_iter.map(|m| println(m)).to_array;
+
+gstate : (Array String, IO I64);
+gstate = (gmsgs, pure(gmsgs.@size));
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    gact.to_iter.fold_m((), |a, _| a);;
+    loop_m((0, gmsgs), |(i, acc)| (
+        if i >= 3 { break_m $ () };
+        println(acc.@(i % acc.@size));;
+        continue_m $ (i + 1, if i == 1 { gstate.@0 } else { acc.push_back("l" + i.to_string) })
+    ));;
+    let n = *gstate.@1;
+    let n2 = *(gstate.@1);
+    (gact.@(k));;
+    gmsgs.to_iter.fold_m(0, |m, acc| println(m + "!");; pure(acc + 1)).bind(|c| println(c.to_string));;
+    println $ (n + n2).to_string
+);

@@ -1,0 +1,42 @@
+module Main;
+
+// Globals and their fields passed to recursive functions that get a borrowing version and return the
+// argument itself; mutual recursion.
+
+ga : Array (Array String);
+ga = Array::from_map(6, |i| Array::from_map(i + 1, |j| (i + j).to_string));
+
+gpair : (Array String, Array (Array String));
+gpair = (ga.@(2), ga);
+
+// Recursive, so it is not inlined; returns either a part of its argument or its argument itself.
+pick_rec : I64 -> Array (Array String) -> Array String;
+pick_rec = |i, arr| (
+    if i >= arr.@size { arr.@(arr.@size - 1) };
+    if arr.@(i).@size == 4 { arr.@(i) };
+    pick_rec(i + 1, arr)
+);
+
+id_rec : I64 -> Array String -> Array String;
+id_rec = |n, a| if n == 0 { a } else { id_rec(n - 1, a) };
+
+sum_rec : I64 -> Array (Array String) -> I64;
+sum_rec = |i, arr| if i >= arr.@size { 0 } else { arr.@(i).@size + sum_rec(i + 1, arr) };
+
+mutual_a : I64 -> Array String -> Array String -> Array String;
+mutual_a = |n, x, y| if n <= 0 { x } else { mutual_b(n - 1, y, x) };
+
+mutual_b : I64 -> Array String -> Array String -> Array String;
+mutual_b = |n, x, y| if n <= 0 { y } else { mutual_a(n - 1, x.push_back(n.to_string), y) };
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let a = pick_rec(0, ga);
+    let b = pick_rec(k, gpair.@1);
+    let c = id_rec(5, ga.@(k)) + id_rec(3, gpair.@0) + id_rec(k, id_rec(k, ga.@(5)));
+    let d = sum_rec(0, ga) + sum_rec(k, gpair.@1) + sum_rec(0, ga.push_back(gpair.@0));
+    let e = mutual_a(5, ga.@(0), ga.@(1)) + mutual_a(4, gpair.@0, ga.@(k)) + mutual_b(k, ga.@(3), ga.@(3));
+    let f = pick_rec(0, [id_rec(2, ga.@(3)), ga.@(1)]);
+    println $ a.to_string + b.to_string + " " + c.to_string + " " + d.to_string + " " + e.to_string + " " + f.to_string
+);

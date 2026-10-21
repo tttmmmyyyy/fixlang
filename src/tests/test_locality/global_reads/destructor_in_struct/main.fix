@@ -1,0 +1,29 @@
+module Main;
+
+// A global `Destructor`, an array of them, and a boxed struct holding one taken apart.
+
+gd : Destructor (Array I64);
+gd = Destructor::make(Array::from_map(4, |i| i * 2), |a| pure(a)).unsafe_perform;
+
+gds : Array (Destructor String);
+gds = Array::from_map(3, |i| Destructor::make("d" + i.to_string, |s| pure(s)).unsafe_perform);
+
+type Holder = box struct { d : Destructor (Array String), extra : Array I64 };
+
+gh : Holder;
+gh = Holder { d : Destructor::make(["h1", "h2"], |a| pure(a)).unsafe_perform, extra : [1, 2, 3] };
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let a = gd.borrow(|a| a.@(k) + a.@size);
+    let b = gds.@(k).borrow(|s| s + "!");
+    let c = gh.@d.borrow(|a| a.to_iter.join("+"));
+    let Holder { d : dd, extra : ex } = gh;
+    let e = dd.borrow(|a| a.@(0)) + ex.@size.to_string;
+    let local = Destructor::make(gd.borrow(|a| a.push_back(9)), |a| pure(a)).unsafe_perform;
+    let f = local.borrow(|a| a.to_string);
+    let copied = gds.push_back(Destructor::make("new", |s| pure(s)).unsafe_perform);
+    let g = copied.to_iter.map(|d| d.borrow(|s| s)).to_array.to_iter.join("");
+    println $ a.to_string + " " + b + " " + c + " " + e + " " + f + " " + g
+);
