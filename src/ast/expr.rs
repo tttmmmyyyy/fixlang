@@ -130,7 +130,7 @@ impl ExprNode {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
             Expr::Var(var) => {
-                let var = var.set_namsapce(ns);
+                let var = var.set_namespace(ns);
                 ret.expr = Arc::new(Expr::Var(var))
             }
             _ => {
@@ -1636,7 +1636,7 @@ pub struct Var {
 }
 
 impl Var {
-    pub fn set_namsapce(&self, ns: NameSpace) -> Arc<Self> {
+    pub fn set_namespace(&self, ns: NameSpace) -> Arc<Self> {
         let mut ret = self.clone();
         ret.name.namespace = ns;
         Arc::new(ret)
