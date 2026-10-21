@@ -11,16 +11,25 @@ use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcRhs, RcVar};
 use std::sync::Arc;
 
 /// The suffix a copy's names take: `#`, the tag of the pass that makes the copy, and
-/// `distinguisher`, which tells the copy apart from the pass's other copies of the same code. No
-/// lowered name ends in this shape, which is what keeps the names the suffix makes fresh.
+/// `distinguisher`, which tells the copy apart from the pass's other copies of the same code.
 ///
 /// A tag is a run of lowercase letters, and a distinguisher is empty or starts with some other
 /// character. A suffix therefore splits into its tag and its distinguisher in one way only, so two
-/// passes with different tags never make the same suffix.
+/// passes with different tags never make the same suffix. A tag also holds a letter that is not a
+/// hexadecimal digit, while a lowered variable's name ends in `#`, sixteen hexadecimal digits and a
+/// counter, so no suffix spells the end of a lowered name.
+///
+/// # Examples
+/// `copy_suffix("u", "UD")` yields `"#uUD"`, and `copy_suffix("borrow", "")` yields `"#borrow"`.
 pub(crate) fn copy_suffix(tag: &str, distinguisher: &str) -> String {
     assert!(
         !tag.is_empty() && tag.chars().all(|c| c.is_ascii_lowercase()),
         "the copy tag `{}` is not a run of lowercase letters",
+        tag
+    );
+    assert!(
+        tag.chars().any(|c| !c.is_ascii_hexdigit()),
+        "the copy tag `{}` is spelled in hexadecimal digits alone, as the end of a lowered name is",
         tag
     );
     assert!(
