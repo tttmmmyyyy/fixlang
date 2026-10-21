@@ -2663,3 +2663,44 @@ pub fn test_opaque_type_in_a_predicate_alone_is_reported_at_the_body() {
         ": Std::Iterator` is required in the type inference of this expression",
     );
 }
+
+/// A type variable that stands as an argument of an equality on an opaque type besides the opaque
+/// type, as `b` in `Rebuild ?r b = Array b`, belongs to that equality, and a trait member whose
+/// declaration has one compiles and runs.
+#[test]
+pub fn test_opaque_member_with_an_equality_of_a_higher_arity_associated_type() {
+    let source = r#"
+        module Main;
+
+        import Std::* hiding Indexable::Elem;
+
+        trait c : Rebuildable {
+            type Elem c;
+            type Rebuild c a;
+            rebuild : (Elem c -> a) -> c -> Rebuild c a;
+        }
+
+        impl Array a : Rebuildable {
+            type Elem (Array a) = a;
+            type Rebuild (Array a) b = Array b;
+            rebuild = |f, arr| arr.map(f);
+        }
+
+        trait c : Make {
+            make : [?r : Rebuildable, Elem ?r = I64, Rebuild ?r b = Array b] c -> ?r;
+        }
+
+        impl I64 : Make {
+            make = |n| [n, n + 1];
+        }
+
+        main : IO ();
+        main = (
+            let r = Make::make(10);
+            let s = r.rebuild(|x| x.to_string);
+            assert_eq(|_|"", s.to_iter.join(","), "10,11");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}

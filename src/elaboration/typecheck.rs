@@ -1839,8 +1839,10 @@ impl TypeCheckContext {
     }
 
     /// The types `instance` gives the type variables of `general`, where `instance` is `general`
-    /// with its type variables given types. The variables of a scheme here are all those standing
-    /// in it: the ones it generalizes, and the opaque type variables, which it leaves free.
+    /// with its type variables given types. The variables of a scheme here are the ones it
+    /// generalizes and the opaque type variables, which it leaves free. A variable that stands as
+    /// an argument of an equality on an opaque type besides the opaque type itself, as `b` in
+    /// `Rebuild ?r b = Array b`, belongs to that equality alone, and the answer leaves it out.
     ///
     /// A variable `general` writes in its type is given the type `instance` writes in its place. A
     /// variable it writes in its equalities alone is given the type the equalities of `instance`
@@ -1874,8 +1876,7 @@ impl TypeCheckContext {
         // The opaque type variables of `instance` stand for themselves too.
         instance.free_vars_to_vec(&mut tc.fixed_tyvars);
         let instance_vars = instance.all_vars();
-        let general_vars = general.all_vars();
-        let fresh = tc.instantiate_tyvars(&general_vars);
+        let fresh = tc.instantiate_tyvars(&general.all_vars());
         tc.unify(&instance_ty, &fresh.substitute_type(&general.ty))
             .unwrap_or_else(|_| not_an_instance(general, instance));
         // The predicates of `general` are left out: a predicate gives a type variable no type, so
@@ -1888,7 +1889,10 @@ impl TypeCheckContext {
         }
 
         let mut general_to_instance = Substitution::default();
-        for tv in &general_vars {
+        let related_vars = general.all_vars().into_iter().filter(|tv| {
+            is_opaque_tyvar(&tv.name) || general.gen_vars.iter().any(|gv| gv.name == tv.name)
+        });
+        for tv in related_vars {
             let ty = tc
                 .substitution
                 .substitute_type(&fresh.substitute_type(&type_from_tyvar(tv.clone())));
