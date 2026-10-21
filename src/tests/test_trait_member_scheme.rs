@@ -116,3 +116,66 @@ pub fn test_member_kind_signature_apart_from_a_head_variable() {
         test_source(&source.replace("{tv}", name), Configuration::develop_mode());
     }
 }
+
+/// The name a member's variable is renamed to, where it shares a name with a variable of the
+/// implementation's head, stays apart from the variables of the implementation's context too.
+#[test]
+pub fn test_renamed_member_variable_apart_from_a_context_variable() {
+    let source = r#"
+        module Main;
+
+        trait c : Bar {
+            get : c -> a -> String;
+        }
+
+        trait c : Foo {
+            type Elm c;
+        }
+
+        impl I64 : Foo {
+            type Elm I64 = Bool;
+        }
+
+        type NoShow = unbox struct { v : I64 };
+
+        impl [a : Foo, Foo::Elm a = {tv}, {tv} : ToString] Array a : Bar {
+            get = |_, y| "ok";
+        }
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"", Bar::get([1, 2], NoShow { v : 3 }), "ok");;
+            pure()
+        );
+    "#;
+    for name in ["b", "z"] {
+        test_source(&source.replace("{tv}", name), Configuration::develop_mode());
+    }
+}
+
+/// A kind signature a member's declaration writes for the trait's type variable leaves with that
+/// variable when the implementation puts its type in the variable's place, apart from a variable
+/// of the implementation's head of the same name and another kind.
+#[test]
+pub fn test_member_kind_signature_of_the_trait_variable_leaves_with_it() {
+    let source = r#"
+        module Main;
+
+        trait [f : *->*] f : Desc {
+            desc : [f : *->*] f I64 -> I64;
+        }
+
+        impl Arrow {tv} : Desc {
+            desc = |_| 42;
+        }
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"", Desc::desc(|x : I64| x + 1), 42);;
+            pure()
+        );
+    "#;
+    for name in ["f", "g"] {
+        test_source(&source.replace("{tv}", name), Configuration::develop_mode());
+    }
+}
