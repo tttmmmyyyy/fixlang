@@ -86,7 +86,6 @@ fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<()
     let mod_name = &module_info.name;
 
     // Collect names that should be imported.
-    // let referenced_names = collect_import_names(program, mod_name);
     let referenced_names = program
         .import_required
         .get(mod_name)

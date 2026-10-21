@@ -71,7 +71,7 @@ use constants::{
     OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX, OPTIMIZATION_LEVEL_NONE,
     PROJECT_FILE_PATH, WHOLE_PROGRAM_IN_ONE_UNIT, WHOLE_PROGRAM_IN_ONE_UNIT_STR,
 };
-use edit::edit_explict_import;
+use edit::edit_explicit_import;
 use error::{panic_if_err, Errors};
 use git_version::git_version;
 use metafiles::{config_file::ConfigFile, project_file::ProjectFile};
@@ -962,7 +962,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         }
         Some(("edit", args)) => match args.subcommand() {
             Some(("explicit-import", _args)) => {
-                panic_if_err(edit_explict_import::run_explicit_import_command());
+                panic_if_err(edit_explicit_import::run_explicit_import_command());
             }
             _ => print_subcommand_help(&mut app, "edit"),
         },

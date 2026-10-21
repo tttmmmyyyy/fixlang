@@ -143,7 +143,7 @@ union variant `V` について:
 依存を cwd 配下にベンダリングしたケース等で誤判定するので避ける。
 
 実装:
-- 既存の前例 [edit_explict_import.rs:52-71](../../src/edit/edit_explict_import.rs#L52-L71) —
+- 既存の前例 [edit_explicit_import.rs:52-71](../../src/edit/edit_explicit_import.rs#L52-L71) —
   `get_user_source_files(&proj_file)` が
   `proj_file.get_files(BuildConfigType::Test)` (= 依存を除いた
   プロジェクト自身のソース) を **絶対パス** に正規化して返す。

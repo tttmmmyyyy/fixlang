@@ -100,15 +100,16 @@ impl NameResolutionContext {
         self.current_module = module;
     }
 
+    /// Records `names` as names the current module has to import.
     pub fn add_import_required(&mut self, names: Vec<FullName>) {
         misc::insert_to_map_vec_many(&mut self.import_required, &self.current_module, names);
     }
 
-    // Resolve the given short name to a full name.
-    //
-    // If there are multiple candidates, or no candidates, return an error.
-    //
-    // The returned full name is absolute exactly when `short_name` is.
+    /// Resolve the given short name to a full name.
+    ///
+    /// If there are multiple candidates, or no candidates, return an error.
+    ///
+    /// The returned full name is absolute exactly when `short_name` is.
     pub fn resolve(
         &mut self,
         short_name: &FullName,
@@ -131,7 +132,7 @@ impl NameResolutionContext {
                 if !short_name.is_suffix_of(full_name) {
                     return None;
                 }
-                // Absolute name are accepted without checking accessibility.
+                // Absolute names are accepted without checking accessibility.
                 let inaccessible = !short_name.is_absolute()
                     && !import::is_accessible(&self.valid_import_stmts(), full_name);
                 if inaccessible {
