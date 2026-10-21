@@ -111,8 +111,8 @@ where
     ///
     /// A local `name` that is bound stands for its innermost binding alone. Otherwise every global
     /// name that `name` is a suffix of and that the imports make accessible is a candidate; a name
-    /// written absolutely reaches the one global it spells out, and the namespace answered for it
-    /// is absolute as well.
+    /// written absolutely reaches the one global it spells out. The namespace answered for a global
+    /// is absolute exactly when `name` is, whatever the namespace it is registered under.
     ///
     /// # Arguments
     /// * `import_stmts` — the import statements in force where the name is written, which decide
@@ -131,18 +131,15 @@ where
             self.global
                 .iter()
                 .filter_map(|(full_name, v)| {
-                    if name == full_name && name.is_absolute() {
-                        // Inherit the absolute property.
-                        let mut full_name = full_name.clone();
-                        full_name.set_absolute();
-                        return Some((full_name.namespace.clone(), v.clone()));
+                    let reached = (name == full_name && name.is_absolute())
+                        || (name.is_suffix_of(full_name)
+                            && import::is_accessible(import_stmts, full_name));
+                    if !reached {
+                        return None;
                     }
-                    if name.is_suffix_of(full_name)
-                        && import::is_accessible(import_stmts, full_name)
-                    {
-                        return Some((full_name.namespace.clone(), v.clone()));
-                    }
-                    return None;
+                    let mut namespace = full_name.namespace.clone();
+                    namespace.is_absolute = name.is_absolute();
+                    Some((namespace, v.clone()))
                 })
                 .collect()
         }
