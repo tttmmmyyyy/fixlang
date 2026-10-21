@@ -451,7 +451,7 @@ fn relate_impl_signature(
 ) -> Result<Substitution, Errors> {
     let impl_src = impl_.first_lhs_src();
 
-    let via_defn_to_impl = agreeing_signature_correspondence(tc, impl_)?;
+    let via_defn_to_impl = via_defn_to_impl_if_agreeing(tc, impl_)?;
     let signatures_agree = via_defn_to_impl.is_some();
 
     // The desugaring reads the signature as the declared type with its type variables given types.
@@ -522,7 +522,7 @@ fn relate_impl_signature(
 /// of the declaration is compared under the name the signature writes for it, which
 /// `instance_substitution` reads off the two schemes, so that a signature may name them as it likes
 /// but may not write one opaque type for two of the declaration.
-fn agreeing_signature_correspondence(
+fn via_defn_to_impl_if_agreeing(
     tc: &TypeCheckContext,
     impl_: &TraitMemberImpl,
 ) -> Result<Option<Substitution>, Errors> {
