@@ -2746,6 +2746,11 @@ impl Scheme {
         }
     }
 
+    /// Whether this scheme generalizes the type variable `name`.
+    pub fn generalizes(&self, name: &Name) -> bool {
+        self.gen_vars.iter().any(|tv| &tv.name == name)
+    }
+
     /// The opaque type variables standing in the constraints and in the type, each one once.
     pub fn opaque_vars(&self) -> Vec<Arc<TyVar>> {
         let mut vars = self.all_vars();

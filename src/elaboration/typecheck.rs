@@ -344,7 +344,7 @@ impl Substitution {
     /// A kind signature on a variable replaced by another variable moves to that variable. One on a
     /// variable replaced by any other type is dropped: the signature states the kind of a variable,
     /// and the type standing in its place has a kind of its own.
-    pub fn substitute_kind_signs(&self, kind_signs: &mut Vec<KindSignature>) {
+    fn substitute_kind_signs(&self, kind_signs: &mut Vec<KindSignature>) {
         kind_signs.retain_mut(|kind_sign| {
             let Some(replacement) = self.data.get(&kind_sign.tyvar) else {
                 return true;
@@ -1901,7 +1901,7 @@ impl TypeCheckContext {
 
         let mut general_to_instance = Substitution::default();
         let related_vars = general.all_vars().into_iter().filter(|tv| {
-            is_opaque_tyvar(&tv.name) || general.gen_vars.iter().any(|gv| gv.name == tv.name)
+            is_opaque_tyvar(&tv.name) || general.generalizes(&tv.name)
         });
         for tv in related_vars {
             let ty = tc
