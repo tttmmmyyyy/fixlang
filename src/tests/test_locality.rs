@@ -344,7 +344,10 @@ mod integration_tests {
             .take(1)
             .filter_map(|rest| rest.split_whitespace().next().map(str::to_string))
             .collect();
-        for (what, vars) in [("field of `gpair`", &fields), ("payload of `gholder`", &payloads)] {
+        for (what, vars) in [
+            ("field of `gpair`", &fields),
+            ("payload of `gholder`", &payloads),
+        ] {
             let lines = rc_lines(&dump, vars);
             assert!(
                 !lines.is_empty(),

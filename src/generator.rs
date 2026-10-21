@@ -1611,11 +1611,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     ///
     /// The check belongs in every state dispatch, so that no annotated site goes unchecked.
     fn build_assert_refcnt_state_local(&mut self, obj_ptr: PointerValue<'c>) {
-        self.build_assert_refcnt_state(
-            obj_ptr,
-            RefcntState::LOCAL,
-            "local",
-        );
+        self.build_assert_refcnt_state(obj_ptr, RefcntState::LOCAL, "local");
     }
 
     /// Abort when the boxed object at `obj_ptr` is not in the global reference-counting state.
@@ -1623,11 +1619,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// It stands in place of the count a `RcState::Global` annotation removes: a count dropped from
     /// an object that is counted would free it early or leak it, far from the operation.
     fn build_assert_refcnt_state_global(&mut self, obj_ptr: PointerValue<'c>) {
-        self.build_assert_refcnt_state(
-            obj_ptr,
-            RefcntState::GLOBAL,
-            "global",
-        );
+        self.build_assert_refcnt_state(obj_ptr, RefcntState::GLOBAL, "global");
     }
 
     /// Abort, in compiler development mode, when the boxed object at `obj_ptr` is not in the
