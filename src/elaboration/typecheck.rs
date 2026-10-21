@@ -219,6 +219,21 @@ impl Substitution {
         return true;
     }
 
+    /// The substitution that replaces each variable this one replaces by its replacement here with
+    /// `following` applied to it. A variable `following` alone replaces stays as it is.
+    ///
+    /// # Examples
+    /// `{c -> Array a}` followed by `{a -> I64, b -> Bool}` is `{c -> Array I64}`.
+    pub fn followed_by(&self, following: &Self) -> Self {
+        Self {
+            data: self
+                .data
+                .iter()
+                .map(|(var, ty)| (var.clone(), following.substitute_type(ty)))
+                .collect(),
+        }
+    }
+
     /// Replaces the type variables this substitution binds in the type `p` constrains.
     pub fn substitute_predicate(&self, p: &mut Predicate) {
         p.ty = self.substitute_type(&p.ty);

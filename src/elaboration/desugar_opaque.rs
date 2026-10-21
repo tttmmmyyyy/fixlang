@@ -129,14 +129,22 @@ impl Program {
             let tc = tc.get_or_insert_with(|| self.create_typechecker(config));
             let mut impl_correspondences = vec![];
             for impl_ in impls {
-                match relate_impl_signature(tc, &gv.scm, impl_, opaque_infos, &gv.decl_src) {
+                let defn_to_via_defn = tc
+                    .instance_substitution(&gv.scm, &impl_.scm_via_defn)
+                    .expect(
+                        "`TraitImpl::member_scheme_by_defn` builds the declaration with its type variables given types",
+                    );
+                match relate_impl_signature(
+                    tc,
+                    &gv.scm,
+                    impl_,
+                    &defn_to_via_defn,
+                    opaque_infos,
+                    &gv.decl_src,
+                ) {
                     Ok(defn_to_impl) => impl_correspondences.push(ImplCorrespondence {
                         defn_to_impl,
-                        defn_to_via_defn: tc
-                            .instance_substitution(&gv.scm, &impl_.scm_via_defn)
-                            .expect(
-                                "`TraitImpl::member_scheme_by_defn` builds the declaration with its type variables given types",
-                            ),
+                        defn_to_via_defn,
                     }),
                     Err(e) => errors.append(e),
                 }
@@ -430,18 +438,21 @@ impl Program {
 /// # Arguments
 /// * `defn_scm` — the type of the member as the trait declares it, in the declaration's own names:
 ///   `[c : ToIter] c -> ?it`.
+/// * `defn_to_via_defn` — the types `impl_.scm_via_defn` gives the type variables of `defn_scm`.
 /// * `opaque_infos` — the opaque type variables of the declaration.
 /// * `decl_src` — where the trait declares the member.
 fn relate_impl_signature(
     tc: &TypeCheckContext,
     defn_scm: &Arc<Scheme>,
     impl_: &TraitMemberImpl,
+    defn_to_via_defn: &Substitution,
     opaque_infos: &[OpaqueInfo],
     decl_src: &Option<Span>,
 ) -> Result<Substitution, Errors> {
     let impl_src = impl_.first_lhs_src();
 
-    let signatures_agree = signature_agrees(tc, impl_)?;
+    let via_defn_to_impl = agreeing_signature_correspondence(tc, impl_)?;
+    let signatures_agree = via_defn_to_impl.is_some();
 
     // The desugaring reads the signature as the declared type with its type variables given types.
     // An implementation that writes no signature is given the type built that way, so a type that
@@ -481,21 +492,19 @@ fn relate_impl_signature(
         }
     }
 
-    if !signatures_agree {
+    let Some(via_defn_to_impl) = via_defn_to_impl else {
         return Err(impl_signature_mismatch_error(
             &impl_.scm,
             &impl_.scm_via_defn,
             &impl_src,
             decl_src,
         ));
-    }
+    };
 
     // A signature that agrees with the declaration gives a type to each type variable of the
     // declaration. One the declaration writes in its constraints alone gets its type through the
     // constraints.
-    let defn_to_impl = tc
-        .instance_substitution(defn_scm, &impl_.scm)
-        .expect("a signature agreeing with the declaration is the declaration with its type variables given types");
+    let defn_to_impl = defn_to_via_defn.followed_by(&via_defn_to_impl);
     for info in opaque_infos {
         let written = defn_to_impl.substitute_type(&type_from_tyvar(info.tyvar.clone()));
         validate_written_type(info, &written)?;
@@ -503,8 +512,9 @@ fn relate_impl_signature(
     Ok(defn_to_impl)
 }
 
-/// Whether the type signature `impl_` writes describes the same values as the declaration of its
-/// trait member.
+/// The types the scheme of `impl_` gives the type variables of `impl_.scm_via_defn`, where the type
+/// signature `impl_` writes describes the same values as the declaration of its trait member;
+/// `None` where it describes other values.
 ///
 /// The opaque types stand for themselves in that comparison: what one of them hides is the
 /// implementation's choice, and the signature states what the declaration states about it rather
@@ -512,9 +522,12 @@ fn relate_impl_signature(
 /// of the declaration is compared under the name the signature writes for it, which
 /// `instance_substitution` reads off the two schemes, so that a signature may name them as it likes
 /// but may not write one opaque type for two of the declaration.
-fn signature_agrees(tc: &TypeCheckContext, impl_: &TraitMemberImpl) -> Result<bool, Errors> {
+fn agreeing_signature_correspondence(
+    tc: &TypeCheckContext,
+    impl_: &TraitMemberImpl,
+) -> Result<Option<Substitution>, Errors> {
     let Some(via_defn_to_impl) = tc.instance_substitution(&impl_.scm_via_defn, &impl_.scm) else {
-        return Ok(false);
+        return Ok(None);
     };
     let mut via_defn_opaque_vars = vec![];
     impl_.scm_via_defn.free_vars_to_vec(&mut via_defn_opaque_vars);
@@ -532,7 +545,7 @@ fn signature_agrees(tc: &TypeCheckContext, impl_: &TraitMemberImpl) -> Result<bo
             continue;
         }
         if renamed_to.contains(&written_tv.name) {
-            return Ok(false);
+            return Ok(None);
         }
         renamed_to.push(written_tv.name.clone());
         assert!(renaming.merge(&Substitution::single(&tv.name, written.clone())));
@@ -543,12 +556,13 @@ fn signature_agrees(tc: &TypeCheckContext, impl_: &TraitMemberImpl) -> Result<bo
     impl_.scm.free_vars_to_vec(&mut opaque_tyvars);
     via_defn.free_vars_to_vec(&mut opaque_tyvars);
     opaque_tyvars.retain(|tv| is_opaque_tyvar(&tv.name));
-    Ok(UnifOrOtherErr::extract_others(tc.check_scheme_equivalent(
+    let agrees = UnifOrOtherErr::extract_others(tc.check_scheme_equivalent(
         &impl_.scm,
         &via_defn,
         &opaque_tyvars,
     ))?
-    .is_ok())
+    .is_ok();
+    Ok(agrees.then_some(via_defn_to_impl))
 }
 
 /// The error reported where the type a signature writes is not the type of the declaration with its
