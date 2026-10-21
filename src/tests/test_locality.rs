@@ -250,6 +250,9 @@ mod integration_tests {
         // everything the value may be holds of it, so the release keeps its dispatch.
         assert_rc_state(&dump, "either", "");
 
+        // The global on one branch and a field of a global on the other: global whichever it is.
+        assert_rc_state(&dump, "both_global", "global");
+
         // A value rebuilt from a retained pointer may name anything, including a global's graph or
         // an object another thread holds.
         assert_rc_state(&dump, "restored", "");
@@ -315,6 +318,51 @@ mod integration_tests {
 
         assert_destructure_state(&dump, "Main::gpair#", "global");
         assert_match_arm_state(&dump, "Main::gholder#", "global");
+    }
+
+    /// Verifies that what a `destructure` or the variant arm of a `match` takes out of a global's
+    /// boxed container is itself global, so the reference counting on it later is dropped too — not
+    /// only the node that takes it out.
+    #[test]
+    fn test_a_value_taken_out_of_a_global_is_global() {
+        let (_temp_dir, project_dir) = setup_test_env("containers");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        // `destructure_field_vars` takes the container's whole name, hash included.
+        let gpair = dump
+            .split_whitespace()
+            .find(|token| token.starts_with("Main::gpair#"))
+            .expect("the dump names the global `gpair`");
+        let fields: Vec<String> = [0, 1]
+            .iter()
+            .flat_map(|&idx| destructure_field_vars(&dump, gpair, idx))
+            .collect();
+        let payloads: Vec<String> = dump
+            .lines()
+            .skip_while(|line| !line.contains("= match Main::gholder#"))
+            .filter_map(|line| line.trim_start().strip_prefix("case 0("))
+            .take(1)
+            .filter_map(|rest| rest.split_whitespace().next().map(str::to_string))
+            .collect();
+        for (what, vars) in [("field of `gpair`", &fields), ("payload of `gholder`", &payloads)] {
+            let lines = rc_lines(&dump, vars);
+            assert!(
+                !lines.is_empty(),
+                "nothing counts a reference to a {} ({:?}), so this case asserts nothing:\n{}",
+                what,
+                vars,
+                dump
+            );
+            for line in &lines {
+                assert!(
+                    line.trim_end().ends_with(" @global"),
+                    "the reference counting on a {} should be dropped as global, but a line \
+                     reads:\n{}",
+                    what,
+                    line
+                );
+            }
+        }
     }
 
     /// Verifies that handing a callback a raw pointer into an array of boxed elements costs the array
