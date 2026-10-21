@@ -129,7 +129,7 @@ impl Program {
             let tc = tc.get_or_insert_with(|| self.create_typechecker(config));
             let mut impl_correspondences = vec![];
             for impl_ in impls {
-                match validate_impl_signature(tc, &gv.scm, impl_, opaque_infos, &gv.decl_src) {
+                match relate_impl_signature(tc, &gv.scm, impl_, opaque_infos, &gv.decl_src) {
                     Ok(defn_to_impl) => impl_correspondences.push(ImplCorrespondence {
                         defn_to_impl,
                         defn_to_via_defn: tc.instance_substitution(&gv.scm, &impl_.scm_via_defn),
@@ -224,16 +224,16 @@ impl Program {
                         gv_name.to_string()
                     );
                     for (impl_, correspondence) in impls.iter_mut().zip(impl_correspondences) {
-                        // The impl side of the match is `impl_.scm`, the scheme this implementation
-                        // is type-checked against. It supplies the variable names the rhs of an
-                        // OpaqueTyConResolution is filled in with, and the lhs is written in those
-                        // same names, so that `resolve_opaque_type_in_type` finds the resolution a
-                        // type belongs to. A type annotation the user writes on the impl member is
-                        // what names those variables.
+                        // `defn_to_impl` is written in the names of `impl_.scm`, the scheme this
+                        // implementation is type-checked against. Those names fill in the rhs of an
+                        // OpaqueTyConResolution, and the lhs is written in them too, so that
+                        // `resolve_opaque_type_in_type` finds the resolution a type belongs to. A
+                        // type annotation the user writes on the impl member is what names those
+                        // variables.
                         //
-                        // The match binds the trait's type variable, because a member's type has to
-                        // name it (see `TraitEnv::validate_structure`). One resolution per
-                        // implementation follows from that: each lhs is the opaque type
+                        // `defn_to_impl` gives the trait's type variable a type, because a member's
+                        // type has to name it (see `TraitEnv::validate_structure`). One resolution
+                        // per implementation follows from that: each lhs is the opaque type
                         // constructor applied to the type that implementation is for.
                         let ImplCorrespondence {
                             defn_to_impl,
@@ -429,7 +429,7 @@ impl Program {
 ///   `[c : ToIter] c -> ?it`.
 /// * `opaque_infos` — the opaque type variables of the declaration.
 /// * `decl_src` — where the trait declares the member.
-fn validate_impl_signature(
+fn relate_impl_signature(
     tc: &TypeCheckContext,
     defn_scm: &Arc<Scheme>,
     impl_: &TraitMemberImpl,
@@ -827,7 +827,7 @@ fn rewrite_impl_scheme(
         let impl_opaque_ty = defn_to_impl.substitute_type(&type_from_tyvar(info.tyvar.clone()));
         let impl_opaque_name = match &impl_opaque_ty.ty {
             Type::TyVar(tv) => &tv.name,
-            // `validate_impl_signature` reports an implementation that writes anything but an
+            // `relate_impl_signature` reports an implementation that writes anything but an
             // opaque type variable here.
             _ => panic!(
                 "Expected opaque tyvar `{}` to map to a tyvar in impl scheme",
@@ -844,7 +844,7 @@ fn rewrite_impl_scheme(
 
         // A signature writing one opaque type variable for two of the declaration is what this
         // merge would refuse, and it describes other values than the declaration, so
-        // `validate_impl_signature` reports it before the desugaring runs.
+        // `relate_impl_signature` reports it before the desugaring runs.
         assert!(sub.merge(&Substitution::single(impl_opaque_name, ty)));
     }
 
