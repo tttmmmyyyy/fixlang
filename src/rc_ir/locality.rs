@@ -828,24 +828,27 @@ impl<'a> Walk<'a> {
     }
 
     /// The annotation of a `Destructure`, which counts every reference the node itself moves. Out of
-    /// a boxed container it releases the container and retains each named field, and the take-out
-    /// rule makes the fields local only where the container is `DeepLocal` — which also covers the
-    /// container's own release — and global where the container is. Out of an unboxed container,
-    /// whose every field is named, it only moves the leaves into the field variables and counts
-    /// nothing.
+    /// a boxed container it releases the container and retains each named field, which the take-out
+    /// annotation covers. Out of an unboxed container, whose every field is named, it only moves the
+    /// leaves into the field variables and counts nothing.
     fn annotate_destructure(&mut self, container: &RcVar) -> RcState {
         if !container.ty.is_box(self.type_env) {
             return RcState::Local;
         }
         let shape = self.shape_of(container);
-        if shape.leaf_at(&[]).global {
+        self.annotate_take_out(shape.leaf_at(&[]))
+    }
+
+    /// The annotation of a node that takes values out of the boxed container whose leaf is
+    /// `container`, retaining them and, for a `Destructure`, releasing the container. The take-out
+    /// rule decides it: the values are local only where the container is `DeepLocal`, which also
+    /// covers the container itself, and global where the container is.
+    fn annotate_take_out(&mut self, container: &LeafCond) -> RcState {
+        if container.global {
             return RcState::Global;
         }
-        let Some(inputs) = self.site_inputs(iter::once(shape.leaf_at(&[]))) else {
-            return RcState::Unknown;
-        };
-        match shape.leaf_at(&[]).resolve(inputs) {
-            Locality::DeepLocal => RcState::Local,
+        match self.site_inputs(iter::once(container)) {
+            Some(inputs) if container.resolve(inputs) == Locality::DeepLocal => RcState::Local,
             _ => RcState::Unknown,
         }
     }
@@ -886,22 +889,10 @@ impl<'a> Walk<'a> {
                 }
                 None => scrut_shape.clone(),
             };
-            // A variant arm of a boxed union retains the payload out of the container, so the
-            // take-out rule decides it: only a `DeepLocal` container hands out a local payload, and
-            // only a global one a global payload. A catch-all arm binds the scrutinee itself and
-            // retains nothing.
+            // A variant arm of a boxed union retains the payload out of the container. A catch-all
+            // arm binds the scrutinee itself and retains nothing.
             let payload_state = if arm.tag.is_some() && boxed {
-                let leaf = scrut_shape.leaf_at(&[]);
-                if leaf.global {
-                    RcState::Global
-                } else {
-                    match self.site_inputs(iter::once(leaf)) {
-                        Some(inputs) if leaf.resolve(inputs) == Locality::DeepLocal => {
-                            RcState::Local
-                        }
-                        _ => RcState::Unknown,
-                    }
-                }
+                self.annotate_take_out(scrut_shape.leaf_at(&[]))
             } else {
                 RcState::Unknown
             };
