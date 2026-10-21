@@ -4,7 +4,7 @@ use crate::ast::predicate::Predicate;
 use crate::ast::program::EndNode;
 use crate::ast::traits::KindSignature;
 use crate::ast::type_env::TypeEnv;
-use crate::ast::types::{add_kind_signed_vars, TyVar, TypeNode};
+use crate::ast::types::{add_kind_signed_vars, apply_kind_signs, TyVar, TypeNode};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
 use crate::misc::Set;
@@ -94,14 +94,7 @@ impl QualType {
             eq.free_vars_vec(buf);
         }
         self.ty.free_vars_to_vec(buf);
-        // Apply kind predicates.
-        for tv in buf {
-            for kind_sign in &self.kind_signs {
-                if tv.name == kind_sign.tyvar {
-                    *tv = tv.set_kind(kind_sign.kind.clone());
-                }
-            }
-        }
+        apply_kind_signs(buf, &self.kind_signs);
     }
 
     /// The type variables this signature names, each one once: those standing in the constraints

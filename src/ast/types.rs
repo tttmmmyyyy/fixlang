@@ -2985,6 +2985,17 @@ pub fn is_type_wildcard_tyvar(name: &str) -> bool {
     name.starts_with(TYPE_WILDCARD_VAR_PREFIX)
 }
 
+/// Gives each variable of `vars` that `kind_signs` names the kind the signature gives it.
+pub fn apply_kind_signs(vars: &mut [Arc<TyVar>], kind_signs: &[KindSignature]) {
+    for tv in vars {
+        for kind_sign in kind_signs {
+            if tv.name == kind_sign.tyvar {
+                *tv = tv.set_kind(kind_sign.kind.clone());
+            }
+        }
+    }
+}
+
 /// Appends to `vars` each variable that `kind_signs` names and `vars` lacks, with the kind the
 /// signature gives it.
 pub fn add_kind_signed_vars(vars: &mut Vec<Arc<TyVar>>, kind_signs: &[KindSignature]) {

@@ -4,7 +4,7 @@ use crate::ast::program::EndNode;
 use crate::ast::qual_type::constraints_to_string;
 use crate::ast::traits::KindSignature;
 use crate::ast::type_env::TypeEnv;
-use crate::ast::types::{add_kind_signed_vars, TyVar};
+use crate::ast::types::{add_kind_signed_vars, apply_kind_signs, TyVar};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
 use crate::parse::sourcefile::SourcePos;
@@ -58,14 +58,7 @@ impl QualPred {
             eq.free_vars_vec(buf);
         }
         self.predicate.ty.free_vars_to_vec(buf);
-        // Apply kind predicates.
-        for tv in buf {
-            for kind_sign in &self.kind_constraints {
-                if tv.name == kind_sign.tyvar {
-                    *tv = tv.set_kind(kind_sign.kind.clone());
-                }
-            }
-        }
+        apply_kind_signs(buf, &self.kind_constraints);
     }
 
     /// The type variables this qualified predicate names, each one once: those standing in the
