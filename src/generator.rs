@@ -1615,7 +1615,6 @@ impl<'c, 'm> Generator<'c, 'm> {
             obj_ptr,
             RefcntState::LOCAL,
             "local",
-            "A reference-counting operation inferred local reached a non-local object.\n",
         );
     }
 
@@ -1629,18 +1628,17 @@ impl<'c, 'm> Generator<'c, 'm> {
             obj_ptr,
             RefcntState::GLOBAL,
             "global",
-            "A reference-counting operation inferred global reached a non-global object.\n",
         );
     }
 
     /// Abort, in compiler development mode, when the boxed object at `obj_ptr` is not in the
-    /// `expected` reference-counting state. `state_name` names the state in the emitted values.
+    /// `expected` reference-counting state. `state_name` names the state in the emitted values and
+    /// in the message the program stops with.
     fn build_assert_refcnt_state(
         &mut self,
         obj_ptr: PointerValue<'c>,
         expected: RefcntState,
         state_name: &str,
-        message: &str,
     ) {
         if !self.config.develop_mode {
             return;
@@ -1660,7 +1658,11 @@ impl<'c, 'm> Generator<'c, 'm> {
                 &format!("is_refcnt_state_not_{}@assert", state_name),
             )
             .unwrap();
-        self.build_panic_if(is_other, &format!("assert_{}", state_name), message);
+        let message = format!(
+            "A reference-counting operation inferred {0} reached a non-{0} object.\n",
+            state_name
+        );
+        self.build_panic_if(is_other, &format!("assert_{}", state_name), &message);
     }
 
     /// Print `message` and stop the program where `cond` holds; where `cond` fails, the program

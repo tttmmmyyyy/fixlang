@@ -747,14 +747,23 @@ impl<'a> Walk<'a> {
     /// are proved local, so the leaves' localities join.
     fn annotate_rc_site(&mut self, v: &RcVar, path: &FieldPath) -> RcState {
         let shape = self.shape_of(v);
-        if shape.leaves_under(path).all(|leaf| leaf.global) {
+        let leaves: Vec<&LeafCond> = shape.leaves_under(path).collect();
+        // Both answers below hold vacuously of no leaf, so a path that misses every boxed leaf would
+        // drop the count of whatever code generation finds there.
+        assert!(
+            !leaves.is_empty(),
+            "reference counting `{}` at {:?} reaches no boxed leaf",
+            v.name.to_string(),
+            path
+        );
+        if leaves.iter().all(|leaf| leaf.global) {
             return RcState::Global;
         }
-        let Some(inputs) = self.site_inputs(shape.leaves_under(path)) else {
+        let Some(inputs) = self.site_inputs(leaves.iter().copied()) else {
             return RcState::Unknown;
         };
-        shape
-            .leaves_under(path)
+        leaves
+            .iter()
             .map(|leaf| leaf.resolve(inputs))
             .fold(Locality::DeepLocal, Locality::join)
             .annotation()
