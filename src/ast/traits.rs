@@ -10,7 +10,7 @@ use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::qual_type::QualType;
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{
-    is_opaque_tyvar, type_from_tyvar, type_tyvar, unfixed_type_variable_error, AssocType, Kind,
+    is_opaque_tyvar, make_tyvar, type_from_tyvar, type_tyvar, unfixed_type_variable_error, AssocType, Kind,
     Scheme, TyVar, TypeNode,
 };
 use crate::constants::ERR_MISSING_TRAIT_IMPL;
@@ -680,8 +680,14 @@ impl TraitImpl {
                 .iter()
                 .map(|kind_sign| kind_sign.tyvar.clone()),
         );
+        // A variable the declaration names in a kind signature alone is the member's too.
         let mut member_vars = vec![];
         member_qualty.free_vars_vec(&mut member_vars);
+        for kind_sign in &member_qualty.kind_signs {
+            if !member_vars.iter().any(|tv| tv.name == kind_sign.tyvar) {
+                member_vars.push(make_tyvar(&kind_sign.tyvar, &kind_sign.kind));
+            }
+        }
         let colliding_vars: Vec<&Arc<TyVar>> = member_vars
             .iter()
             .filter(|tv| &tv.name != tyvar_name && impl_var_names.contains(&tv.name))

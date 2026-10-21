@@ -182,3 +182,29 @@ pub fn test_member_kind_signature_of_the_trait_variable_leaves_with_it() {
         test_source(&source.replace("{tv}", name), Configuration::develop_mode());
     }
 }
+
+/// A variable the member's declaration names in a kind signature alone stays apart from a variable
+/// of the implementation's head of the same name.
+#[test]
+pub fn test_member_variable_of_a_kind_signature_alone_apart_from_a_head_variable() {
+    let source = r#"
+        module Main;
+
+        trait c : Bar {
+            get : [b : *->*] c -> a -> String;
+        }
+
+        impl Array {tv} : Bar {
+            get = |_, _| "ok";
+        }
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"", Bar::get([1], 3), "ok");;
+            pure()
+        );
+    "#;
+    for name in ["a", "b", "x"] {
+        test_source(&source.replace("{tv}", name), Configuration::develop_mode());
+    }
+}
