@@ -517,11 +517,10 @@ fn relate_impl_signature(
 /// `None` where it describes other values.
 ///
 /// The opaque types stand for themselves in that comparison: what one of them hides is the
-/// implementation's choice, and the signature states what the declaration states about it rather
-/// than choosing it, so a constraint on one has to agree with the declaration's. Each opaque type
-/// of the declaration is compared under the name the signature writes for it, which
-/// `instance_substitution` reads off the two schemes, so that a signature may name them as it likes
-/// but may not write one opaque type for two of the declaration.
+/// implementation's choice, and the signature only restates what the declaration says about it, so
+/// a constraint on one has to agree with the declaration's. Each opaque type of the declaration is
+/// compared under the name the signature writes in its place, so a signature may name them as it
+/// likes, but may not write one opaque type for two of the declaration.
 fn via_defn_to_impl_if_agreeing(
     tc: &TypeCheckContext,
     impl_: &TraitMemberImpl,

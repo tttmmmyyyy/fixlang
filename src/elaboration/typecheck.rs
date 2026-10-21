@@ -217,7 +217,7 @@ impl Substitution {
     }
 
     /// The substitution that replaces each variable this one replaces by its replacement here with
-    /// `following` applied to it. A variable `following` alone replaces stays as it is.
+    /// `following` applied to it. A variable `following` alone replaces is left unreplaced.
     ///
     /// # Examples
     /// `{c -> Array a}` followed by `{a -> I64, b -> Bool}` is `{c -> Array I64}`.
@@ -367,8 +367,9 @@ impl Substitution {
     }
 
     /// Replaces the type variables this substitution replaces throughout `qual_pred`: in the
-    /// predicate it states and in the constraints that predicate is qualified by, the kind
-    /// constraints as `substitute_kind_signs` replaces them.
+    /// predicate it states and in the constraints that predicate is qualified by. A kind constraint
+    /// moves to the variable that replaces its variable, and is dropped where any other type
+    /// replaces it.
     pub fn substitute_qualpred(&self, qual_pred: &mut QualPred) {
         for pred in &mut qual_pred.pred_constraints {
             self.substitute_predicate(pred);
@@ -1871,10 +1872,7 @@ impl TypeCheckContext {
     /// either, and the answer leaves it out, so that it stands for itself.
     ///
     /// # Returns
-    /// `None` where `instance` is not `general` with its type variables given types: where the two
-    /// types do not unify, where an equality of `general` contradicts those of `instance`, or where
-    /// `instance` leaves a variable of `general` other than such an opaque type variable without a
-    /// type.
+    /// `None` where `instance` is not `general` with its type variables given types.
     pub fn instance_substitution(
         &self,
         general: &Arc<Scheme>,
