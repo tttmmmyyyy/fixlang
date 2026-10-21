@@ -170,19 +170,7 @@ mod integration_tests {
     /// to judge. The scrutinee is a variable of the dump, or the prefix a global's mangled name
     /// starts with. An arm's tag says whether the payload it binds out of the container is local.
     fn assert_match_arm_state(dump: &str, scrutinee: &str, expected: &str) {
-        // The printer opens the match on the `let` line that binds its result, indents each arm one
-        // level further, and closes it with a `}` back at the `let`'s own indentation. So the arms
-        // are the `case` lines one level in, between the head and that `}`.
-        let indent_of = |line: &str| line.len() - line.trim_start().len();
-        let mut lines = dump
-            .lines()
-            .skip_while(|line| !line.contains(&format!("= match {}", scrutinee)));
-        let head = lines.next().unwrap_or("");
-        let arm_indent = indent_of(head) + 4;
-        let arms: Vec<&str> = lines
-            .take_while(|line| line.trim_end() != format!("{}}}", " ".repeat(indent_of(head))))
-            .filter(|line| indent_of(line) == arm_indent && line.trim_start().starts_with("case "))
-            .collect();
+        let arms = match_arm_lines(dump, scrutinee);
         assert!(
             !arms.is_empty(),
             "no arm of a `match` on `{}` in the RC IR dump, so this case asserts nothing:\n{}",
@@ -197,6 +185,24 @@ mod integration_tests {
                 scrutinee, expected, arm
             );
         }
+    }
+
+    /// The `case` lines of the first `match` on `scrutinee` — a variable of the dump, or the prefix a
+    /// global's mangled name starts with.
+    fn match_arm_lines<'a>(dump: &'a str, scrutinee: &str) -> Vec<&'a str> {
+        // The printer opens the match on the `let` line that binds its result, indents each arm one
+        // level further, and closes it with a `}` back at the `let`'s own indentation. So the arms
+        // are the `case` lines one level in, between the head and that `}`.
+        let indent_of = |line: &str| line.len() - line.trim_start().len();
+        let mut lines = dump
+            .lines()
+            .skip_while(|line| !line.contains(&format!("= match {}", scrutinee)));
+        let head = lines.next().unwrap_or("");
+        let arm_indent = indent_of(head) + 4;
+        lines
+            .take_while(|line| line.trim_end() != format!("{}}}", " ".repeat(indent_of(head))))
+            .filter(|line| indent_of(line) == arm_indent && line.trim_start().starts_with("case "))
+            .collect()
     }
 
     /// Assert that every reference-counting operation on the value bound as `source_name` carries
@@ -337,11 +343,9 @@ mod integration_tests {
             .iter()
             .flat_map(|&idx| destructure_field_vars(&dump, gpair, idx))
             .collect();
-        let payloads: Vec<String> = dump
-            .lines()
-            .skip_while(|line| !line.contains("= match Main::gholder#"))
+        let payloads: Vec<String> = match_arm_lines(&dump, "Main::gholder#")
+            .into_iter()
             .filter_map(|line| line.trim_start().strip_prefix("case 0("))
-            .take(1)
             .filter_map(|rest| rest.split_whitespace().next().map(str::to_string))
             .collect();
         for (what, vars) in [
