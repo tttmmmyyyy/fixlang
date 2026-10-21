@@ -190,10 +190,7 @@ impl Substitution {
     ///
     /// Panics where `following` replaces a variable this substitution already replaces.
     pub fn compose(&mut self, following: &Self) {
-        for (_var, ty) in self.data.iter_mut() {
-            let new_ty = following.substitute_type(&ty);
-            *ty = new_ty;
-        }
+        self.apply_to_replacements(following);
         for (var, ty) in &following.data {
             assert!(!self.data.contains_key(var));
             self.data.insert(var.to_string(), ty.clone());
@@ -217,6 +214,24 @@ impl Substitution {
             }
         }
         return true;
+    }
+
+    /// The substitution that replaces each variable this one replaces by its replacement here with
+    /// `following` applied to it. A variable `following` alone replaces is left unreplaced.
+    ///
+    /// # Examples
+    /// `{c -> Array a}` followed by `{a -> I64, b -> Bool}` is `{c -> Array I64}`.
+    pub fn followed_by(&self, following: &Self) -> Self {
+        let mut followed = self.clone();
+        followed.apply_to_replacements(following);
+        followed
+    }
+
+    /// Applies `following` to every type this substitution replaces a variable by.
+    fn apply_to_replacements(&mut self, following: &Self) {
+        for (_var, ty) in self.data.iter_mut() {
+            *ty = following.substitute_type(ty);
+        }
     }
 
     /// Replaces the type variables this substitution binds in the type `p` constrains.
@@ -329,7 +344,7 @@ impl Substitution {
     /// A kind signature on a variable replaced by another variable moves to that variable. One on a
     /// variable replaced by any other type is dropped: the signature states the kind of a variable,
     /// and the type standing in its place has a kind of its own.
-    pub fn substitute_kind_signs(&self, kind_signs: &mut Vec<KindSignature>) {
+    fn substitute_kind_signs(&self, kind_signs: &mut Vec<KindSignature>) {
         kind_signs.retain_mut(|kind_sign| {
             let Some(replacement) = self.data.get(&kind_sign.tyvar) else {
                 return true;
@@ -352,7 +367,9 @@ impl Substitution {
     }
 
     /// Replaces the type variables this substitution replaces throughout `qual_pred`: in the
-    /// predicate it states and in the constraints that predicate is qualified by.
+    /// predicate it states and in the constraints that predicate is qualified by. A kind constraint
+    /// moves to the variable that replaces its variable, and is dropped where any other type
+    /// replaces it.
     pub fn substitute_qualpred(&self, qual_pred: &mut QualPred) {
         for pred in &mut qual_pred.pred_constraints {
             self.substitute_predicate(pred);
@@ -360,6 +377,7 @@ impl Substitution {
         for eq in &mut qual_pred.eq_constraints {
             self.substitute_equality(eq);
         }
+        self.substitute_kind_signs(&mut qual_pred.kind_constraints);
         self.substitute_predicate(&mut qual_pred.predicate);
     }
 
@@ -1839,8 +1857,10 @@ impl TypeCheckContext {
     }
 
     /// The types `instance` gives the type variables of `general`, where `instance` is `general`
-    /// with its type variables given types. The variables of a scheme here are all those standing
-    /// in it: the ones it generalizes, and the opaque type variables, which it leaves free.
+    /// with its type variables given types. The variables of a scheme here are the ones it
+    /// generalizes and the opaque type variables, which it leaves free. A variable that stands as
+    /// an argument of an equality on an opaque type besides the opaque type itself, as `b` in
+    /// `Rebuild ?r b = Array b`, belongs to that equality alone, and the answer leaves it out.
     ///
     /// A variable `general` writes in its type is given the type `instance` writes in its place. A
     /// variable it writes in its equalities alone is given the type the equalities of `instance`
@@ -1849,46 +1869,40 @@ impl TypeCheckContext {
     /// `{c -> Src, ?it -> ?iter, e -> f}`.
     ///
     /// An opaque type variable that `general` writes in its predicates alone is given no type by
-    /// either, and the answer leaves it out, so that it stands for itself, as it does where
-    /// `check_scheme_equivalent` compares the two schemes.
+    /// either, and the answer leaves it out, so that it stands for itself.
     ///
-    /// Panics where `instance` is not `general` with its type variables given types.
+    /// # Returns
+    /// `None` where `instance` is not `general` with its type variables given types.
     pub fn instance_substitution(
         &self,
         general: &Arc<Scheme>,
         instance: &Arc<Scheme>,
-    ) -> Substitution {
+    ) -> Option<Substitution> {
         self.assert_freshness();
-        /// Panics, telling that `instance` is not an instance of `general`.
-        fn not_an_instance<T>(general: &Scheme, instance: &Scheme) -> T {
-            panic!(
-                "`{}` is not an instance of `{}`",
-                instance.to_string(),
-                general.to_string()
-            )
-        }
         let mut tc = self.clone();
         let instance_ty = tc
             .instantiate_scheme(instance, ConstraintInstantiationMode::Assume)
-            .unwrap_or_else(|_| not_an_instance(general, instance));
+            .ok()?;
         // The opaque type variables of `instance` stand for themselves too.
         instance.free_vars_to_vec(&mut tc.fixed_tyvars);
         let instance_vars = instance.all_vars();
-        let general_vars = general.all_vars();
-        let fresh = tc.instantiate_tyvars(&general_vars);
+        let fresh = tc.instantiate_tyvars(&general.all_vars());
         tc.unify(&instance_ty, &fresh.substitute_type(&general.ty))
-            .unwrap_or_else(|_| not_an_instance(general, instance));
+            .ok()?;
         // The predicates of `general` are left out: a predicate gives a type variable no type, so
         // the type and the equalities are what decide the answer.
         for eq in &general.equalities {
             let mut eq = eq.clone();
             fresh.substitute_equality(&mut eq);
-            tc.add_equality(eq)
-                .unwrap_or_else(|_| not_an_instance(general, instance));
+            tc.add_equality(eq).ok()?;
         }
 
         let mut general_to_instance = Substitution::default();
-        for tv in &general_vars {
+        let related_vars = general
+            .all_vars()
+            .into_iter()
+            .filter(|tv| is_opaque_tyvar(&tv.name) || general.generalizes(&tv.name));
+        for tv in related_vars {
             let ty = tc
                 .substitution
                 .substitute_type(&fresh.substitute_type(&type_from_tyvar(tv.clone())));
@@ -1897,18 +1911,14 @@ impl TypeCheckContext {
                 .iter()
                 .all(|fv| instance_vars.iter().any(|iv| iv.name == fv.name));
             if !given_a_type {
-                assert!(
-                    is_opaque_tyvar(&tv.name),
-                    "`{}` leaves the type variable `{}` of `{}` without a type",
-                    instance.to_string(),
-                    tv.name,
-                    general.to_string(),
-                );
+                if !is_opaque_tyvar(&tv.name) {
+                    return None;
+                }
                 continue;
             }
             assert!(general_to_instance.merge(&Substitution::single(&tv.name, ty)));
         }
-        general_to_instance
+        Some(general_to_instance)
     }
 
     /// Checks that `rhs` is at least as general as `lhs`: assuming what `lhs` states, the type of

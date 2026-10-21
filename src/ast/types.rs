@@ -2736,6 +2736,18 @@ impl Scheme {
         }
     }
 
+    /// Whether this scheme generalizes the type variable `name`.
+    pub fn generalizes(&self, name: &Name) -> bool {
+        self.gen_vars.iter().any(|tv| &tv.name == name)
+    }
+
+    /// The opaque type variables standing in the constraints and in the type, each one once.
+    pub fn opaque_vars(&self) -> Vec<Arc<TyVar>> {
+        let mut vars = self.all_vars();
+        vars.retain(|tv| is_opaque_tyvar(&tv.name));
+        vars
+    }
+
     /// The type variables standing in the constraints and in the type, each one once: the
     /// generalized ones and the ones the scheme leaves free alike.
     pub fn all_vars(&self) -> Vec<Arc<TyVar>> {
@@ -2971,6 +2983,16 @@ pub fn is_opaque_tyvar(name: &str) -> bool {
 /// `TYPE_WILDCARD_VAR_PREFIX` in front of it.
 pub fn is_type_wildcard_tyvar(name: &str) -> bool {
     name.starts_with(TYPE_WILDCARD_VAR_PREFIX)
+}
+
+/// Appends to `vars` each variable that `kind_signs` names and `vars` lacks, with the kind the
+/// signature gives it.
+pub fn add_kind_signed_vars(vars: &mut Vec<Arc<TyVar>>, kind_signs: &[KindSignature]) {
+    for kind_sign in kind_signs {
+        if !vars.iter().any(|tv| tv.name == kind_sign.tyvar) {
+            vars.push(make_tyvar(&kind_sign.tyvar, &kind_sign.kind));
+        }
+    }
 }
 
 /// The type variables standing in `preds`, `eqs` and `ty`, each one once.

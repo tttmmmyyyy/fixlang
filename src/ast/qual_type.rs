@@ -4,7 +4,7 @@ use crate::ast::predicate::Predicate;
 use crate::ast::program::EndNode;
 use crate::ast::traits::KindSignature;
 use crate::ast::type_env::TypeEnv;
-use crate::ast::types::{TyVar, TypeNode};
+use crate::ast::types::{add_kind_signed_vars, TyVar, TypeNode};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
 use crate::misc::Set;
@@ -102,6 +102,15 @@ impl QualType {
                 }
             }
         }
+    }
+
+    /// The type variables this signature names, each one once: those standing in the constraints
+    /// and in the type, and those it names in a kind signature alone.
+    pub fn named_vars(&self) -> Vec<Arc<TyVar>> {
+        let mut vars = vec![];
+        self.free_vars_vec(&mut vars);
+        add_kind_signed_vars(&mut vars, &self.kind_signs);
+        vars
     }
 
     /// Whether the type itself determines `var_name`, so that a use site writing that type says
