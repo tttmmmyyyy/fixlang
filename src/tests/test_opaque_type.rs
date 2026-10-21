@@ -2635,3 +2635,31 @@ pub fn test_opaque_signature_renaming_a_constrained_constraint_variable() {
         test_source(&source.replace("{tv}", name), Configuration::develop_mode());
     }
 }
+
+/// An opaque type a declaration writes in a predicate alone is given a type by nothing an
+/// implementation writes, and the implementation's body is reported for leaving it undetermined.
+#[test]
+pub fn test_opaque_type_in_a_predicate_alone_is_reported_at_the_body() {
+    let source = r#"
+        module Main;
+
+        trait a : Foo {
+            foo : [?it : Iterator] a -> I64;
+        }
+
+        impl I64 : Foo {
+            foo = |x| x;
+        }
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"", Foo::foo(3), 3);;
+            pure()
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        ": Std::Iterator` is required in the type inference of this expression",
+    );
+}

@@ -132,12 +132,7 @@ impl Program {
                 match validate_impl_signature(tc, &gv.scm, impl_, opaque_infos, &gv.decl_src) {
                     Ok(defn_to_impl) => of_impls.push(ImplCorrespondence {
                         defn_to_impl,
-                        defn_to_via_defn: tc
-                            .instance_substitution(&gv.scm, &impl_.scm_via_defn)
-                            .ok()
-                            .expect(
-                                "`TraitImpl::member_scheme_by_defn` builds the declaration with its type variables given types",
-                            ),
+                        defn_to_via_defn: tc.instance_substitution(&gv.scm, &impl_.scm_via_defn),
                     }),
                     Err(e) => errors.append(e),
                 }
@@ -505,12 +500,10 @@ fn validate_impl_signature(
 
     // A signature that agrees with the declaration gives a type to each type variable of the
     // declaration, through its constraints to one the declaration writes in its constraints alone.
-    let defn_to_impl = tc
-        .instance_substitution(defn_scm, &impl_.scm)
-        .ok()
-        .expect("a signature agreeing with the declaration is the declaration with its type variables given types");
+    let defn_to_impl = tc.instance_substitution(defn_scm, &impl_.scm);
     for info in opaque_infos {
-        validate_written_type(info, defn_to_impl.replacement_of(&info.tyvar.name).unwrap())?;
+        let written = defn_to_impl.substitute_type(&type_from_tyvar(info.tyvar.clone()));
+        validate_written_type(info, &written)?;
     }
     Ok(defn_to_impl)
 }
