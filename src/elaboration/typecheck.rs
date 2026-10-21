@@ -280,7 +280,8 @@ impl Substitution {
     }
 
     /// Replaces the type variables this substitution replaces throughout `scm`: in its type, its
-    /// predicates, its equalities and its kind signatures, the last as `substitute_kind_signs` does.
+    /// predicates, its equalities and its kind signatures. A kind signature moves to the variable
+    /// that replaces its variable, and is dropped where any other type replaces it.
     ///
     /// Panics where this substitution replaces a variable the scheme generalizes, since such a
     /// variable stands for every type and no substitution may fix it to one.
@@ -309,8 +310,9 @@ impl Substitution {
     }
 
     /// Replaces the type variables this substitution replaces throughout `qual_type`: in its type,
-    /// in the predicates and equalities qualifying it, and in its kind signatures, the last as
-    /// `substitute_kind_signs` does.
+    /// in the predicates and equalities qualifying it, and in its kind signatures. A kind signature
+    /// moves to the variable that replaces its variable, and is dropped where any other type
+    /// replaces it.
     pub fn substitute_qualtype(&self, qual_type: &mut QualType) {
         for pred in &mut qual_type.preds {
             self.substitute_predicate(pred);

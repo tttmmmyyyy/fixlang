@@ -2506,7 +2506,7 @@ pub fn test_higher_kinded_opaque_type_carries_its_value_to_the_use_site() {
 // ============================================================
 
 /// A type variable the declaration of a trait member writes in its constraints alone, as `e` in
-/// `Item ?it = e`, stays apart from a variable of the implementation's head of the same name. Each
+/// `Item ?it = e`, stays apart from a variable of the implementation's head of the same name. The
 /// test runs the program with the implementation naming its variable `e` and naming it `x`.
 #[test]
 pub fn test_opaque_constraint_variable_apart_from_a_head_variable() {

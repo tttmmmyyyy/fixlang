@@ -166,7 +166,7 @@ impl Program {
     /// Desugar opaque type variables. See the module-level comment for an overview.
     ///
     /// Reports an implementation of a trait member whose type signature disagrees with the
-    /// member's declaration, and changes nothing then.
+    /// member's declaration, and leaves the program unchanged in that case.
     pub fn desugar_opaque_types(&mut self, config: &Configuration) -> Result<(), Errors> {
         let targets = self.global_values_with_opaque_types();
         let mut correspondences = self.relate_opaque_member_impls(&targets, config)?;
@@ -420,9 +420,8 @@ impl Program {
     }
 }
 
-/// The types the scheme of `impl_` gives the type variables of the declaration of its trait
-/// member, where the type signature `impl_` writes agrees with that declaration; the signature is
-/// reported where it disagrees.
+/// The types the scheme of `impl_` gives the type variables of its trait member's declaration. A
+/// type signature `impl_` writes that disagrees with the declaration is reported instead.
 ///
 /// # Arguments
 /// * `defn_scm` — the type of the member as the trait declares it, in the declaration's own names:
@@ -499,7 +498,8 @@ fn relate_impl_signature(
     }
 
     // A signature that agrees with the declaration gives a type to each type variable of the
-    // declaration, through its constraints to one the declaration writes in its constraints alone.
+    // declaration. One the declaration writes in its constraints alone gets its type through the
+    // constraints.
     let defn_to_impl = tc.instance_substitution(defn_scm, &impl_.scm);
     for info in opaque_infos {
         let written = defn_to_impl.substitute_type(&type_from_tyvar(info.tyvar.clone()));
