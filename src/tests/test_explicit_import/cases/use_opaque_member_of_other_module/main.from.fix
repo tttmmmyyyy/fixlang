@@ -1,0 +1,15 @@
+module Main;
+
+import Lib;
+
+type Obj = struct {};
+
+impl Obj : Greeting {
+    greeting = |_| "Hello";
+}
+
+main : IO ();
+main = (
+    eval Obj {}.greeting.to_string;
+    pure()
+);

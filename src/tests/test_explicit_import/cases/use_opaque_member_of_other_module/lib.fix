@@ -1,0 +1,5 @@
+module Lib;
+
+trait a : Greeting {
+    greeting : [?s : ::Std::ToString] a -> ?s;
+}

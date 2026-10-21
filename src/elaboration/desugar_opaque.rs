@@ -898,9 +898,14 @@ fn build_wrap_scheme(
 ///
 /// The wrapper App inherits the inner expression's source span, so that a type error raised while
 /// type-checking the body is reported at the expression the user wrote.
+///
+/// The reference to `#wrap_opaque` is written as an absolute name, so that a trait method
+/// implemented in a module other than the trait's needs no import of it.
 fn wrap_with_opaque(wrap_name: &FullName, inner: Arc<ExprNode>) -> Arc<ExprNode> {
     let src = inner.source.clone();
-    expr_app(expr_var(wrap_name.clone(), None), vec![inner], src)
+    let mut wrap_name = wrap_name.clone();
+    wrap_name.global_to_absolute();
+    expr_app(expr_var(wrap_name, None), vec![inner], src)
 }
 
 /// Build a placeholder expression for the #wrap_opaque body.

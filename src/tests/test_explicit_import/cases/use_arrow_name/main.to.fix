@@ -1,0 +1,12 @@
+module Main;
+
+import Std::{Arrow, I64, IO, Monad::pure};
+
+apply_unit : Arrow () I64 -> I64;
+apply_unit = |f| f();
+
+main : IO ();
+main = (
+    eval apply_unit(|_| 42);
+    pure()
+);
