@@ -532,6 +532,9 @@ fn agreeing_signature_correspondence(
     let mut renaming = Substitution::default();
     let mut renamed_to: Vec<Name> = vec![];
     for tv in &impl_.scm_via_defn.opaque_vars() {
+        // An opaque type written in predicates alone is given no name, and keeps its own. One for
+        // which the signature writes a type other than an opaque type variable keeps its own name
+        // too, and the comparison below then finds the two schemes apart.
         let Some(written) = via_defn_to_impl.replacement_of(&tv.name) else {
             continue;
         };
