@@ -145,8 +145,8 @@ impl<K: CloneKey> CloneRegistry<K> {
     /// The suffix the clone keyed on `key` adds to its function's name and to each of its local names.
     ///
     /// # Examples
-    /// In the registry tagged `u`, the key of two parameters whose boxed leaves are `Unique` and
-    /// `Dynamic` gives `"#uUD"`.
+    /// In a registry tagged `u`, a function whose two parameters have one boxed leaf each, keyed
+    /// `Unique` and `Dynamic`, gets the suffix `"#uUD"`.
     fn suffix(&self, key: &K) -> String {
         copy_suffix(self.tag, &key.spelling())
     }

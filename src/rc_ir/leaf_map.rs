@@ -265,8 +265,8 @@ impl<T: Copy> LeafKey<T> {
     /// do.
     ///
     /// # Examples
-    /// A key of two boxed leaves holding `DeepLocal` and `MayExt`, spelled with `D` for `DeepLocal`
-    /// and `M` for `MayExt`, spells `"DM"`.
+    /// With `letter` giving `D` for `DeepLocal` and `M` for `MayExt`, a key whose two boxed leaves
+    /// hold `DeepLocal` and `MayExt` spells `"DM"`.
     pub fn spell(&self, letter: impl Fn(T) -> char) -> String {
         self.0.values().map(|fact| letter(*fact)).collect()
     }
