@@ -222,6 +222,12 @@ impl Program {
                 }
                 SymbolExpr::Method(impls) => {
                     let impl_correspondences = correspondences.remove(gv_name).unwrap();
+                    assert_eq!(
+                        impls.len(),
+                        impl_correspondences.len(),
+                        "`{}` has an implementation left unrelated to the declaration",
+                        gv_name.to_string()
+                    );
                     for (impl_, correspondence) in impls.iter_mut().zip(impl_correspondences) {
                         // The impl side of the match is `impl_.scm`, the scheme this implementation
                         // is type-checked against. It supplies the variable names the rhs of an

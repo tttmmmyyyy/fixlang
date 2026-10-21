@@ -1848,8 +1848,8 @@ impl TypeCheckContext {
         let mut tc = self.clone();
         let instance_ty = tc.instantiate_scheme(instance, ConstraintInstantiationMode::Assume)?;
         // The opaque type variables of `instance` stand for themselves too.
+        instance.free_vars_to_vec(&mut tc.fixed_tyvars);
         let instance_vars = instance.all_vars();
-        tc.fixed_tyvars.extend(instance_vars.iter().cloned());
         let general_vars = general.all_vars();
         let fresh = tc.instantiate_tyvars(&general_vars);
         tc.unify(&instance_ty, &fresh.substitute_type(&general.ty))?;
