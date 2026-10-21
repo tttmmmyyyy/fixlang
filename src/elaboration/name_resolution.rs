@@ -137,9 +137,9 @@ impl NameResolutionContext {
                 if inaccessible {
                     return None;
                 }
-                // The absolute property comes from the short name alone: a candidate the
-                // environment registers under an absolute name, as `::Std::Arrow` is, still needs
-                // an import where it is written without the leading `::`.
+                // The result is absolute exactly when the short name is. A candidate registered
+                // under an absolute name, as `::Std::Arrow` is, still needs an import where it is
+                // written without the leading `::`.
                 let mut full_name = full_name.clone();
                 full_name.namespace.is_absolute = short_name.is_absolute();
                 return Some(full_name);

@@ -111,8 +111,9 @@ where
     ///
     /// A local `name` that is bound stands for its innermost binding alone. Otherwise every global
     /// name that `name` is a suffix of and that the imports make accessible is a candidate; a name
-    /// written absolutely reaches the one global it spells out. The namespace answered for a global
-    /// is absolute exactly when `name` is, whatever the namespace it is registered under.
+    /// written absolutely reaches the one global it spells out. The namespace returned for a global
+    /// is absolute exactly when `name` is, whether or not the global is registered under an
+    /// absolute name.
     ///
     /// # Arguments
     /// * `import_stmts` — the import statements in force where the name is written, which decide
