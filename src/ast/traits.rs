@@ -438,8 +438,6 @@ impl TraitDefn {
         } else {
             member.qual_ty.clone()
         };
-        let mut vars = vec![];
-        qual_ty.free_vars_vec(&mut vars);
         let mut preds = vec![Predicate::make(
             self.trait_.clone(),
             type_from_tyvar(self.type_var.clone()),
