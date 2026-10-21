@@ -542,14 +542,14 @@ mod tests {
         kind_star, tycon, type_fun, type_funptr, type_tyapp, type_tycon, TyCon, TyConInfo,
         TyConVariant, TypeNode,
     };
-    use crate::fixstd::builtin::CaptureProjectOp;
     use crate::fixstd::builtin::{
         bulitin_tycons, make_array_ty, make_dynamic_object_ty, make_i64_ty, make_ptr_ty,
-        NullPtrLitOp,
+        CaptureProjectOp, NullPtrLitOp,
     };
     use crate::misc::{Map, Set};
-    use crate::rc_ir::ast::{FuncRef, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcVar};
-    use crate::rc_ir::ast::{MatchArm, RcState};
+    use crate::rc_ir::ast::{
+        FuncRef, MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar,
+    };
     use std::sync::Arc;
 
     /// A type environment holding the built-in type constructors, which a check consults to tell a
