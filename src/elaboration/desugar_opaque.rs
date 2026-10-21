@@ -1029,7 +1029,7 @@ pub fn remove_opaque_wrapper_func(expr: Arc<ExprNode>) -> Arc<ExprNode> {
     if let Expr::App(func, args) = expr.expr.as_ref() {
         if args.len() == 1 {
             if let Expr::Var(var) = func.expr.as_ref() {
-                if var.name.name.starts_with(WRAP_OPAQUE_FUNC_NAME) {
+                if var.name.name == WRAP_OPAQUE_FUNC_NAME {
                     return args[0].clone();
                 }
             }
