@@ -409,6 +409,10 @@ impl LocalityKey {
 
 /// A clone's key holds one `LocalityKey` per parameter of its function, each of that parameter's
 /// shape, so the keys of one function spell strings that differ wherever the keys do.
+///
+/// # Examples
+/// The key `[[DeepLocal], [RootLocal, MayExt]]` of a function taking a parameter of one boxed leaf
+/// and one of two spells `"DRM"`, and the clone of `f` it keys is `f#lDRM`.
 impl CloneKey for Vec<LocalityKey> {
     fn spelling(&self) -> String {
         self.iter().map(LocalityKey::spelling).collect()
