@@ -1898,9 +1898,10 @@ impl TypeCheckContext {
         }
 
         let mut general_to_instance = Substitution::default();
-        let related_vars = general.all_vars().into_iter().filter(|tv| {
-            is_opaque_tyvar(&tv.name) || general.generalizes(&tv.name)
-        });
+        let related_vars = general
+            .all_vars()
+            .into_iter()
+            .filter(|tv| is_opaque_tyvar(&tv.name) || general.generalizes(&tv.name));
         for tv in related_vars {
             let ty = tc
                 .substitution
