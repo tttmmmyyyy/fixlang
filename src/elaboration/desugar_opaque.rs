@@ -127,17 +127,17 @@ impl Program {
                 continue;
             };
             let tc = tc.get_or_insert_with(|| self.create_typechecker(config));
-            let mut of_impls = vec![];
+            let mut impl_correspondences = vec![];
             for impl_ in impls {
                 match validate_impl_signature(tc, &gv.scm, impl_, opaque_infos, &gv.decl_src) {
-                    Ok(defn_to_impl) => of_impls.push(ImplCorrespondence {
+                    Ok(defn_to_impl) => impl_correspondences.push(ImplCorrespondence {
                         defn_to_impl,
                         defn_to_via_defn: tc.instance_substitution(&gv.scm, &impl_.scm_via_defn),
                     }),
                     Err(e) => errors.append(e),
                 }
             }
-            correspondences.insert(gv_name.clone(), of_impls);
+            correspondences.insert(gv_name.clone(), impl_correspondences);
         }
         errors.to_result()?;
         Ok(correspondences)

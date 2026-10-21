@@ -1876,7 +1876,7 @@ impl TypeCheckContext {
             tc.add_equality(eq).unwrap_or_else(|_| not_an_instance(general, instance));
         }
 
-        let mut answer = Substitution::default();
+        let mut general_to_instance = Substitution::default();
         for tv in &general_vars {
             let ty = tc
                 .substitution
@@ -1895,9 +1895,9 @@ impl TypeCheckContext {
                 );
                 continue;
             }
-            assert!(answer.merge(&Substitution::single(&tv.name, ty)));
+            assert!(general_to_instance.merge(&Substitution::single(&tv.name, ty)));
         }
-        answer
+        general_to_instance
     }
 
     /// Checks that `rhs` is at least as general as `lhs`: assuming what `lhs` states, the type of
