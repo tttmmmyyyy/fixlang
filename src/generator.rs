@@ -102,8 +102,9 @@ pub struct ScopedValue<'c> {
     /// function of a global.
     accessor: ValueAccessor<'c>,
     /// Whether `get_scoped_obj` retains the value's boxed subobjects when reading it. True only for
-    /// unboxed globals, which keep their own reference and so must hand out a retained copy; a boxed
-    /// global is moved out on read, and local values are reference-counted by explicit RC-IR nodes.
+    /// unboxed globals, which keep their own reference and hand out another one on each read; a
+    /// boxed global is moved out on read, and local values are reference-counted by explicit RC-IR
+    /// nodes. The subobjects of a global are global, so the retain counts nothing.
     retain_on_read: bool,
 }
 
@@ -1287,7 +1288,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             panic_with_msg(&format!("Duplicate symbol: {}", name.to_string()));
         } else {
             // A boxed global is moved out when read, so it needs no retain; an unboxed global keeps
-            // its own reference, so reading it must retain its boxed subobjects.
+            // its own reference, so reading it retains its boxed subobjects.
             let retain_on_read = !ty.is_box(self.type_env());
             self.declared_globals.insert(
                 name.clone(),
@@ -1362,8 +1363,9 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// The object `var` is bound to, as a reference the caller owns.
     ///
     /// Reading a value whose `retain_on_read` is set retains its boxed subobjects, which is what an
-    /// unboxed global asks for: the global keeps its own reference, so a read hands out a retained
-    /// copy. Every other read is plain.
+    /// unboxed global asks for: the global keeps its own reference, so a read hands out another one.
+    /// Those subobjects are global, so the retain counts nothing and development mode checks that
+    /// they are. Every other read is plain.
     pub fn get_scoped_obj(&mut self, var: &FullName) -> Object<'c> {
         let val = self.get_scoped_value(var);
         let obj = val.accessor.get(self);

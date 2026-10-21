@@ -252,7 +252,7 @@ pub enum RcState {
     /// Known threaded: atomic increment/decrement, no state check.
     Threaded,
     /// Known global, along with everything it reaches. Reference counting skips such an object, so
-    /// the operation counts nothing and emits no code; in development mode it checks the state.
+    /// the operation emits no count; in development mode it checks the state instead.
     Global,
 }
 
