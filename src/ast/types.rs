@@ -2729,19 +2729,9 @@ impl Scheme {
     /// Appends to `buf` the type variables standing in the constraints and in the type that the
     /// scheme leaves free, that is, all but the generalized ones.
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
-        let mut free_vars = vec![];
-        for p in &self.predicates {
-            p.free_vars_to_vec(&mut free_vars);
-        }
-        for eq in &self.equalities {
-            eq.free_vars_to_vec(&mut free_vars);
-        }
-        self.ty.free_vars_to_vec(&mut free_vars);
-
-        // Add non-generalized type variables to `buf`.
-        for tv in &free_vars {
+        for tv in self.all_vars() {
             if !self.gen_vars.iter().any(|tv0| tv0.name == tv.name) {
-                buf.push(tv.clone());
+                buf.push(tv);
             }
         }
     }
