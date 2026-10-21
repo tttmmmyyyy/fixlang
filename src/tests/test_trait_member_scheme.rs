@@ -208,3 +208,29 @@ pub fn test_member_variable_of_a_kind_signature_alone_apart_from_a_head_variable
         test_source(&source.replace("{tv}", name), Configuration::develop_mode());
     }
 }
+
+/// A variable the implementation's context gives a kind and writes nowhere else stays apart from
+/// the member's variable of the same name.
+#[test]
+pub fn test_member_variable_apart_from_a_variable_of_a_kind_constraint_alone() {
+    let source = r#"
+        module Main;
+
+        trait c : Describe {
+            describe : [a : *->*] a I64 -> c -> I64;
+        }
+
+        impl [{tv} : *->*->*] I64 : Describe {
+            describe = |_, _| 42;
+        }
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"", Describe::describe(Option::some(1), 3), 42);;
+            pure()
+        );
+    "#;
+    for name in IMPL_TYVAR_NAMES {
+        test_source(&source.replace("{tv}", name), Configuration::develop_mode());
+    }
+}
