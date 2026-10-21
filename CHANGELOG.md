@@ -74,7 +74,7 @@
 
 #### Std
 
-- #718: `String::find` given a negative start index now searches from the beginning of the string: `"abcdef".find("ab", -1)` is `some(0)`. It used to read the memory before the string, which returned a wrong answer or crashed the program.
+- #718, #919: `String::find` given a negative start index now searches from the beginning of the string: `"abcdef".find("ab", -1)` is `some(0)`. It used to read the memory before the string, which returned a wrong answer or crashed the program.
 
 ## [1.5.0] - 2026-09-27
 
