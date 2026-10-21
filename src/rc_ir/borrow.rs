@@ -38,8 +38,7 @@
 
 use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
-use crate::ast::types::Type;
-use crate::ast::types::TypeNode;
+use crate::ast::types::{Type, TypeNode};
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
@@ -174,6 +173,8 @@ fn level_ownership(
     }
     let mut changed = false;
     for (root, path) in &candidates {
+        // A root this version takes no parameter for is a producer or a global, which has no
+        // parameter leaf to own.
         let Some(ty) = vars.param_tys.get(root) else {
             continue;
         };
