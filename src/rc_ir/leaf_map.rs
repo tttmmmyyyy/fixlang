@@ -263,6 +263,10 @@ impl<T: Copy> LeafKey<T> {
     /// The facts written one letter per boxed leaf, in canonical path order, `letter` giving each
     /// fact's letter. Keys of one shape spell strings of one length, which differ wherever the facts
     /// do.
+    ///
+    /// # Examples
+    /// With `letter` giving `D` for `DeepLocal` and `M` for `MayExt`, a key whose two boxed leaves
+    /// hold `DeepLocal` and `MayExt` spells `"DM"`.
     pub fn spell(&self, letter: impl Fn(T) -> char) -> String {
         self.0.values().map(|fact| letter(*fact)).collect()
     }

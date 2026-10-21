@@ -42,7 +42,7 @@ use crate::rc_ir::rename::{clone_fresh, copy_suffix, substitute_expr};
 use std::sync::Arc;
 
 /// The tag on the fresh names the case-of-case move mints, keeping them distinct from other passes'.
-const PASS_TAG: &str = "cc";
+const PASS_TAG: &str = "case";
 
 /// Simplify every function body and global initializer of `prog` to a fixpoint.
 pub fn simplify(prog: &mut RcProgram, config: &Configuration) {

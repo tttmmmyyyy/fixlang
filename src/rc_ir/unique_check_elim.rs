@@ -81,7 +81,12 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     // Materialize every enqueued clone; each materialization may request further clones.
     while let Some((fref, key)) = spec.clones.pop() {
         let clone = spec.materialize_clone(&fref, &key);
-        spec.output_funcs.insert(clone.name.clone(), clone);
+        let name = clone.name.clone();
+        assert!(
+            spec.output_funcs.insert(name.clone(), clone).is_none(),
+            "a clone takes the name `{}` of another function",
+            name.name.to_string()
+        );
     }
 
     RcProgram {

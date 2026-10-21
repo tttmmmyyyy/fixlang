@@ -64,7 +64,7 @@ pub struct CloneRegistry<K> {
     enqueued: Set<(FuncRef, K)>,
     /// The enqueued clones not yet handed out for materialization.
     worklist: VecDeque<(FuncRef, K)>,
-    /// The letter marking this pass's fresh names apart from another pass's.
+    /// The tag marking this pass's fresh names apart from another pass's; see `copy_suffix`.
     tag: &'static str,
 }
 
@@ -143,6 +143,10 @@ impl<K: CloneKey> CloneRegistry<K> {
     }
 
     /// The suffix the clone keyed on `key` adds to its function's name and to each of its local names.
+    ///
+    /// # Examples
+    /// In a registry tagged `u`, a function whose two parameters have one boxed leaf each, keyed
+    /// `Unique` and `Dynamic`, gets the suffix `"#uUD"`.
     fn suffix(&self, key: &K) -> String {
         copy_suffix(self.tag, &key.spelling())
     }
