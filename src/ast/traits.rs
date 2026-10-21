@@ -635,16 +635,7 @@ impl TraitImpl {
     pub fn member_scheme(&self, member_name: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
         if let Some(qual_ty) = self.member_sigs.get(member_name) {
             // If type annotation is provided by user, use it.
-            let mut preds = self.qual_pred.pred_constraints.clone();
-            preds.extend(qual_ty.preds.clone());
-
-            let mut eqs = self.qual_pred.eq_constraints.clone();
-            eqs.extend(qual_ty.eqs.clone());
-
-            let mut kind_signs = self.qual_pred.kind_constraints.clone();
-            kind_signs.extend(qual_ty.kind_signs.clone());
-
-            Scheme::generalize(&kind_signs, preds, eqs, qual_ty.ty.clone())
+            self.qualify_by_context(qual_ty.clone())
         } else {
             // Otherwise, construct the type from trait definition and impl declaration.
             self.member_scheme_by_defn(member_name, trait_defn)
@@ -698,15 +689,19 @@ impl TraitImpl {
             )));
         }
         subst.substitute_qualtype(&mut member_qualty);
+        self.qualify_by_context(member_qualty)
+    }
 
+    /// The scheme of a member's type `qual_ty`, written in this implementation's names, with this
+    /// implementation's context put in front of its own constraints.
+    fn qualify_by_context(&self, qual_ty: QualType) -> Arc<Scheme> {
         let mut kind_signs = self.qual_pred.kind_constraints.clone();
-        kind_signs.append(&mut member_qualty.kind_signs);
+        kind_signs.extend(qual_ty.kind_signs);
         let mut preds = self.qual_pred.pred_constraints.clone();
-        preds.append(&mut member_qualty.preds);
+        preds.extend(qual_ty.preds);
         let mut eqs = self.qual_pred.eq_constraints.clone();
-        eqs.append(&mut member_qualty.eqs);
-
-        Scheme::generalize(&kind_signs, preds, eqs, member_qualty.ty)
+        eqs.extend(qual_ty.eqs);
+        Scheme::generalize(&kind_signs, preds, eqs, qual_ty.ty)
     }
 
     /// Get expression that implements a member.
