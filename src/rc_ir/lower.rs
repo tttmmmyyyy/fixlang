@@ -147,7 +147,8 @@ impl<'a> Lowerer<'a> {
     // --- fresh names ---
 
     /// A variable named `<hint>#<symbol tag><n>`, which no other minted name carries, so the name
-    /// alone identifies the binding wherever the program reads it.
+    /// alone identifies the binding wherever the program reads it. The passes that copy code keep
+    /// their names fresh by this shape; see `rename::copy_suffix`.
     ///
     /// # Arguments
     /// * `hint` — the readable part of the name, shown in an RC IR dump.

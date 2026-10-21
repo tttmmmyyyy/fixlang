@@ -17,7 +17,9 @@ use std::sync::Arc;
 /// character. A suffix therefore splits into its tag and its distinguisher in one way only, so two
 /// passes with different tags never make the same suffix. A tag also holds a letter that is not a
 /// hexadecimal digit, while a lowered variable's name ends in `#`, sixteen hexadecimal digits and a
-/// counter, so no suffix spells the end of a lowered name.
+/// counter (`Lowerer::fresh_var`), so no suffix spells the end of a lowered name. A function's copy
+/// takes the suffix as well, and each pass that adds copies to the program asserts that no other
+/// function holds the name a copy takes.
 ///
 /// # Examples
 /// `copy_suffix("u", "UD")` yields `"#uUD"`, and `copy_suffix("borrow", "")` yields `"#borrow"`.
