@@ -672,7 +672,8 @@ impl TraitImpl {
         // variables `a` would make the two one variable.
         let mut impl_vars = vec![];
         self.qual_pred.free_vars_vec(&mut impl_vars);
-        let mut impl_var_names: Set<Name> = impl_vars.into_iter().map(|tv| tv.name.clone()).collect();
+        let mut impl_var_names: Set<Name> =
+            impl_vars.into_iter().map(|tv| tv.name.clone()).collect();
         impl_var_names.extend(
             self.qual_pred
                 .kind_constraints

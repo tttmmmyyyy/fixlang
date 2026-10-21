@@ -1883,7 +1883,8 @@ impl TypeCheckContext {
         for eq in &general.equalities {
             let mut eq = eq.clone();
             fresh.substitute_equality(&mut eq);
-            tc.add_equality(eq).unwrap_or_else(|_| not_an_instance(general, instance));
+            tc.add_equality(eq)
+                .unwrap_or_else(|_| not_an_instance(general, instance));
         }
 
         let mut general_to_instance = Substitution::default();

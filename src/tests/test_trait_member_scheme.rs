@@ -76,7 +76,10 @@ pub fn test_unfixed_context_variable_named_as_a_member_variable_is_reported() {
         test_source_fail(
             &source.replace("{tv}", name),
             Configuration::develop_mode(),
-            &format!("Type variable `{}` is not fixed by this type signature", name),
+            &format!(
+                "Type variable `{}` is not fixed by this type signature",
+                name
+            ),
         );
     }
 }
