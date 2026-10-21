@@ -102,8 +102,9 @@ pub struct ScopedValue<'c> {
     /// function of a global.
     accessor: ValueAccessor<'c>,
     /// Whether `get_scoped_obj` retains the value's boxed subobjects when reading it. True only for
-    /// unboxed globals, which keep their own reference and so must hand out a retained copy; a boxed
-    /// global is moved out on read, and local values are reference-counted by explicit RC-IR nodes.
+    /// unboxed globals, which keep their own reference and hand out another one on each read; a
+    /// boxed global is moved out on read, and local values are reference-counted by explicit RC-IR
+    /// nodes. The subobjects of a global are global, so the retain counts nothing.
     retain_on_read: bool,
 }
 
@@ -1287,7 +1288,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             panic_with_msg(&format!("Duplicate symbol: {}", name.to_string()));
         } else {
             // A boxed global is moved out when read, so it needs no retain; an unboxed global keeps
-            // its own reference, so reading it must retain its boxed subobjects.
+            // its own reference, so reading it retains its boxed subobjects.
             let retain_on_read = !ty.is_box(self.type_env());
             self.declared_globals.insert(
                 name.clone(),
@@ -1362,16 +1363,16 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// The object `var` is bound to, as a reference the caller owns.
     ///
     /// Reading a value whose `retain_on_read` is set retains its boxed subobjects, which is what an
-    /// unboxed global asks for: the global keeps its own reference, so a read hands out a retained
-    /// copy. Every other read is plain.
+    /// unboxed global asks for: the global keeps its own reference, so a read hands out another one.
+    /// Those subobjects are global, so the retain counts nothing and development mode checks that
+    /// they are. Every other read is plain.
     pub fn get_scoped_obj(&mut self, var: &FullName) -> Object<'c> {
         let val = self.get_scoped_value(var);
         let obj = val.accessor.get(self);
         if val.retain_on_read {
             let one = self.context.i64_type().const_int(1, false);
-            // The subobjects of an unboxed global are marked global, so this retain is already a
-            // no-op at run time; it keeps the runtime dispatch that makes it one.
-            self.build_retain(obj.clone(), one, RcState::Unknown);
+            // The subobjects of an unboxed global are marked global, so the retain counts nothing.
+            self.build_retain(obj.clone(), one, RcState::Global);
         }
         obj
     }
@@ -1612,25 +1613,49 @@ impl<'c, 'm> Generator<'c, 'm> {
     ///
     /// The check belongs in every state dispatch, so that no annotated site goes unchecked.
     fn build_assert_refcnt_state_local(&mut self, obj_ptr: PointerValue<'c>) {
+        self.build_assert_refcnt_state(obj_ptr, RefcntState::LOCAL, "local");
+    }
+
+    /// Abort when the boxed object at `obj_ptr` is not in the global reference-counting state.
+    ///
+    /// It stands in place of the count a `RcState::Global` annotation removes: a count dropped from
+    /// an object that is counted would free it early or leak it, far from the operation.
+    fn build_assert_refcnt_state_global(&mut self, obj_ptr: PointerValue<'c>) {
+        self.build_assert_refcnt_state(obj_ptr, RefcntState::GLOBAL, "global");
+    }
+
+    /// Abort, in compiler development mode, when the boxed object at `obj_ptr` is not in the
+    /// `expected` reference-counting state. `state_name` names the state in the emitted values and
+    /// in the message the program stops with.
+    fn build_assert_refcnt_state(
+        &mut self,
+        obj_ptr: PointerValue<'c>,
+        expected: RefcntState,
+        state_name: &str,
+    ) {
         if !self.config.develop_mode {
             return;
         }
-        let refcnt_state = self.build_load_refcnt_state(obj_ptr, "refcnt_state@assert_local");
-        let is_local = self.build_compare_refcnt_state(
+        let refcnt_state =
+            self.build_load_refcnt_state(obj_ptr, &format!("refcnt_state@assert_{}", state_name));
+        let is_expected = self.build_compare_refcnt_state(
             refcnt_state,
             IntPredicate::EQ,
-            RefcntState::LOCAL,
-            "is_refcnt_state_local@assert",
+            expected,
+            &format!("is_refcnt_state_{}@assert", state_name),
         );
-        let is_nonlocal = self
+        let is_unexpected = self
             .builder()
-            .build_not(is_local, "is_refcnt_state_nonlocal@assert")
+            .build_not(
+                is_expected,
+                &format!("is_refcnt_state_not_{}@assert", state_name),
+            )
             .unwrap();
-        self.build_panic_if(
-            is_nonlocal,
-            "assert_local",
-            "A reference-counting operation inferred local reached a non-local object.\n",
+        let message = format!(
+            "A reference-counting operation inferred {0} reached a non-{0} object.\n",
+            state_name
         );
+        self.build_panic_if(is_unexpected, &format!("assert_{}", state_name), &message);
     }
 
     /// Print `message` and stop the program where `cond` holds; where `cond` fails, the program
@@ -2400,6 +2425,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         state: RcState,
     ) {
         let obj_ptr = obj.value(self).into_pointer_value();
+        if state == RcState::Global {
+            self.build_assert_refcnt_state_global(obj_ptr);
+            return;
+        }
         // The refcount is narrower than the i64 count, so bring the amount to its width. A constant
         // 1 folds to a constant, leaving the single-retain code unchanged.
         let amount = self
@@ -2641,6 +2670,10 @@ impl<'c, 'm> Generator<'c, 'm> {
     ) {
         // Get pointer to the object.
         let obj_ptr = obj.value(self).into_pointer_value();
+        if state == RcState::Global {
+            self.build_assert_refcnt_state_global(obj_ptr);
+            return;
+        }
 
         // Branch by refcnt_state.
         let current_func = self.current_function();

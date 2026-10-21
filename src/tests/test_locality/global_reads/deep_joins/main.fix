@@ -1,0 +1,34 @@
+module Main;
+
+// If/match joins nested four deep that mix a global, a field of another global and local values.
+
+ga : Array String;
+ga = Array::from_map(3, |i| "ga" + i.to_string);
+
+gb : (Array String, Array (Array String));
+gb = (["gb0" + ""], [["gbb" + ""], []]);
+
+pick : I64 -> Array String;
+pick = |k| (
+    let x = if k % 2 == 0 { ga } else { gb.@0 };
+    let y = if k % 3 == 0 { x } else { if k % 5 == 0 { gb.@1.@(0) } else { ["local" + k.to_string] } };
+    let z = match if k > 100 { some(y) } else { none() } { some(v) => v, none() => if k % 7 == 0 { ga } else { y } };
+    let w = if k < 0 { ga } else { if k < 1000 { if k < 500 { z } else { gb.@1.@(1) } } else { gb.@0 } };
+    w
+);
+
+pick_pair : I64 -> (Array String, Array String);
+pick_pair = |k| (
+    let p = if k % 2 == 0 { (ga, gb.@0) } else { (gb.@0, ["l"]) };
+    let (a, b) = p;
+    if k % 4 == 1 { (b, a) } else { p }
+);
+
+main : IO ();
+main = (
+    let k0 = (*get_args).@size;
+    let s = Iterator::range(0, 40).map(|k| pick(k + k0 - 1).to_iter.join("")).to_array.to_iter.join(";");
+    let t = Iterator::range(0, 8).map(|k| (let (a, b) = pick_pair(k); a.push_back("!").to_iter.join("") + b.@size.to_string)).to_array.to_iter.join(";");
+    let u = Iterator::range(0, 10).fold(ga, |k, acc| if k % 3 == 0 { pick(k) } else { if k % 3 == 1 { acc } else { acc.push_back(k.to_string) } });
+    println $ s + " " + t + " " + u.to_string
+);

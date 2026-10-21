@@ -1,0 +1,37 @@
+module Main;
+
+// Globals in nested namespaces whose short names coincide with local variables, fields and other
+// globals, read with and without qualification.
+type BS = box struct { a : Array I64, b : Array I64 };
+
+namespace Inner {
+    a : Array I64 = Array::from_map(3, |i| i + 1);
+    b : BS = BS { a : Inner::a, b : Deep::a };
+    namespace Deep {
+        a : Array I64 = Array::from_map(2, |i| i + 40);
+        bs : BS = BS { a : Deep::a, b : Inner::a.push_back(5) };
+    }
+}
+
+a : Array I64 = Array::from_map(4, |i| i * 11);
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 7);
+    a.to_iter.fold(0, |x, s| s * 73 + x)
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let r1 = consume(Main::a) + consume(Inner::a) + consume(Inner::Deep::a);
+    let BS { a : a, b : b } = Inner::b;
+    let r2 = consume(a) + consume(b) + consume(Main::a);
+    let BS { a : x, b : y } = Inner::Deep::bs;
+    let a = if n > 0 { x } else { a };
+    let r3 = consume(a) + consume(y) + consume(a);
+    let b = Inner::b.set_a(Array::fill(n + 1, n));
+    let BS { a : p, b : q } = b;
+    let r4 = consume(p) + consume(q) + consume(Inner::b.@a);
+    println $ [r1, r2, r3, r4].to_iter.map(to_string).join(",")
+);

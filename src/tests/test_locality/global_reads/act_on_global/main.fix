@@ -1,0 +1,35 @@
+module Main;
+
+// `act`, `iact` and `iset` on a global through the Option, Array and Result functors.
+
+type R = box struct { arr : Array String, opt : Option (Array I64) };
+type U = struct { r : R, n : I64 };
+
+ga : Array String;
+ga = Array::from_map(4, |i| "a" + i.to_string);
+
+gr : R;
+gr = R { arr : ga, opt : some([1, 2, 3]) };
+
+gu : U;
+gu = U { r : gr, n : 3 };
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let a1 : Option (Array String) = ga.act(k, |s| some(s + "!"));
+    let a2 : Option (Array String) = ga.act(k, |s| none());
+    let a3 : Array (Array String) = ga.act(k + 1, |s| [s, s + "?"]);
+    let a4 : Result String (Array String) = ga.act(2, |s| if k > 0 { ok(s + s) } else { err("e") });
+    let b1 : Option R = gr.act_arr(|arr| some(arr.push_back("x")));
+    let b2 : Array R = gr.act_opt(|o| [o, none(), o.map(|v| v.push_back(k))]);
+    let c1 : Option U = gu.act_r(|r| if k > 0 { some(r.set_arr([])) } else { none() });
+    let c2 : Option U = gu[^r][^arr].iact(|arr| some(arr.set(0, "z")));
+    let c3 = gu[^r][^arr][k].iset("idx");
+    let c4 = gu[^r][^opt].iset(none());
+    let c5 : Option U = gu[^r][^opt].iact(|o| some(o.map(|a| a.push_back(99))));
+    let s1 = a1.as_some.to_string + a2.is_none.to_string + a3.to_string + a4.as_ok.to_string;
+    let s2 = b1.as_some.@arr.to_string + b2.to_iter.map(|r| r.@opt.map_or("n", |v| v.to_string)).to_array.to_iter.join("");
+    let s3 = c1.as_some.@r.@arr.to_string + c2.as_some.@r.@arr.to_string + c3.@r.@arr.to_string + c4.@r.@opt.is_none.to_string + c5.as_some.@r.@opt.as_some.to_string;
+    println $ s1 + " " + s2 + " " + s3 + " " + gu.@r.@arr.to_string + gr.@opt.as_some.to_string
+);

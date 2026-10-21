@@ -1,0 +1,38 @@
+module Main;
+
+// A local boxed struct whose fields are the global's objects, destructured and matched; and a local
+// boxed union carrying a global payload.
+type Holder = box struct { a : Array I64, b : Array I64 };
+type Sum = box union { left : Array I64, right : (Array I64, Array I64) };
+
+ga : Array I64 = Array::from_map(5, |i| i * i);
+gb : Array I64 = Array::from_map(5, |i| i + 100);
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(1, 7);
+    a.to_iter.fold(0, |x, s| s * 17 + x)
+);
+
+build : I64 -> Holder;
+build = |n| if n % 2 == 0 { Holder { a : ga, b : Array::fill(n + 2, n) } } else { Holder { a : gb, b : ga } };
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let h = Holder { a : ga, b : gb };
+    let Holder { a : x, b : y } = h;
+    let r1 = consume(x) + consume(y) + x.@(1) + y.@(1);
+    let h2 = build(n);
+    let Holder { a : x2, b : y2 } = h2;
+    let r2 = consume(x2) + consume(y2);
+    let s : Sum = if n == 0 { Sum::right((ga, gb)) } else { Sum::left(ga) };
+    let r3 = match s {
+        left(l) => consume(l) + l.@(0),
+        right(p) => consume(p.@0) + consume(p.@1)
+    };
+    let hh = Holder { a : Array::fill(3, n), b : ga };
+    let hh2 = hh.set_a(hh.@b);
+    let r4 = consume(hh2.@a) + consume(hh2.@b) + consume(hh.@a);
+    println $ [r1, r2, r3, r4].to_iter.map(to_string).join(",")
+);

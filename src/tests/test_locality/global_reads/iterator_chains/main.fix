@@ -1,0 +1,44 @@
+module Main;
+
+// Global `DynIterator`s built with map/zip/filter/take/append, an `Option` of one, and joins with
+// local iterators.
+
+gsrc : Array String;
+gsrc = Array::from_map(6, |i| "s" + i.to_string);
+
+gdyn : DynIterator String;
+gdyn = gsrc.to_iter.map(|s| s + "!").to_dyn;
+
+garr_it : DynIterator String;
+garr_it = gsrc.to_iter.to_dyn;
+
+gmapped : DynIterator I64;
+gmapped = gsrc.to_iter.map(|s| s.get_size).to_dyn;
+
+gdyns : Array (DynIterator I64);
+gdyns = [Iterator::range(0, 3).to_dyn, gsrc.to_iter.map(|s| s.get_size).to_dyn, Iterator::empty.to_dyn];
+
+gzip : DynIterator (String, I64);
+gzip = gsrc.to_iter.zip(Iterator::count_up(10)).filter(|(s, i)| i % 2 == 0).to_dyn;
+
+gopt_it : Option (DynIterator String);
+gopt_it = some(gdyn.take(2).to_dyn);
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let a = gdyn.to_array.to_iter.join(",") + gdyn.to_array.to_iter.join("");
+    let (it2, first) = gdyn.advance.as_some;
+    let b = first + it2.to_array.@size.to_string;
+    let c = garr_it.to_array.to_iter.join("") + garr_it.take(k + 2).to_array.to_iter.join("");
+    let d = gmapped.sum + gmapped.fold(0, |x, acc| acc * 2 + x);
+    let e = gdyns.to_iter.map(|it| it.sum).to_array.to_string;
+    let f = gzip.Iterator::map(|(s, i)| s + i.to_string).to_array.to_iter.join("");
+    let g = match gopt_it { some(it) => it.to_array.to_iter.join(""), none() => "" };
+    let h = gdyns.@(k).append(gdyns.@(0)).to_array.to_string;
+    let local_or_global = if k > 0 { gdyn } else { ["x"].to_iter.to_dyn };
+    let i = local_or_global.take(3).to_array.to_iter.join("");
+    let nested = gdyns.to_iter.map(|it| it.Iterator::map(|x| x + gdyn.to_array.@size).to_dyn).to_array;
+    let j = nested.to_iter.map(|it| it.sum).sum;
+    println $ a + " " + b + " " + c + " " + d.to_string + " " + e + " " + f + " " + g + " " + h + " " + i + " " + j.to_string
+);

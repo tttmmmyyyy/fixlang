@@ -1,0 +1,20 @@
+module Main;
+
+// An array chosen by an if between a global and a fresh one, then set 1000 times in a loop.
+
+g : Array I64;
+g = Array::from_map(100, |i| i);
+
+gnest : Array (Array I64);
+gnest = [g, Array::from_map(10, |i| -i)];
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let x = if k > 5 { Array::fill(100, 0) } else { g };
+    let x = Iterator::range(0, 1000).fold(x, |i, acc| acc.set(i % 100, acc.@(i % 100) + i));
+    let y = Iterator::range(0, 50).fold(gnest, |i, acc| acc.mod(i % 2, |row| row.set(i % 10, i)));
+    let z = loop((0, gnest.@(0)), |(i, a)| if i >= 300 { break $ a } else { continue $ (i + 1, if i % 100 == 0 { gnest.@(i % 2) } else { a.set(i % 10, a.@(i % 10) * 2 + 1) }) });
+    let w = Iterator::range(0, 10).fold(g, |i, acc| if i == 5 { g } else { acc.push_back(i) });
+    println $ x.to_iter.sum.to_string + " " + y.to_string + " " + z.to_iter.sum.to_string + " " + w.@size.to_string + " " + g.to_iter.sum.to_string + gnest.@(1).to_string
+);

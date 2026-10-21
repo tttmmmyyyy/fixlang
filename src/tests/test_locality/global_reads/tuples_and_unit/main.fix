@@ -1,0 +1,64 @@
+module Main;
+
+// Unit, `Tuple0`, a 5-tuple, `Array ()`, `Box ()`, and empty unboxed and boxed structs as globals
+// and in arrays.
+
+gunit : ();
+gunit = ();
+
+gt0 : Tuple0;
+gt0 = ();
+
+gt1 : Box (Array I64);
+gt1 = Box::make(Array::from_map(3, |i| i + 1));
+
+gt5 : (Array I64, String, (), I64, (String, Array String));
+gt5 = (Array::from_map(2, |i| i + 9), "five" + "", (), 5, ("in" + "ner", ["q", "r"]));
+
+garr_unit : Array ();
+garr_unit = Array::fill(10, ());
+
+gbox_unit : Box ();
+gbox_unit = Box::make(());
+
+gopt_unit : Option ();
+gopt_unit = some(());
+
+type Z = struct {};
+type BZ = box struct {};
+
+gz : Z;
+gz = Z {};
+
+gbz : BZ;
+gbz = BZ {};
+
+garr_z : Array Z;
+garr_z = Array::fill(3, Z {});
+
+garr_bz : Array BZ;
+garr_bz = Array::fill(4, BZ {});
+
+gnested_unit : ((), ((), ()), Box (), Array ());
+gnested_unit = ((), ((), ()), Box::make(()), []);
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let _ = gunit;
+    let () = gt0;
+    let (a, s, u, n, (i, ar)) = gt5;
+    let (_, _, _, _, _) = gt5;
+    let (a2, _, _, _, _) = gt5;
+    let t1 = gt1.@value;
+    let t1b = gt1.@value.push_back(k);
+    let _ = gz;
+    let _ = gbz;
+    let bz2 = garr_bz.@(k);
+    let bz3 = garr_bz.push_back(gbz).push_back(BZ {});
+    let (_, (_, ()), bu, au) = gnested_unit;
+    let au2 = au.push_back(gunit).push_back(gbox_unit.@value);
+    let ou = match gopt_unit { some(_) => 1, none() => 0 };
+    let _ = bz2;
+    println $ a.to_string + s + n.to_string + i + ar.to_iter.join("") + a2.@size.to_string + t1.to_string + t1b.to_string + garr_unit.@size.to_string + garr_z.@size.to_string + bz3.@size.to_string + au2.@size.to_string + ou.to_string + gnested_unit.@3.@size.to_string
+);

@@ -1,0 +1,46 @@
+module Main;
+
+// A boxed-union tree read from a global and rebuilt, mixing global subtrees with new nodes.
+
+type T = box union { leaf : String, node : (T, Array String, T) };
+
+mk : I64 -> T;
+mk = |d| if d == 0 { T::leaf("L" + d.to_string) } else { T::node((mk(d - 1), Array::from_map(d, |i| i.to_string), mk(d - 1))) };
+
+gt : T;
+gt = mk(5);
+
+gts : Array T;
+gts = [gt, T::leaf("solo"), mk(1)];
+
+show : T -> String;
+show = |t| match t { leaf(s) => s, node((l, a, r)) => "(" + show(l) + a.@size.to_string + show(r) + ")" };
+
+// Rebuilds the tree, keeping the global's subtrees on the right and replacing the left.
+mirror_left : I64 -> T -> T;
+mirror_left = |k, t| match t {
+    leaf(s) => if k % 2 == 0 { t } else { T::leaf(s + "'") },
+    node((l, a, r)) => T::node((mirror_left(k + 1, r), a.push_back("m"), l))
+};
+
+leftmost : T -> T;
+leftmost = |t| match t { leaf(_) => t, node((l, _, _)) => leftmost(l) };
+
+swap_children : T -> T;
+swap_children = |t| match t { node((l, a, r)) => T::node((r, a, l)), _ => t };
+
+depth : T -> I64;
+depth = |t| match t { node((l, _, r)) => 1 + max(depth(l), depth(r)), _ => 0 };
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let a = show(mirror_left(k, gt));
+    let b = show(leftmost(gt)) + show(leftmost(gts.@(k)));
+    let c = show(swap_children(swap_children(gt)));
+    let d = gts.to_iter.map(depth).to_array.to_string;
+    let e = gts.to_iter.map(|t| show(mirror_left(k, t))).to_array.to_iter.join(";");
+    let mixed = T::node((gt, ["x"], T::node((gts.@(2), [], leftmost(gt)))));
+    let f = show(mirror_left(0, mixed)) + depth(mixed).to_string;
+    println $ a + " " + b + " " + c + " " + d + " " + e + " " + f + " " + show(gt)
+);

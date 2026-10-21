@@ -1,0 +1,45 @@
+module Main;
+
+// Globals holding closures without captures (a null capture object) and with captures, inside boxed
+// structs, boxed unions, unboxed unions and arrays, taken out by patterns and matches and called.
+type Fns = box struct { f : I64 -> I64, g : I64 -> Array I64, h : Array I64 -> I64 };
+type FU = box union { pure_f : I64 -> I64, cap_f : I64 -> Array I64, both : (I64 -> I64, I64 -> Array I64) };
+
+inc : I64 -> I64;
+inc = |x| x + 1;
+
+gbase : Array I64 = Array::from_map(3, |i| i + 2);
+
+gfns : Fns = Fns { f : inc, g : |k| gbase.push_back(k), h : |a| a.@size };
+gfu0 : FU = FU::pure_f(inc);
+gfu1 : FU = FU::cap_f(|k| Array::fill(k + 1, k));
+gfu2 : FU = FU::both((|x| x * 2, |k| gbase.push_back(k * 2)));
+gofn : Option (I64 -> I64) = some(inc);
+garrf : Array (I64 -> I64) = [inc, |x| x * 3, inc >> inc];
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 3);
+    a.to_iter.fold(0, |x, s| s * 43 + x)
+);
+
+run_fu : I64 -> FU -> I64;
+run_fu = |k, fu| match fu {
+    pure_f(f) => f(k) + f(k + 1),
+    cap_f(g) => consume(g(k)) + consume(g(k + 1)),
+    both(p) => (let (f, g) = p; f(k) + consume(g(k)) + f(k))
+};
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let Fns { f : f, g : g, h : h } = gfns;
+    let r1 = f(n) + f(n + 1) + consume(g(n)) + consume(g(n + 2)) + h(g(n)) + h(gbase);
+    let r2 = run_fu(n, gfu0) + run_fu(n, gfu1) + run_fu(n, gfu2);
+    let pick = if n > 0 { gfu0 } else { gfu2 };
+    let r3 = run_fu(n, pick) + run_fu(n + 1, pick);
+    let r4 = match gofn { some(fn) => fn(n) + fn(n + 5), none(_) => 0 };
+    let r5 = garrf.to_iter.fold(0, |fn, s| s + fn(n) + fn(s % 7));
+    let r6 = match gfu2 { both(p) => (p.@0)(n) + consume((p.@1)(n)), _ => 0 };
+    println $ [r1, r2, r3, r4, r5, r6].to_iter.map(to_string).join(",")
+);

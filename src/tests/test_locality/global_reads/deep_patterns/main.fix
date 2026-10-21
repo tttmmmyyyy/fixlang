@@ -1,0 +1,37 @@
+module Main;
+
+// Five levels of unboxed structs taken apart with nested patterns and updated five levels deep with
+// `[^..]` and `iset`.
+
+type L5 = struct { a : Array I64, z : I64 };
+type L4 = struct { l5 : L5, b : String, u : Option (Array String) };
+type L3 = struct { l4 : L4, c : (L5, L5) };
+type L2 = struct { l3 : L3, d : Box L3 };
+type L1 = struct { l2 : L2, e : Array L2 };
+
+mk5 : I64 -> L5;
+mk5 = |i| L5 { a : Array::from_map(i + 1, |j| j * i), z : i };
+
+mk3 : I64 -> L3;
+mk3 = |i| L3 { l4 : L4 { l5 : mk5(i), b : "b" + i.to_string, u : if i % 2 == 0 { some(["u" + i.to_string]) } else { none() } }, c : (mk5(i + 1), mk5(i + 2)) };
+
+g1 : L1;
+g1 = L1 { l2 : L2 { l3 : mk3(1), d : Box::make(mk3(2)) }, e : [L2 { l3 : mk3(3), d : Box::make(mk3(4)) }] };
+
+s5 : L5 -> String;
+s5 = |x| x.@a.to_string + x.@z.to_string;
+
+s3 : L3 -> String;
+s3 = |x| s5(x.@l4.@l5) + x.@l4.@b + x.@l4.@u.map_or("-", |a| a.@(0)) + s5(x.@c.@0) + s5(x.@c.@1);
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let L1 { l2 : L2 { l3 : L3 { l4 : L4 { l5 : L5 { a : deep_a, z : _ }, b : _, u : uu }, c : (_, cc) }, d : dd }, e : _ } = g1;
+    let x = deep_a.to_string + uu.is_some.to_string + s5(cc) + s3(dd.@value);
+    let y = s3(g1.@l2.@l3) + s3(g1.@e.@(k - 1).@d.@value) + g1.@l2.@l3.@c.@1.@a.to_string;
+    let z = g1.@l2.@l3.@l4.@l5.@a.push_back(k).to_string;
+    let w = g1[^l2][^l3][^l4][^l5][^a][0].iset(-5).@l2.@l3.@l4.@l5.@a.to_string;
+    let v = s3(g1.@l2.@l3.set_l4(g1.@e.@(0).@l3.@l4));
+    println $ x + " " + y + " " + z + " " + w + " " + v + " " + s3(g1.@l2.@l3)
+);

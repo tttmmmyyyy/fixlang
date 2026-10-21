@@ -1,0 +1,39 @@
+module Main;
+
+// Raw-pointer round trips on a global's objects and on the global's fields: boxed_to_retained_ptr /
+// boxed_from_retained_ptr, borrow_boxed, mutate_boxed, Box.
+type BS = box struct { arr : Array I64, other : Array I64 };
+
+gbs : BS = BS { arr : Array::from_map(3, |i| i + 1), other : Array::from_map(3, |i| i * 2) };
+gbox : Box (Array I64) = Box::make(Array::from_map(4, |i| i + 20));
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 6);
+    a.to_iter.fold(0, |x, s| s * 23 + x)
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let p = *gbs.boxed_to_retained_ptr;
+    let back : BS = *boxed_from_retained_ptr(p);
+    let BS { arr : x, other : y } = back;
+    let r1 = consume(x) + consume(y);
+    let p2 = *gbox.boxed_to_retained_ptr;
+    let back2 : Array I64 = (*boxed_from_retained_ptr(p2) : Box (Array I64)).@value;
+    let r2 = consume(back2) + consume(back2);
+    let r3 = gbs.borrow_boxed(|ptr| if ptr != nullptr { 1 } else { 0 });
+    let (m, _) = gbs.mutate_boxed(|_| pure());
+    let BS { arr : mx, other : my } = m;
+    let r4 = consume(mx) + consume(my) + consume(gbs.@arr);
+    let (mb, _) = gbox.mutate_boxed(|_| pure());
+    let r5 = consume(mb.@value) + consume(gbox.@value);
+    let b2 = gbox.set_value(Array::fill(n + 1, 2));
+    let r6 = consume(b2.@value) + consume(gbox.@value);
+    let p3 = *gbox.boxed_to_retained_ptr;
+    let gb2 : Box (Array I64) = *boxed_from_retained_ptr(p3);
+    let gb3 : Box (Array I64) = *boxed_from_retained_ptr(*gb2.boxed_to_retained_ptr);
+    let r7 = consume(gb2.@value) + consume(gb3.@value);
+    println $ [r1, r2, r3, r4, r5, r6, r7].to_iter.map(to_string).join(",")
+);

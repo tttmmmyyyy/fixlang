@@ -1,0 +1,33 @@
+module Main;
+
+// A boxed union whose payload is a 6-field struct holding closures.
+
+type P = struct { p0 : Array I64, p1 : String, p2 : Box String, p3 : Array String, p4 : Option String, p5 : I64 -> String };
+type V = box union { wide : P, thin : I64, pair : (P, P) };
+
+mkp : I64 -> P;
+mkp = |i| (
+    let cap = Array::from_map(i + 1, |j| j.to_string);
+    P { p0 : Array::from_map(i, |j| j), p1 : "p" + i.to_string, p2 : Box::make("box" + i.to_string), p3 : ["x" + i.to_string], p4 : some("o" + i.to_string), p5 : |n| cap.@(n % cap.@size) }
+);
+
+gv : Array V;
+gv = [V::wide(mkp(3)), V::thin(7), V::pair((mkp(1), mkp(2)))];
+
+gw : V;
+gw = V::wide(mkp(5));
+
+sp : P -> String;
+sp = |p| p.@p0.to_string + p.@p1 + p.@p2.@value + p.@p3.to_string + p.@p4.as_some + (p.@p5)(4);
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let a = match gw { wide(p) => p.@p1, _ => "" };
+    let b = match gw { wide(p) => (p.@p5)(k), thin(_) => "", pair((x, _)) => x.@p1 };
+    let c = match gw { wide(P { p0 : _, p1 : _, p2 : bx, p3 : _, p4 : _, p5 : _ }) => bx.@value, _ => "" };
+    let d = gv.to_iter.map(|v| match v { wide(p) => sp(p), thin(n) => n.to_string, pair((x, y)) => sp(x) + sp(y) }).to_array.to_iter.join(";");
+    let e = match gv.@(k + 1) { pair((x, _)) => x.@p3.push_back("e").to_string, _ => "" };
+    let f = match gw { wide(p) => sp(p.set_p1("changed")), _ => "" };
+    println $ a + " " + b + " " + c + " " + d + " " + e + " " + f
+);

@@ -1,0 +1,36 @@
+module Main;
+
+// Unboxed globals (tuples, structs, unions, closures, strings) read many times in straight-line
+// code, in loops and in closures; at every optimization level each read retains the global's
+// subobjects with the count dropped.
+type U = struct { arr : Array I64, f : I64 -> I64, s : String, o : Option (Array I64) };
+type UU = union { x : U, y : (Array I64, Array I64), z : I64 };
+
+gu : U = U { arr : Array::from_map(3, |i| i + 1), f : |k| k + 100, s : "un" + "boxed", o : some(Array::fill(2, 9)) };
+guu : UU = UU::x(gu);
+guy : UU = UU::y((gu.@arr, Array::fill(3, 1)));
+gt : (U, UU, Array I64, String) = (gu, guy, Array::fill(5, 5), "t");
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 2);
+    a.to_iter.fold(0, |x, s| s * 71 + x)
+);
+
+from_uu : UU -> I64;
+from_uu = |u| match u { x(v) => consume(v.@arr) + (v.@f)(1), y(p) => consume(p.@0) + consume(p.@1), z(k) => k };
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let r1 = consume(gu.@arr) + (gu.@f)(n) + gu.@s.get_size + consume(gu.@o.as_some) + consume(gu.@arr);
+    let r2 = from_uu(guu) + from_uu(guy) + from_uu(guu) + match guu { x(v) => consume(v.@arr), _ => 0 };
+    let r3 = Iterator::range(0, n + 5).fold(0, |i, s| s + consume(gu.@arr) + from_uu(guy) + gt.@2.@(i % 5));
+    let f = |k| consume(gt.@0.@arr) + k + gt.@3.get_size;
+    let r4 = f(n) + f(n + 1);
+    let U { arr : a, f : g, s : st, o : op } = gu;
+    let r5 = consume(a) + g(n) + st.get_size + match op { some(x) => consume(x), none(_) => 0 } + consume(a);
+    let (u, uu, arr, s) = gt;
+    let r6 = consume(u.@arr) + from_uu(uu) + consume(arr) + s.get_size;
+    println $ [r1, r2, r3, r4, r5, r6].to_iter.map(to_string).join(",")
+);

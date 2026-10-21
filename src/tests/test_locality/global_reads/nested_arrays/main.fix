@@ -1,0 +1,30 @@
+module Main;
+
+// `Array (Array (Array String))` globals, empty arrays and arrays of empty arrays, updated with
+// set/mod/push_back so that they clone.
+
+g3 : Array (Array (Array String));
+g3 = Array::from_map(3, |i| Array::from_map(i + 1, |j| Array::from_map(j + 1, |k| (i * 100 + j * 10 + k).to_string)));
+
+gempty : Array (Array (Array String));
+gempty = [];
+
+gempty_inner : Array (Array (Array String));
+gempty_inner = [[], [[]], [[], []]];
+
+flat : Array (Array (Array String)) -> String;
+flat = |x| x.to_iter.map(|y| y.to_iter.map(|z| z.to_iter.join(",")).to_array.to_iter.join(";")).to_array.to_iter.join("/");
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let a = g3.@(2).@(1).@(k) + g3.@(k).@(0).@(0) + g3.@(2).@(2).@(2);
+    let m1 = g3.set(0, gempty_inner.@(2));
+    let m2 = g3.mod(1, |row| row.set(0, g3.@(2).@(2)));
+    let m3 = g3.@(2).set(1, gempty_inner.@(1).@(0)).push_back(g3.@(0).@(0));
+    let m4 = gempty.push_back(g3.@(k)).push_back(gempty_inner.@(0));
+    let m5 = g3.to_iter.map(|y| y.to_iter.map(|z| z.push_back("!")).to_array).to_array;
+    let m6 = g3.@(1).@(1).set(k, "X");
+    let mut_inner = g3.mod(2, |row| row.mod(2, |cell| cell.mod(0, |s| s + "#")));
+    println $ a + " " + flat(m1) + " " + flat(m2) + " " + flat([m3]) + " " + flat(m4) + " " + flat(m5) + " " + m6.to_iter.join(",") + " " + flat(mut_inner) + " " + flat(g3) + " " + gempty.@size.to_string + flat(gempty_inner)
+);

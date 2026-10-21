@@ -1,0 +1,115 @@
+module Main;
+
+// A small function reading a global, inlined into thirty callers.
+
+type C = struct { names : Array String, vals : Array I64, tag : String };
+
+gc : C;
+gc = C { names : Array::from_map(8, |i| "n" + i.to_string), vals : Array::from_map(8, |i| i * i), tag : "tag" + "" };
+
+name_at : I64 -> String;
+name_at = |i| gc.@names.@(i % 8);
+
+val_at : I64 -> I64;
+val_at = |i| gc.@vals.@(i % 8) + gc.@vals.@size;
+
+whole : () -> C;
+whole = |_| gc;
+
+c0 : I64 -> String;
+c0 = |k| name_at(k + 0) + val_at(k * 0).to_string;
+
+c1 : I64 -> String;
+c1 = |k| (let C { names : n, vals : _, tag : t } = whole(); n.@(k % 8) + t + name_at(1));
+
+c2 : I64 -> String;
+c2 = |k| if k % 2 == 0 { whole().@tag } else { c1(k) + c0(k + 1) };
+
+c3 : I64 -> String;
+c3 = |k| name_at(k + 3) + val_at(k * 3).to_string;
+
+c4 : I64 -> String;
+c4 = |k| (let C { names : n, vals : _, tag : t } = whole(); n.@(k % 8) + t + name_at(4));
+
+c5 : I64 -> String;
+c5 = |k| if k % 2 == 0 { whole().@tag } else { c4(k) + c3(k + 1) };
+
+c6 : I64 -> String;
+c6 = |k| name_at(k + 6) + val_at(k * 6).to_string;
+
+c7 : I64 -> String;
+c7 = |k| (let C { names : n, vals : _, tag : t } = whole(); n.@(k % 8) + t + name_at(7));
+
+c8 : I64 -> String;
+c8 = |k| if k % 2 == 0 { whole().@tag } else { c7(k) + c6(k + 1) };
+
+c9 : I64 -> String;
+c9 = |k| name_at(k + 9) + val_at(k * 9).to_string;
+
+c10 : I64 -> String;
+c10 = |k| (let C { names : n, vals : _, tag : t } = whole(); n.@(k % 8) + t + name_at(10));
+
+c11 : I64 -> String;
+c11 = |k| if k % 2 == 0 { whole().@tag } else { c10(k) + c9(k + 1) };
+
+c12 : I64 -> String;
+c12 = |k| name_at(k + 12) + val_at(k * 12).to_string;
+
+c13 : I64 -> String;
+c13 = |k| (let C { names : n, vals : _, tag : t } = whole(); n.@(k % 8) + t + name_at(13));
+
+c14 : I64 -> String;
+c14 = |k| if k % 2 == 0 { whole().@tag } else { c13(k) + c12(k + 1) };
+
+c15 : I64 -> String;
+c15 = |k| name_at(k + 15) + val_at(k * 15).to_string;
+
+c16 : I64 -> String;
+c16 = |k| (let C { names : n, vals : _, tag : t } = whole(); n.@(k % 8) + t + name_at(16));
+
+c17 : I64 -> String;
+c17 = |k| if k % 2 == 0 { whole().@tag } else { c16(k) + c15(k + 1) };
+
+c18 : I64 -> String;
+c18 = |k| name_at(k + 18) + val_at(k * 18).to_string;
+
+c19 : I64 -> String;
+c19 = |k| (let C { names : n, vals : _, tag : t } = whole(); n.@(k % 8) + t + name_at(19));
+
+c20 : I64 -> String;
+c20 = |k| if k % 2 == 0 { whole().@tag } else { c19(k) + c18(k + 1) };
+
+c21 : I64 -> String;
+c21 = |k| name_at(k + 21) + val_at(k * 21).to_string;
+
+c22 : I64 -> String;
+c22 = |k| (let C { names : n, vals : _, tag : t } = whole(); n.@(k % 8) + t + name_at(22));
+
+c23 : I64 -> String;
+c23 = |k| if k % 2 == 0 { whole().@tag } else { c22(k) + c21(k + 1) };
+
+c24 : I64 -> String;
+c24 = |k| name_at(k + 24) + val_at(k * 24).to_string;
+
+c25 : I64 -> String;
+c25 = |k| (let C { names : n, vals : _, tag : t } = whole(); n.@(k % 8) + t + name_at(25));
+
+c26 : I64 -> String;
+c26 = |k| if k % 2 == 0 { whole().@tag } else { c25(k) + c24(k + 1) };
+
+c27 : I64 -> String;
+c27 = |k| name_at(k + 27) + val_at(k * 27).to_string;
+
+c28 : I64 -> String;
+c28 = |k| (let C { names : n, vals : _, tag : t } = whole(); n.@(k % 8) + t + name_at(28));
+
+c29 : I64 -> String;
+c29 = |k| if k % 2 == 0 { whole().@tag } else { c28(k) + c27(k + 1) };
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let s = [c0(k + 0), c1(k + 1), c2(k + 2), c3(k + 3), c4(k + 4), c5(k + 5), c6(k + 6), c7(k + 7), c8(k + 8), c9(k + 9), c10(k + 10), c11(k + 11), c12(k + 12), c13(k + 13), c14(k + 14), c15(k + 15), c16(k + 16), c17(k + 17), c18(k + 18), c19(k + 19), c20(k + 20), c21(k + 21), c22(k + 22), c23(k + 23), c24(k + 24), c25(k + 25), c26(k + 26), c27(k + 27), c28(k + 28), c29(k + 29)];
+    let t = Iterator::range(0, 50).map(|i| c29(i) + c0(i)).to_array.to_iter.join("").get_size;
+    println $ s.to_iter.join(",") + " " + t.to_string
+);

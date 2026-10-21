@@ -1,0 +1,38 @@
+module Main;
+
+// A boxed union inside an unboxed union inside an unboxed struct, self-referential, updated with
+// `mod_`.
+
+type BU = box union { bnum : I64, barr : Array String, bself : BU };
+type UU = union { ua : Array I64, ub : BU, uc : (BU, Option BU), ud : () };
+type S = struct { u : UU, v : Array UU, w : Option UU };
+
+gs : S;
+gs = S { u : UU::ub(BU::barr(["p", "q"])), v : [UU::ua([1, 2]), UU::uc((BU::bself(BU::bnum(5)), some(BU::barr(["r"])))), UU::ud(), UU::ub(BU::bnum(9))], w : some(UU::uc((BU::bnum(1), none()))) };
+
+bu_s : BU -> String;
+bu_s = |b| match b { bnum(n) => n.to_string, barr(a) => a.to_iter.join(""), bself(c) => "<" + bu_s(c) + ">" };
+
+uu_s : UU -> String;
+uu_s = |u| match u {
+    ua(a) => a.to_string,
+    ub(b) => bu_s(b),
+    uc((b, o)) => bu_s(b) + match o { some(c) => bu_s(c), none() => "-" },
+    ud() => "ud"
+};
+
+only_ub : UU -> Option BU;
+only_ub = |u| match u { ub(b) => some(b), uc((b, _)) => some(b), _ => none() };
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let S { u : u, v : v, w : w } = gs;
+    let a = uu_s(u) + v.to_iter.map(uu_s).to_array.to_iter.join(",") + w.map_or("", uu_s);
+    let b = v.to_iter.filter_map(only_ub).map(bu_s).to_array.to_iter.join("");
+    let c = match gs.@u { ub(bb) => match bb { barr(arr) => arr.push_back("!").to_string, _ => "" }, _ => "" };
+    let d = match gs.@w { some(uu) => uu_s(uu.mod_uc(|(x, y)| (BU::bself(x), if y.is_some { y } else { some(x) }))), none() => "" };
+    let e = uu_s(v.@(k)) + uu_s(if k > 0 { v.@(1) } else { UU::ua([]) });
+    let f = gs.mod_v(|vv| vv.push_back(gs.@u)).@v.to_iter.map(uu_s).to_array.to_iter.join("|");
+    println $ a + " " + b + " " + c + " " + d + " " + e + " " + f
+);

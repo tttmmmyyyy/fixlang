@@ -1,0 +1,44 @@
+module Main;
+
+// Local names that shadow global names, with the global reached by its qualified name.
+
+x : Array String;
+x = Array::from_map(3, |i| "X" + i.to_string);
+
+y : (Array String, String);
+y = (Main::x, "Y" + "");
+
+namespace Inner {
+    x : Array String;
+    x = ["inner" + ""];
+}
+
+f : Array String -> Array String;
+f = |x| x.push_back("f");
+
+g : I64 -> Array String;
+g = |k| (
+    let a = Main::x;
+    let x = if k > 0 { Main::x } else { Inner::x };
+    let x = x.push_back(Inner::x.@(0));
+    let (x, z) = (Main::x, x);
+    let x = f(x);
+    let x = |y| y + x.@(0);
+    let w = [x(Main::x.@(1)), a.@(2)];
+    w + z
+);
+
+h : I64 -> String;
+h = |k| (
+    let (x, y) = y;
+    let y = x.@(k) + y;
+    let (x, _) = Main::y;
+    let x = if k == 0 { x } else { Main::x.set(0, y) };
+    x.to_iter.join("")
+);
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    println $ g(k).to_string + " " + g(0).to_string + " " + h(k) + " " + h(0) + Main::x.to_string + Inner::x.to_string
+);

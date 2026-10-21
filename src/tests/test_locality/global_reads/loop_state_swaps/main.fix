@@ -1,0 +1,34 @@
+module Main;
+
+// Loop states that alternate between a global value and local values, in loop, fold and arrays of
+// arrays.
+
+type S = struct { arr : Array I64, name : String, hist : Array String };
+
+gs : S;
+gs = S { arr : Array::from_map(4, |i| i), name : "g" + "s", hist : ["start"] };
+
+garrs : Array (Array I64);
+garrs = Array::from_map(5, |i| Array::from_map(i + 1, |j| i + j));
+
+main : IO ();
+main = (
+    let n = (*get_args).@size + 5;
+    // Loop state starts as the global, is replaced by a local on odd steps and by the global again on even steps.
+    let r = loop((0, gs), |(i, s)| (
+        if i >= n { break $ s };
+        let s = if i % 2 == 0 { gs } else { s.mod_arr(|a| a.push_back(i)).mod_hist(|h| h.push_back(i.to_string)) };
+        let s = if i == 3 { S { arr : s.@arr, name : gs.@name, hist : gs.@hist } } else { s };
+        continue $ (i + 1, s)
+    ));
+    // Loop state is a global field the whole time, then switched to a local array of arrays.
+    let r2 = loop((0, garrs.@(0), garrs), |(i, cur, all)| (
+        if i >= n { break $ (cur, all) };
+        let cur = if i < 2 { garrs.@(i) } else { cur.push_back(i) };
+        let all = if i == 4 { all.set(0, cur) } else { all };
+        continue $ (i + 1, cur, all)
+    ));
+    let r3 = Iterator::range(0, n).fold(garrs, |i, acc| if i % 3 == 0 { garrs } else { acc.mod(i % 5, |a| a.push_back(i)) });
+    let r4 = Iterator::range(0, n).fold(gs.@name, |i, acc| if i == 2 { gs.@hist.@(0) } else { acc + i.to_string });
+    println $ r.@arr.to_string + r.@name + r.@hist.to_iter.join(",") + " " + r2.@0.to_string + r2.@1.to_string + " " + r3.to_string + " " + r4 + " " + gs.@arr.to_string + garrs.to_string
+);

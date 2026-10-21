@@ -1,0 +1,49 @@
+module Main;
+
+// Globals read inside loop bodies, folds, recursive functions and catch-all match arms, with the
+// loop state switching between a global's object and a locally built one.
+type BS = box struct { a : Array I64, b : Array I64 };
+
+gbs : BS = BS { a : Array::from_map(3, |i| i + 1), b : Array::from_map(4, |i| i * 2) };
+garr : Array (Array I64) = Array::from_map(5, |i| Array::fill(i + 1, i));
+gopt : Option BS = some(gbs);
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 4);
+    a.to_iter.fold(0, |x, s| s * 37 + x)
+);
+
+rec : I64 -> Array I64 -> I64;
+rec = |k, acc| (
+    if k <= 0 { consume(acc) };
+    let BS { a : x, b : y } = gbs;
+    let next = if k % 2 == 0 { x } else { acc.push_back(y.@(0)) };
+    consume(next) + rec(k - 1, next)
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let r1 = loop((0, gbs.@a, 0), |(i, cur, s)| (
+        if i >= n + 6 { break $ s + consume(cur) };
+        let BS { a : x, b : y } = gbs;
+        let cur = if i % 3 == 0 { x } else if i % 3 == 1 { y } else { cur.push_back(i) };
+        continue $ (i + 1, cur, s + consume(cur))
+    ));
+    let r2 = rec(n + 5, Array::fill(1, 0));
+    let r3 = Iterator::range(0, n + 4).fold(([] : Array I64, 0), |i, (cur, s)| (
+        let e = garr.@(i % 5);
+        let cur = if i % 2 == 0 { e } else { cur.append(e) };
+        (cur, s + consume(cur))
+    )).@1;
+    let r4 = Iterator::range(0, n + 3).fold(0, |i, s| s + match gopt {
+        some(bs) => (let BS { a : x, b : _ } = bs; consume(x) + i),
+        _ => 0
+    });
+    let r5 = garr.to_iter.fold(0, |e, s| s + match (if e.@size > 2 { some(e) } else { none() }) {
+        some(x) => consume(x),
+        _ => consume(e)
+    });
+    println $ [r1, r2, r3, r4, r5].to_iter.map(to_string).join(",")
+);

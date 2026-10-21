@@ -1,0 +1,53 @@
+module Main;
+
+// Deeply nested globals: a boxed struct holding an unboxed union of a boxed struct holding a boxed
+// union of arrays, read through every layer with patterns, and the inner pieces consumed.
+type Leaf = box union { nums : Array I64, pair : (Array I64, Array I64) };
+type Mid = box struct { leaf : Leaf, extra : Array I64 };
+type Choice = union { mid : Mid, plain : Array I64 };
+type Top = box struct { choice : Choice, mids : Array Mid };
+type UTop = struct { top : Top, choices : (Choice, Choice) };
+
+mk_mid : I64 -> Mid;
+mk_mid = |i| Mid { leaf : if i % 2 == 0 { Leaf::nums(Array::fill(i + 1, i)) } else { Leaf::pair((Array::fill(2, i), Array::fill(3, i + 1))) }, extra : Array::fill(i + 2, 3) };
+
+gtop : Top = Top { choice : Choice::mid(mk_mid(3)), mids : Array::from_map(4, mk_mid) };
+gutop : UTop = UTop { top : gtop, choices : (Choice::plain(Array::fill(3, 4)), Choice::mid(mk_mid(2))) };
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 8);
+    a.to_iter.fold(0, |x, s| s * 29 + x)
+);
+
+from_leaf : Leaf -> I64;
+from_leaf = |l| match l { nums(a) => consume(a), pair(p) => (let (x, y) = p; consume(x) + consume(y)) };
+
+from_mid : Mid -> I64;
+from_mid = |m| (let Mid { leaf : l, extra : e } = m; from_leaf(l) + consume(e));
+
+from_choice : Choice -> I64;
+from_choice = |c| match c { mid(m) => from_mid(m), plain(a) => consume(a) };
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let Top { choice : c, mids : ms } = gtop;
+    let r1 = from_choice(c) + ms.to_iter.fold(0, |m, s| s + from_mid(m));
+    let r2 = match c {
+        mid(m) => (
+            let Mid { leaf : l, extra : e } = m;
+            match l { nums(a) => consume(a) + consume(e), pair(p) => consume(p.@0) + consume(p.@1) + consume(e) }
+        ),
+        plain(a) => consume(a)
+    };
+    let UTop { top : t, choices : (c1, c2) } = gutop;
+    let r3 = from_choice(c1) + from_choice(c2) + from_choice(t.@choice);
+    let m = ms.@(n % 4);
+    let Mid { leaf : ml, extra : me } = m;
+    let r4 = from_leaf(ml) + consume(me) + from_leaf(ml);
+    let r5 = match gutop.@choices.@1 { mid(mm) => match mm.@leaf { nums(a) => consume(a), pair(p) => consume(p.@1) }, plain(a) => consume(a) };
+    let t2 = gtop.set_choice(Choice::plain(Array::fill(n + 1, 1)));
+    let r6 = from_choice(t2.@choice) + t2.@mids.to_iter.fold(0, |m, s| s + from_mid(m));
+    println $ [r1, r2, r3, r4, r5, r6].to_iter.map(to_string).join(",")
+);

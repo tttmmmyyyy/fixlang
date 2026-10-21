@@ -1,0 +1,37 @@
+module Main;
+
+// A struct read from a global and then updated by set/mod/act: the update clones because a global
+// is never unique, and the clone is destructured. Its fields are a mix of the clone's own and the
+// global's objects.
+type Pair = box struct { head : Array I64, tail : Array (Array I64) };
+type UPair = struct { uhead : Array I64, utail : Array (Array I64) };
+
+gp : Pair = Pair { head : Array::from_map(3, |i| i + 1), tail : Array::from_map(2, |i| Array::fill(2, i)) };
+gu : UPair = UPair { uhead : Array::from_map(3, |i| i + 10), utail : Array::from_map(2, |i| Array::fill(3, i + 5)) };
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 42);
+    a.to_iter.fold(0, |x, s| s * 31 + x)
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let p1 = gp.set_head(Array::fill(n + 1, 3));
+    let Pair { head : h1, tail : t1 } = p1;
+    let a = consume(h1) + consume(t1.@(0)) + consume(t1.@(1));
+    let p2 = gp.mod_tail(|t| t.push_back(Array::fill(n, 8)));
+    let Pair { head : h2, tail : t2 } = p2;
+    let b = consume(h2) + t2.to_iter.fold(0, |e, s| s + consume(e));
+    let (old, p3) = gp.act_head(|h| (h, h.push_back(n)));
+    let c = consume(old) + consume(p3.@head) + consume(p3.@tail.@(0));
+    let p4 = gp[^tail].imod(|t| t.set(0, t.@(1)));
+    let d = p4.@tail.to_iter.fold(0, |e, s| s + consume(e));
+    let u1 = gu.set_uhead(gu.@utail.@(1));
+    let UPair { uhead : uh, utail : ut } = u1;
+    let e = consume(uh) + consume(ut.@(0)) + consume(gu.@uhead);
+    let u2 = gu[^utail].imod(|t| t.mod(0, |x| x.push_back(n)));
+    let f = u2.@utail.to_iter.fold(0, |e, s| s + consume(e)) + consume(u2.@uhead);
+    println $ [a, b, c, d, e, f].to_iter.map(to_string).join(",")
+);

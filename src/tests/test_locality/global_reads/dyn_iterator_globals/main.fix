@@ -1,0 +1,26 @@
+module Main;
+
+// Globals that are iterators over global arrays (array iterators, mapped, filtered, dynamic,
+// zipped), advanced repeatedly from the same global state.
+garr : Array (Array I64) = Array::from_map(5, |i| Array::fill(i + 1, i));
+git : DynIterator (Array I64) = garr.to_iter.to_dyn;
+gdyn : DynIterator (Array I64) = garr.to_iter.map(|a| a.push_back(1)).to_dyn;
+gzip : DynIterator (Array I64, Array I64) = garr.to_iter.zip(garr.reverse.to_iter).to_dyn;
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 5);
+    a.to_iter.fold(0, |x, s| s * 79 + x)
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let r1 = git.fold(0, |a, s| s + consume(a)) + git.fold(0, |a, s| s + consume(a));
+    let (it2, first) = git.advance.as_some;
+    let r2 = consume(first) + it2.fold(0, |a, s| s + consume(a)) + consume(git.advance.as_some.@1);
+    let r3 = gdyn.fold(0, |a, s| s + consume(a)) + gdyn.take(n + 2).fold(0, |a, s| s + consume(a));
+    let r4 = gzip.fold(0, |(x, y), s| s + consume(x) + consume(y));
+    let r5 = match gdyn.advance { some((rest, a)) => consume(a) + rest.fold(0, |b, s| s + consume(b)), none(_) => 0 };
+    println $ [r1, r2, r3, r4, r5].to_iter.map(to_string).join(",")
+);

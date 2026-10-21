@@ -1,0 +1,54 @@
+module Main;
+
+// Polymorphic globals (`Array a`, an empty Option) and polymorphic functions given arguments derived
+// from globals.
+
+gempty : Array a;
+gempty = [];
+
+gnone : Option a;
+gnone = none();
+
+gsingle : [a : FromString] Array a;
+gsingle = [];
+
+ga : Array (Array String);
+ga = Array::from_map(4, |i| Array::from_map(i, |j| (i * j).to_string));
+
+gopt : Option (Array (Option String));
+gopt = some([some("x" + ""), none(), some("z" + "")]);
+
+twice : (a -> a) -> a -> a;
+twice = |f, x| f(f(x));
+
+pick : Bool -> a -> a -> a;
+pick = |c, x, y| if c { x } else { y };
+
+firsts : [a : ToString] Array (Array a) -> String;
+firsts = |arr| arr.to_iter.map(|row| if row.@size > 0 { row.@(0).to_string } else { "-" }).to_array.to_iter.join("");
+
+keep_one : a -> b -> a;
+keep_one = |x, _| x;
+
+dup : a -> (a, a);
+dup = |x| (x, x);
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let e1 : Array I64 = gempty;
+    let e2 : Array String = gempty.push_back("q");
+    let e3 : Array (Array String) = gempty;
+    let o1 : Option String = gnone;
+    let o2 : Option (Array I64) = gnone;
+    let a = twice(|x| x.push_back(x.@size.to_string), ga.@(k + 1));
+    let b = pick(k > 0, ga.@(3), ga.@(2));
+    let c = pick(k > 5, ga, ga.push_back(b));
+    let d = firsts(ga) + firsts(c) + firsts([e1]);
+    let f = keep_one(ga.@(2), ga.@(3)) + keep_one(gempty, ga);
+    let (p, q) = dup(ga.@(3));
+    let (r, s) = dup(gopt);
+    let t = match r { some(arr) => arr.@(k + 1).map_or("n", |x| x), none() => "" } + s.as_some.@(0).as_some;
+    let u = dup(dup(ga.@(1)));
+    println $ e1.to_string + e2.to_string + e3.@size.to_string + o1.is_some.to_string + o2.is_none.to_string + " " + a.to_string + b.to_string + " " + d + " " + f.to_string + p.to_string + q.@(2) + t + " " + u.@0.@1.to_string
+);

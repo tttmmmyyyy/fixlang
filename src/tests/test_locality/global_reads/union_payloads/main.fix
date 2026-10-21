@@ -1,0 +1,57 @@
+module Main;
+
+// Unboxed unions (Option / Result / user) and boxed unions held in globals, with boxed payloads,
+// matched with variant arms and catch-all arms, and returned out of the match.
+type BU = box union { one : Array I64, two : (Array I64, String), zero : () };
+type UU = union { uone : Array I64, utwo : BU };
+
+gopt : Option (Array I64) = some(Array::from_map(3, |i| i + 4));
+gnone : Option (Array I64) = none();
+gres : Result String (Array I64) = ok(Array::from_map(2, |i| i * 9));
+gerr : Result String (Array I64) = err("bad" + Array::fill(3, "x").to_iter.join(""));
+gbu : BU = BU::two((Array::from_map(4, |i| i - 1), "hello" + " world"));
+gbu1 : BU = BU::one(Array::from_map(2, |i| i + 50));
+guu : UU = UU::utwo(gbu);
+gnest : Option BU = some(BU::one(Array::from_map(3, |i| 2 * i)));
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 5);
+    a.to_iter.fold(0, |x, s| s * 7 + x)
+);
+
+pick : I64 -> BU;
+pick = |n| if n % 3 == 0 { gbu } else if n % 3 == 1 { gbu1 } else { BU::zero() };
+
+from_bu : BU -> I64;
+from_bu = |b| match b {
+    one(a) => consume(a),
+    two(p) => consume(p.@0) + p.@1.get_size,
+    zero(_) => -1
+};
+
+catch_all : BU -> BU;
+catch_all = |b| match b {
+    one(a) => if a.@size > 100 { BU::one(a) } else { b },
+    _ => b
+};
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let r1 = match gopt { some(a) => consume(a) + a.@(0), none(_) => 0 };
+    let r2 = gnone.map(consume).as_some_or(-3) + gopt.map(consume).as_some_or(-4);
+    let r3 = match gres { ok(a) => consume(a), err(e) => e.get_size };
+    let r4 = match gerr { ok(a) => consume(a), err(e) => (e + "!").get_size };
+    let r5 = from_bu(gbu) + from_bu(gbu1) + from_bu(pick(n)) + from_bu(pick(n + 1)) + from_bu(pick(n + 2));
+    let r6 = match guu {
+        uone(a) => consume(a),
+        utwo(b) => from_bu(b) + match b { two(p) => consume(p.@0), _ => 0 }
+    };
+    let r7 = from_bu(catch_all(gbu1)) + from_bu(catch_all(gbu)) + from_bu(catch_all(BU::one(Array::fill(n + 1, 2))));
+    let r8 = match gnest { some(b) => match b { one(a) => consume(a) + consume(a), _ => 0 }, none(_) => 0 };
+    let r9 = if gopt.is_some { consume(gopt.as_some) } else { 0 };
+    let both = if n > 0 { gbu } else { gbu1 };
+    let r10 = match both { two(p) => consume(p.@0) + consume(p.@0), one(a) => consume(a), zero(_) => 0 };
+    println $ [r1, r2, r3, r4, r5, r6, r7, r8, r9, r10].to_iter.map(to_string).join(",")
+);

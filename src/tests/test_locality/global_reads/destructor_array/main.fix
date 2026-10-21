@@ -1,0 +1,31 @@
+module Main;
+
+// A global array of Destructors whose destructor functions read other globals and print; since
+// the global is never freed, no destructor may run, while local copies built from them do run.
+type R = box struct { tag : Array I64 };
+
+gtags : Array I64 = Array::from_map(3, |i| i + 10);
+
+mk : I64 -> Destructor R;
+mk = |i| Destructor::make(R { tag : gtags.push_back(i) }, |r| println("dtor " + r.@tag.@(3).to_string);; pure(r)).unsafe_perform;
+
+gds : Array (Destructor R) = Array::from_map(3, mk);
+gd : Destructor R = gds.@(1);
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 4);
+    a.to_iter.fold(0, |x, s| s * 89 + x)
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let r1 = gds.to_iter.fold(0, |d, s| s + d.borrow(|r| consume(r.@tag)));
+    let r2 = gd.borrow(|r| consume(r.@tag)) + gd.borrow(|r| r.@tag.@(n % 4));
+    let local = mk(n + 50);
+    let r3 = local.borrow(|r| consume(r.@tag));
+    let ds = gds.push_back(local);
+    let r4 = ds.to_iter.fold(0, |d, s| s + d.borrow(|r| r.@tag.@(3)));
+    println $ [r1, r2, r3, r4].to_iter.map(to_string).join(",")
+);

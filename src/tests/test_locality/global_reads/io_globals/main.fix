@@ -1,0 +1,48 @@
+module Main;
+
+// Globals of IO type, run several times; IO actions returning global-derived values; a recursive IO
+// global that reads itself when run.
+type BS = box struct { a : Array I64, b : String };
+
+gbs : BS = BS { a : Array::from_map(3, |i| i * 4), b : "abc" + "def" };
+
+gio : IO BS = pure(gbs);
+gio2 : IO (Array I64) = gio.map(|bs| bs.@a.push_back(5));
+gio3 : IO I64 = (
+    let BS { a : a, b : b } = *gio;
+    pure(a.@size + b.get_size)
+);
+gcount : IO I64 = (
+    let BS { a : a, b : _ } = *gio;
+    if a.@size > 10 { pure(a.@size) };
+    pure(a.@(0) + a.@size)
+);
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 9);
+    a.to_iter.fold(0, |x, s| s * 47 + x)
+);
+
+repeat : I64 -> IO I64;
+repeat = |k| (
+    if k <= 0 { pure(0) };
+    let BS { a : a, b : b } = *gio;
+    let r = consume(a) + b.get_size;
+    let rest = *repeat(k - 1);
+    pure(r + rest)
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let x = *gio;
+    let y = *gio;
+    let r1 = consume(x.@a) + consume(y.@a) + x.@b.get_size;
+    let r2 = consume(*gio2) + consume(*gio2);
+    let r3 = *gio3 + *gio3 + *gcount;
+    let r4 = *repeat(n + 3);
+    let acts = [gio, pure(BS { a : Array::fill(n + 1, 1), b : "z" }), gio];
+    let r5 = *acts.to_iter.fold(pure(0), |act, acc| (let s = *acc; let bs = *act; pure(s + consume(bs.@a))));
+    println $ [r1, r2, r3, r4, r5].to_iter.map(to_string).join(",")
+);

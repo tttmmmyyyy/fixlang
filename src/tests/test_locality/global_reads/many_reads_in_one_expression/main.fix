@@ -1,0 +1,28 @@
+module Main;
+
+// The same global read a dozen times in one expression, packed into tuples and arrays and dropped.
+
+g : Array String;
+g = Array::from_map(3, |i| "m" + i.to_string);
+
+gp : (Array String, Array String, String);
+gp = (g, ["q"], "s");
+
+f3 : Array String -> Array String -> Array String -> Array String;
+f3 = |a, b, c| if a.@size > 100 { a } else { if b.@size == c.@size { c } else { b } };
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let arrs = [g, g, g, g, gp.@0, gp.@0, gp.@1, g, g];
+    let tup = (g, g, (g, (g, g)), gp, gp);
+    let x = f3(g, f3(g, g, gp.@1), f3(gp.@0, g, f3(g, gp.@1, g)));
+    let y = [[g, g], [g], []].to_iter.map(|aa| aa.to_iter.map(|a| a.@size).sum).sum;
+    let z = g.@(0) + g.@(1) + g.@(k) + g.@(2) + g.@(g.@size - 1) + gp.@0.@(g.@size - 2) + gp.@2 + gp.@2 + gp.@1.@(0);
+    let (t0, _, (_, (t3, _)), (pa, pb, pc), _) = tup;
+    let dropped = (g, gp, [gp, gp], Box::make(g), some(g), [some(gp.@1)]);
+    let _ = dropped;
+    let w = arrs.@(k).push_back("w") + arrs.@(8) + t0 + t3 + pa + pb + [pc];
+    let v = Iterator::range(0, 20).fold([], |i, acc| acc.push_back(if i % 4 == 0 { g } else { if i % 4 == 1 { gp.@0 } else { [i.to_string] } })).to_iter.map(|a| a.@size).sum;
+    println $ x.to_string + " " + y.to_string + " " + z + " " + w.to_string + " " + v.to_string + " " + arrs.@size.to_string
+);

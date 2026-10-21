@@ -1,0 +1,52 @@
+module Main;
+
+// A trait-polymorphic global instantiated at several types, boxed and unboxed, plus a trait member
+// that is a global value.
+trait a : Seed {
+    seed : I64 -> a;
+    seeds : Array a;
+}
+
+type Bx = box struct { v : Array I64 };
+
+impl I64 : Seed {
+    seed = |i| i * 3;
+    seeds = Array::from_map(3, |i| i + 1);
+}
+impl Bx : Seed {
+    seed = |i| Bx { v : Array::fill(i + 1, i) };
+    seeds = Array::from_map(3, |i| Bx { v : Array::fill(i + 2, i + 7) });
+}
+impl String : Seed {
+    seed = |i| "s" + i.to_string;
+    seeds = ["p", "q" + "r", Array::fill(4, "z").to_iter.join("")];
+}
+
+gpoly : [a : Seed] (Array a, a) = (Array::from_map(4, seed), seed(9));
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 2);
+    a.to_iter.fold(0, |x, s| s * 5 + x)
+);
+
+measure_bx : Bx -> I64;
+measure_bx = |b| consume(b.@v);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let (ai, i) = (gpoly : (Array I64, I64));
+    let r1 = consume(ai) + i;
+    let (ab, b) = (gpoly : (Array Bx, Bx));
+    let r2 = ab.to_iter.fold(0, |x, s| s + measure_bx(x)) + measure_bx(b);
+    let Bx { v : bv } = b;
+    let r3 = consume(bv) + bv.@(n % bv.@size);
+    let (as_, s) = (gpoly : (Array String, String));
+    let r4 = as_.to_iter.fold(0, |x, acc| acc + (x + s).get_size);
+    let r5 = (seeds : Array Bx).to_iter.fold(0, |x, s| s + measure_bx(x)) + consume(seeds : Array I64);
+    let r6 = (seeds : Array String).@(n % 3).get_size + (seeds : Array String).to_iter.join("-").get_size;
+    let Bx { v : sv } = (seeds : Array Bx).@(1);
+    let r7 = consume(sv) + consume(sv);
+    println $ [r1, r2, r3, r4, r5, r6, r7].to_iter.map(to_string).join(",")
+);

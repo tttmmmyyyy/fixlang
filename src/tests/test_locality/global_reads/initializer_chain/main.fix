@@ -1,0 +1,39 @@
+module Main;
+
+// Globals whose initializers read other globals, so the graph of one global shares objects with
+// another's. Every reader destructures them and hands the pieces to a function that consumes them.
+type Node = box struct { val : Array I64, next : Option Node };
+
+g0 : Array I64 = Array::from_map(4, |i| i * 7 + 1);
+g1 : Node = Node { val : g0, next : none() };
+g2 : Node = Node { val : g0.push_back(99), next : some(g1) };
+g3 : (Node, Node, Array I64) = (g2, g1, g2.@val);
+g4 : Node = match g3 { (a, b, c) => Node { val : c, next : some(Node { val : b.@val, next : some(a) }) } };
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size);
+    a.to_iter.fold(0, |x, s| s * 3 + x)
+);
+
+walk : I64 -> Node -> I64;
+walk = |acc, node| (
+    let Node { val : v, next : nx } = node;
+    let acc = acc + consume(v) + v.@(0);
+    match nx {
+        some(n) => walk(acc, n),
+        none(_) => acc
+    }
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let Node { val : v4, next : nx4 } = g4;
+    let a = consume(v4) + v4.@(n % v4.@size);
+    let b = match nx4 { some(m) => consume(m.@val) + walk(0, m), none(_) => 0 };
+    let (x, y, z) = g3;
+    let c = walk(n, x) + walk(n, y) + consume(z) + z.@(0);
+    let d = Iterator::range(0, n + 3).fold(0, |i, s| s + walk(i, g4) + consume(g2.@val));
+    println $ [a, b, c, d].to_iter.map(to_string).join(",")
+);

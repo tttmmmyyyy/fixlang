@@ -1,0 +1,35 @@
+module Main;
+
+// Fields of boxed and unboxed global structs swapped with each other through setters.
+
+type B = box struct { a : Array String, b : Array String, c : String };
+type UB = struct { a : Array String, b : Array String, c : String };
+
+gb : B;
+gb = B { a : ["a1" + "", "a2"], b : ["b1" + ""], c : "c" + "" };
+
+gub : UB;
+gub = UB { a : gb.@b, b : gb.@a, c : gb.@c + "u" };
+
+show_b : B -> String;
+show_b = |x| x.@a.to_string + x.@b.to_string + x.@c;
+
+show_ub : UB -> String;
+show_ub = |x| x.@a.to_string + x.@b.to_string + x.@c;
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let s1 = gb.set_a(gb.@b).set_b(gb.@a);
+    let s2 = gub.set_a(gub.@b).set_b(gub.@a).set_c(gb.@c);
+    let s3 = gb.set_a(gub.@a).set_b(gub.@b).set_c(gub.@c);
+    let s4 = gb.mod_a(|a| gb.@b + a).mod_b(|b| b + gub.@b).mod_c(|c| c + gub.@c);
+    let s5 = s1.set_a(s1.@a.push_back(k.to_string)).set_b(gb.@b);
+    let B { a : x, b : y, c : z } = gb;
+    let UB { a : xu, b : yu, c : zu } = gub;
+    let s6 = B { a : yu, b : x, c : zu + z };
+    let s7 = UB { a : y, b : xu, c : zu };
+    let s8 = if k > 0 { s7 } else { gub };
+    let s9 = s8.set_c(s8.@c + "9");
+    println $ show_b(s1) + " " + show_ub(s2) + " " + show_b(s3) + " " + show_b(s4) + " " + show_b(s5) + " " + show_b(s6) + " " + show_ub(s7) + " " + show_ub(s9) + " " + show_b(gb) + show_ub(gub)
+);

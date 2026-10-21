@@ -1,0 +1,1 @@
+[X1X0, X2, X0, X1, X2, inner] [X1X0, X2, inner, inner] X1YX1X2 X0X1X2[X0, X1, X2][inner]

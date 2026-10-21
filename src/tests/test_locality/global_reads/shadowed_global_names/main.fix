@@ -1,0 +1,37 @@
+module Main;
+
+// Local names that coincide with global names: a `let` shadowing a global, a parameter named like
+// a global, a pattern variable named like a global.
+g : Array I64 = Array::from_map(4, |i| i + 1);
+h : (Array I64, Array I64) = (Array::from_map(2, |i| i * 3), Array::from_map(2, |i| i * 5));
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 9);
+    a.to_iter.fold(0, |x, s| s * 13 + x)
+);
+
+f : Array I64 -> I64;
+f = |g| (
+    let g = g.push_back(1);
+    consume(g) + g.@(0)
+);
+
+k : (Array I64, Array I64) -> I64;
+k = |h| (
+    let (g, h) = h;
+    consume(g) + consume(h) + g.@(0) + h.@(0)
+);
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let r0 = consume(g) + consume(Main::g);
+    let g = Array::fill(n + 3, n);
+    let r1 = consume(g) + g.@(0) + f(g) + f(Main::g);
+    let (g, h) = Main::h;
+    let r2 = consume(g) + consume(h) + k((g, h)) + k(Main::h);
+    let h = (Array::fill(2, n), Main::g);
+    let r3 = k(h) + consume(h.@0) + consume(h.@1);
+    println $ [r0, r1, r2, r3].to_iter.map(to_string).join(",")
+);

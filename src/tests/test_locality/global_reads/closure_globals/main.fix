@@ -1,0 +1,41 @@
+module Main;
+
+// Globals of function type: closures that capture boxed values, global functions taken as values,
+// closures built locally that read globals, and joins of global closures with local ones.
+ga : Array I64 = Array::from_map(4, |i| i + 1);
+
+make_adder : Array I64 -> I64 -> Array I64;
+make_adder = |base, k| base.map(|x| x + k);
+
+gadd : I64 -> Array I64 = make_adder(ga.push_back(10));
+gcomp : I64 -> Array I64 = gadd >> |a| a.push_back(a.@size);
+gpairf : (I64 -> Array I64, Array I64) = (make_adder(ga), ga);
+glazy : Lazy (Array I64) = |_| ga.push_back(77);
+
+consume : Array I64 -> I64;
+consume = |a| (
+    let a = a.push_back(a.@size).set(0, 3);
+    a.to_iter.fold(0, |x, s| s * 11 + x)
+);
+
+apply_twice : (I64 -> Array I64) -> I64 -> I64;
+apply_twice = |f, k| consume(f(k)) + consume(f(k + 1));
+
+main : IO ();
+main = (
+    let n = (*get_args).@size;
+    let r1 = apply_twice(gadd, n) + apply_twice(gcomp, n);
+    let f = if n > 3 { make_adder(Array::fill(2, n)) } else { gadd };
+    let r2 = apply_twice(f, n) + consume(f(0)) + consume(f(1));
+    let g = if n > 3 { gadd } else { gcomp };
+    let r3 = consume(g(n)) + consume(g(n + 1)) + apply_twice(g, 2);
+    let (pf, pa) = gpairf;
+    let r4 = consume(pf(n)) + consume(pa) + consume(pf(n)) + pa.@(0);
+    let h = |k| ga.push_back(k);
+    let r5 = consume(h(n)) + apply_twice(h, n);
+    let r6 = consume(glazy()) + consume(glazy());
+    let fs = [gadd, gcomp, make_adder(ga), f, g, pf];
+    let r7 = fs.to_iter.fold(0, |fn, s| s + consume(fn(n)));
+    let r8 = Iterator::range(0, n + 2).fold(0, |i, s| s + consume(gadd(i)) + consume((gpairf.Tuple2::@0)(i)));
+    println $ [r1, r2, r3, r4, r5, r6, r7, r8].to_iter.map(to_string).join(",")
+);

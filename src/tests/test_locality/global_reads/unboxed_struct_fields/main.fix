@@ -1,0 +1,48 @@
+module Main;
+
+// An unboxed global struct with boxed fields: discarded with `let _`, partly and wholly
+// destructured, its field read many times in one expression, passed to consuming functions, and
+// updated with set/mod.
+
+type Rec = struct { a : Array I64, s : String, b : Box (Array String), n : I64, o : Option (Array I64) };
+
+g : Rec;
+g = Rec { a : Array::from_map(5, |i| i * 7), s : "hello" + 3.to_string, b : Box::make(["x", "yy", "zzz"]), n : 42, o : some(Array::from_map(3, |i| i + 100)) };
+
+none_of : I64 -> I64;
+none_of = |k| (
+    let _ = g;
+    let _ = g;
+    k + 1
+);
+
+some_of : I64 -> I64;
+some_of = |k| (
+    let Rec { a : a, s : _, b : _, n : _, o : _ } = g;
+    a.@(k % 5)
+);
+
+all_of : I64 -> I64;
+all_of = |k| (
+    let Rec { a : a, s : s, b : b, n : n, o : o } = g;
+    let Rec { a : a2, s : s2, b : b2, n : n2, o : o2 } = g;
+    a.@(k) + s.get_size + b.@value.@(k % 3).get_size + n + o.as_some.@(0) + a2.@(1) + s2.get_size + b2.@value.@size + n2 + o2.as_some.@size
+);
+
+twice_same : I64 -> I64;
+twice_same = |k| g.@a.@(k) + g.@a.@(k + 1) + g.@a.@size * g.@a.@size + (if g.@o.is_some { g.@o.as_some.@(k) } else { g.@n });
+
+consume : Array I64 -> Array I64;
+consume = |arr| arr.push_back(arr.@size).set(0, -1);
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let x = none_of(k) + some_of(k) + all_of(k) + twice_same(k);
+    let c = consume(g.@a);
+    let c2 = consume(consume(g.@a));
+    let s = g.@s + g.@s + g.@b.@value.@(k);
+    let r2 = g.set_a(c2).set_s(s);
+    let r3 = g.mod_a(|a| a.push_back(k)).mod_o(|o| o.map(|v| v.push_back(1)));
+    println $ x.to_string + " " + c.to_string + " " + c2.to_string + " " + s + " " + r2.@a.to_string + r2.@s + " " + r3.@a.to_string + r3.@o.as_some.to_string + " " + g.@a.to_string + g.@s
+);

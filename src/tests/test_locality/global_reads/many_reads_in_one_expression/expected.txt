@@ -1,0 +1,1 @@
+[m0, m1, m2] 9 m0m1m1m2m2m1ssq [m0, m1, m2, w, m0, m1, m2, m0, m1, m2, m0, m1, m2, m0, m1, m2, q, s] 40 9

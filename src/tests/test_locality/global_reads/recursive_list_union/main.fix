@@ -1,0 +1,50 @@
+module Main;
+
+// A recursive boxed-union list held by a global, matched with every arm, with `_`, two levels deep,
+// and as the tail of a local list.
+
+type List a = box union { nil : (), cons : (a, List a) };
+
+build : I64 -> List String;
+build = |n| if n == 0 { List::nil() } else { List::cons((n.to_string, build(n - 1))) };
+
+glist : List String;
+glist = build(30);
+
+gtwo : (List String, List String);
+gtwo = (glist, List::cons(("head", glist)));
+
+len : List a -> I64;
+len = |l| match l { nil() => 0, cons((_, t)) => 1 + len(t) };
+
+concat_all : List String -> String;
+concat_all = |l| match l {
+    nil(_) => "",
+    cons((h, t)) => h + concat_all(t)
+};
+
+second : List String -> String;
+second = |l| match l {
+    cons((_, t)) => match t { cons((x, _)) => x, _ => "?" },
+    _ => "?"
+};
+
+drop_n : I64 -> List String -> List String;
+drop_n = |n, l| if n == 0 { l } else { match l { nil() => l, cons((_, t)) => drop_n(n - 1, t) } };
+
+prepend_local : I64 -> List String -> List String;
+prepend_local = |k, l| if k == 0 { l } else { List::cons((("L" + k.to_string), prepend_local(k - 1, l))) };
+
+main : IO ();
+main = (
+    let k = (*get_args).@size;
+    let a = len(glist) + len(gtwo.@0) + len(gtwo.@1);
+    let b = concat_all(drop_n(25, glist));
+    let c = second(glist) + second(gtwo.@1) + second(drop_n(29 + k, glist));
+    let mixed = prepend_local(3, drop_n(27, glist));
+    let mixed2 = if k > 0 { mixed } else { glist };
+    let d = concat_all(mixed2) + concat_all(drop_n(k, mixed2));
+    let e = match glist { cons((h, _)) => h, nil() => "" };
+    let f = match gtwo.@1 { nil() => "n", cons((h, t)) => match t { cons((h2, t2)) => match t2 { cons((h3, _)) => h + h2 + h3, _ => "y" }, _ => "x" } };
+    println $ a.to_string + " " + b + " " + c + " " + d + " " + e + " " + f
+);
