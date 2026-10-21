@@ -659,60 +659,55 @@ impl TraitImpl {
     /// `impl [a : ToString, b : ToString] (a, b) : ToString`. The type comes from the declaration
     /// and the head alone, whatever type signature the implementation writes for the member.
     pub fn member_scheme_by_defn(&self, member_name: &Name, trait_defn: &TraitDefn) -> Arc<Scheme> {
-        // First, see the trait definition.
-        // Let's consider `trait a : ToString { to_string : a -> String }`.
-        let tyvar_name = &trait_defn.type_var.name; // `a` in the above example.
-        let mut member_qualty = trait_defn.member_ty(member_name); // `a -> String` in the above example.
+        // The member's declared type, in the declaration's names: `a -> String` for
+        // `trait a : ToString { to_string : a -> String }`.
+        let tyvar_name = &trait_defn.type_var.name;
+        let mut member_qualty = trait_defn.member_ty(member_name);
 
-        // Next, see the trait implementation to get the type for which the trait is implemented.
-        let impl_type = self.impl_type(); // `(a, b)` in the above example.
-
-        // We are going to substitute `tyvar_name` (e.g., `a`) in `member_qualty` (e.g., `a -> String`) with `impl_type` (e.g., `(a, b)`)
-        // This is OK if FV(member_qualty) \ {tyvar_name} is disjoint from FV(impl_type).
-        // Otherwise, we need to rename the type variables in `member_qualty` to avoid name collision.
-        // Example:
-        // Consider `impl Arrow a : Functor` for `trait f : Functor { map : (a -> b) -> f a -> f b }`.
-        // In this case, if we naively substitute `f` in `map : (a -> b) -> f a -> f b` with `Arrow a`,
-        // then we get `map : (a -> b) -> Arrow a a -> Arrow a b`, which is wrong.
-        // So we first rename `(a -> b) -> f a -> f b` to `(c -> b) -> f c -> f b`.
-        let mut fv_member_qualty = vec![];
-        member_qualty.free_vars_vec(&mut fv_member_qualty);
-        let fv_impl_type = impl_type.free_vars();
-        // Collect type variables that need renaming (those that collide with fv_impl_type).
-        let vars_to_rename: Vec<_> = fv_member_qualty
+        // The trait's type variable is replaced by the type the trait is implemented for. The
+        // member's other type variables are put beside the variables of this implementation's head
+        // and context, so each one that shares a name with one of those is renamed apart:
+        // `map : (a -> b) -> f a -> f b` of `trait f : Functor` becomes
+        // `(c -> b) -> Arrow a c -> Arrow a b` for `impl Arrow a : Functor`, where naming both
+        // variables `a` would make the two one variable.
+        let mut impl_vars = vec![];
+        self.qual_pred.free_vars_vec(&mut impl_vars);
+        let mut impl_var_names: Set<Name> = impl_vars.into_iter().map(|tv| tv.name.clone()).collect();
+        impl_var_names.extend(
+            self.qual_pred
+                .kind_constraints
+                .iter()
+                .map(|kind_sign| kind_sign.tyvar.clone()),
+        );
+        let mut member_vars = vec![];
+        member_qualty.free_vars_vec(&mut member_vars);
+        let colliding_vars: Vec<&Arc<TyVar>> = member_vars
             .iter()
-            .filter(|fv| &fv.name != tyvar_name && fv_impl_type.contains_key(&fv.name))
+            .filter(|tv| &tv.name != tyvar_name && impl_var_names.contains(&tv.name))
             .collect();
-        let used_names: Set<String> = fv_impl_type
-            .keys()
-            .chain(fv_member_qualty.iter().map(|fv| &fv.name))
+        let used_names: Set<Name> = impl_var_names
+            .iter()
             .cloned()
+            .chain(member_vars.iter().map(|tv| tv.name.clone()))
             .collect();
-        let new_names = generate_fresh_varnames(vars_to_rename.len(), &used_names);
-        let mut rename_subst = Substitution::default();
-        for (fv, new_name) in vars_to_rename.iter().zip(new_names.iter()) {
-            let new_fv = type_tyvar(new_name, &fv.kind);
-            let merge_succ = rename_subst.merge(&Substitution::single(&fv.name, new_fv));
-            assert!(merge_succ);
+        let fresh_names = generate_fresh_varnames(colliding_vars.len(), &used_names);
+        let mut subst = Substitution::single(tyvar_name, self.impl_type());
+        for (tv, fresh_name) in colliding_vars.iter().zip(fresh_names.iter()) {
+            assert!(subst.merge(&Substitution::single(
+                &tv.name,
+                type_tyvar(fresh_name, &tv.kind)
+            )));
         }
-        // Rename type variables in `member_qualty`.
-        rename_subst.substitute_qualtype(&mut member_qualty);
+        subst.substitute_qualtype(&mut member_qualty);
 
-        // Then substitute `tyvar_name` with `impl_type`.
-        // Now we get `(a, b) -> String` or `(c -> b) -> Arrow a c -> Arrow a b` in the above examples.
-        let impl_subst = Substitution::single(&tyvar_name, impl_type);
-        impl_subst.substitute_qualtype(&mut member_qualty);
-
-        // Prepare `vars`, `ty`, `preds`, and `eqs` to be generalized.
-        let ty = member_qualty.ty.clone();
         let mut kind_signs = self.qual_pred.kind_constraints.clone();
-        kind_signs.append(&mut member_qualty.kind_signs.clone());
+        kind_signs.append(&mut member_qualty.kind_signs);
         let mut preds = self.qual_pred.pred_constraints.clone();
         preds.append(&mut member_qualty.preds);
         let mut eqs = self.qual_pred.eq_constraints.clone();
         eqs.append(&mut member_qualty.eqs);
 
-        Scheme::generalize(&kind_signs, preds, eqs, ty)
+        Scheme::generalize(&kind_signs, preds, eqs, member_qualty.ty)
     }
 
     /// Get expression that implements a member.

@@ -306,8 +306,12 @@ impl Substitution {
         )
     }
 
-    /// Replaces the type variables this substitution replaces throughout `qual_type`: in its type
-    /// and in the predicates and equalities qualifying it.
+    /// Replaces the type variables this substitution replaces throughout `qual_type`: in its type,
+    /// in the predicates and equalities qualifying it, and in its kind signatures.
+    ///
+    /// A kind signature on a variable replaced by another variable moves to that variable. One on a
+    /// variable replaced by any other type is dropped: the signature states the kind of a variable,
+    /// and the type standing in its place has a kind of its own.
     pub fn substitute_qualtype(&self, qual_type: &mut QualType) {
         for pred in &mut qual_type.preds {
             self.substitute_predicate(pred);
@@ -316,6 +320,16 @@ impl Substitution {
             self.substitute_equality(eq);
         }
         qual_type.ty = self.substitute_type(&qual_type.ty);
+        qual_type.kind_signs.retain_mut(|kind_sign| {
+            let Some(replacement) = self.data.get(&kind_sign.tyvar) else {
+                return true;
+            };
+            let Type::TyVar(tv) = &replacement.ty else {
+                return false;
+            };
+            kind_sign.tyvar = tv.name.clone();
+            true
+        });
     }
 
     /// Replaces the type variables this substitution replaces in the arguments of the associated
@@ -1812,6 +1826,58 @@ impl TypeCheckContext {
         check_one(lhs, rhs)?;
         check_one(rhs, lhs)?;
         Ok(())
+    }
+
+    /// The types `instance` gives the type variables of `general`, where `instance` is `general`
+    /// with its type variables given types. The variables of a scheme here are all those standing
+    /// in it: the ones it generalizes, and the opaque type variables, which it leaves free.
+    ///
+    /// A variable `general` writes in its type is given the type `instance` writes in its place. A
+    /// variable it writes in its equalities alone is given the type the equalities of `instance`
+    /// deduce for it: for `general` of `[?it : Iterator, Item ?it = e] c -> ?it` and `instance` of
+    /// `[?iter : Iterator, Item ?iter = f] Src -> ?iter`, the answer is
+    /// `{c -> Src, ?it -> ?iter, e -> f}`.
+    ///
+    /// Panics where `instance` leaves a variable of `general` without a type.
+    pub fn instance_substitution(
+        &self,
+        general: &Arc<Scheme>,
+        instance: &Arc<Scheme>,
+    ) -> Result<Substitution, UnifOrOtherErr> {
+        self.assert_freshness();
+        let mut tc = self.clone();
+        let instance_ty = tc.instantiate_scheme(instance, ConstraintInstantiationMode::Assume)?;
+        // The opaque type variables of `instance` stand for themselves too.
+        let instance_vars = instance.all_vars();
+        tc.fixed_tyvars.extend(instance_vars.iter().cloned());
+        let general_vars = general.all_vars();
+        let fresh = tc.instantiate_tyvars(&general_vars);
+        tc.unify(&instance_ty, &fresh.substitute_type(&general.ty))?;
+        // The predicates of `general` are left out: a predicate gives a type variable no type, so
+        // the type and the equalities are what decide the answer.
+        for eq in &general.equalities {
+            let mut eq = eq.clone();
+            fresh.substitute_equality(&mut eq);
+            tc.add_equality(eq)?;
+        }
+
+        let mut answer = Substitution::default();
+        for tv in &general_vars {
+            let ty = tc
+                .substitution
+                .substitute_type(&fresh.substitute_type(&type_from_tyvar(tv.clone())));
+            assert!(
+                ty.free_vars_vec()
+                    .iter()
+                    .all(|fv| instance_vars.iter().any(|iv| iv.name == fv.name)),
+                "`{}` leaves the type variable `{}` of `{}` without a type",
+                instance.to_string(),
+                tv.name,
+                general.to_string(),
+            );
+            assert!(answer.merge(&Substitution::single(&tv.name, ty)));
+        }
+        Ok(answer)
     }
 
     /// Checks that `rhs` is at least as general as `lhs`: assuming what `lhs` states, the type of

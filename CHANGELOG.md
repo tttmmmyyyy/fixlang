@@ -60,6 +60,7 @@
 #### Language
 
 - #806, #808: At `-O max`, the default level, a recursion that calls itself through a function held in a struct, as `(w.@f)(w, n - 1)` does, now runs in constant stack. Since 1.5.0 it overflowed the stack when its result was wider than three integers.
+- #350, #385, #661: A trait implementation now means the same thing whatever it names its type variables. When a type variable of the implementation had the name of a type variable in the declaration of a trait member, the compiler could crash, reject a correct implementation with ``Kind mismatch on type variable `g`.``, or accept an implementation that does not fit the declaration.
 
 #### Tool
 

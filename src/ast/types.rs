@@ -2746,6 +2746,18 @@ impl Scheme {
         }
     }
 
+    /// The type variables standing in the constraints and in the type, each one once: the
+    /// generalized ones and the ones the scheme leaves free alike.
+    pub fn all_vars(&self) -> Vec<Arc<TyVar>> {
+        let mut vars: Vec<Arc<TyVar>> = vec![];
+        for tv in collect_free_vars(&self.predicates, &self.equalities, &self.ty) {
+            if !vars.iter().any(|seen| seen.name == tv.name) {
+                vars.push(tv);
+            }
+        }
+        vars
+    }
+
     /// The type variables this scheme's body fixes, in the sense of `Fixv` from the section
     /// "Well-formed programs" of "Associated Type Synonyms".
     ///

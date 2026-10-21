@@ -2500,3 +2500,138 @@ pub fn test_higher_kinded_opaque_type_carries_its_value_to_the_use_site() {
     "#;
     test_source(&source, Configuration::develop_mode());
 }
+
+// ============================================================
+// Type variables a declaration writes in its constraints alone
+// ============================================================
+
+/// A type variable the declaration of a trait member writes in its constraints alone, as `e` in
+/// `Item ?it = e`, stays apart from a variable of the implementation's head of the same name. Each
+/// test runs the program with the implementation naming its variable `e` and naming it `x`.
+#[test]
+pub fn test_opaque_constraint_variable_apart_from_a_head_variable() {
+    let source = r#"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = e] c -> ?it;
+        }
+
+        impl Array {tv} : Make {
+            make = |_| Iterator::empty;
+        }
+
+        main : IO ();
+        main = (
+            let is : Array I64 = Make::make(["a"]).to_array;
+            assert_eq(|_|"", is.@size, 0);;
+            pure()
+        );
+    "#;
+    for name in ["e", "x"] {
+        test_source(&source.replace("{tv}", name), Configuration::develop_mode());
+    }
+}
+
+/// A signature that renames a type variable the declaration writes in its constraints alone states
+/// what the declaration states, so the body is checked against it: one that returns an iterator of
+/// that variable is accepted.
+#[test]
+pub fn test_opaque_signature_renaming_a_constraint_variable() {
+    let source = r#"
+        module Main;
+
+        type Src = unbox struct { n : I64 };
+        type MyIter a = unbox struct { xs : Array a, i : I64 };
+
+        impl MyIter a : Iterator {
+            type Item (MyIter a) = a;
+            advance = |it| (
+                if it.@i >= it.@xs.@size { none() };
+                let v = it.@xs.@(it.@i);
+                some((MyIter { xs : it.@xs, i : it.@i + 1 }, v))
+            );
+        }
+
+        trait c : Coll {
+            make : [?it : Iterator, Item ?it = e] c -> ?it;
+        }
+
+        impl Src : Coll {
+            make : [?it : Iterator, Item ?it = {tv}] Src -> ?it;
+            make = |_| (MyIter { xs : [], i : 0 } : MyIter {tv});
+        }
+
+        main : IO ();
+        main = (
+            let arr : Array I64 = Coll::make(Src { n : 3 }).to_array;
+            assert_eq(|_|"", arr.@size, 0);;
+            pure()
+        );
+    "#;
+    for name in ["e", "f"] {
+        test_source(&source.replace("{tv}", name), Configuration::develop_mode());
+    }
+}
+
+/// A body whose iterator yields one fixed type where the signature's constraint names a type
+/// variable is reported at the body, whatever the signature names that variable.
+#[test]
+pub fn test_opaque_signature_renaming_a_constraint_variable_checks_the_body() {
+    let source = r#"
+        module Main;
+
+        type Src = unbox struct { n : I64 };
+
+        trait c : Coll {
+            make : [?it : Iterator, Item ?it = e] c -> ?it;
+        }
+
+        impl Src : Coll {
+            make : [?it : Iterator, Item ?it = {tv}] Src -> ?it;
+            make = |s| Iterator::range(0, s.@n);
+        }
+
+        main : IO ();
+        main = (
+            let arr : Array String = Coll::make(Src { n : 3 }).to_array;
+            assert_eq(|_|"", arr.@size, 3);;
+            pure()
+        );
+    "#;
+    for name in ["e", "f"] {
+        test_source_fail(
+            &source.replace("{tv}", name),
+            Configuration::develop_mode(),
+            &format!("since `Std::I64 = {}` cannot be deduced", name),
+        );
+    }
+}
+
+/// A signature that renames a type variable the declaration writes in its constraints alone agrees
+/// with the declaration in the constraints it puts on that variable.
+#[test]
+pub fn test_opaque_signature_renaming_a_constrained_constraint_variable() {
+    let source = r#"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = e, e : ToString] c -> ?it;
+        }
+
+        impl Array x : Make {
+            make : [?it : Iterator, Item ?it = {tv}, {tv} : ToString] Array x -> ?it;
+            make = |_| Iterator::empty;
+        }
+
+        main : IO ();
+        main = (
+            let is : Array I64 = Make::make(["a"]).to_array;
+            assert_eq(|_|"", is.@size, 0);;
+            pure()
+        );
+    "#;
+    for name in ["e", "f"] {
+        test_source(&source.replace("{tv}", name), Configuration::develop_mode());
+    }
+}
