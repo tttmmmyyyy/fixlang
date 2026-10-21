@@ -1,0 +1,6 @@
+module Lib;
+
+type Pt = struct { x : ::Std::I64, pair : (::Std::I64, ::Std::String) };
+
+make_pt : ::Std::I64 -> Pt;
+make_pt = |n| Pt { x : n, pair : (n, "s") };

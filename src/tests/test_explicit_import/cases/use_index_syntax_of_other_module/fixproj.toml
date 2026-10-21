@@ -1,0 +1,5 @@
+[general]
+name = "use-index-syntax-of-other-module"
+version = "0.1.0"
+[build]
+files = ["main.fix", "lib.fix"]

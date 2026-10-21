@@ -1,0 +1,13 @@
+module Main;
+
+import Lib::{make_pt, Pt::{@x, act_pair, act_x}};
+import Std::{IO, Indexable::{imod, iset}, Monad::pure, Tuple2::act_1};
+
+main : IO ();
+main = (
+    let p = make_pt(1);
+    let p = p[^x].iset(10);
+    let p = p[^pair][^1].imod(|s| s + "!");
+    eval p.@x;
+    pure()
+);
