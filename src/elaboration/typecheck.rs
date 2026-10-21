@@ -1851,41 +1851,35 @@ impl TypeCheckContext {
     /// `{c -> Src, ?it -> ?iter, e -> f}`.
     ///
     /// An opaque type variable that `general` writes in its predicates alone is given no type by
-    /// either, and the answer leaves it out, so that it stands for itself, as it does where
-    /// `check_scheme_equivalent` compares the two schemes.
+    /// either, and the answer leaves it out, so that it stands for itself.
     ///
-    /// Panics where `instance` is not `general` with its type variables given types.
+    /// # Returns
+    /// `None` where `instance` is not `general` with its type variables given types: where the two
+    /// types do not unify, where an equality of `general` contradicts those of `instance`, or where
+    /// `instance` leaves a variable of `general` other than such an opaque type variable without a
+    /// type.
     pub fn instance_substitution(
         &self,
         general: &Arc<Scheme>,
         instance: &Arc<Scheme>,
-    ) -> Substitution {
+    ) -> Option<Substitution> {
         self.assert_freshness();
-        /// Panics, telling that `instance` is not an instance of `general`.
-        fn not_an_instance<T>(general: &Scheme, instance: &Scheme) -> T {
-            panic!(
-                "`{}` is not an instance of `{}`",
-                instance.to_string(),
-                general.to_string()
-            )
-        }
         let mut tc = self.clone();
         let instance_ty = tc
             .instantiate_scheme(instance, ConstraintInstantiationMode::Assume)
-            .unwrap_or_else(|_| not_an_instance(general, instance));
+            .ok()?;
         // The opaque type variables of `instance` stand for themselves too.
         instance.free_vars_to_vec(&mut tc.fixed_tyvars);
         let instance_vars = instance.all_vars();
         let fresh = tc.instantiate_tyvars(&general.all_vars());
         tc.unify(&instance_ty, &fresh.substitute_type(&general.ty))
-            .unwrap_or_else(|_| not_an_instance(general, instance));
+            .ok()?;
         // The predicates of `general` are left out: a predicate gives a type variable no type, so
         // the type and the equalities are what decide the answer.
         for eq in &general.equalities {
             let mut eq = eq.clone();
             fresh.substitute_equality(&mut eq);
-            tc.add_equality(eq)
-                .unwrap_or_else(|_| not_an_instance(general, instance));
+            tc.add_equality(eq).ok()?;
         }
 
         let mut general_to_instance = Substitution::default();
@@ -1901,18 +1895,14 @@ impl TypeCheckContext {
                 .iter()
                 .all(|fv| instance_vars.iter().any(|iv| iv.name == fv.name));
             if !given_a_type {
-                assert!(
-                    is_opaque_tyvar(&tv.name),
-                    "`{}` leaves the type variable `{}` of `{}` without a type",
-                    instance.to_string(),
-                    tv.name,
-                    general.to_string(),
-                );
+                if !is_opaque_tyvar(&tv.name) {
+                    return None;
+                }
                 continue;
             }
             assert!(general_to_instance.merge(&Substitution::single(&tv.name, ty)));
         }
-        general_to_instance
+        Some(general_to_instance)
     }
 
     /// Checks that `rhs` is at least as general as `lhs`: assuming what `lhs` states, the type of

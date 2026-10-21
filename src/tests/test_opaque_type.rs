@@ -2704,3 +2704,126 @@ pub fn test_opaque_member_with_an_equality_of_a_higher_arity_associated_type() {
     "#;
     test_source(&source, Configuration::develop_mode());
 }
+
+/// A signature that renames the opaque types of the declaration is compared with the declaration
+/// under the names it writes, so that a constraint on one opaque type says nothing about another.
+#[test]
+pub fn test_opaque_signature_renaming_opaque_types_agrees_with_the_declaration() {
+    let source = r#"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = e, e : Iterator, Item e = I64] c -> ?it;
+        }
+
+        impl Array x : Make {
+            make = |_| Iterator::empty;
+        }
+
+        impl I64 : Make {
+            make : [?i : Iterator, Item ?i = e, e : Iterator, Item e = I64] I64 -> ?i;
+            make = |_| Iterator::empty;
+        }
+
+        main : IO ();
+        main = (
+            let is : Array (Iterator::EmptyIterator I64) = Make::make(["a"]).to_array;
+            assert_eq(|_|"", is.@size, 0);;
+            let is : Array (Iterator::EmptyIterator I64) = Make::make(1).to_array;
+            assert_eq(|_|"", is.@size, 0);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A signature may write the declaration's opaque types under each other's names, and each one
+/// then stands for the type the declaration says it does.
+#[test]
+pub fn test_opaque_signature_swapping_the_names_of_opaque_types() {
+    let source = r#"
+        module Main;
+
+        type Src = unbox struct { n : I64 };
+
+        trait c : Coll {
+            make : [?a : Iterator, ?b : Iterator, Item ?a = I64, Item ?b = String] c -> (?a, ?b);
+        }
+
+        impl Src : Coll {
+            make : [?b : Iterator, ?a : Iterator, Item ?b = I64, Item ?a = String] Src -> (?b, ?a);
+            make = |s| (Iterator::range(0, s.@n), ["x", "y"].to_iter);
+        }
+
+        main : IO ();
+        main = (
+            let (i, s) = Coll::make(Src { n : 3 });
+            assert_eq(|_|"", i.map(|x| x + 1).map(to_string).join(","), "1,2,3");;
+            assert_eq(|_|"", s.join(","), "x,y");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A signature that renames two opaque types the declaration chains by an equality, `Item ?a = ?b`,
+/// agrees with the declaration.
+#[test]
+pub fn test_opaque_signature_renaming_chained_opaque_types() {
+    let source = r#"
+        module Main;
+
+        type Src = unbox struct { n : I64 };
+
+        trait c : Coll {
+            make : [?a : Iterator, ?b : Iterator, Item ?a = ?b, Item ?b = I64] c -> ?a;
+        }
+
+        impl Src : Coll {
+            make : [?x : Iterator, ?y : Iterator, Item ?x = ?y, Item ?y = I64] Src -> ?x;
+            make = |s| Iterator::range(0, s.@n).map(|i| Iterator::range(0, i));
+        }
+
+        main : IO ();
+        main = (
+            let joined = Coll::make(Src { n : 4 }).map(|it| it.map(to_string).join("")).join(",");
+            assert_eq(|_|"", joined, ",0,01,012");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A signature that renames the opaque types of the declaration and constrains them less than the
+/// declaration does is reported as disagreeing with it.
+#[test]
+pub fn test_opaque_signature_renaming_opaque_types_and_constraining_less_is_reported() {
+    let source = r#"
+        module Main;
+
+        type Src = unbox struct { n : I64 };
+
+        trait c : Coll {
+            make : [?it : Iterator, ?jt : Iterator, Item ?it = e, Item ?jt = e] c -> (?it, ?jt);
+        }
+
+        impl Src : Coll {
+            make : [?i : Iterator, ?j : Iterator, Item ?i = e, Item ?j = f] Src -> (?i, ?j);
+            make = |s| (Iterator::empty, Iterator::empty);
+        }
+
+        main : IO ();
+        main = (
+            let (i, j) = Coll::make(Src { n : 3 });
+            let a : Array I64 = i.to_array;
+            let b : Array I64 = j.to_array;
+            assert_eq(|_|"", a.@size + b.@size, 0);;
+            pure()
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type signature in implementation does not match trait definition.",
+    );
+}
