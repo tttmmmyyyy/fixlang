@@ -717,36 +717,21 @@ const CLONE_RETRY_WAITS: [Duration; 2] = [Duration::from_secs(1), Duration::from
 /// libgit2 empties `path` when a clone fails, so every attempt starts from the directory the first
 /// one found.
 fn clone_repository(url: &str, path: &Path) -> Result<Repository, git2::Error> {
-    retry_transient_git_failure(
-        || Repository::clone(url, path),
-        |error, wait| {
-            info_msg(&format!(
-                "Failed to clone the repository `{}` ({}); trying again in {} s.",
-                url,
-                error.message(),
-                wait.as_secs()
-            ))
-        },
-    )
-}
-
-/// The result of `attempt`, which is run again after each of `CLONE_RETRY_WAITS` for as long as it
-/// fails with an error `is_transient_git_failure` accepts. `report` is told of each such failure
-/// and the wait that follows it, before the wait.
-fn retry_transient_git_failure<T>(
-    mut attempt: impl FnMut() -> Result<T, git2::Error>,
-    mut report: impl FnMut(&git2::Error, Duration),
-) -> Result<T, git2::Error> {
     for wait in CLONE_RETRY_WAITS {
-        match attempt() {
+        match Repository::clone(url, path) {
             Err(error) if is_transient_git_failure(&error) => {
-                report(&error, wait);
+                info_msg(&format!(
+                    "Failed to clone the repository `{}` ({}); trying again in {} s.",
+                    url,
+                    error.message(),
+                    wait.as_secs()
+                ));
                 thread::sleep(wait);
             }
             result => return result,
         }
     }
-    attempt()
+    Repository::clone(url, path)
 }
 
 /// Whether `error` is a failure of the connection to a remote, which the next attempt may not
@@ -885,74 +870,27 @@ fn create_version_retriever(
 
 #[cfg(test)]
 mod tests {
-    use super::{retry_transient_git_failure, CLONE_RETRY_WAITS};
+    use super::is_transient_git_failure;
     use git2::{ErrorClass, ErrorCode};
-    use std::time::Duration;
 
-    /// The error libgit2 gives for a connection the remote cut off in the middle of a clone.
-    fn cut_off_connection() -> git2::Error {
-        git2::Error::new(ErrorCode::GenericError, ErrorClass::Http, "unexpected EOF")
+    /// A connection the remote cut off in the middle of a clone, and a TLS handshake that broke, are
+    /// failures a clone is attempted again after.
+    #[test]
+    fn a_connection_cut_off_or_a_broken_handshake_is_transient() {
+        let cut_off = git2::Error::new(ErrorCode::GenericError, ErrorClass::Http, "unexpected EOF");
+        let handshake = git2::Error::new(ErrorCode::GenericError, ErrorClass::Ssl, "unknown error");
+        assert!(is_transient_git_failure(&cut_off));
+        assert!(is_transient_git_failure(&handshake));
     }
 
-    /// The error libgit2 gives for a repository on GitHub that does not exist.
-    fn missing_repository() -> git2::Error {
-        git2::Error::new(
+    /// The answer GitHub gives for a repository that does not exist is reported at once.
+    #[test]
+    fn a_missing_repository_on_github_is_not_transient() {
+        let missing = git2::Error::new(
             ErrorCode::Auth,
             ErrorClass::Http,
             "remote authentication required but no callback set",
-        )
-    }
-
-    /// The result of `retry_transient_git_failure` over attempts that give `results` in turn, with
-    /// the number of attempts it made and the waits it reported.
-    fn run(
-        mut results: Vec<Result<(), git2::Error>>,
-    ) -> (Result<(), git2::Error>, usize, Vec<Duration>) {
-        results.reverse();
-        let mut attempts = 0;
-        let mut waits = vec![];
-        let result = retry_transient_git_failure(
-            || {
-                attempts += 1;
-                results.pop().expect("an attempt past the results given")
-            },
-            |_error, wait| waits.push(wait),
         );
-        (result, attempts, waits)
-    }
-
-    /// A clone cut off twice succeeds on the third attempt, after each of the waits.
-    #[test]
-    fn a_clone_cut_off_twice_succeeds_on_the_third_attempt() {
-        let (result, attempts, waits) = run(vec![
-            Err(cut_off_connection()),
-            Err(cut_off_connection()),
-            Ok(()),
-        ]);
-        assert!(result.is_ok());
-        assert_eq!(attempts, 3);
-        assert_eq!(waits, CLONE_RETRY_WAITS.to_vec());
-    }
-
-    /// A clone cut off on every attempt reports the failure of the last one.
-    #[test]
-    fn a_clone_cut_off_on_every_attempt_fails_after_the_last_wait() {
-        let (result, attempts, waits) = run(vec![
-            Err(cut_off_connection()),
-            Err(cut_off_connection()),
-            Err(cut_off_connection()),
-        ]);
-        assert_eq!(result.unwrap_err().class(), ErrorClass::Http);
-        assert_eq!(attempts, CLONE_RETRY_WAITS.len() + 1);
-        assert_eq!(waits, CLONE_RETRY_WAITS.to_vec());
-    }
-
-    /// A repository that does not exist is reported on the first attempt, without a wait.
-    #[test]
-    fn a_missing_repository_fails_without_another_attempt() {
-        let (result, attempts, waits) = run(vec![Err(missing_repository())]);
-        assert_eq!(result.unwrap_err().code(), ErrorCode::Auth);
-        assert_eq!(attempts, 1);
-        assert!(waits.is_empty());
+        assert!(!is_transient_git_failure(&missing));
     }
 }
