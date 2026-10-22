@@ -214,4 +214,76 @@ mod integration_tests {
         );
         assert_victim_kept(&root);
     }
+
+    /// `fix build` writes afresh a lock file whose version climbs out of the install directory,
+    /// even when the path the name and the version make is the one the lock file gives.
+    #[test]
+    fn test_build_rewrites_lock_file_with_version_climbing_out_of_the_install_directory() {
+        let (root, proj) = setup();
+        let version = "0.1.0/../../../../victim";
+        let path = format!(".fixlang/deps/dep_{}", version);
+        // A `fix` that removed what the lock file points at is to remove `victim`, inside the
+        // temporary directory, and nothing else.
+        assert_eq!(
+            proj.join(&path).canonicalize().unwrap(),
+            root.path().join("victim").canonicalize().unwrap()
+        );
+        edit_lock_file(
+            &proj,
+            "version = \"0.1.0\"",
+            &format!("version = \"{}\"", version),
+        );
+        edit_lock_file(
+            &proj,
+            &format!("path = \"{}\"", INSTALL_PATH),
+            &format!("path = \"{}\"", path),
+        );
+        assert_succeeded(
+            &run_fix(&proj, &["build"]),
+            "`fix build` should write the lock file afresh and build.",
+        );
+        assert_victim_kept(&root);
+        let lock_file = fs::read_to_string(proj.join(LOCK_FILE_PATH)).unwrap();
+        assert!(
+            lock_file.contains(&format!("path = \"{}\"", INSTALL_PATH)),
+            "lock file: {}",
+            lock_file
+        );
+    }
+
+    /// A symbolic link at the install directory of a git dependency is removed as a link when the
+    /// dependency is reinstalled, leaving what it points to.
+    #[cfg(unix)]
+    #[test]
+    fn test_install_replaces_symlink_at_install_path_leaving_its_target() {
+        let (root, proj) = setup();
+        fs::remove_dir_all(proj.join(INSTALL_PATH)).unwrap();
+        std::os::unix::fs::symlink(root.path().join("victim"), proj.join(INSTALL_PATH)).unwrap();
+
+        assert_succeeded(
+            &run_fix(&proj, &["deps", "install"]),
+            "`fix deps install` should replace the link with the dependency.",
+        );
+        assert_victim_kept(&root);
+        let installed = fs::symlink_metadata(proj.join(INSTALL_PATH)).unwrap();
+        assert!(
+            installed.is_dir(),
+            "the link should give way to a directory"
+        );
+        assert!(proj.join(INSTALL_PATH).join("fixproj.toml").is_file());
+    }
+
+    /// `fix run` removes the executable it builds under `.fixlang/run`.
+    #[test]
+    fn test_run_removes_its_temporary_executable() {
+        let (_root, proj) = setup();
+        let output = run_fix(&proj, &["run"]);
+        assert_succeeded(&output, "`fix run` should build and run the program.");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), "42\n");
+        let left: Vec<_> = fs::read_dir(proj.join(".fixlang/run"))
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert!(left.is_empty(), "left in .fixlang/run: {:?}", left);
+    }
 }
