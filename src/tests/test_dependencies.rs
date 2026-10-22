@@ -6,8 +6,11 @@ mod integration_tests {
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::{
         fs,
+        io::{Read, Write},
+        net::TcpListener,
         path::{Path, PathBuf},
         process::Output,
+        thread,
     };
     use tempfile::TempDir;
 
@@ -661,6 +664,72 @@ mod integration_tests {
                 upstream.to_string_lossy()
             )),
             "the entry names the repository the project is published through:\n{}",
+            stderr
+        );
+    }
+
+    /// A clone that a remote cuts off is attempted again after each of the waits, and the failure
+    /// of the last attempt is what `fix` reports.
+    ///
+    /// The remote is a local server that answers every request with the start of a git response and
+    /// then closes the connection, as a network that breaks partway through a clone does.
+    #[test]
+    fn test_a_clone_the_remote_cuts_off_is_attempted_again() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("Failed to bind a local port");
+        let port = listener.local_addr().unwrap().port();
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut request = [0u8; 4096];
+                let _ = stream.read(&mut request);
+                let _ = stream.write_all(
+                    b"HTTP/1.1 200 OK\r\n\
+                      Content-Type: application/x-git-upload-pack-advertisement\r\n\
+                      Content-Length: 100000\r\n\r\n\
+                      001e# service=git-upload-pack\n0000",
+                );
+            }
+        });
+
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let project_dir = temp_dir.path();
+        fs::write(
+            project_dir.join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"root\"\nversion = \"0.1.0\"\n\n\
+                 [build]\nfiles = [\"main.fix\"]\n\n\
+                 [[dependencies]]\nname = \"dep\"\nversion = \"*\"\n\
+                 git = {{ url = \"http://127.0.0.1:{}/dep.git\" }}\n",
+                port
+            ),
+        )
+        .expect("Failed to write the project file");
+        fs::write(
+            project_dir.join("main.fix"),
+            "module Main;\n\nmain : IO ();\nmain = pure();\n",
+        )
+        .expect("Failed to write the source of the project");
+
+        let output = fix_command()
+            .args(["deps", "update"])
+            .current_dir(project_dir)
+            .output()
+            .expect("Failed to execute fix deps update");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success(),
+            "the clone cannot succeed:\n{}",
+            stderr
+        );
+        assert_eq!(
+            stderr.matches("trying again").count(),
+            2,
+            "two attempts after the first:\n{}",
+            stderr
+        );
+        assert!(
+            stderr.contains("error: Failed to clone the repository"),
+            "the last attempt's failure is reported:\n{}",
             stderr
         );
     }
