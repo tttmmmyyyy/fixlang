@@ -13,12 +13,15 @@ use crate::{
     misc::{to_absolute_path, warn_msg},
 };
 use core::panic;
-use git2::{build::CheckoutBuilder, Repository};
+use git2::{build::CheckoutBuilder, ErrorClass, ErrorCode, Repository};
+use rand::{thread_rng, Rng};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
+    thread,
+    time::Duration,
 };
 use tempfile::TempDir;
 
@@ -256,7 +259,7 @@ impl DependecyLockFile {
                 })?;
 
                 // Clone the repository.
-                let repo = Repository::clone(&git_info.repo, &dep.path).map_err(|e| {
+                let repo = clone_repository_with_retry(&git_info.repo, &dep.path).map_err(|e| {
                     Errors::from_msg(format!(
                         "Failed to clone the repository \"{}\" to \"{}\": {:?}",
                         git_info.repo,
@@ -698,11 +701,65 @@ pub fn clone_git_repo(url: &str) -> Result<(TempDir, Repository), Errors> {
         .map_err(|e| Errors::from_msg_err("Failed to create a temporary directory", e))?;
 
     // Clone the repository.
-    let repo = Repository::clone(url, temp_dir.path()).map_err(|e| {
+    let repo = clone_repository_with_retry(url, temp_dir.path()).map_err(|e| {
         Errors::from_msg_err(&format!("Failed to clone the repository `{}`", url), e)
     })?;
 
     Ok((temp_dir, repo))
+}
+
+/// The waits before the second and later attempts of a clone. A clone is attempted once more than
+/// there are waits. Each wait is scaled by a random factor between 0.5 and 1.5 (see
+/// `clone_repository_with_retry`).
+const CLONE_RETRY_WAITS: [Duration; 4] = [
+    Duration::from_secs(1),
+    Duration::from_secs(2),
+    Duration::from_secs(4),
+    Duration::from_secs(8),
+];
+
+/// Clones the repository at `url` into the directory `path`, and tries again after a failure of the
+/// connection to the remote, which the next attempt may not meet.
+///
+/// libgit2 empties `path` when a clone fails, so each attempt finds `path` as the first attempt
+/// found it.
+///
+/// The waits are randomized so that the clients a single outage cut off at once spread their next
+/// attempts over time, and the recovering remote meets them a few at a time.
+fn clone_repository_with_retry(url: &str, path: &Path) -> Result<Repository, git2::Error> {
+    for wait in CLONE_RETRY_WAITS {
+        match Repository::clone(url, path) {
+            Err(error) if is_transient_git_failure(&error) => {
+                let wait = wait.mul_f64(thread_rng().gen_range(0.5..1.5));
+                info_msg(&format!(
+                    "Failed to clone the repository `{}` ({}); trying again in {:.1} s.",
+                    url,
+                    error.message(),
+                    wait.as_secs_f64()
+                ));
+                thread::sleep(wait);
+            }
+            result => return result,
+        }
+    }
+    Repository::clone(url, path)
+}
+
+/// Whether `error` is a failure of the connection to a remote, which the next attempt may not
+/// meet: a connection cut off, a TLS handshake that broke, or an address that did not resolve.
+///
+/// libgit2 reports a connection refused or reset by the remote, over TLS among them, as an error of
+/// the operating system (`ErrorClass::Os`). That class also holds the errors of local files, which
+/// are then attempted again as well.
+///
+/// Two answers from a remote are excluded, since a second attempt gets the same answer: a request
+/// for credentials, which is how GitHub answers for a repository that does not exist, and a
+/// certificate that does not verify.
+fn is_transient_git_failure(error: &git2::Error) -> bool {
+    matches!(
+        error.class(),
+        ErrorClass::Net | ErrorClass::Http | ErrorClass::Ssl | ErrorClass::Os
+    ) && !matches!(error.code(), ErrorCode::Auth | ErrorCode::Certificate)
 }
 
 fn project_file_to_package(proj_file: &ProjectFile, mode: BuildConfigType) -> Package {
@@ -825,4 +882,80 @@ fn create_version_retriever(
             .map(|info| info.version.clone())
             .collect())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_transient_git_failure;
+    use git2::{ErrorClass, ErrorCode, Repository};
+    use std::fs;
+    use tempfile::TempDir;
+
+    /// A connection the remote cut off in the middle of a clone, and a TLS handshake that broke, are
+    /// failures after which the clone is attempted again.
+    #[test]
+    fn a_connection_cut_off_or_a_broken_handshake_is_transient() {
+        let cut_off = git2::Error::new(ErrorCode::GenericError, ErrorClass::Http, "unexpected EOF");
+        let broken_handshake =
+            git2::Error::new(ErrorCode::GenericError, ErrorClass::Ssl, "unknown error");
+        assert!(is_transient_git_failure(&cut_off));
+        assert!(is_transient_git_failure(&broken_handshake));
+    }
+
+    /// The answer GitHub gives for a repository that does not exist is reported at once.
+    #[test]
+    fn a_missing_repository_on_github_is_not_transient() {
+        let missing = git2::Error::new(
+            ErrorCode::Auth,
+            ErrorClass::Http,
+            "remote authentication required but no callback set",
+        );
+        assert!(!is_transient_git_failure(&missing));
+    }
+
+    /// A certificate that does not verify is reported at once.
+    #[test]
+    fn a_certificate_that_does_not_verify_is_not_transient() {
+        let unverified = git2::Error::new(
+            ErrorCode::Certificate,
+            ErrorClass::Ssl,
+            "the SSL certificate is invalid",
+        );
+        assert!(!is_transient_git_failure(&unverified));
+    }
+
+    /// A connection the remote refused is a failure after which the clone is attempted again.
+    #[test]
+    fn a_refused_connection_is_transient() {
+        let dir = TempDir::new().unwrap();
+        let error = Repository::clone("http://127.0.0.1:1/dep.git", dir.path())
+            .err()
+            .unwrap();
+        assert_eq!(error.class(), ErrorClass::Os);
+        assert!(is_transient_git_failure(&error));
+    }
+
+    /// An address that did not resolve is a failure after which the clone is attempted again.
+    #[test]
+    fn an_address_that_did_not_resolve_is_transient() {
+        let unresolved = git2::Error::new(
+            ErrorCode::GenericError,
+            ErrorClass::Net,
+            "failed to resolve address for github.com: Temporary failure in name resolution",
+        );
+        assert!(is_transient_git_failure(&unresolved));
+    }
+
+    /// A failure outside the connection to a remote is reported at once: here, the one libgit2
+    /// gives for a clone from a local directory that holds no repository.
+    #[test]
+    fn a_failure_outside_the_connection_is_not_transient() {
+        let dir = TempDir::new().unwrap();
+        let source = dir.path().join("not_a_repository");
+        fs::create_dir(&source).unwrap();
+        let error = Repository::clone(source.to_str().unwrap(), &dir.path().join("clone"))
+            .err()
+            .unwrap();
+        assert!(!is_transient_git_failure(&error));
+    }
 }
