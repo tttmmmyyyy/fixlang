@@ -218,13 +218,13 @@ impl DependencyLockFile {
         Ok(lock_file)
     }
 
-    /// Checks what the entries say against the rules every lock file fix writes keeps: each entry
-    /// names a project and a version, and a git entry pins a commit and is installed at
+    /// Checks that each entry follows the rules of the lock files fix writes: an entry names a
+    /// project and a version, and a git entry pins a commit and lies at
     /// `git_dependency_install_path` of its name and version.
     ///
     /// # Returns
     ///
-    /// The first entry that breaks a rule, described.
+    /// A description of the first entry that breaks a rule.
     pub fn validate(&self) -> Result<(), String> {
         for dep in &self.dependencies {
             dep.validate()?;

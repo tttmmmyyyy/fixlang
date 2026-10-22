@@ -142,8 +142,8 @@ mod integration_tests {
             &format!("path = \".fixlang/deps/{}_0.1.0\"", name),
         );
         fs::rename(root.path().join("victim"), root.path().join("victim_0.1.0")).unwrap();
-        // A `fix` that removed what the lock file points at is to remove the directory made
-        // above, inside the temporary directory, and nothing else.
+        // The path the lock file gives reaches the directory renamed above, so a `fix` that
+        // removes what the lock file points at harms nothing outside the temporary directory.
         assert_eq!(
             proj.join(".fixlang/deps")
                 .join(format!("{}_0.1.0", name))
@@ -177,8 +177,8 @@ mod integration_tests {
         assert_lock_file_places_dependency_at_install_path(&proj);
     }
 
-    /// A `.fixlang` that is a symbolic link leaves what it points to out of reach of the removal a
-    /// reinstallation makes.
+    /// `fix deps install` refuses to remove anything under a `.fixlang` that is a symbolic link, so
+    /// what the link points to is kept.
     #[cfg(unix)]
     #[test]
     fn test_install_refuses_removal_under_symlinked_dot_fixlang() {
@@ -225,8 +225,8 @@ mod integration_tests {
         let (root, proj) = setup();
         let version = "0.1.0/../../../../victim";
         let path = format!(".fixlang/deps/dep_{}", version);
-        // A `fix` that removed what the lock file points at is to remove `victim`, inside the
-        // temporary directory, and nothing else.
+        // The path the lock file gives reaches `victim`, so a `fix` that removes what the lock
+        // file points at harms nothing outside the temporary directory.
         assert_eq!(
             proj.join(&path).canonicalize().unwrap(),
             root.path().join("victim").canonicalize().unwrap()

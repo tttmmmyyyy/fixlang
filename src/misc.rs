@@ -407,15 +407,15 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
     Ok(canonicalized.unwrap())
 }
 
-/// Removes the file or directory at `path`, which is to be the `.fixlang` directory of the current
-/// directory or to lie inside it. Every removal fix makes goes through this function, so that what
-/// a project directory holds — a lock file, or a `.fixlang` that is a symbolic link — cannot lead
-/// fix to remove anything outside it.
+/// Removes the file or directory at `path`, which must be the `.fixlang` directory of the current
+/// directory or lie inside it. Fix makes every removal through this function, so that the contents
+/// of a project directory, such as a lock file or a `.fixlang` that is a symbolic link, cannot lead
+/// fix to remove anything outside `.fixlang`.
 ///
-/// What is judged is the entry the removal takes away: the last component of `path`, inside its
-/// parent directory with the symbolic links and `..` there resolved. A symbolic link at `path`
-/// itself is removed as a link, leaving what it points to; so `.fixlang` is removed even when it is
-/// a symbolic link, while what lies under such a link is refused.
+/// The check applies to the entry the removal takes away: the last component of `path`, inside its
+/// parent directory with symbolic links and `..` resolved. A symbolic link at `path` itself is
+/// removed as a link, and what it points to is kept. So `.fixlang` is removed even when it is a
+/// symbolic link, while anything under such a link is refused.
 pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
     let failed = |e: io::Error| {
         Errors::from_msg(format!(
