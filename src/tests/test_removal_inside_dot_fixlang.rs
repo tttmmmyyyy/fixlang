@@ -207,10 +207,7 @@ mod integration_tests {
         fs::remove_dir_all(proj.join(".fixlang")).unwrap();
         symlink(root.path().join("victim"), proj.join(".fixlang")).unwrap();
 
-        assert_succeeded(
-            &run_fix(&proj, &["clean"]),
-            "`fix clean` should succeed.",
-        );
+        assert_succeeded(&run_fix(&proj, &["clean"]), "`fix clean` should succeed.");
         assert!(
             fs::symlink_metadata(proj.join(".fixlang")).is_err(),
             "`fix clean` should remove the link"
