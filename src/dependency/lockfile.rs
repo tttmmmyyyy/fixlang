@@ -737,13 +737,17 @@ fn clone_repository_with_retry(url: &str, path: &Path) -> Result<Repository, git
 /// Whether `error` is a failure of the connection to a remote, which the next attempt may not
 /// meet: a connection cut off, a TLS handshake that broke, or an address that did not resolve.
 ///
+/// libgit2 reports a connection refused or reset by the remote, over TLS among them, as an error of
+/// the operating system (`ErrorClass::Os`). That class also holds the errors of local files, which
+/// are then attempted again as well.
+///
 /// Two answers from a remote are excluded, since a second attempt gets the same answer: a request
 /// for credentials, which is how GitHub answers for a repository that does not exist, and a
 /// certificate that does not verify.
 fn is_transient_git_failure(error: &git2::Error) -> bool {
     matches!(
         error.class(),
-        ErrorClass::Net | ErrorClass::Http | ErrorClass::Ssl
+        ErrorClass::Net | ErrorClass::Http | ErrorClass::Ssl | ErrorClass::Os
     ) && !matches!(error.code(), ErrorCode::Auth | ErrorCode::Certificate)
 }
 
@@ -907,6 +911,17 @@ mod tests {
             "the SSL certificate is invalid",
         );
         assert!(!is_transient_git_failure(&unverified));
+    }
+
+    /// A connection the remote refused is a failure after which the clone is attempted again.
+    #[test]
+    fn a_refused_connection_is_transient() {
+        let dir = TempDir::new().unwrap();
+        let error = Repository::clone("http://127.0.0.1:1/dep.git", dir.path())
+            .err()
+            .unwrap();
+        assert_eq!(error.class(), ErrorClass::Os);
+        assert!(is_transient_git_failure(&error));
     }
 
     /// An address that did not resolve is a failure after which the clone is attempted again.
