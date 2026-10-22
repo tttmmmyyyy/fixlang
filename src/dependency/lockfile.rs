@@ -17,6 +17,7 @@ use rand::{thread_rng, Rng};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::{
+    fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread,
@@ -250,22 +251,20 @@ impl DependencyLockFile {
                 if dep.path.exists() {
                     // If the path exists, check that the revision is correct.
                     // If the revision is incorrect, or any git error occurs, remove the directory and clone the repository again.
-                    let rev_match = Repository::open(&dep.path).and_then(|repo| {
-                        let head = repo.head()?.target().unwrap_or(Oid::zero());
-                        return Ok(head == target_rev);
-                    });
-                    if let Ok(v) = rev_match {
-                        if v {
-                            // If the revision is ok, load the project file and validate whether it satisfies the dependency.
-                            dep.check_name_version_match_proj_file()?;
-                            continue; // This dependency is already installed and ok.
-                        }
+                    // A HEAD that is not a direct reference to a commit holds no revision, and the
+                    // directory is cloned again.
+                    let rev_match = Repository::open(&dep.path)
+                        .and_then(|repo| Ok(repo.head()?.target() == Some(target_rev)));
+                    if rev_match == Ok(true) {
+                        // If the revision is ok, load the project file and validate whether it satisfies the dependency.
+                        dep.check_name_version_match_proj_file()?;
+                        continue; // This dependency is already installed and ok.
                     }
                     // If something is wrong, remove the directory.
                     remove_inside_dot_fixlang(&dep.path)?;
                 }
                 // Create the directory.
-                std::fs::create_dir_all(&dep.path).map_err(|e| {
+                fs::create_dir_all(&dep.path).map_err(|e| {
                     Errors::from_msg(format!(
                         "Failed to create the directory \"{}\": {:?}",
                         dep.path.to_string_lossy().to_string(),
