@@ -38,6 +38,7 @@
 #### Tool
 
 - #841: The type errors of a program are now reported in the same order on every build. The order used to change from one run to the next when the program had several of them.
+- When cloning the git repository of a dependency fails on the network, for example on a connection cut off midway, `fix` now tries again twice, after 1 s and after 2 s. A repository that does not exist is reported at once.
 
 #### Std
 
