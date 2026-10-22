@@ -147,10 +147,10 @@ A body that leaves this out sends the reviewer into the diff to find the words, 
 A bug fix is understood when the reader sees both mechanisms: the one by which the defect arose in the old code, and the one by which the new code keeps it from arising. The body states both, and the instrument for both is a **state trace** — a walk along the execution:
 
 1. **The functions involved.** Describe each, as in the section above.
-2. **The failing run.** Step along the execution that failed: which function runs, and how the state it works on — local variables, member fields, heap or storage data — changes at each step. Point at the step where the state first goes wrong, and follow the wrong state forward to the observed failure.
-3. **The fixed run.** Step along the same execution in the fixed code, point at the step where it now diverges from the failing run, and show why the state stays correct from there to the end.
+2. **The failing run.** Step along the execution that failed: which function runs, and how the state it works on — local variables, member fields, heap or storage data — changes at each step. Point at the step where the state first goes wrong, and end the trace there. The reader is judging whether the fix is right, and what that judgment needs is how the state goes wrong; that the wrong state goes on to produce the reported symptom is what the issue already shows.
+3. **The fixed run.** Step along the same execution in the fixed code, point at the step where it now diverges from the failing run, and show that the state is correct there.
 
-Carry through the trace only the state the failure depends on.
+Carry through the trace only the state the wrong step depends on.
 
 **The trace is composed, not pasted.** Write it in prose, with pseudocode where it helps (see Pseudocode in the devdoc skill). An analysis log — debugger output, print-debugging output, an IR dump — must not stand in for the trace: a log records everything the run did, and the reader would have to dig the mechanism out of it. A log excerpt may back the trace up from the appendix, as evidence.
 
