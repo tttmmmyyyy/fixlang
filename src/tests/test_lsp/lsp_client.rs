@@ -175,8 +175,10 @@ impl LspClient {
     /// How long a diagnostics pass is given to end.
     pub const PASS_TIMEOUT: Duration = Duration::from_secs(180);
 
-    /// How long the server is given to exit once it has been told to.
-    pub const EXIT_TIMEOUT: Duration = Duration::from_millis(500);
+    /// How long the server is given to exit once it has been told to. Exiting frees the program the
+    /// last analysis built, which takes about 30 ms on an idle machine and several times that on a
+    /// CI runner busy with the rest of the suite.
+    pub const EXIT_TIMEOUT: Duration = Duration::from_secs(5);
 
     /// Run `fix language-server` in `working_dir`, which is the project root the paths a test
     /// passes are taken as relative to, and read what it sends on a thread of its own.
