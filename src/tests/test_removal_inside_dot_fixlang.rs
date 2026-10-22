@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::LOCK_FILE_PATH;
-    use crate::tests::test_util::{assert_failed_with, assert_succeeded, fix_command, run_fix};
+    use crate::tests::test_util::{assert_failed_with, assert_succeeded, run_fix};
     use git2::{IndexAddOption, Repository, Signature};
     use std::{
         fs,
@@ -84,12 +84,28 @@ mod integration_tests {
         fs::write(&path, content.replace(from, to)).unwrap();
     }
 
+    /// Asserts that `dir` still holds the file `data.txt` with the content `setup` gives it.
+    fn assert_data_kept(dir: &Path) {
+        assert_eq!(
+            fs::read_to_string(dir.join("data.txt")).ok(),
+            Some("important".to_string()),
+            "\"{}\" lost its file",
+            dir.to_string_lossy()
+        );
+    }
+
     /// Asserts that `victim/data.txt` under `root` is still there.
     fn assert_victim_kept(root: &TempDir) {
-        assert_eq!(
-            fs::read_to_string(root.path().join("victim/data.txt")).ok(),
-            Some("important".to_string()),
-            "a directory outside the project lost its file"
+        assert_data_kept(&root.path().join("victim"));
+    }
+
+    /// Asserts that the lock file of `proj` places the dependency at `INSTALL_PATH`.
+    fn assert_lock_file_places_dependency_at_install_path(proj: &Path) {
+        let lock_file = fs::read_to_string(proj.join(LOCK_FILE_PATH)).unwrap();
+        assert!(
+            lock_file.contains(&format!("path = \"{}\"", INSTALL_PATH)),
+            "lock file: {}",
+            lock_file
         );
     }
 
@@ -138,11 +154,7 @@ mod integration_tests {
             "\"../../../victim\" is not a project name",
             "`fix deps install` should reject the name the lock file gives.",
         );
-        assert_eq!(
-            fs::read_to_string(root.path().join("victim_0.1.0/data.txt")).ok(),
-            Some("important".to_string()),
-            "a directory outside the project lost its file"
-        );
+        assert_data_kept(&root.path().join("victim_0.1.0"));
     }
 
     /// `fix build` writes a broken lock file afresh, as it does one that is out of date, and builds
@@ -160,12 +172,7 @@ mod integration_tests {
             "`fix build` should write the lock file afresh and build.",
         );
         assert_victim_kept(&root);
-        let lock_file = fs::read_to_string(proj.join(LOCK_FILE_PATH)).unwrap();
-        assert!(
-            lock_file.contains(&format!("path = \"{}\"", INSTALL_PATH)),
-            "lock file: {}",
-            lock_file
-        );
+        assert_lock_file_places_dependency_at_install_path(&proj);
     }
 
     /// A `.fixlang` that is a symbolic link leaves what it points to out of reach of the removal a
@@ -186,11 +193,7 @@ mod integration_tests {
             "`fix deps install` should refuse to remove what lies under the link.",
         );
         assert_victim_kept(&root);
-        assert_eq!(
-            fs::read_to_string(target.join("deps/dep_0.1.0/data.txt")).ok(),
-            Some("important".to_string()),
-            "the directory under the link lost its file"
-        );
+        assert_data_kept(&target.join("deps/dep_0.1.0"));
     }
 
     /// `fix clean` removes a `.fixlang` that is a symbolic link as a link, leaving what it points
@@ -202,12 +205,10 @@ mod integration_tests {
         fs::remove_dir_all(proj.join(".fixlang")).unwrap();
         std::os::unix::fs::symlink(root.path().join("victim"), proj.join(".fixlang")).unwrap();
 
-        let output = fix_command()
-            .arg("clean")
-            .current_dir(&proj)
-            .output()
-            .expect("Failed to execute fix");
-        assert_succeeded(&output, "`fix clean` should succeed.");
+        assert_succeeded(
+            &run_fix(&proj, &["clean"]),
+            "`fix clean` should succeed.",
+        );
         assert!(
             fs::symlink_metadata(proj.join(".fixlang")).is_err(),
             "`fix clean` should remove the link"
@@ -243,12 +244,7 @@ mod integration_tests {
             "`fix build` should write the lock file afresh and build.",
         );
         assert_victim_kept(&root);
-        let lock_file = fs::read_to_string(proj.join(LOCK_FILE_PATH)).unwrap();
-        assert!(
-            lock_file.contains(&format!("path = \"{}\"", INSTALL_PATH)),
-            "lock file: {}",
-            lock_file
-        );
+        assert_lock_file_places_dependency_at_install_path(&proj);
     }
 
     /// A symbolic link at the install directory of a git dependency is removed as a link when the
