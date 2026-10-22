@@ -893,4 +893,28 @@ mod tests {
         );
         assert!(!is_transient_git_failure(&missing));
     }
+
+    /// An address that did not resolve is a failure a clone is attempted again after.
+    #[test]
+    fn an_address_that_did_not_resolve_is_transient() {
+        let unresolved = git2::Error::new(
+            ErrorCode::GenericError,
+            ErrorClass::Net,
+            "failed to resolve address for github.com: Temporary failure in name resolution",
+        );
+        assert!(is_transient_git_failure(&unresolved));
+    }
+
+    /// A failure outside the connection to a remote is reported at once: here, the one libgit2
+    /// gives for a clone from a local directory that holds no repository.
+    #[test]
+    fn a_failure_outside_the_connection_is_not_transient() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let source = dir.path().join("not_a_repository");
+        std::fs::create_dir(&source).unwrap();
+        let error = git2::Repository::clone(source.to_str().unwrap(), &dir.path().join("clone"))
+            .err()
+            .unwrap();
+        assert!(!is_transient_git_failure(&error));
+    }
 }
