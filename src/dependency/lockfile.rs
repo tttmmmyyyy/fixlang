@@ -7,12 +7,11 @@ use crate::{
     dependency::resolver::{self, Dependency, Package, PackageName},
     error::Errors,
     metafiles::project_file::{
-        ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectName, ProjectOrigin,
+        ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectFileRole, ProjectName,
+        ProjectOrigin,
     },
-    misc::info_msg,
-    misc::{to_absolute_path, warn_msg},
+    misc::{info_msg, to_absolute_path, warn_msg},
 };
-use core::panic;
 use git2::{build::CheckoutBuilder, ErrorClass, ErrorCode, Repository};
 use rand::{thread_rng, Rng};
 use semver::Version;
@@ -60,12 +59,12 @@ pub fn get_lock_file_path(mode: LockFileType) -> &'static str {
 
 #[derive(Deserialize, Serialize, Default)]
 #[serde(deny_unknown_fields)]
-pub struct DependecyLockFile {
+pub struct DependencyLockFile {
     pub proj_file_hash: String,
     pub dependencies: Vec<DependencyLockFileEntry>,
 }
 
-impl DependecyLockFile {
+impl DependencyLockFile {
     // Update configuration by adding source files, linking libraries, ... as required by dependencies.
     pub fn set_config(&self, config: &mut Configuration) -> Result<(), Errors> {
         for dep in &self.dependencies {
@@ -79,7 +78,7 @@ impl DependecyLockFile {
     pub fn create(
         proj_file: &ProjectFile,
         mode: BuildConfigType,
-    ) -> Result<DependecyLockFile, Errors> {
+    ) -> Result<DependencyLockFile, Errors> {
         // Resolve the dependency.
         let prjs_info = ProjectsInfo {
             projects: Arc::new(Mutex::new(vec![ProjectInfo::from_project_file(proj_file)])),
@@ -152,7 +151,7 @@ impl DependecyLockFile {
         let prjs = res.unwrap();
 
         // Create a new lock file following the resolved dependencies.
-        let mut lock_file = DependecyLockFile {
+        let mut lock_file = DependencyLockFile {
             proj_file_hash: proj_file.calculate_dependencies_hash(mode),
             dependencies: Vec::new(),
         };
@@ -338,7 +337,6 @@ impl DependencyLockFileEntry {
     // `source` (Git when the lockfile entry carries git info, Local otherwise) so that
     // the returned `ProjectFile` is ready to be passed into `set_config`.
     pub fn project_file(&self) -> Result<ProjectFile, Errors> {
-        use crate::metafiles::project_file::ProjectFileRole;
         let proj_file_path = self.path.join(PROJECT_FILE_PATH);
         let mut pf = ProjectFile::read_file(&proj_file_path)?;
         pf.role = ProjectFileRole::Dependent;
@@ -423,7 +421,7 @@ impl ProjectInfo {
         if self.versions.is_some() {
             return Ok(());
         }
-        self.source.prepre_git_repository()?;
+        self.source.prepare_git_repository()?;
         match &mut self.source {
             ProjectSource::Local(proj_path) => {
                 // Read the project file.
@@ -482,7 +480,7 @@ impl ProjectInfo {
         }
 
         // If the source is a git repository, checkout the given revision and read the project file.
-        self.source.prepre_git_repository()?;
+        self.source.prepare_git_repository()?;
         let repo = self.source.get_git_repository();
         let commit = repo
             .find_commit(rev)
@@ -503,7 +501,7 @@ impl ProjectInfo {
         git_ref: &ProjectFileDependencyGit,
     ) -> Result<(Version, git2::Oid), Errors> {
         // Clone the repository.
-        self.source.prepre_git_repository()?;
+        self.source.prepare_git_repository()?;
         let repo = self.source.get_git_repository();
 
         // Resolve rev/tag to OID.
@@ -673,7 +671,7 @@ impl ProjectSource {
     }
 
     // Open the git repository and return it.
-    fn prepre_git_repository(&mut self) -> Result<(), Errors> {
+    fn prepare_git_repository(&mut self) -> Result<(), Errors> {
         match self {
             ProjectSource::Local(_path_buf) => {
                 // Nothing to do.
@@ -694,7 +692,7 @@ impl ProjectSource {
     }
 }
 
-// Clones a git repository to a temporary directory.
+/// Clones a git repository to a temporary directory.
 pub fn clone_git_repo(url: &str) -> Result<(TempDir, Repository), Errors> {
     // Create a temporary directory to clone the repository.
     let temp_dir = tempfile::tempdir()

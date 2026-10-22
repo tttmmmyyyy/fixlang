@@ -1,5 +1,5 @@
 use crate::configuration::BuildConfigType;
-use crate::dependency::lockfile::{DependecyLockFile, LockFileType};
+use crate::dependency::lockfile::{DependencyLockFile, LockFileType};
 use crate::error::{panic_if_err, Errors};
 use crate::metafiles::config_file::ConfigFile;
 use crate::metafiles::project_file::ProjectFile;
@@ -33,7 +33,7 @@ pub fn deps_install_command(args: &ArgMatches) {
 
 pub fn deps_update_command(args: &ArgMatches) {
     let mode = get_build_mode(args);
-    panic_if_err(DependecyLockFile::update_and_install(mode));
+    panic_if_err(DependencyLockFile::update_and_install(mode));
 }
 
 pub fn deps_add_command(args: &ArgMatches, fix_config: &ConfigFile) {
@@ -43,7 +43,7 @@ pub fn deps_add_command(args: &ArgMatches, fix_config: &ConfigFile) {
     panic_if_err(proj_file.add_dependencies(&projects, fix_config, mode));
 
     // After adding, update the appropriate lock file
-    panic_if_err(DependecyLockFile::update_and_install(mode));
+    panic_if_err(DependencyLockFile::update_and_install(mode));
 }
 
 pub fn deps_list_command(args: &ArgMatches, fix_config: &ConfigFile) {

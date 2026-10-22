@@ -8,7 +8,7 @@ use crate::{
         TRY_FIX_DEPS_UPDATE_TEST, WHOLE_PROGRAM_IN_ONE_UNIT, WHOLE_PROGRAM_IN_ONE_UNIT_STR,
     },
     dependency::lockfile::{
-        clone_git_repo, get_lock_file_path, get_versions_from_repo, DependecyLockFile,
+        clone_git_repo, get_lock_file_path, get_versions_from_repo, DependencyLockFile,
         LockFileType, ProjectSource,
     },
     error::Errors,
@@ -1088,13 +1088,13 @@ impl ProjectFile {
 
     /// Open the lock file.
     /// If the project has no dependencies, return an empty lock file.
-    pub fn open_lock_file(&self, mode: LockFileType) -> Result<DependecyLockFile, Errors> {
+    pub fn open_lock_file(&self, mode: LockFileType) -> Result<DependencyLockFile, Errors> {
         // If there are no dependencies, the lock file is not necessary.
         if self
             .get_dependencies(mode.to_build_config_type())
             .is_empty()
         {
-            return Ok(DependecyLockFile::default());
+            return Ok(DependencyLockFile::default());
         }
 
         // Try to open the valid dependency lock file.
@@ -1111,7 +1111,7 @@ impl ProjectFile {
                 e, msg_try_fix_deps_update
             ))
         })?;
-        let lock_file = toml::from_str::<DependecyLockFile>(&content).map_err(|e| {
+        let lock_file = toml::from_str::<DependencyLockFile>(&content).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to parse the lock file: {:?}. {}",
                 e, msg_try_fix_deps_update
@@ -1128,7 +1128,7 @@ impl ProjectFile {
     }
 
     /// Writes `lock_file` to the path a lock file of the given kind is read from.
-    fn save_lock_file(lock_file: &DependecyLockFile, mode: LockFileType) -> Result<(), Errors> {
+    fn save_lock_file(lock_file: &DependencyLockFile, mode: LockFileType) -> Result<(), Errors> {
         let content = toml::to_string(lock_file)
             .map_err(|e| Errors::from_msg(format!("Failed to serialize lock file: {:?}", e)))?;
         let lock_file_path = get_lock_file_path(mode);
@@ -1142,11 +1142,11 @@ impl ProjectFile {
     pub fn open_or_create_lock_file(
         &self,
         mode: LockFileType,
-    ) -> Result<DependecyLockFile, Errors> {
+    ) -> Result<DependencyLockFile, Errors> {
         Ok(match self.open_lock_file(mode) {
             Ok(lock_file) => lock_file,
             Err(_) => {
-                let lock_file = DependecyLockFile::create(self, mode.to_build_config_type())?;
+                let lock_file = DependencyLockFile::create(self, mode.to_build_config_type())?;
                 Self::save_lock_file(&lock_file, mode)?;
                 lock_file
             }
@@ -1159,7 +1159,7 @@ impl ProjectFile {
     pub fn open_or_auto_update_lock_file(
         &self,
         mode: LockFileType,
-    ) -> Result<DependecyLockFile, Errors> {
+    ) -> Result<DependencyLockFile, Errors> {
         // Try to open existing lock file.
         match self.open_lock_file(mode) {
             Ok(lock_file) => Ok(lock_file),
@@ -1175,7 +1175,7 @@ impl ProjectFile {
                 }
 
                 // Create the lock file.
-                let lock_file = DependecyLockFile::create(self, mode.to_build_config_type())?;
+                let lock_file = DependencyLockFile::create(self, mode.to_build_config_type())?;
 
                 // Save the lock file.
                 Self::save_lock_file(&lock_file, mode)?;
