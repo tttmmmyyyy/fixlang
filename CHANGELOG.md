@@ -38,7 +38,7 @@
 #### Tool
 
 - #841: The type errors of a program are now reported in the same order on every build. The order used to change from one run to the next when the program had several of them.
-- #927: When cloning the git repository of a dependency fails because of the network, for example when the connection is cut off midway, `fix` now tries again twice, after 1 s and then after 2 s. A repository that does not exist on GitHub and a certificate that fails verification are still reported at once.
+- #927: When cloning the git repository of a dependency fails because of the network, for example when the connection is cut off midway, `fix` now tries again up to four times, waiting 1 s, 2 s, 4 s and 8 s before them. A repository that does not exist on GitHub and a certificate that fails verification are still reported at once.
 
 #### Std
 

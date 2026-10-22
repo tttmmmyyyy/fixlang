@@ -723,8 +723,8 @@ mod integration_tests {
         );
         assert_eq!(
             stderr.matches("trying again").count(),
-            2,
-            "two attempts after the first:\n{}",
+            4,
+            "four attempts after the first:\n{}",
             stderr
         );
         assert!(

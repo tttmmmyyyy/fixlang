@@ -709,7 +709,12 @@ pub fn clone_git_repo(url: &str) -> Result<(TempDir, Repository), Errors> {
 
 /// The waits before the second and later attempts of a clone. A clone is attempted once more than
 /// there are waits.
-const CLONE_RETRY_WAITS: [Duration; 2] = [Duration::from_secs(1), Duration::from_secs(2)];
+const CLONE_RETRY_WAITS: [Duration; 4] = [
+    Duration::from_secs(1),
+    Duration::from_secs(2),
+    Duration::from_secs(4),
+    Duration::from_secs(8),
+];
 
 /// Clones the repository at `url` into the directory `path`, and tries again after a failure of the
 /// connection to the remote, which the next attempt may not meet.
