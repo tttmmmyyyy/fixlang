@@ -531,9 +531,9 @@ Do not perform any IO operations other than mutating the elements of `arr`.
 
 This function first clones the array if it is shared. The pointer is valid only while `io` runs.
 
-For example, the callback can use its IO context and the FFI to store into this array a boxed value made somewhere far away.
-Doing that inside a global value's initializer can let an optimization break the program: what an initializer's result reaches stops being reference-counted once the initializer finishes, and the program goes on counting references to what it holds, so nothing may be both.
-`dev-docs/2026-08-03-initializer-contract-violation/` holds a program that makes something be both.
+NOTE:
+The result of a global value's initializer must not include a boxed value that existed before the initializer started, except the values of other global values.
+So, inside an initializer, do not use the pointer to write such a value into the array (for example, one given to C with `boxed_to_retained_ptr`). Doing so is undefined behavior.
 
 ##### Parameters
 
@@ -1699,6 +1699,10 @@ Creates a boxed value from a retained pointer obtained by `boxed_to_retained_ptr
 NOTE:
 It is the user's responsibility to ensure that the argument is actually a pointer to the type of the return value, and undefined behavior will occur if it is not.
 
+NOTE:
+The result of a global value's initializer must not include a boxed value that existed before the initializer started, except the values of other global values.
+So, inside an initializer, if the pointer was made before the initializer started, do not put the returned value into the initializer's result. Doing so is undefined behavior.
+
 ##### Parameters
 
 * `retained_ptr` - The pointer to the value.
@@ -1782,6 +1786,10 @@ Do not perform any IO operations other than mutating the value of `x`.
 For more details on the pointer passed to `io`, see the document of `borrow_boxed`.
 
 This function first clones the value if `x` is not unique.
+
+NOTE:
+The result of a global value's initializer must not include a boxed value that existed before the initializer started, except the values of other global values.
+So, inside an initializer, do not use the pointer to write such a value into `x` (for example, one given to C with `boxed_to_retained_ptr`). Doing so is undefined behavior.
 
 See also: `borrow_boxed`, `mutate_boxed_io`, `mutate_boxed`.
 

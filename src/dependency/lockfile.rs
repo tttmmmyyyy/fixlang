@@ -7,12 +7,11 @@ use crate::{
     dependency::resolver::{self, Dependency, Package, PackageName},
     error::Errors,
     metafiles::project_file::{
-        ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectName, ProjectOrigin,
+        ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectFileRole, ProjectName,
+        ProjectOrigin,
     },
-    misc::info_msg,
-    misc::{to_absolute_path, warn_msg},
+    misc::{info_msg, to_absolute_path, warn_msg},
 };
-use core::panic;
 use git2::{build::CheckoutBuilder, ErrorClass, ErrorCode, Repository};
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -337,7 +336,6 @@ impl DependencyLockFileEntry {
     // `source` (Git when the lockfile entry carries git info, Local otherwise) so that
     // the returned `ProjectFile` is ready to be passed into `set_config`.
     pub fn project_file(&self) -> Result<ProjectFile, Errors> {
-        use crate::metafiles::project_file::ProjectFileRole;
         let proj_file_path = self.path.join(PROJECT_FILE_PATH);
         let mut pf = ProjectFile::read_file(&proj_file_path)?;
         pf.role = ProjectFileRole::Dependent;
