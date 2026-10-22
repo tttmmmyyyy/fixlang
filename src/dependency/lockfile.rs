@@ -872,7 +872,9 @@ fn create_version_retriever(
 #[cfg(test)]
 mod tests {
     use super::is_transient_git_failure;
-    use git2::{ErrorClass, ErrorCode};
+    use git2::{ErrorClass, ErrorCode, Repository};
+    use std::fs;
+    use tempfile::TempDir;
 
     /// A connection the remote cut off in the middle of a clone, and a TLS handshake that broke, are
     /// failures a clone is attempted again after.
@@ -921,10 +923,10 @@ mod tests {
     /// gives for a clone from a local directory that holds no repository.
     #[test]
     fn a_failure_outside_the_connection_is_not_transient() {
-        let dir = tempfile::TempDir::new().unwrap();
+        let dir = TempDir::new().unwrap();
         let source = dir.path().join("not_a_repository");
-        std::fs::create_dir(&source).unwrap();
-        let error = git2::Repository::clone(source.to_str().unwrap(), &dir.path().join("clone"))
+        fs::create_dir(&source).unwrap();
+        let error = Repository::clone(source.to_str().unwrap(), &dir.path().join("clone"))
             .err()
             .unwrap();
         assert!(!is_transient_git_failure(&error));
