@@ -5,6 +5,8 @@ mod integration_tests {
     use crate::constants::LOCK_FILE_PATH;
     use crate::tests::test_util::{assert_failed_with, assert_succeeded, run_fix};
     use git2::{IndexAddOption, Repository, Signature};
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
     use std::{
         fs,
         path::{Path, PathBuf},
@@ -185,7 +187,7 @@ mod integration_tests {
         fs::create_dir_all(target.join("deps/dep_0.1.0")).unwrap();
         fs::write(target.join("deps/dep_0.1.0/data.txt"), "important").unwrap();
         fs::remove_dir_all(proj.join(".fixlang")).unwrap();
-        std::os::unix::fs::symlink(&target, proj.join(".fixlang")).unwrap();
+        symlink(&target, proj.join(".fixlang")).unwrap();
 
         assert_failed_with(
             &run_fix(&proj, &["deps", "install"]),
@@ -203,7 +205,7 @@ mod integration_tests {
     fn test_clean_removes_symlinked_dot_fixlang_as_link() {
         let (root, proj) = setup();
         fs::remove_dir_all(proj.join(".fixlang")).unwrap();
-        std::os::unix::fs::symlink(root.path().join("victim"), proj.join(".fixlang")).unwrap();
+        symlink(root.path().join("victim"), proj.join(".fixlang")).unwrap();
 
         assert_succeeded(
             &run_fix(&proj, &["clean"]),
@@ -254,7 +256,7 @@ mod integration_tests {
     fn test_install_replaces_symlink_at_install_path_leaving_its_target() {
         let (root, proj) = setup();
         fs::remove_dir_all(proj.join(INSTALL_PATH)).unwrap();
-        std::os::unix::fs::symlink(root.path().join("victim"), proj.join(INSTALL_PATH)).unwrap();
+        symlink(root.path().join("victim"), proj.join(INSTALL_PATH)).unwrap();
 
         assert_succeeded(
             &run_fix(&proj, &["deps", "install"]),

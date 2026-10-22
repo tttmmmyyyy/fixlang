@@ -12,7 +12,7 @@ use crate::{
     },
     misc::{info_msg, remove_inside_dot_fixlang, to_absolute_path, warn_msg},
 };
-use git2::{build::CheckoutBuilder, ErrorClass, ErrorCode, Repository};
+use git2::{build::CheckoutBuilder, ErrorClass, ErrorCode, Oid, Repository};
 use rand::{thread_rng, Rng};
 use semver::Version;
 use serde::{Deserialize, Serialize};
@@ -355,7 +355,7 @@ impl DependencyLockFileEntry {
             ));
         }
         if let Some(git) = &self.git {
-            if let Err(e) = git2::Oid::from_str(&git.rev) {
+            if let Err(e) = Oid::from_str(&git.rev) {
                 return Err(format!(
                     "the revision \"{}\" of \"{}\" is not a commit hash: {}",
                     git.rev,
