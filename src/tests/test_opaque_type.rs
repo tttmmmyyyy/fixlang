@@ -2219,7 +2219,10 @@ pub fn test_opaque_regression_unknown_name_undefined_internal() {
         f = |n| Iterator::range(0, n);
 
         main : IO ();
-        main = pure();
+        main = (
+            eval f(3);
+            pure()
+        );
     "#;
     test_source(&source, Configuration::develop_mode());
 }
@@ -2499,4 +2502,331 @@ pub fn test_higher_kinded_opaque_type_carries_its_value_to_the_use_site() {
         );
     "#;
     test_source(&source, Configuration::develop_mode());
+}
+
+// ============================================================
+// Type variables a declaration writes in its constraints alone
+// ============================================================
+
+/// A type variable the declaration of a trait member writes in its constraints alone, as `e` in
+/// `Item ?it = e`, stays apart from a variable of the implementation's head of the same name. The
+/// test runs the program with the implementation naming its variable `e` and naming it `x`.
+#[test]
+pub fn test_opaque_constraint_variable_apart_from_a_head_variable() {
+    let source = r#"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = e] c -> ?it;
+        }
+
+        impl Array {tv} : Make {
+            make = |_| Iterator::empty;
+        }
+
+        main : IO ();
+        main = (
+            let is : Array I64 = Make::make(["a"]).to_array;
+            assert_eq(|_|"", is.@size, 0);;
+            pure()
+        );
+    "#;
+    for name in ["e", "x"] {
+        test_source(&source.replace("{tv}", name), Configuration::develop_mode());
+    }
+}
+
+/// A signature that renames a type variable the declaration writes in its constraints alone states
+/// what the declaration states, so the body is checked against it: one that returns an iterator of
+/// that variable is accepted.
+#[test]
+pub fn test_opaque_signature_renaming_a_constraint_variable() {
+    let source = r#"
+        module Main;
+
+        type Src = unbox struct { n : I64 };
+        type MyIter a = unbox struct { xs : Array a, i : I64 };
+
+        impl MyIter a : Iterator {
+            type Item (MyIter a) = a;
+            advance = |it| (
+                if it.@i >= it.@xs.@size { none() };
+                let v = it.@xs.@(it.@i);
+                some((MyIter { xs : it.@xs, i : it.@i + 1 }, v))
+            );
+        }
+
+        trait c : Coll {
+            make : [?it : Iterator, Item ?it = e] c -> ?it;
+        }
+
+        impl Src : Coll {
+            make : [?it : Iterator, Item ?it = {tv}] Src -> ?it;
+            make = |_| (MyIter { xs : [], i : 0 } : MyIter {tv});
+        }
+
+        main : IO ();
+        main = (
+            let arr : Array I64 = Coll::make(Src { n : 3 }).to_array;
+            assert_eq(|_|"", arr.@size, 0);;
+            pure()
+        );
+    "#;
+    for name in ["e", "f"] {
+        test_source(&source.replace("{tv}", name), Configuration::develop_mode());
+    }
+}
+
+/// A body whose iterator yields one fixed type where the signature's constraint names a type
+/// variable is reported at the body, whatever the signature names that variable.
+#[test]
+pub fn test_opaque_signature_renaming_a_constraint_variable_checks_the_body() {
+    let source = r#"
+        module Main;
+
+        type Src = unbox struct { n : I64 };
+
+        trait c : Coll {
+            make : [?it : Iterator, Item ?it = e] c -> ?it;
+        }
+
+        impl Src : Coll {
+            make : [?it : Iterator, Item ?it = {tv}] Src -> ?it;
+            make = |s| Iterator::range(0, s.@n);
+        }
+
+        main : IO ();
+        main = (
+            let arr : Array String = Coll::make(Src { n : 3 }).to_array;
+            assert_eq(|_|"", arr.@size, 3);;
+            pure()
+        );
+    "#;
+    for name in ["e", "f"] {
+        test_source_fail(
+            &source.replace("{tv}", name),
+            Configuration::develop_mode(),
+            &format!("since `Std::I64 = {}` cannot be deduced", name),
+        );
+    }
+}
+
+/// A signature that renames a type variable the declaration writes in its constraints alone agrees
+/// with the declaration in the constraints it puts on that variable.
+#[test]
+pub fn test_opaque_signature_renaming_a_constrained_constraint_variable() {
+    let source = r#"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = e, e : ToString] c -> ?it;
+        }
+
+        impl Array x : Make {
+            make : [?it : Iterator, Item ?it = {tv}, {tv} : ToString] Array x -> ?it;
+            make = |_| Iterator::empty;
+        }
+
+        main : IO ();
+        main = (
+            let is : Array I64 = Make::make(["a"]).to_array;
+            assert_eq(|_|"", is.@size, 0);;
+            pure()
+        );
+    "#;
+    for name in ["e", "f"] {
+        test_source(&source.replace("{tv}", name), Configuration::develop_mode());
+    }
+}
+
+/// An opaque type a declaration writes in a predicate alone is given a type by nothing an
+/// implementation writes, and the implementation's body is reported for leaving it undetermined.
+#[test]
+pub fn test_opaque_type_in_a_predicate_alone_is_reported_at_the_body() {
+    let source = r#"
+        module Main;
+
+        trait a : Foo {
+            foo : [?it : Iterator] a -> I64;
+        }
+
+        impl I64 : Foo {
+            foo = |x| x;
+        }
+
+        main : IO ();
+        main = (
+            assert_eq(|_|"", Foo::foo(3), 3);;
+            pure()
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        ": Std::Iterator` is required in the type inference of this expression",
+    );
+}
+
+/// A type variable that stands as an argument of an equality on an opaque type besides the opaque
+/// type, as `b` in `Rebuild ?r b = Array b`, belongs to that equality, and a trait member whose
+/// declaration has one compiles and runs.
+#[test]
+pub fn test_opaque_member_with_an_equality_of_a_higher_arity_associated_type() {
+    let source = r#"
+        module Main;
+
+        import Std::* hiding Indexable::Elem;
+
+        trait c : Rebuildable {
+            type Elem c;
+            type Rebuild c a;
+            rebuild : (Elem c -> a) -> c -> Rebuild c a;
+        }
+
+        impl Array a : Rebuildable {
+            type Elem (Array a) = a;
+            type Rebuild (Array a) b = Array b;
+            rebuild = |f, arr| arr.map(f);
+        }
+
+        trait c : Make {
+            make : [?r : Rebuildable, Elem ?r = I64, Rebuild ?r b = Array b] c -> ?r;
+        }
+
+        impl I64 : Make {
+            make = |n| [n, n + 1];
+        }
+
+        main : IO ();
+        main = (
+            let r = Make::make(10);
+            let s = r.rebuild(|x| x.to_string);
+            assert_eq(|_|"", s.to_iter.join(","), "10,11");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A signature that renames the opaque types of the declaration is compared with the declaration
+/// under the names it writes, so that a constraint on one opaque type says nothing about another.
+#[test]
+pub fn test_opaque_signature_renaming_opaque_types_agrees_with_the_declaration() {
+    let source = r#"
+        module Main;
+
+        trait c : Make {
+            make : [?it : Iterator, Item ?it = e, e : Iterator, Item e = I64] c -> ?it;
+        }
+
+        impl Array x : Make {
+            make = |_| Iterator::empty;
+        }
+
+        impl I64 : Make {
+            make : [?i : Iterator, Item ?i = e, e : Iterator, Item e = I64] I64 -> ?i;
+            make = |_| Iterator::empty;
+        }
+
+        main : IO ();
+        main = (
+            let is : Array (Iterator::EmptyIterator I64) = Make::make(["a"]).to_array;
+            assert_eq(|_|"", is.@size, 0);;
+            let is : Array (Iterator::EmptyIterator I64) = Make::make(1).to_array;
+            assert_eq(|_|"", is.@size, 0);;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A signature may write the declaration's opaque types under each other's names, and each one
+/// then stands for the type the declaration says it does.
+#[test]
+pub fn test_opaque_signature_swapping_the_names_of_opaque_types() {
+    let source = r#"
+        module Main;
+
+        type Src = unbox struct { n : I64 };
+
+        trait c : Coll {
+            make : [?a : Iterator, ?b : Iterator, Item ?a = I64, Item ?b = String] c -> (?a, ?b);
+        }
+
+        impl Src : Coll {
+            make : [?b : Iterator, ?a : Iterator, Item ?b = I64, Item ?a = String] Src -> (?b, ?a);
+            make = |s| (Iterator::range(0, s.@n), ["x", "y"].to_iter);
+        }
+
+        main : IO ();
+        main = (
+            let (i, s) = Coll::make(Src { n : 3 });
+            assert_eq(|_|"", i.map(|x| x + 1).map(to_string).join(","), "1,2,3");;
+            assert_eq(|_|"", s.join(","), "x,y");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A signature that renames two opaque types the declaration chains by an equality, `Item ?a = ?b`,
+/// agrees with the declaration.
+#[test]
+pub fn test_opaque_signature_renaming_chained_opaque_types() {
+    let source = r#"
+        module Main;
+
+        type Src = unbox struct { n : I64 };
+
+        trait c : Coll {
+            make : [?a : Iterator, ?b : Iterator, Item ?a = ?b, Item ?b = I64] c -> ?a;
+        }
+
+        impl Src : Coll {
+            make : [?x : Iterator, ?y : Iterator, Item ?x = ?y, Item ?y = I64] Src -> ?x;
+            make = |s| Iterator::range(0, s.@n).map(|i| Iterator::range(0, i));
+        }
+
+        main : IO ();
+        main = (
+            let joined = Coll::make(Src { n : 4 }).map(|it| it.map(to_string).join("")).join(",");
+            assert_eq(|_|"", joined, ",0,01,012");;
+            pure()
+        );
+    "#;
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A signature that renames the opaque types of the declaration and constrains them less than the
+/// declaration does is reported as disagreeing with it.
+#[test]
+pub fn test_opaque_signature_renaming_opaque_types_and_constraining_less_is_reported() {
+    let source = r#"
+        module Main;
+
+        type Src = unbox struct { n : I64 };
+
+        trait c : Coll {
+            make : [?it : Iterator, ?jt : Iterator, Item ?it = e, Item ?jt = e] c -> (?it, ?jt);
+        }
+
+        impl Src : Coll {
+            make : [?i : Iterator, ?j : Iterator, Item ?i = e, Item ?j = f] Src -> (?i, ?j);
+            make = |s| (Iterator::empty, Iterator::empty);
+        }
+
+        main : IO ();
+        main = (
+            let (i, j) = Coll::make(Src { n : 3 });
+            let a : Array I64 = i.to_array;
+            let b : Array I64 = j.to_array;
+            assert_eq(|_|"", a.@size + b.@size, 0);;
+            pure()
+        );
+    "#;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "Type signature in implementation does not match trait definition.",
+    );
 }
