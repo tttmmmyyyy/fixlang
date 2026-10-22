@@ -879,9 +879,9 @@ mod tests {
     #[test]
     fn a_connection_cut_off_or_a_broken_handshake_is_transient() {
         let cut_off = git2::Error::new(ErrorCode::GenericError, ErrorClass::Http, "unexpected EOF");
-        let handshake = git2::Error::new(ErrorCode::GenericError, ErrorClass::Ssl, "unknown error");
+        let broken_handshake = git2::Error::new(ErrorCode::GenericError, ErrorClass::Ssl, "unknown error");
         assert!(is_transient_git_failure(&cut_off));
-        assert!(is_transient_git_failure(&handshake));
+        assert!(is_transient_git_failure(&broken_handshake));
     }
 
     /// The answer GitHub gives for a repository that does not exist is reported at once.
