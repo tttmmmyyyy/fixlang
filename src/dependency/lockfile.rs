@@ -236,13 +236,14 @@ impl DependencyLockFile {
     pub fn install(&self) -> Result<(), Errors> {
         for dep in &self.dependencies {
             if let Some(git_info) = &dep.git {
-                let target_rev = git2::Oid::from_str(&git_info.rev).unwrap();
+                let target_rev = Oid::from_str(&git_info.rev)
+                    .expect("a lock file holds a commit hash in each `rev`");
                 // In case the source is a git repository,
                 if dep.path.exists() {
                     // If the path exists, check that the revision is correct.
                     // If the revision is incorrect, or any git error occurs, remove the directory and clone the repository again.
                     let rev_match = Repository::open(&dep.path).and_then(|repo| {
-                        let head = repo.head()?.target().unwrap_or(git2::Oid::zero());
+                        let head = repo.head()?.target().unwrap_or(Oid::zero());
                         return Ok(head == target_rev);
                     });
                     if let Ok(v) = rev_match {
@@ -342,11 +343,8 @@ pub struct DependencyLockFileEntry {
 impl DependencyLockFileEntry {
     /// Checks this entry against the rules `DependencyLockFile::validate` lists.
     fn validate(&self) -> Result<(), String> {
-        if ProjectFile::validate_project_name(&self.name, None).is_err() {
-            return Err(format!(
-                "\"{}\" is not a project name, which consists of alphanumeric characters and hyphens",
-                self.name
-            ));
+        if !ProjectFile::is_project_name(&self.name) {
+            return Err(format!("\"{}\" is not a project name", self.name));
         }
         if let Err(e) = Version::parse(&self.version) {
             return Err(format!(
@@ -402,7 +400,9 @@ impl DependencyLockFileEntry {
                 LOCK_FILE_PATH,
             )));
         }
-        if proj_file.general.version() != Version::parse(&self.version).unwrap() {
+        if proj_file.general.version()
+            != Version::parse(&self.version).expect("a lock file holds a version in each `version`")
+        {
             return Err(Errors::from_msg(format!(
                 "The version of the dependency \"{}\" installed at \"{}\" does not match the one specified in \"{}\". Try to run `fix deps update`.",
                 self.name, self.path.to_string_lossy().to_string(), LOCK_FILE_PATH,
@@ -451,7 +451,7 @@ impl ProjectInfo {
             source: ProjectSource::Local(proj_file.path.parent().unwrap().to_path_buf()),
             versions: Some(vec![VersionInfo {
                 version: proj_file.general.version(),
-                rev: git2::Oid::zero(),
+                rev: Oid::zero(),
                 tagged: false,
             }]),
             proj_files: vec![proj_file.clone()],
@@ -473,7 +473,7 @@ impl ProjectInfo {
                 let ver = proj_file.general.version();
                 self.versions = Some(vec![VersionInfo {
                     version: ver,
-                    rev: git2::Oid::zero(),
+                    rev: Oid::zero(),
                     tagged: false,
                 }]);
             }
@@ -542,7 +542,7 @@ impl ProjectInfo {
     fn resolve_pinned_ref(
         &mut self,
         git_ref: &ProjectFileDependencyGit,
-    ) -> Result<(Version, git2::Oid), Errors> {
+    ) -> Result<(Version, Oid), Errors> {
         // Clone the repository.
         self.source.prepare_git_repository()?;
         let repo = self.source.get_git_repository();
@@ -575,7 +575,7 @@ impl ProjectInfo {
 }
 
 // Resolve a rev or tag specification to a git OID.
-fn resolve_git_ref(repo: &Repository, git: &ProjectFileDependencyGit) -> Result<git2::Oid, Errors> {
+fn resolve_git_ref(repo: &Repository, git: &ProjectFileDependencyGit) -> Result<Oid, Errors> {
     if let Some(rev) = &git.rev {
         let obj = repo
             .revparse_single(rev)
@@ -671,7 +671,7 @@ pub fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Err
 
 pub struct VersionInfo {
     pub version: Version,
-    rev: git2::Oid,   // Empty if source is `ProjectDir`.
+    rev: Oid,         // Empty if source is `ProjectDir`.
     pub tagged: bool, // True if the version is tagged.
 }
 

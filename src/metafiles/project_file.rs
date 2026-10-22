@@ -463,6 +463,12 @@ impl ProjectFile {
         hash_source.finish()
     }
 
+    /// Whether `name` can name a project: it is a non-empty string of alphanumeric characters and
+    /// hyphens.
+    pub fn is_project_name(name: &str) -> bool {
+        !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '-')
+    }
+
     /// Checks that `name` is a non-empty string of alphanumeric characters and hyphens.
     ///
     /// # Arguments
@@ -476,7 +482,7 @@ impl ProjectFile {
                 &[&span],
             ));
         }
-        if !name.chars().all(|c| c.is_alphanumeric() || c == '-') {
+        if !Self::is_project_name(name) {
             return Err(Errors::from_msg_srcs(
                 "Project name should only contain alphanumeric characters and hyphens.".to_string(),
                 &[&span],
