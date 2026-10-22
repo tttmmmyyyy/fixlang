@@ -711,11 +711,11 @@ pub fn clone_git_repo(url: &str) -> Result<(TempDir, Repository), Errors> {
 /// there are waits.
 const CLONE_RETRY_WAITS: [Duration; 2] = [Duration::from_secs(1), Duration::from_secs(2)];
 
-/// Clones the repository at `url` into the directory `path`, attempting it again after a failure
-/// the network may not repeat (see `is_transient_git_failure`).
+/// Clones the repository at `url` into the directory `path`, and tries again after a failure of the
+/// connection to the remote, which the next attempt may not meet.
 ///
-/// libgit2 empties `path` when a clone fails, so every attempt starts from the directory the first
-/// one found.
+/// libgit2 empties `path` when a clone fails, so each attempt finds `path` as the first attempt
+/// found it.
 fn clone_repository_with_retry(url: &str, path: &Path) -> Result<Repository, git2::Error> {
     for wait in CLONE_RETRY_WAITS {
         match Repository::clone(url, path) {
@@ -737,9 +737,9 @@ fn clone_repository_with_retry(url: &str, path: &Path) -> Result<Repository, git
 /// Whether `error` is a failure of the connection to a remote, which the next attempt may not
 /// meet: a connection cut off, a TLS handshake that broke, or an address that did not resolve.
 ///
-/// Two answers of a remote are excluded, since asking again is answered the same: a request for
-/// credentials, which is how GitHub answers for a repository that does not exist, and a certificate
-/// that does not verify.
+/// Two answers from a remote are excluded, since a second attempt gets the same answer: a request
+/// for credentials, which is how GitHub answers for a repository that does not exist, and a
+/// certificate that does not verify.
 fn is_transient_git_failure(error: &git2::Error) -> bool {
     matches!(
         error.class(),
@@ -877,7 +877,7 @@ mod tests {
     use tempfile::TempDir;
 
     /// A connection the remote cut off in the middle of a clone, and a TLS handshake that broke, are
-    /// failures a clone is attempted again after.
+    /// failures after which the clone is attempted again.
     #[test]
     fn a_connection_cut_off_or_a_broken_handshake_is_transient() {
         let cut_off = git2::Error::new(ErrorCode::GenericError, ErrorClass::Http, "unexpected EOF");
@@ -909,7 +909,7 @@ mod tests {
         assert!(!is_transient_git_failure(&unverified));
     }
 
-    /// An address that did not resolve is a failure a clone is attempted again after.
+    /// An address that did not resolve is a failure after which the clone is attempted again.
     #[test]
     fn an_address_that_did_not_resolve_is_transient() {
         let unresolved = git2::Error::new(
