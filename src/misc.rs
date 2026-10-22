@@ -1,6 +1,6 @@
 use crate::{
     ast::name::Name,
-    constants::{COMPILER_THREAD_STACK_SIZE, TEMPORARY_SRC_PATH},
+    constants::{COMPILER_THREAD_STACK_SIZE, DOT_FIXLANG, TEMPORARY_SRC_PATH},
     error::Errors,
     hash::{md5_hex, md5_u64},
     parse::sourcefile::SourceFile,
@@ -405,6 +405,54 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
         )));
     }
     Ok(canonicalized.unwrap())
+}
+
+/// Removes the file or directory at `path`, which is to be the `.fixlang` directory of the current
+/// directory or to lie inside it. Every removal fix makes goes through this function, so that what
+/// a project directory holds — a lock file, or a `.fixlang` that is a symbolic link — cannot lead
+/// fix to remove anything outside it.
+///
+/// What is judged is the entry the removal takes away: the last component of `path`, inside its
+/// parent directory with the symbolic links and `..` there resolved. A symbolic link at `path`
+/// itself is removed as a link, leaving what it points to; so `.fixlang` is removed even when it is
+/// a symbolic link, while what lies under such a link is refused.
+pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
+    let failed = |e: io::Error| {
+        Errors::from_msg(format!(
+            "Failed to remove \"{}\": {}",
+            path.to_string_lossy(),
+            e
+        ))
+    };
+    let dot_fixlang = env::current_dir()
+        .and_then(|dir| dir.canonicalize())
+        .map_err(failed)?
+        .join(DOT_FIXLANG);
+    let entry = match (path.parent(), path.file_name()) {
+        (Some(parent), Some(name)) => {
+            let parent = if parent.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                parent
+            };
+            Some(parent.canonicalize().map_err(failed)?.join(name))
+        }
+        // A path ending in `..` names no entry of its own.
+        _ => None,
+    };
+    if !entry.is_some_and(|entry| entry.starts_with(&dot_fixlang)) {
+        return Err(Errors::from_msg(format!(
+            "Refused to remove \"{}\", which lies outside \"{}\".",
+            path.to_string_lossy(),
+            dot_fixlang.to_string_lossy()
+        )));
+    }
+    if fs::symlink_metadata(path).map_err(failed)?.is_dir() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
+    }
+    .map_err(failed)
 }
 
 /// The path `target` written relative to the path `base`, so that `base` joined with the result

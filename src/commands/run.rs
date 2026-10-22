@@ -2,12 +2,13 @@ use crate::commands::build::build;
 use crate::configuration::{Configuration, OutputFileType};
 use crate::constants::{DOT_FIXLANG, RUN_PATH};
 use crate::error::{panic_if_err, panic_with_msg, Errors};
+use crate::misc::remove_inside_dot_fixlang;
 use rand::Rng;
 use std::fs;
 use std::io;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{self, Output, Stdio};
 
 /// Builds the program as an executable under `RUN_PATH` and runs it, passing it the arguments
@@ -87,7 +88,7 @@ pub fn with_temporary_executable<T>(
         Some(out_path) => {
             // Move the temporary executable file to the specified output file.
             if let Err(e) = fs::rename(exec_path.clone(), out_path.clone()) {
-                let _ = fs::remove_file(exec_path.clone()); // Ignore the error.
+                let _ = remove_inside_dot_fixlang(Path::new(&exec_path)); // Ignore the error.
                 panic_with_msg(&format!(
                     "Failed to rename \"{}\" to \"{}\": {}",
                     exec_path,
@@ -98,7 +99,7 @@ pub fn with_temporary_executable<T>(
         }
         None => {
             // If the output file is not specified, remove the temporary executable file.
-            let _ = fs::remove_file(exec_path.clone()); // Ignore the error.
+            let _ = remove_inside_dot_fixlang(Path::new(&exec_path)); // Ignore the error.
         }
     }
 

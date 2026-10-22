@@ -10,7 +10,7 @@ use crate::{
         ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectFileRole, ProjectName,
         ProjectOrigin,
     },
-    misc::{info_msg, to_absolute_path, warn_msg},
+    misc::{info_msg, remove_inside_dot_fixlang, to_absolute_path, warn_msg},
 };
 use git2::{build::CheckoutBuilder, ErrorClass, ErrorCode, Repository};
 use rand::{thread_rng, Rng};
@@ -194,8 +194,7 @@ impl DependencyLockFile {
                 path: match &prj_info.source {
                     ProjectSource::Local(path_buf) => path_buf.clone(),
                     ProjectSource::Git(_, _) => {
-                        let dir = PathBuf::from(EXTERNAL_PROJ_INSTALL_PATH);
-                        dir.join(format!("{}_{}", prj.name, prj.version.to_string()))
+                        git_dependency_install_path(&prj.name, &prj.version.to_string())
                     }
                 },
                 git: match &prj_info.source {
@@ -219,6 +218,20 @@ impl DependencyLockFile {
         Ok(lock_file)
     }
 
+    /// Checks what the entries say against the rules every lock file fix writes keeps: each entry
+    /// names a project and a version, and a git entry pins a commit and is installed at
+    /// `git_dependency_install_path` of its name and version.
+    ///
+    /// # Returns
+    ///
+    /// The first entry that breaks a rule, described.
+    pub fn validate(&self) -> Result<(), String> {
+        for dep in &self.dependencies {
+            dep.validate()?;
+        }
+        Ok(())
+    }
+
     // Install the dependencies.
     pub fn install(&self) -> Result<(), Errors> {
         for dep in &self.dependencies {
@@ -240,13 +253,7 @@ impl DependencyLockFile {
                         }
                     }
                     // If something is wrong, remove the directory.
-                    std::fs::remove_dir_all(&dep.path).map_err(|e| {
-                        Errors::from_msg(format!(
-                            "Failed to remove the directory \"{}\": {:?}",
-                            dep.path.to_string_lossy().to_string(),
-                            e
-                        ))
-                    })?;
+                    remove_inside_dot_fixlang(&dep.path)?;
                 }
                 // Create the directory.
                 std::fs::create_dir_all(&dep.path).map_err(|e| {
@@ -309,18 +316,18 @@ impl DependencyLockFile {
         Ok(())
     }
 
-    // Update the lock file and install the dependencies.
+    /// Writes the lock file of the given mode afresh from the project file, whatever lock file is
+    /// on disk, and installs the dependencies it pins.
     pub fn update_and_install(mode: BuildConfigType) -> Result<(), Errors> {
-        // Remove lock file.
-        let lock_file_path = Path::new(get_lock_file_path(LockFileType::from_build_config_type(
-            mode,
-        )));
-        if lock_file_path.exists() {
-            std::fs::remove_file(lock_file_path).expect("Failed to remove the lock file.");
-        }
         ProjectFile::read_root_file()?
-            .open_or_create_lock_file_and_install(LockFileType::from_build_config_type(mode))
+            .create_lock_file(LockFileType::from_build_config_type(mode))?
+            .install()
     }
+}
+
+/// The directory a git dependency of the given name and version is cloned into.
+fn git_dependency_install_path(name: &str, version: &str) -> PathBuf {
+    PathBuf::from(EXTERNAL_PROJ_INSTALL_PATH).join(format!("{}_{}", name, version))
 }
 
 #[derive(Deserialize, Serialize, Default)]
@@ -333,6 +340,42 @@ pub struct DependencyLockFileEntry {
 }
 
 impl DependencyLockFileEntry {
+    /// Checks this entry against the rules `DependencyLockFile::validate` lists.
+    fn validate(&self) -> Result<(), String> {
+        if ProjectFile::validate_project_name(&self.name, None).is_err() {
+            return Err(format!(
+                "\"{}\" is not a project name, which consists of alphanumeric characters and hyphens",
+                self.name
+            ));
+        }
+        if let Err(e) = Version::parse(&self.version) {
+            return Err(format!(
+                "the version \"{}\" of \"{}\" is not a version: {}",
+                self.version, self.name, e
+            ));
+        }
+        if let Some(git) = &self.git {
+            if let Err(e) = git2::Oid::from_str(&git.rev) {
+                return Err(format!(
+                    "the revision \"{}\" of \"{}\" is not a commit hash: {}",
+                    git.rev,
+                    self.name,
+                    e.message()
+                ));
+            }
+            let install_path = git_dependency_install_path(&self.name, &self.version);
+            if self.path != install_path {
+                return Err(format!(
+                    "the git dependency \"{}\" is at \"{}\", where it belongs at \"{}\"",
+                    self.name,
+                    self.path.to_string_lossy(),
+                    install_path.to_string_lossy()
+                ));
+            }
+        }
+        Ok(())
+    }
+
     // Read this dependency's `fixproj.toml` and populate `role = Dependent` plus
     // `source` (Git when the lockfile entry carries git info, Local otherwise) so that
     // the returned `ProjectFile` is ready to be passed into `set_config`.

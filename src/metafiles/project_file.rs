@@ -1124,81 +1124,65 @@ impl ProjectFile {
                 msg_try_fix_deps_update
             )));
         }
+        lock_file.validate().map_err(|e| {
+            Errors::from_msg(format!(
+                "The lock file is broken: {}. {}",
+                e, msg_try_fix_deps_update
+            ))
+        })?;
         Ok(lock_file)
     }
 
-    /// Writes `lock_file` to the path a lock file of the given kind is read from.
-    fn save_lock_file(lock_file: &DependencyLockFile, mode: LockFileType) -> Result<(), Errors> {
-        let content = toml::to_string(lock_file)
+    /// The lock file of the given kind, built afresh from this project's dependency entries and
+    /// written out over the one on disk, creating the directory that holds it where that is missing
+    /// (`.fixlang/` for the language server's lock file).
+    pub fn create_lock_file(&self, mode: LockFileType) -> Result<DependencyLockFile, Errors> {
+        let lock_file = DependencyLockFile::create(self, mode.to_build_config_type())?;
+        let content = toml::to_string(&lock_file)
             .map_err(|e| Errors::from_msg(format!("Failed to serialize lock file: {:?}", e)))?;
         let lock_file_path = get_lock_file_path(mode);
+        if let Some(parent) = Path::new(lock_file_path).parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| Errors::from_msg(format!("Failed to create directory: {:?}", e)))?;
+        }
         fs::write(lock_file_path, content)
             .map_err(|e| Errors::from_msg(format!("Failed to write lock file: {:?}", e)))?;
-        Ok(())
+        Ok(lock_file)
     }
 
-    /// The lock file of the given kind. One that is missing or out of date is built afresh from
-    /// this project's dependency entries and written out.
+    /// The lock file of the given kind. One that is missing, out of date or broken is built afresh
+    /// from this project's dependency entries and written out.
     pub fn open_or_create_lock_file(
         &self,
         mode: LockFileType,
     ) -> Result<DependencyLockFile, Errors> {
-        Ok(match self.open_lock_file(mode) {
-            Ok(lock_file) => lock_file,
-            Err(_) => {
-                let lock_file = DependencyLockFile::create(self, mode.to_build_config_type())?;
-                Self::save_lock_file(&lock_file, mode)?;
-                lock_file
-            }
-        })
+        match self.open_lock_file(mode) {
+            Ok(lock_file) => Ok(lock_file),
+            Err(_) => self.create_lock_file(mode),
+        }
     }
 
-    /// The lock file of the given kind, with its dependencies installed. One that is missing or out
-    /// of date is built afresh and written out, creating the directory that holds it where that is
-    /// missing too, so that a project which has never been built reaches a lock file as well.
+    /// The lock file of the given kind, with its dependencies installed. One that is missing, out
+    /// of date or broken is built afresh and written out, so that a project which has never been
+    /// built reaches a lock file as well.
     pub fn open_or_auto_update_lock_file(
         &self,
         mode: LockFileType,
     ) -> Result<DependencyLockFile, Errors> {
-        // Try to open existing lock file.
         match self.open_lock_file(mode) {
             Ok(lock_file) => Ok(lock_file),
             Err(_) => {
-                // If the lock file does not exist or is invalid, automatically create/update it.
-
-                // Ensure the parent directory exists (e.g., .fixlang/ for LSP lock file).
-                let lock_file_path = get_lock_file_path(mode);
-                if let Some(parent) = Path::new(lock_file_path).parent() {
-                    fs::create_dir_all(parent).map_err(|e| {
-                        Errors::from_msg(format!("Failed to create directory: {:?}", e))
-                    })?;
-                }
-
-                // Create the lock file.
-                let lock_file = DependencyLockFile::create(self, mode.to_build_config_type())?;
-
-                // Save the lock file.
-                Self::save_lock_file(&lock_file, mode)?;
-
-                // Install the dependencies.
+                let lock_file = self.create_lock_file(mode)?;
                 lock_file.install()?;
-
                 Ok(lock_file)
             }
         }
     }
 
-    /// Installs the dependencies the lock file of the given kind pins, writing that lock file first
-    /// where the one on disk is missing or out of date.
-    pub fn open_or_create_lock_file_and_install(&self, mode: LockFileType) -> Result<(), Errors> {
-        self.open_or_create_lock_file(mode)
-            .and_then(|lf| lf.install())
-    }
-
     /// Adds what this project's dependencies contribute to `config`: their source files, the
     /// libraries they link, and the rest of the settings their project files give. The dependencies
-    /// are installed first, and the lock file written where the one on disk is missing or out of
-    /// date.
+    /// are installed first, and the lock file written where the one on disk is missing, out of date
+    /// or broken.
     pub fn install_dependencies(
         self: &ProjectFile,
         config: &mut Configuration,

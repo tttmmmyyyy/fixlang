@@ -3,7 +3,7 @@ use crate::configuration::{Configuration, LinkType, OutputFileType, Sanitizer};
 use crate::constants::INTERMEDIATE_PATH;
 use crate::elaboration::elaborate_via_config;
 use crate::error::Errors;
-use crate::misc::info_msg;
+use crate::misc::{info_msg, remove_inside_dot_fixlang};
 use rand::{thread_rng, Rng};
 use std::env::consts::OS;
 use std::fs;
@@ -148,7 +148,7 @@ fn build_runtime_object(config: &Configuration) -> Result<PathBuf, Errors> {
         // The source is this build's copy, which a failed compilation is as done with as a
         // finished one. A directory that resists removal is left where it is, since the
         // compilation's own failure is what the build reports.
-        let _ = fs::remove_dir_all(&build_dir);
+        let _ = remove_inside_dot_fixlang(&build_dir);
         return Err(errors);
     }
 
@@ -158,10 +158,7 @@ fn build_runtime_object(config: &Configuration) -> Result<PathBuf, Errors> {
         compiled_path.to_string_lossy().to_string(),
         object.to_string_lossy().to_string()
     ));
-    fs::remove_dir_all(&build_dir).expect(&format!(
-        "Failed to remove \"{}\"",
-        build_dir.to_string_lossy().to_string()
-    ));
+    remove_inside_dot_fixlang(&build_dir)?;
     Ok(object)
 }
 

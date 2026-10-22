@@ -1,0 +1,217 @@
+/// Tests that what a project directory holds — its lock file, its `.fixlang` — cannot lead `fix` to
+/// remove anything outside the project's `.fixlang` directory.
+#[cfg(test)]
+mod integration_tests {
+    use crate::constants::LOCK_FILE_PATH;
+    use crate::tests::test_util::{assert_failed_with, assert_succeeded, fix_command, run_fix};
+    use git2::{IndexAddOption, Repository, Signature};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+    };
+    use tempfile::TempDir;
+
+    /// The directory `fix` installs the git dependency of these tests into.
+    const INSTALL_PATH: &str = ".fixlang/deps/dep_0.1.0";
+
+    /// A temporary directory holding a git repository `dep-repo` of a project `dep` at version
+    /// 0.1.0, a project `proj` depending on it by its commit, and a directory `victim` beside them
+    /// holding the file `data.txt`. The lock file of `proj` is written and its dependency
+    /// installed.
+    fn setup() -> (TempDir, PathBuf) {
+        let root = TempDir::new().expect("Failed to create temp directory");
+
+        let repo_dir = root.path().join("dep-repo");
+        fs::create_dir_all(&repo_dir).unwrap();
+        let repo = Repository::init(&repo_dir).expect("Failed to initialize the repository");
+        fs::write(
+            repo_dir.join("fixproj.toml"),
+            "[general]\nname = \"dep\"\nversion = \"0.1.0\"\n\n[build]\nfiles = [\"lib.fix\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            repo_dir.join("lib.fix"),
+            "module Dep;\n\nvalue : I64;\nvalue = 42;\n",
+        )
+        .unwrap();
+        let mut index = repo.index().unwrap();
+        index
+            .add_all(&["*"], IndexAddOption::DEFAULT, None)
+            .unwrap();
+        index.write().unwrap();
+        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+        let sig = Signature::now("Test", "test@example.com").unwrap();
+        let commit = repo
+            .commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
+            .unwrap();
+
+        let proj = root.path().join("proj");
+        fs::create_dir_all(&proj).unwrap();
+        fs::write(
+            proj.join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"proj\"\nversion = \"0.1.0\"\n\n\
+                 [build]\nfiles = [\"main.fix\"]\n\n\
+                 [[dependencies]]\nname = \"dep\"\n\
+                 git = {{ url = \"file://{}\", rev = \"{}\" }}\n",
+                repo_dir.to_string_lossy(),
+                commit
+            ),
+        )
+        .unwrap();
+        fs::write(
+            proj.join("main.fix"),
+            "module Main;\n\nimport Dep;\n\nmain : IO ();\nmain = println(Dep::value.to_string);\n",
+        )
+        .unwrap();
+        assert_succeeded(
+            &run_fix(&proj, &["deps", "update"]),
+            "`fix deps update` should write the lock file and install the dependency.",
+        );
+
+        let victim = root.path().join("victim");
+        fs::create_dir_all(&victim).unwrap();
+        fs::write(victim.join("data.txt"), "important").unwrap();
+
+        (root, proj)
+    }
+
+    /// Replaces `from` with `to` in the lock file of `proj`, which has to hold `from`.
+    fn edit_lock_file(proj: &Path, from: &str, to: &str) {
+        let path = proj.join(LOCK_FILE_PATH);
+        let content = fs::read_to_string(&path).unwrap();
+        assert!(content.contains(from), "lock file: {}", content);
+        fs::write(&path, content.replace(from, to)).unwrap();
+    }
+
+    /// Asserts that `victim/data.txt` under `root` is still there.
+    fn assert_victim_kept(root: &TempDir) {
+        assert_eq!(
+            fs::read_to_string(root.path().join("victim/data.txt")).ok(),
+            Some("important".to_string()),
+            "a directory outside the project lost its file"
+        );
+    }
+
+    /// A lock file placing a git dependency at a path of its own is rejected by `fix deps install`,
+    /// before anything there is removed.
+    #[test]
+    fn test_install_rejects_git_dependency_path_off_the_install_path() {
+        let (root, proj) = setup();
+        edit_lock_file(
+            &proj,
+            &format!("path = \"{}\"", INSTALL_PATH),
+            "path = \"../victim\"",
+        );
+        assert_failed_with(
+            &run_fix(&proj, &["deps", "install"]),
+            "the git dependency \"dep\" is at \"../victim\", where it belongs at \".fixlang/deps/dep_0.1.0\"",
+            "`fix deps install` should reject the path the lock file gives.",
+        );
+        assert_victim_kept(&root);
+    }
+
+    /// A lock file whose dependency name climbs out of the install directory is rejected by `fix
+    /// deps install`, even with the path the name and the version make.
+    #[test]
+    fn test_install_rejects_dependency_name_with_path_separators() {
+        let (root, proj) = setup();
+        let name = "../../../victim";
+        edit_lock_file(&proj, "name = \"dep\"", &format!("name = \"{}\"", name));
+        edit_lock_file(
+            &proj,
+            &format!("path = \"{}\"", INSTALL_PATH),
+            &format!("path = \".fixlang/deps/{}_0.1.0\"", name),
+        );
+        fs::rename(root.path().join("victim"), root.path().join("victim_0.1.0")).unwrap();
+        // A `fix` that removed what the lock file points at is to remove the directory made
+        // above, inside the temporary directory, and nothing else.
+        assert_eq!(
+            proj.join(".fixlang/deps")
+                .join(format!("{}_0.1.0", name))
+                .canonicalize()
+                .unwrap(),
+            root.path().join("victim_0.1.0").canonicalize().unwrap()
+        );
+        assert_failed_with(
+            &run_fix(&proj, &["deps", "install"]),
+            "\"../../../victim\" is not a project name",
+            "`fix deps install` should reject the name the lock file gives.",
+        );
+        assert_eq!(
+            fs::read_to_string(root.path().join("victim_0.1.0/data.txt")).ok(),
+            Some("important".to_string()),
+            "a directory outside the project lost its file"
+        );
+    }
+
+    /// `fix build` writes a broken lock file afresh, as it does one that is out of date, and builds
+    /// with the dependency installed where the new lock file places it.
+    #[test]
+    fn test_build_rewrites_lock_file_with_git_dependency_path_off_the_install_path() {
+        let (root, proj) = setup();
+        edit_lock_file(
+            &proj,
+            &format!("path = \"{}\"", INSTALL_PATH),
+            "path = \"../victim\"",
+        );
+        assert_succeeded(
+            &run_fix(&proj, &["build"]),
+            "`fix build` should write the lock file afresh and build.",
+        );
+        assert_victim_kept(&root);
+        let lock_file = fs::read_to_string(proj.join(LOCK_FILE_PATH)).unwrap();
+        assert!(
+            lock_file.contains(&format!("path = \"{}\"", INSTALL_PATH)),
+            "lock file: {}",
+            lock_file
+        );
+    }
+
+    /// A `.fixlang` that is a symbolic link leaves what it points to out of reach of the removal a
+    /// reinstallation makes.
+    #[cfg(unix)]
+    #[test]
+    fn test_install_refuses_removal_under_symlinked_dot_fixlang() {
+        let (root, proj) = setup();
+        let target = root.path().join("victim");
+        fs::create_dir_all(target.join("deps/dep_0.1.0")).unwrap();
+        fs::write(target.join("deps/dep_0.1.0/data.txt"), "important").unwrap();
+        fs::remove_dir_all(proj.join(".fixlang")).unwrap();
+        std::os::unix::fs::symlink(&target, proj.join(".fixlang")).unwrap();
+
+        assert_failed_with(
+            &run_fix(&proj, &["deps", "install"]),
+            "Refused to remove \".fixlang/deps/dep_0.1.0\"",
+            "`fix deps install` should refuse to remove what lies under the link.",
+        );
+        assert_victim_kept(&root);
+        assert_eq!(
+            fs::read_to_string(target.join("deps/dep_0.1.0/data.txt")).ok(),
+            Some("important".to_string()),
+            "the directory under the link lost its file"
+        );
+    }
+
+    /// `fix clean` removes a `.fixlang` that is a symbolic link as a link, leaving what it points
+    /// to.
+    #[cfg(unix)]
+    #[test]
+    fn test_clean_removes_symlinked_dot_fixlang_as_link() {
+        let (root, proj) = setup();
+        fs::remove_dir_all(proj.join(".fixlang")).unwrap();
+        std::os::unix::fs::symlink(root.path().join("victim"), proj.join(".fixlang")).unwrap();
+
+        let output = fix_command()
+            .arg("clean")
+            .current_dir(&proj)
+            .output()
+            .expect("Failed to execute fix");
+        assert_succeeded(&output, "`fix clean` should succeed.");
+        assert!(
+            fs::symlink_metadata(proj.join(".fixlang")).is_err(),
+            "`fix clean` should remove the link"
+        );
+        assert_victim_kept(&root);
+    }
+}
