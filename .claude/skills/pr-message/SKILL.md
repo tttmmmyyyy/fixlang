@@ -147,7 +147,7 @@ A body that leaves this out sends the reviewer into the diff to find the words, 
 A bug fix is understood when the reader sees both mechanisms: the one by which the defect arose in the old code, and the one by which the new code keeps it from arising. The body states both, and the instrument for both is a **state trace** — a walk along the execution:
 
 1. **The functions involved.** Describe each, as in the section above.
-2. **The failing run.** Step along the execution that failed: which function runs, and how the state it works on — local variables, member fields, heap or storage data — changes at each step. Point at the step where the state first goes wrong, and end the trace there. The reader is judging whether the fix is right, and what that judgment needs is how the state goes wrong; that the wrong state goes on to produce the reported symptom is what the issue already shows.
+2. **The failing run.** Step along the execution that failed: which function runs, and how the state it works on — local variables, member fields, heap or storage data — changes at each step. Point at the step where the state first goes wrong, and end the trace there. The reader is judging whether the fix is right, and what that judgment needs is how the state goes wrong; that the wrong state goes on to produce the reported symptom is what the issue already shows. A bug no issue reports — one found while making the change — has its symptom stated once beside the trace, since nothing else shows it.
 3. **The fixed run.** Step along the same execution in the fixed code, point at the step where it now diverges from the failing run, and show that the state is correct there.
 
 Carry through the trace only the state the wrong step depends on.
