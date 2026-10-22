@@ -2729,19 +2729,9 @@ impl Scheme {
     /// Appends to `buf` the type variables standing in the constraints and in the type that the
     /// scheme leaves free, that is, all but the generalized ones.
     pub fn free_vars_to_vec(&self, buf: &mut Vec<Arc<TyVar>>) {
-        let mut free_vars = vec![];
-        for p in &self.predicates {
-            p.free_vars_to_vec(&mut free_vars);
-        }
-        for eq in &self.equalities {
-            eq.free_vars_to_vec(&mut free_vars);
-        }
-        self.ty.free_vars_to_vec(&mut free_vars);
-
-        // Add non-generalized type variables to `buf`.
-        for tv in &free_vars {
-            if !self.gen_vars.iter().any(|tv0| tv0.name == tv.name) {
-                buf.push(tv.clone());
+        for tv in self.all_vars() {
+            if !self.generalizes(&tv.name) {
+                buf.push(tv);
             }
         }
     }
@@ -2993,6 +2983,17 @@ pub fn is_opaque_tyvar(name: &str) -> bool {
 /// `TYPE_WILDCARD_VAR_PREFIX` in front of it.
 pub fn is_type_wildcard_tyvar(name: &str) -> bool {
     name.starts_with(TYPE_WILDCARD_VAR_PREFIX)
+}
+
+/// Gives each variable of `vars` that `kind_signs` names the kind the signature gives it.
+pub fn apply_kind_signs(vars: &mut [Arc<TyVar>], kind_signs: &[KindSignature]) {
+    for tv in vars {
+        for kind_sign in kind_signs {
+            if tv.name == kind_sign.tyvar {
+                *tv = tv.set_kind(kind_sign.kind.clone());
+            }
+        }
+    }
 }
 
 /// Appends to `vars` each variable that `kind_signs` names and `vars` lacks, with the kind the

@@ -741,17 +741,7 @@ fn opaque_tycon_arity(resolutions: &[OpaqueTyConResolution]) -> usize {
 /// Example: `Std::repeat` with scheme `[?it : Iterator, Item ?it = a] a -> I64 -> ?it`
 /// yields one OpaqueInfo with tycon `Std::repeat::?it`, tycon_vars `[a]`, tycon_kind `* -> *`.
 fn collect_opaque_infos(scm: &Arc<Scheme>, gv_name: &FullName) -> Vec<OpaqueInfo> {
-    // Find all opaque type variables in the scheme.
-    let all_vars = collect_free_vars(&scm.predicates, &scm.equalities, &scm.ty);
-
-    let mut seen = Set::<Name>::default();
-    let mut opaque_vars = vec![];
-    for tv in &all_vars {
-        if is_opaque_tyvar(&tv.name) && !seen.contains(&tv.name) {
-            seen.insert(tv.name.clone());
-            opaque_vars.push(tv.clone());
-        }
-    }
+    let opaque_vars = scm.opaque_vars();
 
     // Non-opaque gen_vars become the TyCon's type arguments.
     let gen_vars = scm.gen_vars.clone();
