@@ -258,7 +258,7 @@ impl DependecyLockFile {
                 })?;
 
                 // Clone the repository.
-                let repo = clone_repository(&git_info.repo, &dep.path).map_err(|e| {
+                let repo = clone_repository_with_retry(&git_info.repo, &dep.path).map_err(|e| {
                     Errors::from_msg(format!(
                         "Failed to clone the repository \"{}\" to \"{}\": {:?}",
                         git_info.repo,
@@ -700,7 +700,7 @@ pub fn clone_git_repo(url: &str) -> Result<(TempDir, Repository), Errors> {
         .map_err(|e| Errors::from_msg_err("Failed to create a temporary directory", e))?;
 
     // Clone the repository.
-    let repo = clone_repository(url, temp_dir.path()).map_err(|e| {
+    let repo = clone_repository_with_retry(url, temp_dir.path()).map_err(|e| {
         Errors::from_msg_err(&format!("Failed to clone the repository `{}`", url), e)
     })?;
 
@@ -716,7 +716,7 @@ const CLONE_RETRY_WAITS: [Duration; 2] = [Duration::from_secs(1), Duration::from
 ///
 /// libgit2 empties `path` when a clone fails, so every attempt starts from the directory the first
 /// one found.
-fn clone_repository(url: &str, path: &Path) -> Result<Repository, git2::Error> {
+fn clone_repository_with_retry(url: &str, path: &Path) -> Result<Repository, git2::Error> {
     for wait in CLONE_RETRY_WAITS {
         match Repository::clone(url, path) {
             Err(error) if is_transient_git_failure(&error) => {
@@ -881,7 +881,8 @@ mod tests {
     #[test]
     fn a_connection_cut_off_or_a_broken_handshake_is_transient() {
         let cut_off = git2::Error::new(ErrorCode::GenericError, ErrorClass::Http, "unexpected EOF");
-        let broken_handshake = git2::Error::new(ErrorCode::GenericError, ErrorClass::Ssl, "unknown error");
+        let broken_handshake =
+            git2::Error::new(ErrorCode::GenericError, ErrorClass::Ssl, "unknown error");
         assert!(is_transient_git_failure(&cut_off));
         assert!(is_transient_git_failure(&broken_handshake));
     }
