@@ -725,7 +725,7 @@ const CLONE_RETRY_WAITS: [Duration; 4] = [
 /// found it.
 ///
 /// The waits are randomized so that the clients a single outage cut off at once spread their next
-/// attempts out instead of all reaching the recovering remote at the same moment.
+/// attempts over time, and the recovering remote meets them a few at a time.
 fn clone_repository_with_retry(url: &str, path: &Path) -> Result<Repository, git2::Error> {
     for wait in CLONE_RETRY_WAITS {
         match Repository::clone(url, path) {
