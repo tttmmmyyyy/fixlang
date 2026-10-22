@@ -9,6 +9,7 @@ use crate::{
     misc::{save_temporary_source, Map},
     parse::parser::check_grammar_accepts,
 };
+use git2::{IndexAddOption, Repository, Signature};
 use inkwell::{context::Context, module::Module, targets::TargetMachine};
 use std::{
     env,
@@ -1154,6 +1155,29 @@ pub fn setup_case_projects(cases_dir: &str, project: &str) -> (TempDir, PathBuf)
     copy_dir_recursive(&cases, &temp_dir.path().to_path_buf()).expect("Failed to copy test cases");
     let project_dir = temp_dir.path().join(project);
     (temp_dir, project_dir)
+}
+
+/// Makes `dir` a git repository whose one commit holds `files`, each given by its path inside `dir`
+/// and its content, and answers the hash of that commit.
+pub fn create_git_repo(dir: &Path, files: &[(&str, &str)]) -> String {
+    let repo = Repository::init(dir).expect("Failed to initialize the repository");
+    for (rel, content) in files {
+        let path = dir.join(rel);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, content).unwrap();
+    }
+    let mut index = repo.index().unwrap();
+    index
+        .add_all(&["*"], IndexAddOption::DEFAULT, None)
+        .unwrap();
+    index.write().unwrap();
+    let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
+    let sig = Signature::now("Test", "test@example.com").unwrap();
+    repo.commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
+        .unwrap()
+        .to_string()
 }
 
 /// Runs `fix` with `args` in `project_dir`.

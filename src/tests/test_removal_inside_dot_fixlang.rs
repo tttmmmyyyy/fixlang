@@ -3,8 +3,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::LOCK_FILE_PATH;
-    use crate::tests::test_util::{assert_failed_with, assert_succeeded, run_fix};
-    use git2::{IndexAddOption, Repository, Signature};
+    use crate::tests::test_util::{assert_failed_with, assert_succeeded, create_git_repo, run_fix};
     #[cfg(unix)]
     use std::os::unix::fs::symlink;
     use std::{
@@ -20,32 +19,21 @@ mod integration_tests {
     /// 0.1.0, a project `proj` depending on it by its commit, and a directory `victim` beside them
     /// holding the file `data.txt`. The lock file of `proj` is written and its dependency
     /// installed.
-    fn setup() -> (TempDir, PathBuf) {
+    fn setup_test_env() -> (TempDir, PathBuf) {
         let root = TempDir::new().expect("Failed to create temp directory");
 
         let repo_dir = root.path().join("dep-repo");
         fs::create_dir_all(&repo_dir).unwrap();
-        let repo = Repository::init(&repo_dir).expect("Failed to initialize the repository");
-        fs::write(
-            repo_dir.join("fixproj.toml"),
-            "[general]\nname = \"dep\"\nversion = \"0.1.0\"\n\n[build]\nfiles = [\"lib.fix\"]\n",
-        )
-        .unwrap();
-        fs::write(
-            repo_dir.join("lib.fix"),
-            "module Dep;\n\nvalue : I64;\nvalue = 42;\n",
-        )
-        .unwrap();
-        let mut index = repo.index().unwrap();
-        index
-            .add_all(&["*"], IndexAddOption::DEFAULT, None)
-            .unwrap();
-        index.write().unwrap();
-        let tree = repo.find_tree(index.write_tree().unwrap()).unwrap();
-        let sig = Signature::now("Test", "test@example.com").unwrap();
-        let commit = repo
-            .commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
-            .unwrap();
+        let commit = create_git_repo(
+            &repo_dir,
+            &[
+                (
+                    "fixproj.toml",
+                    "[general]\nname = \"dep\"\nversion = \"0.1.0\"\n\n[build]\nfiles = [\"lib.fix\"]\n",
+                ),
+                ("lib.fix", "module Dep;\n\nvalue : I64;\nvalue = 42;\n"),
+            ],
+        );
 
         let proj = root.path().join("proj");
         fs::create_dir_all(&proj).unwrap();
@@ -115,7 +103,7 @@ mod integration_tests {
     /// before anything there is removed.
     #[test]
     fn test_install_rejects_git_dependency_path_off_the_install_path() {
-        let (root, proj) = setup();
+        let (root, proj) = setup_test_env();
         edit_lock_file(
             &proj,
             &format!("path = \"{}\"", INSTALL_PATH),
@@ -133,7 +121,7 @@ mod integration_tests {
     /// deps install`, even with the path the name and the version make.
     #[test]
     fn test_install_rejects_dependency_name_with_path_separators() {
-        let (root, proj) = setup();
+        let (root, proj) = setup_test_env();
         let name = "../../../victim";
         edit_lock_file(&proj, "name = \"dep\"", &format!("name = \"{}\"", name));
         edit_lock_file(
@@ -163,7 +151,7 @@ mod integration_tests {
     /// with the dependency installed where the new lock file places it.
     #[test]
     fn test_build_rewrites_lock_file_with_git_dependency_path_off_the_install_path() {
-        let (root, proj) = setup();
+        let (root, proj) = setup_test_env();
         edit_lock_file(
             &proj,
             &format!("path = \"{}\"", INSTALL_PATH),
@@ -182,7 +170,7 @@ mod integration_tests {
     #[cfg(unix)]
     #[test]
     fn test_install_refuses_removal_under_symlinked_dot_fixlang() {
-        let (root, proj) = setup();
+        let (root, proj) = setup_test_env();
         let target = root.path().join("victim");
         fs::create_dir_all(target.join("deps/dep_0.1.0")).unwrap();
         fs::write(target.join("deps/dep_0.1.0/data.txt"), "important").unwrap();
@@ -203,7 +191,7 @@ mod integration_tests {
     #[cfg(unix)]
     #[test]
     fn test_clean_removes_symlinked_dot_fixlang_as_link() {
-        let (root, proj) = setup();
+        let (root, proj) = setup_test_env();
         fs::remove_dir_all(proj.join(".fixlang")).unwrap();
         symlink(root.path().join("victim"), proj.join(".fixlang")).unwrap();
 
@@ -219,7 +207,7 @@ mod integration_tests {
     /// even when the path the name and the version make is the one the lock file gives.
     #[test]
     fn test_build_rewrites_lock_file_with_version_climbing_out_of_the_install_directory() {
-        let (root, proj) = setup();
+        let (root, proj) = setup_test_env();
         let version = "0.1.0/../../../../victim";
         let path = format!(".fixlang/deps/dep_{}", version);
         // The path the lock file gives reaches `victim`, so a `fix` that removes what the lock
@@ -251,7 +239,7 @@ mod integration_tests {
     #[cfg(unix)]
     #[test]
     fn test_install_replaces_symlink_at_install_path_leaving_its_target() {
-        let (root, proj) = setup();
+        let (root, proj) = setup_test_env();
         fs::remove_dir_all(proj.join(INSTALL_PATH)).unwrap();
         symlink(root.path().join("victim"), proj.join(INSTALL_PATH)).unwrap();
 
@@ -271,7 +259,7 @@ mod integration_tests {
     /// `fix run` removes the executable it builds under `.fixlang/run`.
     #[test]
     fn test_run_removes_its_temporary_executable() {
-        let (_root, proj) = setup();
+        let (_root, proj) = setup_test_env();
         let output = run_fix(&proj, &["run"]);
         assert_succeeded(&output, "`fix run` should build and run the program.");
         assert_eq!(String::from_utf8_lossy(&output.stdout), "42\n");
