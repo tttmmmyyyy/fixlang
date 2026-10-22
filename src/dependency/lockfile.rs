@@ -691,7 +691,7 @@ impl ProjectSource {
     }
 }
 
-// Clones a git repository to a temporary directory.
+/// Clones a git repository to a temporary directory.
 pub fn clone_git_repo(url: &str) -> Result<(TempDir, Repository), Errors> {
     // Create a temporary directory to clone the repository.
     let temp_dir = tempfile::tempdir()
