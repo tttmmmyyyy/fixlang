@@ -14,6 +14,7 @@ use crate::{
 };
 use core::panic;
 use git2::{build::CheckoutBuilder, ErrorClass, ErrorCode, Repository};
+use rand::{thread_rng, Rng};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -708,7 +709,8 @@ pub fn clone_git_repo(url: &str) -> Result<(TempDir, Repository), Errors> {
 }
 
 /// The waits before the second and later attempts of a clone. A clone is attempted once more than
-/// there are waits.
+/// there are waits. Each wait is scaled by a random factor between 0.5 and 1.5 (see
+/// `clone_repository_with_retry`).
 const CLONE_RETRY_WAITS: [Duration; 4] = [
     Duration::from_secs(1),
     Duration::from_secs(2),
@@ -721,15 +723,19 @@ const CLONE_RETRY_WAITS: [Duration; 4] = [
 ///
 /// libgit2 empties `path` when a clone fails, so each attempt finds `path` as the first attempt
 /// found it.
+///
+/// The waits are randomized so that the clients a single outage cut off at once spread their next
+/// attempts out instead of all reaching the recovering remote at the same moment.
 fn clone_repository_with_retry(url: &str, path: &Path) -> Result<Repository, git2::Error> {
     for wait in CLONE_RETRY_WAITS {
         match Repository::clone(url, path) {
             Err(error) if is_transient_git_failure(&error) => {
+                let wait = wait.mul_f64(thread_rng().gen_range(0.5..1.5));
                 info_msg(&format!(
-                    "Failed to clone the repository `{}` ({}); trying again in {:?}.",
+                    "Failed to clone the repository `{}` ({}); trying again in {:.1} s.",
                     url,
                     error.message(),
-                    wait
+                    wait.as_secs_f64()
                 ));
                 thread::sleep(wait);
             }
