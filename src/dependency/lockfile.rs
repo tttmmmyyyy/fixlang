@@ -721,10 +721,10 @@ fn clone_repository(url: &str, path: &Path) -> Result<Repository, git2::Error> {
         match Repository::clone(url, path) {
             Err(error) if is_transient_git_failure(&error) => {
                 info_msg(&format!(
-                    "Failed to clone the repository `{}` ({}); trying again in {} s.",
+                    "Failed to clone the repository `{}` ({}); trying again in {:?}.",
                     url,
                     error.message(),
-                    wait.as_secs()
+                    wait
                 ));
                 thread::sleep(wait);
             }
@@ -737,13 +737,14 @@ fn clone_repository(url: &str, path: &Path) -> Result<Repository, git2::Error> {
 /// Whether `error` is a failure of the connection to a remote, which the next attempt may not
 /// meet: a connection cut off, a TLS handshake that broke, or an address that did not resolve.
 ///
-/// A remote that asks for credentials is excluded. GitHub answers so for a repository that does
-/// not exist, and asking again is answered the same.
+/// Two answers of a remote are excluded, since asking again is answered the same: a request for
+/// credentials, which is how GitHub answers for a repository that does not exist, and a certificate
+/// that does not verify.
 fn is_transient_git_failure(error: &git2::Error) -> bool {
     matches!(
         error.class(),
         ErrorClass::Net | ErrorClass::Http | ErrorClass::Ssl
-    ) && error.code() != ErrorCode::Auth
+    ) && !matches!(error.code(), ErrorCode::Auth | ErrorCode::Certificate)
 }
 
 fn project_file_to_package(proj_file: &ProjectFile, mode: BuildConfigType) -> Package {
@@ -892,6 +893,17 @@ mod tests {
             "remote authentication required but no callback set",
         );
         assert!(!is_transient_git_failure(&missing));
+    }
+
+    /// A certificate that does not verify is reported at once.
+    #[test]
+    fn a_certificate_that_does_not_verify_is_not_transient() {
+        let unverified = git2::Error::new(
+            ErrorCode::Certificate,
+            ErrorClass::Ssl,
+            "the SSL certificate is invalid",
+        );
+        assert!(!is_transient_git_failure(&unverified));
     }
 
     /// An address that did not resolve is a failure a clone is attempted again after.
