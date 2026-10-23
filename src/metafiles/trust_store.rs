@@ -1,5 +1,6 @@
 // Per-user trust store recording the user's approvals of `preliminary_commands` and `ld_flags`.
-// Stored as `~/.fixtrust.toml`. See `logs/.../spec.md` for the user-visible specification.
+// Stored as `~/.fixtrust.toml`. See the section "Approval of `preliminary_commands` and `ld_flags`"
+// of `Document.md` for the user-visible specification.
 
 use crate::{
     build_approval::{BuildRequest, BuildSection},
@@ -146,15 +147,17 @@ impl TrustStore {
     }
 }
 
-/// Builds the `Approval` record of `request`, stamped with the current time.
-pub fn make_approval(request: &BuildRequest) -> Approval {
-    Approval {
-        source: request.source.to_trust_key(),
-        mode: request.section.as_str().to_string(),
-        commit_hash: request.source.commit_hash().map(String::from),
-        approved_at: chrono::Utc::now().to_rfc3339(),
-        project_name: request.project_name.clone(),
-        commands_preview: request.preliminary_commands.clone(),
-        ld_flags_preview: request.ld_flags.clone(),
+impl Approval {
+    /// The approval of `request`, stamped with the current time.
+    pub fn of(request: &BuildRequest) -> Self {
+        Approval {
+            source: request.source.to_trust_key(),
+            mode: request.section.as_str().to_string(),
+            commit_hash: request.source.commit_hash().map(String::from),
+            approved_at: chrono::Utc::now().to_rfc3339(),
+            project_name: request.project_name.clone(),
+            commands_preview: request.preliminary_commands.clone(),
+            ld_flags_preview: request.ld_flags.clone(),
+        }
     }
 }

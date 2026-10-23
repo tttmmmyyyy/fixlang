@@ -11,7 +11,7 @@ use crate::{
     error::Errors,
     metafiles::{
         project_file::ProjectOrigin,
-        trust_store::{make_approval, TrustStore},
+        trust_store::{Approval, TrustStore},
     },
     misc::{info_msg, prompt_style, split_string_by_space_not_quated, to_absolute_path, warn_msg},
 };
@@ -118,7 +118,7 @@ fn run_preliminary_command(
 /// flag, a non-interactive failure, or an interactive 3-choice prompt), and then grants every
 /// request: its `ld_flags` go to the linker, ahead of the flags the command line gives, and its
 /// preliminary commands run, in the order the requests were registered.
-pub fn approve_and_run(config: &mut Configuration) -> Result<(), Errors> {
+pub fn approve_and_grant(config: &mut Configuration) -> Result<(), Errors> {
     if config.build_requests.is_empty() {
         return Ok(());
     }
@@ -290,7 +290,7 @@ fn prompt_and_record(pending: &[Classified], trust_store: &mut TrustStore) -> Re
         match read_choice() {
             Choice::Yes => {
                 for entry in &sg.entries {
-                    trust_store.record(make_approval(&entry.request));
+                    trust_store.record(Approval::of(&entry.request));
                 }
                 if let Err(e) = trust_store.save() {
                     warn_msg(&format!(
@@ -526,7 +526,7 @@ fn print_pending_entry_header(sg: &SourceGroup) {
     // All entries are NEW. If only a single section entry exists we annotate which one
     // so the user can see why they are being re-prompted (e.g. after `fix test` when
     // build was approved separately).
-    let mode_hint = if sg.entries.len() == 1 {
+    let section_hint = if sg.entries.len() == 1 {
         match sg.entries[0].request.section {
             BuildSection::Build => "",
             BuildSection::Test => " -- test mode",
@@ -534,5 +534,5 @@ fn print_pending_entry_header(sg: &SourceGroup) {
     } else {
         ""
     };
-    eprintln!("  [{}] (NEW{})", sg.project_name, mode_hint);
+    eprintln!("  [{}] (NEW{})", sg.project_name, section_hint);
 }

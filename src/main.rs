@@ -878,7 +878,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set up configuration from the command line arguments, to overwrite the configuration described in the project file.
         panic_if_err(set_config_from_args(&mut config, args));
 
-        panic_if_err(config.approve_build_requests());
+        panic_if_err(config.grant_build_requests());
         config
     }
 

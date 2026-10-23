@@ -1,5 +1,6 @@
-// Integration tests for the preliminary_commands approval flow.
-// See logs/security-preliminary-commands.20260419/{spec,design}.md for the specification.
+// Integration tests for the approval of the `preliminary_commands` and `ld_flags` of project files.
+// See the section "Approval of `preliminary_commands` and `ld_flags`" of `Document.md` for the
+// specification.
 
 #[cfg(test)]
 mod tests {
@@ -138,7 +139,7 @@ mod tests {
 
     // ---------- (B) --trust-projects ----------
     #[test]
-    fn case_b_allow_flag_bypasses_without_recording() {
+    fn case_b_trust_flag_bypasses_without_recording() {
         // `--allow-preliminary-commands` is the name the flag had before it covered `ld_flags`,
         // kept so that scripts written for it keep working.
         for flag in ["--trust-projects", "--allow-preliminary-commands"] {

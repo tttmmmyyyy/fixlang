@@ -1,6 +1,6 @@
 use crate::ast::name::FullName;
 use crate::build::cpu_features::{CpuFeatures, HostCpu, ValgrindCpu};
-use crate::build_approval::{approve_and_run, BuildRequest};
+use crate::build_approval::{approve_and_grant, BuildRequest};
 use crate::constants::{
     DEFAULT_COMPILATION_UNIT_SIZE, MAIN_FUNCTION_NAME, MAIN_MODULE_NAME, MAX_SPLIT_SCALARS,
     OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX,
@@ -481,7 +481,7 @@ pub struct Configuration {
     pub library_search_paths: Vec<PathBuf>,
     /// Flags passed to the linker as they are written, beside the ones the build itself forms. The
     /// flags the project files give join these once they are approved, through
-    /// `approve_build_requests`.
+    /// `grant_build_requests`.
     pub ld_flags: Vec<String>,
     /// Whether the generated program carries debug information, which `-g` turns on.
     pub debug_info: bool,
@@ -549,7 +549,7 @@ pub struct Configuration {
     /// what the build produces and how the entry point is implemented.
     pub subcommand: SubCommand,
     /// The preliminary commands and linker flags the project files ask the build to run, those of
-    /// the root project and of every dependency, held until `approve_build_requests` grants them.
+    /// the root project and of every dependency, held until `grant_build_requests` grants them.
     pub build_requests: Vec<BuildRequest>,
     /// Whether every pending build request is approved for this run alone, bypassing the
     /// trust-store approval prompt. Set by `--trust-projects`.
@@ -1424,8 +1424,8 @@ impl Configuration {
     /// Grants the build requests the project files make, in the order they were registered: runs
     /// their preliminary commands and hands their flags to the linker. Asks the user to approve the
     /// requests the trust store holds no approval for.
-    pub fn approve_build_requests(&mut self) -> Result<(), Errors> {
-        approve_and_run(self)
+    pub fn grant_build_requests(&mut self) -> Result<(), Errors> {
+        approve_and_grant(self)
     }
 
     /// Whether the generated program keeps the checks that abort it on a violation, such as array
