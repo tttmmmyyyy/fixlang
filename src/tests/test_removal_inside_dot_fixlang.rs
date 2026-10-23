@@ -314,7 +314,7 @@ mod integration_tests {
     /// install directory, leaves what the link points to as it is.
     #[cfg(unix)]
     #[test]
-    fn test_install_keeps_symlink_target_when_lock_file_path_ends_in_separator() {
+    fn test_install_keeps_symlink_target_when_lock_file_path_ends_in_slash_or_dot() {
         for suffix in ["/", "/."] {
             let (root, proj) = setup_test_env();
             fs::remove_dir_all(proj.join(INSTALL_PATH)).unwrap();

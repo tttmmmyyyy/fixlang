@@ -902,7 +902,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
     // Whether the subcommand writes or removes files under `.fixlang`. `fix clean` removes a
     // `.fixlang` that is a symbolic link, as a link. A `deps` or `edit` naming no subcommand of its
     // own prints the help.
-    let uses_dot_fixlang = match matches.subcommand() {
+    let writes_under_dot_fixlang = match matches.subcommand() {
         Some(("version" | "init" | "clean", _args)) => false,
         Some((
             "build" | "run" | "test" | "check" | "docs" | "language-server",
@@ -917,7 +917,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             DOT_FIXLANG
         ),
     };
-    if uses_dot_fixlang {
+    if writes_under_dot_fixlang {
         panic_if_err(check_dot_fixlang_is_not_symlink());
     }
     match matches.subcommand() {
