@@ -3284,7 +3284,7 @@ git = { url = "https://github.com/example/test-helper.git" }
 
 テスト用依存関係が存在する場合、通常の依存関係とテスト用依存関係の両方を含む追加のロックファイル"fixdeps.test.lock"が作成されます。
 
-"fix deps install"コマンドは、"fixdeps.lock"ファイルに記述された依存関係を".fix"ディレクトリにインストールします。
+"fix deps install"コマンドは、"fixdeps.lock"ファイルに記述された依存関係を".fixlang/deps"ディレクトリにインストールします。
 このコマンドは"fix build"または"fix run"コマンドから自動的に呼び出されます。
 
 ## 設定ファイル

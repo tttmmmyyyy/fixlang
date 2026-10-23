@@ -1092,8 +1092,9 @@ impl ProjectFile {
         Ok(())
     }
 
-    /// Open the lock file.
-    /// If the project has no dependencies, return an empty lock file.
+    /// The lock file of the given kind, read from its path. A project with no dependencies gets an
+    /// empty lock file without reading one. A lock file that is missing, out of date or broken is an
+    /// error.
     pub fn open_lock_file(&self, mode: LockFileType) -> Result<DependencyLockFile, Errors> {
         // If there are no dependencies, the lock file is not necessary.
         if self

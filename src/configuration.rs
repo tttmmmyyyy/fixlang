@@ -29,7 +29,7 @@ use std::{
         self,
         consts::{ARCH, OS},
     },
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 /// Passes run before the `default<O3>` rounds at the optimization levels built for speed.
@@ -1397,7 +1397,7 @@ impl Configuration {
 
     /// The command that runs the built program at `exec_path`, under whatever the run settings ask
     /// to run it under.
-    pub fn program_run_command(&self, exec_path: &str) -> Result<Command, Errors> {
+    pub fn program_run_command(&self, exec_path: &Path) -> Result<Command, Errors> {
         assert!(
             self.validate_run_settings().is_ok(),
             "the run settings pick at most one of valgrind and a sanitizer"
