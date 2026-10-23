@@ -16,8 +16,12 @@ The C functions and values the Fix standard library is implemented with.
 #include <string.h>
 #include <time.h>
 
+// Marks a function that stops the program. `cold` places it in `.text.unlikely`, away from the
+// code the program runs, so that what such a function contains does not move that code.
+#define FIXRUNTIME_STOPS __attribute__((noreturn, cold))
+
 // Defined at the end of this file, and called by the functions before it.
-__attribute__((noreturn)) void fixruntime_abort(void);
+FIXRUNTIME_STOPS void fixruntime_abort(void);
 
 // Print message to stderr, and flush it.
 void fixruntime_eprintln(const char *msg)
@@ -141,19 +145,19 @@ const char *fixruntime_getenv(const char *name)
 // Each of the four below prints what went wrong to standard error and stops the program: an index
 // fell outside its array, an array size was below zero, an array size was wider than the address
 // space, or a signed operation's result did not fit its type.
-__attribute__((noreturn)) void fixruntime_index_out_of_range(int64_t idx, int64_t size)
+FIXRUNTIME_STOPS void fixruntime_index_out_of_range(int64_t idx, int64_t size)
 {
     fprintf(stderr, "Index out of range: index=%" PRId64 ", size=%" PRId64 "\n", idx, size);
     fixruntime_abort();
 }
 
-__attribute__((noreturn)) void fixruntime_negative_array_size(int64_t size)
+FIXRUNTIME_STOPS void fixruntime_negative_array_size(int64_t size)
 {
     fprintf(stderr, "Negative array size or capacity: %" PRId64 "\n", size);
     fixruntime_abort();
 }
 
-__attribute__((noreturn)) void fixruntime_array_size_overflow(int64_t size)
+FIXRUNTIME_STOPS void fixruntime_array_size_overflow(int64_t size)
 {
     fprintf(stderr, "Array size or capacity exceeds the address space: %" PRId64 "\n", size);
     fixruntime_abort();
@@ -194,7 +198,7 @@ static void fixruntime_write_integer_operand(char *buf, int32_t is_signed, uint6
     buf[length] = '\0';
 }
 
-__attribute__((noreturn)) void fixruntime_signed_overflow(const char *operation, int32_t operands_are_signed, uint64_t lhs_low, uint64_t lhs_high, uint64_t rhs_low, uint64_t rhs_high)
+FIXRUNTIME_STOPS void fixruntime_signed_overflow(const char *operation, int32_t operands_are_signed, uint64_t lhs_low, uint64_t lhs_high, uint64_t rhs_low, uint64_t rhs_high)
 {
     char lhs_text[FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE];
     char rhs_text[FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE];
@@ -204,7 +208,7 @@ __attribute__((noreturn)) void fixruntime_signed_overflow(const char *operation,
     fixruntime_abort();
 }
 
-__attribute__((noreturn)) void fixruntime_shift_amount_out_of_range(const char *operation, int32_t operands_are_signed, uint64_t amount_low, uint64_t amount_high)
+FIXRUNTIME_STOPS void fixruntime_shift_amount_out_of_range(const char *operation, int32_t operands_are_signed, uint64_t amount_low, uint64_t amount_high)
 {
     char amount_text[FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE];
     fixruntime_write_integer_operand(amount_text, operands_are_signed, amount_low, amount_high);
@@ -212,7 +216,7 @@ __attribute__((noreturn)) void fixruntime_shift_amount_out_of_range(const char *
     fixruntime_abort();
 }
 
-__attribute__((noreturn)) void fixruntime_float_to_integer_out_of_range(const char *operation, double value)
+FIXRUNTIME_STOPS void fixruntime_float_to_integer_out_of_range(const char *operation, double value)
 {
     // A NaN is reported without its sign bit, which the language leaves open: the quotient that
     // produces one carries a different sign when the optimizer folds it than when the machine
@@ -269,7 +273,7 @@ static int fixruntime_backtrace_full_callback(void *data, uintptr_t pc,
 // Every output stream is flushed first, because `abort` discards what the C library still holds in
 // a buffer: standard output written to a file or a pipe is buffered in blocks, so the lines a
 // program printed before a check stopped it would be lost.
-__attribute__((noreturn)) void fixruntime_abort(void)
+FIXRUNTIME_STOPS void fixruntime_abort(void)
 {
     fflush(NULL);
 
