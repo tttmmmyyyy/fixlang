@@ -143,7 +143,7 @@ canonicalized path, a lowercased name, a decoded string — and the action then 
 whose extra syntax (a trailing separator, a case, an escape) changes what the action reaches. Feed
 it an input whose two forms name different things.
 
-All three leave a comment asserting a protection the code does not have, and both survive review
+All three leave a comment asserting a protection the code does not have, and all three survive review
 indefinitely: the reader checks that a guard exists, not that it can fire. The probe is cheap —
 construct the case the comment names and watch whether the guard sees it — and a hit is a bug plus
 a false sense of safety, which is worse than an unguarded invariant, because nobody looks again at
