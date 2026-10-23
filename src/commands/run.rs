@@ -70,8 +70,7 @@ pub fn with_temporary_executable<T>(
         .expect(format!("Failed to create \"{}\" directory.", RUN_PATH).as_str());
 
     // For parallel execution, use different file name for each execution.
-    let exec_path =
-        PathBuf::from(RUN_PATH).join(format!("a{}.out", thread_rng().gen::<u64>()));
+    let exec_path = PathBuf::from(RUN_PATH).join(format!("a{}.out", thread_rng().gen::<u64>()));
     let user_specified_out_path =
         std::mem::replace(&mut config.out_file_path, Some(exec_path.clone()));
 

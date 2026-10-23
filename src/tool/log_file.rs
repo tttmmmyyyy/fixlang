@@ -15,8 +15,7 @@ fn open_log_file() -> Mutex<File> {
         .expect("Failed to get parent directory of LSP_LOG_FILE_PATH.");
 
     // Create directories to the parent directory.
-    fs::create_dir_all(parent_dir)
-        .expect("Failed to create directories to the parent directory.");
+    fs::create_dir_all(parent_dir).expect("Failed to create directories to the parent directory.");
 
     // Create and open the log file.
     let file = OpenOptions::new()

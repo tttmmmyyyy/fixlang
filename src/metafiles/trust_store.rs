@@ -2,7 +2,9 @@
 // Stored as `~/.fixtrust.toml`. See `logs/.../spec.md` for the user-visible specification.
 
 use crate::{
-    error::Errors, metafiles::project_file::ProjectOrigin, misc::{replace_file, warn_msg},
+    error::Errors,
+    metafiles::project_file::ProjectOrigin,
+    misc::{replace_file, warn_msg},
     preliminary_command::PreliminaryCommandMode,
 };
 use serde::{Deserialize, Serialize};
