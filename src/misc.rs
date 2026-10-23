@@ -7,8 +7,10 @@ use crate::{
 };
 use colored::{control, ColoredString, Colorize};
 use fxhash::{FxHashMap, FxHashSet};
+use rand::random;
 use std::{
-    env, fs,
+    env,
+    fs::{self, OpenOptions},
     hash::Hash,
     io::{self, ErrorKind, IsTerminal, Write},
     mem,
@@ -474,8 +476,8 @@ pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
 /// Writes `content` to the file at `path` by writing a new file beside it and renaming that onto
 /// `path`. A symbolic link at `path` is replaced by the new file, and what it pointed to is kept.
 pub fn replace_file(path: &Path, content: &[u8]) -> io::Result<()> {
-    let tmp_path = path.with_extension(format!("{}.tmp", rand::random::<u64>()));
-    let mut tmp_file = fs::OpenOptions::new()
+    let tmp_path = path.with_extension(format!("{}.tmp", random::<u64>()));
+    let mut tmp_file = OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(&tmp_path)?;
