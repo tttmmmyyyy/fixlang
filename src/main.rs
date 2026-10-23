@@ -323,12 +323,11 @@ fn run_cli() {
             "Skip the evaluation instructed by the `eval` syntax: build `eval {expr0}; {expr1}` as `{expr1}`.\n\
             Use it to drop a debugging effect such as `Debug::debug_println` from a built program."
         );
+    // Accepted with a warning and otherwise ignored. Earlier compilers asked the user to approve
+    // `preliminary_commands`, and this flag skipped the question; scripts that pass it keep running.
     let allow_preliminary_commands = Arg::new("allow-preliminary-commands")
         .long("allow-preliminary-commands")
-        .help(
-            "Approve all preliminary_commands for this invocation without prompting.\n\
-            Intended for CI and other non-interactive runs.",
-        );
+        .hide(true);
     let allow_deprecated = Arg::new("allow-deprecated")
         .long("allow-deprecated")
         .takes_value(false)
@@ -824,9 +823,12 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             config.skip_eval = true;
         }
 
-        // Set `allow_preliminary_commands`.
         if args.contains_id("allow-preliminary-commands") {
-            config.allow_preliminary_commands = true;
+            warn_msg(
+                "`--allow-preliminary-commands` has no effect: `fix` runs the preliminary_commands \
+                 of a project without asking for approval. See \"What `fix` runs from a project\" \
+                 in Document.md.",
+            );
         }
 
         // Set deprecation handling mode.

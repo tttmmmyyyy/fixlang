@@ -3072,26 +3072,11 @@ The following table shows how each setting is handled.
 Note:
 The Fix build system compiles all the projects of a build as a single set of compilation units, so a setting such as the optimization level or the generation of debugging information takes one value across the whole build. The compiler options and the main project's project file decide that value.
 
-### Approval of `preliminary_commands`
+### What `fix` runs from a project
 
-`preliminary_commands` run arbitrary processes before compilation, both from the root project and from dependencies. To prevent malicious projects or compromised dependencies from running unreviewed shell code, `fix build` / `fix run` / `fix test` require the commands to be approved before they execute.
+`fix build`, `fix run` and `fix test` run what a project and its dependencies supply: the `preliminary_commands` before compilation, and the `ld_flags` on the linker's command line, where a flag such as `gcc`'s `-wrapper` starts a program. `fix run` and `fix test` also run the program built from their source files, which can call any C function. Build, run and test a project only when you trust it and its dependencies.
 
-On the first build that encounters a `preliminary_commands` entry, `fix` shows the commands together with the project they come from and asks for your decision:
-
-- `[y]` — Approve and remember. The approval is recorded to `~/.fixtrust.toml` so future builds of the same project skip the prompt.
-- `[o]` — Approve for this invocation only. Nothing is written to the trust store.
-- `[n]` — Reject (default). The build aborts immediately.
-
-The approval granularity depends on the source of the project:
-
-- **Root project / local-path dependencies** are keyed by absolute path. Once you press `[y]` for a path, subsequent builds at that path are auto-approved regardless of any changes to its `preliminary_commands`. This keeps the edit/build loop on your own projects friction-free, but it also means you should not press `[y]` on third-party projects that you have only cloned for inspection — use `[o]` for those.
-- **Git dependencies** are keyed by the repository URL plus the commit hash recorded in the lock file. Updating the dependency to a new commit (`fix deps update`) re-prompts so that you can review the new commit's `preliminary_commands`.
-
-To bypass the prompt in CI or any other non-interactive environment, pass `--allow-preliminary-commands`. This treats every pending command as a one-shot approval and does not write to the trust store.
-
-If the session is non-interactive (no TTY attached) and `--allow-preliminary-commands` was not given, the build fails with a descriptive error rather than blocking on a prompt.
-
-Entries in `~/.fixtrust.toml` are plain TOML; to revoke an approval, either delete the whole file or remove the offending `[[approval]]` block manually.
+`fix check`, `fix deps install`, `fix deps update`, `fix docs` and the language server run nothing a project supplies. Inspect a project you do not trust yet with these commands, or by opening it in an editor.
 
 ## Managing dependencies
 

@@ -5,7 +5,7 @@ use crate::{
     hash::{md5_hex, md5_u64},
     parse::sourcefile::SourceFile,
 };
-use colored::{control, ColoredString, Colorize};
+use colored::{control, Colorize};
 use fxhash::{FxHashMap, FxHashSet};
 use rand::random;
 use std::{
@@ -535,12 +535,6 @@ pub fn info_msg(msg: &str) {
 /// Prints `msg` to standard error under a `warning` label.
 pub fn warn_msg(msg: &str) {
     eprintln!("{}: {}", "warning".yellow().bold(), msg);
-}
-
-/// Styles `s` as a line of an interactive prompt that requires the user's attention, so that every
-/// such prompt looks alike.
-pub fn prompt_style(s: &str) -> ColoredString {
-    s.bright_green().bold()
 }
 
 /// `text` cut short where it is too long for a report to carry, with an ellipsis marking the cut.

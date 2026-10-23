@@ -68,7 +68,6 @@ fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
 /// what it produced.
 fn run_case(project_dir: &Path, opt_level: &str, program_args: &[&str]) -> Output {
     fix_command_at_opt_level("run", opt_level)
-        .arg("--allow-preliminary-commands")
         .arg("--")
         .args(program_args)
         .current_dir(project_dir)

@@ -205,13 +205,9 @@ pub fn test_external_project(url: &str, test_name: &str, git_ref: Option<&str>) 
         );
     }
 
-    // Run `fix test`. `--allow-preliminary-commands` is supplied because this test is
-    // non-interactive and some external projects legitimately ship `preliminary_commands`
-    // (e.g. cp-library).
+    // Run `fix test`.
     let mut cmd = fix_command();
-    cmd.arg("test")
-        .arg("--allow-preliminary-commands")
-        .current_dir(&repo_dir);
+    cmd.arg("test").current_dir(&repo_dir);
 
     let output = cmd.output().expect("Failed to run fix test.");
 
