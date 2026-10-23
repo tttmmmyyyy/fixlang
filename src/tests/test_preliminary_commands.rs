@@ -161,6 +161,24 @@ mod tests {
         }
     }
 
+    // `--help` names the flag `--trust-projects` alone; its old name stays out of the help.
+    #[test]
+    fn help_names_trust_projects_and_not_its_old_name() {
+        for subcommand in ["build", "run", "test"] {
+            let out = fix_command()
+                .args([subcommand, "--help"])
+                .output()
+                .expect("run fix --help");
+            let help = String::from_utf8_lossy(&out.stdout);
+            assert!(
+                help.contains("--trust-projects") && !help.contains("allow-preliminary-commands"),
+                "fix {} --help: {}",
+                subcommand,
+                help
+            );
+        }
+    }
+
     // ---------- (C) Non-interactive stdin, no flag ----------
     #[test]
     fn case_c_non_interactive_fails() {
@@ -692,23 +710,32 @@ commands_preview = []
     }
 
     // A `y` records the approval of `ld_flags` with what they were, and a later build passes them
-    // without asking.
+    // to the linker without asking.
     #[test]
     fn ld_flags_approval_is_recorded_and_reused() {
         let env = Env::new();
-        write_project(&env.proj, &fixproj_with_ld_flags("ld-record", "[\"-lm\"]"));
+        let (script, marker) = write_wrapper_script(&env.proj);
+        let ld_flags = format!("[\"-wrapper\", \"{}\"]", script.display());
+        write_project(&env.proj, &fixproj_with_ld_flags("ld-record", &ld_flags));
         let out1 = run_fix(&env, &["build"], Some("y\n"), true);
         assert!(out1.status.success(), "stderr: {}", stderr_str(&out1));
         let content = env.trust_file_contents().expect("trust file");
         assert!(
-            content.contains("ld_flags_preview = [\"-lm\"]"),
+            content.contains("ld_flags_preview")
+                && content.contains("\"-wrapper\"")
+                && content.contains(&format!("\"{}\"", script.display())),
             "trust file: {}",
             content
         );
 
+        fs::remove_file(&marker).expect("the flags approved by `y` reached the linker");
         let out2 = run_fix(&env, &["build"], None, false);
         assert!(out2.status.success(), "stderr: {}", stderr_str(&out2));
         assert!(stderr_str(&out2).contains("(approved)"));
+        assert!(
+            marker.exists(),
+            "the flags the trust store approves did not reach the linker"
+        );
     }
 
     // The `ld_flags` of a dependency are approved as the dependency's, under its name.

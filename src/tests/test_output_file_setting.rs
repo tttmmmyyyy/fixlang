@@ -345,6 +345,19 @@ fn test_build_writes_an_output_in_a_directory_of_the_project() {
     assert!(run_program(&project_dir.join("bin/prog")).contains(PROGRAM_OUTPUT));
 }
 
+/// An output named by an absolute path that lies inside the project is written there.
+#[test]
+fn test_build_writes_an_output_named_by_an_absolute_path_inside_the_project() {
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "named_output");
+    let output = project_dir.join("prog");
+    set_output(&project_dir, output.to_str().unwrap());
+    assert_succeeded(
+        &run_fix(&project_dir, &["build", "-O", "none"]),
+        "`fix build` should write the output an absolute path inside the project names.",
+    );
+    assert!(run_program(&output).contains(PROGRAM_OUTPUT));
+}
+
 /// The `--output` option writes the output file wherever the user names, outside the project too.
 #[test]
 fn test_the_output_option_writes_outside_the_project() {
