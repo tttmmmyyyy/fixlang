@@ -251,8 +251,8 @@ impl DependencyLockFile {
                 if dep.path.exists() {
                     // If the path exists, check that the revision is correct.
                     // If the revision is incorrect, or any git error occurs, remove the directory and clone the repository again.
-                    // A HEAD that is not a direct reference to a commit holds no revision, and the
-                    // directory is cloned again.
+                    // A HEAD that resolves to no commit holds no revision, and the directory is
+                    // cloned again.
                     let rev_match = Repository::open(&dep.path)
                         .and_then(|repo| Ok(repo.head()?.target() == Some(target_rev)));
                     if rev_match == Ok(true) {
