@@ -162,6 +162,20 @@ fn build_runtime_object(config: &Configuration) -> Result<PathBuf, Errors> {
     Ok(object)
 }
 
+/// `path` written so that the C compiler reads it as a file to link. A relative path gets `./` in
+/// front, so that the compiler reads neither one starting with `-` as an option nor one starting
+/// with `@` as a file of further options.
+///
+/// # Examples
+/// `file_operand("-helper.o")` is `./-helper.o`, and `file_operand("/lib/a.o")` is `/lib/a.o`.
+fn file_operand(path: &Path) -> PathBuf {
+    if path.is_relative() {
+        Path::new(".").join(path)
+    } else {
+        path.to_path_buf()
+    }
+}
+
 /// Builds the program specified in the configuration, linking the object files and the runtime into
 /// the output file.
 pub fn build(config: &Configuration) -> Result<(), Errors> {
@@ -227,11 +241,11 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     com.arg("-o").arg(out_path.to_str().unwrap());
 
     let mut obj_paths = obj_files.obj_paths;
-    obj_paths.append(&mut config.object_files.clone());
+    obj_paths.extend(config.object_files.iter().cloned());
+    obj_paths.push(runtime_obj_path);
     for obj_path in obj_paths {
-        com.arg(obj_path.to_str().unwrap());
+        com.arg(file_operand(&obj_path));
     }
-    com.arg(runtime_obj_path.to_str().unwrap());
     com.args(library_search_path_opts).args(libs_opts);
     run_c_compiler(&mut com, "link the output file")?;
 

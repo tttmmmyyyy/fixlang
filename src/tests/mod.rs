@@ -74,6 +74,7 @@ mod test_memory_regions;
 mod test_no_runtime_check_setting;
 mod test_object_cache;
 mod test_object_cache_layout_change;
+mod test_object_files_setting;
 mod test_opaque_type;
 mod test_optimization_threads;
 mod test_output_file_setting;
