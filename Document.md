@@ -3078,6 +3078,8 @@ The Fix build system compiles all the projects of a build as a single set of com
 
 `fix check`, `fix deps install`, `fix deps update`, `fix docs` and the language server run nothing a project supplies. Inspect a project you do not trust yet with these commands, or by opening it in an editor.
 
+Fix 1.3.0 to 1.5.x and the pre-releases of 1.6.0 asked the user to approve the `preliminary_commands` before running them. The approval was removed in 1.6.0, since it did not stop an untrusted project: the `ld_flags` and the built program run what the project wrote without it.
+
 ## Managing dependencies
 
 Dependencies of a Fix project are represented by [[dependencies]] elements in the "fixproj.toml" file.
