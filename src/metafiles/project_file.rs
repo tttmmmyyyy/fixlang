@@ -1152,8 +1152,10 @@ impl ProjectFile {
             fs::create_dir_all(parent)
                 .map_err(|e| Errors::from_msg(format!("Failed to create directory: {:?}", e)))?;
         }
-        replace_file(Path::new(lock_file_path), content.as_bytes())
-            .map_err(|e| Errors::from_msg(format!("Failed to write lock file: {:?}", e)))?;
+        replace_file(Path::new(lock_file_path), |tmp_path| {
+            fs::write(tmp_path, &content)
+        })
+        .map_err(|e| Errors::from_msg(format!("Failed to write lock file: {:?}", e)))?;
         Ok(lock_file)
     }
 

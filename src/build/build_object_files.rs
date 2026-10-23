@@ -23,7 +23,9 @@ use crate::{
     },
     generator::{enum_attribute_kind_id, module_functions, Generator},
     hash::HashSource,
-    misc::{info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg, Map, Set},
+    misc::{
+        info_msg, join_compiler_threads, replace_file, spawn_compiler_thread, warn_msg, Map, Set,
+    },
     optimization::optimization,
     rc_ir::{
         ast::RcProgram,
@@ -51,12 +53,12 @@ use inkwell::{
     values::BasicValue,
     OptimizationLevel,
 };
-use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
     ffi::{c_char, CString},
     fmt::Display,
     fs::{self, create_dir_all, File},
+    io,
     iter::once,
     mem,
     path::{Path, PathBuf},
@@ -645,23 +647,10 @@ pub(crate) fn get_target_machine(
     }
 }
 
-/// Compile `module` into an object file at `obj_path`.
+/// Compile `module` into an object file at `obj_path`, which exists only once it holds the whole
+/// object file. Creates the containing directory. A failure of any step aborts the compilation.
 fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine, obj_path: &Path) {
-    write_through_temporary_file(obj_path, |path| {
-        target_machine
-            .write_to_file(module, FileType::Object, path)
-            .map_err(|e| e.to_string())
-    });
-}
-
-/// Write a file at `path` through a uniquely named temporary file in the same directory that is
-/// renamed into place, so that `path` exists only once it holds the whole of what was written.
-/// Creates the containing directory. A failure of any step aborts the compilation.
-///
-/// # Arguments
-/// * `write` — writes the content to the temporary path it is handed.
-fn write_through_temporary_file(path: &Path, write: impl FnOnce(&Path) -> Result<(), String>) {
-    let dir_path = path.parent().unwrap();
+    let dir_path = obj_path.parent().unwrap();
     if let Err(e) = create_dir_all(dir_path) {
         panic_with_msg(&format!(
             "Failed to create directory \"{}\": {}",
@@ -669,19 +658,15 @@ fn write_through_temporary_file(path: &Path, write: impl FnOnce(&Path) -> Result
             e
         ));
     }
-    let tmp_path = path.with_extension(thread_rng().gen::<u64>().to_string() + ".tmp");
-    if let Err(e) = write(&tmp_path) {
+    let written = replace_file(obj_path, |path| {
+        target_machine
+            .write_to_file(module, FileType::Object, path)
+            .map_err(|e| io::Error::other(e.to_string()))
+    });
+    if let Err(e) = written {
         panic_with_msg(&format!(
             "Failed to write to file \"{}\": {}",
-            path.to_string_lossy(),
-            e
-        ));
-    }
-    if let Err(e) = fs::rename(&tmp_path, path) {
-        panic_with_msg(&format!(
-            "Failed to rename \"{}\" to \"{}\": {}",
-            tmp_path.to_string_lossy(),
-            path.to_string_lossy(),
+            obj_path.to_string_lossy(),
             e
         ));
     }

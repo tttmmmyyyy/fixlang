@@ -165,17 +165,57 @@ mod integration_tests {
         assert_lock_file_places_dependency_at_install_path(&proj);
     }
 
-    /// `fix deps install` refuses to remove anything under a `.fixlang` that is a symbolic link, so
-    /// what the link points to is kept.
+    /// Each command that writes or removes files under `.fixlang` fails on a `.fixlang` that is a
+    /// symbolic link, before it writes or removes anything where the link points.
     #[cfg(unix)]
     #[test]
-    fn test_install_refuses_removal_under_symlinked_dot_fixlang() {
+    fn test_commands_reject_symlinked_dot_fixlang() {
         let (root, proj) = setup_test_env();
         let target = root.path().join("victim");
-        fs::create_dir_all(target.join("deps/dep_0.1.0")).unwrap();
-        fs::write(target.join("deps/dep_0.1.0/data.txt"), "important").unwrap();
         fs::remove_dir_all(proj.join(".fixlang")).unwrap();
         symlink(&target, proj.join(".fixlang")).unwrap();
+
+        for args in [
+            &["build"][..],
+            &["run"][..],
+            &["test"][..],
+            &["check"][..],
+            &["deps", "install"][..],
+            &["deps", "update"][..],
+            &["deps", "add", "dep"][..],
+            &["docs"][..],
+            &["edit", "explicit-import"][..],
+        ] {
+            assert_failed_with(
+                &run_fix(&proj, args),
+                "\".fixlang\" is a symbolic link",
+                &format!("`fix {}` should reject the link.", args.join(" ")),
+            );
+            let entries: Vec<_> = fs::read_dir(&target)
+                .unwrap()
+                .map(|e| e.unwrap().file_name())
+                .collect();
+            assert_eq!(
+                entries,
+                ["data.txt"],
+                "`fix {}` changed what the link points to",
+                args.join(" ")
+            );
+            assert_victim_kept(&root);
+        }
+    }
+
+    /// `fix deps install` refuses to remove anything under a directory inside `.fixlang` that is a
+    /// symbolic link, so what the link points to is kept.
+    #[cfg(unix)]
+    #[test]
+    fn test_install_refuses_removal_under_symlink_inside_dot_fixlang() {
+        let (root, proj) = setup_test_env();
+        let target = root.path().join("victim");
+        fs::create_dir_all(target.join("dep_0.1.0")).unwrap();
+        fs::write(target.join("dep_0.1.0/data.txt"), "important").unwrap();
+        fs::remove_dir_all(proj.join(".fixlang/deps")).unwrap();
+        symlink(&target, proj.join(".fixlang/deps")).unwrap();
 
         assert_failed_with(
             &run_fix(&proj, &["deps", "install"]),
@@ -183,7 +223,7 @@ mod integration_tests {
             "`fix deps install` should refuse to remove what lies under the link.",
         );
         assert_victim_kept(&root);
-        assert_data_kept(&target.join("deps/dep_0.1.0"));
+        assert_data_kept(&target.join("dep_0.1.0"));
     }
 
     /// `fix clean` removes a `.fixlang` that is a symbolic link as a link, leaving what it points
@@ -274,7 +314,7 @@ mod integration_tests {
     /// install directory, leaves what the link points to as it is.
     #[cfg(unix)]
     #[test]
-    fn test_install_keeps_symlink_target_when_lock_file_path_ends_in_separator() {
+    fn test_install_keeps_symlink_target_when_lock_file_path_ends_in_slash_or_dot() {
         for suffix in ["/", "/."] {
             let (root, proj) = setup_test_env();
             fs::remove_dir_all(proj.join(INSTALL_PATH)).unwrap();
