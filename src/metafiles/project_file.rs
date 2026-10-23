@@ -1219,7 +1219,7 @@ impl ProjectFile {
         let outside = || {
             Errors::from_msg(format!(
                 "The field `output` of \"{}\" names \"{}\", which lies outside the project directory.\n\
-                 HINT: To write the output file outside the project, give its path by `--output` (`-o`).",
+                 HINT: Name a file inside the project in the field. To write the output file outside the project, give its path by `--output` (`-o`).",
                 PROJECT_FILE_PATH,
                 output.to_string_lossy()
             ))
