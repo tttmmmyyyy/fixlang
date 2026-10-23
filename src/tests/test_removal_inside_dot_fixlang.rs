@@ -269,4 +269,51 @@ mod integration_tests {
             .collect();
         assert!(left.is_empty(), "left in .fixlang/run: {:?}", left);
     }
+
+    /// A lock file whose git dependency path ends in `/` or `/.`, where a symbolic link stands at the
+    /// install directory, leaves what the link points to as it is.
+    #[cfg(unix)]
+    #[test]
+    fn test_install_keeps_symlink_target_when_lock_file_path_ends_in_separator() {
+        for suffix in ["/", "/."] {
+            let (root, proj) = setup_test_env();
+            fs::remove_dir_all(proj.join(INSTALL_PATH)).unwrap();
+            symlink(root.path().join("victim"), proj.join(INSTALL_PATH)).unwrap();
+            edit_lock_file(
+                &proj,
+                &format!("path = \"{}\"", INSTALL_PATH),
+                &format!("path = \"{}{}\"", INSTALL_PATH, suffix),
+            );
+            let _ = run_fix(&proj, &["deps", "install"]);
+            assert_victim_kept(&root);
+        }
+    }
+
+    /// A lock file that is a symbolic link to a file outside the project is replaced by the lock file
+    /// `fix` writes, leaving the file it pointed to as it is, both when a build writes the lock file
+    /// afresh and when `fix deps update` does.
+    #[cfg(unix)]
+    #[test]
+    fn test_writing_lock_file_replaces_symlink_leaving_its_target() {
+        for args in [&["build"][..], &["deps", "update"][..]] {
+            let (root, proj) = setup_test_env();
+            fs::remove_file(proj.join(LOCK_FILE_PATH)).unwrap();
+            symlink(
+                root.path().join("victim/data.txt"),
+                proj.join(LOCK_FILE_PATH),
+            )
+            .unwrap();
+            assert_succeeded(
+                &run_fix(&proj, args),
+                &format!("`fix {}` should write the lock file.", args.join(" ")),
+            );
+            assert_victim_kept(&root);
+            assert!(
+                fs::symlink_metadata(proj.join(LOCK_FILE_PATH))
+                    .unwrap()
+                    .is_file(),
+                "the lock file should be a file of its own"
+            );
+        }
+    }
 }
