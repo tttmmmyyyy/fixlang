@@ -87,12 +87,12 @@ impl TrustStore {
         }
     }
 
-    // Check whether an approval entry matching the given (source, mode) tuple exists.
+    // Check whether an approval entry matching the given (source, section) tuple exists.
     // For git dependencies the commit hash must also match; for local/root projects only the
-    // source (absolute path) and mode are used.
-    pub fn is_approved(&self, src: &ProjectOrigin, mode: BuildSection) -> bool {
+    // source (absolute path) and section are used.
+    pub fn is_approved(&self, src: &ProjectOrigin, section: BuildSection) -> bool {
         let src_key = src.to_trust_key();
-        let mode_str = mode.as_str();
+        let mode_str = section.as_str();
         self.approvals.iter().any(|a| {
             a.source == src_key
                 && a.mode == mode_str
