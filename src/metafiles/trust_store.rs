@@ -2,11 +2,11 @@
 // Stored as `~/.fixtrust.toml`. See `logs/.../spec.md` for the user-visible specification.
 
 use crate::{
-    error::Errors, metafiles::project_file::ProjectOrigin, misc::warn_msg,
+    error::Errors, metafiles::project_file::ProjectOrigin, misc::{replace_file, warn_msg},
     preliminary_command::PreliminaryCommandMode,
 };
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 pub const TRUST_FILE_NAME: &str = ".fixtrust.toml";
 
@@ -60,7 +60,7 @@ impl TrustStore {
         if !path.exists() {
             return Ok(Self::default());
         }
-        let content = std::fs::read_to_string(&path).map_err(|e| {
+        let content = fs::read_to_string(&path).map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to read trust store file `{}`: {}",
                 path.display(),
@@ -110,15 +110,15 @@ impl TrustStore {
         self.approvals.push(approval);
     }
 
-    // Save to the default path (`~/.fixtrust.toml`) atomically: write to `<path>.tmp`
-    // then rename onto the destination. Returns the path that was written on success.
+    // Save to the default path (`~/.fixtrust.toml`) atomically, through `replace_file`. Returns
+    // the path that was written on success.
     pub fn save(&self) -> Result<PathBuf, Errors> {
         let path = default_path()?;
         let content = toml::to_string_pretty(self)
             .map_err(|e| Errors::from_msg(format!("Failed to serialize trust store: {}", e)))?;
         if let Some(parent) = path.parent() {
             if !parent.as_os_str().is_empty() && !parent.exists() {
-                std::fs::create_dir_all(parent).map_err(|e| {
+                fs::create_dir_all(parent).map_err(|e| {
                     Errors::from_msg(format!(
                         "Failed to create directory `{}` for trust store: {}",
                         parent.display(),
@@ -127,22 +127,9 @@ impl TrustStore {
                 })?;
             }
         }
-        let tmp_path = {
-            let mut p = path.as_os_str().to_os_string();
-            p.push(".tmp");
-            PathBuf::from(p)
-        };
-        std::fs::write(&tmp_path, content).map_err(|e| {
+        replace_file(&path, |tmp_path| fs::write(tmp_path, &content)).map_err(|e| {
             Errors::from_msg(format!(
-                "Failed to write temporary trust store file `{}`: {}",
-                tmp_path.display(),
-                e
-            ))
-        })?;
-        std::fs::rename(&tmp_path, &path).map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to rename `{}` to `{}`: {}",
-                tmp_path.display(),
+                "Failed to write trust store file `{}`: {}",
                 path.display(),
                 e
             ))
