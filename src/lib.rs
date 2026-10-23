@@ -3,6 +3,7 @@ extern crate pest_derive;
 
 pub mod ast;
 pub mod build;
+pub mod build_approval;
 pub mod commands;
 pub mod configuration;
 pub mod constants;
@@ -22,7 +23,6 @@ pub mod misc;
 pub mod object;
 pub mod optimization;
 pub mod parse;
-pub mod preliminary_command;
 pub mod printer;
 pub mod rc_ir;
 pub mod return_abi;

@@ -1,5 +1,6 @@
 use crate::ast::name::FullName;
 use crate::build::cpu_features::{CpuFeatures, HostCpu, ValgrindCpu};
+use crate::build_approval::{approve_and_run, BuildRequest};
 use crate::constants::{
     DEFAULT_COMPILATION_UNIT_SIZE, MAIN_FUNCTION_NAME, MAIN_MODULE_NAME, MAX_SPLIT_SCALARS,
     OPTIMIZATION_LEVEL_BASIC, OPTIMIZATION_LEVEL_EXPERIMENTAL, OPTIMIZATION_LEVEL_MAX,
@@ -16,7 +17,6 @@ use crate::misc::{
     path_relative_to, platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg,
     Map, Set,
 };
-use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
 use crate::target_triple::build_target_triple;
 use build_time::build_time_utc;
 use inkwell::OptimizationLevel;
@@ -479,7 +479,9 @@ pub struct Configuration {
     pub linked_libraries: Vec<(String, LinkType)>,
     /// The directories the linker searches for the linked libraries.
     pub library_search_paths: Vec<PathBuf>,
-    /// Flags passed to the linker as they are written, beside the ones the build itself forms.
+    /// Flags passed to the linker as they are written, beside the ones the build itself forms. The
+    /// flags the project files give join these once they are approved, through
+    /// `approve_build_requests`.
     pub ld_flags: Vec<String>,
     /// Whether the generated program carries debug information, which `-g` turns on.
     pub debug_info: bool,
@@ -546,12 +548,12 @@ pub struct Configuration {
     /// The subcommand of the `fix` command this configuration was assembled for, which decides
     /// what the build produces and how the entry point is implemented.
     pub subcommand: SubCommand,
-    /// The commands `fixproj.toml` asks to be run before the build, those of the root project and
-    /// of every dependency.
-    pub preliminary_commands: Vec<PreliminaryCommand>,
-    /// Whether every pending preliminary command is approved for this run alone, bypassing the
-    /// trust-store approval prompt. Set by `--allow-preliminary-commands`.
-    pub allow_preliminary_commands: bool,
+    /// The preliminary commands and linker flags the project files ask the build to run, those of
+    /// the root project and of every dependency, held until `approve_build_requests` grants them.
+    pub build_requests: Vec<BuildRequest>,
+    /// Whether every pending build request is approved for this run alone, bypassing the
+    /// trust-store approval prompt. Set by `--trust-projects`.
+    pub trust_projects: bool,
     /// Where the type checker reads and writes the result of checking each symbol, so that a
     /// symbol whose sources are unchanged is served rather than checked again.
     pub type_check_cache: Arc<dyn TypeCheckCache + Send + Sync>,
@@ -682,8 +684,8 @@ impl Configuration {
             host_cpu: HostCpu::of_this_machine(),
             disable_cpu_features_regex: vec![],
             llvm_args: vec![],
-            preliminary_commands: vec![],
-            allow_preliminary_commands: false,
+            build_requests: vec![],
+            trust_projects: false,
             type_check_cache: Arc::new(FileCache::new()),
             num_worker_thread: 0,
             llvm_passes_override: None,
@@ -1115,8 +1117,8 @@ impl Configuration {
             root_source_files: _,
             project_sources: _,
             example_build: _,
-            preliminary_commands: _,
-            allow_preliminary_commands: _,
+            build_requests: _,
+            trust_projects: _,
 
             // How the compiler goes about its work, which leaves what it produces alone. How many
             // symbols a compilation unit holds decides which object files a build has rather than
@@ -1419,9 +1421,10 @@ impl Configuration {
         Ok(Command::new(exec_path))
     }
 
-    /// Runs the preliminary commands the project files list, in the order they were registered,
-    /// asking the user to approve the ones the trust store holds no approval for.
-    pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {
+    /// Grants the build requests the project files make, in the order they were registered: runs
+    /// their preliminary commands and hands their flags to the linker. Asks the user to approve the
+    /// requests the trust store holds no approval for.
+    pub fn approve_build_requests(&mut self) -> Result<(), Errors> {
         approve_and_run(self)
     }
 

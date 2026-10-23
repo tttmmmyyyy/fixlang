@@ -1,4 +1,5 @@
 use crate::{
+    build_approval::{BuildRequest, BuildSection},
     configuration::{
         BuildConfigType, Configuration, FixOptimizationLevel, LinkType, OutputFileType,
         ProjectSources, Sanitizer, ValgrindTool,
@@ -16,7 +17,6 @@ use crate::{
     metafiles::{config_file::ConfigFile, registry_file::RegistryFile},
     misc::{info_msg, replace_file, to_absolute_path, warn_msg, Set},
     parse::sourcefile::{SourceFile, Span},
-    preliminary_command::{PreliminaryCommand, PreliminaryCommandMode},
 };
 use regex::Regex;
 use reqwest::Url;
@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
     hash::Hash,
-    io::{Read, Write},
+    io::{self, Read, Write},
     path::{Path, PathBuf},
 };
 use toml::Spanned;
@@ -85,7 +85,7 @@ pub struct ProjectFileBuild {
     /// The directories the linker searches for libraries, each resolved against the project
     /// directory.
     library_paths: Option<Vec<PathBuf>>,
-    /// Further flags handed to the linker as they are written.
+    /// Further flags handed to the linker as they are written, once the user has approved them.
     #[serde(default)]
     ld_flags: Vec<String>,
     /// The commands run in the project directory before the Fix program is compiled, each written
@@ -765,7 +765,7 @@ impl ProjectFile {
     /// Updates a configuration from a project file.
     ///
     /// `self.role` decides whether the fields that only the root project contributes are skipped,
-    /// and `self.source` tags `preliminary_commands` for trust-store lookup. Both must be populated
+    /// and `self.source` tags the build requests for trust-store lookup. Both must be populated
     /// before this is called.
     pub fn set_config(&self, config: &mut Configuration) -> Result<(), Errors> {
         let is_dependent_proj = self.role == ProjectFileRole::Dependent;
@@ -887,49 +887,40 @@ impl ProjectFile {
             }
         }
 
-        // Add ld_flags.
-        config.ld_flags.append(&mut self.build.ld_flags.clone());
-        if mode == BuildConfigType::Test {
-            config.ld_flags.append(
-                &mut self
-                    .build
-                    .test
-                    .as_ref()
-                    .map_or(vec![], |test| test.ld_flags.clone()),
-            );
-        }
-
-        // Set preliminary commands.
+        // Record what the project asks the build to run: the preliminary commands and the linker
+        // flags of its `build` section, and in a test build those of its `build.test` section.
+        // They run once the user approves them.
         let work_dir = to_absolute_path(
             self.path
                 .parent()
                 .expect("ProjectFile::path always points to fixproj.toml inside a directory"),
         )?;
-        let project_name = self.general.name.clone();
-        for command in &self.build.preliminary_commands {
-            config.preliminary_commands.push(PreliminaryCommand {
-                work_dir: work_dir.clone(),
-                command: command.clone(),
-                project_name: project_name.clone(),
-                mode: PreliminaryCommandMode::Build,
-                source: project_origin.clone(),
-            });
-        }
+        let mut sections = vec![(
+            BuildSection::Build,
+            &self.build.preliminary_commands,
+            &self.build.ld_flags,
+        )];
         if mode == BuildConfigType::Test {
-            for command in &self
-                .build
-                .test
-                .as_ref()
-                .map_or(vec![], |test| test.preliminary_commands.clone())
-            {
-                config.preliminary_commands.push(PreliminaryCommand {
-                    work_dir: work_dir.clone(),
-                    command: command.clone(),
-                    project_name: project_name.clone(),
-                    mode: PreliminaryCommandMode::Test,
-                    source: project_origin.clone(),
-                });
+            if let Some(test) = self.build.test.as_ref() {
+                sections.push((
+                    BuildSection::Test,
+                    &test.preliminary_commands,
+                    &test.ld_flags,
+                ));
             }
+        }
+        for (section, preliminary_commands, ld_flags) in sections {
+            if preliminary_commands.is_empty() && ld_flags.is_empty() {
+                continue;
+            }
+            config.build_requests.push(BuildRequest {
+                work_dir: work_dir.clone(),
+                project_name: self.general.name.clone(),
+                section,
+                source: project_origin.clone(),
+                preliminary_commands: preliminary_commands.clone(),
+                ld_flags: ld_flags.clone(),
+            });
         }
 
         // Set the memory check mode.
@@ -1025,6 +1016,7 @@ impl ProjectFile {
         // test run leaves the output file of a build where it is.
         if config.subcommand.produces_output_file() {
             if let Some(output) = self.build.output.as_ref() {
+                self.check_output_inside_project(output)?;
                 config.out_file_path = Some(PathBuf::from(output));
             }
             if let Some(output_file_type) = output_file_type {
@@ -1219,6 +1211,55 @@ impl ProjectFile {
     fn project_file_span(&self, start: usize, end: usize) -> Span {
         let input = SourceFile::from_file_path(self.path.clone());
         Span { start, end, input }
+    }
+
+    /// Fails unless `output`, the `output` field of the `build` section, names a file inside the
+    /// project directory. The build overwrites that file, so a project file that names one outside,
+    /// directly or through a symbolic link, would have `fix build` overwrite a file of the user's.
+    ///
+    /// The check resolves the directory the file is in, symbolic links and `..` included, and
+    /// refuses a symbolic link at the file itself.
+    fn check_output_inside_project(&self, output: &Path) -> Result<(), Errors> {
+        let outside = || {
+            Errors::from_msg(format!(
+                "The field `output` of \"{}\" names \"{}\", which lies outside the project directory.\n\
+                 HINT: To write the output file outside the project, give its path by `--output` (`-o`).",
+                PROJECT_FILE_PATH,
+                output.to_string_lossy()
+            ))
+        };
+        let failed = |e: io::Error| {
+            Errors::from_msg(format!(
+                "Failed to resolve the field `output` of \"{}\", \"{}\": {}",
+                PROJECT_FILE_PATH,
+                output.to_string_lossy(),
+                e
+            ))
+        };
+        // The parent of a relative path of one component is the empty path, which `canonicalize`
+        // does not take for the current directory it names.
+        let canonicalize_dir = |dir: &Path| {
+            if dir.as_os_str().is_empty() {
+                Path::new(".").canonicalize()
+            } else {
+                dir.canonicalize()
+            }
+        };
+        let path = self.join_to_project_dir(output);
+        let (Some(parent), Some(_)) = (path.parent(), path.file_name()) else {
+            return Err(outside());
+        };
+        let parent = canonicalize_dir(parent).map_err(failed)?;
+        let project_dir = canonicalize_dir(
+            self.path
+                .parent()
+                .expect("ProjectFile::path always points to fixproj.toml inside a directory"),
+        )
+        .map_err(failed)?;
+        if !parent.starts_with(&project_dir) || path.is_symlink() {
+            return Err(outside());
+        }
+        Ok(())
     }
 
     /// `path` resolved against the directory holding this project file. An absolute `path` is

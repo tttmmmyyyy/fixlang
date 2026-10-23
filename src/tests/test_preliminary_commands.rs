@@ -136,25 +136,29 @@ mod tests {
         assert!(env.trust_file_contents().is_none());
     }
 
-    // ---------- (B) --allow-preliminary-commands ----------
+    // ---------- (B) --trust-projects ----------
     #[test]
     fn case_b_allow_flag_bypasses_without_recording() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_preliminary("b-test", &["[\"echo\", \"hello\"]"]),
-        );
-        let out = run_fix(
-            &env,
-            &["build", "--allow-preliminary-commands"],
-            None,
-            false,
-        );
-        assert!(out.status.success(), "stderr: {}", stderr_str(&out));
-        // No trust file should have been created.
-        assert!(env.trust_file_contents().is_none());
-        let err = stderr_str(&out);
-        assert!(err.contains("auto-approved"));
+        // `--allow-preliminary-commands` is the name the flag had before it covered `ld_flags`,
+        // kept so that scripts written for it keep working.
+        for flag in ["--trust-projects", "--allow-preliminary-commands"] {
+            let env = Env::new();
+            write_project(
+                &env.proj,
+                &fixproj_with_preliminary("b-test", &["[\"echo\", \"hello\"]"]),
+            );
+            let out = run_fix(&env, &["build", flag], None, false);
+            assert!(
+                out.status.success(),
+                "{}: stderr: {}",
+                flag,
+                stderr_str(&out)
+            );
+            // No trust file should have been created.
+            assert!(env.trust_file_contents().is_none(), "{}", flag);
+            let err = stderr_str(&out);
+            assert!(err.contains("auto-approved"), "{}: stderr: {}", flag, err);
+        }
     }
 
     // ---------- (C) Non-interactive stdin, no flag ----------
@@ -310,7 +314,7 @@ commands_preview = [["echo", "hello"]]
     // like) are irrelevant to it. The approval flow must therefore be skipped, even
     // when stdin is non-interactive and the trust store is empty. Otherwise CI
     // pipelines that call `fix docs` would be forced to set
-    // `--allow-preliminary-commands`, and the fixlang-docpage-generator workflow
+    // `--trust-projects`, and the fixlang-docpage-generator workflow
     // would break the moment any documented dependency declares a preliminary
     // command.
     #[test]
@@ -624,6 +628,129 @@ commands_preview = []
             err.contains("trust this commit from now on"),
             "expected Git-flavored prompt; stderr: {}",
             err
+        );
+    }
+
+    // ---------- ld_flags ----------
+    // A linker flag can run any program (`gcc`'s `-wrapper`), so `ld_flags` go through the same
+    // approval as `preliminary_commands`.
+
+    // A fixproj.toml for a root project whose `build` section lists `ld_flags` (a TOML array
+    // literal) and no preliminary command.
+    fn fixproj_with_ld_flags(name: &str, ld_flags: &str) -> String {
+        format!(
+            "[general]\nname = \"{name}\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+             [build]\nfiles = [\"main.fix\"]\nld_flags = {ld_flags}\n",
+        )
+    }
+
+    // Writes into `dir` a script `wrap.sh` that, given as `gcc`'s `-wrapper`, records that it ran
+    // by creating `dir/wrapper-ran` and then runs the command `gcc` handed it. Returns the script's
+    // path and the path of the file it creates.
+    fn write_wrapper_script(dir: &Path) -> (PathBuf, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let script = dir.join("wrap.sh");
+        let marker = dir.join("wrapper-ran");
+        fs::write(
+            &script,
+            format!("#!/bin/sh\ntouch '{}'\nexec \"$@\"\n", marker.display()),
+        )
+        .unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        (script, marker)
+    }
+
+    // `ld_flags` that run a program are refused without approval, and the program does not run.
+    #[test]
+    fn ld_flags_wait_for_approval_before_the_linker_runs_them() {
+        let env = Env::new();
+        let (script, marker) = write_wrapper_script(&env.proj);
+        write_project(
+            &env.proj,
+            &fixproj_with_ld_flags(
+                "ld-wrapper",
+                &format!("[\"-wrapper\", \"{}\"]", script.display()),
+            ),
+        );
+        let out = run_fix(&env, &["build"], None, false);
+        assert!(!out.status.success(), "stderr: {}", stderr_str(&out));
+        let err = stderr_str(&out);
+        assert!(
+            err.contains("require approval") && err.contains("ld_flags: -wrapper"),
+            "stderr: {}",
+            err
+        );
+        assert!(!marker.exists(), "the wrapper ran without approval");
+
+        // Approved for this run, the flags reach the linker.
+        let out = run_fix(&env, &["build", "--trust-projects"], None, false);
+        assert!(out.status.success(), "stderr: {}", stderr_str(&out));
+        assert!(
+            marker.exists(),
+            "the approved flags did not reach the linker"
+        );
+    }
+
+    // A `y` records the approval of `ld_flags` with what they were, and a later build passes them
+    // without asking.
+    #[test]
+    fn ld_flags_approval_is_recorded_and_reused() {
+        let env = Env::new();
+        write_project(&env.proj, &fixproj_with_ld_flags("ld-record", "[\"-lm\"]"));
+        let out1 = run_fix(&env, &["build"], Some("y\n"), true);
+        assert!(out1.status.success(), "stderr: {}", stderr_str(&out1));
+        let content = env.trust_file_contents().expect("trust file");
+        assert!(
+            content.contains("ld_flags_preview = [\"-lm\"]"),
+            "trust file: {}",
+            content
+        );
+
+        let out2 = run_fix(&env, &["build"], None, false);
+        assert!(out2.status.success(), "stderr: {}", stderr_str(&out2));
+        assert!(stderr_str(&out2).contains("(approved)"));
+    }
+
+    // The `ld_flags` of a dependency are approved as the dependency's, under its name.
+    #[test]
+    fn dependency_ld_flags_require_approval() {
+        let env = Env::new();
+        let dep_dir = TempDir::new().unwrap();
+        let (script, marker) = write_wrapper_script(dep_dir.path());
+        fs::write(
+            dep_dir.path().join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"ld-dep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+                 [build]\nfiles = [\"lib.fix\"]\nld_flags = [\"-wrapper\", \"{}\"]\n",
+                script.display()
+            ),
+        )
+        .unwrap();
+        fs::write(
+            dep_dir.path().join("lib.fix"),
+            "module LdDep;\n\nvalue : I64;\nvalue = 1;\n",
+        )
+        .unwrap();
+        write_project(
+            &env.proj,
+            &format!(
+                "[general]\nname = \"ld-root\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+                 [build]\nfiles = [\"main.fix\"]\n\n\
+                 [[dependencies]]\nname = \"ld-dep\"\nversion = \"*\"\npath = \"{}\"\n",
+                dep_dir.path().display()
+            ),
+        );
+        let out = run_fix(&env, &["build"], None, false);
+        assert!(!out.status.success(), "stderr: {}", stderr_str(&out));
+        let err = stderr_str(&out);
+        assert!(
+            err.contains("[ld-dep] (NEW)") && err.contains("ld_flags: -wrapper"),
+            "stderr: {}",
+            err
+        );
+        assert!(
+            !marker.exists(),
+            "the dependency's wrapper ran without approval"
         );
     }
 }

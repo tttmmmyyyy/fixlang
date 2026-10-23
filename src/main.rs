@@ -23,6 +23,7 @@ extern crate urlencoding;
 
 mod ast;
 mod build;
+mod build_approval;
 mod commands;
 mod configuration;
 mod constants;
@@ -42,7 +43,6 @@ mod misc;
 mod object;
 mod optimization;
 mod parse;
-mod preliminary_command;
 mod printer;
 mod rc_ir;
 mod return_abi;
@@ -323,10 +323,11 @@ fn run_cli() {
             "Skip the evaluation instructed by the `eval` syntax: build `eval {expr0}; {expr1}` as `{expr1}`.\n\
             Use it to drop a debugging effect such as `Debug::debug_println` from a built program."
         );
-    let allow_preliminary_commands = Arg::new("allow-preliminary-commands")
-        .long("allow-preliminary-commands")
+    let trust_projects = Arg::new("trust-projects")
+        .long("trust-projects")
+        .alias("allow-preliminary-commands")
         .help(
-            "Approve all preliminary_commands for this invocation without prompting.\n\
+            "Approve the preliminary_commands and ld_flags of every project for this invocation without prompting.\n\
             Intended for CI and other non-interactive runs.",
         );
     let allow_deprecated = Arg::new("allow-deprecated")
@@ -370,7 +371,7 @@ fn run_cli() {
         .arg(no_runtime_check.clone())
         .arg(check_integer_operations.clone())
         .arg(skip_eval.clone())
-        .arg(allow_preliminary_commands.clone())
+        .arg(trust_projects.clone())
         .arg(allow_deprecated.clone())
         .arg(deny_deprecated.clone());
 
@@ -403,7 +404,7 @@ fn run_cli() {
             .arg(no_runtime_check.clone())
             .arg(check_integer_operations.clone())
             .arg(skip_eval.clone())
-            .arg(allow_preliminary_commands.clone())
+            .arg(trust_projects.clone())
             .arg(allow_deprecated.clone())
             .arg(deny_deprecated.clone())
     };
@@ -824,9 +825,9 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             config.skip_eval = true;
         }
 
-        // Set `allow_preliminary_commands`.
-        if args.contains_id("allow-preliminary-commands") {
-            config.allow_preliminary_commands = true;
+        // Set `trust_projects`.
+        if args.contains_id("trust-projects") {
+            config.trust_projects = true;
         }
 
         // Set deprecation handling mode.
@@ -859,9 +860,9 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         Ok(())
     }
 
-    /// Create configuration from the command line arguments and the project file, and run the
-    /// preliminary commands the project files list, so that every build the subcommand makes reads
-    /// what they write. The project file's settings are laid down first, so an option on the
+    /// Create configuration from the command line arguments and the project file, and grant the
+    /// build requests the project files make, so that every build the subcommand makes reads what
+    /// their preliminary commands write and links with their flags. The project file's settings are laid down first, so an option on the
     /// command line overrides them.
     fn create_config(subcommand: SubCommand, args: &ArgMatches) -> Configuration {
         let mode = subcommand.build_mode();
@@ -877,7 +878,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         // Set up configuration from the command line arguments, to overwrite the configuration described in the project file.
         panic_if_err(set_config_from_args(&mut config, args));
 
-        panic_if_err(config.run_preliminary_commands());
+        panic_if_err(config.approve_build_requests());
         config
     }
 

@@ -9,7 +9,11 @@
 //! running, which is how these tests read off what a run built.
 
 use crate::configuration::OutputFileType;
-use crate::tests::test_util::{assert_failed, assert_succeeded, run_fix, setup_case_projects};
+use crate::tests::test_util::{
+    assert_failed, assert_failed_with, assert_succeeded, run_fix, setup_case_projects,
+};
+use std::fs;
+use std::os::unix::fs::symlink;
 use std::path::Path;
 use std::process::Command;
 
@@ -259,4 +263,99 @@ fn test_a_program_build_does_not_reuse_the_objects_of_a_library_build() {
         "the second build should produce \"{}\", the program it was asked for.",
         default_executable_name(),
     );
+}
+
+/// What a build reports when the project file names an output file outside the project.
+const OUTPUT_OUTSIDE_REPORT: &str = "which lies outside the project directory";
+
+/// Rewrites the `output` field of the `named_output` project at `project_dir` to `output`.
+fn set_output(project_dir: &Path, output: &str) {
+    let path = project_dir.join("fixproj.toml");
+    let content = fs::read_to_string(&path)
+        .unwrap()
+        .lines()
+        .map(|line| {
+            if line.starts_with("output = ") {
+                format!("output = \"{}\"", output)
+            } else {
+                line.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(&path, content).unwrap();
+}
+
+/// The `output` of a project file names a file inside the project: `fix build` overwrites the file
+/// it names, so one outside, reached by `..` or by an absolute path, is refused and left as it was.
+#[test]
+fn test_build_refuses_an_output_outside_the_project() {
+    let (temp_dir, project_dir) = setup_case_projects(CASES, "named_output");
+    let victim = temp_dir.path().join("victim");
+    let outputs = [
+        "../victim".to_string(),
+        "sub/../../victim".to_string(),
+        victim.display().to_string(),
+    ];
+    fs::create_dir(project_dir.join("sub")).unwrap();
+    for output in &outputs {
+        fs::write(&victim, "keep").unwrap();
+        set_output(&project_dir, output);
+        assert_failed_with(
+            &run_fix(&project_dir, &["build", "-O", "none"]),
+            OUTPUT_OUTSIDE_REPORT,
+            &format!("`fix build` should refuse the output \"{}\".", output),
+        );
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "keep");
+    }
+}
+
+/// An output that leaves the project through a symbolic link, at a directory on its way or at the
+/// file itself, is refused, and what the link points to is left as it was.
+#[test]
+fn test_build_refuses_an_output_through_a_symbolic_link() {
+    let (temp_dir, project_dir) = setup_case_projects(CASES, "named_output");
+    let outside_dir = temp_dir.path().join("outside");
+    fs::create_dir(&outside_dir).unwrap();
+    let victim = outside_dir.join("prog");
+    fs::write(&victim, "keep").unwrap();
+    symlink(&outside_dir, project_dir.join("linked_dir")).unwrap();
+    symlink(&victim, project_dir.join("linked_file")).unwrap();
+    for output in ["linked_dir/prog", "linked_file"] {
+        set_output(&project_dir, output);
+        assert_failed_with(
+            &run_fix(&project_dir, &["build", "-O", "none"]),
+            OUTPUT_OUTSIDE_REPORT,
+            &format!("`fix build` should refuse the output \"{}\".", output),
+        );
+        assert_eq!(fs::read_to_string(&victim).unwrap(), "keep");
+    }
+}
+
+/// An output in a directory of the project is written there.
+#[test]
+fn test_build_writes_an_output_in_a_directory_of_the_project() {
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "named_output");
+    fs::create_dir(project_dir.join("bin")).unwrap();
+    set_output(&project_dir, "bin/prog");
+    assert_succeeded(
+        &run_fix(&project_dir, &["build", "-O", "none"]),
+        "`fix build` should write the output in a directory of the project.",
+    );
+    assert!(run_program(&project_dir.join("bin/prog")).contains(PROGRAM_OUTPUT));
+}
+
+/// The `--output` option writes the output file wherever the user names, outside the project too.
+#[test]
+fn test_the_output_option_writes_outside_the_project() {
+    let (temp_dir, project_dir) = setup_case_projects(CASES, "named_output");
+    let outside = temp_dir.path().join("prog");
+    assert_succeeded(
+        &run_fix(
+            &project_dir,
+            &["build", "-O", "none", "-o", outside.to_str().unwrap()],
+        ),
+        "`fix build -o` should write the output outside the project.",
+    );
+    assert!(run_program(&outside).contains(PROGRAM_OUTPUT));
 }

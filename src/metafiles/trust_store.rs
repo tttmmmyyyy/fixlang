@@ -1,11 +1,11 @@
-// Per-user trust store recording the user's approvals of `preliminary_commands`.
+// Per-user trust store recording the user's approvals of `preliminary_commands` and `ld_flags`.
 // Stored as `~/.fixtrust.toml`. See `logs/.../spec.md` for the user-visible specification.
 
 use crate::{
+    build_approval::{BuildRequest, BuildSection},
     error::Errors,
     metafiles::project_file::ProjectOrigin,
     misc::{replace_file, warn_msg},
-    preliminary_command::PreliminaryCommandMode,
 };
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
@@ -36,7 +36,8 @@ pub struct TrustStore {
 pub struct Approval {
     // Serialized origin of the project (absolute path for local, `git+<url>` for git).
     pub source: String,
-    // `"build"` or `"test"` — which mode's `preliminary_commands` this approval covers.
+    // `"build"` or `"test"` — which section's `preliminary_commands` and `ld_flags` this approval
+    // covers.
     pub mode: String,
     // Pinned commit hash for git sources; absent for local/root projects.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -50,6 +51,9 @@ pub struct Approval {
     // lookup (commit_hash/source already carry the authoritative identity).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub commands_preview: Vec<Vec<String>>,
+    // Snapshot of the `ld_flags` at approval time. Informational only, as `commands_preview` is.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ld_flags_preview: Vec<String>,
 }
 
 impl TrustStore {
@@ -86,7 +90,7 @@ impl TrustStore {
     // Check whether an approval entry matching the given (source, mode) tuple exists.
     // For git dependencies the commit hash must also match; for local/root projects only the
     // source (absolute path) and mode are used.
-    pub fn is_approved(&self, src: &ProjectOrigin, mode: PreliminaryCommandMode) -> bool {
+    pub fn is_approved(&self, src: &ProjectOrigin, mode: BuildSection) -> bool {
         let src_key = src.to_trust_key();
         let mode_str = mode.as_str();
         self.approvals.iter().any(|a| {
@@ -140,19 +144,15 @@ impl TrustStore {
     }
 }
 
-// Build an `Approval` record from source/mode info and the user-facing metadata.
-pub fn make_approval(
-    source: &ProjectOrigin,
-    mode: PreliminaryCommandMode,
-    project_name: String,
-    commands_preview: Vec<Vec<String>>,
-) -> Approval {
+// Build the `Approval` record of `request`, approved now.
+pub fn make_approval(request: &BuildRequest) -> Approval {
     Approval {
-        source: source.to_trust_key(),
-        mode: mode.as_str().to_string(),
-        commit_hash: source.commit_hash().map(String::from),
+        source: request.source.to_trust_key(),
+        mode: request.section.as_str().to_string(),
+        commit_hash: request.source.commit_hash().map(String::from),
         approved_at: chrono::Utc::now().to_rfc3339(),
-        project_name,
-        commands_preview,
+        project_name: request.project_name.clone(),
+        commands_preview: request.preliminary_commands.clone(),
+        ld_flags_preview: request.ld_flags.clone(),
     }
 }

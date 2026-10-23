@@ -2980,7 +2980,7 @@ The following table shows how each setting is handled.
             <td>--ld-flags</td>
             <td>Merge</td>
             <td>Affects</td>
-            <td>Linker flags</td>
+            <td>Linker flags. The flags of a project file reach the linker once they are approved; see <a href="#approval-of-preliminary_commands-and-ld_flags">Approval of <code>preliminary_commands</code> and <code>ld_flags</code></a>.</td>
         </tr>
         <tr>
             <td>preliminary_commands</td>
@@ -3022,7 +3022,7 @@ The following table shows how each setting is handled.
             <td>-o, --output</td>
             <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Output file path. The field names the file <code>fix build</code> writes. <code>fix run</code> and <code>fix test</code> build an executable in a temporary place and run it; giving them <code>-o</code> keeps that executable at the path it names, which is how the program a failing test ran is kept for a debugger.</td>
+            <td>Output file path. The field names the file <code>fix build</code> writes. <code>fix run</code> and <code>fix test</code> build an executable in a temporary place and run it; giving them <code>-o</code> keeps that executable at the path it names, which is how the program a failing test ran is kept for a debugger. The field names a file inside the project directory, and one outside it, reached by <code>..</code>, by an absolute path or through a symbolic link, is an error; <code>-o</code> names a file anywhere.</td>
         </tr>
         <tr>
             <td>output_type</td>
@@ -3072,11 +3072,11 @@ The following table shows how each setting is handled.
 Note:
 The Fix build system compiles all the projects of a build as a single set of compilation units, so a setting such as the optimization level or the generation of debugging information takes one value across the whole build. The compiler options and the main project's project file decide that value.
 
-### Approval of `preliminary_commands`
+### Approval of `preliminary_commands` and `ld_flags`
 
-`preliminary_commands` run arbitrary processes before compilation, both from the root project and from dependencies. To prevent malicious projects or compromised dependencies from running unreviewed shell code, `fix build` / `fix run` / `fix test` require the commands to be approved before they execute.
+`preliminary_commands` run arbitrary processes before compilation, and `ld_flags` can make the linker run one (`gcc`'s `-wrapper` option, for example, starts a program of its choosing). Both come from the root project and from dependencies. To prevent malicious projects or compromised dependencies from running unreviewed code, `fix build` / `fix run` / `fix test` require them to be approved before the commands execute and the flags reach the linker.
 
-On the first build that encounters a `preliminary_commands` entry, `fix` shows the commands together with the project they come from and asks for your decision:
+On the first build that encounters a project with `preliminary_commands` or `ld_flags`, `fix` shows the commands and the flags together with the project they come from and asks for your decision:
 
 - `[y]` — Approve and remember. The approval is recorded to `~/.fixtrust.toml` so future builds of the same project skip the prompt.
 - `[o]` — Approve for this invocation only. Nothing is written to the trust store.
@@ -3084,12 +3084,12 @@ On the first build that encounters a `preliminary_commands` entry, `fix` shows t
 
 The approval granularity depends on the source of the project:
 
-- **Root project / local-path dependencies** are keyed by absolute path. Once you press `[y]` for a path, subsequent builds at that path are auto-approved regardless of any changes to its `preliminary_commands`. This keeps the edit/build loop on your own projects friction-free, but it also means you should not press `[y]` on third-party projects that you have only cloned for inspection — use `[o]` for those.
-- **Git dependencies** are keyed by the repository URL plus the commit hash recorded in the lock file. Updating the dependency to a new commit (`fix deps update`) re-prompts so that you can review the new commit's `preliminary_commands`.
+- **Root project / local-path dependencies** are keyed by absolute path. Once you press `[y]` for a path, subsequent builds at that path are auto-approved regardless of any changes to its `preliminary_commands` and `ld_flags`. This keeps the edit/build loop on your own projects friction-free, but it also means you should not press `[y]` on third-party projects that you have only cloned for inspection — use `[o]` for those.
+- **Git dependencies** are keyed by the repository URL plus the commit hash recorded in the lock file. Updating the dependency to a new commit (`fix deps update`) re-prompts so that you can review the new commit's `preliminary_commands` and `ld_flags`.
 
-To bypass the prompt in CI or any other non-interactive environment, pass `--allow-preliminary-commands`. This treats every pending command as a one-shot approval and does not write to the trust store.
+To bypass the prompt in CI or any other non-interactive environment, pass `--trust-projects`. This treats every pending project as a one-shot approval and does not write to the trust store.
 
-If the session is non-interactive (no TTY attached) and `--allow-preliminary-commands` was not given, the build fails with a descriptive error rather than blocking on a prompt.
+If the session is non-interactive (no TTY attached) and `--trust-projects` was not given, the build fails with a descriptive error rather than blocking on a prompt.
 
 Entries in `~/.fixtrust.toml` are plain TOML; to revoke an approval, either delete the whole file or remove the offending `[[approval]]` block manually.
 

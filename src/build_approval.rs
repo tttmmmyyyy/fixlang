@@ -1,6 +1,9 @@
-// `PreliminaryCommand` data types and the approval flow that runs them.
-// The flow is invoked by `Configuration::run_preliminary_commands`.
-// See `logs/.../spec.md` for the user-visible specification.
+// The approval of what a project asks a build to run: the `preliminary_commands` it lists and the
+// `ld_flags` it hands to the linker. Both run code the project chooses (a linker flag such as
+// `gcc`'s `-wrapper` starts any program), so a build uses them only once the user has approved
+// them. The flow is invoked by `Configuration::approve_build_requests`.
+// See the section "Approval of `preliminary_commands` and `ld_flags`" of `Document.md` for the
+// user-visible specification.
 
 use crate::{
     configuration::Configuration,
@@ -19,114 +22,121 @@ use std::process::Command;
 
 // ---- Types ----
 
-// Which `preliminary_commands` section a command belongs to (`[build]` or `[build.test]`).
+// Which section of a project file a request comes from: `[build]` or `[build.test]`.
 // Used as part of the trust-store approval key so build-mode and test-mode approvals are
 // tracked independently.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum PreliminaryCommandMode {
+pub enum BuildSection {
     Build,
     Test,
 }
 
-impl PreliminaryCommandMode {
+impl BuildSection {
     // Lowercase identifier used in the `mode` field of `~/.fixtrust.toml` entries.
     pub fn as_str(&self) -> &'static str {
         match self {
-            PreliminaryCommandMode::Build => "build",
-            PreliminaryCommandMode::Test => "test",
+            BuildSection::Build => "build",
+            BuildSection::Test => "test",
         }
     }
 }
 
-// A single preliminary command queued to run before compilation. One entry is created per
-// argv in a `fixproj.toml` `preliminary_commands` array, with `project_name`, `mode`, and
-// `source` identifying which project the command came from.
+// What one section of one project file asks the build to run: its `preliminary_commands` and its
+// `ld_flags`. A section that lists neither makes no request. The trust-store lookup granularity is
+// one request.
 #[derive(Clone)]
-pub struct PreliminaryCommand {
-    // Absolute path of the directory in which the command will run.
+pub struct BuildRequest {
+    // Absolute path of the project directory, in which the commands run.
     pub work_dir: PathBuf,
-    // argv of the command (must be non-empty; the first element is the executable).
-    pub command: Vec<String>,
-    // `[general] name` of the project that declared this command (used for display).
+    // `[general] name` of the project that made the request (used for display).
     pub project_name: String,
-    // Whether this command came from `[build]` or `[build.test]`.
-    pub mode: PreliminaryCommandMode,
-    // Where the declaring project originated from. Combined with `mode` (and commit for
-    // git deps) to look up the trust-store entry that approves this command.
+    // Whether the request came from `[build]` or `[build.test]`.
+    pub section: BuildSection,
+    // Where the requesting project originated from. Combined with `section` (and commit for
+    // git deps) to look up the trust-store entry that approves this request.
     pub source: ProjectOrigin,
+    // The argv of each preliminary command, each non-empty with the executable first.
+    pub preliminary_commands: Vec<Vec<String>>,
+    // The flags to hand to the linker.
+    pub ld_flags: Vec<String>,
 }
 
-impl PreliminaryCommand {
-    // Execute this command synchronously. Returns an error if the process fails to start
-    // or exits non-zero. Scans the command's stdout for lines in the
-    // `fix.ld_flags=...` format and appends their flags to `config.ld_flags`.
-    pub fn run(&self, config: &mut Configuration) -> Result<(), Errors> {
-        let mut com = Command::new(&self.command[0]);
-        for arg in &self.command[1..] {
-            com.arg(arg);
-        }
-        let work_dir = to_absolute_path(&self.work_dir)?;
-        com.current_dir(&work_dir);
-        let status = com.status().map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to run command \"{}\": {:?}",
-                self.command.join(" "),
-                e
-            ))
-        })?;
-        if !status.success() {
-            return Err(Errors::from_msg(format!(
-                "Command \"{}\" failed with exit code {}.",
-                self.command.join(" "),
-                status.code().unwrap_or(-1)
-            )));
-        }
-
-        // Get stdout as String.
-        let output = com.output().map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to run command \"{}\": {:?}",
-                self.command.join(" "),
-                e
-            ))
-        })?;
-
-        // If the command outputs build flags in the designated format, add them to the configuration.
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stdout_lines: Vec<&str> = stdout.lines().collect();
-        for stdout_line in stdout_lines {
-            if stdout_line.starts_with(PRELIMINARY_BUILD_LD_FLAGS) {
-                let ld_flags = stdout_line[PRELIMINARY_BUILD_LD_FLAGS.len()..].trim();
-                let mut ld_flags = split_string_by_space_not_quated(ld_flags);
-                config.ld_flags.append(&mut ld_flags);
-            }
-        }
-        Ok(())
+// Execute the preliminary command `command` in `work_dir` synchronously. Returns an error if the
+// process fails to start or exits non-zero. Scans the command's stdout for lines in the
+// `fix.ld_flags=...` format and appends their flags to `config.ld_flags`.
+fn run_preliminary_command(
+    command: &[String],
+    work_dir: &Path,
+    config: &mut Configuration,
+) -> Result<(), Errors> {
+    let mut com = Command::new(&command[0]);
+    for arg in &command[1..] {
+        com.arg(arg);
     }
+    let work_dir = to_absolute_path(work_dir)?;
+    com.current_dir(&work_dir);
+    let status = com.status().map_err(|e| {
+        Errors::from_msg(format!(
+            "Failed to run command \"{}\": {:?}",
+            command.join(" "),
+            e
+        ))
+    })?;
+    if !status.success() {
+        return Err(Errors::from_msg(format!(
+            "Command \"{}\" failed with exit code {}.",
+            command.join(" "),
+            status.code().unwrap_or(-1)
+        )));
+    }
+
+    // Get stdout as String.
+    let output = com.output().map_err(|e| {
+        Errors::from_msg(format!(
+            "Failed to run command \"{}\": {:?}",
+            command.join(" "),
+            e
+        ))
+    })?;
+
+    // If the command outputs build flags in the designated format, add them to the configuration.
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout_lines: Vec<&str> = stdout.lines().collect();
+    for stdout_line in stdout_lines {
+        if stdout_line.starts_with(PRELIMINARY_BUILD_LD_FLAGS) {
+            let ld_flags = stdout_line[PRELIMINARY_BUILD_LD_FLAGS.len()..].trim();
+            let mut ld_flags = split_string_by_space_not_quated(ld_flags);
+            config.ld_flags.append(&mut ld_flags);
+        }
+    }
+    Ok(())
 }
 
 // ---- Approval flow ----
 
-// Entry point called from `Configuration::run_preliminary_commands`. Classifies the
-// queued `preliminary_commands` into approved / pending groups using the user's trust
-// store, resolves the pending ones (via the `--allow-preliminary-commands` flag, a
-// non-interactive failure, or an interactive 3-choice prompt), and finally executes all
-// commands in the order they were registered.
+// Entry point called from `Configuration::approve_build_requests`. Classifies the queued
+// requests into approved / pending ones using the user's trust store, resolves the pending ones
+// (via the `--trust-projects` flag, a non-interactive failure, or an interactive 3-choice prompt),
+// and then grants every request: its `ld_flags` go to the linker, ahead of the flags the command
+// line gives, and its preliminary commands run, in the order the requests were registered.
 pub fn approve_and_run(config: &mut Configuration) -> Result<(), Errors> {
-    if config.preliminary_commands.is_empty() {
+    if config.build_requests.is_empty() {
         return Ok(());
     }
 
-    let groups = group_commands(&config.preliminary_commands);
     let mut trust_store = TrustStore::load()?;
 
     let mut approved: Vec<Classified> = vec![];
     let mut pending: Vec<Classified> = vec![];
-    for g in groups {
-        let status = classify(&g, &trust_store);
-        match status {
-            GroupStatus::Approved => approved.push(Classified { group: g, status }),
-            _ => pending.push(Classified { group: g, status }),
+    for request in &config.build_requests {
+        let status = classify(request, &trust_store);
+        let classified = Classified {
+            request: request.clone(),
+            status,
+        };
+        match classified.status {
+            RequestStatus::Approved => approved.push(classified),
+            _ => pending.push(classified),
         }
     }
 
@@ -135,100 +145,71 @@ pub fn approve_and_run(config: &mut Configuration) -> Result<(), Errors> {
     }
 
     if !pending.is_empty() {
-        if config.allow_preliminary_commands {
+        if config.trust_projects {
             display_auto_approved(&pending);
         } else if !is_interactive() {
             display_non_interactive_error(&pending);
             return Err(Errors::from_msg(
-                "preliminary commands require approval.".to_string(),
+                "preliminary commands and ld_flags require approval.".to_string(),
             ));
         } else {
             prompt_and_record(&pending, &mut trust_store)?;
         }
     }
 
-    // Execute all preliminary_commands in the order they were registered.
-    for cmd in &config.preliminary_commands.clone() {
-        cmd.run(config)?;
+    let requests = config.build_requests.clone();
+    let project_ld_flags = requests
+        .iter()
+        .flat_map(|request| request.ld_flags.iter().cloned());
+    config.ld_flags.splice(0..0, project_ld_flags);
+    for request in &requests {
+        for command in &request.preliminary_commands {
+            run_preliminary_command(command, &request.work_dir, config)?;
+        }
     }
     Ok(())
 }
 
-// All preliminary commands that share the same `(source, mode)` tuple -- i.e. every
-// command declared under the same `[build]` or `[build.test]` section of the same
-// project. The trust-store lookup granularity is one `Group`.
-struct Group {
-    source: ProjectOrigin,
-    mode: PreliminaryCommandMode,
-    // `[general] name` of the declaring project, copied for convenience at display time.
-    project_name: String,
-    // Commands belonging to this group. Cloned (rather than borrowed) so this type can be
-    // moved around freely without wrestling with the caller's lifetimes.
-    commands: Vec<PreliminaryCommand>,
-}
-
-// Result of looking a `Group` up in the trust store.
-enum GroupStatus {
-    // No matching entry and no previous approval for this (source, mode).
+// Result of looking a `BuildRequest` up in the trust store.
+enum RequestStatus {
+    // No matching entry and no previous approval for this (source, section).
     New,
-    // A previous approval exists for this (source, mode) but with a different commit hash.
+    // A previous approval exists for this (source, section) but with a different commit hash.
     // Only possible for git dependencies; surfaced as `CHANGED from commit abcd…` so the
     // user can review what changed between updates.
     Changed { old_commit: Option<String> },
-    // Exact match in the trust store; the group can run without prompting.
+    // Exact match in the trust store; the request is granted without prompting.
     Approved,
 }
 
-// A `Group` paired with its classification. Produced by `classify` and consumed by the
+// A `BuildRequest` paired with its classification. Produced by `classify` and consumed by the
 // approval / display pipeline.
 struct Classified {
-    group: Group,
-    status: GroupStatus,
+    request: BuildRequest,
+    status: RequestStatus,
 }
 
-// Bucket every queued `PreliminaryCommand` into `Group`s keyed by `(source, mode)` while
-// preserving the original registration order across groups.
-fn group_commands(commands: &[PreliminaryCommand]) -> Vec<Group> {
-    let mut groups: Vec<Group> = vec![];
-    for cmd in commands {
-        if let Some(g) = groups
-            .iter_mut()
-            .find(|g| g.source == cmd.source && g.mode == cmd.mode)
-        {
-            g.commands.push(cmd.clone());
-        } else {
-            groups.push(Group {
-                source: cmd.source.clone(),
-                mode: cmd.mode,
-                project_name: cmd.project_name.clone(),
-                commands: vec![cmd.clone()],
-            });
-        }
-    }
-    groups
-}
-
-// Decide whether a group is `Approved`, `Changed`, or `New` relative to the trust store.
+// Decide whether a request is `Approved`, `Changed`, or `New` relative to the trust store.
 // `Changed` is only possible for git dependencies (path-based sources are trusted
 // regardless of their pinned commit).
-fn classify(g: &Group, trust_store: &TrustStore) -> GroupStatus {
-    if trust_store.is_approved(&g.source, g.mode) {
-        return GroupStatus::Approved;
+fn classify(request: &BuildRequest, trust_store: &TrustStore) -> RequestStatus {
+    if trust_store.is_approved(&request.source, request.section) {
+        return RequestStatus::Approved;
     }
-    if let ProjectOrigin::Git { .. } = &g.source {
-        let src_key = g.source.to_trust_key();
-        let mode_str = g.mode.as_str();
+    if let ProjectOrigin::Git { .. } = &request.source {
+        let src_key = request.source.to_trust_key();
+        let mode_str = request.section.as_str();
         if let Some(prev) = trust_store
             .approvals
             .iter()
             .find(|a| a.source == src_key && a.mode == mode_str)
         {
-            return GroupStatus::Changed {
+            return RequestStatus::Changed {
                 old_commit: prev.commit_hash.clone(),
             };
         }
     }
-    GroupStatus::New
+    RequestStatus::New
 }
 
 // Determine whether to treat the session as interactive.
@@ -282,7 +263,7 @@ fn read_choice() -> Choice {
     choice
 }
 
-// Walk pending groups project by project, ask the user, and persist `Yes` answers into
+// Walk pending requests project by project, ask the user, and persist `Yes` answers into
 // the trust store immediately. A `No` answer aborts the whole build without prompting
 // for any remaining projects. Trust-store write failures are downgraded to a warning so
 // the build can still proceed as a one-time approval.
@@ -300,26 +281,15 @@ fn prompt_and_record(pending: &[Classified], trust_store: &mut TrustStore) -> Re
         eprintln!(
             "{}",
             prompt_style(
-                "The following project requests your approval to run preliminary commands:"
+                "The following project requests your approval to run preliminary commands \
+                 or pass ld_flags to the linker:"
             )
         );
         display_prompt_block(sg, &trust_path);
         match read_choice() {
             Choice::Yes => {
                 for entry in &sg.entries {
-                    let preview: Vec<Vec<String>> = entry
-                        .group
-                        .commands
-                        .iter()
-                        .map(|c| c.command.clone())
-                        .collect();
-                    let approval = make_approval(
-                        &entry.group.source,
-                        entry.group.mode,
-                        entry.group.project_name.clone(),
-                        preview,
-                    );
-                    trust_store.record(approval);
+                    trust_store.record(make_approval(&entry.request));
                 }
                 if let Err(e) = trust_store.save() {
                     warn_msg(&format!(
@@ -334,7 +304,7 @@ fn prompt_and_record(pending: &[Classified], trust_store: &mut TrustStore) -> Re
             }
             Choice::No => {
                 return Err(Errors::from_msg(
-                    "preliminary commands not approved. aborted.".to_string(),
+                    "preliminary commands and ld_flags not approved. aborted.".to_string(),
                 ));
             }
         }
@@ -348,7 +318,7 @@ fn prompt_and_record(pending: &[Classified], trust_store: &mut TrustStore) -> Re
 struct SourceGroup<'a> {
     source: ProjectOrigin,
     project_name: String,
-    // One entry per mode; at most two (build, test), sorted so Build comes first.
+    // One entry per section; at most two (build, test), sorted so Build comes first.
     entries: Vec<&'a Classified>,
 }
 
@@ -357,21 +327,21 @@ struct SourceGroup<'a> {
 fn group_classified_by_source<'a>(pending: &'a [Classified]) -> Vec<SourceGroup<'a>> {
     let mut groups: Vec<SourceGroup<'a>> = vec![];
     for c in pending {
-        if let Some(sg) = groups.iter_mut().find(|sg| sg.source == c.group.source) {
+        if let Some(sg) = groups.iter_mut().find(|sg| sg.source == c.request.source) {
             sg.entries.push(c);
         } else {
             groups.push(SourceGroup {
-                source: c.group.source.clone(),
-                project_name: c.group.project_name.clone(),
+                source: c.request.source.clone(),
+                project_name: c.request.project_name.clone(),
                 entries: vec![c],
             });
         }
     }
     // Stable sort so build comes before test within each source group.
     for sg in &mut groups {
-        sg.entries.sort_by_key(|c| match c.group.mode {
-            PreliminaryCommandMode::Build => 0,
-            PreliminaryCommandMode::Test => 1,
+        sg.entries.sort_by_key(|c| match c.request.section {
+            BuildSection::Build => 0,
+            BuildSection::Test => 1,
         });
     }
     groups
@@ -426,89 +396,80 @@ fn print_path_line(work_dir: &Path) {
     eprintln!("    path: {}", work_dir.display());
 }
 
-// Print each command on its own `$ ...` line.
-fn print_command_lines(commands: &[PreliminaryCommand]) {
-    for c in commands {
-        eprintln!("    $ {}", format_argv(&c.command));
+// Print what a request asks for: each preliminary command on its own `$ ...` line, and the
+// linker flags on an `ld_flags: ...` line.
+fn print_request_lines(request: &BuildRequest) {
+    for command in &request.preliminary_commands {
+        eprintln!("    $ {}", format_argv(command));
+    }
+    if !request.ld_flags.is_empty() {
+        eprintln!("    ld_flags: {}", format_argv(&request.ld_flags));
     }
 }
 
-// Render the `(already approved)` header and the command listing for every project
-// whose preliminary_commands were pre-approved by the trust store.
+// Print the source and `path:` lines of a project and what each of its requests asks for,
+// labelling each request with its section when the project made one for each.
+fn print_source_group(sg: &SourceGroup) {
+    print_source_line(&sg.source);
+    if let Some(first) = sg.entries.first() {
+        print_path_line(&first.request.work_dir);
+    }
+    for e in &sg.entries {
+        if sg.entries.len() > 1 {
+            eprintln!("    ({})", e.request.section.as_str());
+        }
+        print_request_lines(&e.request);
+    }
+}
+
+// Render the `(already approved)` header and the listing for every project whose requests
+// were pre-approved by the trust store.
 fn display_approved(approved: &[Classified]) {
-    info_msg("Running preliminary commands (already approved).");
+    info_msg("Running preliminary commands and passing ld_flags (already approved).");
     eprintln!();
     // Re-group by source for cleaner display (same path/source shown once).
     let by_source = group_classified_by_source(approved);
     for sg in &by_source {
         eprintln!("  [{}] (approved)", sg.project_name);
-        print_source_line(&sg.source);
-        if let Some(first) = sg.entries.first().and_then(|e| e.group.commands.first()) {
-            print_path_line(&first.work_dir);
-        }
-        for e in &sg.entries {
-            if sg.entries.len() > 1 {
-                eprintln!("    ({})", e.group.mode.as_str());
-            }
-            print_command_lines(&e.group.commands);
-        }
+        print_source_group(sg);
         eprintln!();
     }
 }
 
-// Render the command listing when `--allow-preliminary-commands` was used. Commands
-// still run, but the trust store is not updated; the status label reminds the reader
-// that the approval came from the CLI flag, not from a recorded trust entry.
+// Render the listing when `--trust-projects` was used. The requests are still granted, but the
+// trust store is not updated; the status label reminds the reader that the approval came from the
+// CLI flag, not from a recorded trust entry.
 fn display_auto_approved(pending: &[Classified]) {
-    info_msg("Running preliminary commands (auto-approved via --allow-preliminary-commands).");
+    info_msg(
+        "Running preliminary commands and passing ld_flags (auto-approved via --trust-projects).",
+    );
     eprintln!();
     let by_source = group_classified_by_source(pending);
     for sg in &by_source {
-        eprintln!(
-            "  [{}] (auto-approved (--allow-preliminary-commands))",
-            sg.project_name
-        );
-        print_source_line(&sg.source);
-        if let Some(first) = sg.entries.first().and_then(|e| e.group.commands.first()) {
-            print_path_line(&first.work_dir);
-        }
-        for e in &sg.entries {
-            if sg.entries.len() > 1 {
-                eprintln!("    ({})", e.group.mode.as_str());
-            }
-            print_command_lines(&e.group.commands);
-        }
+        eprintln!("  [{}] (auto-approved (--trust-projects))", sg.project_name);
+        print_source_group(sg);
         eprintln!();
     }
 }
 
 // Render the failure message used when pending approvals remain but stdin is not a tty
-// and `--allow-preliminary-commands` was not supplied. Lists the unresolved projects
-// and points the reader at the two ways to approve.
+// and `--trust-projects` was not supplied. Lists the unresolved projects and points the
+// reader at the two ways to approve.
 fn display_non_interactive_error(pending: &[Classified]) {
     eprintln!(
-        "{}: preliminary commands require approval, but no interactive terminal is available.",
+        "{}: preliminary commands and ld_flags require approval, but no interactive terminal is available.",
         "error".red().bold()
     );
     eprintln!();
     let by_source = group_classified_by_source(pending);
     for sg in &by_source {
         print_pending_entry_header(sg);
-        print_source_line(&sg.source);
-        if let Some(first) = sg.entries.first().and_then(|e| e.group.commands.first()) {
-            print_path_line(&first.work_dir);
-        }
-        for e in &sg.entries {
-            if sg.entries.len() > 1 {
-                eprintln!("    ({})", e.group.mode.as_str());
-            }
-            print_command_lines(&e.group.commands);
-        }
+        print_source_group(sg);
         eprintln!();
     }
     eprintln!("To approve:");
     eprintln!("  - Run fix in an interactive terminal and answer the prompt.");
-    eprintln!("  - Or pass --allow-preliminary-commands to bypass for this invocation only.");
+    eprintln!("  - Or pass --trust-projects to approve for this invocation only.");
 }
 
 // Render the full prompt block for a single project's pending approval, including the
@@ -517,16 +478,7 @@ fn display_non_interactive_error(pending: &[Classified]) {
 // which file will be edited on `y`.
 fn display_prompt_block(sg: &SourceGroup, trust_path: &Path) {
     print_pending_entry_header(sg);
-    print_source_line(&sg.source);
-    if let Some(first) = sg.entries.first().and_then(|e| e.group.commands.first()) {
-        print_path_line(&first.work_dir);
-    }
-    for e in &sg.entries {
-        if sg.entries.len() > 1 {
-            eprintln!("    ({})", e.group.mode.as_str());
-        }
-        print_command_lines(&e.group.commands);
-    }
+    print_source_group(sg);
     eprintln!();
     eprintln!("{}", prompt_style("Choices:"));
     match &sg.source {
@@ -557,11 +509,11 @@ fn display_prompt_block(sg: &SourceGroup, trust_path: &Path) {
 }
 
 // Render the status line for a pending project entry. Combines the project label with
-// NEW / CHANGED / mode-specific annotations depending on the constituent entries.
+// NEW / CHANGED / section-specific annotations depending on the constituent entries.
 fn print_pending_entry_header(sg: &SourceGroup) {
     // If any entry is CHANGED, surface that (it carries more context than NEW).
     if let Some(changed) = sg.entries.iter().find_map(|e| match &e.status {
-        GroupStatus::Changed { old_commit } => Some(old_commit.clone()),
+        RequestStatus::Changed { old_commit } => Some(old_commit.clone()),
         _ => None,
     }) {
         let tag = match changed {
@@ -571,13 +523,13 @@ fn print_pending_entry_header(sg: &SourceGroup) {
         eprintln!("  [{}] ({})", sg.project_name, tag);
         return;
     }
-    // All entries are NEW. If only a single mode entry exists we annotate which one
+    // All entries are NEW. If only a single section entry exists we annotate which one
     // so the user can see why they are being re-prompted (e.g. after `fix test` when
     // build was approved separately).
     let mode_hint = if sg.entries.len() == 1 {
-        match sg.entries[0].group.mode {
-            PreliminaryCommandMode::Build => "",
-            PreliminaryCommandMode::Test => " -- test mode",
+        match sg.entries[0].request.section {
+            BuildSection::Build => "",
+            BuildSection::Test => " -- test mode",
         }
     } else {
         ""
