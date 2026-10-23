@@ -87,18 +87,20 @@ impl TrustStore {
         }
     }
 
-    /// Checks whether an approval entry matching the given (source, section) tuple exists.
-    /// For git dependencies the commit hash must also match; for local/root projects only the
-    /// source (absolute path) and section are used.
-    pub fn is_approved(&self, src: &ProjectOrigin, section: BuildSection) -> bool {
-        let src_key = src.to_trust_key();
-        let mode_str = section.as_str();
+    /// Checks whether an approval entry covers `request`: one with its source and section. For a
+    /// git dependency the entry must also hold the commit the request comes from, and the
+    /// `ld_flags` it makes, so that an entry recorded without the user seeing those flags asks
+    /// again. For a local/root project the source (absolute path) and section are enough.
+    pub fn is_approved(&self, request: &BuildRequest) -> bool {
+        let src_key = request.source.to_trust_key();
+        let mode_str = request.section.as_str();
         self.approvals.iter().any(|a| {
             a.source == src_key
                 && a.mode == mode_str
-                && match src {
+                && match &request.source {
                     ProjectOrigin::Git { commit, .. } => {
                         a.commit_hash.as_deref() == Some(commit.as_str())
+                            && a.ld_flags_preview == request.ld_flags
                     }
                     ProjectOrigin::Local(_) => true,
                 }

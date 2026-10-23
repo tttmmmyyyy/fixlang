@@ -613,6 +613,52 @@ commands_preview = []
         assert!(err.contains("CHANGED from commit"), "stderr: {}", err);
     }
 
+    /// A git dependency's approval covers its `ld_flags` only when it recorded them: one recorded
+    /// for the same commit without them asks again, and one that recorded them is used as it is.
+    #[test]
+    fn git_dep_approval_without_its_ld_flags_asks_again() {
+        let env = Env::new();
+        let dep_root = TempDir::new().unwrap();
+        let (dep_repo, commit) = make_git_dep_repo(
+            dep_root.path(),
+            "gitldflags",
+            "[general]\nname = \"gitldflags\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+             [build]\nfiles = [\"lib.fix\"]\nld_flags = [\"-lm\"]\n",
+            &[],
+        );
+        let dep_url = format!("file://{}", dep_repo.to_string_lossy());
+        write_project(
+            &env.proj,
+            &format!(
+                "[general]\nname = \"root-with-ldflags-dep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+                 [build]\nfiles = [\"main.fix\"]\n\n\
+                 [[dependencies]]\nname = \"gitldflags\"\ngit = {{ url = \"{url}\" }}\n",
+                url = dep_url
+            ),
+        );
+        let approval = |ld_flags_preview: &str| {
+            format!(
+                "[[approval]]\nsource = \"git+{dep_url}\"\nmode = \"build\"\n\
+                 commit_hash = \"{commit}\"\napproved_at = \"2026-04-20T10:00:00Z\"\n\
+                 project_name = \"gitldflags\"\n{ld_flags_preview}",
+            )
+        };
+
+        fs::write(env.trust_file(), approval("")).unwrap();
+        let out = run_fix(&env, &["build"], None, false);
+        assert!(!out.status.success(), "stderr: {}", stderr_str(&out));
+        let err = stderr_str(&out);
+        assert!(
+            err.contains("[gitldflags] (CHANGED)") && err.contains("ld_flags: -lm"),
+            "stderr: {}",
+            err
+        );
+
+        fs::write(env.trust_file(), approval("ld_flags_preview = [\"-lm\"]\n")).unwrap();
+        let out = run_fix(&env, &["build"], None, false);
+        assert!(out.status.success(), "stderr: {}", stderr_str(&out));
+    }
+
     // (R) Git dep prompt wording differs from local prompt wording.
     #[test]
     fn case_r_git_prompt_wording() {

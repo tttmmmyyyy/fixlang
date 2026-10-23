@@ -173,9 +173,10 @@ pub fn approve_and_run(config: &mut Configuration) -> Result<(), Errors> {
 enum RequestStatus {
     /// No matching entry and no previous approval for this (source, section).
     New,
-    /// A previous approval exists for this (source, section) but with a different commit hash.
-    /// Only possible for git dependencies; surfaced as `CHANGED from commit abcd…` so the
-    /// user can review what changed between updates.
+    /// A previous approval exists for this (source, section) but with a different commit hash,
+    /// or for the same commit with other `ld_flags`. Only possible for git dependencies; surfaced
+    /// as `CHANGED from commit abcd…` (or `CHANGED`, where `old_commit` names no other commit) so
+    /// the user can review what changed between updates.
     Changed { old_commit: Option<String> },
     /// Exact match in the trust store; the request is granted without prompting.
     Approved,
@@ -191,10 +192,10 @@ struct Classified {
 /// `Changed` is only possible for git dependencies (path-based sources are trusted
 /// regardless of their pinned commit).
 fn classify(request: &BuildRequest, trust_store: &TrustStore) -> RequestStatus {
-    if trust_store.is_approved(&request.source, request.section) {
+    if trust_store.is_approved(request) {
         return RequestStatus::Approved;
     }
-    if let ProjectOrigin::Git { .. } = &request.source {
+    if let ProjectOrigin::Git { commit, .. } = &request.source {
         let src_key = request.source.to_trust_key();
         let mode_str = request.section.as_str();
         if let Some(prev) = trust_store
@@ -202,8 +203,10 @@ fn classify(request: &BuildRequest, trust_store: &TrustStore) -> RequestStatus {
             .iter()
             .find(|a| a.source == src_key && a.mode == mode_str)
         {
+            // An entry for the request's own commit differs from it in the `ld_flags` it recorded,
+            // and names no other commit.
             return RequestStatus::Changed {
-                old_commit: prev.commit_hash.clone(),
+                old_commit: prev.commit_hash.clone().filter(|old| old != commit),
             };
         }
     }
