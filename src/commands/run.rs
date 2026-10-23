@@ -3,7 +3,7 @@ use crate::configuration::{Configuration, OutputFileType};
 use crate::constants::{DOT_FIXLANG, RUN_PATH};
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::misc::remove_inside_dot_fixlang;
-use rand::Rng;
+use rand::{thread_rng, Rng};
 use std::fs;
 use std::io;
 #[cfg(unix)]
@@ -71,7 +71,7 @@ pub fn with_temporary_executable<T>(
 
     // For parallel execution, use different file name for each execution.
     let exec_path =
-        PathBuf::from(RUN_PATH).join(format!("a{}.out", rand::thread_rng().gen::<u64>()));
+        PathBuf::from(RUN_PATH).join(format!("a{}.out", thread_rng().gen::<u64>()));
     let user_specified_out_path =
         std::mem::replace(&mut config.out_file_path, Some(exec_path.clone()));
 
