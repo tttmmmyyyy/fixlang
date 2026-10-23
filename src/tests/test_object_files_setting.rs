@@ -64,11 +64,12 @@ fn test_an_object_named_like_an_option_is_not_an_option() {
 fn test_an_object_named_like_an_options_file_is_not_read_for_options() {
     let dir = TempDir::new().unwrap();
     let marker = write_wrapper_script(dir.path());
-    fs::write(dir.path().join("@opts"), "-wrapper ./wrap.sh\n").unwrap();
+    // `gcc` reads `@opts` as the file `opts` of further options.
+    fs::write(dir.path().join("opts"), "-wrapper ./wrap.sh\n").unwrap();
     write_project(dir.path(), "[\"@opts\"]");
     assert_failed(
         &run_fix(dir.path(), &["build", "-O", "none"]),
-        "`fix build` should fail to link the text file `@opts`.",
+        "`fix build` should fail to link `@opts`, which is no file.",
     );
     assert!(!marker.exists(), "the object `@opts` was read for options");
 }
