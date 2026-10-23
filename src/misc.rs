@@ -475,15 +475,17 @@ pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
 /// `path`. A symbolic link at `path` is replaced by the new file, and what it pointed to is kept.
 pub fn replace_file(path: &Path, content: &[u8]) -> io::Result<()> {
     let tmp_path = path.with_extension(format!("{}.tmp", rand::random::<u64>()));
-    fs::OpenOptions::new()
+    let mut tmp_file = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&tmp_path)?
-        .write_all(content)?;
-    fs::rename(&tmp_path, path).inspect_err(|_| {
-        // The file was created above by this call, so removing it touches nothing else.
-        let _ = fs::remove_file(&tmp_path);
-    })
+        .open(&tmp_path)?;
+    tmp_file
+        .write_all(content)
+        .and_then(|()| fs::rename(&tmp_path, path))
+        .inspect_err(|_| {
+            // The file was created above by this call, so removing it touches nothing else.
+            let _ = fs::remove_file(&tmp_path);
+        })
 }
 
 /// The path `target` written relative to the path `base`, so that `base` joined with the result
