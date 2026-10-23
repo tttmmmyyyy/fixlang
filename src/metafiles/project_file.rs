@@ -370,10 +370,7 @@ impl ProjectFile {
         let mut proj_file = ProjectFile::read_file(&proj_file_path)?;
         proj_file.role = ProjectFileRole::Root;
         proj_file.source = Some(ProjectOrigin::Local(to_absolute_path(
-            proj_file
-                .path
-                .parent()
-                .expect("ProjectFile::path always points to fixproj.toml inside a directory"),
+            proj_file.project_dir(),
         )?));
         Ok(proj_file)
     }
@@ -1254,11 +1251,7 @@ impl ProjectFile {
         if path.is_absolute() {
             return path.to_path_buf();
         } else {
-            return self
-                .path
-                .parent()
-                .expect("ProjectFile::path always points to fixproj.toml inside a directory")
-                .join(path);
+            return self.project_dir().join(path);
         }
     }
 
