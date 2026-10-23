@@ -3,26 +3,10 @@
 //! file of further options (`@file`) is still read as the path of a file, so a project file cannot
 //! hand the linker options through `objects` without the approval `ld_flags` need.
 
-use crate::tests::test_util::{assert_failed, run_fix};
+use crate::tests::test_util::{assert_failed, run_fix, write_wrapper_script};
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use tempfile::TempDir;
-
-/// Writes into `dir` a script `wrap.sh` that, given as `gcc`'s `-wrapper`, records that it ran by
-/// creating `dir/wrapper-ran` and then runs the command `gcc` handed it. Returns the path of the
-/// file it creates.
-fn write_wrapper_script(dir: &Path) -> std::path::PathBuf {
-    let marker = dir.join("wrapper-ran");
-    let script = dir.join("wrap.sh");
-    fs::write(
-        &script,
-        format!("#!/bin/sh\ntouch '{}'\nexec \"$@\"\n", marker.display()),
-    )
-    .unwrap();
-    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
-    marker
-}
 
 /// Writes into `dir` a project whose `build` section lists `objects` (a TOML array literal).
 fn write_project(dir: &Path, objects: &str) {
@@ -47,7 +31,7 @@ fn write_project(dir: &Path, objects: &str) {
 #[test]
 fn test_an_object_named_like_an_option_is_not_an_option() {
     let dir = TempDir::new().unwrap();
-    let marker = write_wrapper_script(dir.path());
+    let (_script, marker) = write_wrapper_script(dir.path());
     write_project(dir.path(), "[\"-wrapper\", \"./wrap.sh\"]");
     assert_failed(
         &run_fix(dir.path(), &["build", "-O", "none"]),
@@ -63,7 +47,7 @@ fn test_an_object_named_like_an_option_is_not_an_option() {
 #[test]
 fn test_an_object_named_like_an_options_file_is_not_read_for_options() {
     let dir = TempDir::new().unwrap();
-    let marker = write_wrapper_script(dir.path());
+    let (_script, marker) = write_wrapper_script(dir.path());
     // `gcc` reads `@opts` as the file `opts` of further options.
     fs::write(dir.path().join("opts"), "-wrapper ./wrap.sh\n").unwrap();
     write_project(dir.path(), "[\"@opts\"]");

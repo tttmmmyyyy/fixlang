@@ -408,6 +408,25 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
     Ok(canonicalized.unwrap())
 }
 
+/// The entry `path` names, written as the directory it is in, with symbolic links and `..`
+/// resolved, joined with the last component of `path`. A symbolic link at that last component is
+/// left unresolved. `None` when `path` names no entry of its own, as one ending in `..` does.
+///
+/// The directory has to exist, since resolving it reads the file system.
+pub fn resolve_entry(path: &Path) -> io::Result<Option<PathBuf>> {
+    let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+        return Ok(None);
+    };
+    // The parent of a relative path of one component is the empty path, which `canonicalize`
+    // does not take for the current directory it names.
+    let parent = if parent.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        parent
+    };
+    Ok(Some(parent.canonicalize()?.join(name)))
+}
+
 /// Fails when the `.fixlang` of the current directory is a symbolic link. Fix writes and removes
 /// the files under `.fixlang` as files of the project, and a `.fixlang` that is a symbolic link,
 /// such as one committed to a repository, would lead those writes and removals outside the project.

@@ -16,6 +16,7 @@ use std::{
     ffi::OsString,
     fs::{self, remove_file, File},
     io,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Output, Stdio},
     sync::{Arc, Once},
@@ -1318,4 +1319,19 @@ pub fn standalone_generator<'c, 'm>(
         Default::default(),
         Default::default(),
     )
+}
+
+/// Writes into `dir` a script `wrap.sh` that, given as `gcc`'s `-wrapper`, records that it ran by
+/// creating `dir/wrapper-ran` and then runs the command `gcc` handed it. Returns the script's path
+/// and the path of the file it creates.
+pub fn write_wrapper_script(dir: &Path) -> (PathBuf, PathBuf) {
+    let script = dir.join("wrap.sh");
+    let marker = dir.join("wrapper-ran");
+    fs::write(
+        &script,
+        format!("#!/bin/sh\ntouch '{}'\nexec \"$@\"\n", marker.display()),
+    )
+    .unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    (script, marker)
 }

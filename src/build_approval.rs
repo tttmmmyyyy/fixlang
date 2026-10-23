@@ -63,11 +63,11 @@ pub struct BuildRequest {
 
 // Execute the preliminary command `command` in `work_dir` synchronously. Returns an error if the
 // process fails to start or exits non-zero. Scans the command's stdout for lines in the
-// `fix.ld_flags=...` format and appends their flags to `config.ld_flags`.
+// `fix.ld_flags=...` format and appends their flags to `ld_flags`.
 fn run_preliminary_command(
     command: &[String],
     work_dir: &Path,
-    config: &mut Configuration,
+    ld_flags: &mut Vec<String>,
 ) -> Result<(), Errors> {
     let mut com = Command::new(&command[0]);
     for arg in &command[1..] {
@@ -104,9 +104,8 @@ fn run_preliminary_command(
     let stdout_lines: Vec<&str> = stdout.lines().collect();
     for stdout_line in stdout_lines {
         if stdout_line.starts_with(PRELIMINARY_BUILD_LD_FLAGS) {
-            let ld_flags = stdout_line[PRELIMINARY_BUILD_LD_FLAGS.len()..].trim();
-            let mut ld_flags = split_string_by_space_not_quated(ld_flags);
-            config.ld_flags.append(&mut ld_flags);
+            let flags = stdout_line[PRELIMINARY_BUILD_LD_FLAGS.len()..].trim();
+            ld_flags.append(&mut split_string_by_space_not_quated(flags));
         }
     }
     Ok(())
@@ -136,7 +135,7 @@ pub fn approve_and_run(config: &mut Configuration) -> Result<(), Errors> {
         };
         match classified.status {
             RequestStatus::Approved => approved.push(classified),
-            _ => pending.push(classified),
+            RequestStatus::New | RequestStatus::Changed { .. } => pending.push(classified),
         }
     }
 
@@ -157,14 +156,14 @@ pub fn approve_and_run(config: &mut Configuration) -> Result<(), Errors> {
         }
     }
 
-    let requests = config.build_requests.clone();
-    let project_ld_flags = requests
+    let project_ld_flags = config
+        .build_requests
         .iter()
         .flat_map(|request| request.ld_flags.iter().cloned());
     config.ld_flags.splice(0..0, project_ld_flags);
-    for request in &requests {
+    for request in &config.build_requests {
         for command in &request.preliminary_commands {
-            run_preliminary_command(command, &request.work_dir, config)?;
+            run_preliminary_command(command, &request.work_dir, &mut config.ld_flags)?;
         }
     }
     Ok(())
@@ -411,9 +410,8 @@ fn print_request_lines(request: &BuildRequest) {
 // labelling each request with its section when the project made one for each.
 fn print_source_group(sg: &SourceGroup) {
     print_source_line(&sg.source);
-    if let Some(first) = sg.entries.first() {
-        print_path_line(&first.request.work_dir);
-    }
+    // `group_classified_by_source` makes each group with the entry that opens it.
+    print_path_line(&sg.entries[0].request.work_dir);
     for e in &sg.entries {
         if sg.entries.len() > 1 {
             eprintln!("    ({})", e.request.section.as_str());

@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_util::{create_git_repo, fix_command};
+    use crate::tests::test_util::{create_git_repo, fix_command, write_wrapper_script};
     use std::fs;
     use std::io::Write;
     use std::path::{Path, PathBuf};
@@ -660,22 +660,6 @@ commands_preview = []
             "[general]\nname = \"{name}\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
              [build]\nfiles = [\"main.fix\"]\nld_flags = {ld_flags}\n",
         )
-    }
-
-    // Writes into `dir` a script `wrap.sh` that, given as `gcc`'s `-wrapper`, records that it ran
-    // by creating `dir/wrapper-ran` and then runs the command `gcc` handed it. Returns the script's
-    // path and the path of the file it creates.
-    fn write_wrapper_script(dir: &Path) -> (PathBuf, PathBuf) {
-        use std::os::unix::fs::PermissionsExt;
-        let script = dir.join("wrap.sh");
-        let marker = dir.join("wrapper-ran");
-        fs::write(
-            &script,
-            format!("#!/bin/sh\ntouch '{}'\nexec \"$@\"\n", marker.display()),
-        )
-        .unwrap();
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
-        (script, marker)
     }
 
     // `ld_flags` that run a program are refused without approval, and the program does not run.

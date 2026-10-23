@@ -15,7 +15,7 @@ use crate::{
     error::Errors,
     hash::HashSource,
     metafiles::{config_file::ConfigFile, registry_file::RegistryFile},
-    misc::{info_msg, replace_file, to_absolute_path, warn_msg, Set},
+    misc::{info_msg, replace_file, resolve_entry, to_absolute_path, warn_msg, Set},
     parse::sourcefile::{SourceFile, Span},
 };
 use regex::Regex;
@@ -890,11 +890,7 @@ impl ProjectFile {
         // Record what the project asks the build to run: the preliminary commands and the linker
         // flags of its `build` section, and in a test build those of its `build.test` section.
         // They run once the user approves them.
-        let work_dir = to_absolute_path(
-            self.path
-                .parent()
-                .expect("ProjectFile::path always points to fixproj.toml inside a directory"),
-        )?;
+        let work_dir = to_absolute_path(self.project_dir())?;
         let mut sections = vec![(
             BuildSection::Build,
             &self.build.preliminary_commands,
@@ -1236,30 +1232,20 @@ impl ProjectFile {
                 e
             ))
         };
-        // The parent of a relative path of one component is the empty path, which `canonicalize`
-        // does not take for the current directory it names.
-        let canonicalize_dir = |dir: &Path| {
-            if dir.as_os_str().is_empty() {
-                Path::new(".").canonicalize()
-            } else {
-                dir.canonicalize()
-            }
-        };
         let path = self.join_to_project_dir(output);
-        let (Some(parent), Some(_)) = (path.parent(), path.file_name()) else {
-            return Err(outside());
-        };
-        let parent = canonicalize_dir(parent).map_err(failed)?;
-        let project_dir = canonicalize_dir(
-            self.path
-                .parent()
-                .expect("ProjectFile::path always points to fixproj.toml inside a directory"),
-        )
-        .map_err(failed)?;
-        if !parent.starts_with(&project_dir) || path.is_symlink() {
-            return Err(outside());
+        let entry = resolve_entry(&path).map_err(failed)?;
+        let project_dir = to_absolute_path(self.project_dir())?;
+        match entry {
+            Some(entry) if entry.starts_with(&project_dir) && !entry.is_symlink() => Ok(()),
+            _ => Err(outside()),
         }
-        Ok(())
+    }
+
+    /// The directory holding this project file.
+    fn project_dir(&self) -> &Path {
+        self.path
+            .parent()
+            .expect("ProjectFile::path always points to fixproj.toml inside a directory")
     }
 
     /// `path` resolved against the directory holding this project file. An absolute `path` is
