@@ -3182,7 +3182,7 @@ Fixのビルドシステムは、ビルドに含まれるすべてのプロジ�
 
 `fix build`、`fix run`、`fix test` は、プロジェクトとその依存が与えるものを実行します。コンパイルの前には `preliminary_commands` を実行し、リンカのコマンドラインには `ld_flags` を渡します。`gcc` の `-wrapper` のように、プログラムを起動するフラグもあります。`fix run` と `fix test` は、さらにソースファイルからビルドしたプログラムを実行し、そのプログラムは C の関数を何でも呼べます。プロジェクトをビルド・実行・テストするのは、そのプロジェクトと依存を信頼できるときだけにしてください。
 
-`fix check`、`fix deps install`、`fix deps update`、`fix docs` と language server は、プロジェクトが与えるものを何も実行しません。まだ信頼していないプロジェクトは、これらのコマンドで調べるか、エディタで開いて調べてください。
+`fix check`、`fix deps install`、`fix deps update`、`fix docs` と language server は、プロジェクトが与えるプログラムを実行しません。
 
 Fix 1.3.0 から 1.5.x までと 1.6.0 の pre-release は、`preliminary_commands` を実行する前にユーザに承認を求めていました。この承認は信頼できないプロジェクトを止められないため、1.6.0 で削除しました。承認がなくても、`ld_flags` とビルドしたプログラムを通して、プロジェクトに書かれたものが実行されるからです。
 

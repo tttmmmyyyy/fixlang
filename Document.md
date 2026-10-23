@@ -3076,7 +3076,7 @@ The Fix build system compiles all the projects of a build as a single set of com
 
 `fix build`, `fix run` and `fix test` run what a project and its dependencies supply: the `preliminary_commands` before compilation, and the `ld_flags` on the linker's command line, where a flag such as `gcc`'s `-wrapper` starts a program. `fix run` and `fix test` also run the program built from their source files, which can call any C function. Build, run and test a project only when you trust it and its dependencies.
 
-`fix check`, `fix deps install`, `fix deps update`, `fix docs` and the language server run nothing a project supplies. Inspect a project you do not trust yet with these commands, or by opening it in an editor.
+`fix check`, `fix deps install`, `fix deps update`, `fix docs` and the language server run no program a project supplies.
 
 Fix 1.3.0 to 1.5.x and the pre-releases of 1.6.0 asked the user to approve the `preliminary_commands` before running them. The approval was removed in 1.6.0, since it did not stop an untrusted project: the `ld_flags` and the built program run what the project wrote without it.
 
