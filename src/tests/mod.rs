@@ -83,6 +83,7 @@ mod test_preliminary_commands;
 mod test_provenance;
 mod test_punched_array;
 mod test_rc_ir_aliasing;
+mod test_removal_inside_dot_fixlang;
 mod test_runtime_build;
 mod test_sanitize_setting;
 mod test_shared_boxed_swap;

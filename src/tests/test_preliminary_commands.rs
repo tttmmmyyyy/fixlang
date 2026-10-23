@@ -3,7 +3,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tests::test_util::fix_command;
+    use crate::tests::test_util::{create_git_repo, fix_command};
     use std::fs;
     use std::io::Write;
     use std::path::{Path, PathBuf};
@@ -508,39 +508,20 @@ commands_preview = [["echo", "hello"]]
         fixproj_toml: &str,
         extra_files: &[(&str, &str)],
     ) -> (PathBuf, String) {
-        use git2::{IndexAddOption, Repository, Signature};
         let repo_dir = root.join(format!("{}-repo", name));
         fs::create_dir_all(&repo_dir).unwrap();
-        let repo = Repository::init(&repo_dir).expect("git init");
-        fs::write(repo_dir.join("fixproj.toml"), fixproj_toml).unwrap();
-        fs::write(
-            repo_dir.join("lib.fix"),
-            format!(
-                "module {};\n\ngreet : IO ();\ngreet = println(\"hi from {}\");\n",
-                capitalize(name),
-                name
-            ),
-        )
-        .unwrap();
-        for (rel, content) in extra_files {
-            let path = repo_dir.join(rel);
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent).unwrap();
-            }
-            fs::write(path, content).unwrap();
-        }
-        let mut index = repo.index().unwrap();
-        index
-            .add_all(&["*"], IndexAddOption::DEFAULT, None)
-            .unwrap();
-        index.write().unwrap();
-        let tree_id = index.write_tree().unwrap();
-        let tree = repo.find_tree(tree_id).unwrap();
-        let sig = Signature::now("Test", "test@example.com").unwrap();
-        let commit_id = repo
-            .commit(Some("HEAD"), &sig, &sig, "initial", &tree, &[])
-            .unwrap();
-        (repo_dir, commit_id.to_string())
+        let lib_fix = format!(
+            "module {};\n\ngreet : IO ();\ngreet = println(\"hi from {}\");\n",
+            capitalize(name),
+            name
+        );
+        let mut files = vec![
+            ("fixproj.toml", fixproj_toml),
+            ("lib.fix", lib_fix.as_str()),
+        ];
+        files.extend_from_slice(extra_files);
+        let commit = create_git_repo(&repo_dir, &files);
+        (repo_dir, commit)
     }
 
     fn capitalize(s: &str) -> String {

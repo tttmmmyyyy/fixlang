@@ -1,6 +1,6 @@
 use crate::constants::LOG_FILE_PATH;
 use once_cell::sync::Lazy;
-use std::fs::File;
+use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::sync::Mutex;
 
@@ -15,11 +15,10 @@ fn open_log_file() -> Mutex<File> {
         .expect("Failed to get parent directory of LSP_LOG_FILE_PATH.");
 
     // Create directories to the parent directory.
-    std::fs::create_dir_all(parent_dir)
-        .expect("Failed to create directories to the parent directory.");
+    fs::create_dir_all(parent_dir).expect("Failed to create directories to the parent directory.");
 
     // Create and open the log file.
-    let file = std::fs::OpenOptions::new()
+    let file = OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)

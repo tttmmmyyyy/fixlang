@@ -196,7 +196,7 @@ pub fn test_examples(
 /// `config`: an example to compile passed when the program was built, and an example to run is run.
 fn outcome_in_program(
     config: &Configuration,
-    exec_path: &str,
+    exec_path: &Path,
     position: usize,
     example: &FixExample,
 ) -> ExampleOutcome {

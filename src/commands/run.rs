@@ -2,12 +2,13 @@ use crate::commands::build::build;
 use crate::configuration::{Configuration, OutputFileType};
 use crate::constants::{DOT_FIXLANG, RUN_PATH};
 use crate::error::{panic_if_err, panic_with_msg, Errors};
-use rand::Rng;
+use crate::misc::remove_inside_dot_fixlang;
+use rand::{thread_rng, Rng};
 use std::fs;
 use std::io;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{self, Output, Stdio};
 
 /// Builds the program as an executable under `RUN_PATH` and runs it, passing it the arguments
@@ -53,7 +54,7 @@ pub fn build_executable(config: Configuration) -> Result<(), Errors> {
 /// names, and removed when the settings name no path.
 pub fn with_temporary_executable<T>(
     mut config: Configuration,
-    use_executable: impl FnOnce(&Configuration, &str) -> Result<T, Errors>,
+    use_executable: impl FnOnce(&Configuration, &Path) -> Result<T, Errors>,
 ) -> Result<T, Errors> {
     // The kind of the output file describes what `fix build` produces, so the settings that name a
     // dynamic library reach `fix build` alone (`ProjectFile::set_config`, `set_config_from_args`).
@@ -69,11 +70,9 @@ pub fn with_temporary_executable<T>(
         .expect(format!("Failed to create \"{}\" directory.", RUN_PATH).as_str());
 
     // For parallel execution, use different file name for each execution.
-    let exec_path: String = format!("{}/a{}.out", RUN_PATH, rand::thread_rng().gen::<u64>());
-    let user_specified_out_path = std::mem::replace(
-        &mut config.out_file_path,
-        Some(PathBuf::from(exec_path.clone())),
-    );
+    let exec_path = PathBuf::from(RUN_PATH).join(format!("a{}.out", thread_rng().gen::<u64>()));
+    let user_specified_out_path =
+        std::mem::replace(&mut config.out_file_path, Some(exec_path.clone()));
 
     config.validate_run_settings()?;
 
@@ -86,11 +85,11 @@ pub fn with_temporary_executable<T>(
     match user_specified_out_path {
         Some(out_path) => {
             // Move the temporary executable file to the specified output file.
-            if let Err(e) = fs::rename(exec_path.clone(), out_path.clone()) {
-                let _ = fs::remove_file(exec_path.clone()); // Ignore the error.
+            if let Err(e) = fs::rename(&exec_path, &out_path) {
+                let _ = remove_inside_dot_fixlang(&exec_path); // Ignore the error.
                 panic_with_msg(&format!(
                     "Failed to rename \"{}\" to \"{}\": {}",
-                    exec_path,
+                    exec_path.display(),
                     out_path.display(),
                     e
                 ));
@@ -98,7 +97,7 @@ pub fn with_temporary_executable<T>(
         }
         None => {
             // If the output file is not specified, remove the temporary executable file.
-            let _ = fs::remove_file(exec_path.clone()); // Ignore the error.
+            let _ = remove_inside_dot_fixlang(&exec_path); // Ignore the error.
         }
     }
 
