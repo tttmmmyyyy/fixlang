@@ -408,9 +408,9 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
 }
 
 /// Removes the file or directory at `path`, which must be the `.fixlang` directory of the current
-/// directory or lie inside it. Fix makes every removal through this function, so that the contents
-/// of a project directory, such as a lock file or a `.fixlang` that is a symbolic link, cannot lead
-/// fix to remove anything outside `.fixlang`.
+/// directory or lie inside it. Fix removes the files and directories of a project through this
+/// function, so that the contents of a project directory, such as a lock file or a `.fixlang` that
+/// is a symbolic link, cannot lead fix to remove anything outside `.fixlang`.
 ///
 /// The check applies to the entry the removal takes away: the last component of `path`, inside its
 /// parent directory with symbolic links and `..` resolved. A symbolic link at `path` itself is
@@ -440,19 +440,36 @@ pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
         // A path ending in `..` names no entry of its own.
         _ => None,
     };
-    if !entry.is_some_and(|entry| entry.starts_with(&dot_fixlang)) {
+    let Some(entry) = entry.filter(|entry| entry.starts_with(&dot_fixlang)) else {
         return Err(Errors::from_msg(format!(
             "Refused to remove \"{}\", which lies outside \"{}\".",
             path.to_string_lossy(),
             dot_fixlang.to_string_lossy()
         )));
-    }
-    if fs::symlink_metadata(path).map_err(failed)?.is_dir() {
-        fs::remove_dir_all(path)
+    };
+    // The removal acts on the entry judged above. `path` itself, written with a trailing `/` or
+    // `/.`, leads the file system through a symbolic link at its last component.
+    if fs::symlink_metadata(&entry).map_err(failed)?.is_dir() {
+        fs::remove_dir_all(&entry)
     } else {
-        fs::remove_file(path)
+        fs::remove_file(&entry)
     }
     .map_err(failed)
+}
+
+/// Writes `content` to the file at `path` by writing a new file beside it and renaming that onto
+/// `path`. A symbolic link at `path` is replaced by the new file, and what it pointed to is kept.
+pub fn replace_file(path: &Path, content: &[u8]) -> io::Result<()> {
+    let tmp_path = path.with_extension(format!("{}.tmp", rand::random::<u64>()));
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&tmp_path)?
+        .write_all(content)?;
+    fs::rename(&tmp_path, path).inspect_err(|_| {
+        // The file was created above by this call, so removing it touches nothing else.
+        let _ = fs::remove_file(&tmp_path);
+    })
 }
 
 /// The path `target` written relative to the path `base`, so that `base` joined with the result

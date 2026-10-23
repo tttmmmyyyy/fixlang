@@ -14,7 +14,7 @@ use crate::{
     error::Errors,
     hash::HashSource,
     metafiles::{config_file::ConfigFile, registry_file::RegistryFile},
-    misc::{info_msg, to_absolute_path, warn_msg, Set},
+    misc::{info_msg, replace_file, to_absolute_path, warn_msg, Set},
     parse::sourcefile::{SourceFile, Span},
     preliminary_command::{PreliminaryCommand, PreliminaryCommandMode},
 };
@@ -1152,7 +1152,7 @@ impl ProjectFile {
             fs::create_dir_all(parent)
                 .map_err(|e| Errors::from_msg(format!("Failed to create directory: {:?}", e)))?;
         }
-        fs::write(lock_file_path, content)
+        replace_file(Path::new(lock_file_path), content.as_bytes())
             .map_err(|e| Errors::from_msg(format!("Failed to write lock file: {:?}", e)))?;
         Ok(lock_file)
     }
