@@ -889,7 +889,7 @@ impl ProjectFile {
 
         // Record what the project asks the build to run: the preliminary commands and the linker
         // flags of its `build` section, and in a test build those of its `build.test` section.
-        // They run once the user approves them.
+        // They take effect once the user approves them.
         let work_dir = to_absolute_path(self.project_dir())?;
         let mut sections = vec![(
             BuildSection::Build,

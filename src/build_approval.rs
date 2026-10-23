@@ -1,7 +1,7 @@
 // The approval of what a project asks a build to run: the `preliminary_commands` it lists and the
 // `ld_flags` it hands to the linker. Both run code the project chooses (a linker flag such as
 // `gcc`'s `-wrapper` starts any program), so a build uses them only once the user has approved
-// them. The flow is invoked by `Configuration::approve_build_requests`.
+// them.
 // See the section "Approval of `preliminary_commands` and `ld_flags`" of `Document.md` for the
 // user-visible specification.
 
@@ -22,9 +22,9 @@ use std::process::Command;
 
 // ---- Types ----
 
-// Which section of a project file a request comes from: `[build]` or `[build.test]`.
-// Used as part of the trust-store approval key so build-mode and test-mode approvals are
-// tracked independently.
+/// Which section of a project file a request comes from: `[build]` or `[build.test]`.
+/// Used as part of the trust-store approval key so build-mode and test-mode approvals are
+/// tracked independently.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum BuildSection {
     Build,
@@ -41,29 +41,29 @@ impl BuildSection {
     }
 }
 
-// What one section of one project file asks the build to run: its `preliminary_commands` and its
-// `ld_flags`. A section that lists neither makes no request. The trust-store lookup granularity is
-// one request.
+/// What one section of one project file asks the build to run: its `preliminary_commands` and its
+/// `ld_flags`. A section that lists neither makes no request. The trust store approves one request
+/// at a time.
 #[derive(Clone)]
 pub struct BuildRequest {
-    // Absolute path of the project directory, in which the commands run.
+    /// Absolute path of the project directory, in which the commands run.
     pub work_dir: PathBuf,
-    // `[general] name` of the project that made the request (used for display).
+    /// `[general] name` of the project that made the request (used for display).
     pub project_name: String,
-    // Whether the request came from `[build]` or `[build.test]`.
+    /// Whether the request came from `[build]` or `[build.test]`.
     pub section: BuildSection,
-    // Where the requesting project originated from. Combined with `section` (and commit for
-    // git deps) to look up the trust-store entry that approves this request.
+    /// Where the requesting project originated from. Combined with `section` (and commit for
+    /// git deps) to look up the trust-store entry that approves this request.
     pub source: ProjectOrigin,
-    // The argv of each preliminary command, each non-empty with the executable first.
+    /// The argv of each preliminary command, each non-empty with the executable first.
     pub preliminary_commands: Vec<Vec<String>>,
-    // The flags to hand to the linker.
+    /// The flags the section's `ld_flags` lists, as they are written.
     pub ld_flags: Vec<String>,
 }
 
-// Execute the preliminary command `command` in `work_dir` synchronously. Returns an error if the
-// process fails to start or exits non-zero. Scans the command's stdout for lines in the
-// `fix.ld_flags=...` format and appends their flags to `ld_flags`.
+/// Runs the preliminary command `command` (an argv) in `work_dir` and waits for it. The call fails
+/// when the command exits with a non-zero status. Scans the command's stdout for lines in the
+/// `fix.ld_flags=...` format and appends their flags to `ld_flags`.
 fn run_preliminary_command(
     command: &[String],
     work_dir: &Path,
@@ -113,11 +113,11 @@ fn run_preliminary_command(
 
 // ---- Approval flow ----
 
-// Entry point called from `Configuration::approve_build_requests`. Classifies the queued
-// requests into approved / pending ones using the user's trust store, resolves the pending ones
-// (via the `--trust-projects` flag, a non-interactive failure, or an interactive 3-choice prompt),
-// and then grants every request: its `ld_flags` go to the linker, ahead of the flags the command
-// line gives, and its preliminary commands run, in the order the requests were registered.
+/// Approves and grants the build requests queued in `config`. Classifies them into approved /
+/// pending ones using the user's trust store, resolves the pending ones (via the `--trust-projects`
+/// flag, a non-interactive failure, or an interactive 3-choice prompt), and then grants every
+/// request: its `ld_flags` go to the linker, ahead of the flags the command line gives, and its
+/// preliminary commands run, in the order the requests were registered.
 pub fn approve_and_run(config: &mut Configuration) -> Result<(), Errors> {
     if config.build_requests.is_empty() {
         return Ok(());
@@ -169,28 +169,27 @@ pub fn approve_and_run(config: &mut Configuration) -> Result<(), Errors> {
     Ok(())
 }
 
-// Result of looking a `BuildRequest` up in the trust store.
+/// Result of looking a `BuildRequest` up in the trust store.
 enum RequestStatus {
-    // No matching entry and no previous approval for this (source, section).
+    /// No matching entry and no previous approval for this (source, section).
     New,
-    // A previous approval exists for this (source, section) but with a different commit hash.
-    // Only possible for git dependencies; surfaced as `CHANGED from commit abcd…` so the
-    // user can review what changed between updates.
+    /// A previous approval exists for this (source, section) but with a different commit hash.
+    /// Only possible for git dependencies; surfaced as `CHANGED from commit abcd…` so the
+    /// user can review what changed between updates.
     Changed { old_commit: Option<String> },
-    // Exact match in the trust store; the request is granted without prompting.
+    /// Exact match in the trust store; the request is granted without prompting.
     Approved,
 }
 
-// A `BuildRequest` paired with its classification. Produced by `classify` and consumed by the
-// approval / display pipeline.
+/// A `BuildRequest` paired with what the trust store says of it.
 struct Classified {
     request: BuildRequest,
     status: RequestStatus,
 }
 
-// Decide whether a request is `Approved`, `Changed`, or `New` relative to the trust store.
-// `Changed` is only possible for git dependencies (path-based sources are trusted
-// regardless of their pinned commit).
+/// Decides whether a request is `Approved`, `Changed`, or `New` relative to the trust store.
+/// `Changed` is only possible for git dependencies (path-based sources are trusted
+/// regardless of their pinned commit).
 fn classify(request: &BuildRequest, trust_store: &TrustStore) -> RequestStatus {
     if trust_store.is_approved(&request.source, request.section) {
         return RequestStatus::Approved;
@@ -395,8 +394,8 @@ fn print_path_line(work_dir: &Path) {
     eprintln!("    path: {}", work_dir.display());
 }
 
-// Print what a request asks for: each preliminary command on its own `$ ...` line, and the
-// linker flags on an `ld_flags: ...` line.
+/// Prints what a request asks for: each preliminary command on its own `$ ...` line, and the
+/// linker flags on an `ld_flags: ...` line.
 fn print_request_lines(request: &BuildRequest) {
     for command in &request.preliminary_commands {
         eprintln!("    $ {}", format_argv(command));
@@ -406,11 +405,11 @@ fn print_request_lines(request: &BuildRequest) {
     }
 }
 
-// Print the source and `path:` lines of a project and what each of its requests asks for,
-// labelling each request with its section when the project made one for each.
+/// Prints the source and `path:` lines of a project and what each of its requests asks for,
+/// labelling each request with its section when the project made one for each.
 fn print_source_group(sg: &SourceGroup) {
     print_source_line(&sg.source);
-    // `group_classified_by_source` makes each group with the entry that opens it.
+    // Every group holds at least one entry.
     print_path_line(&sg.entries[0].request.work_dir);
     for e in &sg.entries {
         if sg.entries.len() > 1 {
@@ -435,8 +434,8 @@ fn display_approved(approved: &[Classified]) {
 }
 
 // Render the listing when `--trust-projects` was used. The requests are still granted, but the
-// trust store is not updated; the status label reminds the reader that the approval came from the
-// CLI flag, not from a recorded trust entry.
+// trust store is not updated; the status label tells the reader that the approval came from the
+// CLI flag.
 fn display_auto_approved(pending: &[Classified]) {
     info_msg(
         "Running preliminary commands and passing ld_flags (auto-approved via --trust-projects).",

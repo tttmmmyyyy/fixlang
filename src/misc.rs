@@ -413,12 +413,15 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
 /// left unresolved. `None` when `path` names no entry of its own, as one ending in `..` does.
 ///
 /// The directory has to exist, since resolving it reads the file system.
+///
+/// # Examples
+/// Run in `/p/q`, `resolve_entry("../out")` is `Some("/p/out")`.
 pub fn resolve_entry(path: &Path) -> io::Result<Option<PathBuf>> {
     let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
         return Ok(None);
     };
-    // The parent of a relative path of one component is the empty path, which `canonicalize`
-    // does not take for the current directory it names.
+    // A relative path of one component has the empty path as its parent. That parent stands for
+    // the current directory, and `canonicalize` rejects it.
     let parent = if parent.as_os_str().is_empty() {
         Path::new(".")
     } else {

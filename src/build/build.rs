@@ -162,10 +162,12 @@ fn build_runtime_object(config: &Configuration) -> Result<PathBuf, Errors> {
     Ok(object)
 }
 
-/// `path` written so that the C compiler reads it as a file to link: a relative path is given with
-/// `./` in front, so that the compiler reads neither one starting with `-` as an option nor one
-/// starting with `@` as a file of further options. The object files a project file names are such
-/// paths.
+/// `path` written so that the C compiler reads it as a file to link. A relative path gets `./` in
+/// front, so that the compiler reads neither one starting with `-` as an option nor one starting
+/// with `@` as a file of further options.
+///
+/// # Examples
+/// `file_operand("-wrapper")` is `./-wrapper`, and `file_operand("/lib/a.o")` is `/lib/a.o`.
 fn file_operand(path: &Path) -> PathBuf {
     if path.is_relative() {
         Path::new(".").join(path)

@@ -161,7 +161,7 @@ mod tests {
         }
     }
 
-    // `--help` names the flag `--trust-projects` alone; its old name stays out of the help.
+    /// `--help` names the flag `--trust-projects` alone; its old name stays out of the help.
     #[test]
     fn help_names_trust_projects_and_not_its_old_name() {
         for subcommand in ["build", "run", "test"] {
@@ -653,8 +653,8 @@ commands_preview = []
     // A linker flag can run any program (`gcc`'s `-wrapper`), so `ld_flags` go through the same
     // approval as `preliminary_commands`.
 
-    // A fixproj.toml for a root project whose `build` section lists `ld_flags` (a TOML array
-    // literal) and no preliminary command.
+    /// A fixproj.toml for a root project whose `build` section lists `ld_flags` (a TOML array
+    /// literal) and no preliminary command.
     fn fixproj_with_ld_flags(name: &str, ld_flags: &str) -> String {
         format!(
             "[general]\nname = \"{name}\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
@@ -662,7 +662,8 @@ commands_preview = []
         )
     }
 
-    // `ld_flags` that run a program are refused without approval, and the program does not run.
+    /// `ld_flags` that run a program are refused without approval, and the program does not run;
+    /// approved for one run by `--trust-projects`, they reach the linker.
     #[test]
     fn ld_flags_wait_for_approval_before_the_linker_runs_them() {
         let env = Env::new();
@@ -693,8 +694,8 @@ commands_preview = []
         );
     }
 
-    // A `y` records the approval of `ld_flags` with what they were, and a later build passes them
-    // to the linker without asking.
+    /// A `y` records the approval of `ld_flags` with what they were, and a later build passes them
+    /// to the linker without asking.
     #[test]
     fn ld_flags_approval_is_recorded_and_reused() {
         let env = Env::new();
@@ -722,7 +723,7 @@ commands_preview = []
         );
     }
 
-    // The `ld_flags` of a dependency are approved as the dependency's, under its name.
+    /// The `ld_flags` of a dependency are approved as the dependency's, under its name.
     #[test]
     fn dependency_ld_flags_require_approval() {
         let env = Env::new();

@@ -862,8 +862,8 @@ Consecutive line comments immediately preceding an entity declaration in the sou
 
     /// Create configuration from the command line arguments and the project file, and grant the
     /// build requests the project files make, so that every build the subcommand makes reads what
-    /// their preliminary commands write and links with their flags. The project file's settings are laid down first, so an option on the
-    /// command line overrides them.
+    /// their preliminary commands write and links with their flags. The project file's settings are
+    /// laid down first, so an option on the command line overrides them.
     fn create_config(subcommand: SubCommand, args: &ArgMatches) -> Configuration {
         let mode = subcommand.build_mode();
         let mut config = panic_if_err(Configuration::release_mode(subcommand));

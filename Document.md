@@ -3022,7 +3022,7 @@ The following table shows how each setting is handled.
             <td>-o, --output</td>
             <td>Overwrite</td>
             <td>Does not affect</td>
-            <td>Output file path. The field names the file <code>fix build</code> writes. <code>fix run</code> and <code>fix test</code> build an executable in a temporary place and run it; giving them <code>-o</code> keeps that executable at the path it names, which is how the program a failing test ran is kept for a debugger. The field names a file inside the project directory, and one outside it, reached by <code>..</code>, by an absolute path or through a symbolic link, is an error; <code>-o</code> names a file anywhere.</td>
+            <td>Output file path. The field names the file <code>fix build</code> writes. <code>fix run</code> and <code>fix test</code> build an executable in a temporary place and run it; giving them <code>-o</code> keeps that executable at the path it names, which is how the program a failing test ran is kept for a debugger. The field names a file inside the project directory; to write the file elsewhere, give its path by <code>-o</code>.</td>
         </tr>
         <tr>
             <td>output_type</td>
@@ -3074,7 +3074,7 @@ The Fix build system compiles all the projects of a build as a single set of com
 
 ### Approval of `preliminary_commands` and `ld_flags`
 
-`preliminary_commands` run arbitrary processes before compilation, and `ld_flags` can make the linker run one (`gcc`'s `-wrapper` option, for example, starts a program of its choosing). Both come from the root project and from dependencies. To prevent malicious projects or compromised dependencies from running unreviewed code, `fix build` / `fix run` / `fix test` require them to be approved before the commands execute and the flags reach the linker.
+`preliminary_commands` run arbitrary processes before compilation, and `ld_flags` can make the linker run one (`gcc`'s `-wrapper` option, for example, starts the program it names). Both come from the root project and from dependencies. To prevent malicious projects or compromised dependencies from running unreviewed code, `fix build` / `fix run` / `fix test` require them to be approved before the commands execute and the flags reach the linker.
 
 On the first build that encounters a project with `preliminary_commands` or `ld_flags`, `fix` shows the commands and the flags together with the project they come from and asks for your decision:
 

@@ -51,7 +51,7 @@ pub struct Approval {
     // lookup (commit_hash/source already carry the authoritative identity).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub commands_preview: Vec<Vec<String>>,
-    // Snapshot of the `ld_flags` at approval time. Informational only, as `commands_preview` is.
+    /// Snapshot of the `ld_flags` at approval time. Informational only, as `commands_preview` is.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ld_flags_preview: Vec<String>,
 }
@@ -87,9 +87,9 @@ impl TrustStore {
         }
     }
 
-    // Check whether an approval entry matching the given (source, section) tuple exists.
-    // For git dependencies the commit hash must also match; for local/root projects only the
-    // source (absolute path) and section are used.
+    /// Checks whether an approval entry matching the given (source, section) tuple exists.
+    /// For git dependencies the commit hash must also match; for local/root projects only the
+    /// source (absolute path) and section are used.
     pub fn is_approved(&self, src: &ProjectOrigin, section: BuildSection) -> bool {
         let src_key = src.to_trust_key();
         let mode_str = section.as_str();
@@ -144,7 +144,7 @@ impl TrustStore {
     }
 }
 
-// Build the `Approval` record of `request`, approved now.
+/// Builds the `Approval` record of `request`, stamped with the current time.
 pub fn make_approval(request: &BuildRequest) -> Approval {
     Approval {
         source: request.source.to_trust_key(),
