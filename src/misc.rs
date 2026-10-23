@@ -465,18 +465,7 @@ pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
         .and_then(|dir| dir.canonicalize())
         .map_err(failed)?
         .join(DOT_FIXLANG);
-    let entry = match (path.parent(), path.file_name()) {
-        (Some(parent), Some(name)) => {
-            let parent = if parent.as_os_str().is_empty() {
-                Path::new(".")
-            } else {
-                parent
-            };
-            Some(parent.canonicalize().map_err(failed)?.join(name))
-        }
-        // A path ending in `..` names no entry of its own.
-        _ => None,
-    };
+    let entry = resolve_entry(path).map_err(failed)?;
     let Some(entry) = entry.filter(|entry| entry.starts_with(&dot_fixlang)) else {
         return Err(Errors::from_msg(format!(
             "Refused to remove \"{}\", which lies outside \"{}\".",
