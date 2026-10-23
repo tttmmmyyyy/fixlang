@@ -182,6 +182,9 @@ mod integration_tests {
             &["check"][..],
             &["deps", "install"][..],
             &["deps", "update"][..],
+            &["deps", "add", "dep"][..],
+            &["docs"][..],
+            &["edit", "explicit-import"][..],
         ] {
             assert_failed_with(
                 &run_fix(&proj, args),
