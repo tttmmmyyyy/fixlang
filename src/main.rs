@@ -76,7 +76,9 @@ use error::{panic_if_err, Errors};
 use git_version::git_version;
 use metafiles::{config_file::ConfigFile, project_file::ProjectFile};
 use mimalloc::MiMalloc;
-use misc::{disable_colored_no_tty, spawn_compiler_thread, warn_msg};
+use misc::{
+    check_dot_fixlang_is_not_symlink, disable_colored_no_tty, spawn_compiler_thread, warn_msg,
+};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -897,6 +899,16 @@ Consecutive line comments immediately preceding an entity declaration in the sou
     let fix_config = panic_if_err(ConfigFile::load());
 
     let matches = app.get_matches_mut();
+    // Every subcommand but these writes or removes files under `.fixlang`. `fix clean` removes a
+    // `.fixlang` that is a symbolic link, as a link.
+    let uses_dot_fixlang = match matches.subcommand() {
+        Some(("version" | "init" | "clean", _args)) => false,
+        Some(("deps", args)) => args.subcommand_name().is_some_and(|name| name != "list"),
+        _ => true,
+    };
+    if uses_dot_fixlang {
+        panic_if_err(check_dot_fixlang_is_not_symlink());
+    }
     match matches.subcommand() {
         Some(("version", _args)) => {
             print!("{}", app.render_version());

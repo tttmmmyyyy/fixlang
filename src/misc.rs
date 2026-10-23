@@ -407,6 +407,20 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
     Ok(canonicalized.unwrap())
 }
 
+/// Fails when the `.fixlang` of the current directory is a symbolic link. Fix writes and removes
+/// the files under `.fixlang` as files of the project, and a `.fixlang` that is a symbolic link,
+/// such as one committed to a repository, would lead those writes and removals outside the project.
+pub fn check_dot_fixlang_is_not_symlink() -> Result<(), Errors> {
+    if Path::new(DOT_FIXLANG).is_symlink() {
+        return Err(Errors::from_msg(format!(
+            "\"{}\" is a symbolic link. Fix keeps the files it builds and installs in the directory \"{}\" of the project.\n\
+             HINT: `fix clean` removes the link, leaving what it points to.",
+            DOT_FIXLANG, DOT_FIXLANG
+        )));
+    }
+    Ok(())
+}
+
 /// Removes the file or directory at `path`, which must be the `.fixlang` directory of the current
 /// directory or lie inside it. Fix removes the files and directories of a project through this
 /// function, so that the contents of a project directory, such as a lock file or a `.fixlang` that
