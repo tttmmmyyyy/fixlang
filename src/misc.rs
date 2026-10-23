@@ -9,8 +9,7 @@ use colored::{control, ColoredString, Colorize};
 use fxhash::{FxHashMap, FxHashSet};
 use rand::random;
 use std::{
-    env,
-    fs::{self, OpenOptions},
+    env, fs,
     hash::Hash,
     io::{self, ErrorKind, IsTerminal, Write},
     mem,
@@ -473,19 +472,17 @@ pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
     .map_err(failed)
 }
 
-/// Writes `content` to the file at `path` by writing a new file beside it and renaming that onto
-/// `path`. A symbolic link at `path` is replaced by the new file, and what it pointed to is kept.
-pub fn replace_file(path: &Path, content: &[u8]) -> io::Result<()> {
+/// Writes the file at `path` by having `write` write a new file beside it, at the path it is handed,
+/// and renaming that onto `path`, so that `path` holds either what it held before or the whole of
+/// what `write` wrote. A symbolic link at `path` is replaced by the new file, and what it pointed to
+/// is kept.
+pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) -> io::Result<()> {
     let tmp_path = path.with_extension(format!("{}.tmp", random::<u64>()));
-    let mut tmp_file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&tmp_path)?;
-    tmp_file
-        .write_all(content)
+    write(&tmp_path)
         .and_then(|()| fs::rename(&tmp_path, path))
         .inspect_err(|_| {
-            // The file was created above by this call, so removing it touches nothing else.
+            // The temporary path carries a random number drawn by this call, so removing it touches
+            // nothing else.
             let _ = fs::remove_file(&tmp_path);
         })
 }
