@@ -265,8 +265,14 @@ static int fixruntime_backtrace_full_callback(void *data, uintptr_t pc,
 
 // Stops the program, printing the call stack it stopped at where the runtime was built with
 // `BACKTRACE` defined.
+//
+// Every output stream is flushed first, because `abort` discards what the C library still holds in
+// a buffer: standard output written to a file or a pipe is buffered in blocks, so the lines a
+// program printed before a check stopped it would be lost.
 __attribute__((noreturn)) void fixruntime_abort(void)
 {
+    fflush(NULL);
+
 #if defined(BACKTRACE)
 #if defined(__linux__)
 
