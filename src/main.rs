@@ -904,10 +904,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
     // own prints the help.
     let writes_under_dot_fixlang = match matches.subcommand() {
         Some(("version" | "init" | "clean", _args)) => false,
-        Some((
-            "build" | "run" | "test" | "check" | "docs" | "language-server",
-            _args,
-        )) => true,
+        Some(("build" | "run" | "test" | "check" | "docs" | "language-server", _args)) => true,
         Some(("deps", args)) => args.subcommand_name().is_some_and(|name| name != "list"),
         Some(("edit", args)) => args.subcommand_name().is_some(),
         // The command lines that reach here are the ones the dispatch below handles.
