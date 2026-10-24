@@ -3080,7 +3080,7 @@ The Fix build system compiles all the projects of a build as a single set of com
 
 Ways to protect yourself include running the commands in a sandbox such as a Docker container, and having an AI review the project and its dependencies.
 
-Fix 1.3.0 to the pre-releases of 1.6.0 asked the user to approve the `preliminary_commands` before `fix build`, `fix run` and `fix test` ran them. The approval was removed for these reasons:
+Fix 1.3.0 to 1.6.0-beta.1 asked the user to approve the `preliminary_commands` before `fix build`, `fix run` and `fix test` ran them. The approval was removed for these reasons:
 
 - Approving was tedious, and the approvals easily became a formality.
 - A project has other ways to run any command, such as the `ld_flags` and the built program, and believing that `fix build` is safe because of the approval is more dangerous than knowing that it is not.
