@@ -1,7 +1,7 @@
 //! The commands a project file's `preliminary_commands` run before compilation.
 
 use crate::{
-    constants::PRELIMINARY_BUILD_LD_FLAGS, error::Errors, misc::split_string_by_space_not_quated,
+    constants::PRELIMINARY_BUILD_LD_FLAGS, error::Errors, misc::split_string_by_unquoted_spaces,
 };
 use std::path::PathBuf;
 use std::process::Command;
@@ -57,7 +57,7 @@ impl PreliminaryCommand {
         Ok(stdout
             .lines()
             .filter_map(|line| line.strip_prefix(PRELIMINARY_BUILD_LD_FLAGS))
-            .flat_map(|flags| split_string_by_space_not_quated(flags.trim()))
+            .flat_map(|flags| split_string_by_unquoted_spaces(flags.trim()))
             .collect())
     }
 }
