@@ -15,10 +15,10 @@ static LOG_FILE: Lazy<Mutex<File>> = Lazy::new(|| open_log_file());
 /// by the new file. Panics when the file cannot be created, or when a symbolic link in the project
 /// would place it outside the project.
 fn open_log_file() -> Mutex<File> {
-    let path = Path::new(LOG_FILE_PATH);
-    panic_if_err(write_file_guarding_project_links(path, |tmp_path| {
-        File::create(tmp_path).map(|_| ())
-    }));
+    let path = panic_if_err(write_file_guarding_project_links(
+        Path::new(LOG_FILE_PATH),
+        |tmp_path| File::create(tmp_path).map(|_| ()),
+    ));
     let file = OpenOptions::new()
         .append(true)
         .open(path)

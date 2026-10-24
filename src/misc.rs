@@ -557,11 +557,12 @@ pub fn create_dir_guarding_project_links(path: &Path) -> Result<PathBuf, Errors>
 /// renaming that onto `path`. Creates the parent directory of `path` when it is missing, and fails
 /// when `path` follows a symbolic link in the project directory (the current directory) to a place
 /// outside it. A symbolic link at `path` itself is replaced by the new file, and what it pointed to
-/// is kept. Panics when `path` names no file, as `..` does.
+/// is kept. Returns the absolute path of the file written, with symbolic links resolved. Panics
+/// when `path` names no file, as `..` does.
 pub fn write_file_guarding_project_links(
     path: &Path,
     write: impl FnOnce(&Path) -> io::Result<()>,
-) -> Result<(), Errors> {
+) -> Result<PathBuf, Errors> {
     let failed = |e: io::Error| {
         Errors::from_msg(format!(
             "Failed to write \"{}\": {}",
@@ -572,8 +573,9 @@ pub fn write_file_guarding_project_links(
     let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
         panic!("\"{}\" names no file to write.", path.to_string_lossy());
     };
-    let dir = create_dir_guarding_project_links(parent)?;
-    replace_file(&dir.join(name), write).map_err(failed)
+    let file = create_dir_guarding_project_links(parent)?.join(name);
+    replace_file(&file, write).map_err(failed)?;
+    Ok(file)
 }
 
 /// The path `target` written relative to the path `base`, so that `base` joined with the result
