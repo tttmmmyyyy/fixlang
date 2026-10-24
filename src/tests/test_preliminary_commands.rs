@@ -1,9 +1,12 @@
 //! Which subcommands run the `preliminary_commands` of a project and of its dependencies. `fix
-//! build`, `fix run` and `fix test` run them without asking; `fix check`, `fix deps install`, `fix
-//! deps update`, `fix docs` and the language server run none.
+//! build`, `fix run` and `fix test` run them without asking; `fix check`, `fix deps add`, `fix deps
+//! install`, `fix deps update`, `fix docs`, `fix edit explicit-import` and the language server run
+//! none.
 
 use crate::tests::test_lsp::lsp_client::LspClient;
-use crate::tests::test_util::{assert_failed, assert_succeeded, create_git_repo, run_fix};
+use crate::tests::test_util::{
+    assert_failed, assert_succeeded, create_git_repo, fix_command, run_fix,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -206,6 +209,78 @@ fn subcommands_that_build_nothing_run_no_command_of_a_git_dependency() {
     assert!(
         !marker.exists(),
         "a subcommand that builds nothing ran the dependency's command"
+    );
+}
+
+/// Verifies that `fix deps add`, adding a git dependency from a registry, and then `fix edit
+/// explicit-import` run no command of the project or of the dependency.
+#[test]
+fn deps_add_and_edit_explicit_import_run_no_command() {
+    let dir = TempDir::new().unwrap();
+    let marker = dir.path().join("ran");
+    let repo = dir.path().join("dep-repo");
+    fs::create_dir(&repo).unwrap();
+    create_git_repo(
+        &repo,
+        &[
+            (
+                "fixproj.toml",
+                &format!(
+                    "[general]\nname = \"dep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+                     [build]\nfiles = [\"lib.fix\"]\npreliminary_commands = [{}]\n",
+                    touch_command(&marker)
+                ),
+            ),
+            (
+                "lib.fix",
+                "module Dep;\n\ngreet : IO ();\ngreet = println(\"hi\");\n",
+            ),
+        ],
+    );
+    let registry = dir.path().join("registry.toml");
+    fs::write(
+        &registry,
+        format!(
+            "[[projects]]\nname = \"dep\"\ngit = \"file://{}\"\n",
+            repo.display()
+        ),
+    )
+    .unwrap();
+    // `fix deps add` reads the registries from the configuration file in the home directory.
+    let home = dir.path().join("home");
+    fs::create_dir(&home).unwrap();
+    fs::write(
+        home.join(".fixconfig.toml"),
+        format!("registries = [\"{}\"]\n", registry.display()),
+    )
+    .unwrap();
+    let proj = dir.path().join("proj");
+    fs::create_dir(&proj).unwrap();
+    let command = format!("[{}]", touch_command(&marker));
+    write_project(&proj, "root", &command, &command, "");
+    // A program that calls the dependency, so that `fix edit explicit-import` elaborates it.
+    fs::write(
+        proj.join("main.fix"),
+        "module Main;\n\nimport Dep;\n\nmain : IO ();\nmain = Dep::greet;\n",
+    )
+    .unwrap();
+
+    let output = fix_command()
+        .args(["deps", "add", "dep@*"])
+        .current_dir(&proj)
+        .env("HOME", &home)
+        .output()
+        .expect("Failed to execute fix");
+    assert_succeeded(&output, "`fix deps add` should succeed.");
+    assert!(!marker.exists(), "`fix deps add` ran a preliminary command");
+
+    assert_succeeded(
+        &run_fix(&proj, &["edit", "explicit-import"]),
+        "`fix edit explicit-import` should succeed.",
+    );
+    assert!(
+        !marker.exists(),
+        "`fix edit explicit-import` ran a preliminary command"
     );
 }
 

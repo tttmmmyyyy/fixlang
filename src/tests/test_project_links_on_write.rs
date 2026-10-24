@@ -91,6 +91,11 @@ mod integration_tests {
         );
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert_eq!(stderr.matches(REFUSED).count(), 1, "stderr: {}", stderr);
+        assert!(
+            stderr.contains("HINT: `fix clean` removes the directory \".fixlang\""),
+            "the refusal should point at `fix clean`. stderr: {}",
+            stderr
+        );
         assert_victim_untouched(&root);
     }
 
@@ -289,10 +294,16 @@ mod integration_tests {
         .unwrap();
         fs::create_dir_all(proj.join(".fixlang")).unwrap();
         symlink(victim(&root), proj.join(".fixlang/deps")).unwrap();
+        let output = run_fix(&proj, &["deps", "update"]);
         assert_failed_with(
-            &run_fix(&proj, &["deps", "update"]),
+            &output,
             REFUSED,
             "`fix deps update` should refuse to clone under the link.",
+        );
+        assert_failed_with(
+            &output,
+            "HINT: `fix clean` removes the directory \".fixlang\"",
+            "the refusal should point at `fix clean`.",
         );
         assert_victim_untouched(&root);
     }
