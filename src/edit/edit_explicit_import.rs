@@ -13,7 +13,7 @@ use crate::edit::edit_util::apply_text_edits;
 use crate::elaboration::typecheckcache::MemoryCache;
 use crate::error::Errors;
 use crate::metafiles::project_file::ProjectFile;
-use crate::misc::{info_msg, to_absolute_path, warn_msg, Map};
+use crate::misc::{info_msg, warn_msg, Map};
 use crate::project_fs::resolve_file_inside_project;
 use std::fs;
 use std::path::PathBuf;
@@ -52,39 +52,30 @@ pub fn run_explicit_import_command() -> Result<(), Errors> {
     Ok(())
 }
 
-// Get the list of source files that belong to the project (not dependencies).
+// Get the list of source files that belong to the project (not dependencies), with symbolic links
+// resolved. A file the project file lists outside the project, or one whose symbolic link leads
+// outside it, is reported and left out, since the project file can name any path.
 fn get_user_source_files(proj_file: &ProjectFile) -> Result<Vec<PathBuf>, Errors> {
     // Use get_files(BuildMode::Test) to get the root project's source files (excluding dependencies).
     // BuildMode::Test includes test files.
     let files = proj_file.get_files(BuildConfigType::Test);
 
-    // Convert to absolute paths
-    let mut abs_files = Vec::new();
+    let mut inside_files = Vec::new();
     for file_path in files {
-        let abs_path = to_absolute_path(&file_path).map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to get absolute path for {}: {}",
-                file_path.display(),
-                e
-            ))
-        })?;
-        abs_files.push(abs_path);
+        match resolve_file_inside_project(&file_path)? {
+            Some(resolved) => inside_files.push(resolved),
+            None => warn_msg(&format!(
+                "Left \"{}\" as it is: it lies outside the project.",
+                file_path.display()
+            )),
+        }
     }
 
-    Ok(abs_files)
+    Ok(inside_files)
 }
 
-// Rewrite import statements for a single file. A file outside the project, or one whose symbolic
-// link leads outside it, is left as it is and reported, since the project file can name any path.
+// Rewrite import statements for a single file.
 fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<(), Errors> {
-    let Some(target) = resolve_file_inside_project(file_path)? else {
-        warn_msg(&format!(
-            "Left \"{}\" as it is: it lies outside the project.",
-            file_path.display()
-        ));
-        return Ok(());
-    };
-
     // Find the module info for this file.
     let module_info = program.module_of_file(file_path).ok_or_else(|| {
         Errors::from_msg(format!(
@@ -114,7 +105,7 @@ fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<()
     let new_import_stmts = generate_import_statements(mod_name.clone(), names_to_import);
 
     // Read the file content.
-    let content = fs::read_to_string(&target).map_err(|e| {
+    let content = fs::read_to_string(file_path).map_err(|e| {
         Errors::from_msg(format!(
             "Failed to read file {}: {}",
             file_path.display(),
@@ -126,7 +117,7 @@ fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<()
     let new_content = rewrite_file_content(&content, &module_info, &new_import_stmts, program)?;
 
     // Write the new content back to the file.
-    fs::write(&target, new_content).map_err(|e| {
+    fs::write(file_path, new_content).map_err(|e| {
         Errors::from_msg(format!(
             "Failed to write file {}: {}",
             file_path.display(),

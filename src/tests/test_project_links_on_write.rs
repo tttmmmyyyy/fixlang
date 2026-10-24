@@ -430,6 +430,12 @@ mod integration_tests {
             &output,
             "`fix edit explicit-import` should rewrite the project.",
         );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("Left \"lib.fix\" as it is: it lies outside the project."),
+            "stderr: {}",
+            stderr
+        );
         assert_eq!(
             fs::read_to_string(victim(&root).join("lib.fix")).unwrap(),
             LIB_SOURCE
