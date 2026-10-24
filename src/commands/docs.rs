@@ -18,7 +18,7 @@ use crate::{
     parse::sourcefile::Span,
     project_fs::write_file_guarding_project_links,
 };
-use std::{fs, sync::Arc};
+use std::{cmp::Ordering, fs, mem, sync::Arc};
 
 pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> {
     info_msg("Loading source files...");
@@ -156,7 +156,7 @@ impl MarkdownSection {
 
             // If an empty line is found, add the paragraph.
             if line.trim().is_empty() {
-                ret.add_paragraph(std::mem::replace(&mut paragraph, String::new()).to_string());
+                ret.add_paragraph(mem::replace(&mut paragraph, String::new()).to_string());
                 line_it.next();
                 continue;
             }
@@ -166,7 +166,7 @@ impl MarkdownSection {
             line_it.next();
         }
         // Add the last paragraph.
-        ret.add_paragraph(std::mem::replace(&mut paragraph, String::new()).to_string());
+        ret.add_paragraph(mem::replace(&mut paragraph, String::new()).to_string());
 
         // Parse the sub-sections.
         while let Some(line) = line_it.peek() {
@@ -390,13 +390,13 @@ impl PartialEq for Entry {
 impl Eq for Entry {}
 
 impl PartialOrd for Entry {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for Entry {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         if self.name.namespace != other.name.namespace {
             return self.name.namespace.cmp(&other.name.namespace);
         }
