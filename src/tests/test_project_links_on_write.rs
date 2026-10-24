@@ -16,6 +16,9 @@ mod integration_tests {
     /// project.
     const REFUSED: &str = "is a symbolic link in the project leading outside it";
 
+    /// The start of the `HINT:` line of a refusal of a symbolic link under `.fixlang`.
+    const FIX_CLEAN_HINT: &str = "HINT: `fix clean` removes the directory \".fixlang\"";
+
     /// A temporary directory holding a project `proj`, whose `Main` module documents its `main`,
     /// and a directory `victim` beside it holding the file `data.txt`.
     fn setup_test_env() -> (TempDir, PathBuf) {
@@ -92,7 +95,7 @@ mod integration_tests {
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert_eq!(stderr.matches(REFUSED).count(), 1, "stderr: {}", stderr);
         assert!(
-            stderr.contains("HINT: `fix clean` removes the directory \".fixlang\""),
+            stderr.contains(FIX_CLEAN_HINT),
             "the refusal should point at `fix clean`. stderr: {}",
             stderr
         );
@@ -191,7 +194,7 @@ mod integration_tests {
         );
         assert_failed_with(
             &output,
-            "HINT: `fix clean` removes the directory \".fixlang\"",
+            FIX_CLEAN_HINT,
             "the refusal should point at `fix clean`.",
         );
         assert_victim_untouched(&root);
@@ -302,7 +305,7 @@ mod integration_tests {
         );
         assert_failed_with(
             &output,
-            "HINT: `fix clean` removes the directory \".fixlang\"",
+            FIX_CLEAN_HINT,
             "the refusal should point at `fix clean`.",
         );
         assert_victim_untouched(&root);

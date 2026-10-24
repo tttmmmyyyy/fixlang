@@ -42,11 +42,10 @@ fn write_project(dir: &Path, name: &str, build_commands: &str, test_commands: &s
     .unwrap();
 }
 
-/// Writes into `root` a git repository whose project lists a preliminary command creating a marker
-/// file, and into `root/proj` a project that depends on it and lists no command. Returns the
-/// project directory and the marker's path.
-fn project_with_git_dependency(root: &Path) -> (PathBuf, PathBuf) {
-    let marker = root.join("dep-ran");
+/// Writes into `root/dep-repo` a git repository holding a project `dep`, whose module `Dep` defines
+/// `greet`, and whose project file lists a preliminary command creating `marker`. Returns the
+/// repository's path.
+fn create_dependency_repo(root: &Path, marker: &Path) -> PathBuf {
     let repo = root.join("dep-repo");
     fs::create_dir(&repo).unwrap();
     create_git_repo(
@@ -57,7 +56,7 @@ fn project_with_git_dependency(root: &Path) -> (PathBuf, PathBuf) {
                 &format!(
                     "[general]\nname = \"dep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
                      [build]\nfiles = [\"lib.fix\"]\npreliminary_commands = [{}]\n",
-                    touch_command(&marker)
+                    touch_command(marker)
                 ),
             ),
             (
@@ -66,6 +65,15 @@ fn project_with_git_dependency(root: &Path) -> (PathBuf, PathBuf) {
             ),
         ],
     );
+    repo
+}
+
+/// Writes into `root` a git repository whose project lists a preliminary command creating a marker
+/// file, and into `root/proj` a project that depends on it and lists no command. Returns the
+/// project directory and the marker's path.
+fn project_with_git_dependency(root: &Path) -> (PathBuf, PathBuf) {
+    let marker = root.join("dep-ran");
+    let repo = create_dependency_repo(root, &marker);
     let proj = root.join("proj");
     fs::create_dir(&proj).unwrap();
     write_project(
@@ -218,25 +226,7 @@ fn subcommands_that_build_nothing_run_no_command_of_a_git_dependency() {
 fn deps_add_and_edit_explicit_import_run_no_command() {
     let dir = TempDir::new().unwrap();
     let marker = dir.path().join("ran");
-    let repo = dir.path().join("dep-repo");
-    fs::create_dir(&repo).unwrap();
-    create_git_repo(
-        &repo,
-        &[
-            (
-                "fixproj.toml",
-                &format!(
-                    "[general]\nname = \"dep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
-                     [build]\nfiles = [\"lib.fix\"]\npreliminary_commands = [{}]\n",
-                    touch_command(&marker)
-                ),
-            ),
-            (
-                "lib.fix",
-                "module Dep;\n\ngreet : IO ();\ngreet = println(\"hi\");\n",
-            ),
-        ],
-    );
+    let repo = create_dependency_repo(dir.path(), &marker);
     let registry = dir.path().join("registry.toml");
     fs::write(
         &registry,
