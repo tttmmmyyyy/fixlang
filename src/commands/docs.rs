@@ -14,7 +14,7 @@ use crate::{
     elaboration::elaborate_via_config,
     error::Errors,
     metafiles::project_file::ProjectFile,
-    misc::info_msg,
+    misc::{info_msg, write_file_within_project},
     parse::sourcefile::Span,
 };
 use std::sync::Arc;
@@ -292,22 +292,8 @@ fn docgen_for_module(
     // Write `doc` into `{mod_name}.md` file.
     let doc_file = format!("{}.md", mod_name);
 
-    // Create the output directory.
-    if let Err(e) = std::fs::create_dir_all(&config.out_dir) {
-        return Err(Errors::from_msg(format!(
-            "Failed to create directory \"{}\": {:?}",
-            config.out_dir.display(),
-            e
-        )));
-    }
     let doc_path = config.out_dir.join(doc_file);
-    std::fs::write(&doc_path, markdown_str).map_err(|e| {
-        Errors::from_msg(format!(
-            "Failed to write file \"{}\": {:?}",
-            doc_path.display(),
-            e
-        ))
-    })?;
+    write_file_within_project(&doc_path, |tmp_path| std::fs::write(tmp_path, markdown_str))?;
 
     info_msg(&format!(
         "Saved documentation to \"{}\".",

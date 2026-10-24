@@ -14,7 +14,7 @@ use std::{
     io::{self, ErrorKind, IsTerminal, Write},
     mem,
     panic::resume_unwind,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     sync::Mutex,
     thread::{self, JoinHandle},
 };
@@ -188,20 +188,14 @@ pub fn temporary_source_path(file_name: &str, hash: &str) -> PathBuf {
 pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile, Errors> {
     let hash = md5_hex(source);
     let path = temporary_source_path(file_name, &hash);
-    let parent = path.parent().unwrap();
-    fs::create_dir_all(parent).map_err(|e| {
-        Errors::from_msg(format!(
-            "Failed to create directory \"{}\": {}",
-            parent.to_string_lossy().to_string(),
-            e
-        ))
-    })?;
+    let dir = create_dir_within_project(path.parent().unwrap())?;
 
-    // Use create_new(true) for atomic check-and-create operation
+    // Use create_new(true) for atomic check-and-create operation. It also refuses to follow a
+    // symbolic link at the path.
     match fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&path)
+        .open(dir.join(path.file_name().unwrap()))
     {
         Ok(mut file) => {
             file.write_all(source.as_bytes()).map_err(|e| {
@@ -485,6 +479,98 @@ pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) ->
             // nothing else.
             let _ = fs::remove_file(&tmp_path);
         })
+}
+
+/// Resolves `path` as the file system does, and fails when that follows a symbolic link lying in the
+/// project directory (the current directory) to a place outside it. Fix writes the files of a
+/// project at paths resolved here, so that a link committed to a repository, such as
+/// `.fixlang/cache` or `docs`, cannot lead fix to write outside the project. A link lying outside
+/// the project belongs to the user, and is followed wherever it leads.
+///
+/// The components from the first missing one onward are joined as they stand, which is what
+/// `create_dir_all` makes of them. The answer is an absolute path.
+///
+/// # Examples
+/// In a project at `/p`, `docs/Main.md` resolves to `/p/docs/Main.md`. With `docs` a link to
+/// `/p/site`, it resolves to `/p/site/Main.md`, and with `docs` a link to `/home/u`, it fails.
+fn resolve_within_project(path: &Path) -> Result<PathBuf, Errors> {
+    let failed = |e: io::Error| {
+        Errors::from_msg(format!(
+            "Failed to resolve \"{}\": {}",
+            path.to_string_lossy(),
+            e
+        ))
+    };
+    let project = env::current_dir()
+        .and_then(|dir| dir.canonicalize())
+        .map_err(failed)?;
+    // A path holding no symbolic link up to here, and no `..` after a missing component, so that
+    // popping its last component reaches the directory `..` names.
+    let mut resolved = project.clone();
+    for component in path.components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => resolved.push(component),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                resolved.pop();
+            }
+            Component::Normal(name) => {
+                let next = resolved.join(name);
+                let is_link = fs::symlink_metadata(&next).is_ok_and(|meta| meta.is_symlink());
+                if !is_link {
+                    resolved = next;
+                    continue;
+                }
+                let target = next.canonicalize().map_err(failed)?;
+                if resolved.starts_with(&project) && !target.starts_with(&project) {
+                    return Err(Errors::from_msg(format!(
+                        "Refused to write \"{}\": \"{}\" is a symbolic link in the project leading outside it, to \"{}\".\n\
+                         HINT: Remove the link, and fix writes in its place.",
+                        path.to_string_lossy(),
+                        next.to_string_lossy(),
+                        target.to_string_lossy()
+                    )));
+                }
+                resolved = target;
+            }
+        }
+    }
+    Ok(resolved)
+}
+
+/// Creates the directory at `path` and its missing ancestors, at the place `resolve_within_project`
+/// resolves it to, and answers with that place.
+pub fn create_dir_within_project(path: &Path) -> Result<PathBuf, Errors> {
+    let dir = resolve_within_project(path)?;
+    fs::create_dir_all(&dir).map_err(|e| {
+        Errors::from_msg(format!(
+            "Failed to create directory \"{}\": {}",
+            path.to_string_lossy(),
+            e
+        ))
+    })?;
+    Ok(dir)
+}
+
+/// Writes the file at `path` through `replace_file`, in the directory `create_dir_within_project`
+/// makes of the parent of `path`. A symbolic link at `path` itself is replaced by the new file, and
+/// what it pointed to is kept.
+pub fn write_file_within_project(
+    path: &Path,
+    write: impl FnOnce(&Path) -> io::Result<()>,
+) -> Result<(), Errors> {
+    let failed = |e: io::Error| {
+        Errors::from_msg(format!(
+            "Failed to write \"{}\": {}",
+            path.to_string_lossy(),
+            e
+        ))
+    };
+    let (parent, Some(name)) = (path.parent().unwrap_or(Path::new("")), path.file_name()) else {
+        return Err(failed(io::Error::from(ErrorKind::InvalidInput)));
+    };
+    let dir = create_dir_within_project(parent)?;
+    replace_file(&dir.join(name), write).map_err(failed)
 }
 
 /// The path `target` written relative to the path `base`, so that `base` joined with the result

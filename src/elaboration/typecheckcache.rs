@@ -1,11 +1,11 @@
 use crate::{
     ast::name::FullName, ast::program::TypedExpr, ast::types::Scheme,
-    constants::TYPE_CHECK_CACHE_PATH, elaboration::touch_directory, misc::warn_msg,
+    constants::TYPE_CHECK_CACHE_PATH, misc::warn_msg, misc::write_file_within_project,
 };
 use std::{
     collections::{BTreeMap, VecDeque},
-    fs::File,
-    io::{Read, Write},
+    fs::{self, File},
+    io::Read,
     panic::RefUnwindSafe,
     path::PathBuf,
     sync::{Arc, Mutex, MutexGuard},
@@ -92,17 +92,16 @@ impl FileCache {
         format!("{}_{}", readable_name, digest)
     }
 
-    /// The path of the file that holds the cache entry for a value, creating the cache directory if
-    /// it is absent.
+    /// The path of the file that holds the cache entry for a value.
     fn cache_file_path(&self, name: &FullName, type_: &Arc<Scheme>, version_hash: &str) -> PathBuf {
         let cache_file_name = self.cache_file_name(name, type_, version_hash);
-        touch_directory(TYPE_CHECK_CACHE_PATH).join(cache_file_name)
+        PathBuf::from(TYPE_CHECK_CACHE_PATH).join(cache_file_name)
     }
 }
 
 impl TypeCheckCache for FileCache {
-    /// Writes the expression into the entry's own file. A file that cannot be created or written
-    /// is reported as a warning and leaves the entry absent.
+    /// Writes the expression into the entry's own file, through `write_file_within_project`. A file
+    /// that cannot be written is reported as a warning and leaves the entry absent.
     fn save_cache(
         &self,
         expr: &TypedExpr,
@@ -111,25 +110,12 @@ impl TypeCheckCache for FileCache {
         version_hash: &str,
     ) {
         let cache_file_path = self.cache_file_path(name, type_, version_hash);
-        let cache_file_path_str = cache_file_path.to_string_lossy().to_string();
-        let mut cache_file = match File::create(&cache_file_path) {
-            Err(_) => {
-                warn_msg(&format!(
-                    "Failed to create cache file \"{}\".",
-                    cache_file_path_str
-                ));
-                return;
-            }
-            Ok(file) => file,
-        };
         let serialized = postcard::to_allocvec(expr).unwrap();
-        match cache_file.write_all(&serialized) {
-            Ok(_) => {}
-            Err(_) => {
-                warn_msg(&format!(
-                    "Failed to write cache file \"{}\".",
-                    cache_file_path_str
-                ));
+        if let Err(errs) =
+            write_file_within_project(&cache_file_path, |path| fs::write(path, &serialized))
+        {
+            for err in errs.errors() {
+                warn_msg(&err.msg);
             }
         }
     }

@@ -14,7 +14,7 @@ use crate::{
     error::Errors,
     hash::HashSource,
     metafiles::{config_file::ConfigFile, registry_file::RegistryFile},
-    misc::{info_msg, replace_file, to_absolute_path, warn_msg, Set},
+    misc::{info_msg, to_absolute_path, warn_msg, write_file_within_project, Set},
     parse::sourcefile::{SourceFile, Span},
     preliminary_command::{PreliminaryCommand, PreliminaryCommandMode},
 };
@@ -1141,21 +1141,16 @@ impl ProjectFile {
     }
 
     /// Builds the lock file of the given kind afresh from this project's dependency entries and
-    /// writes it over the one on disk. Creates the directory that holds it when that is missing,
-    /// such as `.fixlang/` for the language server's lock file.
+    /// writes it over the one on disk, through `write_file_within_project`, which creates the
+    /// directory that holds it when that is missing, such as `.fixlang/` for the language server's
+    /// lock file.
     pub fn create_lock_file(&self, mode: LockFileType) -> Result<DependencyLockFile, Errors> {
         let lock_file = DependencyLockFile::create(self, mode.to_build_config_type())?;
         let content = toml::to_string(&lock_file)
             .map_err(|e| Errors::from_msg(format!("Failed to serialize lock file: {:?}", e)))?;
-        let lock_file_path = get_lock_file_path(mode);
-        if let Some(parent) = Path::new(lock_file_path).parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| Errors::from_msg(format!("Failed to create directory: {:?}", e)))?;
-        }
-        replace_file(Path::new(lock_file_path), |tmp_path| {
+        write_file_within_project(Path::new(get_lock_file_path(mode)), |tmp_path| {
             fs::write(tmp_path, &content)
-        })
-        .map_err(|e| Errors::from_msg(format!("Failed to write lock file: {:?}", e)))?;
+        })?;
         Ok(lock_file)
     }
 

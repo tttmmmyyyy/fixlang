@@ -10,14 +10,15 @@ use crate::{
         ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectFileRole, ProjectName,
         ProjectOrigin,
     },
-    misc::{info_msg, remove_inside_dot_fixlang, to_absolute_path, warn_msg},
+    misc::{
+        create_dir_within_project, info_msg, remove_inside_dot_fixlang, to_absolute_path, warn_msg,
+    },
 };
 use git2::{build::CheckoutBuilder, ErrorClass, ErrorCode, Oid, Repository};
 use rand::{thread_rng, Rng};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::{
-    fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread,
@@ -263,17 +264,9 @@ impl DependencyLockFile {
                     // If something is wrong, remove the directory.
                     remove_inside_dot_fixlang(&dep.path)?;
                 }
-                // Create the directory.
-                fs::create_dir_all(&dep.path).map_err(|e| {
-                    Errors::from_msg(format!(
-                        "Failed to create the directory \"{}\": {:?}",
-                        dep.path.to_string_lossy().to_string(),
-                        e
-                    ))
-                })?;
-
-                // Clone the repository.
-                let repo = clone_repository_with_retry(&git_info.repo, &dep.path).map_err(|e| {
+                // Create the directory, and clone the repository into it.
+                let clone_dir = create_dir_within_project(&dep.path)?;
+                let repo = clone_repository_with_retry(&git_info.repo, &clone_dir).map_err(|e| {
                     Errors::from_msg(format!(
                         "Failed to clone the repository \"{}\" to \"{}\": {:?}",
                         git_info.repo,
