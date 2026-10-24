@@ -142,7 +142,7 @@ pub fn resolve_guarding_project_links(path: &Path) -> Result<PathBuf, Errors> {
                 if resolved.starts_with(&project) && !target.starts_with(&project) {
                     return Err(Errors::from_msg(format!(
                         "Refused to write \"{}\": \"{}\" is a symbolic link in the project leading outside it, to \"{}\".\n\
-                         HINT: Remove the link, and fix writes in its place.",
+                         HINT: Remove the link, and fix writes in its place. To write where the link leads, name that place on the command line, as `fix docs --out-dir <dir>` does.",
                         path.to_string_lossy(),
                         next.to_string_lossy(),
                         target.to_string_lossy()
