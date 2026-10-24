@@ -10,6 +10,7 @@
 
 use crate::configuration::OutputFileType;
 use crate::tests::test_util::{assert_failed, assert_succeeded, run_fix, setup_case_projects};
+use std::fs;
 use std::path::Path;
 use std::process::Command;
 
@@ -259,4 +260,17 @@ fn test_a_program_build_does_not_reuse_the_objects_of_a_library_build() {
         "the second build should produce \"{}\", the program it was asked for.",
         default_executable_name(),
     );
+}
+
+/// An output file whose name starts with `@` is written under that name. The C compiler
+/// does not read it as the name of a file of further options, which here would be the file `prog`.
+#[test]
+fn test_an_output_file_named_like_an_options_file_is_written() {
+    let (_temp_dir, project_dir) = setup_case_projects(CASES, "named_output");
+    fs::write(project_dir.join("prog"), "--no-such-option\n").unwrap();
+    assert_succeeded(
+        &run_fix(&project_dir, &["build", "-O", "none", "-o", "@prog"]),
+        "`fix build -o @prog` should write the file `@prog`.",
+    );
+    assert!(run_program(&project_dir.join("@prog")).contains(PROGRAM_OUTPUT));
 }

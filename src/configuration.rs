@@ -16,7 +16,7 @@ use crate::misc::{
     path_relative_to, platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg,
     Map, Set,
 };
-use crate::preliminary_command::{approve_and_run, PreliminaryCommand};
+use crate::preliminary_command::PreliminaryCommand;
 use crate::target_triple::build_target_triple;
 use build_time::build_time_utc;
 use inkwell::OptimizationLevel;
@@ -549,9 +549,6 @@ pub struct Configuration {
     /// The commands `fixproj.toml` asks to be run before the build, those of the root project and
     /// of every dependency.
     pub preliminary_commands: Vec<PreliminaryCommand>,
-    /// Whether every pending preliminary command is approved for this run alone, bypassing the
-    /// trust-store approval prompt. Set by `--allow-preliminary-commands`.
-    pub allow_preliminary_commands: bool,
     /// Where the type checker reads and writes the result of checking each symbol, so that a
     /// symbol whose sources are unchanged is served rather than checked again.
     pub type_check_cache: Arc<dyn TypeCheckCache + Send + Sync>,
@@ -683,7 +680,6 @@ impl Configuration {
             disable_cpu_features_regex: vec![],
             llvm_args: vec![],
             preliminary_commands: vec![],
-            allow_preliminary_commands: false,
             type_check_cache: Arc::new(FileCache::new()),
             num_worker_thread: 0,
             llvm_passes_override: None,
@@ -1116,7 +1112,6 @@ impl Configuration {
             project_sources: _,
             example_build: _,
             preliminary_commands: _,
-            allow_preliminary_commands: _,
 
             // How the compiler goes about its work, which leaves what it produces alone. How many
             // symbols a compilation unit holds decides which object files a build has rather than
@@ -1419,10 +1414,12 @@ impl Configuration {
         Ok(Command::new(exec_path))
     }
 
-    /// Runs the preliminary commands the project files list, in the order they were registered,
-    /// asking the user to approve the ones the trust store holds no approval for.
+    /// Runs the preliminary commands the project files list, in the order they were registered.
     pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {
-        approve_and_run(self)
+        for command in &self.preliminary_commands {
+            self.ld_flags.extend(command.run()?);
+        }
+        Ok(())
     }
 
     /// Whether the generated program keeps the checks that abort it on a violation, such as array

@@ -16,7 +16,7 @@ use crate::{
     metafiles::{config_file::ConfigFile, registry_file::RegistryFile},
     misc::{info_msg, to_absolute_path, warn_msg, write_file_within_project, Set},
     parse::sourcefile::{SourceFile, Span},
-    preliminary_command::{PreliminaryCommand, PreliminaryCommandMode},
+    preliminary_command::PreliminaryCommand,
 };
 use regex::Regex;
 use reqwest::Url;
@@ -89,7 +89,7 @@ pub struct ProjectFileBuild {
     #[serde(default)]
     ld_flags: Vec<String>,
     /// The commands run in the project directory before the Fix program is compiled, each written
-    /// as a program followed by its arguments. They run once the user has approved them.
+    /// as a program followed by its arguments.
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
 
@@ -286,7 +286,7 @@ pub enum ProjectFileRole {
 }
 
 /// Where a project comes from.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Debug)]
 pub enum ProjectOrigin {
     /// A project in the local file system, at the absolute path this variant holds: the root
     /// project, or one a `path` dependency entry names.
@@ -294,26 +294,6 @@ pub enum ProjectOrigin {
     /// A project cloned from a git repository, identified by the repository URL and the commit hash
     /// the lock file pins the clone to.
     Git { url: String, commit: String },
-}
-
-impl ProjectOrigin {
-    /// A string naming where the project comes from: the project directory for a local project, and
-    /// `git+` followed by the repository URL for a git one, so that every commit of one repository
-    /// shares a key.
-    pub fn to_trust_key(&self) -> String {
-        match self {
-            ProjectOrigin::Local(p) => p.to_string_lossy().to_string(),
-            ProjectOrigin::Git { url, .. } => format!("git+{}", url),
-        }
-    }
-
-    /// The commit hash a git project is pinned to.
-    pub fn commit_hash(&self) -> Option<&str> {
-        match self {
-            ProjectOrigin::Local(_) => None,
-            ProjectOrigin::Git { commit, .. } => Some(commit),
-        }
-    }
 }
 
 /// A project file (`fixproj.toml`): what the project is, how it is built, what it depends on, and
@@ -765,7 +745,7 @@ impl ProjectFile {
     /// Updates a configuration from a project file.
     ///
     /// `self.role` decides whether the fields that only the root project contributes are skipped,
-    /// and `self.source` tags `preliminary_commands` for trust-store lookup. Both must be populated
+    /// and `self.source` is recorded as where the project's sources came from. Both must be set
     /// before this is called.
     pub fn set_config(&self, config: &mut Configuration) -> Result<(), Errors> {
         let is_dependent_proj = self.role == ProjectFileRole::Dependent;
@@ -905,14 +885,10 @@ impl ProjectFile {
                 .parent()
                 .expect("ProjectFile::path always points to fixproj.toml inside a directory"),
         )?;
-        let project_name = self.general.name.clone();
         for command in &self.build.preliminary_commands {
             config.preliminary_commands.push(PreliminaryCommand {
                 work_dir: work_dir.clone(),
                 command: command.clone(),
-                project_name: project_name.clone(),
-                mode: PreliminaryCommandMode::Build,
-                source: project_origin.clone(),
             });
         }
         if mode == BuildConfigType::Test {
@@ -925,9 +901,6 @@ impl ProjectFile {
                 config.preliminary_commands.push(PreliminaryCommand {
                     work_dir: work_dir.clone(),
                     command: command.clone(),
-                    project_name: project_name.clone(),
-                    mode: PreliminaryCommandMode::Test,
-                    source: project_origin.clone(),
                 });
             }
         }
