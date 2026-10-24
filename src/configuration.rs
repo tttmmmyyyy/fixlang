@@ -1416,8 +1416,8 @@ impl Configuration {
 
     /// Runs the preliminary commands the project files list, in the order they were registered.
     pub fn run_preliminary_commands(&mut self) -> Result<(), Errors> {
-        for command in self.preliminary_commands.clone() {
-            command.run(self)?;
+        for command in &self.preliminary_commands {
+            self.ld_flags.extend(command.run()?);
         }
         Ok(())
     }

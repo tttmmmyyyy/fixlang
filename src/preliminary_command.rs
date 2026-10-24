@@ -1,10 +1,9 @@
 //! The commands a project file's `preliminary_commands` run before compilation.
 
 use crate::{
-    configuration::Configuration,
     constants::PRELIMINARY_BUILD_LD_FLAGS,
     error::Errors,
-    misc::{split_string_by_space_not_quated, to_absolute_path},
+    misc::split_string_by_space_not_quated,
 };
 use std::path::PathBuf;
 use std::process::Command;
@@ -20,16 +19,18 @@ pub struct PreliminaryCommand {
 }
 
 impl PreliminaryCommand {
-    /// Runs this command to completion, and adds the flags of each `fix.ld_flags=...` line of its
-    /// standard output to `config.ld_flags`. Fails when the process does not start or exits with a
-    /// nonzero status.
-    pub fn run(&self, config: &mut Configuration) -> Result<(), Errors> {
+    /// Runs this command to completion, and returns the linker flags its standard output gives on
+    /// `fix.ld_flags=...` lines. Fails when the process does not start or exits with a nonzero
+    /// status.
+    ///
+    /// # Examples
+    /// A command printing `fix.ld_flags=-L/opt/lib -lfoo` returns `["-L/opt/lib", "-lfoo"]`.
+    pub fn run(&self) -> Result<Vec<String>, Errors> {
         let mut com = Command::new(&self.command[0]);
         for arg in &self.command[1..] {
             com.arg(arg);
         }
-        let work_dir = to_absolute_path(&self.work_dir)?;
-        com.current_dir(&work_dir);
+        com.current_dir(&self.work_dir);
         let status = com.status().map_err(|e| {
             Errors::from_msg(format!(
                 "Failed to run command \"{}\": {:?}",
@@ -54,16 +55,11 @@ impl PreliminaryCommand {
             ))
         })?;
 
-        // If the command outputs build flags in the designated format, add them to the configuration.
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let stdout_lines: Vec<&str> = stdout.lines().collect();
-        for stdout_line in stdout_lines {
-            if stdout_line.starts_with(PRELIMINARY_BUILD_LD_FLAGS) {
-                let ld_flags = stdout_line[PRELIMINARY_BUILD_LD_FLAGS.len()..].trim();
-                let mut ld_flags = split_string_by_space_not_quated(ld_flags);
-                config.ld_flags.append(&mut ld_flags);
-            }
-        }
-        Ok(())
+        Ok(stdout
+            .lines()
+            .filter_map(|line| line.strip_prefix(PRELIMINARY_BUILD_LD_FLAGS))
+            .flat_map(|flags| split_string_by_space_not_quated(flags.trim()))
+            .collect())
     }
 }
