@@ -13,18 +13,15 @@ use crate::edit::edit_util::apply_text_edits;
 use crate::elaboration::typecheckcache::MemoryCache;
 use crate::error::Errors;
 use crate::metafiles::project_file::ProjectFile;
-use crate::misc::{info_msg, to_absolute_path, Map};
+use crate::misc::{info_msg, warn_msg, Map, Set};
+use crate::project_fs::resolve_file_inside_project;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-// Run the "fix edit explicit-import" command.
-// This command:
-// 1. Checks if the project has any errors (exits if errors exist)
-// 2. For each source file in the project (excluding dependencies):
-//    - Collects all referenced type names, trait names, and value names
-//    - Removes all existing import statements
-//    - Writes explicit import statements for all collected names
+/// Runs `fix edit explicit-import`. Fails when the project has errors. Otherwise, for each source
+/// file of the root project, collects the type, trait and value names the file refers to, removes
+/// its import statements, and writes import statements naming exactly those names.
 pub fn run_explicit_import_command() -> Result<(), Errors> {
     info_msg("Running diagnostics on the program...");
 
@@ -51,30 +48,36 @@ pub fn run_explicit_import_command() -> Result<(), Errors> {
     Ok(())
 }
 
-// Get the list of source files that belong to the project (not dependencies).
+/// The root project's own source files, test files included, with symbolic links resolved, each
+/// once. A listed file that lies outside the project, by its path or through a symbolic link, is
+/// left out with a warning.
 fn get_user_source_files(proj_file: &ProjectFile) -> Result<Vec<PathBuf>, Errors> {
-    // Use get_files(BuildMode::Test) to get the root project's source files (excluding dependencies).
-    // BuildMode::Test includes test files.
     let files = proj_file.get_files(BuildConfigType::Test);
 
-    // Convert to absolute paths
-    let mut abs_files = Vec::new();
+    let mut inside_files = Vec::new();
+    let mut seen = Set::default();
     for file_path in files {
-        let abs_path = to_absolute_path(&file_path).map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to get absolute path for {}: {}",
-                file_path.display(),
-                e
-            ))
-        })?;
-        abs_files.push(abs_path);
+        match resolve_file_inside_project(&file_path)? {
+            // The project file can list one file twice, under two spellings or through a symbolic
+            // link, and a second rewrite would erase text at the spans the first one moved.
+            Some(resolved) => {
+                if seen.insert(resolved.clone()) {
+                    inside_files.push(resolved);
+                }
+            }
+            None => warn_msg(&format!(
+                "Left \"{}\" as it is: it lies outside the project.",
+                file_path.display()
+            )),
+        }
     }
 
-    Ok(abs_files)
+    Ok(inside_files)
 }
 
-// Rewrite import statements for a single file.
-fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<(), Errors> {
+/// Replaces the import statements of the source file at `file_path` with ones naming exactly the
+/// entities of other modules that its module refers to, and writes the file back.
+fn rewrite_imports_for_file(file_path: &Path, program: &Program) -> Result<(), Errors> {
     // Find the module info for this file.
     let module_info = program.module_of_file(file_path).ok_or_else(|| {
         Errors::from_msg(format!(
@@ -113,7 +116,7 @@ fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<()
     })?;
 
     // Rewrite the file with new import statements.
-    let new_content = rewrite_file_content(&content, &module_info, &new_import_stmts, program)?;
+    let new_content = rewrite_file_content(&content, &module_info, &new_import_stmts, program);
 
     // Write the new content back to the file.
     fs::write(file_path, new_content).map_err(|e| {
@@ -129,7 +132,8 @@ fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<()
     Ok(())
 }
 
-// Generate import statements for the given names.
+/// The import statements, sorted, that a module named `current_module` needs to refer to each of
+/// `names`.
 pub fn generate_import_statements(
     current_module: Name,
     names: Vec<FullName>,
@@ -150,7 +154,7 @@ fn rewrite_file_content(
     module_info: &ModuleInfo,
     new_import_stmts: &[ImportStatement],
     program: &Program,
-) -> Result<String, Errors> {
+) -> String {
     // Find the range of existing import statements.
     let empty_vec = vec![];
     let import_stmts = program
@@ -170,7 +174,5 @@ fn rewrite_file_content(
     ));
 
     // Apply the text edits to the content.
-    let result = apply_text_edits(content, &text_edits);
-
-    Ok(result)
+    apply_text_edits(content, &text_edits)
 }

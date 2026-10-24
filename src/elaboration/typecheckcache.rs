@@ -1,14 +1,18 @@
 use crate::{
-    ast::name::FullName, ast::program::TypedExpr, ast::types::Scheme,
-    constants::TYPE_CHECK_CACHE_PATH, elaboration::touch_directory, misc::warn_msg,
+    ast::name::FullName,
+    ast::program::TypedExpr,
+    ast::types::Scheme,
+    constants::TYPE_CHECK_CACHE_PATH,
+    misc::warn_msg,
+    project_fs::{create_dir_guarding_project_links, replace_file, DOT_FIXLANG_LINK_HINT},
 };
 use std::{
     collections::{BTreeMap, VecDeque},
-    fs::File,
-    io::{Read, Write},
+    fs::{self, File},
+    io::Read,
     panic::RefUnwindSafe,
-    path::PathBuf,
-    sync::{Arc, Mutex, MutexGuard},
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, MutexGuard, OnceLock},
 };
 
 /// A type-check cache held by the threads that check a program together.
@@ -61,15 +65,47 @@ fn entity_identity(name: &FullName, type_: &Arc<Scheme>) -> EntityIdentity {
     format!("{}\n{}", name, type_)
 }
 
+/// How many characters of a value's name the name of its cache file carries. Each is one byte, and
+/// with the digest the file name stays well within the 255 bytes file systems allow.
+const READABLE_NAME_LENGTH: usize = 100;
+
 /// A cache that gives every entry a file of its own, so the entries outlive the run that wrote
 /// them.
-pub struct FileCache {}
+pub struct FileCache {
+    /// The cache directory, created by the first entry saved, with symbolic links resolved. `None`
+    /// when it could not be created, which is then reported once, and no entry is saved.
+    dir: OnceLock<Option<PathBuf>>,
+}
 
 impl FileCache {
     /// Creates a handle to the cache. Every handle reaches the same entries, which live under
     /// `TYPE_CHECK_CACHE_PATH` relative to the working directory.
     pub fn new() -> Self {
-        FileCache {}
+        FileCache {
+            dir: OnceLock::new(),
+        }
+    }
+
+    /// The directory the entries are saved in, created when the first entry is saved. A directory
+    /// that cannot be created, or that a symbolic link in the project would place outside it, is
+    /// reported as a warning, and answers `None` to that call and every later one.
+    fn dir_to_save_in(&self) -> Option<&PathBuf> {
+        self.dir
+            .get_or_init(|| {
+                match create_dir_guarding_project_links(
+                    Path::new(TYPE_CHECK_CACHE_PATH),
+                    DOT_FIXLANG_LINK_HINT,
+                ) {
+                    Ok(dir) => Some(dir),
+                    Err(errs) => {
+                        for err in errs.errors() {
+                            warn_msg(&err.msg);
+                        }
+                        None
+                    }
+                }
+            })
+            .as_ref()
     }
 
     /// The name of the file that holds the cache entry for a value.
@@ -77,7 +113,9 @@ impl FileCache {
     /// The digest is what identifies the entry: it is taken over the entity and the version hash at
     /// once, so two entries meet in one file only when both agree. The part in front of it names
     /// the value for someone reading the cache directory, and is filename-safe because it keeps
-    /// only alphanumeric characters; several values can wear the same one.
+    /// only ASCII alphanumeric characters; several values can wear the same one. It is cut at
+    /// `READABLE_NAME_LENGTH` characters, so that the file name fits the file system's limit on
+    /// name length however long the value's name is.
     ///
     /// # Examples
     ///
@@ -86,23 +124,26 @@ impl FileCache {
         let key = format!("{}\n{}", entity_identity(name, type_), version_hash);
         let digest = format!("{:x}", md5::compute(key));
 
-        let readable_name = name
+        let readable_name: String = name
             .to_string()
-            .replace(|c: char| !c.is_alphanumeric(), "_");
+            .chars()
+            .take(READABLE_NAME_LENGTH)
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+            .collect();
         format!("{}_{}", readable_name, digest)
     }
 
-    /// The path of the file that holds the cache entry for a value, creating the cache directory if
-    /// it is absent.
+    /// The path of the file that holds the cache entry for a value.
     fn cache_file_path(&self, name: &FullName, type_: &Arc<Scheme>, version_hash: &str) -> PathBuf {
         let cache_file_name = self.cache_file_name(name, type_, version_hash);
-        touch_directory(TYPE_CHECK_CACHE_PATH).join(cache_file_name)
+        PathBuf::from(TYPE_CHECK_CACHE_PATH).join(cache_file_name)
     }
 }
 
 impl TypeCheckCache for FileCache {
-    /// Writes the expression into the entry's own file. A file that cannot be created or written
-    /// is reported as a warning and leaves the entry absent.
+    /// Writes the expression into the entry's own file. A file that cannot be written, or that a
+    /// symbolic link in the project would place outside it, is reported as a warning and leaves the
+    /// entry absent.
     fn save_cache(
         &self,
         expr: &TypedExpr,
@@ -110,27 +151,21 @@ impl TypeCheckCache for FileCache {
         type_: &Arc<Scheme>,
         version_hash: &str,
     ) {
-        let cache_file_path = self.cache_file_path(name, type_, version_hash);
-        let cache_file_path_str = cache_file_path.to_string_lossy().to_string();
-        let mut cache_file = match File::create(&cache_file_path) {
-            Err(_) => {
-                warn_msg(&format!(
-                    "Failed to create cache file \"{}\".",
-                    cache_file_path_str
-                ));
-                return;
-            }
-            Ok(file) => file,
+        let Some(dir) = self.dir_to_save_in() else {
+            return;
         };
+        // The name holds no path separator, and `replace_file` replaces a symbolic link at the path
+        // instead of writing through it, so the entry is written in `dir`.
+        let cache_file_path = dir.join(self.cache_file_name(name, type_, version_hash));
         let serialized = postcard::to_allocvec(expr).unwrap();
-        match cache_file.write_all(&serialized) {
-            Ok(_) => {}
-            Err(_) => {
-                warn_msg(&format!(
-                    "Failed to write cache file \"{}\".",
-                    cache_file_path_str
-                ));
-            }
+        if let Err(e) = replace_file(&cache_file_path, |tmp_path| {
+            fs::write(tmp_path, &serialized)
+        }) {
+            warn_msg(&format!(
+                "Failed to write cache file \"{}\": {}.",
+                cache_file_path.to_string_lossy(),
+                e
+            ));
         }
     }
 

@@ -16,8 +16,9 @@ use crate::{
     metafiles::project_file::ProjectFile,
     misc::info_msg,
     parse::sourcefile::Span,
+    project_fs::write_file_guarding_project_links,
 };
-use std::sync::Arc;
+use std::{cmp::Ordering, fs, mem, sync::Arc};
 
 pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> {
     info_msg("Loading source files...");
@@ -155,7 +156,7 @@ impl MarkdownSection {
 
             // If an empty line is found, add the paragraph.
             if line.trim().is_empty() {
-                ret.add_paragraph(std::mem::replace(&mut paragraph, String::new()).to_string());
+                ret.add_paragraph(mem::replace(&mut paragraph, String::new()).to_string());
                 line_it.next();
                 continue;
             }
@@ -165,7 +166,7 @@ impl MarkdownSection {
             line_it.next();
         }
         // Add the last paragraph.
-        ret.add_paragraph(std::mem::replace(&mut paragraph, String::new()).to_string());
+        ret.add_paragraph(mem::replace(&mut paragraph, String::new()).to_string());
 
         // Parse the sub-sections.
         while let Some(line) = line_it.peek() {
@@ -292,22 +293,12 @@ fn docgen_for_module(
     // Write `doc` into `{mod_name}.md` file.
     let doc_file = format!("{}.md", mod_name);
 
-    // Create the output directory.
-    if let Err(e) = std::fs::create_dir_all(&config.out_dir) {
-        return Err(Errors::from_msg(format!(
-            "Failed to create directory \"{}\": {:?}",
-            config.out_dir.display(),
-            e
-        )));
-    }
     let doc_path = config.out_dir.join(doc_file);
-    std::fs::write(&doc_path, markdown_str).map_err(|e| {
-        Errors::from_msg(format!(
-            "Failed to write file \"{}\": {:?}",
-            doc_path.display(),
-            e
-        ))
-    })?;
+    write_file_guarding_project_links(
+        &doc_path,
+        "Remove the link, and fix writes in its place, or name the place it leads to in `--out-dir` to write there.",
+        |tmp_path| fs::write(tmp_path, markdown_str),
+    )?;
 
     info_msg(&format!(
         "Saved documentation to \"{}\".",
@@ -403,13 +394,13 @@ impl PartialEq for Entry {
 impl Eq for Entry {}
 
 impl PartialOrd for Entry {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
 impl Ord for Entry {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         if self.name.namespace != other.name.namespace {
             return self.name.namespace.cmp(&other.name.namespace);
         }

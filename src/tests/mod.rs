@@ -81,6 +81,7 @@ mod test_output_file_setting;
 mod test_pointer_arithmetic;
 mod test_predicate_deduction;
 mod test_preliminary_commands;
+mod test_project_links_on_write;
 mod test_provenance;
 mod test_punched_array;
 mod test_rc_ir_aliasing;

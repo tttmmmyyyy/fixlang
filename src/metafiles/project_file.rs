@@ -14,9 +14,12 @@ use crate::{
     error::Errors,
     hash::HashSource,
     metafiles::{config_file::ConfigFile, registry_file::RegistryFile},
-    misc::{info_msg, replace_file, to_absolute_path, warn_msg, Set},
+    misc::{info_msg, to_absolute_path, warn_msg, Set},
     parse::sourcefile::{SourceFile, Span},
     preliminary_command::PreliminaryCommand,
+    project_fs::{
+        resolve_guarding_project_links, write_file_guarding_project_links, DOT_FIXLANG_LINK_HINT,
+    },
 };
 use regex::Regex;
 use reqwest::Url;
@@ -1115,20 +1118,17 @@ impl ProjectFile {
 
     /// Builds the lock file of the given kind afresh from this project's dependency entries and
     /// writes it over the one on disk. Creates the directory that holds it when that is missing,
-    /// such as `.fixlang/` for the language server's lock file.
+    /// such as `.fixlang/` for the language server's lock file. Fails when a symbolic link in the
+    /// project would place the lock file outside the project.
     pub fn create_lock_file(&self, mode: LockFileType) -> Result<DependencyLockFile, Errors> {
         let lock_file = DependencyLockFile::create(self, mode.to_build_config_type())?;
         let content = toml::to_string(&lock_file)
             .map_err(|e| Errors::from_msg(format!("Failed to serialize lock file: {:?}", e)))?;
-        let lock_file_path = get_lock_file_path(mode);
-        if let Some(parent) = Path::new(lock_file_path).parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| Errors::from_msg(format!("Failed to create directory: {:?}", e)))?;
-        }
-        replace_file(Path::new(lock_file_path), |tmp_path| {
-            fs::write(tmp_path, &content)
-        })
-        .map_err(|e| Errors::from_msg(format!("Failed to write lock file: {:?}", e)))?;
+        write_file_guarding_project_links(
+            Path::new(get_lock_file_path(mode)),
+            DOT_FIXLANG_LINK_HINT,
+            |tmp_path| fs::write(tmp_path, &content),
+        )?;
         Ok(lock_file)
     }
 
@@ -1297,6 +1297,12 @@ impl ProjectFile {
         fix_config: &ConfigFile,
         mode: BuildConfigType,
     ) -> Result<(), Errors> {
+        // The place the project file resolves to, which the added entries are written at. A project
+        // file that is a symbolic link stays one.
+        let project_file_path = resolve_guarding_project_links(
+            &self.path,
+            "Run `fix deps add` in the project the link leads to.",
+        )?;
         let mut added_toml = "".to_string();
 
         // Parse each element of `proj_specs` as the form `proj-name@ver_req`.
@@ -1444,7 +1450,7 @@ impl ProjectFile {
         // Write the added dependencies to the project file.
         let mut file = fs::OpenOptions::new()
             .append(true)
-            .open(&self.path)
+            .open(&project_file_path)
             .map_err(|e| {
                 Errors::from_msg(format!(
                     "Failed to open file \"{}\": {:?}",
