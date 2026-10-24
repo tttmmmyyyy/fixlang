@@ -566,8 +566,8 @@ pub fn write_file_within_project(
             e
         ))
     };
-    let (parent, Some(name)) = (path.parent().unwrap_or(Path::new("")), path.file_name()) else {
-        return Err(failed(io::Error::from(ErrorKind::InvalidInput)));
+    let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
+        panic!("\"{}\" names no file to write.", path.to_string_lossy());
     };
     let dir = create_dir_within_project(parent)?;
     replace_file(&dir.join(name), write).map_err(failed)

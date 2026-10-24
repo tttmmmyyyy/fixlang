@@ -31,7 +31,7 @@ mod integration_tests {
             "module Main;\n\n/// Prints a greeting.\nmain : IO ();\nmain = println(\"hello\");\n",
         )
         .unwrap();
-        let victim = root.path().join("victim");
+        let victim = victim(&root);
         fs::create_dir_all(&victim).unwrap();
         fs::write(victim.join("data.txt"), "important").unwrap();
         (root, proj)
