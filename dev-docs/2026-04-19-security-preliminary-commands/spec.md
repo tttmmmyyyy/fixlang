@@ -1,5 +1,7 @@
 # 仕様: `preliminary_commands` 実行時のユーザ確認
 
+> この承認の仕組みは #947 で削除しました。現在の挙動は Document.md の "What `fix` runs from a project" にあります。
+
 対象ユーザから見た挙動の仕様。実装方針は [design.md](design.md) を参照。
 
 ## 背景 / 問題
