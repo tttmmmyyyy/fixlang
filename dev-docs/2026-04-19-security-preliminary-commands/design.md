@@ -1,6 +1,6 @@
 # 設計: `preliminary_commands` 実行時のユーザ確認
 
-> この承認の仕組みは #947 で削除しました。現在の挙動は Document.md の "What `fix` runs from a project" にあります。
+> この承認の仕組みは #947 で削除しました。現在の挙動は Document.md の "Security" にあります。
 
 仕様は [spec.md](spec.md) を参照。本書は実装方針を扱う。
 
