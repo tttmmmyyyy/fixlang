@@ -3074,16 +3074,16 @@ The Fix build system compiles all the projects of a build as a single set of com
 
 ## Security
 
-`fix build`, as well as `fix run` and `fix test`, can run code written by the authors of a project and its dependencies. `fix build` runs the `preliminary_commands` before compilation and passes the `ld_flags` to the linker, and the `ld_flags` can hold a flag that starts a program, such as `gcc`'s `-wrapper`. Run these commands only when you trust the project and its dependencies.
+`fix build`, as well as `fix run` and `fix test`, can run code written by the authors of a project and its dependencies. Run them only when you trust the project and its dependencies.
 
 `fix check`, `fix deps install`, `fix deps update`, `fix docs` and the language server are specified to run no arbitrary code.
 
 Ways to protect yourself include running the commands in a sandbox such as a Docker container, and having an AI review the project and its dependencies.
 
-Fix 1.3.0 to 1.6.0-beta.1 asked the user to approve the `preliminary_commands` before `fix build`, `fix run` and `fix test` ran them. The approval was removed for these reasons:
+Fix 1.3.0 to 1.6.0-beta.1 asked the user to approve the `preliminary_commands` on `fix build`, `fix run` and `fix test`. The feature was removed for these reasons:
 
-- Approving was tedious, and the approvals easily became a formality.
-- A project has other ways to run any command, such as the `ld_flags` and the built program, and believing that `fix build` is safe because of the approval is more dangerous than knowing that it is not.
+- Approving was tedious, and easily became a formality.
+- A project has ways other than the `preliminary_commands` to run any command, and believing that `fix build` is safe because of the approval is more dangerous.
 
 ## Managing dependencies
 
