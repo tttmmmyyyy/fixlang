@@ -112,9 +112,9 @@ impl TypeCheckCache for FileCache {
     ) {
         let cache_file_path = self.cache_file_path(name, type_, version_hash);
         let serialized = postcard::to_allocvec(expr).unwrap();
-        if let Err(errs) =
-            write_file_within_project(&cache_file_path, |tmp_path| fs::write(tmp_path, &serialized))
-        {
+        if let Err(errs) = write_file_within_project(&cache_file_path, |tmp_path| {
+            fs::write(tmp_path, &serialized)
+        }) {
             for err in errs.errors() {
                 warn_msg(&err.msg);
             }

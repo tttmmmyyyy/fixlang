@@ -266,14 +266,15 @@ impl DependencyLockFile {
                 }
                 // Create the directory, and clone the repository into it.
                 let clone_dir = create_dir_within_project(&dep.path)?;
-                let repo = clone_repository_with_retry(&git_info.repo, &clone_dir).map_err(|e| {
-                    Errors::from_msg(format!(
-                        "Failed to clone the repository \"{}\" to \"{}\": {:?}",
-                        git_info.repo,
-                        dep.path.to_string_lossy().to_string(),
-                        e
-                    ))
-                })?;
+                let repo =
+                    clone_repository_with_retry(&git_info.repo, &clone_dir).map_err(|e| {
+                        Errors::from_msg(format!(
+                            "Failed to clone the repository \"{}\" to \"{}\": {:?}",
+                            git_info.repo,
+                            dep.path.to_string_lossy().to_string(),
+                            e
+                        ))
+                    })?;
 
                 // Checkout the specified revision.
                 let commit = repo

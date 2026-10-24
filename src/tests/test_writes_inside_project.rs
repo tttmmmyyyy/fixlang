@@ -76,7 +76,10 @@ mod integration_tests {
         fs::create_dir_all(proj.join(".fixlang")).unwrap();
         symlink(victim(&root), proj.join(".fixlang/cache")).unwrap();
         let output = run_fix(&proj, &["check"]);
-        assert_succeeded(&output, "`fix check` should check the program without its cache.");
+        assert_succeeded(
+            &output,
+            "`fix check` should check the program without its cache.",
+        );
         assert!(
             String::from_utf8_lossy(&output.stderr).contains(REFUSED),
             "stderr: {}",
@@ -90,7 +93,10 @@ mod integration_tests {
     #[test]
     fn check_replaces_a_cache_file_that_is_a_link() {
         let (root, proj) = setup_test_env();
-        assert_succeeded(&run_fix(&proj, &["check"]), "`fix check` should write its cache.");
+        assert_succeeded(
+            &run_fix(&proj, &["check"]),
+            "`fix check` should write its cache.",
+        );
         let cache_dir = proj.join(TYPE_CHECK_CACHE_PATH);
         let cache_files: Vec<PathBuf> = fs::read_dir(&cache_dir)
             .unwrap()
@@ -231,7 +237,11 @@ mod integration_tests {
     fn language_server_writes_nothing_through_links_in_dot_fixlang() {
         let (root, proj) = setup_test_env();
         fs::create_dir_all(proj.join(".fixlang")).unwrap();
-        symlink(victim(&root).join("data.txt"), proj.join(".fixlang/fix.log")).unwrap();
+        symlink(
+            victim(&root).join("data.txt"),
+            proj.join(".fixlang/fix.log"),
+        )
+        .unwrap();
         symlink(victim(&root), proj.join(".fixlang/tmp")).unwrap();
 
         let mut client = LspClient::new(&proj).expect("Failed to start the language server");
@@ -244,7 +254,9 @@ mod integration_tests {
         client
             .wait_for_ended_passes(1, LspClient::PASS_TIMEOUT)
             .expect("the diagnostics pass is expected to end");
-        client.shutdown().expect("Failed to shut the language server down");
+        client
+            .shutdown()
+            .expect("Failed to shut the language server down");
 
         assert_victim_untouched(&root);
     }
