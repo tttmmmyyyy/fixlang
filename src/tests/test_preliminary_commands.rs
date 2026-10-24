@@ -1,6 +1,6 @@
 //! Which subcommands run the `preliminary_commands` of a project and of its dependencies. `fix
-//! build`, `fix run` and `fix test` run them without asking, on a terminal or off one; `fix check`,
-//! `fix deps update` and `fix docs` run none.
+//! build`, `fix run` and `fix test` run them without asking; `fix check`, `fix deps install`, `fix
+//! deps update`, `fix docs` and the language server run none.
 
 use crate::tests::test_util::{create_git_repo, fix_command};
 use std::fs;
@@ -177,10 +177,13 @@ fn check_runs_no_command() {
 }
 
 #[test]
-fn check_deps_update_and_docs_run_no_command_of_a_git_dependency() {
+fn subcommands_that_build_nothing_run_no_command_of_a_git_dependency() {
     let dir = TempDir::new().unwrap();
     let (proj, marker) = project_with_git_dependency(dir.path());
     assert_succeeded(&run_fix(&proj, &["deps", "update"]));
+    // `fix clean` leaves the lock file, so that `fix deps install` clones the dependency afresh.
+    assert_succeeded(&run_fix(&proj, &["clean"]));
+    assert_succeeded(&run_fix(&proj, &["deps", "install"]));
     assert_succeeded(&run_fix(&proj, &["check"]));
     assert_succeeded(&run_fix(&proj, &["docs", "-o", "out"]));
     assert!(
@@ -188,3 +191,77 @@ fn check_deps_update_and_docs_run_no_command_of_a_git_dependency() {
         "a subcommand that builds nothing ran the dependency's command"
     );
 }
+
+#[test]
+fn a_failing_command_fails_the_build() {
+    let dir = TempDir::new().unwrap();
+    write_project(dir.path(), "proj", "[[\"false\"]]", "[]", "");
+    let output = run_fix(dir.path(), &["build"]);
+    assert!(
+        !output.status.success(),
+        "`fix build` succeeded although a preliminary command failed"
+    );
+}
+
+#[test]
+fn commands_run_in_the_order_the_project_file_lists_them() {
+    let dir = TempDir::new().unwrap();
+    let log = dir.path().join("log");
+    let append = |word: &str| {
+        format!(
+            "[\"sh\", \"-c\", \"echo {} >> '{}'\"]",
+            word,
+            log.display()
+        )
+    };
+    write_project(
+        dir.path(),
+        "proj",
+        &format!("[{}, {}]", append("first"), append("second")),
+        "[]",
+        "",
+    );
+    assert_succeeded(&run_fix(dir.path(), &["build"]));
+    // Consecutive repeats are merged, since a command runs twice (#949): the order is what this
+    // test pins.
+    let mut lines: Vec<String> = fs::read_to_string(&log)
+        .unwrap()
+        .lines()
+        .map(String::from)
+        .collect();
+    lines.dedup();
+    assert_eq!(lines, ["first", "second"]);
+}
+
+#[test]
+fn the_language_server_runs_no_command_of_a_git_dependency() {
+    use crate::tests::test_lsp::lsp_client::LspClient;
+    use std::time::Duration;
+
+    let dir = TempDir::new().unwrap();
+    let (proj, marker) = project_with_git_dependency(dir.path());
+    // A program that calls the dependency, so that a pass reporting nothing is one that read the
+    // dependency's project file.
+    fs::write(
+        proj.join("main.fix"),
+        "module Main;\n\nimport Dep;\n\nmain : IO ();\nmain = Dep::greet;\n",
+    )
+    .unwrap();
+    let mut client = LspClient::new(&proj).expect("Failed to start LSP");
+    client
+        .initialize(&proj, Duration::from_secs(5))
+        .expect("Failed to initialize LSP");
+    client
+        .open_document(Path::new("main.fix"))
+        .expect("Failed to open main.fix");
+    client.save_and_wait_for_a_pass(Path::new("main.fix"));
+    client
+        .verify_no_diagnostics()
+        .expect("the project is expected to elaborate with its dependency");
+    client.shutdown().expect("Failed to shut down LSP");
+    assert!(
+        !marker.exists(),
+        "the language server ran the dependency's command"
+    );
+}
+
