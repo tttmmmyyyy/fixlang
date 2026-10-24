@@ -97,7 +97,7 @@ files = ["main.fix"]
 ## This is useful when you need to get the path to the library dynamically, e.g., using pkg-config.
 ##
 ## Note: `fix build`, `fix run` and `fix test` run the preliminary_commands of the project and of
-## its dependencies. See Document.md "What `fix` runs from a project".
+## its dependencies. See "Security" in Document.md.
 # preliminary_commands = [["make", "lib.o"]]
 
 ## Disable specific CPU features. 

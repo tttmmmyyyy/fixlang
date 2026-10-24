@@ -825,8 +825,7 @@ Consecutive line comments immediately preceding an entity declaration in the sou
         if args.contains_id("allow-preliminary-commands") {
             warn_msg(
                 "`--allow-preliminary-commands` has no effect: `fix` runs the preliminary_commands \
-                 of a project without asking for approval. See \"What `fix` runs from a project\" \
-                 in Document.md.",
+                 of a project without asking for approval. See \"Security\" in Document.md.",
             );
         }
 
