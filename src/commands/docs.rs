@@ -296,7 +296,7 @@ fn docgen_for_module(
     let doc_path = config.out_dir.join(doc_file);
     write_file_guarding_project_links(
         &doc_path,
-        "Remove the link, and fix writes in its place, or pass the directory it leads to as `--out-dir` to write there.",
+        "Remove the link, and fix writes in its place, or name the place it leads to in `--out-dir` to write there.",
         |tmp_path| fs::write(tmp_path, markdown_str),
     )?;
 

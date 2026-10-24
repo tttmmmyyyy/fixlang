@@ -228,7 +228,7 @@ mod integration_tests {
         );
         assert_failed_with(
             &output,
-            "pass the directory it leads to as `--out-dir`",
+            "name the place it leads to in `--out-dir`",
             "the refusal should point at `--out-dir`.",
         );
         assert_victim_untouched(&root);

@@ -76,9 +76,10 @@ pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
     };
     let Some(entry) = entry.filter(|entry| entry.starts_with(&dot_fixlang)) else {
         return Err(Errors::from_msg(format!(
-            "Refused to remove \"{}\", which lies outside \"{}\".",
+            "Refused to remove \"{}\", which lies outside \"{}\".\nHINT: {}",
             path.to_string_lossy(),
-            dot_fixlang.to_string_lossy()
+            dot_fixlang.to_string_lossy(),
+            DOT_FIXLANG_LINK_HINT
         )));
     };
     // The removal acts on the entry judged above. `path` itself, written with a trailing `/` or
