@@ -123,6 +123,29 @@ mod integration_tests {
         }
     }
 
+    /// `fix check` saves the cache entry of a value whose cache file name is close to the longest
+    /// name the file system allows.
+    #[test]
+    fn check_saves_the_cache_of_a_value_with_a_long_name() {
+        let (_root, proj) = setup_test_env();
+        let name = "a".repeat(205);
+        fs::write(
+            proj.join("main.fix"),
+            format!(
+                "module Main;\n\n{n} : I64;\n{n} = 1;\n\nmain : IO ();\nmain = println({n}.to_string);\n",
+                n = name
+            ),
+        )
+        .unwrap();
+        let output = run_fix(&proj, &["check"]);
+        assert_succeeded(&output, "`fix check` should check the program.");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!stderr.contains("Failed to write"), "stderr: {}", stderr);
+        assert!(fs::read_dir(proj.join(TYPE_CHECK_CACHE_PATH))
+            .unwrap()
+            .any(|entry| entry.unwrap().file_name().to_string_lossy().contains(&name)));
+    }
+
     /// `fix check` refuses to save its sources under a `.fixlang/tmp` that links outside the
     /// project.
     #[test]

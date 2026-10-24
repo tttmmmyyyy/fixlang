@@ -81,8 +81,11 @@ pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
 /// and renaming that onto `path`, so that `path` holds either what it held before or the whole of
 /// what `write` wrote. A symbolic link at `path` is replaced by the new file, and what it pointed to
 /// is kept.
+///
+/// The new file is named apart from `path`, so that a name of `path` as long as the file system
+/// allows still leaves room for it.
 pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) -> io::Result<()> {
-    let tmp_path = path.with_extension(format!("{}.tmp", random::<u64>()));
+    let tmp_path = path.with_file_name(format!(".{:016x}.tmp", random::<u64>()));
     write(&tmp_path)
         .and_then(|()| fs::rename(&tmp_path, path))
         .inspect_err(|_| {
