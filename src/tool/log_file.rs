@@ -11,7 +11,9 @@ pub const WRITE_LOG: bool = false;
 
 static LOG_FILE: Lazy<Mutex<File>> = Lazy::new(|| open_log_file());
 
-/// Writes an empty log file through `write_file_within_project` and opens it for appending.
+/// Creates the log file empty and opens it for appending. A symbolic link at its path is replaced
+/// by the new file. Panics when the file cannot be created, or when a symbolic link in the project
+/// would place it outside the project.
 fn open_log_file() -> Mutex<File> {
     let path = Path::new(LOG_FILE_PATH);
     panic_if_err(write_file_within_project(path, |tmp_path| {
@@ -26,8 +28,8 @@ fn open_log_file() -> Mutex<File> {
 
 #[doc(hidden)]
 pub fn write_log_file_impl(message: &str) {
-    // The log file is opened by the first message written, so that a `fix` writing no log leaves
-    // the file system as it found it.
+    // The log file is opened when the first message is written, so a `fix` run that writes no log
+    // leaves the file system unchanged.
     if WRITE_LOG {
         let mut file = LOG_FILE.lock().expect("Failed to lock the log file.");
         let message = message.to_string() + "\n";

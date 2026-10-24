@@ -1,5 +1,5 @@
-/// Tests that a symbolic link a project directory holds, such as one committed to a repository,
-/// cannot lead the subcommands that build nothing to write outside the project.
+/// Tests that a symbolic link in a project, such as one committed to a repository, cannot make the
+/// subcommands that build nothing write outside the project.
 #[cfg(all(test, unix))]
 mod integration_tests {
     use crate::constants::TYPE_CHECK_CACHE_PATH;
@@ -12,7 +12,8 @@ mod integration_tests {
     };
     use tempfile::TempDir;
 
-    /// The report of a write that a symbolic link would lead outside the project.
+    /// The part of the error message that reports a write a symbolic link would lead outside the
+    /// project.
     const REFUSED: &str = "is a symbolic link in the project leading outside it";
 
     /// A temporary directory holding a project `proj`, whose `Main` module documents its `main`,
@@ -57,7 +58,8 @@ mod integration_tests {
         );
     }
 
-    /// Asserts that `path` is a regular file, which no symbolic link stands in for.
+    /// Asserts that the entry at `path` is a regular file. A symbolic link to a regular file fails
+    /// the assertion.
     fn assert_regular_file(path: &Path) {
         assert!(
             fs::symlink_metadata(path).unwrap().file_type().is_file(),

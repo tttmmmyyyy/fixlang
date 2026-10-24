@@ -1114,9 +1114,9 @@ impl ProjectFile {
     }
 
     /// Builds the lock file of the given kind afresh from this project's dependency entries and
-    /// writes it over the one on disk, through `write_file_within_project`, which creates the
-    /// directory that holds it when that is missing, such as `.fixlang/` for the language server's
-    /// lock file.
+    /// writes it over the one on disk. Creates the directory that holds it when that is missing,
+    /// such as `.fixlang/` for the language server's lock file. Fails when a symbolic link in the
+    /// project would place the lock file outside the project.
     pub fn create_lock_file(&self, mode: LockFileType) -> Result<DependencyLockFile, Errors> {
         let lock_file = DependencyLockFile::create(self, mode.to_build_config_type())?;
         let content = toml::to_string(&lock_file)

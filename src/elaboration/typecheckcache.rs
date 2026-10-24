@@ -100,8 +100,9 @@ impl FileCache {
 }
 
 impl TypeCheckCache for FileCache {
-    /// Writes the expression into the entry's own file, through `write_file_within_project`. A file
-    /// that cannot be written is reported as a warning and leaves the entry absent.
+    /// Writes the expression into the entry's own file. A file that cannot be written, or that a
+    /// symbolic link in the project would place outside it, is reported as a warning and leaves the
+    /// entry absent.
     fn save_cache(
         &self,
         expr: &TypedExpr,

@@ -481,14 +481,14 @@ pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) ->
         })
 }
 
-/// Resolves `path` as the file system does, and fails when that follows a symbolic link lying in the
+/// Resolves `path` as the file system does, and fails when it follows a symbolic link in the
 /// project directory (the current directory) to a place outside it. Fix writes the files of a
-/// project at paths resolved here, so that a link committed to a repository, such as
-/// `.fixlang/cache` or `docs`, cannot lead fix to write outside the project. A link lying outside
-/// the project belongs to the user, and is followed wherever it leads.
+/// project at paths resolved here, so a link committed to a repository, such as `.fixlang/cache`
+/// or `docs`, cannot make fix write outside the project. A link outside the project belongs to the
+/// user, and is followed wherever it leads.
 ///
-/// The components from the first missing one onward are joined as they stand, which is what
-/// `create_dir_all` makes of them. The answer is an absolute path.
+/// The components from the first missing one onward are joined as they are, which is what
+/// `create_dir_all` makes of them. The result is an absolute path.
 ///
 /// # Examples
 /// In a project at `/p`, `docs/Main.md` resolves to `/p/docs/Main.md`. With `docs` a link to
@@ -504,8 +504,8 @@ fn resolve_within_project(path: &Path) -> Result<PathBuf, Errors> {
     let project = env::current_dir()
         .and_then(|dir| dir.canonicalize())
         .map_err(failed)?;
-    // A path holding no symbolic link up to here, and no `..` after a missing component, so that
-    // popping its last component reaches the directory `..` names.
+    // `resolved` holds no symbolic link, so popping its last component reaches the directory that
+    // `..` names.
     let mut resolved = project.clone();
     for component in path.components() {
         match component {
@@ -538,8 +538,9 @@ fn resolve_within_project(path: &Path) -> Result<PathBuf, Errors> {
     Ok(resolved)
 }
 
-/// Creates the directory at `path` and its missing ancestors, at the place `resolve_within_project`
-/// resolves it to, and answers with that place.
+/// Creates the directory at `path` and its missing ancestors, and returns the absolute path of the
+/// directory, with symbolic links resolved. Fails when `path` follows a symbolic link in the project
+/// directory (the current directory) to a place outside it.
 pub fn create_dir_within_project(path: &Path) -> Result<PathBuf, Errors> {
     let dir = resolve_within_project(path)?;
     fs::create_dir_all(&dir).map_err(|e| {
@@ -552,9 +553,11 @@ pub fn create_dir_within_project(path: &Path) -> Result<PathBuf, Errors> {
     Ok(dir)
 }
 
-/// Writes the file at `path` through `replace_file`, in the directory `create_dir_within_project`
-/// makes of the parent of `path`. A symbolic link at `path` itself is replaced by the new file, and
-/// what it pointed to is kept.
+/// Writes the file at `path` by having `write` write a new file at the path it is handed, and
+/// renaming that onto `path`. Creates the parent directory of `path` when it is missing, and fails
+/// when `path` follows a symbolic link in the project directory (the current directory) to a place
+/// outside it. A symbolic link at `path` itself is replaced by the new file, and what it pointed to
+/// is kept. Panics when `path` names no file, as `..` does.
 pub fn write_file_within_project(
     path: &Path,
     write: impl FnOnce(&Path) -> io::Result<()>,
