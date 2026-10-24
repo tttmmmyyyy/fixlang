@@ -416,6 +416,12 @@ pub fn check_dot_fixlang_is_not_symlink() -> Result<(), Errors> {
     Ok(())
 }
 
+/// The directory of the project fix works on, which is the current directory, with symbolic links
+/// resolved.
+fn project_dir() -> io::Result<PathBuf> {
+    env::current_dir()?.canonicalize()
+}
+
 /// Removes the file or directory at `path`, which must be the `.fixlang` directory of the current
 /// directory or lie inside it. Fix removes the files and directories of a project through this
 /// function, so that the contents of a project directory, such as a lock file or a `.fixlang` that
@@ -433,10 +439,7 @@ pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
             e
         ))
     };
-    let dot_fixlang = env::current_dir()
-        .and_then(|dir| dir.canonicalize())
-        .map_err(failed)?
-        .join(DOT_FIXLANG);
+    let dot_fixlang = project_dir().map_err(failed)?.join(DOT_FIXLANG);
     let entry = match (path.parent(), path.file_name()) {
         (Some(parent), Some(name)) => {
             let parent = if parent.as_os_str().is_empty() {
@@ -501,11 +504,10 @@ fn resolve_guarding_project_links(path: &Path) -> Result<PathBuf, Errors> {
             e
         ))
     };
-    let project = env::current_dir()
-        .and_then(|dir| dir.canonicalize())
-        .map_err(failed)?;
-    // `resolved` holds no symbolic link, so popping its last component reaches the directory that
-    // `..` names.
+    let project = project_dir().map_err(failed)?;
+    // `resolved` holds no symbolic link up to its first missing component, so that popping its last
+    // component reaches the directory `..` names. Past a missing component, `..` is taken as it is
+    // spelled.
     let mut resolved = project.clone();
     for component in path.components() {
         match component {
@@ -516,7 +518,11 @@ fn resolve_guarding_project_links(path: &Path) -> Result<PathBuf, Errors> {
             }
             Component::Normal(name) => {
                 let next = resolved.join(name);
-                let is_link = fs::symlink_metadata(&next).is_ok_and(|meta| meta.is_symlink());
+                let is_link = match fs::symlink_metadata(&next) {
+                    Ok(meta) => meta.is_symlink(),
+                    Err(e) if e.kind() == ErrorKind::NotFound => false,
+                    Err(e) => return Err(failed(e)),
+                };
                 if !is_link {
                     resolved = next;
                     continue;
