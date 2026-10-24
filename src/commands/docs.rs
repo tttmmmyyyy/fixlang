@@ -17,7 +17,7 @@ use crate::{
     misc::{info_msg, write_file_within_project},
     parse::sourcefile::Span,
 };
-use std::sync::Arc;
+use std::{fs, sync::Arc};
 
 pub fn generate_docs_for_files(mut config: Configuration) -> Result<(), Errors> {
     info_msg("Loading source files...");
@@ -293,7 +293,7 @@ fn docgen_for_module(
     let doc_file = format!("{}.md", mod_name);
 
     let doc_path = config.out_dir.join(doc_file);
-    write_file_within_project(&doc_path, |tmp_path| std::fs::write(tmp_path, markdown_str))?;
+    write_file_within_project(&doc_path, |tmp_path| fs::write(tmp_path, markdown_str))?;
 
     info_msg(&format!(
         "Saved documentation to \"{}\".",
