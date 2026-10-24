@@ -112,7 +112,7 @@ fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<()
     })?;
 
     // Rewrite the file with new import statements.
-    let new_content = rewrite_file_content(&content, &module_info, &new_import_stmts, program)?;
+    let new_content = rewrite_file_content(&content, &module_info, &new_import_stmts, program);
 
     // Write the new content back to the file.
     fs::write(file_path, new_content).map_err(|e| {
@@ -149,7 +149,7 @@ fn rewrite_file_content(
     module_info: &ModuleInfo,
     new_import_stmts: &[ImportStatement],
     program: &Program,
-) -> Result<String, Errors> {
+) -> String {
     // Find the range of existing import statements.
     let empty_vec = vec![];
     let import_stmts = program
@@ -169,7 +169,5 @@ fn rewrite_file_content(
     ));
 
     // Apply the text edits to the content.
-    let result = apply_text_edits(content, &text_edits);
-
-    Ok(result)
+    apply_text_edits(content, &text_edits)
 }
