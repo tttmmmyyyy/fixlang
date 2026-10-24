@@ -457,4 +457,29 @@ mod integration_tests {
             LIB_SOURCE
         );
     }
+
+    /// `fix edit explicit-import` leaves a source file in a directory beside the project as it is
+    /// when that directory's name starts with the project's, as `proj_lib` beside `proj` does.
+    #[test]
+    fn edit_leaves_a_source_file_in_a_sibling_sharing_the_name_prefix_as_it_is() {
+        let (root, proj) = edit_explicit_import_env("../proj_lib/lib.fix");
+        let sibling = root.path().join("proj_lib");
+        fs::create_dir_all(&sibling).unwrap();
+        fs::write(sibling.join("lib.fix"), LIB_SOURCE).unwrap();
+        let output = run_fix(&proj, &["edit", "explicit-import"]);
+        assert_succeeded(
+            &output,
+            "`fix edit explicit-import` should rewrite the project.",
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("it lies outside the project"),
+            "stderr: {}",
+            stderr
+        );
+        assert_eq!(
+            fs::read_to_string(sibling.join("lib.fix")).unwrap(),
+            LIB_SOURCE
+        );
+    }
 }
