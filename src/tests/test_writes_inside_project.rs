@@ -184,10 +184,10 @@ mod integration_tests {
         assert_regular_file(&out.join("Main.md"));
     }
 
-    /// `fix deps install` refuses to clone a git dependency into a `.fixlang/deps` that links
+    /// `fix deps update` refuses to clone a git dependency into a `.fixlang/deps` that links
     /// outside the project.
     #[test]
-    fn deps_install_refuses_a_deps_directory_linking_outside() {
+    fn deps_update_refuses_a_deps_directory_linking_outside() {
         let (root, proj) = setup_test_env();
         let repo_dir = root.path().join("dep-repo");
         fs::create_dir_all(&repo_dir).unwrap();
@@ -223,14 +223,14 @@ mod integration_tests {
         assert_victim_untouched(&root);
     }
 
-    /// The language server, serving a project whose `.fixlang/fix.log` and `.fixlang/cache` link
+    /// The language server, serving a project whose `.fixlang/fix.log` and `.fixlang/tmp` link
     /// outside it, writes nothing through either link.
     #[test]
     fn language_server_writes_nothing_through_links_in_dot_fixlang() {
         let (root, proj) = setup_test_env();
         fs::create_dir_all(proj.join(".fixlang")).unwrap();
         symlink(victim(&root).join("data.txt"), proj.join(".fixlang/fix.log")).unwrap();
-        symlink(victim(&root), proj.join(".fixlang/cache")).unwrap();
+        symlink(victim(&root), proj.join(".fixlang/tmp")).unwrap();
 
         let mut client = LspClient::new(&proj).expect("Failed to start the language server");
         client
@@ -244,6 +244,36 @@ mod integration_tests {
             .expect("the diagnostics pass is expected to end");
         client.shutdown().expect("Failed to shut the language server down");
 
+        assert_victim_untouched(&root);
+    }
+
+    /// `fix docs` refuses an output directory that links to another link of the project, which in
+    /// turn links outside it.
+    #[test]
+    fn docs_refuses_a_chain_of_links_leading_outside() {
+        let (root, proj) = setup_test_env();
+        symlink(victim(&root), proj.join("site")).unwrap();
+        symlink(proj.join("site"), proj.join("docs")).unwrap();
+        assert_failed_with(
+            &run_fix(&proj, &["docs"]),
+            REFUSED,
+            "`fix docs` should refuse to write through the links.",
+        );
+        assert_victim_untouched(&root);
+    }
+
+    /// `fix docs` refuses an output directory the command line names by an absolute path, when a
+    /// symbolic link in the project along that path leads outside it.
+    #[test]
+    fn docs_refuses_an_absolute_output_directory_through_a_link_in_the_project() {
+        let (root, proj) = setup_test_env();
+        symlink(victim(&root), proj.join("docs")).unwrap();
+        let out_dir = proj.canonicalize().unwrap().join("docs");
+        assert_failed_with(
+            &run_fix(&proj, &["docs", "--out-dir", &out_dir.to_string_lossy()]),
+            REFUSED,
+            "`fix docs` should refuse to write through the link.",
+        );
         assert_victim_untouched(&root);
     }
 }
