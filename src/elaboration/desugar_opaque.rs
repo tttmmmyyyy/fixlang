@@ -59,16 +59,16 @@ use crate::ast::program::{
 };
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::types::{
-    apply_type_args, collect_free_vars, is_opaque_tyvar, kind_arrow, make_tyvar, tycon,
-    type_from_tyvar, type_fun, type_tyapp, type_tycon, Kind, OpaqueTyConResolution, Scheme, TyCon,
-    TyConInfo, TyConVariant, TyVar, Type, TypeNode,
+    apply_type_args, is_opaque_tyvar, kind_arrow, make_tyvar, tycon, type_from_tyvar, type_fun,
+    type_tyapp, type_tycon, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant,
+    TyVar, Type, TypeNode,
 };
 use crate::configuration::Configuration;
 use crate::constants::{WRAP_OPAQUE_FUNC_NAME, WRAP_OPAQUE_TYVAR_PREFIX};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext, UnifOrOtherErr};
 use crate::error::Errors;
 use crate::graph::Graph;
-use crate::misc::{insert_to_map_vec, Map, Set};
+use crate::misc::{insert_to_map_vec, Map};
 use crate::parse::sourcefile::Span;
 use std::sync::Arc;
 

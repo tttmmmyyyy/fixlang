@@ -1,629 +1,280 @@
-// Integration tests for the preliminary_commands approval flow.
-// See logs/security-preliminary-commands.20260419/{spec,design}.md for the specification.
+//! Which subcommands run the `preliminary_commands` of a project and of its dependencies. `fix
+//! build`, `fix run` and `fix test` run them without asking; `fix check`, `fix deps install`, `fix
+//! deps update`, `fix docs` and the language server run none.
 
-#[cfg(test)]
-mod tests {
-    use crate::tests::test_util::{create_git_repo, fix_command};
-    use std::fs;
-    use std::io::Write;
-    use std::path::{Path, PathBuf};
-    use std::process::{Output, Stdio};
-    use tempfile::TempDir;
+use crate::tests::test_lsp::lsp_client::LspClient;
+use crate::tests::test_util::{assert_failed, assert_succeeded, create_git_repo, run_fix};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+use tempfile::TempDir;
 
-    // ---------- Helpers ----------
+/// The argv of a preliminary command that creates `marker`, written as a TOML array literal.
+fn touch_command(marker: &Path) -> String {
+    format!("[\"touch\", \"{}\"]", marker.display())
+}
 
-    // Environment for a single test case: a project directory and an isolated HOME
-    // (so that `~/.fixtrust.toml` resolves into the tempdir).
-    struct Env {
-        _home_dir: TempDir,
-        _proj_dir: TempDir,
-        home: PathBuf,
-        proj: PathBuf,
-    }
-
-    impl Env {
-        fn new() -> Self {
-            let home_dir = TempDir::new().expect("home tempdir");
-            let proj_dir = TempDir::new().expect("proj tempdir");
-            let home = home_dir.path().to_path_buf();
-            let proj = proj_dir.path().to_path_buf();
-            Env {
-                _home_dir: home_dir,
-                _proj_dir: proj_dir,
-                home,
-                proj,
-            }
-        }
-
-        fn trust_file(&self) -> PathBuf {
-            self.home.join(".fixtrust.toml")
-        }
-
-        fn trust_file_contents(&self) -> Option<String> {
-            fs::read_to_string(self.trust_file()).ok()
-        }
-    }
-
-    // Write `fixproj.toml` and a minimal `main.fix` into the project directory.
-    fn write_project(proj: &Path, fixproj_toml: &str) {
-        fs::write(proj.join("fixproj.toml"), fixproj_toml).expect("write fixproj.toml");
-        fs::write(
-            proj.join("main.fix"),
-            "module Main;\n\nmain : IO ();\nmain = println(\"ok\");\n",
-        )
-        .expect("write main.fix");
-    }
-
-    // Run `fix <args>` in `env.proj` with `HOME=env.home`.
-    // `stdin_input`: optional stdin bytes. If provided, piped in (non-tty unless forced).
-    // `interactive`: if true, set `FIX_TEST_FORCE_INTERACTIVE=1` so the prompt branch is taken.
-    fn run_fix(env: &Env, args: &[&str], stdin_input: Option<&str>, interactive: bool) -> Output {
-        let mut cmd = fix_command();
-        cmd.args(args)
-            .current_dir(&env.proj)
-            .env("HOME", &env.home)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        if interactive {
-            cmd.env("FIX_TEST_FORCE_INTERACTIVE", "1");
-        }
-        if stdin_input.is_some() {
-            cmd.stdin(Stdio::piped());
-        } else {
-            cmd.stdin(Stdio::null());
-        }
-        let mut child = cmd.spawn().expect("spawn fix");
-        if let Some(input) = stdin_input {
-            let mut stdin = child.stdin.take().expect("child stdin");
-            stdin.write_all(input.as_bytes()).expect("write stdin");
-        }
-        child.wait_with_output().expect("wait_with_output")
-    }
-
-    // Convenience: produce a fixproj.toml for a simple root project with the given
-    // build-mode preliminary_commands lines (each line formatted as a TOML array literal).
-    fn fixproj_with_preliminary(name: &str, commands: &[&str]) -> String {
-        let joined = commands
-            .iter()
-            .map(|c| format!("  {},", c))
-            .collect::<Vec<_>>()
-            .join("\n");
+/// Writes into `dir` a project named `name` whose `build` section lists `build_commands` and whose
+/// `build.test` section lists `test_commands`, each a TOML array literal of argvs. `extra` is
+/// appended to the project file.
+fn write_project(dir: &Path, name: &str, build_commands: &str, test_commands: &str, extra: &str) {
+    fs::write(
+        dir.join("fixproj.toml"),
         format!(
             "[general]\nname = \"{name}\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
-             [build]\nfiles = [\"main.fix\"]\npreliminary_commands = [\n{joined}\n]\n",
-            name = name,
-            joined = joined
-        )
-    }
+             [build]\nfiles = [\"main.fix\"]\npreliminary_commands = {build_commands}\n\n\
+             [build.test]\nfiles = [\"test.fix\"]\npreliminary_commands = {test_commands}\n{extra}",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        dir.join("main.fix"),
+        "module Main;\n\nmain : IO ();\nmain = println(\"ok\");\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.join("test.fix"),
+        "module Test;\n\ntest : IO ();\ntest = println(\"testing\");\n",
+    )
+    .unwrap();
+}
 
-    fn fixproj_with_build_and_test(name: &str, build_cmds: &[&str], test_cmds: &[&str]) -> String {
-        let joined_build = build_cmds
-            .iter()
-            .map(|c| format!("  {},", c))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let joined_test = test_cmds
-            .iter()
-            .map(|c| format!("  {},", c))
-            .collect::<Vec<_>>()
-            .join("\n");
-        format!(
-            "[general]\nname = \"{name}\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
-             [build]\nfiles = [\"main.fix\"]\npreliminary_commands = [\n{jb}\n]\n\n\
-             [build.test]\nfiles = [\"test.fix\"]\npreliminary_commands = [\n{jt}\n]\n",
-            name = name,
-            jb = joined_build,
-            jt = joined_test,
-        )
-    }
-
-    fn stderr_str(o: &Output) -> String {
-        String::from_utf8_lossy(&o.stderr).to_string()
-    }
-
-    // ---------- (A) No preliminary_commands ----------
-    #[test]
-    fn case_a_no_preliminary_commands() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            "[general]\nname = \"noop\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
-             [build]\nfiles = [\"main.fix\"]\n",
-        );
-        let out = run_fix(&env, &["build"], None, false);
-        assert!(out.status.success(), "stderr: {}", stderr_str(&out));
-        // No trust file should have been created.
-        assert!(env.trust_file_contents().is_none());
-    }
-
-    // ---------- (B) --allow-preliminary-commands ----------
-    #[test]
-    fn case_b_allow_flag_bypasses_without_recording() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_preliminary("b-test", &["[\"echo\", \"hello\"]"]),
-        );
-        let out = run_fix(
-            &env,
-            &["build", "--allow-preliminary-commands"],
-            None,
-            false,
-        );
-        assert!(out.status.success(), "stderr: {}", stderr_str(&out));
-        // No trust file should have been created.
-        assert!(env.trust_file_contents().is_none());
-        let err = stderr_str(&out);
-        assert!(err.contains("auto-approved"));
-    }
-
-    // ---------- (C) Non-interactive stdin, no flag ----------
-    #[test]
-    fn case_c_non_interactive_fails() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_preliminary("c-test", &["[\"echo\", \"hello\"]"]),
-        );
-        let out = run_fix(&env, &["build"], None, false);
-        assert!(!out.status.success());
-        let err = stderr_str(&out);
-        assert!(
-            err.contains("require approval") && err.contains("no interactive terminal"),
-            "stderr: {}",
-            err
-        );
-    }
-
-    // ---------- (D) Trust store has a matching entry → no prompt ----------
-    #[test]
-    fn case_d_approved_entry_skips_prompt() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_preliminary("d-test", &["[\"echo\", \"hello\"]"]),
-        );
-        // Pre-populate trust file with an approval for the project's absolute path.
-        let preapproval = format!(
-            r#"[[approval]]
-source = "{}"
-mode = "build"
-approved_at = "2026-04-20T10:00:00Z"
-project_name = "d-test"
-commands_preview = [["echo", "hello"]]
-"#,
-            env.proj.canonicalize().unwrap().to_string_lossy()
-        );
-        fs::write(env.trust_file(), preapproval).unwrap();
-
-        let out = run_fix(&env, &["build"], None, false);
-        assert!(out.status.success(), "stderr: {}", stderr_str(&out));
-        let err = stderr_str(&out);
-        assert!(err.contains("(approved)"));
-    }
-
-    // ---------- (K) Interactive 'y' → records and runs ----------
-    #[test]
-    fn case_k_happy_path_y() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_preliminary("k-test", &["[\"echo\", \"greet\"]"]),
-        );
-        let out = run_fix(&env, &["build"], Some("y\n"), true);
-        assert!(out.status.success(), "stderr: {}", stderr_str(&out));
-        let content = env.trust_file_contents().expect("trust file should exist");
-        assert!(content.contains("k-test"));
-        assert!(content.contains("mode = \"build\""));
-    }
-
-    // ---------- (L) Interactive 'n' → aborts ----------
-    #[test]
-    fn case_l_n_aborts_build() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_preliminary("l-test", &["[\"echo\", \"oops\"]"]),
-        );
-        let out = run_fix(&env, &["build"], Some("n\n"), true);
-        assert!(!out.status.success());
-        let err = stderr_str(&out);
-        assert!(err.contains("not approved"), "stderr: {}", err);
-        // trust file must not have been written.
-        assert!(env.trust_file_contents().is_none());
-    }
-
-    // ---------- (I) Interactive 'o' → runs but no record ----------
-    #[test]
-    fn case_i_o_runs_without_recording() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_preliminary("i-test", &["[\"echo\", \"once\"]"]),
-        );
-        let out = run_fix(&env, &["build"], Some("o\n"), true);
-        assert!(out.status.success(), "stderr: {}", stderr_str(&out));
-        assert!(env.trust_file_contents().is_none());
-    }
-
-    // ---------- (M) Path-based trust: commit content change does not re-prompt ----------
-    #[test]
-    fn case_m_path_trust_survives_command_change() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_preliminary("m-test", &["[\"echo\", \"one\"]"]),
-        );
-        let out1 = run_fix(&env, &["build"], Some("y\n"), true);
-        assert!(out1.status.success(), "stderr: {}", stderr_str(&out1));
-
-        // Change preliminary_commands and re-run.
-        write_project(
-            &env.proj,
-            &fixproj_with_preliminary("m-test", &["[\"echo\", \"TWO\"]"]),
-        );
-        let out2 = run_fix(&env, &["build"], None, false);
-        assert!(out2.status.success(), "stderr: {}", stderr_str(&out2));
-        let err = stderr_str(&out2);
-        assert!(err.contains("(approved)"), "stderr: {}", err);
-    }
-
-    // ---------- (N) Prompt surfaces the trust-store path up front so the user knows
-    // which file will be edited when they press `y`.
-    #[test]
-    fn case_n_prompt_shows_trust_store_path() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_preliminary("n-test", &["[\"echo\", \"hi\"]"]),
-        );
-        // Press `n` so we only observe the prompt text; the path must appear before
-        // the user answers.
-        let out = run_fix(&env, &["build"], Some("n\n"), true);
-        assert!(!out.status.success());
-        let err = stderr_str(&out);
-        let expected = env.trust_file().to_string_lossy().to_string();
-        assert!(
-            err.contains("records this approval in") && err.contains(&expected),
-            "stderr: {}",
-            err
-        );
-    }
-
-    // ---------- (O) fix run uses the same approval flow ----------
-    #[test]
-    fn case_o_fix_run_uses_same_flow() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_preliminary("o-test", &["[\"echo\", \"run-time\"]"]),
-        );
-        // Non-interactive fix run with preliminary_commands must fail without the flag.
-        let out = run_fix(&env, &["run"], None, false);
-        assert!(!out.status.success());
-        assert!(stderr_str(&out).contains("require approval"));
-    }
-
-    // ---------- fix docs is exempt from the approval flow ----------
-    // `fix docs` only reads source code to emit Markdown -- it never builds object
-    // files, so dependencies' preliminary_commands (typically `make lib.o` and the
-    // like) are irrelevant to it. The approval flow must therefore be skipped, even
-    // when stdin is non-interactive and the trust store is empty. Otherwise CI
-    // pipelines that call `fix docs` would be forced to set
-    // `--allow-preliminary-commands`, and the fixlang-docpage-generator workflow
-    // would break the moment any documented dependency declares a preliminary
-    // command.
-    #[test]
-    fn fix_docs_does_not_require_preliminary_approval_for_root() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_preliminary("docs-root-prelim", &["[\"echo\", \"should-not-run\"]"]),
-        );
-        let out = run_fix(&env, &["docs", "-o", "out"], None, false);
-        assert!(
-            out.status.success(),
-            "fix docs should succeed without preliminary-command approval; stderr: {}",
-            stderr_str(&out)
-        );
-        let err = stderr_str(&out);
-        assert!(
-            !err.contains("require approval"),
-            "fix docs must not surface the approval gate; stderr: {}",
-            err
-        );
-        // The trust store must be untouched -- `fix docs` should not even consult
-        // it, much less write to it.
-        assert!(env.trust_file_contents().is_none());
-    }
-
-    #[test]
-    fn fix_docs_does_not_require_preliminary_approval_for_git_dep() {
-        let env = Env::new();
-        let dep_root = TempDir::new().unwrap();
-        let (dep_repo, _) = make_git_dep_repo(
-            dep_root.path(),
-            "docsdep",
-            "[general]\nname = \"docsdep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
-             [build]\nfiles = [\"lib.fix\"]\npreliminary_commands = [[\"echo\", \"dep-prelim\"]]\n",
-            &[],
-        );
-        let dep_url = format!("file://{}", dep_repo.to_string_lossy());
-
-        write_project(
-            &env.proj,
-            &format!(
-                "[general]\nname = \"docs-with-gitdep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
-                 [build]\nfiles = [\"main.fix\"]\n\n\
-                 [[dependencies]]\nname = \"docsdep\"\ngit = {{ url = \"{url}\" }}\n",
-                url = dep_url
+/// Writes into `root` a git repository whose project lists a preliminary command creating a marker
+/// file, and into `root/proj` a project that depends on it and lists no command. Returns the
+/// project directory and the marker's path.
+fn project_with_git_dependency(root: &Path) -> (PathBuf, PathBuf) {
+    let marker = root.join("dep-ran");
+    let repo = root.join("dep-repo");
+    fs::create_dir(&repo).unwrap();
+    create_git_repo(
+        &repo,
+        &[
+            (
+                "fixproj.toml",
+                &format!(
+                    "[general]\nname = \"dep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+                     [build]\nfiles = [\"lib.fix\"]\npreliminary_commands = [{}]\n",
+                    touch_command(&marker)
+                ),
             ),
-        );
-
-        // `fix docs` requires the lock file to already exist, mirroring how the
-        // fixlang-docpage-generator runs `fix deps install` before `fix docs`.
-        let setup = run_fix(&env, &["deps", "update"], None, false);
-        assert!(
-            setup.status.success(),
-            "setup `fix deps update` failed: {}",
-            stderr_str(&setup)
-        );
-
-        let out = run_fix(&env, &["docs", "-o", "out"], None, false);
-        assert!(
-            out.status.success(),
-            "fix docs should succeed even when a git dep declares preliminary_commands; \
-             stderr: {}",
-            stderr_str(&out)
-        );
-        let err = stderr_str(&out);
-        assert!(
-            !err.contains("require approval"),
-            "fix docs must not surface the approval gate for dep preliminary_commands; \
-             stderr: {}",
-            err
-        );
-        assert!(env.trust_file_contents().is_none());
-    }
-
-    // ---------- (P) Corrupt trust file → warn and re-prompt ----------
-    #[test]
-    fn case_p_corrupt_trust_file_warns_and_reprompts() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_preliminary("p-test", &["[\"echo\", \"hi\"]"]),
-        );
-        fs::write(env.trust_file(), "this is not valid toml ~~~\n").unwrap();
-        // Non-interactive run: we expect the parse warning, and a non-interactive failure
-        // (because the corrupt file is effectively empty).
-        let out = run_fix(&env, &["build"], None, false);
-        assert!(!out.status.success());
-        let err = stderr_str(&out);
-        assert!(
-            err.contains("Failed to parse trust store"),
-            "stderr: {}",
-            err
-        );
-        assert!(err.contains("require approval"), "stderr: {}", err);
-    }
-
-    // ---------- (S) Input validation: various non-'y'/'o' inputs default to No ----------
-    #[test]
-    fn case_s_input_validation_defaults_to_no() {
-        for input in ["\n", "Y\n", "x\n", ""] {
-            let env = Env::new();
-            write_project(
-                &env.proj,
-                &fixproj_with_preliminary("s-test", &["[\"echo\", \"x\"]"]),
-            );
-            // Empty input simulates EOF; any non-y/o/n should also default to no.
-            let out = run_fix(&env, &["build"], Some(input), true);
-            // All of these should FAIL (default is n).
-            // Exception: 'Y\n' is uppercase, which current implementation lowercases to 'y'
-            // and approves. Skip that case — verify it succeeds instead.
-            if input == "Y\n" {
-                assert!(out.status.success(), "input {:?} should be accepted", input);
-            } else {
-                assert!(
-                    !out.status.success(),
-                    "input {:?} should default to no; stderr: {}",
-                    input,
-                    stderr_str(&out)
-                );
-            }
-        }
-    }
-
-    // ---------- (G/H) Build/test mode handling ----------
-    // (G) fix build then fix test: build approved first, test still prompts.
-    // (H) fix test with both modes unapproved: single prompt approves both.
-    #[test]
-    fn case_g_build_approved_then_fix_test_only_prompts_test() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_build_and_test(
-                "gh-test",
-                &["[\"echo\", \"build-step\"]"],
-                &["[\"echo\", \"test-step\"]"],
+            (
+                "lib.fix",
+                "module Dep;\n\ngreet : IO ();\ngreet = println(\"hi\");\n",
             ),
-        );
-        // A test.fix with a trivial `test` entry point.
-        fs::write(
-            env.proj.join("test.fix"),
-            "module Test;\n\ntest : IO ();\ntest = println(\"testing\");\n",
-        )
-        .expect("write test.fix");
+        ],
+    );
+    let proj = root.join("proj");
+    fs::create_dir(&proj).unwrap();
+    write_project(
+        &proj,
+        "root",
+        "[]",
+        "[]",
+        &format!(
+            "\n[[dependencies]]\nname = \"dep\"\ngit = {{ url = \"file://{}\" }}\n",
+            repo.display()
+        ),
+    );
+    (proj, marker)
+}
 
-        // First: fix build → approve build mode.
-        let out1 = run_fix(&env, &["build"], Some("y\n"), true);
-        assert!(out1.status.success(), "stderr: {}", stderr_str(&out1));
-        let content = env.trust_file_contents().expect("trust file");
-        assert!(content.contains("mode = \"build\""));
-        assert!(!content.contains("mode = \"test\""));
+/// Verifies that `fix build` runs the commands of the `build` section and none of the `build.test`
+/// section.
+#[test]
+fn build_runs_the_build_section_commands() {
+    let dir = TempDir::new().unwrap();
+    let build_marker = dir.path().join("build-ran");
+    let test_marker = dir.path().join("test-ran");
+    write_project(
+        dir.path(),
+        "proj",
+        &format!("[{}]", touch_command(&build_marker)),
+        &format!("[{}]", touch_command(&test_marker)),
+        "",
+    );
+    assert_succeeded(
+        &run_fix(dir.path(), &["build"]),
+        "`fix build` should succeed.",
+    );
+    assert!(build_marker.exists(), "`fix build` did not run the command");
+    assert!(
+        !test_marker.exists(),
+        "`fix build` ran a command of the `build.test` section"
+    );
+}
 
-        // Second: fix test → build is approved, test requires approval.
-        let out2 = run_fix(&env, &["test"], Some("y\n"), true);
-        assert!(out2.status.success(), "stderr: {}", stderr_str(&out2));
-        let err2 = stderr_str(&out2);
-        assert!(
-            err2.contains("(NEW -- test mode)"),
-            "expected the prompt to mention test mode only; stderr: {}",
-            err2
-        );
-        let content2 = env.trust_file_contents().expect("trust file");
-        assert!(content2.contains("mode = \"test\""));
-    }
+/// Verifies that `fix test` runs the commands of both the `build` and the `build.test` sections.
+#[test]
+fn test_runs_the_commands_of_both_sections() {
+    let dir = TempDir::new().unwrap();
+    let build_marker = dir.path().join("build-ran");
+    let test_marker = dir.path().join("test-ran");
+    write_project(
+        dir.path(),
+        "proj",
+        &format!("[{}]", touch_command(&build_marker)),
+        &format!("[{}]", touch_command(&test_marker)),
+        "",
+    );
+    assert_succeeded(
+        &run_fix(dir.path(), &["test"]),
+        "`fix test` should succeed.",
+    );
+    assert!(build_marker.exists());
+    assert!(test_marker.exists());
+}
 
-    #[test]
-    fn case_h_fix_test_combines_both_modes() {
-        let env = Env::new();
-        write_project(
-            &env.proj,
-            &fixproj_with_build_and_test(
-                "h-test",
-                &["[\"echo\", \"build-step\"]"],
-                &["[\"echo\", \"test-step\"]"],
-            ),
-        );
-        fs::write(
-            env.proj.join("test.fix"),
-            "module Test;\n\ntest : IO ();\ntest = println(\"testing\");\n",
-        )
-        .expect("write test.fix");
+/// Verifies that `fix build` runs the commands a git dependency lists, without asking for approval.
+#[test]
+fn build_runs_the_commands_of_a_git_dependency() {
+    let dir = TempDir::new().unwrap();
+    let (proj, marker) = project_with_git_dependency(dir.path());
+    assert_succeeded(&run_fix(&proj, &["build"]), "`fix build` should succeed.");
+    assert!(
+        marker.exists(),
+        "`fix build` did not run the dependency's command"
+    );
+}
 
-        let out = run_fix(&env, &["test"], Some("y\n"), true);
-        assert!(out.status.success(), "stderr: {}", stderr_str(&out));
-        let content = env.trust_file_contents().expect("trust file");
-        assert!(content.contains("mode = \"build\""));
-        assert!(content.contains("mode = \"test\""));
-    }
+/// Verifies that `--allow-preliminary-commands` is still accepted, prints a warning, and leaves the
+/// commands to run.
+#[test]
+fn allow_preliminary_commands_is_accepted_with_a_warning() {
+    let dir = TempDir::new().unwrap();
+    let marker = dir.path().join("ran");
+    write_project(
+        dir.path(),
+        "proj",
+        &format!("[{}]", touch_command(&marker)),
+        "[]",
+        "",
+    );
+    let output = run_fix(dir.path(), &["build", "--allow-preliminary-commands"]);
+    assert_succeeded(
+        &output,
+        "`fix build --allow-preliminary-commands` should succeed.",
+    );
+    assert!(marker.exists());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("`--allow-preliminary-commands` has no effect"),
+        "stderr: {}",
+        stderr
+    );
+}
 
-    // ---------- (E, T) Git-dependency cases using a local-file:// repo ----------
-    // Build a local git repo that contains a minimal Fix project.
-    fn make_git_dep_repo(
-        root: &Path,
-        name: &str,
-        fixproj_toml: &str,
-        extra_files: &[(&str, &str)],
-    ) -> (PathBuf, String) {
-        let repo_dir = root.join(format!("{}-repo", name));
-        fs::create_dir_all(&repo_dir).unwrap();
-        let lib_fix = format!(
-            "module {};\n\ngreet : IO ();\ngreet = println(\"hi from {}\");\n",
-            capitalize(name),
-            name
-        );
-        let mut files = vec![
-            ("fixproj.toml", fixproj_toml),
-            ("lib.fix", lib_fix.as_str()),
-        ];
-        files.extend_from_slice(extra_files);
-        let commit = create_git_repo(&repo_dir, &files);
-        (repo_dir, commit)
-    }
+/// Verifies that `fix check` runs no command of either section.
+#[test]
+fn check_runs_no_command() {
+    let dir = TempDir::new().unwrap();
+    let marker = dir.path().join("ran");
+    write_project(
+        dir.path(),
+        "proj",
+        &format!("[{}]", touch_command(&marker)),
+        &format!("[{}]", touch_command(&marker)),
+        "",
+    );
+    assert_succeeded(
+        &run_fix(dir.path(), &["check"]),
+        "`fix check` should succeed.",
+    );
+    assert!(!marker.exists(), "`fix check` ran a preliminary command");
+}
 
-    fn capitalize(s: &str) -> String {
-        let mut c = s.chars();
-        match c.next() {
-            Some(ch) => ch
-                .to_uppercase()
-                .chain(c)
-                .collect::<String>()
-                .replace('-', "_"),
-            None => String::new(),
-        }
-    }
+/// Verifies that `fix deps update`, `fix deps install`, `fix check` and `fix docs` run no command
+/// of a git dependency.
+#[test]
+fn subcommands_that_build_nothing_run_no_command_of_a_git_dependency() {
+    let dir = TempDir::new().unwrap();
+    let (proj, marker) = project_with_git_dependency(dir.path());
+    assert_succeeded(
+        &run_fix(&proj, &["deps", "update"]),
+        "`fix deps update` should succeed.",
+    );
+    // `fix clean` leaves the lock file, so that `fix deps install` clones the dependency afresh.
+    assert_succeeded(&run_fix(&proj, &["clean"]), "`fix clean` should succeed.");
+    assert_succeeded(
+        &run_fix(&proj, &["deps", "install"]),
+        "`fix deps install` should succeed.",
+    );
+    assert_succeeded(&run_fix(&proj, &["check"]), "`fix check` should succeed.");
+    assert_succeeded(
+        &run_fix(&proj, &["docs", "-o", "out"]),
+        "`fix docs` should succeed.",
+    );
+    assert!(
+        !marker.exists(),
+        "a subcommand that builds nothing ran the dependency's command"
+    );
+}
 
-    // (E) CHANGED status for Git deps when commit_hash mismatches.
-    // We simulate by pre-populating the trust store with a different commit hash
-    // for the same (source, mode) tuple.
-    #[test]
-    fn case_e_git_dep_changed_fails_non_interactive() {
-        let env = Env::new();
-        let _dep_root = TempDir::new().unwrap();
-        let (dep_repo, _commit) = make_git_dep_repo(
-            _dep_root.path(),
-            "gitdep",
-            "[general]\nname = \"gitdep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
-             [build]\nfiles = [\"lib.fix\"]\npreliminary_commands = [[\"echo\", \"dep-step\"]]\n",
-            &[],
-        );
-        let dep_url = format!("file://{}", dep_repo.to_string_lossy());
+/// Verifies that a command exiting with a nonzero status fails `fix build`.
+#[test]
+fn a_failing_command_fails_the_build() {
+    let dir = TempDir::new().unwrap();
+    write_project(dir.path(), "proj", "[[\"false\"]]", "[]", "");
+    assert_failed(
+        &run_fix(dir.path(), &["build"]),
+        "`fix build` succeeded although a preliminary command failed",
+    );
+}
 
-        write_project(
-            &env.proj,
-            &format!(
-                "[general]\nname = \"root-with-gitdep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
-                 [build]\nfiles = [\"main.fix\"]\n\n\
-                 [[dependencies]]\nname = \"gitdep\"\ngit = {{ url = \"{url}\" }}\n",
-                url = dep_url
-            ),
-        );
+/// Verifies that the commands of one section run in the order the project file lists them.
+#[test]
+fn commands_run_in_the_order_the_project_file_lists_them() {
+    let dir = TempDir::new().unwrap();
+    let log = dir.path().join("log");
+    let append = |word: &str| format!("[\"sh\", \"-c\", \"echo {} >> '{}'\"]", word, log.display());
+    write_project(
+        dir.path(),
+        "proj",
+        &format!("[{}, {}]", append("first"), append("second")),
+        "[]",
+        "",
+    );
+    assert_succeeded(
+        &run_fix(dir.path(), &["build"]),
+        "`fix build` should succeed.",
+    );
+    // Consecutive repeats are merged, since a command runs twice (#949): the order is what this
+    // test pins.
+    let mut lines: Vec<String> = fs::read_to_string(&log)
+        .unwrap()
+        .lines()
+        .map(String::from)
+        .collect();
+    lines.dedup();
+    assert_eq!(lines, ["first", "second"]);
+}
 
-        // Pre-populate trust store with a mismatching commit for the git dep.
-        let preapproval = format!(
-            r#"[[approval]]
-source = "git+{url}"
-mode = "build"
-commit_hash = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
-approved_at = "2026-04-20T10:00:00Z"
-project_name = "gitdep"
-commands_preview = [["echo", "dep-step"]]
-
-[[approval]]
-source = "{root}"
-mode = "build"
-approved_at = "2026-04-20T10:00:00Z"
-project_name = "root-with-gitdep"
-commands_preview = []
-"#,
-            url = dep_url,
-            root = env.proj.canonicalize().unwrap().to_string_lossy()
-        );
-        fs::write(env.trust_file(), preapproval).unwrap();
-
-        let out = run_fix(&env, &["build"], None, false);
-        // Expect the run to fail non-interactively because the git dep's commit changed.
-        assert!(!out.status.success(), "stderr: {}", stderr_str(&out));
-        let err = stderr_str(&out);
-        assert!(err.contains("CHANGED from commit"), "stderr: {}", err);
-    }
-
-    // (R) Git dep prompt wording differs from local prompt wording.
-    #[test]
-    fn case_r_git_prompt_wording() {
-        let env = Env::new();
-        let dep_root = TempDir::new().unwrap();
-        let (dep_repo, _) = make_git_dep_repo(
-            dep_root.path(),
-            "gitwording",
-            "[general]\nname = \"gitwording\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
-             [build]\nfiles = [\"lib.fix\"]\npreliminary_commands = [[\"echo\", \"dep\"]]\n",
-            &[],
-        );
-        let dep_url = format!("file://{}", dep_repo.to_string_lossy());
-
-        write_project(
-            &env.proj,
-            &format!(
-                "[general]\nname = \"r-root\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
-                 [build]\nfiles = [\"main.fix\"]\n\n\
-                 [[dependencies]]\nname = \"gitwording\"\ngit = {{ url = \"{url}\" }}\n",
-                url = dep_url
-            ),
-        );
-
-        // Stdin ends without selecting -> defaults to N -> abort. We still get the
-        // prompt printed once, which is what we want to inspect.
-        let out = run_fix(&env, &["build"], Some("n\n"), true);
-        assert!(!out.status.success());
-        let err = stderr_str(&out);
-        assert!(
-            err.contains("trust this commit from now on"),
-            "expected Git-flavored prompt; stderr: {}",
-            err
-        );
-    }
+/// Verifies that the language server, elaborating a project with a git dependency, runs no command
+/// of that dependency.
+#[test]
+fn the_language_server_runs_no_command_of_a_git_dependency() {
+    let dir = TempDir::new().unwrap();
+    let (proj, marker) = project_with_git_dependency(dir.path());
+    // A program that calls the dependency, so that a pass reporting nothing is one that read the
+    // dependency's project file.
+    fs::write(
+        proj.join("main.fix"),
+        "module Main;\n\nimport Dep;\n\nmain : IO ();\nmain = Dep::greet;\n",
+    )
+    .unwrap();
+    let mut client = LspClient::new(&proj).expect("Failed to start LSP");
+    client
+        .initialize(&proj, Duration::from_secs(5))
+        .expect("Failed to initialize LSP");
+    client
+        .open_document(Path::new("main.fix"))
+        .expect("Failed to open main.fix");
+    client.save_and_wait_for_a_pass(Path::new("main.fix"));
+    client
+        .verify_no_diagnostics()
+        .expect("the project is expected to elaborate with its dependency");
+    client.shutdown().expect("Failed to shut down LSP");
+    assert!(
+        !marker.exists(),
+        "the language server ran the dependency's command"
+    );
 }

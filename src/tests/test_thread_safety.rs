@@ -48,8 +48,7 @@ fn run_harness(
         .arg("-O")
         .arg(opt_level)
         .arg("--sanitize")
-        .arg(sanitizer)
-        .arg("--allow-preliminary-commands");
+        .arg(sanitizer);
     if !program_args.is_empty() {
         command.arg("--").args(program_args);
     }

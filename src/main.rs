@@ -2,7 +2,6 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 extern crate build_time;
-extern crate chrono;
 extern crate colored;
 extern crate difference;
 extern crate fxhash;
@@ -323,12 +322,11 @@ fn run_cli() {
             "Skip the evaluation instructed by the `eval` syntax: build `eval {expr0}; {expr1}` as `{expr1}`.\n\
             Use it to drop a debugging effect such as `Debug::debug_println` from a built program."
         );
+    // Accepted with a warning and otherwise ignored, so that scripts written for compilers that
+    // asked to approve `preliminary_commands` keep running.
     let allow_preliminary_commands = Arg::new("allow-preliminary-commands")
         .long("allow-preliminary-commands")
-        .help(
-            "Approve all preliminary_commands for this invocation without prompting.\n\
-            Intended for CI and other non-interactive runs.",
-        );
+        .hide(true);
     let allow_deprecated = Arg::new("allow-deprecated")
         .long("allow-deprecated")
         .takes_value(false)
@@ -824,9 +822,11 @@ Consecutive line comments immediately preceding an entity declaration in the sou
             config.skip_eval = true;
         }
 
-        // Set `allow_preliminary_commands`.
         if args.contains_id("allow-preliminary-commands") {
-            config.allow_preliminary_commands = true;
+            warn_msg(
+                "`--allow-preliminary-commands` has no effect: `fix` runs the preliminary_commands \
+                 of a project without asking for approval. See \"Security\" in Document.md.",
+            );
         }
 
         // Set deprecation handling mode.
