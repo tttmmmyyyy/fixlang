@@ -1,6 +1,7 @@
 //! Which subcommands run the `preliminary_commands` of a project and of its dependencies. `fix
-//! build`, `fix run` and `fix test` run them without asking; `fix check`, `fix deps install`, `fix
-//! deps update`, `fix docs` and the language server run none.
+//! build`, `fix run` and `fix test` run them without asking; `fix check`, `fix deps add`, `fix deps
+//! install`, `fix deps update`, `fix docs`, `fix edit explicit-import` and the language server run
+//! none.
 
 use crate::tests::test_lsp::lsp_client::LspClient;
 use crate::tests::test_util::{assert_failed, assert_succeeded, create_git_repo, run_fix};
@@ -39,11 +40,10 @@ fn write_project(dir: &Path, name: &str, build_commands: &str, test_commands: &s
     .unwrap();
 }
 
-/// Writes into `root` a git repository whose project lists a preliminary command creating a marker
-/// file, and into `root/proj` a project that depends on it and lists no command. Returns the
-/// project directory and the marker's path.
-fn project_with_git_dependency(root: &Path) -> (PathBuf, PathBuf) {
-    let marker = root.join("dep-ran");
+/// Writes into `root/dep-repo` a git repository holding a project `dep`, whose module `Dep` defines
+/// `greet`, and whose project file lists a preliminary command creating `marker`. Returns the
+/// repository's path.
+fn create_dependency_repo(root: &Path, marker: &Path) -> PathBuf {
     let repo = root.join("dep-repo");
     fs::create_dir(&repo).unwrap();
     create_git_repo(
@@ -54,7 +54,7 @@ fn project_with_git_dependency(root: &Path) -> (PathBuf, PathBuf) {
                 &format!(
                     "[general]\nname = \"dep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
                      [build]\nfiles = [\"lib.fix\"]\npreliminary_commands = [{}]\n",
-                    touch_command(&marker)
+                    touch_command(marker)
                 ),
             ),
             (
@@ -63,6 +63,15 @@ fn project_with_git_dependency(root: &Path) -> (PathBuf, PathBuf) {
             ),
         ],
     );
+    repo
+}
+
+/// Writes into `root` a git repository whose project lists a preliminary command creating a marker
+/// file, and into `root/proj` a project that depends on it and lists no command. Returns the
+/// project directory and the marker's path.
+fn project_with_git_dependency(root: &Path) -> (PathBuf, PathBuf) {
+    let marker = root.join("dep-ran");
+    let repo = create_dependency_repo(root, &marker);
     let proj = root.join("proj");
     fs::create_dir(&proj).unwrap();
     write_project(
@@ -206,6 +215,43 @@ fn subcommands_that_build_nothing_run_no_command_of_a_git_dependency() {
     assert!(
         !marker.exists(),
         "a subcommand that builds nothing ran the dependency's command"
+    );
+}
+
+/// Verifies that `fix edit explicit-import` runs no command of the project or of its git
+/// dependency, which it installs to check the program.
+#[test]
+fn edit_explicit_import_runs_no_command() {
+    let dir = TempDir::new().unwrap();
+    let marker = dir.path().join("ran");
+    let repo = create_dependency_repo(dir.path(), &marker);
+    let proj = dir.path().join("proj");
+    fs::create_dir(&proj).unwrap();
+    let commands = format!("[{}]", touch_command(&marker));
+    write_project(
+        &proj,
+        "root",
+        &commands,
+        &commands,
+        &format!(
+            "\n[[dependencies]]\nname = \"dep\"\ngit = {{ url = \"file://{}\" }}\n",
+            repo.display()
+        ),
+    );
+    // A program that calls the dependency, so that `fix edit explicit-import` elaborates it.
+    fs::write(
+        proj.join("main.fix"),
+        "module Main;\n\nimport Dep;\n\nmain : IO ();\nmain = Dep::greet;\n",
+    )
+    .unwrap();
+
+    assert_succeeded(
+        &run_fix(&proj, &["edit", "explicit-import"]),
+        "`fix edit explicit-import` should succeed.",
+    );
+    assert!(
+        !marker.exists(),
+        "`fix edit explicit-import` ran a preliminary command"
     );
 }
 

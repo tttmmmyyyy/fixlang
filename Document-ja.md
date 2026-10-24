@@ -3182,7 +3182,7 @@ Fixのビルドシステムは、ビルドに含まれるすべてのプロジ�
 
 `fix run` と `fix test` はもちろん、`fix build` も、プロジェクトとその依存の作者が書いた処理を実行し得ます。よって、プロジェクトとその依存を信頼できるときだけ実行してください。
 
-`fix check`、`fix deps install`、`fix deps update`、`fix docs` と言語サーバーは、任意のコードを実行しない仕様です。
+`fix check`、`fix deps add`、`fix deps install`、`fix deps update`、`fix docs`、`fix edit explicit-import` と言語サーバーは、任意のコードを実行しない仕様です。
 
 信頼できるかわからないプロジェクトをビルド・実行するときは、Docker などのサンドボックス環境の中で行ってください。
 

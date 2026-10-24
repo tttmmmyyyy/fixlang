@@ -16,6 +16,9 @@ mod integration_tests {
     /// project.
     const REFUSED: &str = "is a symbolic link in the project leading outside it";
 
+    /// The start of the `HINT:` line of a refusal of a symbolic link under `.fixlang`.
+    const FIX_CLEAN_HINT: &str = "HINT: `fix clean` removes the directory \".fixlang\"";
+
     /// A temporary directory holding a project `proj`, whose `Main` module documents its `main`,
     /// and a directory `victim` beside it holding the file `data.txt`.
     fn setup_test_env() -> (TempDir, PathBuf) {
@@ -91,6 +94,11 @@ mod integration_tests {
         );
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert_eq!(stderr.matches(REFUSED).count(), 1, "stderr: {}", stderr);
+        assert!(
+            stderr.contains(FIX_CLEAN_HINT),
+            "the refusal should point at `fix clean`. stderr: {}",
+            stderr
+        );
         assert_victim_untouched(&root);
     }
 
@@ -178,10 +186,16 @@ mod integration_tests {
         let (root, proj) = setup_test_env();
         fs::create_dir_all(proj.join(".fixlang")).unwrap();
         symlink(victim(&root), proj.join(".fixlang/tmp")).unwrap();
+        let output = run_fix(&proj, &["check"]);
         assert_failed_with(
-            &run_fix(&proj, &["check"]),
+            &output,
             REFUSED,
             "`fix check` should refuse to write under the link.",
+        );
+        assert_failed_with(
+            &output,
+            FIX_CLEAN_HINT,
+            "the refusal should point at `fix clean`.",
         );
         assert_victim_untouched(&root);
     }
@@ -209,10 +223,16 @@ mod integration_tests {
     fn docs_refuses_an_output_directory_linking_outside() {
         let (root, proj) = setup_test_env();
         symlink(victim(&root), proj.join("docs")).unwrap();
+        let output = run_fix(&proj, &["docs"]);
         assert_failed_with(
-            &run_fix(&proj, &["docs"]),
+            &output,
             REFUSED,
             "`fix docs` should refuse to write through the link.",
+        );
+        assert_failed_with(
+            &output,
+            "name the place it leads to in `--out-dir`",
+            "the refusal should point at `--out-dir`.",
         );
         assert_victim_untouched(&root);
     }
@@ -277,10 +297,16 @@ mod integration_tests {
         .unwrap();
         fs::create_dir_all(proj.join(".fixlang")).unwrap();
         symlink(victim(&root), proj.join(".fixlang/deps")).unwrap();
+        let output = run_fix(&proj, &["deps", "update"]);
         assert_failed_with(
-            &run_fix(&proj, &["deps", "update"]),
+            &output,
             REFUSED,
             "`fix deps update` should refuse to clone under the link.",
+        );
+        assert_failed_with(
+            &output,
+            FIX_CLEAN_HINT,
+            "the refusal should point at `fix clean`.",
         );
         assert_victim_untouched(&root);
     }
@@ -294,10 +320,16 @@ mod integration_tests {
         fs::rename(proj.join("fixproj.toml"), &outside_project_file).unwrap();
         symlink(&outside_project_file, proj.join("fixproj.toml")).unwrap();
         let content = fs::read_to_string(&outside_project_file).unwrap();
+        let output = run_fix(&proj, &["deps", "add", "dep"]);
         assert_failed_with(
-            &run_fix(&proj, &["deps", "add", "dep"]),
+            &output,
             REFUSED,
             "`fix deps add` should refuse to write through the link.",
+        );
+        assert_failed_with(
+            &output,
+            "HINT: Run `fix deps add` in the project the link leads to.",
+            "the refusal should point at the project the link leads to.",
         );
         assert_eq!(
             fs::read_to_string(&outside_project_file).unwrap(),

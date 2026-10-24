@@ -3076,7 +3076,7 @@ The Fix build system compiles all the projects of a build as a single set of com
 
 `fix build`, as well as `fix run` and `fix test`, can run code written by the authors of a project and its dependencies. Run them only when you trust the project and its dependencies.
 
-`fix check`, `fix deps install`, `fix deps update`, `fix docs` and the language server are specified to run no arbitrary code.
+`fix check`, `fix deps add`, `fix deps install`, `fix deps update`, `fix docs`, `fix edit explicit-import` and the language server are specified to run no arbitrary code.
 
 Build and run a project you are not sure you can trust inside a sandbox, such as a Docker container.
 

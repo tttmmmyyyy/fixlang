@@ -1,6 +1,6 @@
 use crate::constants::LOG_FILE_PATH;
 use crate::error::panic_if_err;
-use crate::project_fs::write_file_guarding_project_links;
+use crate::project_fs::{write_file_guarding_project_links, DOT_FIXLANG_LINK_HINT};
 use once_cell::sync::Lazy;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -20,6 +20,7 @@ static LOG_FILE: Lazy<Mutex<File>> = Lazy::new(|| open_log_file());
 fn open_log_file() -> Mutex<File> {
     let path = panic_if_err(write_file_guarding_project_links(
         Path::new(LOG_FILE_PATH),
+        DOT_FIXLANG_LINK_HINT,
         |tmp_path| File::create(tmp_path).map(|_| ()),
     ));
     let file = OpenOptions::new()
