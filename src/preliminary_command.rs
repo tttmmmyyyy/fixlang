@@ -3,6 +3,7 @@
 use crate::{
     constants::PRELIMINARY_BUILD_LD_FLAGS, error::Errors, misc::split_string_by_unquoted_spaces,
 };
+use std::io;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -24,34 +25,23 @@ impl PreliminaryCommand {
     /// # Examples
     /// A command printing `fix.ld_flags=-L/opt/lib -lfoo` returns `["-L/opt/lib", "-lfoo"]`.
     pub fn run(&self) -> Result<Vec<String>, Errors> {
+        let shown = self.command.join(" ");
+        let failed_to_run = |e: io::Error| {
+            Errors::from_msg(format!("Failed to run command \"{}\": {:?}", shown, e))
+        };
         let mut com = Command::new(&self.command[0]);
-        for arg in &self.command[1..] {
-            com.arg(arg);
-        }
-        com.current_dir(&self.work_dir);
-        let status = com.status().map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to run command \"{}\": {:?}",
-                self.command.join(" "),
-                e
-            ))
-        })?;
+        com.args(&self.command[1..]).current_dir(&self.work_dir);
+        let status = com.status().map_err(failed_to_run)?;
         if !status.success() {
             return Err(Errors::from_msg(format!(
                 "Command \"{}\" failed with exit code {}.",
-                self.command.join(" "),
+                shown,
                 status.code().unwrap_or(-1)
             )));
         }
 
         // Get stdout as String.
-        let output = com.output().map_err(|e| {
-            Errors::from_msg(format!(
-                "Failed to run command \"{}\": {:?}",
-                self.command.join(" "),
-                e
-            ))
-        })?;
+        let output = com.output().map_err(failed_to_run)?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         Ok(stdout
