@@ -123,12 +123,12 @@ mod integration_tests {
         }
     }
 
-    /// `fix check` saves the cache entry of a value whose cache file name is close to the longest
-    /// name the file system allows.
+    /// `fix check` saves the cache entry of a value whose name is longer than the longest file name
+    /// the file system allows.
     #[test]
     fn check_saves_the_cache_of_a_value_with_a_long_name() {
         let (_root, proj) = setup_test_env();
-        let name = "a".repeat(205);
+        let name = "a".repeat(300);
         fs::write(
             proj.join("main.fix"),
             format!(
@@ -143,7 +143,32 @@ mod integration_tests {
         assert!(!stderr.contains("Failed to write"), "stderr: {}", stderr);
         assert!(fs::read_dir(proj.join(TYPE_CHECK_CACHE_PATH))
             .unwrap()
-            .any(|entry| entry.unwrap().file_name().to_string_lossy().contains(&name)));
+            .any(|entry| entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .contains("aaaa")));
+    }
+
+    /// `fix docs` writes the documentation of a module whose name is close to the longest file name
+    /// the file system allows.
+    #[test]
+    fn docs_writes_the_documentation_of_a_module_with_a_long_name() {
+        let (_root, proj) = setup_test_env();
+        let module = format!("M{}", "a".repeat(239));
+        fs::write(
+            proj.join("main.fix"),
+            format!(
+                "module {};\n\n/// A value.\nvalue : I64;\nvalue = 1;\n",
+                module
+            ),
+        )
+        .unwrap();
+        assert_succeeded(
+            &run_fix(&proj, &["docs"]),
+            "`fix docs` should write the documentation.",
+        );
+        assert_regular_file(&proj.join("docs").join(format!("{}.md", module)));
     }
 
     /// `fix check` refuses to save its sources under a `.fixlang/tmp` that links outside the

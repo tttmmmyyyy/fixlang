@@ -65,6 +65,10 @@ fn entity_identity(name: &FullName, type_: &Arc<Scheme>) -> EntityIdentity {
     format!("{}\n{}", name, type_)
 }
 
+/// How many characters of a value's name the name of its cache file carries. Each is one byte, and
+/// with the digest the file name stays well within the 255 bytes file systems allow.
+const READABLE_NAME_LENGTH: usize = 100;
+
 /// A cache that gives every entry a file of its own, so the entries outlive the run that wrote
 /// them.
 pub struct FileCache {
@@ -106,7 +110,9 @@ impl FileCache {
     /// The digest is what identifies the entry: it is taken over the entity and the version hash at
     /// once, so two entries meet in one file only when both agree. The part in front of it names
     /// the value for someone reading the cache directory, and is filename-safe because it keeps
-    /// only alphanumeric characters; several values can wear the same one.
+    /// only ASCII alphanumeric characters; several values can wear the same one. It is cut at
+    /// `READABLE_NAME_LENGTH` characters, so that the file name fits the file system's limit on
+    /// name length however long the value's name is.
     ///
     /// # Examples
     ///
@@ -115,9 +121,12 @@ impl FileCache {
         let key = format!("{}\n{}", entity_identity(name, type_), version_hash);
         let digest = format!("{:x}", md5::compute(key));
 
-        let readable_name = name
+        let readable_name: String = name
             .to_string()
-            .replace(|c: char| !c.is_alphanumeric(), "_");
+            .chars()
+            .take(READABLE_NAME_LENGTH)
+            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+            .collect();
         format!("{}_{}", readable_name, digest)
     }
 
