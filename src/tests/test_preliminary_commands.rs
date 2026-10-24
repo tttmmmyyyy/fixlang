@@ -2,9 +2,11 @@
 //! build`, `fix run` and `fix test` run them without asking; `fix check`, `fix deps install`, `fix
 //! deps update`, `fix docs` and the language server run none.
 
+use crate::tests::test_lsp::lsp_client::LspClient;
 use crate::tests::test_util::{assert_failed, assert_succeeded, create_git_repo, run_fix};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tempfile::TempDir;
 
 /// The argv of a preliminary command that creates `marker`, written as a TOML array literal.
@@ -227,9 +229,6 @@ fn commands_run_in_the_order_the_project_file_lists_them() {
 
 #[test]
 fn the_language_server_runs_no_command_of_a_git_dependency() {
-    use crate::tests::test_lsp::lsp_client::LspClient;
-    use std::time::Duration;
-
     let dir = TempDir::new().unwrap();
     let (proj, marker) = project_with_git_dependency(dir.path());
     // A program that calls the dependency, so that a pass reporting nothing is one that read the
