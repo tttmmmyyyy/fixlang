@@ -31,7 +31,7 @@ A simple, fast, functional language.
   - Outside its `unsafe_` functions and the FFI, Fix is memory safe: array indices and union variants are checked at run time, unless the program is built with `--no-runtime-check`.
   - Fix's values are immutable, so thread safety follows: nothing shared between threads can be seen mutating.
 - **Memory management**
-  - Fix manages memory by reference counting, and outside its `unsafe_` functions and the FFI no cycle of references can be constructed: a value never changes once it is built, so it refers only to values built before it, and an update in place happens only to an object nothing else refers to. Every value is freed the moment it becomes unreachable, so Fix needs no tracing garbage collector, no `weak` references, and no cycle collector.
+  - Fix manages memory by reference counting, and outside the FFI no cycle of references can be constructed: a value never changes once it is built, so it refers only to values built before it, and an update in place happens only to an object nothing else refers to. Every value is freed the moment it becomes unreachable, so Fix needs no tracing garbage collector, no `weak` references, and no cycle collector.
 - **Tools**
   - Dependency manager (`fix deps`)
   - Document generator (`fix docs`)
