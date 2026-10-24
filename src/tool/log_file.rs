@@ -7,8 +7,11 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
 
+/// Whether `write_log!` writes its messages to the log file at `LOG_FILE_PATH`. Turned on by hand
+/// to debug a `fix` process, such as the language server, whose output a test cannot read.
 pub const WRITE_LOG: bool = false;
 
+/// The log file, created empty when the first message is written to it.
 static LOG_FILE: Lazy<Mutex<File>> = Lazy::new(|| open_log_file());
 
 /// Creates the log file empty and opens it for appending. A symbolic link at its path is replaced
@@ -26,6 +29,8 @@ fn open_log_file() -> Mutex<File> {
     Mutex::new(file)
 }
 
+/// Appends `message` and a newline to the log file when `WRITE_LOG` is on, and does nothing
+/// otherwise. Called by `write_log!`.
 #[doc(hidden)]
 pub fn write_log_file_impl(message: &str) {
     // The log file is opened when the first message is written, so a `fix` run that writes no log

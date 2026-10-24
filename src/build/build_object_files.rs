@@ -657,9 +657,9 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
             e
         ));
     }
-    let written = replace_file(obj_path, |path| {
+    let written = replace_file(obj_path, |tmp_path| {
         target_machine
-            .write_to_file(module, FileType::Object, path)
+            .write_to_file(module, FileType::Object, tmp_path)
             .map_err(|e| io::Error::other(e.to_string()))
     });
     if let Err(e) = written {
