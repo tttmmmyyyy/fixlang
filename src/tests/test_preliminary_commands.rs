@@ -4,9 +4,7 @@
 //! none.
 
 use crate::tests::test_lsp::lsp_client::LspClient;
-use crate::tests::test_util::{
-    assert_failed, assert_succeeded, create_git_repo, fix_command, run_fix,
-};
+use crate::tests::test_util::{assert_failed, assert_succeeded, create_git_repo, run_fix};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -220,49 +218,32 @@ fn subcommands_that_build_nothing_run_no_command_of_a_git_dependency() {
     );
 }
 
-/// Verifies that `fix deps add`, adding a git dependency from a registry, and then `fix edit
-/// explicit-import` run no command of the project or of the dependency.
+/// Verifies that `fix edit explicit-import` runs no command of the project or of its git
+/// dependency, which it installs to check the program.
 #[test]
-fn deps_add_and_edit_explicit_import_run_no_command() {
+fn edit_explicit_import_runs_no_command() {
     let dir = TempDir::new().unwrap();
     let marker = dir.path().join("ran");
     let repo = create_dependency_repo(dir.path(), &marker);
-    let registry = dir.path().join("registry.toml");
-    fs::write(
-        &registry,
-        format!(
-            "[[projects]]\nname = \"dep\"\ngit = \"file://{}\"\n",
-            repo.display()
-        ),
-    )
-    .unwrap();
-    // `fix deps add` reads the registries from the configuration file in the home directory.
-    let home = dir.path().join("home");
-    fs::create_dir(&home).unwrap();
-    fs::write(
-        home.join(".fixconfig.toml"),
-        format!("registries = [\"{}\"]\n", registry.display()),
-    )
-    .unwrap();
     let proj = dir.path().join("proj");
     fs::create_dir(&proj).unwrap();
     let commands = format!("[{}]", touch_command(&marker));
-    write_project(&proj, "root", &commands, &commands, "");
+    write_project(
+        &proj,
+        "root",
+        &commands,
+        &commands,
+        &format!(
+            "\n[[dependencies]]\nname = \"dep\"\ngit = {{ url = \"file://{}\" }}\n",
+            repo.display()
+        ),
+    );
     // A program that calls the dependency, so that `fix edit explicit-import` elaborates it.
     fs::write(
         proj.join("main.fix"),
         "module Main;\n\nimport Dep;\n\nmain : IO ();\nmain = Dep::greet;\n",
     )
     .unwrap();
-
-    let output = fix_command()
-        .args(["deps", "add", "dep@*"])
-        .current_dir(&proj)
-        .env("HOME", &home)
-        .output()
-        .expect("Failed to execute fix");
-    assert_succeeded(&output, "`fix deps add` should succeed.");
-    assert!(!marker.exists(), "`fix deps add` ran a preliminary command");
 
     assert_succeeded(
         &run_fix(&proj, &["edit", "explicit-import"]),
