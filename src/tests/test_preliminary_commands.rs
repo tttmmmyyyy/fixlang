@@ -92,7 +92,10 @@ fn build_runs_the_build_section_commands() {
         &format!("[{}]", touch_command(&test_marker)),
         "",
     );
-    assert_succeeded(&run_fix(dir.path(), &["build"]), "`fix build` should succeed.");
+    assert_succeeded(
+        &run_fix(dir.path(), &["build"]),
+        "`fix build` should succeed.",
+    );
     assert!(build_marker.exists(), "`fix build` did not run the command");
     assert!(
         !test_marker.exists(),
@@ -113,7 +116,10 @@ fn test_runs_the_commands_of_both_sections() {
         &format!("[{}]", touch_command(&test_marker)),
         "",
     );
-    assert_succeeded(&run_fix(dir.path(), &["test"]), "`fix test` should succeed.");
+    assert_succeeded(
+        &run_fix(dir.path(), &["test"]),
+        "`fix test` should succeed.",
+    );
     assert!(build_marker.exists());
     assert!(test_marker.exists());
 }
@@ -124,7 +130,10 @@ fn build_runs_the_commands_of_a_git_dependency() {
     let dir = TempDir::new().unwrap();
     let (proj, marker) = project_with_git_dependency(dir.path());
     assert_succeeded(&run_fix(&proj, &["build"]), "`fix build` should succeed.");
-    assert!(marker.exists(), "`fix build` did not run the dependency's command");
+    assert!(
+        marker.exists(),
+        "`fix build` did not run the dependency's command"
+    );
 }
 
 /// Verifies that `--allow-preliminary-commands` is still accepted, prints a warning, and leaves the
@@ -166,7 +175,10 @@ fn check_runs_no_command() {
         &format!("[{}]", touch_command(&marker)),
         "",
     );
-    assert_succeeded(&run_fix(dir.path(), &["check"]), "`fix check` should succeed.");
+    assert_succeeded(
+        &run_fix(dir.path(), &["check"]),
+        "`fix check` should succeed.",
+    );
     assert!(!marker.exists(), "`fix check` ran a preliminary command");
 }
 
@@ -213,13 +225,7 @@ fn a_failing_command_fails_the_build() {
 fn commands_run_in_the_order_the_project_file_lists_them() {
     let dir = TempDir::new().unwrap();
     let log = dir.path().join("log");
-    let append = |word: &str| {
-        format!(
-            "[\"sh\", \"-c\", \"echo {} >> '{}'\"]",
-            word,
-            log.display()
-        )
-    };
+    let append = |word: &str| format!("[\"sh\", \"-c\", \"echo {} >> '{}'\"]", word, log.display());
     write_project(
         dir.path(),
         "proj",
@@ -227,7 +233,10 @@ fn commands_run_in_the_order_the_project_file_lists_them() {
         "[]",
         "",
     );
-    assert_succeeded(&run_fix(dir.path(), &["build"]), "`fix build` should succeed.");
+    assert_succeeded(
+        &run_fix(dir.path(), &["build"]),
+        "`fix build` should succeed.",
+    );
     // Consecutive repeats are merged, since a command runs twice (#949): the order is what this
     // test pins.
     let mut lines: Vec<String> = fs::read_to_string(&log)
@@ -269,4 +278,3 @@ fn the_language_server_runs_no_command_of_a_git_dependency() {
         "the language server ran the dependency's command"
     );
 }
-
