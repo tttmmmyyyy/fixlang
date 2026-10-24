@@ -1,9 +1,7 @@
 //! The commands a project file's `preliminary_commands` run before compilation.
 
 use crate::{
-    constants::PRELIMINARY_BUILD_LD_FLAGS,
-    error::Errors,
-    misc::split_string_by_space_not_quated,
+    constants::PRELIMINARY_BUILD_LD_FLAGS, error::Errors, misc::split_string_by_space_not_quated,
 };
 use std::path::PathBuf;
 use std::process::Command;
