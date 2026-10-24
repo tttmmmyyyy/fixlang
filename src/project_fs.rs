@@ -40,7 +40,8 @@ pub fn check_dot_fixlang_is_not_symlink() -> Result<(), Errors> {
     Ok(())
 }
 
-/// The `HINT:` line of the refusal of a symbolic link under `.fixlang`, which fix creates afresh.
+/// The `HINT:` line of an error that refuses a symbolic link under `.fixlang`, a directory that fix
+/// creates again when it is missing.
 pub const DOT_FIXLANG_LINK_HINT: &str =
     "`fix clean` removes the directory \".fixlang\", the link included, and fix creates it again.";
 
@@ -119,12 +120,13 @@ pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) ->
 /// The components from the first missing one onward are joined as they are, which is what
 /// `create_dir_all` makes of them. The result is an absolute path.
 ///
+/// # Arguments
+/// * `hint` — the `HINT:` line of the error that refuses a link: what the user can do about a link
+///   at the place the caller writes, such as `DOT_FIXLANG_LINK_HINT` for a place under `.fixlang`.
+///
 /// # Examples
 /// In a project at `/p`, `docs/Main.md` resolves to `/p/docs/Main.md`. With `docs` a link to
 /// `/p/site`, it resolves to `/p/site/Main.md`, and with `docs` a link to `/home/u`, it fails.
-///
-/// `hint` is the `HINT:` line of the error that refuses a link: what the user can do about a link
-/// at the place the caller writes, such as `DOT_FIXLANG_LINK_HINT` for a place under `.fixlang`.
 pub fn resolve_guarding_project_links(path: &Path, hint: &str) -> Result<PathBuf, Errors> {
     let failed = io_failure("resolve", path);
     let project = project_dir().map_err(failed)?;
