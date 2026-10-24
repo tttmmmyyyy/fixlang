@@ -3072,7 +3072,7 @@ The following table shows how each setting is handled.
 Note:
 The Fix build system compiles all the projects of a build as a single set of compilation units, so a setting such as the optimization level or the generation of debugging information takes one value across the whole build. The compiler options and the main project's project file decide that value.
 
-### What `fix` runs from a project
+## Security
 
 `fix build`, `fix run` and `fix test` run programs that a project and its dependencies supply. They run the `preliminary_commands` before compilation, and they pass the `ld_flags` to the linker, where a flag such as `gcc`'s `-wrapper` starts a program. `fix run` and `fix test` also run the program built from the project's source files, which can call any C function. Build, run and test a project only when you trust it and its dependencies.
 
