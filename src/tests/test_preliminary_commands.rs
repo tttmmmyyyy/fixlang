@@ -246,8 +246,8 @@ fn deps_add_and_edit_explicit_import_run_no_command() {
     .unwrap();
     let proj = dir.path().join("proj");
     fs::create_dir(&proj).unwrap();
-    let command = format!("[{}]", touch_command(&marker));
-    write_project(&proj, "root", &command, &command, "");
+    let commands = format!("[{}]", touch_command(&marker));
+    write_project(&proj, "root", &commands, &commands, "");
     // A program that calls the dependency, so that `fix edit explicit-import` elaborates it.
     fs::write(
         proj.join("main.fix"),
