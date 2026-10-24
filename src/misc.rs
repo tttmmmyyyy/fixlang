@@ -188,7 +188,7 @@ pub fn temporary_source_path(file_name: &str, hash: &str) -> PathBuf {
 pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile, Errors> {
     let hash = md5_hex(source);
     let path = temporary_source_path(file_name, &hash);
-    let dir = create_dir_within_project(path.parent().unwrap())?;
+    let dir = create_dir_guarding_project_links(path.parent().unwrap())?;
 
     // Use create_new(true) for atomic check-and-create operation. It also refuses to follow a
     // symbolic link at the path.
@@ -493,7 +493,7 @@ pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) ->
 /// # Examples
 /// In a project at `/p`, `docs/Main.md` resolves to `/p/docs/Main.md`. With `docs` a link to
 /// `/p/site`, it resolves to `/p/site/Main.md`, and with `docs` a link to `/home/u`, it fails.
-fn resolve_within_project(path: &Path) -> Result<PathBuf, Errors> {
+fn resolve_guarding_project_links(path: &Path) -> Result<PathBuf, Errors> {
     let failed = |e: io::Error| {
         Errors::from_msg(format!(
             "Failed to resolve \"{}\": {}",
@@ -541,8 +541,8 @@ fn resolve_within_project(path: &Path) -> Result<PathBuf, Errors> {
 /// Creates the directory at `path` and its missing ancestors, and returns the absolute path of the
 /// directory, with symbolic links resolved. Fails when `path` follows a symbolic link in the project
 /// directory (the current directory) to a place outside it.
-pub fn create_dir_within_project(path: &Path) -> Result<PathBuf, Errors> {
-    let dir = resolve_within_project(path)?;
+pub fn create_dir_guarding_project_links(path: &Path) -> Result<PathBuf, Errors> {
+    let dir = resolve_guarding_project_links(path)?;
     fs::create_dir_all(&dir).map_err(|e| {
         Errors::from_msg(format!(
             "Failed to create directory \"{}\": {}",
@@ -558,7 +558,7 @@ pub fn create_dir_within_project(path: &Path) -> Result<PathBuf, Errors> {
 /// when `path` follows a symbolic link in the project directory (the current directory) to a place
 /// outside it. A symbolic link at `path` itself is replaced by the new file, and what it pointed to
 /// is kept. Panics when `path` names no file, as `..` does.
-pub fn write_file_within_project(
+pub fn write_file_guarding_project_links(
     path: &Path,
     write: impl FnOnce(&Path) -> io::Result<()>,
 ) -> Result<(), Errors> {
@@ -572,7 +572,7 @@ pub fn write_file_within_project(
     let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
         panic!("\"{}\" names no file to write.", path.to_string_lossy());
     };
-    let dir = create_dir_within_project(parent)?;
+    let dir = create_dir_guarding_project_links(parent)?;
     replace_file(&dir.join(name), write).map_err(failed)
 }
 

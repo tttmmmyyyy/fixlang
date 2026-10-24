@@ -1,6 +1,6 @@
 use crate::{
     ast::name::FullName, ast::program::TypedExpr, ast::types::Scheme,
-    constants::TYPE_CHECK_CACHE_PATH, misc::warn_msg, misc::write_file_within_project,
+    constants::TYPE_CHECK_CACHE_PATH, misc::warn_msg, misc::write_file_guarding_project_links,
 };
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -112,7 +112,7 @@ impl TypeCheckCache for FileCache {
     ) {
         let cache_file_path = self.cache_file_path(name, type_, version_hash);
         let serialized = postcard::to_allocvec(expr).unwrap();
-        if let Err(errs) = write_file_within_project(&cache_file_path, |tmp_path| {
+        if let Err(errs) = write_file_guarding_project_links(&cache_file_path, |tmp_path| {
             fs::write(tmp_path, &serialized)
         }) {
             for err in errs.errors() {

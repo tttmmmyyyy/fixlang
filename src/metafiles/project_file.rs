@@ -14,7 +14,7 @@ use crate::{
     error::Errors,
     hash::HashSource,
     metafiles::{config_file::ConfigFile, registry_file::RegistryFile},
-    misc::{info_msg, to_absolute_path, warn_msg, write_file_within_project, Set},
+    misc::{info_msg, to_absolute_path, warn_msg, write_file_guarding_project_links, Set},
     parse::sourcefile::{SourceFile, Span},
     preliminary_command::PreliminaryCommand,
 };
@@ -1121,7 +1121,7 @@ impl ProjectFile {
         let lock_file = DependencyLockFile::create(self, mode.to_build_config_type())?;
         let content = toml::to_string(&lock_file)
             .map_err(|e| Errors::from_msg(format!("Failed to serialize lock file: {:?}", e)))?;
-        write_file_within_project(Path::new(get_lock_file_path(mode)), |tmp_path| {
+        write_file_guarding_project_links(Path::new(get_lock_file_path(mode)), |tmp_path| {
             fs::write(tmp_path, &content)
         })?;
         Ok(lock_file)

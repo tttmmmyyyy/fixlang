@@ -14,7 +14,7 @@ use crate::{
     elaboration::elaborate_via_config,
     error::Errors,
     metafiles::project_file::ProjectFile,
-    misc::{info_msg, write_file_within_project},
+    misc::{info_msg, write_file_guarding_project_links},
     parse::sourcefile::Span,
 };
 use std::{fs, sync::Arc};
@@ -293,7 +293,7 @@ fn docgen_for_module(
     let doc_file = format!("{}.md", mod_name);
 
     let doc_path = config.out_dir.join(doc_file);
-    write_file_within_project(&doc_path, |tmp_path| fs::write(tmp_path, markdown_str))?;
+    write_file_guarding_project_links(&doc_path, |tmp_path| fs::write(tmp_path, markdown_str))?;
 
     info_msg(&format!(
         "Saved documentation to \"{}\".",

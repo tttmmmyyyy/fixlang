@@ -1,6 +1,6 @@
 use crate::constants::LOG_FILE_PATH;
 use crate::error::panic_if_err;
-use crate::misc::write_file_within_project;
+use crate::misc::write_file_guarding_project_links;
 use once_cell::sync::Lazy;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -16,7 +16,7 @@ static LOG_FILE: Lazy<Mutex<File>> = Lazy::new(|| open_log_file());
 /// would place it outside the project.
 fn open_log_file() -> Mutex<File> {
     let path = Path::new(LOG_FILE_PATH);
-    panic_if_err(write_file_within_project(path, |tmp_path| {
+    panic_if_err(write_file_guarding_project_links(path, |tmp_path| {
         File::create(tmp_path).map(|_| ())
     }));
     let file = OpenOptions::new()

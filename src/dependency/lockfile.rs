@@ -11,7 +11,8 @@ use crate::{
         ProjectOrigin,
     },
     misc::{
-        create_dir_within_project, info_msg, remove_inside_dot_fixlang, to_absolute_path, warn_msg,
+        create_dir_guarding_project_links, info_msg, remove_inside_dot_fixlang, to_absolute_path,
+        warn_msg,
     },
 };
 use git2::{build::CheckoutBuilder, ErrorClass, ErrorCode, Oid, Repository};
@@ -265,7 +266,7 @@ impl DependencyLockFile {
                     remove_inside_dot_fixlang(&dep.path)?;
                 }
                 // Create the directory, and clone the repository into it.
-                let clone_dir = create_dir_within_project(&dep.path)?;
+                let clone_dir = create_dir_guarding_project_links(&dep.path)?;
                 let repo =
                     clone_repository_with_retry(&git_info.repo, &clone_dir).map_err(|e| {
                         Errors::from_msg(format!(
