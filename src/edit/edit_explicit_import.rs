@@ -16,16 +16,12 @@ use crate::metafiles::project_file::ProjectFile;
 use crate::misc::{info_msg, warn_msg, Map};
 use crate::project_fs::resolve_file_inside_project;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-// Run the "fix edit explicit-import" command.
-// This command:
-// 1. Checks if the project has any errors (exits if errors exist)
-// 2. For each source file in the project (excluding dependencies):
-//    - Collects all referenced type names, trait names, and value names
-//    - Removes all existing import statements
-//    - Writes explicit import statements for all collected names
+/// Runs `fix edit explicit-import`. Fails when the project has errors. Otherwise, for each source
+/// file of the root project, collects the type, trait and value names the file refers to, removes
+/// its import statements, and writes import statements naming exactly those names.
 pub fn run_explicit_import_command() -> Result<(), Errors> {
     info_msg("Running diagnostics on the program...");
 
@@ -72,8 +68,9 @@ fn get_user_source_files(proj_file: &ProjectFile) -> Result<Vec<PathBuf>, Errors
     Ok(inside_files)
 }
 
-// Rewrite import statements for a single file.
-fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<(), Errors> {
+/// Replaces the import statements of the source file at `file_path` with ones naming exactly the
+/// entities of other modules that its module refers to, and writes the file back.
+fn rewrite_imports_for_file(file_path: &Path, program: &Program) -> Result<(), Errors> {
     // Find the module info for this file.
     let module_info = program.module_of_file(file_path).ok_or_else(|| {
         Errors::from_msg(format!(
@@ -128,7 +125,8 @@ fn rewrite_imports_for_file(file_path: &PathBuf, program: &Program) -> Result<()
     Ok(())
 }
 
-// Generate import statements for the given names.
+/// The import statements, sorted, that a module named `current_module` needs to refer to each of
+/// `names`.
 pub fn generate_import_statements(
     current_module: Name,
     names: Vec<FullName>,
