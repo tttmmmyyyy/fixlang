@@ -3078,7 +3078,7 @@ The Fix build system compiles all the projects of a build as a single set of com
 
 `fix check`, `fix deps install`, `fix deps update`, `fix docs` and the language server are specified to run no arbitrary code.
 
-Build and run a project you are not sure you can trust inside a sandbox, such as a Docker container. Having an AI review the project and its dependencies also helps, but it does not replace the sandbox: instructions for the AI embedded in the sources can lead the review astray.
+Ways to protect yourself include running the commands in a sandbox such as a Docker container, and having an AI review the project and its dependencies.
 
 Fix 1.3.0 to the pre-releases of 1.6.0 asked the user to approve the `preliminary_commands` before `fix build`, `fix run` and `fix test` ran them. The approval was removed for these reasons:
 
