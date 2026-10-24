@@ -4,7 +4,7 @@ use crate::{
     error::Errors,
     hash::{md5_hex, md5_u64},
     parse::sourcefile::SourceFile,
-    project_fs::create_dir_guarding_project_links,
+    project_fs::{create_dir_guarding_project_links, DOT_FIXLANG_LINK_HINT},
 };
 use colored::{control, Colorize};
 use fxhash::{FxHashMap, FxHashSet};
@@ -188,7 +188,7 @@ pub fn temporary_source_path(file_name: &str, hash: &str) -> PathBuf {
 pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile, Errors> {
     let hash = md5_hex(source);
     let path = temporary_source_path(file_name, &hash);
-    let dir = create_dir_guarding_project_links(path.parent().unwrap())?;
+    let dir = create_dir_guarding_project_links(path.parent().unwrap(), DOT_FIXLANG_LINK_HINT)?;
 
     // Use create_new(true) for atomic check-and-create operation. It also refuses to follow a
     // symbolic link at the path.

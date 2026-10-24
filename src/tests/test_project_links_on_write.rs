@@ -178,10 +178,16 @@ mod integration_tests {
         let (root, proj) = setup_test_env();
         fs::create_dir_all(proj.join(".fixlang")).unwrap();
         symlink(victim(&root), proj.join(".fixlang/tmp")).unwrap();
+        let output = run_fix(&proj, &["check"]);
         assert_failed_with(
-            &run_fix(&proj, &["check"]),
+            &output,
             REFUSED,
             "`fix check` should refuse to write under the link.",
+        );
+        assert_failed_with(
+            &output,
+            "HINT: `fix clean` removes the directory \".fixlang\"",
+            "the refusal should point at `fix clean`.",
         );
         assert_victim_untouched(&root);
     }
@@ -209,10 +215,16 @@ mod integration_tests {
     fn docs_refuses_an_output_directory_linking_outside() {
         let (root, proj) = setup_test_env();
         symlink(victim(&root), proj.join("docs")).unwrap();
+        let output = run_fix(&proj, &["docs"]);
         assert_failed_with(
-            &run_fix(&proj, &["docs"]),
+            &output,
             REFUSED,
             "`fix docs` should refuse to write through the link.",
+        );
+        assert_failed_with(
+            &output,
+            "pass the directory it leads to as `--out-dir`",
+            "the refusal should point at `--out-dir`.",
         );
         assert_victim_untouched(&root);
     }
@@ -294,10 +306,16 @@ mod integration_tests {
         fs::rename(proj.join("fixproj.toml"), &outside_project_file).unwrap();
         symlink(&outside_project_file, proj.join("fixproj.toml")).unwrap();
         let content = fs::read_to_string(&outside_project_file).unwrap();
+        let output = run_fix(&proj, &["deps", "add", "dep"]);
         assert_failed_with(
-            &run_fix(&proj, &["deps", "add", "dep"]),
+            &output,
             REFUSED,
             "`fix deps add` should refuse to write through the link.",
+        );
+        assert_failed_with(
+            &output,
+            "HINT: Run `fix deps add` in the project the link leads to.",
+            "the refusal should point at the project the link leads to.",
         );
         assert_eq!(
             fs::read_to_string(&outside_project_file).unwrap(),

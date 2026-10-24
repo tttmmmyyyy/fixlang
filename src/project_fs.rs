@@ -40,6 +40,10 @@ pub fn check_dot_fixlang_is_not_symlink() -> Result<(), Errors> {
     Ok(())
 }
 
+/// The `HINT:` line of the refusal of a symbolic link under `.fixlang`, which fix creates afresh.
+pub const DOT_FIXLANG_LINK_HINT: &str =
+    "`fix clean` removes the directory \".fixlang\", the link included, and fix creates it again.";
+
 /// The directory of the project fix works on, which is the current directory, with symbolic links
 /// resolved.
 fn project_dir() -> io::Result<PathBuf> {
@@ -117,7 +121,10 @@ pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) ->
 /// # Examples
 /// In a project at `/p`, `docs/Main.md` resolves to `/p/docs/Main.md`. With `docs` a link to
 /// `/p/site`, it resolves to `/p/site/Main.md`, and with `docs` a link to `/home/u`, it fails.
-pub fn resolve_guarding_project_links(path: &Path) -> Result<PathBuf, Errors> {
+///
+/// `hint` is the `HINT:` line of the error that refuses a link: what the user can do about a link
+/// at the place the caller writes, such as `DOT_FIXLANG_LINK_HINT` for a place under `.fixlang`.
+pub fn resolve_guarding_project_links(path: &Path, hint: &str) -> Result<PathBuf, Errors> {
     let failed = io_failure("resolve", path);
     let project = project_dir().map_err(failed)?;
     // `resolved` holds no symbolic link up to its first missing component, so that popping its last
@@ -146,10 +153,11 @@ pub fn resolve_guarding_project_links(path: &Path) -> Result<PathBuf, Errors> {
                 if resolved.starts_with(&project) && !target.starts_with(&project) {
                     return Err(Errors::from_msg(format!(
                         "Refused to write \"{}\": \"{}\" is a symbolic link in the project leading outside it, to \"{}\".\n\
-                         HINT: Remove the link, and fix writes in its place. To write where the link leads, name that place on the command line, as `fix docs --out-dir <dir>` does.",
+                         HINT: {}",
                         path.to_string_lossy(),
                         next.to_string_lossy(),
-                        target.to_string_lossy()
+                        target.to_string_lossy(),
+                        hint
                     )));
                 }
                 resolved = target;
@@ -161,9 +169,10 @@ pub fn resolve_guarding_project_links(path: &Path) -> Result<PathBuf, Errors> {
 
 /// Creates the directory at `path` and its missing ancestors, and returns the absolute path of the
 /// directory, with symbolic links resolved. Fails when `path` follows a symbolic link in the project
-/// directory (the current directory) to a place outside it.
-pub fn create_dir_guarding_project_links(path: &Path) -> Result<PathBuf, Errors> {
-    let dir = resolve_guarding_project_links(path)?;
+/// directory (the current directory) to a place outside it, with `hint` as the `HINT:` line, as
+/// `resolve_guarding_project_links` does.
+pub fn create_dir_guarding_project_links(path: &Path, hint: &str) -> Result<PathBuf, Errors> {
+    let dir = resolve_guarding_project_links(path, hint)?;
     fs::create_dir_all(&dir).map_err(|e| {
         Errors::from_msg(format!(
             "Failed to create directory \"{}\": {}",
@@ -179,16 +188,18 @@ pub fn create_dir_guarding_project_links(path: &Path) -> Result<PathBuf, Errors>
 /// when `path` follows a symbolic link in the project directory (the current directory) to a place
 /// outside it. A symbolic link at `path` itself is replaced by the new file, and what it pointed to
 /// is kept. Returns the absolute path of the file written, with symbolic links resolved. Panics
-/// when `path` names no file, as `..` does.
+/// when `path` names no file, as `..` does. `hint` is the `HINT:` line of a refusal, as in
+/// `resolve_guarding_project_links`.
 pub fn write_file_guarding_project_links(
     path: &Path,
+    hint: &str,
     write: impl FnOnce(&Path) -> io::Result<()>,
 ) -> Result<PathBuf, Errors> {
     let failed = io_failure("write", path);
     let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
         panic!("\"{}\" names no file to write.", path.to_string_lossy());
     };
-    let file = create_dir_guarding_project_links(parent)?.join(name);
+    let file = create_dir_guarding_project_links(parent, hint)?.join(name);
     replace_file(&file, write).map_err(failed)?;
     Ok(file)
 }

@@ -4,7 +4,7 @@ use crate::{
     ast::types::Scheme,
     constants::TYPE_CHECK_CACHE_PATH,
     misc::warn_msg,
-    project_fs::{create_dir_guarding_project_links, replace_file},
+    project_fs::{create_dir_guarding_project_links, replace_file, DOT_FIXLANG_LINK_HINT},
 };
 use std::{
     collections::{BTreeMap, VecDeque},
@@ -92,7 +92,10 @@ impl FileCache {
     fn dir_to_save_in(&self) -> Option<&PathBuf> {
         self.dir
             .get_or_init(|| {
-                match create_dir_guarding_project_links(Path::new(TYPE_CHECK_CACHE_PATH)) {
+                match create_dir_guarding_project_links(
+                    Path::new(TYPE_CHECK_CACHE_PATH),
+                    DOT_FIXLANG_LINK_HINT,
+                ) {
                     Ok(dir) => Some(dir),
                     Err(errs) => {
                         for err in errs.errors() {
