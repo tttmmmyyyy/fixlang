@@ -2,7 +2,7 @@
 //! starts with: the C compiler reads neither one starting with `-` as an option nor one starting
 //! with `@` as a file of further options.
 
-use crate::tests::test_util::{compile_c_object, fix_command};
+use crate::tests::test_util::{assert_succeeded, compile_c_object, run_fix};
 use std::fs;
 use tempfile::TempDir;
 
@@ -29,16 +29,10 @@ fn assert_object_named_links(name: &str, other_files: &[(&str, &str)]) {
         "module Main;\n\nmain : IO ();\nmain = println(FFI_CALL[CInt helper()].to_string);\n",
     )
     .unwrap();
-    let output = fix_command()
-        .args(["run", "-O", "none"])
-        .current_dir(dir.path())
-        .output()
-        .expect("Failed to run fix.");
-    assert!(
-        output.status.success(),
-        "`fix run` failed to link the object \"{}\": {}",
-        name,
-        String::from_utf8_lossy(&output.stderr)
+    let output = run_fix(dir.path(), &["run", "-O", "none"]);
+    assert_succeeded(
+        &output,
+        &format!("`fix run` should link the object \"{}\".", name),
     );
     assert_eq!(String::from_utf8_lossy(&output.stdout), "42\n");
 }

@@ -2,29 +2,10 @@
 //! build`, `fix run` and `fix test` run them without asking; `fix check`, `fix deps install`, `fix
 //! deps update`, `fix docs` and the language server run none.
 
-use crate::tests::test_util::{create_git_repo, fix_command};
+use crate::tests::test_util::{assert_failed, assert_succeeded, create_git_repo, run_fix};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::{Output, Stdio};
 use tempfile::TempDir;
-
-/// Runs `fix <args>` in `dir` with no terminal on its standard input.
-fn run_fix(dir: &Path, args: &[&str]) -> Output {
-    fix_command()
-        .args(args)
-        .current_dir(dir)
-        .stdin(Stdio::null())
-        .output()
-        .expect("Failed to run fix.")
-}
-
-fn assert_succeeded(output: &Output) {
-    assert!(
-        output.status.success(),
-        "stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
 
 /// The argv of a preliminary command that creates `marker`, written as a TOML array literal.
 fn touch_command(marker: &Path) -> String {
@@ -106,7 +87,7 @@ fn build_runs_the_build_section_commands() {
         &format!("[{}]", touch_command(&test_marker)),
         "",
     );
-    assert_succeeded(&run_fix(dir.path(), &["build"]));
+    assert_succeeded(&run_fix(dir.path(), &["build"]), "`fix build` should succeed.");
     assert!(build_marker.exists(), "`fix build` did not run the command");
     assert!(
         !test_marker.exists(),
@@ -126,7 +107,7 @@ fn test_runs_the_commands_of_both_sections() {
         &format!("[{}]", touch_command(&test_marker)),
         "",
     );
-    assert_succeeded(&run_fix(dir.path(), &["test"]));
+    assert_succeeded(&run_fix(dir.path(), &["test"]), "`fix test` should succeed.");
     assert!(build_marker.exists());
     assert!(test_marker.exists());
 }
@@ -135,7 +116,7 @@ fn test_runs_the_commands_of_both_sections() {
 fn build_runs_the_commands_of_a_git_dependency() {
     let dir = TempDir::new().unwrap();
     let (proj, marker) = project_with_git_dependency(dir.path());
-    assert_succeeded(&run_fix(&proj, &["build"]));
+    assert_succeeded(&run_fix(&proj, &["build"]), "`fix build` should succeed.");
     assert!(marker.exists(), "`fix build` did not run the dependency's command");
 }
 
@@ -151,7 +132,10 @@ fn allow_preliminary_commands_is_accepted_with_a_warning() {
         "",
     );
     let output = run_fix(dir.path(), &["build", "--allow-preliminary-commands"]);
-    assert_succeeded(&output);
+    assert_succeeded(
+        &output,
+        "`fix build --allow-preliminary-commands` should succeed.",
+    );
     assert!(marker.exists());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
@@ -172,7 +156,7 @@ fn check_runs_no_command() {
         &format!("[{}]", touch_command(&marker)),
         "",
     );
-    assert_succeeded(&run_fix(dir.path(), &["check"]));
+    assert_succeeded(&run_fix(dir.path(), &["check"]), "`fix check` should succeed.");
     assert!(!marker.exists(), "`fix check` ran a preliminary command");
 }
 
@@ -180,12 +164,21 @@ fn check_runs_no_command() {
 fn subcommands_that_build_nothing_run_no_command_of_a_git_dependency() {
     let dir = TempDir::new().unwrap();
     let (proj, marker) = project_with_git_dependency(dir.path());
-    assert_succeeded(&run_fix(&proj, &["deps", "update"]));
+    assert_succeeded(
+        &run_fix(&proj, &["deps", "update"]),
+        "`fix deps update` should succeed.",
+    );
     // `fix clean` leaves the lock file, so that `fix deps install` clones the dependency afresh.
-    assert_succeeded(&run_fix(&proj, &["clean"]));
-    assert_succeeded(&run_fix(&proj, &["deps", "install"]));
-    assert_succeeded(&run_fix(&proj, &["check"]));
-    assert_succeeded(&run_fix(&proj, &["docs", "-o", "out"]));
+    assert_succeeded(&run_fix(&proj, &["clean"]), "`fix clean` should succeed.");
+    assert_succeeded(
+        &run_fix(&proj, &["deps", "install"]),
+        "`fix deps install` should succeed.",
+    );
+    assert_succeeded(&run_fix(&proj, &["check"]), "`fix check` should succeed.");
+    assert_succeeded(
+        &run_fix(&proj, &["docs", "-o", "out"]),
+        "`fix docs` should succeed.",
+    );
     assert!(
         !marker.exists(),
         "a subcommand that builds nothing ran the dependency's command"
@@ -196,10 +189,9 @@ fn subcommands_that_build_nothing_run_no_command_of_a_git_dependency() {
 fn a_failing_command_fails_the_build() {
     let dir = TempDir::new().unwrap();
     write_project(dir.path(), "proj", "[[\"false\"]]", "[]", "");
-    let output = run_fix(dir.path(), &["build"]);
-    assert!(
-        !output.status.success(),
-        "`fix build` succeeded although a preliminary command failed"
+    assert_failed(
+        &run_fix(dir.path(), &["build"]),
+        "`fix build` succeeded although a preliminary command failed",
     );
 }
 
@@ -221,7 +213,7 @@ fn commands_run_in_the_order_the_project_file_lists_them() {
         "[]",
         "",
     );
-    assert_succeeded(&run_fix(dir.path(), &["build"]));
+    assert_succeeded(&run_fix(dir.path(), &["build"]), "`fix build` should succeed.");
     // Consecutive repeats are merged, since a command runs twice (#949): the order is what this
     // test pins.
     let mut lines: Vec<String> = fs::read_to_string(&log)
