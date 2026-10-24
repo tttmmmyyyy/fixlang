@@ -496,7 +496,7 @@ pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) ->
 /// # Examples
 /// In a project at `/p`, `docs/Main.md` resolves to `/p/docs/Main.md`. With `docs` a link to
 /// `/p/site`, it resolves to `/p/site/Main.md`, and with `docs` a link to `/home/u`, it fails.
-fn resolve_guarding_project_links(path: &Path) -> Result<PathBuf, Errors> {
+pub fn resolve_guarding_project_links(path: &Path) -> Result<PathBuf, Errors> {
     let failed = |e: io::Error| {
         Errors::from_msg(format!(
             "Failed to resolve \"{}\": {}",

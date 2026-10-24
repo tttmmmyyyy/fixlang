@@ -231,6 +231,27 @@ mod integration_tests {
         assert_victim_untouched(&root);
     }
 
+    /// `fix deps add` refuses to append to a project file that links outside the project, before it
+    /// looks the project up in any registry.
+    #[test]
+    fn deps_add_refuses_a_project_file_linking_outside() {
+        let (root, proj) = setup_test_env();
+        let outside_project_file = root.path().join("fixproj.toml");
+        fs::rename(proj.join("fixproj.toml"), &outside_project_file).unwrap();
+        symlink(&outside_project_file, proj.join("fixproj.toml")).unwrap();
+        let content = fs::read_to_string(&outside_project_file).unwrap();
+        assert_failed_with(
+            &run_fix(&proj, &["deps", "add", "dep"]),
+            REFUSED,
+            "`fix deps add` should refuse to write through the link.",
+        );
+        assert_eq!(
+            fs::read_to_string(&outside_project_file).unwrap(),
+            content,
+            "the project file the link points to changed"
+        );
+    }
+
     /// The language server, serving a project whose `.fixlang/fix.log` and `.fixlang/tmp` link
     /// outside it, writes nothing through either link.
     #[test]

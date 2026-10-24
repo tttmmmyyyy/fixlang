@@ -14,7 +14,10 @@ use crate::{
     error::Errors,
     hash::HashSource,
     metafiles::{config_file::ConfigFile, registry_file::RegistryFile},
-    misc::{info_msg, to_absolute_path, warn_msg, write_file_guarding_project_links, Set},
+    misc::{
+        info_msg, resolve_guarding_project_links, to_absolute_path, warn_msg,
+        write_file_guarding_project_links, Set,
+    },
     parse::sourcefile::{SourceFile, Span},
     preliminary_command::PreliminaryCommand,
 };
@@ -1292,6 +1295,9 @@ impl ProjectFile {
         fix_config: &ConfigFile,
         mode: BuildConfigType,
     ) -> Result<(), Errors> {
+        // The place the project file resolves to, which the added entries are written at. A project
+        // file that is a symbolic link stays one.
+        let project_file_path = resolve_guarding_project_links(&self.path)?;
         let mut added_toml = "".to_string();
 
         // Parse each element of `proj_specs` as the form `proj-name@ver_req`.
@@ -1439,7 +1445,7 @@ impl ProjectFile {
         // Write the added dependencies to the project file.
         let mut file = fs::OpenOptions::new()
             .append(true)
-            .open(&self.path)
+            .open(&project_file_path)
             .map_err(|e| {
                 Errors::from_msg(format!(
                     "Failed to open file \"{}\": {:?}",
