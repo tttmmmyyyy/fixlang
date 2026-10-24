@@ -745,8 +745,8 @@ impl ProjectFile {
     /// Updates a configuration from a project file.
     ///
     /// `self.role` decides whether the fields that only the root project contributes are skipped,
-    /// and `self.source` is where the project came from, which the dependency entry a diagnostic
-    /// suggests for it writes. Both must be populated before this is called.
+    /// and `self.source` is recorded as where the project's sources came from. Both must be set
+    /// before this is called.
     pub fn set_config(&self, config: &mut Configuration) -> Result<(), Errors> {
         let is_dependent_proj = self.role == ProjectFileRole::Dependent;
         let project_origin = self

@@ -37,11 +37,15 @@ fn assert_object_named_links(name: &str, other_files: &[(&str, &str)]) {
     assert_eq!(String::from_utf8_lossy(&output.stdout), "42\n");
 }
 
+/// Verifies that an object file whose name starts with `-` is linked, where `gcc` would read the
+/// name as an option.
 #[test]
 fn an_object_named_like_an_option_is_linked_as_a_file() {
     assert_object_named_links("-helper.o", &[]);
 }
 
+/// Verifies that an object file whose name starts with `@` is linked, where `gcc` would read the
+/// name as a file of options.
 #[test]
 fn an_object_named_like_an_options_file_is_linked_as_a_file() {
     // `gcc` reads `@helper.o` as the file `helper.o` of further options when that file exists.

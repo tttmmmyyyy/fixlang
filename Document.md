@@ -3074,7 +3074,7 @@ The Fix build system compiles all the projects of a build as a single set of com
 
 ### What `fix` runs from a project
 
-`fix build`, `fix run` and `fix test` run what a project and its dependencies supply: the `preliminary_commands` before compilation, and the `ld_flags` on the linker's command line, where a flag such as `gcc`'s `-wrapper` starts a program. `fix run` and `fix test` also run the program built from their source files, which can call any C function. Build, run and test a project only when you trust it and its dependencies.
+`fix build`, `fix run` and `fix test` run programs that a project and its dependencies supply. They run the `preliminary_commands` before compilation, and they pass the `ld_flags` to the linker, where a flag such as `gcc`'s `-wrapper` starts a program. `fix run` and `fix test` also run the program built from the project's source files, which can call any C function. Build, run and test a project only when you trust it and its dependencies.
 
 `fix check`, `fix deps install`, `fix deps update`, `fix docs` and the language server run no program a project supplies.
 

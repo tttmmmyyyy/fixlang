@@ -323,8 +323,8 @@ fn run_cli() {
             "Skip the evaluation instructed by the `eval` syntax: build `eval {expr0}; {expr1}` as `{expr1}`.\n\
             Use it to drop a debugging effect such as `Debug::debug_println` from a built program."
         );
-    // Accepted with a warning and otherwise ignored. Earlier compilers asked the user to approve
-    // `preliminary_commands`, and this flag skipped the question; scripts that pass it keep running.
+    // Accepted with a warning and otherwise ignored, so that scripts written for compilers that
+    // asked to approve `preliminary_commands` keep running.
     let allow_preliminary_commands = Arg::new("allow-preliminary-commands")
         .long("allow-preliminary-commands")
         .hide(true);

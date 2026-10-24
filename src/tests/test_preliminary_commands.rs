@@ -39,8 +39,9 @@ fn write_project(dir: &Path, name: &str, build_commands: &str, test_commands: &s
     .unwrap();
 }
 
-/// A project in `root`/`proj` that depends on a git repository in `root`, whose project lists a
-/// preliminary command creating the returned marker. The root project lists none.
+/// Writes into `root` a git repository whose project lists a preliminary command creating a marker
+/// file, and into `root/proj` a project that depends on it and lists no command. Returns the
+/// project directory and the marker's path.
 fn project_with_git_dependency(root: &Path) -> (PathBuf, PathBuf) {
     let marker = root.join("dep-ran");
     let repo = root.join("dep-repo");
@@ -77,6 +78,8 @@ fn project_with_git_dependency(root: &Path) -> (PathBuf, PathBuf) {
     (proj, marker)
 }
 
+/// Verifies that `fix build` runs the commands of the `build` section and none of the `build.test`
+/// section.
 #[test]
 fn build_runs_the_build_section_commands() {
     let dir = TempDir::new().unwrap();
@@ -97,6 +100,7 @@ fn build_runs_the_build_section_commands() {
     );
 }
 
+/// Verifies that `fix test` runs the commands of both the `build` and the `build.test` sections.
 #[test]
 fn test_runs_the_commands_of_both_sections() {
     let dir = TempDir::new().unwrap();
@@ -114,6 +118,7 @@ fn test_runs_the_commands_of_both_sections() {
     assert!(test_marker.exists());
 }
 
+/// Verifies that `fix build` runs the commands a git dependency lists, without asking for approval.
 #[test]
 fn build_runs_the_commands_of_a_git_dependency() {
     let dir = TempDir::new().unwrap();
@@ -122,6 +127,8 @@ fn build_runs_the_commands_of_a_git_dependency() {
     assert!(marker.exists(), "`fix build` did not run the dependency's command");
 }
 
+/// Verifies that `--allow-preliminary-commands` is still accepted, prints a warning, and leaves the
+/// commands to run.
 #[test]
 fn allow_preliminary_commands_is_accepted_with_a_warning() {
     let dir = TempDir::new().unwrap();
@@ -147,6 +154,7 @@ fn allow_preliminary_commands_is_accepted_with_a_warning() {
     );
 }
 
+/// Verifies that `fix check` runs no command of either section.
 #[test]
 fn check_runs_no_command() {
     let dir = TempDir::new().unwrap();
@@ -162,6 +170,8 @@ fn check_runs_no_command() {
     assert!(!marker.exists(), "`fix check` ran a preliminary command");
 }
 
+/// Verifies that `fix deps update`, `fix deps install`, `fix check` and `fix docs` run no command
+/// of a git dependency.
 #[test]
 fn subcommands_that_build_nothing_run_no_command_of_a_git_dependency() {
     let dir = TempDir::new().unwrap();
@@ -187,6 +197,7 @@ fn subcommands_that_build_nothing_run_no_command_of_a_git_dependency() {
     );
 }
 
+/// Verifies that a command exiting with a nonzero status fails `fix build`.
 #[test]
 fn a_failing_command_fails_the_build() {
     let dir = TempDir::new().unwrap();
@@ -197,6 +208,7 @@ fn a_failing_command_fails_the_build() {
     );
 }
 
+/// Verifies that the commands of one section run in the order the project file lists them.
 #[test]
 fn commands_run_in_the_order_the_project_file_lists_them() {
     let dir = TempDir::new().unwrap();
@@ -227,6 +239,8 @@ fn commands_run_in_the_order_the_project_file_lists_them() {
     assert_eq!(lines, ["first", "second"]);
 }
 
+/// Verifies that the language server, elaborating a project with a git dependency, runs no command
+/// of that dependency.
 #[test]
 fn the_language_server_runs_no_command_of_a_git_dependency() {
     let dir = TempDir::new().unwrap();
