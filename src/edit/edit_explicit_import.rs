@@ -52,9 +52,9 @@ pub fn run_explicit_import_command() -> Result<(), Errors> {
     Ok(())
 }
 
-// Get the list of source files that belong to the project (not dependencies), with symbolic links
-// resolved. A file the project file lists outside the project, or one whose symbolic link leads
-// outside it, is reported and left out, since the project file can name any path.
+/// The root project's own source files, test files included, with symbolic links resolved. A listed
+/// file that lies outside the project, by its path or through a symbolic link, is left out with a
+/// warning.
 fn get_user_source_files(proj_file: &ProjectFile) -> Result<Vec<PathBuf>, Errors> {
     // Use get_files(BuildMode::Test) to get the root project's source files (excluding dependencies).
     // BuildMode::Test includes test files.

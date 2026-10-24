@@ -195,10 +195,9 @@ pub fn write_file_guarding_project_links(
     Ok(file)
 }
 
-/// The place the existing file at `path` resolves to, with symbolic links resolved, when that place
-/// lies in the project directory (the current directory), and `None` when it lies outside. Fix
-/// judges a file it takes from the project file through this function before writing to it, since
-/// the project file names any path, outside the project as well.
+/// Resolves the symbolic links and `..` in the path of the existing file `path`, and returns the
+/// result when it lies in the project directory (the current directory), and `None` when it lies
+/// outside.
 ///
 /// # Examples
 /// In a project at `/p`, `src/main.fix` answers `Some("/p/src/main.fix")`, and `../lib/lib.fix`,
