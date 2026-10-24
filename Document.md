@@ -3074,11 +3074,16 @@ The Fix build system compiles all the projects of a build as a single set of com
 
 ## Security
 
-`fix build`, `fix run` and `fix test` run programs that a project and its dependencies supply. They run the `preliminary_commands` before compilation, and they pass the `ld_flags` to the linker, where a flag such as `gcc`'s `-wrapper` starts a program. `fix run` and `fix test` also run the program built from the project's source files, which can call any C function. Build, run and test a project only when you trust it and its dependencies.
+`fix build`, as well as `fix run` and `fix test`, can run code written by the authors of a project and its dependencies. `fix build` runs the `preliminary_commands` before compilation and passes the `ld_flags` to the linker, and the `ld_flags` can hold a flag that starts a program, such as `gcc`'s `-wrapper`. Run these commands only when you trust the project and its dependencies.
 
-`fix check`, `fix deps install`, `fix deps update`, `fix docs` and the language server run no program a project supplies.
+`fix check`, `fix deps install`, `fix deps update`, `fix docs` and the language server are specified to run no arbitrary code.
 
-Fix 1.3.0 to 1.5.x and the pre-releases of 1.6.0 asked the user to approve the `preliminary_commands` before running them. The approval was removed in 1.6.0, since it did not stop an untrusted project: the `ld_flags` and the built program run what the project wrote without it.
+Build and run a project you are not sure you can trust inside a sandbox, such as a Docker container. Having an AI review the project and its dependencies also helps, but it does not replace the sandbox: instructions for the AI embedded in the sources can lead the review astray.
+
+Fix 1.3.0 to the pre-releases of 1.6.0 asked the user to approve the `preliminary_commands` before `fix build`, `fix run` and `fix test` ran them. The approval was removed for these reasons:
+
+- Approving was tedious, and the approvals easily became a formality.
+- A project has other ways to run any command, such as the `ld_flags` and the built program, and believing that `fix build` is safe because of the approval is more dangerous than knowing that it is not.
 
 ## Managing dependencies
 
