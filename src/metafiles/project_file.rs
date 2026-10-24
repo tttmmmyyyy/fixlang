@@ -14,12 +14,10 @@ use crate::{
     error::Errors,
     hash::HashSource,
     metafiles::{config_file::ConfigFile, registry_file::RegistryFile},
-    misc::{
-        info_msg, resolve_guarding_project_links, to_absolute_path, warn_msg,
-        write_file_guarding_project_links, Set,
-    },
+    misc::{info_msg, to_absolute_path, warn_msg, Set},
     parse::sourcefile::{SourceFile, Span},
     preliminary_command::PreliminaryCommand,
+    project_fs::{resolve_guarding_project_links, write_file_guarding_project_links},
 };
 use regex::Regex;
 use reqwest::Url;

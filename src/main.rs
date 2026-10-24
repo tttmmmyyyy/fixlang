@@ -43,6 +43,7 @@ mod optimization;
 mod parse;
 mod preliminary_command;
 mod printer;
+mod project_fs;
 mod rc_ir;
 mod return_abi;
 mod target_triple;
@@ -75,9 +76,8 @@ use error::{panic_if_err, Errors};
 use git_version::git_version;
 use metafiles::{config_file::ConfigFile, project_file::ProjectFile};
 use mimalloc::MiMalloc;
-use misc::{
-    check_dot_fixlang_is_not_symlink, disable_colored_no_tty, spawn_compiler_thread, warn_msg,
-};
+use misc::{disable_colored_no_tty, spawn_compiler_thread, warn_msg};
+use project_fs::check_dot_fixlang_is_not_symlink;
 use std::{
     fs,
     path::{Path, PathBuf},

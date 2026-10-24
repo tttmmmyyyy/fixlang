@@ -23,10 +23,9 @@ use crate::{
     },
     generator::{enum_attribute_kind_id, module_functions, Generator},
     hash::HashSource,
-    misc::{
-        info_msg, join_compiler_threads, replace_file, spawn_compiler_thread, warn_msg, Map, Set,
-    },
+    misc::{info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg, Map, Set},
     optimization::optimization,
+    project_fs::replace_file,
     rc_ir::{
         ast::RcProgram,
         borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},

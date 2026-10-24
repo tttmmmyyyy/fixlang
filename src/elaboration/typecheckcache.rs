@@ -3,7 +3,8 @@ use crate::{
     ast::program::TypedExpr,
     ast::types::Scheme,
     constants::TYPE_CHECK_CACHE_PATH,
-    misc::{create_dir_guarding_project_links, replace_file, warn_msg},
+    misc::warn_msg,
+    project_fs::{create_dir_guarding_project_links, replace_file},
 };
 use std::{
     collections::{BTreeMap, VecDeque},

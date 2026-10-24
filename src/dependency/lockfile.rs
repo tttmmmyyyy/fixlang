@@ -10,10 +10,8 @@ use crate::{
         ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectFileRole, ProjectName,
         ProjectOrigin,
     },
-    misc::{
-        create_dir_guarding_project_links, info_msg, remove_inside_dot_fixlang, to_absolute_path,
-        warn_msg,
-    },
+    misc::{info_msg, to_absolute_path, warn_msg},
+    project_fs::{create_dir_guarding_project_links, remove_inside_dot_fixlang},
 };
 use git2::{build::CheckoutBuilder, ErrorClass, ErrorCode, Oid, Repository};
 use rand::{thread_rng, Rng};

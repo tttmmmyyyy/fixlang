@@ -14,8 +14,9 @@ use crate::{
     elaboration::elaborate_via_config,
     error::Errors,
     metafiles::project_file::ProjectFile,
-    misc::{info_msg, write_file_guarding_project_links},
+    misc::info_msg,
     parse::sourcefile::Span,
+    project_fs::write_file_guarding_project_links,
 };
 use std::{fs, sync::Arc};
 

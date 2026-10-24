@@ -1,6 +1,6 @@
 use crate::constants::LOG_FILE_PATH;
 use crate::error::panic_if_err;
-use crate::misc::write_file_guarding_project_links;
+use crate::project_fs::write_file_guarding_project_links;
 use once_cell::sync::Lazy;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
