@@ -365,4 +365,96 @@ mod integration_tests {
         );
         assert_victim_untouched(&root);
     }
+
+    /// The library source `edit_explicit_import_env` places, which `fix edit explicit-import`
+    /// rewrites by giving it an import statement for `I64`.
+    const LIB_SOURCE: &str = "module Lib;\n\ntwice : I64 -> I64;\ntwice = |x| x + x;\n";
+
+    /// A project `proj` whose `main.fix` imports `Lib`, with its project file listing `main.fix`
+    /// and `lib_entry` as its source files. `lib_entry` names the source of `Lib`, which the test
+    /// places.
+    fn edit_explicit_import_env(lib_entry: &str) -> (TempDir, PathBuf) {
+        let (root, proj) = setup_test_env();
+        fs::write(
+            proj.join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"proj\"\nversion = \"0.1.0\"\n\n\
+                 [build]\nfiles = [\"main.fix\", \"{}\"]\n",
+                lib_entry
+            ),
+        )
+        .unwrap();
+        fs::write(
+            proj.join("main.fix"),
+            "module Main;\nimport Lib;\n\nmain : IO ();\nmain = println(twice(3).to_string);\n",
+        )
+        .unwrap();
+        (root, proj)
+    }
+
+    /// `fix edit explicit-import` leaves a source file outside the project, which the project file
+    /// lists, as it is, and still rewrites the files inside.
+    #[test]
+    fn edit_leaves_a_source_file_outside_the_project_as_it_is() {
+        let (root, proj) = edit_explicit_import_env("../victim/lib.fix");
+        fs::write(victim(&root).join("lib.fix"), LIB_SOURCE).unwrap();
+        let output = run_fix(&proj, &["edit", "explicit-import"]);
+        assert_succeeded(
+            &output,
+            "`fix edit explicit-import` should rewrite the project.",
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("it lies outside the project"),
+            "stderr: {}",
+            stderr
+        );
+        assert_eq!(
+            fs::read_to_string(victim(&root).join("lib.fix")).unwrap(),
+            LIB_SOURCE
+        );
+        assert!(fs::read_to_string(proj.join("main.fix"))
+            .unwrap()
+            .contains("import Lib::twice;"));
+    }
+
+    /// `fix edit explicit-import` leaves a source file that is a symbolic link leading outside the
+    /// project as it is, together with what the link points to.
+    #[test]
+    fn edit_leaves_a_source_file_linking_outside_as_it_is() {
+        let (root, proj) = edit_explicit_import_env("lib.fix");
+        fs::write(victim(&root).join("lib.fix"), LIB_SOURCE).unwrap();
+        symlink(victim(&root).join("lib.fix"), proj.join("lib.fix")).unwrap();
+        let output = run_fix(&proj, &["edit", "explicit-import"]);
+        assert_succeeded(
+            &output,
+            "`fix edit explicit-import` should rewrite the project.",
+        );
+        assert_eq!(
+            fs::read_to_string(victim(&root).join("lib.fix")).unwrap(),
+            LIB_SOURCE
+        );
+    }
+
+    /// `fix edit explicit-import` rewrites a source file that is a symbolic link to another file
+    /// of the project, and keeps the link.
+    #[test]
+    fn edit_rewrites_a_source_file_linking_inside_the_project() {
+        let (_root, proj) = edit_explicit_import_env("lib.fix");
+        fs::create_dir_all(proj.join("src")).unwrap();
+        fs::write(proj.join("src/lib.fix"), LIB_SOURCE).unwrap();
+        symlink(proj.join("src/lib.fix"), proj.join("lib.fix")).unwrap();
+        assert_succeeded(
+            &run_fix(&proj, &["edit", "explicit-import"]),
+            "`fix edit explicit-import` should rewrite the project.",
+        );
+        assert!(fs::symlink_metadata(proj.join("lib.fix"))
+            .unwrap()
+            .file_type()
+            .is_symlink());
+        assert_ne!(
+            fs::read_to_string(proj.join("src/lib.fix")).unwrap(),
+            LIB_SOURCE
+        );
+    }
 }

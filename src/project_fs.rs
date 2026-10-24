@@ -194,3 +194,24 @@ pub fn write_file_guarding_project_links(
     replace_file(&file, write).map_err(failed)?;
     Ok(file)
 }
+
+/// The place the existing file at `path` resolves to, with symbolic links resolved, when that place
+/// lies in the project directory (the current directory), and `None` when it lies outside. Fix
+/// judges a file it takes from the project file through this function before writing to it, since
+/// the project file names any path, outside the project as well.
+///
+/// # Examples
+/// In a project at `/p`, `src/main.fix` answers `Some("/p/src/main.fix")`, and `../lib/lib.fix`,
+/// or `src/lib.fix` being a symbolic link to `/q/lib.fix`, answers `None`.
+pub fn resolve_file_inside_project(path: &Path) -> Result<Option<PathBuf>, Errors> {
+    let failed = |e: io::Error| {
+        Errors::from_msg(format!(
+            "Failed to resolve \"{}\": {}",
+            path.to_string_lossy(),
+            e
+        ))
+    };
+    let project = project_dir().map_err(failed)?;
+    let file = path.canonicalize().map_err(failed)?;
+    Ok(file.starts_with(&project).then_some(file))
+}
