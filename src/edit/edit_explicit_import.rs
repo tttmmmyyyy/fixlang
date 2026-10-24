@@ -13,7 +13,7 @@ use crate::edit::edit_util::apply_text_edits;
 use crate::elaboration::typecheckcache::MemoryCache;
 use crate::error::Errors;
 use crate::metafiles::project_file::ProjectFile;
-use crate::misc::{info_msg, warn_msg, Map};
+use crate::misc::{info_msg, warn_msg, Map, Set};
 use crate::project_fs::resolve_file_inside_project;
 use std::fs;
 use std::path::PathBuf;
@@ -52,16 +52,23 @@ pub fn run_explicit_import_command() -> Result<(), Errors> {
     Ok(())
 }
 
-/// The root project's own source files, test files included, with symbolic links resolved. A listed
-/// file that lies outside the project, by its path or through a symbolic link, is left out with a
-/// warning.
+/// The root project's own source files, test files included, with symbolic links resolved, each
+/// once. A listed file that lies outside the project, by its path or through a symbolic link, is
+/// left out with a warning.
 fn get_user_source_files(proj_file: &ProjectFile) -> Result<Vec<PathBuf>, Errors> {
     let files = proj_file.get_files(BuildConfigType::Test);
 
     let mut inside_files = Vec::new();
+    let mut seen = Set::default();
     for file_path in files {
         match resolve_file_inside_project(&file_path)? {
-            Some(resolved) => inside_files.push(resolved),
+            // The project file can list one file twice, under two spellings or through a symbolic
+            // link, and a second rewrite would erase text at the spans the first one moved.
+            Some(resolved) => {
+                if seen.insert(resolved.clone()) {
+                    inside_files.push(resolved);
+                }
+            }
             None => warn_msg(&format!(
                 "Left \"{}\" as it is: it lies outside the project.",
                 file_path.display()

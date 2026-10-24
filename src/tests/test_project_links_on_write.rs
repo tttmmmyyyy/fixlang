@@ -488,4 +488,26 @@ mod integration_tests {
             LIB_SOURCE
         );
     }
+
+    /// `fix edit explicit-import` rewrites a source file that the project file lists twice, under
+    /// two spellings, once, and keeps the code after its imports.
+    #[test]
+    fn edit_rewrites_a_source_file_listed_twice_once() {
+        let (_root, proj) = setup_explicit_import_env("./main.fix");
+        fs::write(
+            proj.join("main.fix"),
+            "module Main;\n\nmain : IO ();\nmain = println(3.to_string);\n\nimport Std;\n",
+        )
+        .unwrap();
+        assert_succeeded(
+            &run_fix(&proj, &["edit", "explicit-import"]),
+            "`fix edit explicit-import` should rewrite the project.",
+        );
+        let main = fs::read_to_string(proj.join("main.fix")).unwrap();
+        assert!(main.contains("main : IO ();"), "main.fix: {}", main);
+        assert_succeeded(
+            &run_fix(&proj, &["check"]),
+            "the rewritten project should check.",
+        );
+    }
 }
