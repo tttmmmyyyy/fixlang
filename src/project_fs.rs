@@ -10,6 +10,22 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+/// The error reporting that an operation, named by `verb`, failed on `path` with `e`.
+///
+/// # Examples
+/// `io_failure("write", Path::new("a.txt"))` turns a "Permission denied" error into
+/// `Failed to write "a.txt": Permission denied (os error 13)`.
+fn io_failure<'a>(verb: &'a str, path: &'a Path) -> impl Fn(io::Error) -> Errors + Copy + 'a {
+    move |e| {
+        Errors::from_msg(format!(
+            "Failed to {} \"{}\": {}",
+            verb,
+            path.to_string_lossy(),
+            e
+        ))
+    }
+}
+
 /// Fails when the `.fixlang` of the current directory is a symbolic link. Fix writes and removes
 /// the files under `.fixlang` as files of the project, and a `.fixlang` that is a symbolic link,
 /// such as one committed to a repository, would lead those writes and removals outside the project.
@@ -40,13 +56,7 @@ fn project_dir() -> io::Result<PathBuf> {
 /// removed as a link, and what it points to is kept. So `.fixlang` is removed even when it is a
 /// symbolic link, while anything under such a link is refused.
 pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
-    let failed = |e: io::Error| {
-        Errors::from_msg(format!(
-            "Failed to remove \"{}\": {}",
-            path.to_string_lossy(),
-            e
-        ))
-    };
+    let failed = io_failure("remove", path);
     let dot_fixlang = project_dir().map_err(failed)?.join(DOT_FIXLANG);
     let entry = match (path.parent(), path.file_name()) {
         (Some(parent), Some(name)) => {
@@ -108,13 +118,7 @@ pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) ->
 /// In a project at `/p`, `docs/Main.md` resolves to `/p/docs/Main.md`. With `docs` a link to
 /// `/p/site`, it resolves to `/p/site/Main.md`, and with `docs` a link to `/home/u`, it fails.
 pub fn resolve_guarding_project_links(path: &Path) -> Result<PathBuf, Errors> {
-    let failed = |e: io::Error| {
-        Errors::from_msg(format!(
-            "Failed to resolve \"{}\": {}",
-            path.to_string_lossy(),
-            e
-        ))
-    };
+    let failed = io_failure("resolve", path);
     let project = project_dir().map_err(failed)?;
     // `resolved` holds no symbolic link up to its first missing component, so that popping its last
     // component reaches the directory `..` names. Past a missing component, `..` is taken as it is
@@ -180,13 +184,7 @@ pub fn write_file_guarding_project_links(
     path: &Path,
     write: impl FnOnce(&Path) -> io::Result<()>,
 ) -> Result<PathBuf, Errors> {
-    let failed = |e: io::Error| {
-        Errors::from_msg(format!(
-            "Failed to write \"{}\": {}",
-            path.to_string_lossy(),
-            e
-        ))
-    };
+    let failed = io_failure("write", path);
     let (Some(parent), Some(name)) = (path.parent(), path.file_name()) else {
         panic!("\"{}\" names no file to write.", path.to_string_lossy());
     };
@@ -203,13 +201,7 @@ pub fn write_file_guarding_project_links(
 /// In a project at `/p`, `src/main.fix` answers `Some("/p/src/main.fix")`, and `../lib/lib.fix`,
 /// or `src/lib.fix` being a symbolic link to `/q/lib.fix`, answers `None`.
 pub fn resolve_file_inside_project(path: &Path) -> Result<Option<PathBuf>, Errors> {
-    let failed = |e: io::Error| {
-        Errors::from_msg(format!(
-            "Failed to resolve \"{}\": {}",
-            path.to_string_lossy(),
-            e
-        ))
-    };
+    let failed = io_failure("resolve", path);
     let project = project_dir().map_err(failed)?;
     let file = path.canonicalize().map_err(failed)?;
     Ok(file.starts_with(&project).then_some(file))

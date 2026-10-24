@@ -56,8 +56,6 @@ pub fn run_explicit_import_command() -> Result<(), Errors> {
 /// file that lies outside the project, by its path or through a symbolic link, is left out with a
 /// warning.
 fn get_user_source_files(proj_file: &ProjectFile) -> Result<Vec<PathBuf>, Errors> {
-    // Use get_files(BuildMode::Test) to get the root project's source files (excluding dependencies).
-    // BuildMode::Test includes test files.
     let files = proj_file.get_files(BuildConfigType::Test);
 
     let mut inside_files = Vec::new();

@@ -366,14 +366,14 @@ mod integration_tests {
         assert_victim_untouched(&root);
     }
 
-    /// The library source `edit_explicit_import_env` places, which `fix edit explicit-import`
+    /// The library source `setup_explicit_import_env` places, which `fix edit explicit-import`
     /// rewrites by giving it an import statement for `I64`.
     const LIB_SOURCE: &str = "module Lib;\n\ntwice : I64 -> I64;\ntwice = |x| x + x;\n";
 
     /// A project `proj` whose `main.fix` imports `Lib`, with its project file listing `main.fix`
     /// and `lib_entry` as its source files. `lib_entry` names the source of `Lib`, which the test
     /// places.
-    fn edit_explicit_import_env(lib_entry: &str) -> (TempDir, PathBuf) {
+    fn setup_explicit_import_env(lib_entry: &str) -> (TempDir, PathBuf) {
         let (root, proj) = setup_test_env();
         fs::write(
             proj.join("fixproj.toml"),
@@ -396,7 +396,7 @@ mod integration_tests {
     /// lists, as it is, and still rewrites the files inside.
     #[test]
     fn edit_leaves_a_source_file_outside_the_project_as_it_is() {
-        let (root, proj) = edit_explicit_import_env("../victim/lib.fix");
+        let (root, proj) = setup_explicit_import_env("../victim/lib.fix");
         fs::write(victim(&root).join("lib.fix"), LIB_SOURCE).unwrap();
         let output = run_fix(&proj, &["edit", "explicit-import"]);
         assert_succeeded(
@@ -422,7 +422,7 @@ mod integration_tests {
     /// project as it is, together with what the link points to.
     #[test]
     fn edit_leaves_a_source_file_linking_outside_as_it_is() {
-        let (root, proj) = edit_explicit_import_env("lib.fix");
+        let (root, proj) = setup_explicit_import_env("lib.fix");
         fs::write(victim(&root).join("lib.fix"), LIB_SOURCE).unwrap();
         symlink(victim(&root).join("lib.fix"), proj.join("lib.fix")).unwrap();
         let output = run_fix(&proj, &["edit", "explicit-import"]);
@@ -446,7 +446,7 @@ mod integration_tests {
     /// of the project, and keeps the link.
     #[test]
     fn edit_rewrites_a_source_file_linking_inside_the_project() {
-        let (_root, proj) = edit_explicit_import_env("lib.fix");
+        let (_root, proj) = setup_explicit_import_env("lib.fix");
         fs::create_dir_all(proj.join("src")).unwrap();
         fs::write(proj.join("src/lib.fix"), LIB_SOURCE).unwrap();
         symlink(proj.join("src/lib.fix"), proj.join("lib.fix")).unwrap();
@@ -468,7 +468,7 @@ mod integration_tests {
     /// when that directory's name starts with the project's, as `proj_lib` beside `proj` does.
     #[test]
     fn edit_leaves_a_source_file_in_a_sibling_sharing_the_name_prefix_as_it_is() {
-        let (root, proj) = edit_explicit_import_env("../proj_lib/lib.fix");
+        let (root, proj) = setup_explicit_import_env("../proj_lib/lib.fix");
         let sibling = root.path().join("proj_lib");
         fs::create_dir_all(&sibling).unwrap();
         fs::write(sibling.join("lib.fix"), LIB_SOURCE).unwrap();
