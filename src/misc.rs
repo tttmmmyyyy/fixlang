@@ -555,7 +555,7 @@ pub fn shorten_for_report(text: String) -> String {
 ///
 /// Single and double quotes both quote, and a backslash makes the character after it part of the
 /// word it stands in. The quotes and backslashes themselves stay out of the words returned.
-pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
+pub fn split_string_by_unquoted_spaces(s: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut current_word = String::new();
     let mut open_quote = None;
@@ -618,7 +618,7 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
 mod tests {
     use super::{
         char_pos_to_utf16_pos, join_compiler_threads, map_on_compiler_threads,
-        spawn_compiler_thread, split_at_name_boundaries, split_string_by_space_not_quated,
+        spawn_compiler_thread, split_at_name_boundaries, split_string_by_unquoted_spaces,
         upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos, Set,
     };
     use crate::error::any_to_string;
@@ -820,42 +820,39 @@ mod tests {
     #[test]
     fn test_split_string() {
         assert_eq!(
-            split_string_by_space_not_quated("hello world"),
+            split_string_by_unquoted_spaces("hello world"),
             vec!["hello", "world"]
         );
         assert_eq!(
-            split_string_by_space_not_quated("hello   world"),
+            split_string_by_unquoted_spaces("hello   world"),
             vec!["hello", "world"]
         );
         assert_eq!(
-            split_string_by_space_not_quated(" \"hello world\" "),
+            split_string_by_unquoted_spaces(" \"hello world\" "),
             vec!["hello world"]
         );
         assert_eq!(
-            split_string_by_space_not_quated(" 'hello world' "),
+            split_string_by_unquoted_spaces(" 'hello world' "),
             vec!["hello world"]
         );
         assert_eq!(
-            split_string_by_space_not_quated("hello \"big world\""),
+            split_string_by_unquoted_spaces("hello \"big world\""),
             vec!["hello", "big world"]
         );
         assert_eq!(
-            split_string_by_space_not_quated("'it\\'s a beautiful day'"),
+            split_string_by_unquoted_spaces("'it\\'s a beautiful day'"),
             vec!["it's a beautiful day"]
         );
         assert_eq!(
-            split_string_by_space_not_quated("\"this has \\\"escaped quotes\\\"\""),
+            split_string_by_unquoted_spaces("\"this has \\\"escaped quotes\\\"\""),
             vec!["this has \"escaped quotes\""]
         );
         assert_eq!(
-            split_string_by_space_not_quated("混合 \"日本語 の テスト\""),
+            split_string_by_unquoted_spaces("混合 \"日本語 の テスト\""),
             vec!["混合", "日本語 の テスト"]
         );
-        assert_eq!(split_string_by_space_not_quated(""), Vec::<String>::new());
-        assert_eq!(
-            split_string_by_space_not_quated("   "),
-            Vec::<String>::new()
-        );
+        assert_eq!(split_string_by_unquoted_spaces(""), Vec::<String>::new());
+        assert_eq!(split_string_by_unquoted_spaces("   "), Vec::<String>::new());
     }
 
     /// Every capital opens a word of its own, so a run of capitals comes out as one-letter words,
