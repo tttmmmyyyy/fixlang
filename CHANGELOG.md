@@ -39,7 +39,7 @@
 
 - #841: The type errors of a program are now reported in the same order on every build. The order used to change from one run to the next when the program had several of them.
 - #927: When cloning the git repository of a dependency fails because of the network, for example when the connection is cut off midway, `fix` now tries again up to four times, waiting about 1 s, 2 s, 4 s and 8 s before them. A repository that does not exist on GitHub and a certificate that fails verification are still reported at once.
-- #947: `fix build`, `fix run` and `fix test` no longer ask for approval before running the `preliminary_commands` of a project, and `--allow-preliminary-commands` now only prints a warning. The approval did not stop an untrusted project, whose `ld_flags` and built program run without it. "Security" in Document.md says which subcommands run what a project supplies.
+- #947, #950: `fix build`, `fix run` and `fix test` no longer ask for approval before running the `preliminary_commands` of a project, and `--allow-preliminary-commands` now only prints a warning. The approval did not stop an untrusted project, whose `ld_flags` and built program run without it. "Security" in Document.md says which subcommands run what a project supplies.
 
 #### Std
 
@@ -75,7 +75,7 @@
 - #311, #909: A module that implements a trait of another module, where a member of the trait returns an opaque type as `greeting : [?s : ToString] a -> ?s` does, now builds when its imports list the items it uses, as in `import Lib::{Greeting, Greeting::greeting};`. It used to fail with ``Unknown name `Lib::Greeting::greeting::#wrap_opaque`.``, and `fix edit explicit-import` wrote that name into the import statement, which made the file fail to parse.
 - #907, #909: `fix edit explicit-import` now imports `Arrow` when a file writes a function type as `Arrow a b`. It used to leave `Arrow` out, and the rewritten file failed to build with ``Unknown type or associated type name `Arrow`.``
 - #931, #941: A lock file that places a git dependency outside the project, as `path = "../victim"`, no longer makes `fix build` remove that directory and clone the dependency there. Commands that build now write such a lock file afresh, `fix deps install` reports it as broken, and `fix` removes nothing outside the project's `.fixlang` directory. Commands that write or remove files under `.fixlang` now fail when `.fixlang` is a symbolic link; `fix clean` removes the link and keeps what it points to. A lock file that is a symbolic link is now replaced by the file `fix` writes, and the file it pointed to is kept; `fix` used to write the lock file into that file.
-- An entry of a project file's `objects` that starts with `-` or `@` is now linked as a file, and an output file named with `@` in front, as `-o @prog`, is now written under that name. `gcc` used to read such a name as an option, or as the name of a file of options.
+- #950: An entry of a project file's `objects` that starts with `-` or `@` is now linked as a file, and an output file named with `@` in front, as `-o @prog`, is now written under that name. `gcc` used to read such a name as an option, or as the name of a file of options.
 
 #### Std
 
