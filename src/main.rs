@@ -2,7 +2,6 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 extern crate build_time;
-extern crate chrono;
 extern crate colored;
 extern crate difference;
 extern crate fxhash;

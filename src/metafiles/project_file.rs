@@ -286,7 +286,7 @@ pub enum ProjectFileRole {
 }
 
 /// Where a project comes from.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Debug)]
 pub enum ProjectOrigin {
     /// A project in the local file system, at the absolute path this variant holds: the root
     /// project, or one a `path` dependency entry names.
