@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-24
+
 ### Added
 
 #### Language
@@ -40,6 +42,9 @@
 - #841: The type errors of a program are now reported in the same order on every build. The order used to change from one run to the next when the program had several of them.
 - #927: When cloning the git repository of a dependency fails because of the network, for example when the connection is cut off midway, `fix` now tries again up to four times, waiting about 1 s, 2 s, 4 s and 8 s before them. A repository that does not exist on GitHub and a certificate that fails verification are still reported at once.
 - #947, #950: `fix build`, `fix run` and `fix test` no longer ask for approval before running the `preliminary_commands` of a project, and `--allow-preliminary-commands` now only prints a warning. The approval did not stop an untrusted project, whose `ld_flags` and built program run without it. "Security" in Document.md says which subcommands run what a project supplies.
+- #780: `install.sh` now lists the releases newest first and offers the newest full release as the default. The default used to be whichever release GitHub listed first, which could be a pre-release such as `v1.5.0-rc.1`. Pre-releases are marked `(pre-release)` in the list, and you can install one by typing its name.
+- #812, #818: Unless `--with-private` is given, `fix docs` now leaves out the entities in a namespace or a module whose name starts with `_`, the members and the associated types of a trait whose names start with `_`, and the implementations of a trait or for a type whose name starts with `_`.
+- #812, #818: In completion, the language server ranks an entity of a dependency or of `Std` last when its name, or any part of its namespace or module name, starts with `_`.
 
 #### Std
 
@@ -50,12 +55,6 @@
 - #827: The standard library's translations of Ryu, which writes a floating point number as text, and of fast_float, which reads one, are now taken under the Boost Software License 1.0 instead of the Apache License 2.0 and the MIT License. The Boost Software License asks no copyright notice of a program in the form of machine code a compiler made, so a program built by `fix` that you distribute needs no notice of them.
 - #760, #827: If a program has changed the floating point rounding mode from the default (round to nearest), for example by calling C's `fesetround` through FFI, `F64::from_string` and `F32::from_string` may now return the number next to the nearest one.
 - #541, #811: `CChar` is now `U8` on a target where C's `char` without `signed` or `unsigned` is unsigned, such as Linux on arm64. It used to be `I8` on every target, which read a `char` above 127 from a C function as a negative number there.
-
-#### Tool
-
-- #780: `install.sh` now lists the releases newest first and offers the newest full release as the default. The default used to be whichever release GitHub listed first, which could be a pre-release such as `v1.5.0-rc.1`. Pre-releases are marked `(pre-release)` in the list, and you can install one by typing its name.
-- #812, #818: Unless `--with-private` is given, `fix docs` now leaves out the entities in a namespace or a module whose name starts with `_`, the members and the associated types of a trait whose names start with `_`, and the implementations of a trait or for a type whose name starts with `_`.
-- #812, #818: In completion, the language server ranks an entity of a dependency or of `Std` last when its name, or any part of its namespace or module name, starts with `_`.
 
 ### Fixed
 
