@@ -1,14 +1,17 @@
 use crate::{
-    ast::name::FullName, ast::program::TypedExpr, ast::types::Scheme,
-    constants::TYPE_CHECK_CACHE_PATH, misc::warn_msg, misc::write_file_guarding_project_links,
+    ast::name::FullName,
+    ast::program::TypedExpr,
+    ast::types::Scheme,
+    constants::TYPE_CHECK_CACHE_PATH,
+    misc::{create_dir_guarding_project_links, replace_file, warn_msg},
 };
 use std::{
     collections::{BTreeMap, VecDeque},
     fs::{self, File},
     io::Read,
     panic::RefUnwindSafe,
-    path::PathBuf,
-    sync::{Arc, Mutex, MutexGuard},
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex, MutexGuard, OnceLock},
 };
 
 /// A type-check cache held by the threads that check a program together.
@@ -63,13 +66,38 @@ fn entity_identity(name: &FullName, type_: &Arc<Scheme>) -> EntityIdentity {
 
 /// A cache that gives every entry a file of its own, so the entries outlive the run that wrote
 /// them.
-pub struct FileCache {}
+pub struct FileCache {
+    /// The cache directory, created by the first entry saved, with symbolic links resolved. `None`
+    /// when it could not be created, which is then reported once, and no entry is saved.
+    dir: OnceLock<Option<PathBuf>>,
+}
 
 impl FileCache {
     /// Creates a handle to the cache. Every handle reaches the same entries, which live under
     /// `TYPE_CHECK_CACHE_PATH` relative to the working directory.
     pub fn new() -> Self {
-        FileCache {}
+        FileCache {
+            dir: OnceLock::new(),
+        }
+    }
+
+    /// The directory the entries are saved in, created when the first entry is saved. A directory
+    /// that cannot be created, or that a symbolic link in the project would place outside it, is
+    /// reported as a warning, and answers `None` to that call and every later one.
+    fn dir_to_save_in(&self) -> Option<&PathBuf> {
+        self.dir
+            .get_or_init(|| {
+                match create_dir_guarding_project_links(Path::new(TYPE_CHECK_CACHE_PATH)) {
+                    Ok(dir) => Some(dir),
+                    Err(errs) => {
+                        for err in errs.errors() {
+                            warn_msg(&err.msg);
+                        }
+                        None
+                    }
+                }
+            })
+            .as_ref()
     }
 
     /// The name of the file that holds the cache entry for a value.
@@ -110,14 +138,21 @@ impl TypeCheckCache for FileCache {
         type_: &Arc<Scheme>,
         version_hash: &str,
     ) {
-        let cache_file_path = self.cache_file_path(name, type_, version_hash);
+        let Some(dir) = self.dir_to_save_in() else {
+            return;
+        };
+        // The name holds no path separator, and `replace_file` replaces a symbolic link at the path
+        // instead of writing through it, so the entry is written in `dir`.
+        let cache_file_path = dir.join(self.cache_file_name(name, type_, version_hash));
         let serialized = postcard::to_allocvec(expr).unwrap();
-        if let Err(errs) = write_file_guarding_project_links(&cache_file_path, |tmp_path| {
+        if let Err(e) = replace_file(&cache_file_path, |tmp_path| {
             fs::write(tmp_path, &serialized)
         }) {
-            for err in errs.errors() {
-                warn_msg(&err.msg);
-            }
+            warn_msg(&format!(
+                "Failed to write cache file \"{}\": {}.",
+                cache_file_path.to_string_lossy(),
+                e
+            ));
         }
     }
 

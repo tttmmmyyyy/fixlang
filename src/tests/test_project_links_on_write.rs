@@ -69,10 +69,19 @@ mod integration_tests {
     }
 
     /// `fix check` writes no type-check cache through a `.fixlang/cache` that links outside the
-    /// project, and reports the refusal without failing.
+    /// project, and reports the refusal once, however many values it checks, without failing.
     #[test]
     fn check_writes_no_cache_through_a_cache_directory_linking_outside() {
         let (root, proj) = setup_test_env();
+        fs::write(
+            proj.join("main.fix"),
+            "module Main;\n\n\
+             num_a : I64;\nnum_a = 1;\n\n\
+             num_b : I64;\nnum_b = num_a + num_a;\n\n\
+             num_c : I64;\nnum_c = num_b + num_a;\n\n\
+             main : IO ();\nmain = println(num_c.to_string);\n",
+        )
+        .unwrap();
         fs::create_dir_all(proj.join(".fixlang")).unwrap();
         symlink(victim(&root), proj.join(".fixlang/cache")).unwrap();
         let output = run_fix(&proj, &["check"]);
@@ -80,11 +89,8 @@ mod integration_tests {
             &output,
             "`fix check` should check the program without its cache.",
         );
-        assert!(
-            String::from_utf8_lossy(&output.stderr).contains(REFUSED),
-            "stderr: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(stderr.matches(REFUSED).count(), 1, "stderr: {}", stderr);
         assert_victim_untouched(&root);
     }
 
