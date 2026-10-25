@@ -192,7 +192,7 @@ impl LatestContent {
     }
 
     /// The import statements the content writes, parsed on the first call. `None` says the
-    /// content does not parse.
+    /// content does not begin with a `module` declaration.
     pub(super) fn get_import_stmts(&mut self) -> &Option<Vec<ImportStatement>> {
         if self.import_stmts.is_none() {
             self.import_stmts = parse_str_import_statements(self.path.clone(), &self.content).ok();
