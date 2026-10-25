@@ -10,7 +10,7 @@ mod tests {
     use super::super::lsp_client::LspClient;
     use crate::ast::name::FullName;
     use serde_json::{json, Value};
-    use std::{fs, path::Path, time::Duration};
+    use std::{cmp::Reverse, fs, iter, path::Path, time::Duration};
 
     /// Test that associated types appear in completion candidates.
     /// The completion project defines various entities:
@@ -184,7 +184,7 @@ mod tests {
     /// as it stands before any of them is applied, and `text` is ASCII, so a UTF-16 column is a
     /// byte column.
     fn apply_text_edits(text: &str, edits: &[Value]) -> String {
-        let line_starts: Vec<usize> = std::iter::once(0)
+        let line_starts: Vec<usize> = iter::once(0)
             .chain(text.match_indices('\n').map(|(i, _)| i + 1))
             .collect();
         let offset = |pos: &Value| {
@@ -201,7 +201,7 @@ mod tests {
                 )
             })
             .collect();
-        edits.sort_by_key(|(start, _, _)| std::cmp::Reverse(*start));
+        edits.sort_by_key(|(start, _, _)| Reverse(*start));
         let mut text = text.to_string();
         for (start, end, new_text) in edits {
             text.replace_range(start..end, new_text);
