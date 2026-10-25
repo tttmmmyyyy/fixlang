@@ -182,7 +182,7 @@ pub struct LatestContent {
 impl LatestContent {
     /// A record of `content` for `path`, whose module and import statements are parsed when they
     /// are first asked for.
-    fn new(path: PathBuf, content: String) -> Self {
+    pub(crate) fn new(path: PathBuf, content: String) -> Self {
         LatestContent {
             path,
             content,

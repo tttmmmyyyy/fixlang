@@ -76,7 +76,7 @@ pub fn create_text_edit_to_insert_imports(
     }
 }
 
-pub(super) fn create_text_edit_to_import(
+pub(crate) fn create_text_edit_to_import(
     item_name: &FullName,
     latest_content: &mut LatestContent,
 ) -> Vec<TextEdit> {
