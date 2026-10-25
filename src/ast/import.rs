@@ -571,8 +571,8 @@ mod tests {
 
     /// The import statements of a source are the statements written in its code, before or after
     /// its other declarations; an `import` written inside a comment, a string literal or a name
-    /// is none of them. A character literal holding `"` opens no string, so a statement after it is
-    /// read.
+    /// is none of them. A string literal runs past a `\"` and across a line break, and a character
+    /// literal holding `"` opens no string, so a statement after it is read.
     #[test]
     fn test_import_statements_are_read_from_code_alone() {
         let source = r#"module Main;
@@ -581,6 +581,10 @@ import Lib::f;
 // Write `import Lib::g;` to use `g`.
 /* import Lib::h; */
 message : String = "import Lib::i;";
+escaped : String = "Write \"import Lib::l;\" to use l.";
+lines : String = "first line
+import Lib::m;
+";
 quote : U8 = '"';
 reimport Lib::j;
 import Lib::k;
