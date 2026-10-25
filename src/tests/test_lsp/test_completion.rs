@@ -8,9 +8,10 @@ mod tests {
         find_sort_text, wait_for_completion_items, LspCompletionCtx,
     };
     use super::super::lsp_client::LspClient;
+    use super::super::text_edit::{apply_lsp_edits, parse_text_edits};
     use crate::ast::name::FullName;
     use serde_json::{json, Value};
-    use std::{cmp::Reverse, fs, iter, path::Path, time::Duration};
+    use std::{fs, path::Path, time::Duration};
 
     /// Test that associated types appear in completion candidates.
     /// The completion project defines various entities:
@@ -180,35 +181,6 @@ mod tests {
         ctx.shutdown();
     }
 
-    /// `text` with the LSP `TextEdit`s `edits` applied. Every range of `edits` is a range of `text`
-    /// as it stands before any of them is applied, and `text` is ASCII, so a UTF-16 column is a
-    /// byte column.
-    fn apply_text_edits(text: &str, edits: &[Value]) -> String {
-        let line_starts: Vec<usize> = iter::once(0)
-            .chain(text.match_indices('\n').map(|(i, _)| i + 1))
-            .collect();
-        let offset = |pos: &Value| {
-            line_starts[pos["line"].as_u64().unwrap() as usize]
-                + pos["character"].as_u64().unwrap() as usize
-        };
-        let mut edits: Vec<(usize, usize, &str)> = edits
-            .iter()
-            .map(|edit| {
-                (
-                    offset(&edit["range"]["start"]),
-                    offset(&edit["range"]["end"]),
-                    edit["newText"].as_str().unwrap(),
-                )
-            })
-            .collect();
-        edits.sort_by_key(|(start, _, _)| Reverse(*start));
-        let mut text = text.to_string();
-        for (start, end, new_text) in edits {
-            text.replace_range(start..end, new_text);
-        }
-        text
-    }
-
     /// Completing a value of a module the file imports only part of attaches edits that add the
     /// value to the file's import statement, and leave an `import` written in a comment or a
     /// string literal as it stands.
@@ -236,7 +208,7 @@ mod tests {
             .unwrap_or_else(|| panic!("the resolved item carries import edits: {}", resolved));
 
         assert_eq!(
-            apply_text_edits(&source, edits),
+            apply_lsp_edits(&source, &parse_text_edits(edits)),
             source.replace(
                 "import Lib::lib_value;\n\n//",
                 "import Lib::{lib_value, other_value};\n\n//"
