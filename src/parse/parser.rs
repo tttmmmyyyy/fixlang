@@ -3404,10 +3404,13 @@ fn parse_import_statements(
     let mut pairs = pair.into_inner();
     let mod_info = parse_module_defn(pairs.next().unwrap(), ctx);
     ctx.module_name = mod_info.name;
-    // The literals read between the statements are pairs of their own.
     let import_stmts = pairs
-        .filter(|pair| pair.as_rule() == Rule::import_statement)
-        .map(|pair| parse_import_statement(pair, ctx))
+        .filter_map(|pair| match pair.as_rule() {
+            Rule::import_statement => Some(parse_import_statement(pair, ctx)),
+            // The literals read between the statements, and the end of the source.
+            Rule::expr_string_lit | Rule::expr_u8_lit | Rule::EOI => None,
+            rule => unreachable!("{:?} between import statements", rule),
+        })
         .collect();
     Ok(import_stmts)
 }
