@@ -1,0 +1,5 @@
+module Lib;
+
+lib_value : I64 = 1;
+
+other_value : I64 = 2;

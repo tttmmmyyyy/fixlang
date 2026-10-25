@@ -460,7 +460,13 @@ source_block_comment = { "/*" ~ block_commented_character* ~ "*/" }
 // === File ===
 file = _{ SOI ~ sep* ~ module ~ sep* ~ EOI }
 
-file_only_import_statements = { SOI ~ sep* ~ module_defn ~ sep* ~ (import_statement | ANY)* ~ EOI }
+// The import statements of a source, wherever they stand after the `module` declaration it begins
+// with. A comment, a string or a character literal and a name are each read whole, so an `import`
+// inside one starts no statement. It accepts every source that begins with a `module` declaration,
+// so it can be run over one that does not parse as a whole.
+file_only_import_statements = { SOI ~ sep* ~ module_defn ~ (import_statement | text_between_import_statements)* ~ EOI }
+
+text_between_import_statements = _{ block_comment | line_comment | expr_string_lit | expr_u8_lit | name_char+ | ANY }
 
 file_only_module_defn = { SOI ~ sep* ~ module_defn ~ ANY* ~ EOI }
 

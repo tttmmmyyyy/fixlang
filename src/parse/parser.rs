@@ -3404,13 +3404,11 @@ fn parse_import_statements(
     let mut pairs = pair.into_inner();
     let mod_info = parse_module_defn(pairs.next().unwrap(), ctx);
     ctx.module_name = mod_info.name;
-    let mut import_stmts = vec![];
-    for pair in pairs {
-        if pair.as_rule() != Rule::import_statement {
-            break;
-        }
-        import_stmts.push(parse_import_statement(pair, ctx));
-    }
+    // The literals read between the statements are pairs of their own.
+    let import_stmts = pairs
+        .filter(|pair| pair.as_rule() == Rule::import_statement)
+        .map(|pair| parse_import_statement(pair, ctx))
+        .collect();
     Ok(import_stmts)
 }
 

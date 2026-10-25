@@ -568,4 +568,31 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(written, statements);
     }
+
+    /// The import statements of a source are the statements written in its code, before or after
+    /// its other declarations; an `import` written inside a comment, a string literal or a name
+    /// is none of them. A character literal holding `"` opens no string, so a statement after it is
+    /// read.
+    #[test]
+    fn test_import_statements_are_read_from_code_alone() {
+        let source = r#"module Main;
+
+import Lib::f;
+// Write `import Lib::g;` to use `g`.
+/* import Lib::h; */
+message : String = "import Lib::i;";
+quote : U8 = '"';
+reimport Lib::j;
+import Lib::k;
+"#;
+        let parsed = panic_if_err(parse_str_import_statements(
+            PathBuf::from("main.fix"),
+            source,
+        ));
+        let written = parsed
+            .iter()
+            .map(|statement| statement.stringify())
+            .collect::<Vec<_>>();
+        assert_eq!(written, ["import Lib::f;", "import Lib::k;"]);
+    }
 }

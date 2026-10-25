@@ -180,6 +180,72 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// `text` with the LSP `TextEdit`s `edits` applied. Every range of `edits` is a range of `text`
+    /// as it stands before any of them is applied, and `text` is ASCII, so a UTF-16 column is a
+    /// byte column.
+    fn apply_text_edits(text: &str, edits: &[Value]) -> String {
+        let line_starts: Vec<usize> = std::iter::once(0)
+            .chain(text.match_indices('\n').map(|(i, _)| i + 1))
+            .collect();
+        let offset = |pos: &Value| {
+            line_starts[pos["line"].as_u64().unwrap() as usize]
+                + pos["character"].as_u64().unwrap() as usize
+        };
+        let mut edits: Vec<(usize, usize, &str)> = edits
+            .iter()
+            .map(|edit| {
+                (
+                    offset(&edit["range"]["start"]),
+                    offset(&edit["range"]["end"]),
+                    edit["newText"].as_str().unwrap(),
+                )
+            })
+            .collect();
+        edits.sort_by_key(|(start, _, _)| std::cmp::Reverse(*start));
+        let mut text = text.to_string();
+        for (start, end, new_text) in edits {
+            text.replace_range(start..end, new_text);
+        }
+        text
+    }
+
+    /// Completing a value of a module the file imports only part of attaches edits that add the
+    /// value to the file's import statement. An `import` written in a comment or a string literal
+    /// is text of the program, and the edits leave it as it stands.
+    #[test]
+    fn test_completion_auto_import_edits_the_import_statements_alone() {
+        let mut ctx = LspCompletionCtx::setup("completion-auto-import", &["lib.fix", "main.fix"]);
+        let source = fs::read_to_string(ctx.project_dir.join("main.fix")).unwrap();
+        let (line, text) = source
+            .lines()
+            .enumerate()
+            .find(|(_, text)| text.contains("Lib::other_value"))
+            .unwrap();
+        let col = text.find("other_value").unwrap() + "other_v".len();
+
+        let items = ctx.complete("main.fix", line as u32, col as u32);
+        let item = items
+            .iter()
+            .find(|it| it.get("label").and_then(|l| l.as_str()) == Some("Lib::other_value"))
+            .cloned()
+            .expect("`Lib::other_value` is a candidate");
+        let resolved = ctx.resolve(item);
+        let edits = resolved
+            .get("additionalTextEdits")
+            .and_then(|v| v.as_array())
+            .unwrap_or_else(|| panic!("the resolved item carries import edits: {}", resolved));
+
+        assert_eq!(
+            apply_text_edits(&source, edits),
+            source.replace(
+                "import Lib::lib_value;\n\n//",
+                "import Lib::{lib_value, other_value};\n\n//"
+            )
+        );
+
+        ctx.shutdown();
+    }
+
     /// `Hoge::old_func` carries a `DEPRECATED[...]` pragma in the fixture.
     /// Its completion item should advertise that to the client via both the
     /// legacy `deprecated: true` boolean (LSP <3.15) and the modern

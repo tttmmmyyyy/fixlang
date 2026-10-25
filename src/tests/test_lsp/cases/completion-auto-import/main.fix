@@ -1,0 +1,13 @@
+module Main;
+
+import Lib::lib_value;
+
+// `import Lib::lib_value;` brings in `lib_value`.
+message : String = "import Lib::lib_value;";
+
+main : IO () = (
+    let _ = lib_value;
+    let _ = message;
+    let _ = Lib::other_value;
+    pure()
+);

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+#### Tool
+
+- The language server no longer edits a comment or a string literal that contains an `import` statement when a completion adds an import. It used to delete the statement from the comment or the string and add it to the import statements of the file.
+
 ## [1.6.0] - 2026-10-24
 
 ### Added
