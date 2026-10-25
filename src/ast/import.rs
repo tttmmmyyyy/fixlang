@@ -569,10 +569,10 @@ mod tests {
         assert_eq!(written, statements);
     }
 
-    /// The import statements of a source are the statements written in its code, before or after
-    /// its other declarations; an `import` written inside a comment, a string literal or a name
-    /// is none of them. A string literal runs past a `\"` and across a line break, and a character
-    /// literal holding `"` opens no string, so a statement after it is read.
+    /// Verifies that the import statements of a source are those written in its code, before or
+    /// after its other declarations, and that an `import` inside a comment, a string literal or a
+    /// name is skipped. A string literal runs past a `\"` and across a line break, and the
+    /// character literal `'"'` opens no string, so the statement after it is read.
     #[test]
     fn test_import_statements_are_read_from_code_alone() {
         let source = r#"module Main;

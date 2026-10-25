@@ -461,9 +461,9 @@ source_block_comment = { "/*" ~ block_commented_character* ~ "*/" }
 file = _{ SOI ~ sep* ~ module ~ sep* ~ EOI }
 
 // The import statements of a source, wherever they stand after the `module` declaration it begins
-// with. A comment, a string or a character literal and a name are each read whole, so an `import`
-// inside one starts no statement. It accepts every source that begins with a `module` declaration,
-// so it can be run over one that does not parse as a whole.
+// with. Comments, string literals, character literals and names are each read whole, so an `import`
+// inside one of them starts no statement. It accepts every source that begins with a `module`
+// declaration, so it also reads a source that fails to parse as a whole.
 file_only_import_statements = { SOI ~ sep* ~ module_defn ~ (import_statement | text_between_import_statements)* ~ EOI }
 
 text_between_import_statements = _{ block_comment | line_comment | expr_string_lit | expr_u8_lit | name_char+ | ANY }

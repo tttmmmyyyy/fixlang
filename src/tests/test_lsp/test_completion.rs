@@ -210,8 +210,8 @@ mod tests {
     }
 
     /// Completing a value of a module the file imports only part of attaches edits that add the
-    /// value to the file's import statement. An `import` written in a comment or a string literal
-    /// is text of the program, and the edits leave it as it stands.
+    /// value to the file's import statement, and leave an `import` written in a comment or a
+    /// string literal as it stands.
     #[test]
     fn test_completion_auto_import_edits_the_import_statements_alone() {
         let mut ctx = LspCompletionCtx::setup("completion-auto-import", &["lib.fix", "main.fix"]);

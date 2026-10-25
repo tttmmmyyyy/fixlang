@@ -3407,7 +3407,7 @@ fn parse_import_statements(
     let import_stmts = pairs
         .filter_map(|pair| match pair.as_rule() {
             Rule::import_statement => Some(parse_import_statement(pair, ctx)),
-            // The literals read between the statements, and the end of the source.
+            // The string and character literals read between the statements, and the end of the source.
             Rule::expr_string_lit | Rule::expr_u8_lit | Rule::EOI => None,
             rule => unreachable!("{:?} between import statements", rule),
         })
