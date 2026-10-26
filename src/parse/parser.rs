@@ -3396,6 +3396,8 @@ fn parse_import_item_node(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportTre
     }
 }
 
+/// The import statements a `file_only_import_statements` pair holds, each imported into the module
+/// the pair declares.
 fn parse_import_statements(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
