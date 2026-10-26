@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+#### Tool
+
+- #964: When a completion adds an import, the language server now leaves alone an `import` statement written in a comment or a string literal. It used to delete that statement from the comment or the string and add it to the import statements of the file.
+
 ## [1.6.0] - 2026-10-24
 
 ### Added
