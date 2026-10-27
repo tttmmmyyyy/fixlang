@@ -1,8 +1,7 @@
 //! What a program wrote before a runtime check stopped it reaches its destination.
 //!
 //! The tests run the program with its standard output captured into a pipe, where the C library
-//! buffers it in blocks rather than lines, so a line stays in the buffer until something flushes
-//! it.
+//! buffers it in blocks, so a printed line stays in the buffer until something flushes it.
 
 use crate::{
     constants::COMPILER_TEST_WORKING_PATH,

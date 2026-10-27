@@ -16,8 +16,9 @@ The C functions and values the Fix standard library is implemented with.
 #include <string.h>
 #include <time.h>
 
-// Marks a function that stops the program. `cold` places it in `.text.unlikely`, away from the
-// code the program runs, so that what such a function contains does not move that code.
+// Marks a function that stops the program. `cold` places it in `.text.unlikely`, apart from the
+// code the program runs, so that the size of such a function does not shift the addresses of that
+// code.
 #define FIXRUNTIME_STOPS __attribute__((noreturn, cold))
 
 // Defined at the end of this file, and called by the functions before it.
@@ -275,9 +276,8 @@ static int fixruntime_backtrace_full_callback(void *data, uintptr_t pc,
 // program printed before a check stopped it would be lost.
 //
 // `fflush(NULL)` takes the lock of each stream, as `exit` does with glibc 2.38 and later. So where
-// another thread holds one, as a thread waiting in a read from standard input does, the program waits
-// for that thread here just as it would in `exit`; the two ways of ending a program flush the same
-// streams and wait in the same cases.
+// another thread holds a stream's lock, such as a thread waiting to read standard input, the
+// program waits here for that thread, as it would in `exit`.
 FIXRUNTIME_STOPS void fixruntime_abort(void)
 {
     fflush(NULL);
