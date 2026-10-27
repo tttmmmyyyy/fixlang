@@ -10,8 +10,8 @@ use crate::{
     tests::test_util::{
         assert_grammar_accepts, assert_grammar_rejects, emitted_llvm_ir, fix_command,
         generated_llvm_ir_modules, integer_operations_checked_config, run_source_assert_failed,
-        run_source_capture, test_files_in_directory, test_source, test_source_fail,
-        test_source_fail_excludes, test_source_with_c, EmittedIr,
+        run_source_capture, runtime_checked_config, test_files_in_directory, test_source,
+        test_source_fail, test_source_fail_excludes, test_source_with_c, EmittedIr,
     },
 };
 use rand::{thread_rng, Rng};
@@ -11841,9 +11841,7 @@ pub fn test_union_variant_mismatch() {
             pure()
         );
     "##;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
-    test_source_fail(&source, config, "Union variant mismatch");
+    test_source_fail(&source, runtime_checked_config(), "Union variant mismatch");
 }
 
 /// `mutate_boxed_io` on a boxed union that another binding still holds writes to a copy: the
@@ -12649,9 +12647,7 @@ main = (
 );
     "##;
     // Verify that the compilation went well, and the program started running.
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
-    test_source_fail(&source, config, "program running!");
+    test_source_fail(&source, runtime_checked_config(), "program running!");
 }
 
 /// Verifies that two global values, the full name of one ending with the full name of the other,
