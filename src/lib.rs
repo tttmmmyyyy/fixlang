@@ -24,6 +24,7 @@ pub mod optimization;
 pub mod parse;
 pub mod preliminary_command;
 pub mod printer;
+pub mod project_fs;
 pub mod rc_ir;
 pub mod return_abi;
 pub mod target_triple;

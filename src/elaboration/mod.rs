@@ -14,7 +14,6 @@ use crate::tool::stopwatch::StopWatch;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-use std::{fs::create_dir_all, path::PathBuf};
 
 /// Perform validations and type checking on the program, and return the updated program.
 /// Changes made to the program include instantiation of symbols and setting of entry points.
@@ -189,24 +188,6 @@ pub fn read_file(path: &Path) -> Result<String, String> {
         Ok(_) => (),
     }
     Ok(content)
-}
-
-/// Create the directory at `rel_path`, together with its missing ancestors, and return its path.
-/// An existing directory is left as it is. Panics when the directory cannot be created.
-pub fn touch_directory<P>(rel_path: P) -> PathBuf
-where
-    P: AsRef<Path>,
-{
-    let dir_path = PathBuf::new().join(rel_path);
-    match create_dir_all(&dir_path) {
-        Err(why) => panic!(
-            "Failed to create directory \"{}\": {}",
-            dir_path.to_string_lossy().to_string(),
-            why
-        ),
-        Ok(_) => {}
-    };
-    dir_path
 }
 
 /// Load all source files specified in the configuration, together with the Fix examples it

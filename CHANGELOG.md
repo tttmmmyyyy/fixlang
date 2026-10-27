@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+#### Tool
+
+- #964: When a completion adds an import, the language server now leaves alone an `import` statement written in a comment or a string literal. It used to delete that statement from the comment or the string and add it to the import statements of the file.
+
+## [1.6.0] - 2026-10-24
+
 ### Added
 
 #### Language
@@ -39,6 +47,10 @@
 
 - #841: The type errors of a program are now reported in the same order on every build. The order used to change from one run to the next when the program had several of them.
 - #927: When cloning the git repository of a dependency fails because of the network, for example when the connection is cut off midway, `fix` now tries again up to four times, waiting about 1 s, 2 s, 4 s and 8 s before them. A repository that does not exist on GitHub and a certificate that fails verification are still reported at once.
+- #947, #950: `fix build`, `fix run` and `fix test` no longer ask for approval before running the `preliminary_commands` of a project, and `--allow-preliminary-commands` now only prints a warning. The approval did not stop an untrusted project, whose `ld_flags` and built program run without it. "Security" in Document.md says which subcommands run what a project supplies.
+- #780: `install.sh` now lists the releases newest first and offers the newest full release as the default. The default used to be whichever release GitHub listed first, which could be a pre-release such as `v1.5.0-rc.1`. Pre-releases are marked `(pre-release)` in the list, and you can install one by typing its name.
+- #812, #818: Unless `--with-private` is given, `fix docs` now leaves out the entities in a namespace or a module whose name starts with `_`, the members and the associated types of a trait whose names start with `_`, and the implementations of a trait or for a type whose name starts with `_`.
+- #812, #818: In completion, the language server ranks an entity of a dependency or of `Std` last when its name, or any part of its namespace or module name, starts with `_`.
 
 #### Std
 
@@ -49,12 +61,6 @@
 - #827: The standard library's translations of Ryu, which writes a floating point number as text, and of fast_float, which reads one, are now taken under the Boost Software License 1.0 instead of the Apache License 2.0 and the MIT License. The Boost Software License asks no copyright notice of a program in the form of machine code a compiler made, so a program built by `fix` that you distribute needs no notice of them.
 - #760, #827: If a program has changed the floating point rounding mode from the default (round to nearest), for example by calling C's `fesetround` through FFI, `F64::from_string` and `F32::from_string` may now return the number next to the nearest one.
 - #541, #811: `CChar` is now `U8` on a target where C's `char` without `signed` or `unsigned` is unsigned, such as Linux on arm64. It used to be `I8` on every target, which read a `char` above 127 from a C function as a negative number there.
-
-#### Tool
-
-- #780: `install.sh` now lists the releases newest first and offers the newest full release as the default. The default used to be whichever release GitHub listed first, which could be a pre-release such as `v1.5.0-rc.1`. Pre-releases are marked `(pre-release)` in the list, and you can install one by typing its name.
-- #812, #818: Unless `--with-private` is given, `fix docs` now leaves out the entities in a namespace or a module whose name starts with `_`, the members and the associated types of a trait whose names start with `_`, and the implementations of a trait or for a type whose name starts with `_`.
-- #812, #818: In completion, the language server ranks an entity of a dependency or of `Std` last when its name, or any part of its namespace or module name, starts with `_`.
 
 ### Fixed
 
@@ -75,6 +81,9 @@
 - #311, #909: A module that implements a trait of another module, where a member of the trait returns an opaque type as `greeting : [?s : ToString] a -> ?s` does, now builds when its imports list the items it uses, as in `import Lib::{Greeting, Greeting::greeting};`. It used to fail with ``Unknown name `Lib::Greeting::greeting::#wrap_opaque`.``, and `fix edit explicit-import` wrote that name into the import statement, which made the file fail to parse.
 - #907, #909: `fix edit explicit-import` now imports `Arrow` when a file writes a function type as `Arrow a b`. It used to leave `Arrow` out, and the rewritten file failed to build with ``Unknown type or associated type name `Arrow`.``
 - #931, #941: A lock file that places a git dependency outside the project, as `path = "../victim"`, no longer makes `fix build` remove that directory and clone the dependency there. Commands that build now write such a lock file afresh, `fix deps install` reports it as broken, and `fix` removes nothing outside the project's `.fixlang` directory. Commands that write or remove files under `.fixlang` now fail when `.fixlang` is a symbolic link; `fix clean` removes the link and keeps what it points to. A lock file that is a symbolic link is now replaced by the file `fix` writes, and the file it pointed to is kept; `fix` used to write the lock file into that file.
+- #952, #957: `fix edit explicit-import` now prints a warning and leaves a source file unchanged when it lies outside the project, either because `files` in the project file names such a path, as `"../lib/lib.fix"`, or because the file is a symbolic link leading outside. It used to rewrite the import statements of such a file. A source file that the project file lists twice, as `main.fix` in `[build]` and in `[build.test]`, is now rewritten once; the second rewrite used to erase part of its code.
+- #946, #954: `fix check`, `fix deps add`, `fix deps install`, `fix deps update`, `fix docs` and the language server no longer write outside the project through a symbolic link in it, such as a `docs` or a `.fixlang/cache` committed to a repository as a link to another place. They now refuse such a link, and replace a file that is a link, as `docs/Main.md`, by the file they write. The language server no longer empties a `.fixlang/fix.log` that is a link.
+- #950: An entry of a project file's `objects` that starts with `-` or `@` is now linked as a file, and an output file named with `@` in front, as `-o @prog`, is now written under that name. `gcc` used to read such a name as an option, or as the name of a file of options.
 
 #### Std
 

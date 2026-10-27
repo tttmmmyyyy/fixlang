@@ -3,7 +3,8 @@ use crate::configuration::{Configuration, LinkType, OutputFileType, Sanitizer};
 use crate::constants::INTERMEDIATE_PATH;
 use crate::elaboration::elaborate_via_config;
 use crate::error::Errors;
-use crate::misc::{info_msg, remove_inside_dot_fixlang};
+use crate::misc::info_msg;
+use crate::project_fs::remove_inside_dot_fixlang;
 use rand::{thread_rng, Rng};
 use std::env::consts::OS;
 use std::fs;
@@ -162,6 +163,16 @@ fn build_runtime_object(config: &Configuration) -> Result<PathBuf, Errors> {
     Ok(object)
 }
 
+/// `path` written so that the C compiler reads it as the path of a file. A relative path gets `./`
+/// in front, so that the compiler reads neither one starting with `-` as an option nor one starting
+/// with `@` as a file of further options.
+///
+/// # Examples
+/// `file_operand("-helper.o")` is `./-helper.o`, and `file_operand("/lib/a.o")` is `/lib/a.o`.
+fn file_operand(path: &Path) -> PathBuf {
+    Path::new(".").join(path)
+}
+
 /// Builds the program specified in the configuration, linking the object files and the runtime into
 /// the output file.
 pub fn build(config: &Configuration) -> Result<(), Errors> {
@@ -224,14 +235,14 @@ pub fn build(config: &Configuration) -> Result<(), Errors> {
     } else {
         com.arg("-Wl,--gc-sections");
     }
-    com.arg("-o").arg(out_path.to_str().unwrap());
+    com.arg("-o").arg(file_operand(&out_path));
 
     let mut obj_paths = obj_files.obj_paths;
-    obj_paths.append(&mut config.object_files.clone());
+    obj_paths.extend(config.object_files.iter().cloned());
+    obj_paths.push(runtime_obj_path);
     for obj_path in obj_paths {
-        com.arg(obj_path.to_str().unwrap());
+        com.arg(file_operand(&obj_path));
     }
-    com.arg(runtime_obj_path.to_str().unwrap());
     com.args(library_search_path_opts).args(libs_opts);
     run_c_compiler(&mut com, "link the output file")?;
 

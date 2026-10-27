@@ -96,9 +96,8 @@ files = ["main.fix"]
 ## - `fix.ld_flags=(...)`: Specify flags to pass to the linker. Specify flags separated by spaces in `...`. Example: `fix.ld_flags=-L/path/to/lib -lmylib`.
 ## This is useful when you need to get the path to the library dynamically, e.g., using pkg-config.
 ##
-## Note: preliminary_commands require user approval on the first build (either interactively or
-## via `--allow-preliminary-commands`). Approvals are recorded in `~/.fixtrust.toml`.
-## See Document.md / Document-ja.md "Approval of preliminary_commands" for details.
+## Note: `fix build`, `fix run` and `fix test` run the preliminary_commands of the project and of
+## its dependencies. See "Security" in Document.md.
 # preliminary_commands = [["make", "lib.o"]]
 
 ## Disable specific CPU features. 

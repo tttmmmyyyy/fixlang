@@ -14,9 +14,12 @@ use crate::{
     error::Errors,
     hash::HashSource,
     metafiles::{config_file::ConfigFile, registry_file::RegistryFile},
-    misc::{info_msg, replace_file, to_absolute_path, warn_msg, Set},
+    misc::{info_msg, to_absolute_path, warn_msg, Set},
     parse::sourcefile::{SourceFile, Span},
-    preliminary_command::{PreliminaryCommand, PreliminaryCommandMode},
+    preliminary_command::PreliminaryCommand,
+    project_fs::{
+        resolve_guarding_project_links, write_file_guarding_project_links, DOT_FIXLANG_LINK_HINT,
+    },
 };
 use regex::Regex;
 use reqwest::Url;
@@ -89,7 +92,7 @@ pub struct ProjectFileBuild {
     #[serde(default)]
     ld_flags: Vec<String>,
     /// The commands run in the project directory before the Fix program is compiled, each written
-    /// as a program followed by its arguments. They run once the user has approved them.
+    /// as a program followed by its arguments.
     #[serde(default)]
     preliminary_commands: Vec<Vec<String>>,
 
@@ -286,7 +289,7 @@ pub enum ProjectFileRole {
 }
 
 /// Where a project comes from.
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Debug)]
 pub enum ProjectOrigin {
     /// A project in the local file system, at the absolute path this variant holds: the root
     /// project, or one a `path` dependency entry names.
@@ -294,26 +297,6 @@ pub enum ProjectOrigin {
     /// A project cloned from a git repository, identified by the repository URL and the commit hash
     /// the lock file pins the clone to.
     Git { url: String, commit: String },
-}
-
-impl ProjectOrigin {
-    /// A string naming where the project comes from: the project directory for a local project, and
-    /// `git+` followed by the repository URL for a git one, so that every commit of one repository
-    /// shares a key.
-    pub fn to_trust_key(&self) -> String {
-        match self {
-            ProjectOrigin::Local(p) => p.to_string_lossy().to_string(),
-            ProjectOrigin::Git { url, .. } => format!("git+{}", url),
-        }
-    }
-
-    /// The commit hash a git project is pinned to.
-    pub fn commit_hash(&self) -> Option<&str> {
-        match self {
-            ProjectOrigin::Local(_) => None,
-            ProjectOrigin::Git { commit, .. } => Some(commit),
-        }
-    }
 }
 
 /// A project file (`fixproj.toml`): what the project is, how it is built, what it depends on, and
@@ -765,7 +748,7 @@ impl ProjectFile {
     /// Updates a configuration from a project file.
     ///
     /// `self.role` decides whether the fields that only the root project contributes are skipped,
-    /// and `self.source` tags `preliminary_commands` for trust-store lookup. Both must be populated
+    /// and `self.source` is recorded as where the project's sources came from. Both must be set
     /// before this is called.
     pub fn set_config(&self, config: &mut Configuration) -> Result<(), Errors> {
         let is_dependent_proj = self.role == ProjectFileRole::Dependent;
@@ -905,14 +888,10 @@ impl ProjectFile {
                 .parent()
                 .expect("ProjectFile::path always points to fixproj.toml inside a directory"),
         )?;
-        let project_name = self.general.name.clone();
         for command in &self.build.preliminary_commands {
             config.preliminary_commands.push(PreliminaryCommand {
                 work_dir: work_dir.clone(),
                 command: command.clone(),
-                project_name: project_name.clone(),
-                mode: PreliminaryCommandMode::Build,
-                source: project_origin.clone(),
             });
         }
         if mode == BuildConfigType::Test {
@@ -925,9 +904,6 @@ impl ProjectFile {
                 config.preliminary_commands.push(PreliminaryCommand {
                     work_dir: work_dir.clone(),
                     command: command.clone(),
-                    project_name: project_name.clone(),
-                    mode: PreliminaryCommandMode::Test,
-                    source: project_origin.clone(),
                 });
             }
         }
@@ -1142,20 +1118,17 @@ impl ProjectFile {
 
     /// Builds the lock file of the given kind afresh from this project's dependency entries and
     /// writes it over the one on disk. Creates the directory that holds it when that is missing,
-    /// such as `.fixlang/` for the language server's lock file.
+    /// such as `.fixlang/` for the language server's lock file. Fails when a symbolic link in the
+    /// project would place the lock file outside the project.
     pub fn create_lock_file(&self, mode: LockFileType) -> Result<DependencyLockFile, Errors> {
         let lock_file = DependencyLockFile::create(self, mode.to_build_config_type())?;
         let content = toml::to_string(&lock_file)
             .map_err(|e| Errors::from_msg(format!("Failed to serialize lock file: {:?}", e)))?;
-        let lock_file_path = get_lock_file_path(mode);
-        if let Some(parent) = Path::new(lock_file_path).parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| Errors::from_msg(format!("Failed to create directory: {:?}", e)))?;
-        }
-        replace_file(Path::new(lock_file_path), |tmp_path| {
-            fs::write(tmp_path, &content)
-        })
-        .map_err(|e| Errors::from_msg(format!("Failed to write lock file: {:?}", e)))?;
+        write_file_guarding_project_links(
+            Path::new(get_lock_file_path(mode)),
+            DOT_FIXLANG_LINK_HINT,
+            |tmp_path| fs::write(tmp_path, &content),
+        )?;
         Ok(lock_file)
     }
 
@@ -1324,6 +1297,12 @@ impl ProjectFile {
         fix_config: &ConfigFile,
         mode: BuildConfigType,
     ) -> Result<(), Errors> {
+        // The place the project file resolves to, which the added entries are written at. A project
+        // file that is a symbolic link stays one.
+        let project_file_path = resolve_guarding_project_links(
+            &self.path,
+            "Run `fix deps add` in the project the link leads to.",
+        )?;
         let mut added_toml = "".to_string();
 
         // Parse each element of `proj_specs` as the form `proj-name@ver_req`.
@@ -1471,7 +1450,7 @@ impl ProjectFile {
         // Write the added dependencies to the project file.
         let mut file = fs::OpenOptions::new()
             .append(true)
-            .open(&self.path)
+            .open(&project_file_path)
             .map_err(|e| {
                 Errors::from_msg(format!(
                     "Failed to open file \"{}\": {:?}",

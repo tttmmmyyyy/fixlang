@@ -10,14 +10,16 @@ use crate::{
         ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectFileRole, ProjectName,
         ProjectOrigin,
     },
-    misc::{info_msg, remove_inside_dot_fixlang, to_absolute_path, warn_msg},
+    misc::{info_msg, to_absolute_path, warn_msg},
+    project_fs::{
+        create_dir_guarding_project_links, remove_inside_dot_fixlang, DOT_FIXLANG_LINK_HINT,
+    },
 };
 use git2::{build::CheckoutBuilder, ErrorClass, ErrorCode, Oid, Repository};
 use rand::{thread_rng, Rng};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::{
-    fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread,
@@ -263,24 +265,18 @@ impl DependencyLockFile {
                     // If something is wrong, remove the directory.
                     remove_inside_dot_fixlang(&dep.path)?;
                 }
-                // Create the directory.
-                fs::create_dir_all(&dep.path).map_err(|e| {
-                    Errors::from_msg(format!(
-                        "Failed to create the directory \"{}\": {:?}",
-                        dep.path.to_string_lossy().to_string(),
-                        e
-                    ))
-                })?;
-
-                // Clone the repository.
-                let repo = clone_repository_with_retry(&git_info.repo, &dep.path).map_err(|e| {
-                    Errors::from_msg(format!(
-                        "Failed to clone the repository \"{}\" to \"{}\": {:?}",
-                        git_info.repo,
-                        dep.path.to_string_lossy().to_string(),
-                        e
-                    ))
-                })?;
+                // Create the directory, and clone the repository into it.
+                let clone_dir =
+                    create_dir_guarding_project_links(&dep.path, DOT_FIXLANG_LINK_HINT)?;
+                let repo =
+                    clone_repository_with_retry(&git_info.repo, &clone_dir).map_err(|e| {
+                        Errors::from_msg(format!(
+                            "Failed to clone the repository \"{}\" to \"{}\": {:?}",
+                            git_info.repo,
+                            dep.path.to_string_lossy().to_string(),
+                            e
+                        ))
+                    })?;
 
                 // Checkout the specified revision.
                 let commit = repo

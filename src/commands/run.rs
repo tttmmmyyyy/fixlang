@@ -2,7 +2,7 @@ use crate::commands::build::build;
 use crate::configuration::{Configuration, OutputFileType};
 use crate::constants::{DOT_FIXLANG, RUN_PATH};
 use crate::error::{panic_if_err, panic_with_msg, Errors};
-use crate::misc::remove_inside_dot_fixlang;
+use crate::project_fs::remove_inside_dot_fixlang;
 use rand::{thread_rng, Rng};
 use std::fs;
 use std::io;

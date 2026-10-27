@@ -1,13 +1,13 @@
 use crate::{
     ast::name::Name,
-    constants::{COMPILER_THREAD_STACK_SIZE, DOT_FIXLANG, TEMPORARY_SRC_PATH},
+    constants::{COMPILER_THREAD_STACK_SIZE, TEMPORARY_SRC_PATH},
     error::Errors,
     hash::{md5_hex, md5_u64},
     parse::sourcefile::SourceFile,
+    project_fs::{create_dir_guarding_project_links, DOT_FIXLANG_LINK_HINT},
 };
-use colored::{control, ColoredString, Colorize};
+use colored::{control, Colorize};
 use fxhash::{FxHashMap, FxHashSet};
-use rand::random;
 use std::{
     env, fs,
     hash::Hash,
@@ -188,20 +188,14 @@ pub fn temporary_source_path(file_name: &str, hash: &str) -> PathBuf {
 pub fn save_temporary_source(source: &str, file_name: &str) -> Result<SourceFile, Errors> {
     let hash = md5_hex(source);
     let path = temporary_source_path(file_name, &hash);
-    let parent = path.parent().unwrap();
-    fs::create_dir_all(parent).map_err(|e| {
-        Errors::from_msg(format!(
-            "Failed to create directory \"{}\": {}",
-            parent.to_string_lossy().to_string(),
-            e
-        ))
-    })?;
+    let dir = create_dir_guarding_project_links(path.parent().unwrap(), DOT_FIXLANG_LINK_HINT)?;
 
-    // Use create_new(true) for atomic check-and-create operation
+    // Use create_new(true) for atomic check-and-create operation. It also refuses to follow a
+    // symbolic link at the path.
     match fs::OpenOptions::new()
         .write(true)
         .create_new(true)
-        .open(&path)
+        .open(dir.join(path.file_name().unwrap()))
     {
         Ok(mut file) => {
             file.write_all(source.as_bytes()).map_err(|e| {
@@ -408,85 +402,6 @@ pub fn to_absolute_path(path: &Path) -> Result<PathBuf, Errors> {
     Ok(canonicalized.unwrap())
 }
 
-/// Fails when the `.fixlang` of the current directory is a symbolic link. Fix writes and removes
-/// the files under `.fixlang` as files of the project, and a `.fixlang` that is a symbolic link,
-/// such as one committed to a repository, would lead those writes and removals outside the project.
-pub fn check_dot_fixlang_is_not_symlink() -> Result<(), Errors> {
-    if Path::new(DOT_FIXLANG).is_symlink() {
-        return Err(Errors::from_msg(format!(
-            "\"{}\" is a symbolic link. Fix keeps the files it builds and installs in the directory \"{}\" of the project.\n\
-             HINT: `fix clean` removes the link, leaving what it points to.",
-            DOT_FIXLANG, DOT_FIXLANG
-        )));
-    }
-    Ok(())
-}
-
-/// Removes the file or directory at `path`, which must be the `.fixlang` directory of the current
-/// directory or lie inside it. Fix removes the files and directories of a project through this
-/// function, so that the contents of a project directory, such as a lock file or a `.fixlang` that
-/// is a symbolic link, cannot lead fix to remove anything outside `.fixlang`.
-///
-/// The check applies to the entry the removal takes away: the last component of `path`, inside its
-/// parent directory with symbolic links and `..` resolved. A symbolic link at `path` itself is
-/// removed as a link, and what it points to is kept. So `.fixlang` is removed even when it is a
-/// symbolic link, while anything under such a link is refused.
-pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
-    let failed = |e: io::Error| {
-        Errors::from_msg(format!(
-            "Failed to remove \"{}\": {}",
-            path.to_string_lossy(),
-            e
-        ))
-    };
-    let dot_fixlang = env::current_dir()
-        .and_then(|dir| dir.canonicalize())
-        .map_err(failed)?
-        .join(DOT_FIXLANG);
-    let entry = match (path.parent(), path.file_name()) {
-        (Some(parent), Some(name)) => {
-            let parent = if parent.as_os_str().is_empty() {
-                Path::new(".")
-            } else {
-                parent
-            };
-            Some(parent.canonicalize().map_err(failed)?.join(name))
-        }
-        // A path ending in `..` names no entry of its own.
-        _ => None,
-    };
-    let Some(entry) = entry.filter(|entry| entry.starts_with(&dot_fixlang)) else {
-        return Err(Errors::from_msg(format!(
-            "Refused to remove \"{}\", which lies outside \"{}\".",
-            path.to_string_lossy(),
-            dot_fixlang.to_string_lossy()
-        )));
-    };
-    // The removal acts on the entry judged above. `path` itself, written with a trailing `/` or
-    // `/.`, leads the file system through a symbolic link at its last component.
-    if fs::symlink_metadata(&entry).map_err(failed)?.is_dir() {
-        fs::remove_dir_all(&entry)
-    } else {
-        fs::remove_file(&entry)
-    }
-    .map_err(failed)
-}
-
-/// Writes the file at `path` by having `write` write a new file beside it, at the path it is handed,
-/// and renaming that onto `path`, so that `path` holds either what it held before or the whole of
-/// what `write` wrote. A symbolic link at `path` is replaced by the new file, and what it pointed to
-/// is kept.
-pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) -> io::Result<()> {
-    let tmp_path = path.with_extension(format!("{}.tmp", random::<u64>()));
-    write(&tmp_path)
-        .and_then(|()| fs::rename(&tmp_path, path))
-        .inspect_err(|_| {
-            // The temporary path carries a random number drawn by this call, so removing it touches
-            // nothing else.
-            let _ = fs::remove_file(&tmp_path);
-        })
-}
-
 /// The path `target` written relative to the path `base`, so that `base` joined with the result
 /// reaches `target`. A target that no sequence of steps from `base` reaches — one on another root,
 /// or a relative path beside an absolute one — is answered with itself.
@@ -537,12 +452,6 @@ pub fn warn_msg(msg: &str) {
     eprintln!("{}: {}", "warning".yellow().bold(), msg);
 }
 
-/// Styles `s` as a line of an interactive prompt that requires the user's attention, so that every
-/// such prompt looks alike.
-pub fn prompt_style(s: &str) -> ColoredString {
-    s.bright_green().bold()
-}
-
 /// `text` cut short where it is too long for a report to carry, with an ellipsis marking the cut.
 ///
 /// A type or a constraint that trips one of the compiler's bounds can be a term of any size, and
@@ -561,7 +470,7 @@ pub fn shorten_for_report(text: String) -> String {
 ///
 /// Single and double quotes both quote, and a backslash makes the character after it part of the
 /// word it stands in. The quotes and backslashes themselves stay out of the words returned.
-pub fn split_string_by_space_not_quated(s: &str) -> Vec<String> {
+pub fn split_string_by_unquoted_spaces(s: &str) -> Vec<String> {
     let mut words = Vec::new();
     let mut current_word = String::new();
     let mut open_quote = None;
@@ -624,7 +533,7 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
 mod tests {
     use super::{
         char_pos_to_utf16_pos, join_compiler_threads, map_on_compiler_threads,
-        spawn_compiler_thread, split_at_name_boundaries, split_string_by_space_not_quated,
+        spawn_compiler_thread, split_at_name_boundaries, split_string_by_unquoted_spaces,
         upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos, Set,
     };
     use crate::error::any_to_string;
@@ -826,42 +735,39 @@ mod tests {
     #[test]
     fn test_split_string() {
         assert_eq!(
-            split_string_by_space_not_quated("hello world"),
+            split_string_by_unquoted_spaces("hello world"),
             vec!["hello", "world"]
         );
         assert_eq!(
-            split_string_by_space_not_quated("hello   world"),
+            split_string_by_unquoted_spaces("hello   world"),
             vec!["hello", "world"]
         );
         assert_eq!(
-            split_string_by_space_not_quated(" \"hello world\" "),
+            split_string_by_unquoted_spaces(" \"hello world\" "),
             vec!["hello world"]
         );
         assert_eq!(
-            split_string_by_space_not_quated(" 'hello world' "),
+            split_string_by_unquoted_spaces(" 'hello world' "),
             vec!["hello world"]
         );
         assert_eq!(
-            split_string_by_space_not_quated("hello \"big world\""),
+            split_string_by_unquoted_spaces("hello \"big world\""),
             vec!["hello", "big world"]
         );
         assert_eq!(
-            split_string_by_space_not_quated("'it\\'s a beautiful day'"),
+            split_string_by_unquoted_spaces("'it\\'s a beautiful day'"),
             vec!["it's a beautiful day"]
         );
         assert_eq!(
-            split_string_by_space_not_quated("\"this has \\\"escaped quotes\\\"\""),
+            split_string_by_unquoted_spaces("\"this has \\\"escaped quotes\\\"\""),
             vec!["this has \"escaped quotes\""]
         );
         assert_eq!(
-            split_string_by_space_not_quated("混合 \"日本語 の テスト\""),
+            split_string_by_unquoted_spaces("混合 \"日本語 の テスト\""),
             vec!["混合", "日本語 の テスト"]
         );
-        assert_eq!(split_string_by_space_not_quated(""), Vec::<String>::new());
-        assert_eq!(
-            split_string_by_space_not_quated("   "),
-            Vec::<String>::new()
-        );
+        assert_eq!(split_string_by_unquoted_spaces(""), Vec::<String>::new());
+        assert_eq!(split_string_by_unquoted_spaces("   "), Vec::<String>::new());
     }
 
     /// Every capital opens a word of its own, so a run of capitals comes out as one-letter words,

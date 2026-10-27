@@ -14,6 +14,7 @@ pub mod test_diagnostics;
 pub mod test_goto_definition;
 pub mod test_hover;
 pub mod test_import_completion;
+pub mod test_import_edit;
 pub mod test_polling;
 pub mod test_queued_requests;
 pub mod test_references;
@@ -22,6 +23,7 @@ pub mod test_request_handling;
 pub mod test_semantic_tokens;
 pub mod test_stdin_eof;
 pub mod test_workspace_symbol;
+pub mod text_edit;
 
 #[cfg(test)]
 mod tests {

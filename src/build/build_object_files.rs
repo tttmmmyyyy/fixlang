@@ -23,10 +23,9 @@ use crate::{
     },
     generator::{enum_attribute_kind_id, module_functions, Generator},
     hash::HashSource,
-    misc::{
-        info_msg, join_compiler_threads, replace_file, spawn_compiler_thread, warn_msg, Map, Set,
-    },
+    misc::{info_msg, join_compiler_threads, spawn_compiler_thread, warn_msg, Map, Set},
     optimization::optimization,
+    project_fs::replace_file,
     rc_ir::{
         ast::RcProgram,
         borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
@@ -658,9 +657,9 @@ fn write_to_object_file<'c>(module: &Module<'c>, target_machine: &TargetMachine,
             e
         ));
     }
-    let written = replace_file(obj_path, |path| {
+    let written = replace_file(obj_path, |tmp_path| {
         target_machine
-            .write_to_file(module, FileType::Object, path)
+            .write_to_file(module, FileType::Object, tmp_path)
             .map_err(|e| io::Error::other(e.to_string()))
     });
     if let Err(e) = written {

@@ -217,10 +217,16 @@ mod integration_tests {
         fs::remove_dir_all(proj.join(".fixlang/deps")).unwrap();
         symlink(&target, proj.join(".fixlang/deps")).unwrap();
 
+        let output = run_fix(&proj, &["deps", "install"]);
         assert_failed_with(
-            &run_fix(&proj, &["deps", "install"]),
+            &output,
             "Refused to remove \".fixlang/deps/dep_0.1.0\"",
             "`fix deps install` should refuse to remove what lies under the link.",
+        );
+        assert_failed_with(
+            &output,
+            "HINT: `fix clean` removes the directory \".fixlang\"",
+            "the refusal should point at `fix clean`.",
         );
         assert_victim_kept(&root);
         assert_data_kept(&target.join("dep_0.1.0"));
