@@ -7,8 +7,7 @@ use crate::{
     constants::COMPILER_TEST_WORKING_PATH,
     misc::function_name,
     tests::test_util::{
-        assert_failed_with, run_source_capture, runtime_checked_config,
-        source_with_a_runtime_zero,
+        assert_failed_with, run_source_capture, runtime_checked_config, source_with_a_runtime_zero,
     },
 };
 use std::fs;
