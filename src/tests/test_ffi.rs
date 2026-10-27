@@ -8,8 +8,8 @@ use crate::{
     ffi::{c_abi_extends_narrow_integers, CNumericTypes, CSignature},
     fixstd::builtin::{I8_TYPE, U16_TYPE},
     fixstd::runtime::{
-        build_runtime, compiler_defined_c_function_reason, BuildMode, RUNTIME_ABORT,
-        RUNTIME_GET_ARGC,
+        build_runtime, compiler_defined_c_function_reason, BuildMode, RUNTIME_GET_ARGC,
+        RUNTIME_STOP,
     },
     generator::{enum_attribute_kind_id, Generator},
     misc::function_name,
@@ -685,7 +685,7 @@ pub fn test_export_non_ascii_first_character_fails() {
 pub fn test_export_taking_a_name_the_compiler_owns_fails() {
     for (c_function_name, reason) in [
         (C_ENTRY_POINT_NAME, "it is the entry point of the program"),
-        (RUNTIME_ABORT, "belongs to the Fix runtime"),
+        (RUNTIME_STOP, "belongs to the Fix runtime"),
         (RUNTIME_GET_ARGC, "belongs to the Fix runtime"),
     ] {
         let source = format!(

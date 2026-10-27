@@ -25,8 +25,7 @@ use crate::ffi::{c_abi_extends_narrow_integers, promote_through_ellipsis, CSigna
 use crate::fixstd::builtin::make_array_storage_ty;
 use crate::fixstd::builtin::make_dynamic_object_ty;
 use crate::fixstd::builtin::run_io_or_ios_runner;
-use crate::fixstd::runtime::RUNTIME_ABORT;
-use crate::fixstd::runtime::RUNTIME_EPRINTLN;
+use crate::fixstd::runtime::RUNTIME_STOP;
 use crate::hash::HashSource;
 use crate::misc::flatten_opt;
 use crate::misc::Map;
@@ -2918,17 +2917,10 @@ impl<'c, 'm> Generator<'c, 'm> {
         );
     }
 
-    /// Emit code writing `string` to stderr, followed by a newline.
-    fn eprintln(&mut self, string: &str) {
-        let string_ptr = self.add_global_string(string);
-        let string_ptr = string_ptr.as_pointer_value();
-        self.call_runtime(RUNTIME_EPRINTLN, &[string_ptr.into()]);
-    }
-
-    /// Emit code writing `string` to stderr and aborting the program.
+    /// Emit code stopping the program with `string` as the report written to stderr.
     pub fn panic(&mut self, string: &str) {
-        self.eprintln(string);
-        self.call_runtime(RUNTIME_ABORT, &[]);
+        let string_ptr = self.add_global_string(string).as_pointer_value();
+        self.call_runtime(RUNTIME_STOP, &[string_ptr.into()]);
     }
 
     /// Emit a call to the runtime function named `func_name`, which the module must already

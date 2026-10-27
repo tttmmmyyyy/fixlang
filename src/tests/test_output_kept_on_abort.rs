@@ -7,10 +7,19 @@ use crate::{
     constants::COMPILER_TEST_WORKING_PATH,
     misc::function_name,
     tests::test_util::{
-        assert_failed_with, run_source_capture, runtime_checked_config, source_with_a_runtime_zero,
+        assert_failed_with, build_program, run_source_capture, runtime_checked_config,
+        source_with_a_runtime_zero,
     },
 };
-use std::fs;
+use std::{
+    fs,
+    io::{Read, Write},
+    os::unix::process::ExitStatusExt,
+    process::{Command, Stdio},
+};
+
+/// The signal `abort` stops a program with.
+const SIGABRT: i32 = 6;
 
 /// A line printed to standard output before an index check stops the program is kept.
 #[test]
@@ -84,4 +93,68 @@ pub fn test_an_open_file_keeps_what_was_written_when_a_check_stops_the_program()
         "written before the check"
     );
     fs::remove_file(&file_path).unwrap();
+}
+
+/// Where standard output and standard error go to one pipe, the report of a check that stops the
+/// program comes after the lines the program printed before it.
+#[test]
+pub fn test_the_report_follows_what_was_printed_before_the_check() {
+    let source = source_with_a_runtime_zero(
+        r#"
+        println("printed before the check");;
+        let arr = Array::fill(3, 0);
+        eval arr.@(zero + 10);
+        "#,
+    );
+    let (_dir, program) = build_program(&source, "basic", &[], None, "an index check");
+    let output = Command::new("sh")
+        .args(["-c", "exec \"$0\" 2>&1"])
+        .arg(&program)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.signal(), Some(SIGABRT));
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "printed before the check\nIndex out of range: index=10, size=3\n"
+    );
+}
+
+/// A program whose standard output goes to a pipe its reader has closed is still stopped by
+/// `abort` when a check fails, and still writes the report, although flushing what it printed
+/// fails.
+#[test]
+pub fn test_a_check_reports_and_aborts_when_stdout_is_a_closed_pipe() {
+    // The program prints a line, which stays in its buffer, and waits for a line on standard input
+    // before the check, so that the reader of its standard output is gone by the time it flushes.
+    let source = source_with_a_runtime_zero(
+        r#"
+        println("printed before the check");;
+        let _ = *read_line(stdin).to_result;
+        let arr = Array::fill(3, 0);
+        eval arr.@(zero + 10);
+        "#,
+    );
+    let (_dir, program) = build_program(&source, "basic", &[], None, "an index check");
+    let mut child = Command::new(&program)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    drop(child.stdout.take());
+    child.stdin.take().unwrap().write_all(b"go\n").unwrap();
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .unwrap()
+        .read_to_string(&mut stderr)
+        .unwrap();
+    let status = child.wait().unwrap();
+    assert_eq!(status.signal(), Some(SIGABRT), "stderr: {}", stderr);
+    assert!(
+        stderr.contains("Index out of range: index=10, size=3"),
+        "stderr: {}",
+        stderr
+    );
 }

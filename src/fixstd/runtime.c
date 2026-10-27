@@ -10,6 +10,8 @@ The C functions and values the Fix standard library is implemented with.
 #include <errno.h>
 #include <inttypes.h>
 #include <math.h>
+#include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -22,14 +24,8 @@ The C functions and values the Fix standard library is implemented with.
 #define FIXRUNTIME_STOPS __attribute__((noreturn, cold))
 
 // Defined at the end of this file, and called by the functions before it.
-FIXRUNTIME_STOPS void fixruntime_abort(void);
-
-// Print message to stderr, and flush it.
-void fixruntime_eprintln(const char *msg)
-{
-    fprintf(stderr, "%s\n", msg);
-    fflush(stderr);
-}
+static FIXRUNTIME_STOPS void fixruntime_stopf(const char *format, ...)
+    __attribute__((format(printf, 1, 2)));
 
 // The processor time the program has used so far, in the ticks C counts it in.
 int64_t fixruntime_clock()
@@ -148,20 +144,17 @@ const char *fixruntime_getenv(const char *name)
 // space, or a signed operation's result did not fit its type.
 FIXRUNTIME_STOPS void fixruntime_index_out_of_range(int64_t idx, int64_t size)
 {
-    fprintf(stderr, "Index out of range: index=%" PRId64 ", size=%" PRId64 "\n", idx, size);
-    fixruntime_abort();
+    fixruntime_stopf("Index out of range: index=%" PRId64 ", size=%" PRId64, idx, size);
 }
 
 FIXRUNTIME_STOPS void fixruntime_negative_array_size(int64_t size)
 {
-    fprintf(stderr, "Negative array size or capacity: %" PRId64 "\n", size);
-    fixruntime_abort();
+    fixruntime_stopf("Negative array size or capacity: %" PRId64, size);
 }
 
 FIXRUNTIME_STOPS void fixruntime_array_size_overflow(int64_t size)
 {
-    fprintf(stderr, "Array size or capacity exceeds the address space: %" PRId64 "\n", size);
-    fixruntime_abort();
+    fixruntime_stopf("Array size or capacity exceeds the address space: %" PRId64, size);
 }
 
 // The bytes an operand of an integer operation takes in a report: the longest such number is
@@ -205,16 +198,14 @@ FIXRUNTIME_STOPS void fixruntime_signed_overflow(const char *operation, int32_t 
     char rhs_text[FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE];
     fixruntime_write_integer_operand(lhs_text, operands_are_signed, lhs_low, lhs_high);
     fixruntime_write_integer_operand(rhs_text, operands_are_signed, rhs_low, rhs_high);
-    fprintf(stderr, "Signed integer overflow: %s, with %s and %s\n", operation, lhs_text, rhs_text);
-    fixruntime_abort();
+    fixruntime_stopf("Signed integer overflow: %s, with %s and %s", operation, lhs_text, rhs_text);
 }
 
 FIXRUNTIME_STOPS void fixruntime_shift_amount_out_of_range(const char *operation, int32_t operands_are_signed, uint64_t amount_low, uint64_t amount_high)
 {
     char amount_text[FIXRUNTIME_INTEGER_OPERAND_TEXT_SIZE];
     fixruntime_write_integer_operand(amount_text, operands_are_signed, amount_low, amount_high);
-    fprintf(stderr, "Shift amount outside the width of the type: %s, with %s\n", operation, amount_text);
-    fixruntime_abort();
+    fixruntime_stopf("Shift amount outside the width of the type: %s, with %s", operation, amount_text);
 }
 
 FIXRUNTIME_STOPS void fixruntime_float_to_integer_out_of_range(const char *operation, double value)
@@ -224,13 +215,9 @@ FIXRUNTIME_STOPS void fixruntime_float_to_integer_out_of_range(const char *opera
     // computes it, and a report naming that bit would name the optimization level instead.
     if (isnan(value))
     {
-        fprintf(stderr, "Floating-point value outside the range of the integer type: %s, with nan\n", operation);
+        fixruntime_stopf("Floating-point value outside the range of the integer type: %s, with nan", operation);
     }
-    else
-    {
-        fprintf(stderr, "Floating-point value outside the range of the integer type: %s, with %.17g\n", operation, value);
-    }
-    fixruntime_abort();
+    fixruntime_stopf("Floating-point value outside the range of the integer type: %s, with %.17g", operation, value);
 }
 
 #if defined(BACKTRACE)
@@ -268,19 +255,31 @@ static int fixruntime_backtrace_full_callback(void *data, uintptr_t pc,
 
 #endif // BACKTRACE
 
-// Stops the program, printing the call stack it stopped at where the runtime was built with
-// `BACKTRACE` defined.
+// Stops the program, writing to standard error the report that `format` and the values after it
+// make, followed by a newline, and then the call stack it stopped at where the runtime was built
+// with `BACKTRACE` defined.
 //
 // Every output stream is flushed first, because `abort` discards what the C library still holds in
 // a buffer: standard output written to a file or a pipe is buffered in blocks, so the lines a
-// program printed before a check stopped it would be lost.
+// program printed before a check stopped it would be lost. The flush comes before the report, so
+// that where standard output and standard error go to one place, the report follows those lines.
+//
+// SIGPIPE is ignored from the start, so that a flush to a pipe whose reader has gone fails instead
+// of ending the program, and the report, the call stack and the stop by `abort` still follow.
 //
 // `fflush(NULL)` takes the lock of each stream, as `exit` does with glibc 2.38 and later. So where
 // another thread holds a stream's lock, such as a thread waiting to read standard input, the
 // program waits here for that thread, as it would in `exit`.
-FIXRUNTIME_STOPS void fixruntime_abort(void)
+static FIXRUNTIME_STOPS void fixruntime_stopf(const char *format, ...)
 {
+    signal(SIGPIPE, SIG_IGN);
     fflush(NULL);
+
+    va_list values;
+    va_start(values, format);
+    vfprintf(stderr, format, values);
+    va_end(values);
+    fputc('\n', stderr);
 
 #if defined(BACKTRACE)
 #if defined(__linux__)
@@ -322,4 +321,10 @@ FIXRUNTIME_STOPS void fixruntime_abort(void)
 #endif // __linux__
 #endif // BACKTRACE
     abort();
+}
+
+// Stops the program, writing `message` to standard error as the report.
+FIXRUNTIME_STOPS void fixruntime_stop(const char *message)
+{
+    fixruntime_stopf("%s", message);
 }
