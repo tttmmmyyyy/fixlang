@@ -851,6 +851,14 @@ pub fn integer_operations_checked_no_runtime_check_config() -> Configuration {
     config
 }
 
+/// A configuration whose runtime checks are on, so that the checks that stop a program are part
+/// of it.
+pub fn runtime_checked_config() -> Configuration {
+    let mut config = Configuration::develop_mode();
+    config.no_runtime_check = false;
+    config
+}
+
 /// Runs `body` under `config` as the body of a program that binds `zero` to a `Std::I64` the
 /// compiler cannot fold, and fails the test unless the program exits with code 0.
 pub fn test_with_a_runtime_zero(body: &str, config: Configuration) {

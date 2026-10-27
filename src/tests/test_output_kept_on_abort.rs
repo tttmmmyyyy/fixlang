@@ -5,37 +5,14 @@
 //! it.
 
 use crate::{
-    configuration::Configuration,
     constants::COMPILER_TEST_WORKING_PATH,
     misc::function_name,
-    tests::test_util::{run_source_capture, source_with_a_runtime_zero},
+    tests::test_util::{
+        assert_failed_with, run_source_capture, runtime_checked_config,
+        source_with_a_runtime_zero,
+    },
 };
-use std::{fs, process::Output};
-
-/// A configuration whose runtime checks are on, so that the checks stopping the programs below are
-/// part of them.
-fn runtime_checked_config() -> Configuration {
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
-    config
-}
-
-/// Fails the test unless the program behind `output` was stopped rather than exiting with code 0,
-/// and unless its standard error contains `report`.
-fn assert_stopped_with(output: &Output, report: &str) {
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        !output.status.success(),
-        "the program should have been stopped.\nstderr: {}",
-        stderr
-    );
-    assert!(
-        stderr.contains(report),
-        "the report should contain {:?}.\nstderr: {}",
-        report,
-        stderr
-    );
-}
+use std::fs;
 
 /// A line printed to standard output before an index check stops the program is kept.
 #[test]
@@ -49,7 +26,11 @@ pub fn test_stdout_is_kept_when_an_index_check_stops_the_program() {
         "#,
     );
     let output = run_source_capture(&source, runtime_checked_config());
-    assert_stopped_with(&output, "Index out of range: index=10, size=3");
+    assert_failed_with(
+        &output,
+        "Index out of range: index=10, size=3",
+        "the index check should stop the program",
+    );
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         "printed before the check\n"
@@ -67,7 +48,11 @@ pub fn test_stdout_is_kept_when_undefined_stops_the_program() {
         "#,
     );
     let output = run_source_capture(&source, runtime_checked_config());
-    assert_stopped_with(&output, "undefined reached");
+    assert_failed_with(
+        &output,
+        "undefined reached",
+        "`undefined` should stop the program",
+    );
     assert_eq!(
         String::from_utf8_lossy(&output.stdout),
         "printed before undefined\n"
@@ -78,7 +63,7 @@ pub fn test_stdout_is_kept_when_undefined_stops_the_program() {
 /// the program.
 #[test]
 pub fn test_an_open_file_keeps_what_was_written_when_a_check_stops_the_program() {
-    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
+    fs::create_dir_all(COMPILER_TEST_WORKING_PATH).unwrap();
     let file_path = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
     let _ = fs::remove_file(&file_path);
     let source = source_with_a_runtime_zero(&format!(
@@ -91,7 +76,11 @@ pub fn test_an_open_file_keeps_what_was_written_when_a_check_stops_the_program()
         file_path
     ));
     let output = run_source_capture(&source, runtime_checked_config());
-    assert_stopped_with(&output, "Index out of range");
+    assert_failed_with(
+        &output,
+        "Index out of range",
+        "the index check should stop the program",
+    );
     assert_eq!(
         fs::read_to_string(&file_path).unwrap(),
         "written before the check"

@@ -2,19 +2,11 @@ use crate::{
     configuration::{Configuration, FixOptimizationLevel},
     fixstd::runtime::{RUNTIME_ARRAY_SIZE_OVERFLOW, RUNTIME_MALLOC},
     tests::test_util::{
-        emitted_llvm_ir, fix_build_source_command, llvm_function_bodies, test_source,
-        test_source_fail, EmittedIr,
+        emitted_llvm_ir, fix_build_source_command, llvm_function_bodies, runtime_checked_config,
+        test_source, test_source_fail, EmittedIr,
     },
 };
 use tempfile::TempDir;
-
-/// A configuration whose runtime checks are on, which is what makes the checks under test part of
-/// the emitted program.
-fn runtime_checked_config() -> Configuration {
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
-    config
-}
 
 /// A configuration whose runtime checks are off, as `--no-runtime-check` leaves them.
 fn runtime_unchecked_config() -> Configuration {
