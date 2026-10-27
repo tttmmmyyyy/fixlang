@@ -1,8 +1,7 @@
 use crate::{
     configuration::Configuration,
-    constants::COMPILER_TEST_WORKING_PATH,
     misc::function_name,
-    tests::test_util::{test_source, test_source_with_c},
+    tests::test_util::{test_source, test_source_with_c, working_file_path},
 };
 use std::fs;
 
@@ -10,9 +9,7 @@ use std::fs;
 /// it back line by line, each line keeping its trailing newline and the last line having none.
 #[test]
 pub fn test_write_read_file_string() {
-    // Create a working directory.
-    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
-    let tmp_file = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
+    let tmp_file = working_file_path(function_name!(), "txt");
 
     let source = format!(
         r#"
@@ -47,9 +44,7 @@ pub fn test_write_read_file_string() {
 /// `is_eof` answers `true` once `read_string` has read the file to its end.
 #[test]
 pub fn test_is_eof() {
-    // Create a working directory.
-    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
-    let tmp_file = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
+    let tmp_file = working_file_path(function_name!(), "txt");
 
     let source = format!(
         r#"
@@ -85,9 +80,7 @@ pub fn test_is_eof() {
 /// 1024-byte chunks `read_bytes` reads it in.
 #[test]
 pub fn test_write_read_file_bytes() {
-    // Create a working directory.
-    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
-    let tmp_file = format!("{}/{}.dat", COMPILER_TEST_WORKING_PATH, function_name!());
+    let tmp_file = working_file_path(function_name!(), "dat");
 
     // Test write_file_bytes, read_file_bytes.
     let source = format!(
@@ -117,8 +110,7 @@ pub fn test_write_read_file_bytes() {
 /// handle that gives none.
 #[test]
 pub fn test_write_read_bytes_report_failure() {
-    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
-    let tmp_file = format!("{}/{}.dat", COMPILER_TEST_WORKING_PATH, function_name!());
+    let tmp_file = working_file_path(function_name!(), "dat");
 
     let source = format!(
         r#"
@@ -151,8 +143,7 @@ pub fn test_write_read_bytes_report_failure() {
 /// newline they pass the empty string once more, and on an empty file they pass it once.
 #[test]
 pub fn test_lines_read_from_a_file() {
-    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
-    let tmp_file = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
+    let tmp_file = working_file_path(function_name!(), "txt");
 
     let source = format!(
         r#"
@@ -218,8 +209,7 @@ pub fn test_lines_read_from_a_file() {
 /// nothing at the end; and writing no bytes succeeds and leaves the file empty.
 #[test]
 pub fn test_read_write_boundaries() {
-    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
-    let tmp_file = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
+    let tmp_file = working_file_path(function_name!(), "txt");
 
     let source = format!(
         r#"
@@ -280,9 +270,7 @@ pub fn test_read_write_boundaries() {
 /// pointer null.
 #[test]
 pub fn test_with_file_closed_when_ok() {
-    // Create a working directory.
-    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
-    let tmp_file = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
+    let tmp_file = working_file_path(function_name!(), "txt");
 
     let source = format!(
         r#"
@@ -338,9 +326,7 @@ void *load()
 /// null.
 #[test]
 pub fn test_with_file_closed_when_err() {
-    // Create a working directory.
-    let _ = fs::create_dir_all(COMPILER_TEST_WORKING_PATH);
-    let tmp_file = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
+    let tmp_file = working_file_path(function_name!(), "txt");
 
     let source = format!(
         r#"
