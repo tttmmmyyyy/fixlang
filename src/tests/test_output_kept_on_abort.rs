@@ -66,6 +66,30 @@ pub fn test_stdout_is_kept_when_undefined_stops_the_program() {
     );
 }
 
+/// A line printed to standard output before a signed overflow check stops the program is kept.
+#[test]
+pub fn test_stdout_is_kept_when_an_overflow_check_stops_the_program() {
+    let source = source_with_a_runtime_zero(
+        r#"
+        println("printed before the check");;
+        eval I64::maximum + (zero + 1);
+        println("not reached");;
+        "#,
+    );
+    let mut config = runtime_checked_config();
+    config.check_integer_operations = true;
+    let output = run_source_capture(&source, config);
+    assert_failed_with(
+        &output,
+        "Signed integer overflow",
+        "the overflow check should stop the program",
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "printed before the check\n"
+    );
+}
+
 /// What the program wrote to a file it opened and never closed is in the file after a check stops
 /// the program.
 #[test]
