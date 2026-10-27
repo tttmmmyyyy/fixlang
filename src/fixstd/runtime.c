@@ -273,6 +273,11 @@ static int fixruntime_backtrace_full_callback(void *data, uintptr_t pc,
 // Every output stream is flushed first, because `abort` discards what the C library still holds in
 // a buffer: standard output written to a file or a pipe is buffered in blocks, so the lines a
 // program printed before a check stopped it would be lost.
+//
+// `fflush(NULL)` takes the lock of each stream, as `exit` does with glibc 2.38 and later. So where
+// another thread holds one, as a thread waiting in a read from standard input does, the program waits
+// for that thread here just as it would in `exit`; the two ways of ending a program flush the same
+// streams and wait in the same cases.
 FIXRUNTIME_STOPS void fixruntime_abort(void)
 {
     fflush(NULL);

@@ -4,6 +4,10 @@
 
 ### Fixed
 
+#### Language
+
+- #707: A program stopped by a runtime check, such as an index out of range or `undefined`, now keeps what it wrote before it stopped. When its standard output went to a file or a pipe, as with `./prog > log`, the lines it had printed were lost, and so was what it had written to a file it had not closed.
+
 #### Tool
 
 - #964: When a completion adds an import, the language server now leaves alone an `import` statement written in a comment or a string literal. It used to delete that statement from the comment or the string and add it to the import statements of the file.
@@ -68,7 +72,6 @@
 
 - #806, #808: At `-O max`, the default level, a recursion that calls itself through a function held in a struct, as `(w.@f)(w, n - 1)` does, now runs in constant stack. Since 1.5.0 it overflowed the stack when its result was wider than three integers.
 - #350, #385, #661, #921: A trait implementation now means the same thing whatever it names its type variables. When a type variable of the implementation had the name of a type variable in the declaration of a trait member, the compiler could crash, reject a correct implementation with a kind mismatch error, or accept an implementation that does not fit the declaration. A type signature in an implementation may now write the opaque types of the declaration under other names, as `?b` for `?a` and `?a` for `?b`. Such a signature used to be rejected where it agreed with the declaration, and accepted where it constrained the opaque types less.
-- #707: A program stopped by a runtime check, such as an index out of range or `undefined`, now keeps what it wrote before it stopped. When its standard output went to a file or a pipe, as with `./prog > log`, the lines it had printed were lost, and so was what it had written to a file it had not closed.
 
 #### Tool
 
