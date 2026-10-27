@@ -164,6 +164,9 @@ pub enum BuildMode {
 /// Without `noreturn`, a bounds-check failure path (which calls the function and then flows to a
 /// merge) keeps contributing a `poison` value to the merge, forcing an aggregate phi that hides the
 /// array size and defeats bounds-check elimination.
+///
+/// The functions declared here are the ones `runtime.c` defines with `FIXRUNTIME_STOPS`, and the two
+/// sets must stay the same.
 fn declare_noreturn_runtime_function<'c, 'm>(
     gc: &Generator<'c, 'm>,
     mode: BuildMode,
