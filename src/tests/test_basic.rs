@@ -13666,9 +13666,9 @@ main = (
 }
 
 /// Checks that `debug_print` and `debug_println` flush stdout: what they write reaches it even when
-/// the program then aborts, which leaves the stdio buffers unflushed.
+/// the program then ends through `_exit` of libc, which discards the stdio buffers.
 #[test]
-pub fn test_debug_print_flushes_stdout_before_an_abort() {
+pub fn test_debug_print_flushes_stdout_before_exiting_without_a_flush() {
     for (call, expected) in [
         (r#"debug_print("a")"#, "a"),
         (r#"debug_println("b")"#, "b\n"),
@@ -13680,7 +13680,7 @@ module Main;
 main : IO ();
 main = (
     eval {};
-    undefined("stop")
+    FFI_CALL_IO[() _exit(CInt), 1.c_int]
 );
     "##,
             call
@@ -13688,9 +13688,10 @@ main = (
         let mut config = Configuration::develop_mode();
         config.set_valgrind(ValgrindTool::None);
         let output = run_source_capture(&source, config);
-        assert!(
-            !output.status.success(),
-            "`undefined` was expected to abort the program after `{}`.",
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "`_exit` was expected to end the program after `{}`.",
             call
         );
         assert_eq!(
