@@ -858,6 +858,9 @@ pub fn working_file_path(name: &str, extension: &str) -> String {
     format!("{}/{}.{}", COMPILER_TEST_WORKING_PATH, name, extension)
 }
 
+/// The signal `abort` stops a program with.
+pub const SIGABRT: i32 = 6;
+
 /// A configuration whose runtime checks are on, so that the checks that stop a program are part
 /// of it.
 pub fn runtime_checked_config() -> Configuration {

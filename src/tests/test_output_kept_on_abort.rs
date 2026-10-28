@@ -7,7 +7,7 @@ use crate::{
     misc::function_name,
     tests::test_util::{
         assert_failed_with, build_program, integer_operations_checked_config, run_source_capture,
-        runtime_checked_config, source_with_a_runtime_zero, working_file_path,
+        runtime_checked_config, source_with_a_runtime_zero, working_file_path, SIGABRT,
     },
 };
 use std::{
@@ -17,9 +17,6 @@ use std::{
     path::Path,
     process::{Command, Stdio},
 };
-
-/// The signal `abort` stops a program with.
-const SIGABRT: i32 = 6;
 
 /// A line printed to standard output before an index check stops the program is kept.
 #[test]

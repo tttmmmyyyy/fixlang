@@ -2,7 +2,7 @@
 mod tests {
     use crate::{
         commands::run::run, configuration::Configuration, error::panic_if_err,
-        misc::save_temporary_source,
+        misc::save_temporary_source, tests::test_util::SIGABRT,
     };
     use std::os::unix::process::ExitStatusExt;
 
@@ -30,12 +30,12 @@ mod tests {
             output.status.code()
         );
 
-        // The signal should be SIGABRT (6).
+        // The signal should be SIGABRT.
         let signal = output.status.signal();
         assert_eq!(
             signal,
-            Some(6),
-            "Expected SIGABRT (signal 6), but got signal: {:?}",
+            Some(SIGABRT),
+            "Expected SIGABRT, but got signal: {:?}",
             signal
         );
     }
