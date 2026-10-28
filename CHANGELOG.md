@@ -7,7 +7,7 @@
 #### Tool
 
 - #964: When a completion adds an import, the language server now leaves alone an `import` statement written in a comment or a string literal. It used to delete that statement from the comment or the string and add it to the import statements of the file.
-- #968: Dependency resolution now finds a choice of versions whenever one satisfies every version requirement. It used to fail when it had chosen a version for one requirement and a requirement on the same project resolved later accepted only another version, as with `fix deps add a@=1.0.0 b@=1.0.0` where `a` requires `b` `^1.0.0` and `b` 1.1.0 exists.
+- #968: Dependency resolution now finds a choice of versions whenever one satisfies every version requirement. It could fail when one requirement on a project accepted a newer version than another requirement on that project allowed, as with `fix deps add a@=1.0.0 b@=1.0.0` where `a` requires `b` `^1.0.0` and `b` 1.1.0 exists.
 
 ## [1.6.0] - 2026-10-24
 

@@ -591,9 +591,9 @@ mod integration_tests {
         release_upstream_version(repo_dir, name, version, "");
     }
 
-    /// Commits to the upstream repository at `repo_dir` a project file for `name` at `version`,
-    /// which ends with `dependencies` (`[[dependencies]]` entries), and tags the commit with the
-    /// version.
+    /// Commits a project file for `name` at `version` to the upstream repository at `repo_dir`,
+    /// and tags the commit with the version. The project file ends with `dependencies`, which
+    /// holds `[[dependencies]]` entries.
     fn release_upstream_version(repo_dir: &Path, name: &str, version: &str, dependencies: &str) {
         fs::write(
             repo_dir.join("fixproj.toml"),
@@ -620,8 +620,8 @@ mod integration_tests {
         )
     }
 
-    /// A version of a dependency that a transitive requirement accepts is chosen again when a
-    /// requirement resolved later accepts only an older one.
+    /// When the root project pins an older version of a package and a dependency accepts a newer
+    /// one as well, the pinned version is chosen.
     ///
     /// The root project requires `resolve-collection` `=1.0.0` and `resolve-common` `=1.0.0`, and
     /// `resolve-collection` requires `resolve-common` `^1.0.0`, which `resolve-common` 1.1.0

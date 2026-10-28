@@ -32,11 +32,16 @@ pub type PackageRetriever<'a> =
 // It takes a package name and returns a list of versions which exist.
 pub type VersionRetriever<'a> = &'a dyn Fn(&PackageName) -> Result<Vec<Version>, Errors>;
 
-// Find a version of every package the root project depends on, directly or transitively, such that
-// every package's requirements are satisfied.
-// Returns the root package and the chosen packages, or None if no choice of versions satisfies all
-// the requirements.
-// If retriever functions rise an error, returns the error.
+/// Finds a version of every package the root project depends on, directly or transitively, such
+/// that every package's requirements are satisfied.
+///
+/// # Arguments
+/// * `mode` — the build configuration whose dependencies the root project brings in. The
+///   dependencies of other packages are read from their `build` section.
+///
+/// # Returns
+/// The root package followed by the chosen packages, or `None` if no choice of versions satisfies
+/// all the requirements.
 pub fn resolve_dependency<'a, 'b>(
     root_proj: &ProjectFile,
     package_retriever: PackageRetriever<'a>,
@@ -58,15 +63,20 @@ pub fn resolve_dependency<'a, 'b>(
     )
 }
 
-// Choose versions for the packages named by `requirements` and not yet in `fixed`, together with
-// everything they depend on, so that every requirement is satisfied.
-// `requirements` holds the dependencies of the packages in `fixed`; the ones on packages already in
-// `fixed` are checked against the chosen version.
-// The search is depth-first and complete: when a choice leads to a conflict, the next version of the
-// most recently chosen package is tried, and so on back to the first choice.
-// Returns `fixed` extended by the chosen packages, or None if no choice satisfies all the
-// requirements.
-// If retriever functions rise an error, returns the error.
+/// Chooses versions for the packages named by `requirements` and not yet in `fixed`, together with
+/// everything they depend on, so that every requirement is satisfied.
+///
+/// The search is depth-first and complete: when a choice leads to a conflict, the next version of
+/// the most recently chosen package is tried, and so on back to the first choice.
+///
+/// # Arguments
+/// * `fixed` — the packages whose versions are already chosen.
+/// * `requirements` — the dependencies of the packages in `fixed` that are not yet checked. A
+///   requirement on a package in `fixed` is checked against its chosen version.
+/// * `depth` — the indentation of the progress messages.
+///
+/// # Returns
+/// `fixed` extended by the chosen packages, or `None` if no choice satisfies all the requirements.
 fn resolve_requirements<'a, 'b>(
     fixed: Vec<Package>,
     requirements: Vec<Dependency>,
@@ -156,8 +166,8 @@ fn resolve_requirements<'a, 'b>(
     Ok(None)
 }
 
-// The versions of the package `name` that satisfy every requirement on it in `requirements`, newest
-// first.
+/// The versions of the package `name` that satisfy every requirement on it in `requirements`,
+/// newest first.
 fn candidate_versions<'b>(
     name: &PackageName,
     requirements: &[Dependency],
