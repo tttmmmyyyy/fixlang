@@ -2,8 +2,16 @@
 //! or transitively, so that every version requirement holds. The search is the PubGrub algorithm of
 //! the `pubgrub` crate, which learns the cause of each conflict and so never retries a combination
 //! of versions that the cause already rules out.
+//!
+//! A version of a project is identified together with the source it is fetched from, so the
+//! requirement that every project come from one source is checked by the search like any other
+//! requirement.
 
-use crate::{configuration::BuildConfigType, error::Errors, misc::Map};
+use crate::{
+    configuration::BuildConfigType,
+    error::Errors,
+    misc::{Map, Set},
+};
 use pubgrub::{
     DefaultStringReporter, Dependencies, DependencyProvider, PackageResolutionStatistics,
     PubGrubError, Reporter, VersionSet,
@@ -13,10 +21,46 @@ use std::{
     cell::RefCell,
     cmp::Reverse,
     collections::BTreeSet,
-    fmt::{self, Debug, Display},
+    fmt::{self, Display},
+    path::PathBuf,
 };
 
 pub type PackageName = String;
+
+/// Where the versions of a project are fetched from.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum Source {
+    /// The project directory at this absolute path, which holds one version.
+    Local(PathBuf),
+    /// The git repository at this URL, whose tags name the versions.
+    Git(String),
+}
+
+impl Display for Source {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Source::Local(path) => write!(f, "{}", path.display()),
+            Source::Git(url) => write!(f, "{}", url),
+        }
+    }
+}
+
+/// A version of a project, together with the source it is fetched from.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct SourcedVersion {
+    pub version: Version,
+    pub source: Source,
+}
+
+/// Written as the explanation of a failed resolution shows a version of the root project.
+///
+/// # Examples
+/// `1.0.0 from https://github.com/a/b.git`
+impl Display for SourcedVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} from {}", self.version, self.source)
+    }
+}
 
 /// What the resolver reads of a project at one version.
 #[derive(Clone)]
@@ -27,27 +71,39 @@ pub struct Package {
     pub fix_version: VersionReq,
 }
 
-/// A version requirement on a project.
+/// A version requirement on a project, which is to be fetched from `source`.
 #[derive(Clone)]
 pub struct Dependency {
     pub name: PackageName,
     pub requirement: VersionReq,
+    pub source: Source,
+}
+
+/// Why a version of a project could not be retrieved.
+pub enum RetrievalError {
+    /// The version itself is broken, as a project file that cannot be read is: the resolution
+    /// leaves the version out and goes on.
+    Unusable(Errors),
+    /// Retrieving failed for a reason outside the version, as a repository that cannot be read
+    /// does: the resolution stops.
+    Failed(Errors),
 }
 
 /// Retrieves a project at a version. The build configuration selects the dependencies the project
 /// file lists.
 pub type PackageRetriever<'a> =
-    &'a dyn Fn(&PackageName, &Version, BuildConfigType) -> Result<Package, Errors>;
+    &'a dyn Fn(&PackageName, &SourcedVersion, BuildConfigType) -> Result<Package, RetrievalError>;
 
-/// Lists the versions a project exists in.
-pub type VersionRetriever<'a> = &'a dyn Fn(&PackageName) -> Result<Vec<Version>, Errors>;
+/// Lists the versions a project exists in at a source.
+pub type VersionRetriever<'a> = &'a dyn Fn(&PackageName, &Source) -> Result<Vec<Version>, Errors>;
 
 /// Chooses a version of every project the root project depends on, directly or transitively, such
-/// that every version requirement holds and every chosen version accepts the running compiler.
-/// Among the choices, newer versions are preferred.
+/// that every version requirement holds, every project comes from the one source all requirements
+/// on it name, and every chosen version accepts the running compiler. Among the choices, newer
+/// versions are preferred.
 ///
-/// A version that cannot be retrieved, or whose `fix_version` rejects `compiler_version`, is left
-/// out of the choice. When no choice exists, the error explains which requirements conflict.
+/// A version that is unusable, or whose `fix_version` rejects `compiler_version`, is left out of
+/// the choice. When no choice exists, the error explains which requirements conflict.
 ///
 /// # Arguments
 /// * `mode` — the build configuration whose dependencies the root project brings in. The
@@ -57,12 +113,12 @@ pub type VersionRetriever<'a> = &'a dyn Fn(&PackageName) -> Result<Vec<Version>,
 /// # Returns
 /// The chosen projects other than the root, sorted by name.
 pub fn resolve_dependency(
-    root: (&PackageName, &Version),
+    root: (&PackageName, &SourcedVersion),
     mode: BuildConfigType,
     compiler_version: &Version,
     package_retriever: PackageRetriever<'_>,
     versions_retriever: VersionRetriever<'_>,
-) -> Result<Vec<(PackageName, Version)>, Errors> {
+) -> Result<Vec<(PackageName, SourcedVersion)>, Errors> {
     let provider = Provider {
         root_name: root.0.clone(),
         root_version: root.1.clone(),
@@ -70,7 +126,11 @@ pub fn resolve_dependency(
         compiler_version: compiler_version.clone(),
         package_retriever,
         versions_retriever,
-        known_versions: RefCell::new(Map::from_iter([(root.0.clone(), vec![root.1.clone()])])),
+        known_versions: RefCell::new(Map::from_iter([(
+            root.0.clone(),
+            BTreeSet::from([root.1.clone()]),
+        )])),
+        listed: RefCell::default(),
     };
     match pubgrub::resolve(&provider, root.0.clone(), root.1.clone()) {
         Ok(selected) => {
@@ -90,7 +150,7 @@ pub fn resolve_dependency(
         }
         Err(PubGrubError::ErrorRetrievingDependencies { source, .. })
         | Err(PubGrubError::ErrorChoosingVersion { source, .. })
-        | Err(PubGrubError::ErrorInShouldCancel(source)) => Err(source.0),
+        | Err(PubGrubError::ErrorInShouldCancel(source)) => Err(source),
     }
 }
 
@@ -98,19 +158,21 @@ pub fn resolve_dependency(
 /// `fix_version` of each version.
 struct Provider<'a, 'b> {
     root_name: PackageName,
-    root_version: Version,
+    root_version: SourcedVersion,
     mode: BuildConfigType,
     compiler_version: Version,
     package_retriever: PackageRetriever<'a>,
     versions_retriever: VersionRetriever<'b>,
-    /// The versions of the root project and of each project some retrieved version has a
-    /// requirement on, newest first. The solver asks only about these projects.
-    known_versions: RefCell<Map<PackageName, Vec<Version>>>,
+    /// The versions of the root project, and of each project at each source some retrieved version
+    /// has a requirement on. The solver asks only about these projects.
+    known_versions: RefCell<Map<PackageName, BTreeSet<SourcedVersion>>>,
+    /// The projects and sources whose versions `known_versions` holds.
+    listed: RefCell<Set<(PackageName, Source)>>,
 }
 
 impl Provider<'_, '_> {
-    /// The versions of `name`, recorded when the first requirement on it was read.
-    fn known_versions_of(&self, name: &PackageName) -> Vec<Version> {
+    /// The versions of `name` the provider has listed, at every source.
+    fn known_versions_of(&self, name: &PackageName) -> BTreeSet<SourcedVersion> {
         self.known_versions
             .borrow()
             .get(name)
@@ -118,21 +180,29 @@ impl Provider<'_, '_> {
             .clone()
     }
 
-    /// The versions of `dependency.name` that satisfy `dependency.requirement`. The first
-    /// requirement read on a project records its versions.
+    /// The versions of `dependency.name` at `dependency.source` that satisfy
+    /// `dependency.requirement`. The first requirement read on a project at a source lists its
+    /// versions there.
     fn versions_satisfying(&self, dependency: &Dependency) -> Result<Versions, Errors> {
-        if !self.known_versions.borrow().contains_key(&dependency.name) {
-            let mut versions = (self.versions_retriever)(&dependency.name)?;
-            versions.sort();
-            versions.reverse();
+        let key = (dependency.name.clone(), dependency.source.clone());
+        if !self.listed.borrow().contains(&key) {
+            let versions = (self.versions_retriever)(&dependency.name, &dependency.source)?;
             self.known_versions
                 .borrow_mut()
-                .insert(dependency.name.clone(), versions);
+                .entry(dependency.name.clone())
+                .or_default()
+                .extend(versions.into_iter().map(|version| SourcedVersion {
+                    version,
+                    source: dependency.source.clone(),
+                }));
+            self.listed.borrow_mut().insert(key);
         }
         Ok(Versions::Only(
             self.known_versions.borrow()[&dependency.name]
                 .iter()
-                .filter(|v| dependency.requirement.matches(v))
+                .filter(|v| {
+                    v.source == dependency.source && dependency.requirement.matches(&v.version)
+                })
                 .cloned()
                 .collect(),
         ))
@@ -141,14 +211,14 @@ impl Provider<'_, '_> {
 
 impl DependencyProvider for Provider<'_, '_> {
     type P = PackageName;
-    type V = Version;
+    type V = SourcedVersion;
     type VS = Versions;
     /// Decides first the projects that took part in more conflicts, then those with fewer versions
     /// left to choose from.
     type Priority = (u32, Reverse<usize>);
     /// Why a version is left out of the choice, written to follow "are unavailable".
     type M = String;
-    type Err = RetrievalError;
+    type Err = Errors;
 
     fn prioritize(
         &self,
@@ -171,18 +241,19 @@ impl DependencyProvider for Provider<'_, '_> {
         &self,
         package: &PackageName,
         range: &Versions,
-    ) -> Result<Option<Version>, RetrievalError> {
+    ) -> Result<Option<SourcedVersion>, Errors> {
         Ok(self
             .known_versions_of(package)
             .into_iter()
+            .rev()
             .find(|v| range.contains(v)))
     }
 
     fn get_dependencies(
         &self,
         package: &PackageName,
-        version: &Version,
-    ) -> Result<Dependencies<PackageName, Versions, String>, RetrievalError> {
+        version: &SourcedVersion,
+    ) -> Result<Dependencies<PackageName, Versions, String>, Errors> {
         let mode = if *package == self.root_name && *version == self.root_version {
             self.mode
         } else {
@@ -190,12 +261,13 @@ impl DependencyProvider for Provider<'_, '_> {
         };
         let retrieved = match (self.package_retriever)(package, version, mode) {
             Ok(retrieved) => retrieved,
-            Err(errs) => {
+            Err(RetrievalError::Unusable(errs)) => {
                 return Ok(Dependencies::Unavailable(format!(
-                    "because it could not be retrieved: {}",
-                    errs
+                    "because it could not be read: {}",
+                    errs.to_string().trim_end()
                 )))
             }
+            Err(RetrievalError::Failed(errs)) => return Err(errs),
         };
         if !retrieved.fix_version.matches(&self.compiler_version) {
             return Ok(Dependencies::Unavailable(format!(
@@ -205,34 +277,34 @@ impl DependencyProvider for Provider<'_, '_> {
         }
         let mut constraints = vec![];
         for dependency in &retrieved.deps {
-            let versions = self
-                .versions_satisfying(dependency)
-                .map_err(RetrievalError)?;
-            constraints.push((dependency.name.clone(), versions));
+            constraints.push((
+                dependency.name.clone(),
+                self.versions_satisfying(dependency)?,
+            ));
         }
         Ok(Dependencies::Available(constraints.into_iter().collect()))
     }
 }
 
 /// A set of versions of one project, kept as the versions it holds or as the versions it leaves
-/// out. A version requirement becomes the set of the existing versions it accepts, so the set
-/// follows the requirement's own matching rules, those for pre-releases included.
+/// out. A version requirement becomes the set of the existing versions it accepts at its source,
+/// so the set follows the requirement's own matching rules, those for pre-releases included.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Versions {
     /// Exactly these versions.
-    Only(BTreeSet<Version>),
+    Only(BTreeSet<SourcedVersion>),
     /// Every version but these.
-    AllBut(BTreeSet<Version>),
+    AllBut(BTreeSet<SourcedVersion>),
 }
 
 impl VersionSet for Versions {
-    type V = Version;
+    type V = SourcedVersion;
 
     fn empty() -> Self {
         Versions::Only(BTreeSet::new())
     }
 
-    fn singleton(v: Version) -> Self {
+    fn singleton(v: SourcedVersion) -> Self {
         Versions::Only(BTreeSet::from([v]))
     }
 
@@ -257,7 +329,7 @@ impl VersionSet for Versions {
         }
     }
 
-    fn contains(&self, v: &Version) -> bool {
+    fn contains(&self, v: &SourcedVersion) -> bool {
         match self {
             Versions::Only(vs) => vs.contains(v),
             Versions::AllBut(vs) => !vs.contains(v),
@@ -265,75 +337,91 @@ impl VersionSet for Versions {
     }
 }
 
-/// Writes the set as the explanation of a failed resolution shows it.
+/// Writes the set as the explanation of a failed resolution shows it, the versions of each source
+/// together.
 ///
 /// # Examples
-/// `Only({1.0.0, 1.1.0})` is written `1.0.0 | 1.1.0`, and `AllBut({1.0.0})` is written
-/// `other than 1.0.0`.
+/// `Only({1.0.0 at A, 1.1.0 at A})` is written `1.0.0 | 1.1.0 from A`, and `AllBut({1.0.0 at A})`
+/// is written `other than 1.0.0 from A`.
 impl Display for Versions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let join = |vs: &BTreeSet<Version>| {
-            vs.iter()
-                .map(|v| v.to_string())
+        let by_source = |vs: &BTreeSet<SourcedVersion>| {
+            let mut groups: Map<&Source, Vec<String>> = Map::default();
+            let mut sources = vec![];
+            for v in vs {
+                if !groups.contains_key(&v.source) {
+                    sources.push(&v.source);
+                }
+                groups
+                    .entry(&v.source)
+                    .or_default()
+                    .push(v.version.to_string());
+            }
+            sources.sort();
+            sources
+                .iter()
+                .map(|source| format!("{} from {}", groups[source].join(" | "), source))
                 .collect::<Vec<_>>()
-                .join(" | ")
+                .join(" or ")
         };
         match self {
             Versions::Only(vs) if vs.is_empty() => write!(f, "(no existing version)"),
-            Versions::Only(vs) => write!(f, "{}", join(vs)),
+            Versions::Only(vs) => write!(f, "{}", by_source(vs)),
             Versions::AllBut(vs) if vs.is_empty() => write!(f, "(any version)"),
-            Versions::AllBut(vs) => write!(f, "other than {}", join(vs)),
+            Versions::AllBut(vs) => write!(f, "other than {}", by_source(vs)),
         }
     }
 }
 
-/// An error that stops the resolution: the versions of a project could not be listed.
-pub struct RetrievalError(Errors);
-
-impl Display for RetrievalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
-impl Debug for RetrievalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        Display::fmt(&self.0, f)
-    }
-}
-
-impl std::error::Error for RetrievalError {}
-
 #[cfg(test)]
 mod tests {
-    use super::{resolve_dependency, Dependency, Package, PackageName};
+    use super::{
+        resolve_dependency, Dependency, Package, PackageName, RetrievalError, Source,
+        SourcedVersion,
+    };
     use crate::configuration::BuildConfigType;
     use crate::error::Errors;
     use crate::misc::Map;
     use semver::{Version, VersionReq};
     use std::cell::Cell;
 
-    /// The requirement `req` on the package `name`.
+    /// The registry the tests resolve against: the packages, each at a version and a source.
+    type Registry = Map<(PackageName, SourcedVersion), Package>;
+
+    /// The source a test fetches the package `name` from, unless it names another.
+    fn source_of(name: &str) -> Source {
+        Source::Git(format!("https://example.com/{}.git", name))
+    }
+
+    /// The version `version` of a package at `source`.
+    fn at(version: &str, source: Source) -> SourcedVersion {
+        SourcedVersion {
+            version: Version::parse(version).unwrap(),
+            source,
+        }
+    }
+
+    /// The requirement `req` on the package `name`, fetched from `source_of(name)`.
     fn dependency(name: &str, req: &str) -> Dependency {
         Dependency {
             name: name.to_string(),
             requirement: VersionReq::parse(req).unwrap(),
+            source: source_of(name),
         }
     }
 
-    /// A registry of packages for the resolver: each entry is a package of one version and the
-    /// requirements it has, written as `("name", "version", &[("dep", "requirement")])`. Every
-    /// package accepts every compiler.
-    fn registry(entries: &[(&str, &str, &[(&str, &str)])]) -> Map<(PackageName, Version), Package> {
+    /// A registry of packages: each entry is a package of one version and the requirements it has,
+    /// written as `("name", "version", &[("dep", "requirement")])`. Every package is fetched from
+    /// `source_of` its name, and accepts every compiler.
+    fn registry(entries: &[(&str, &str, &[(&str, &str)])]) -> Registry {
         let mut map = Map::default();
         for (name, version, deps) in entries {
-            let package = Package {
-                deps: deps.iter().map(|(dep, req)| dependency(dep, req)).collect(),
-                fix_version: VersionReq::STAR,
-            };
             map.insert(
-                (name.to_string(), Version::parse(version).unwrap()),
-                package,
+                (name.to_string(), at(version, source_of(name))),
+                Package {
+                    deps: deps.iter().map(|(dep, req)| dependency(dep, req)).collect(),
+                    fix_version: VersionReq::STAR,
+                },
             );
         }
         map
@@ -347,41 +435,42 @@ mod tests {
         retrievals: usize,
     }
 
-    /// Resolves the requirements `root_deps` of a root package against `registry`, with the
-    /// compiler at version 1.6.1. Retrieving a package listed in `broken` fails.
+    /// Resolves the requirements `root_deps` of a root package against `registry`, under the build
+    /// configuration, with the compiler at version 1.6.1. Retrieving a package version listed in
+    /// `unusable` fails as a broken version does.
     fn resolve_with(
-        registry: &Map<(PackageName, Version), Package>,
-        root_deps: &[(&str, &str)],
-        broken: &[(&str, &str)],
+        registry: &Registry,
+        root_deps: &[Dependency],
+        unusable: &[(&str, &str)],
     ) -> Resolution {
         let root_name = "root".to_string();
-        let root_version = Version::new(0, 1, 0);
+        let root_version = at("0.1.0", Source::Local("/root".into()));
         let root = Package {
-            deps: root_deps
-                .iter()
-                .map(|(dep, req)| dependency(dep, req))
-                .collect(),
+            deps: root_deps.to_vec(),
             fix_version: VersionReq::STAR,
         };
         let retrievals = Cell::new(0);
-        let package_retriever = |name: &PackageName, version: &Version, _: BuildConfigType| {
-            retrievals.set(retrievals.get() + 1);
-            if *name == root_name {
-                return Ok(root.clone());
-            }
-            if broken
-                .iter()
-                .any(|(n, v)| n == name && Version::parse(v).unwrap() == *version)
-            {
-                return Err(Errors::from_msg("the tag is broken".to_string()));
-            }
-            Ok(registry[&(name.clone(), version.clone())].clone())
-        };
-        let versions_retriever = |name: &PackageName| {
+        let package_retriever =
+            |name: &PackageName, version: &SourcedVersion, _: BuildConfigType| {
+                retrievals.set(retrievals.get() + 1);
+                if *name == root_name {
+                    return Ok(root.clone());
+                }
+                if unusable
+                    .iter()
+                    .any(|(n, v)| n == name && Version::parse(v).unwrap() == version.version)
+                {
+                    return Err(RetrievalError::Unusable(Errors::from_msg(
+                        "the tag is broken".to_string(),
+                    )));
+                }
+                Ok(registry[&(name.clone(), version.clone())].clone())
+            };
+        let versions_retriever = |name: &PackageName, source: &Source| {
             Ok(registry
                 .keys()
-                .filter(|(n, _)| n == name)
-                .map(|(_, v)| v.clone())
+                .filter(|(n, v)| n == name && v.source == *source)
+                .map(|(_, v)| v.version.clone())
                 .collect())
         };
         let chosen = resolve_dependency(
@@ -394,7 +483,7 @@ mod tests {
         .map(|chosen| {
             chosen
                 .iter()
-                .map(|(name, version)| format!("{}@{}", name, version))
+                .map(|(name, version)| format!("{}@{}", name, version.version))
                 .collect()
         })
         .map_err(|errs| errs.to_string());
@@ -404,13 +493,15 @@ mod tests {
         }
     }
 
-    /// Resolves the requirements `root_deps` of a root package against `registry`, and returns the
-    /// chosen packages other than the root as `name@version`, sorted, or the error message.
-    fn resolve(
-        registry: &Map<(PackageName, Version), Package>,
-        root_deps: &[(&str, &str)],
-    ) -> Result<Vec<String>, String> {
-        resolve_with(registry, root_deps, &[]).chosen
+    /// Resolves the requirements `root_deps`, each on the package of its name at `source_of` that
+    /// name, against `registry`, and returns the chosen packages other than the root as
+    /// `name@version`, sorted, or the error message.
+    fn resolve(registry: &Registry, root_deps: &[(&str, &str)]) -> Result<Vec<String>, String> {
+        let root_deps = root_deps
+            .iter()
+            .map(|(dep, req)| dependency(dep, req))
+            .collect::<Vec<_>>();
+        resolve_with(registry, &root_deps, &[]).chosen
     }
 
     /// When a package's dependency accepts several versions of a package and the root pins an older
@@ -488,8 +579,8 @@ mod tests {
         let message = resolve(&registry, &[("a", "*"), ("b", "*")]).unwrap_err();
         assert!(
             message.contains("Failed to resolve dependencies.")
-                && message.contains("a 1.0.0 depends on c 1.0.0")
-                && message.contains("b 1.0.0 depends on c 2.0.0"),
+                && message.contains("depends on c 1.0.0 from https://example.com/c.git")
+                && message.contains("depends on c 2.0.0 from https://example.com/c.git"),
             "{}",
             message
         );
@@ -497,11 +588,12 @@ mod tests {
 
     /// The registry of a conflict that has nothing to do with `count` independent packages `a0`,
     /// `a1`, ..., each in four versions: `b` in three versions all requires `c` at `c_requirement`,
-    /// and `c` exists in 1.0.0 and 2.0.0. The root requires every `a`, `b` and `c`.
+    /// and `c` exists in 1.0.0 and 2.0.0. Also returns the root's requirements: every `a`, `b` and
+    /// `c`.
     fn registry_with_an_unrelated_conflict(
         count: usize,
         c_requirement: &str,
-    ) -> (Map<(PackageName, Version), Package>, Vec<(String, String)>) {
+    ) -> (Registry, Vec<Dependency>) {
         let names = (0..count).map(|i| format!("a{}", i)).collect::<Vec<_>>();
         let mut entries: Vec<(&str, &str, &[(&str, &str)])> = vec![];
         for name in &names {
@@ -517,10 +609,10 @@ mod tests {
         entries.push(("c", "2.0.0", &[]));
         let mut root_deps = names
             .iter()
-            .map(|name| (name.clone(), "*".to_string()))
+            .map(|name| dependency(name, "*"))
             .collect::<Vec<_>>();
-        root_deps.push(("b".to_string(), "*".to_string()));
-        root_deps.push(("c".to_string(), "*".to_string()));
+        root_deps.push(dependency("b", "*"));
+        root_deps.push(dependency("c", "*"));
         (registry(&entries), root_deps)
     }
 
@@ -531,10 +623,6 @@ mod tests {
     fn a_conflict_does_not_make_the_search_try_unrelated_combinations() {
         for (c_requirement, expected_c) in [("=1.0.0", Some("c@1.0.0")), ("=3.0.0", None)] {
             let (registry, root_deps) = registry_with_an_unrelated_conflict(12, c_requirement);
-            let root_deps = root_deps
-                .iter()
-                .map(|(n, r)| (n.as_str(), r.as_str()))
-                .collect::<Vec<_>>();
             let resolution = resolve_with(&registry, &root_deps, &[]);
             match expected_c {
                 Some(c) => assert!(resolution.chosen.unwrap().contains(&c.to_string())),
@@ -554,9 +642,9 @@ mod tests {
     #[test]
     fn a_version_rejecting_the_compiler_is_left_out() {
         let mut registry = registry(&[("x", "1.0.0", &[]), ("x", "2.0.0", &[])]);
-        let requires = |registry: &mut Map<(PackageName, Version), Package>, v: &str, req: &str| {
+        let requires = |registry: &mut Registry, version: &str, req: &str| {
             registry
-                .get_mut(&("x".to_string(), Version::parse(v).unwrap()))
+                .get_mut(&("x".to_string(), at(version, source_of("x"))))
                 .unwrap()
                 .fix_version = VersionReq::parse(req).unwrap();
         };
@@ -575,13 +663,209 @@ mod tests {
         );
     }
 
-    /// A version that cannot be retrieved is left out, and an older version is chosen.
+    /// A version that is unusable is left out, and an older version is chosen.
     #[test]
-    fn a_version_that_cannot_be_retrieved_is_left_out() {
+    fn an_unusable_version_is_left_out() {
         let registry = registry(&[("x", "1.0.0", &[]), ("x", "2.0.0", &[])]);
         assert_eq!(
-            resolve_with(&registry, &[("x", "*")], &[("x", "2.0.0")]).chosen,
+            resolve_with(&registry, &[dependency("x", "*")], &[("x", "2.0.0")]).chosen,
             Ok(vec!["x@1.0.0".to_string()])
         );
+    }
+
+    /// A version rejected for a dependency fetched from one source leaves nothing behind that stops
+    /// an older version from fetching that dependency from another source.
+    ///
+    /// `x` 2.0.0 requires `d` `^2.0.0` from one repository, which holds only `d` 1.0.0; `x` 1.0.0
+    /// requires `d` from another repository.
+    #[test]
+    fn a_rejected_version_leaves_no_source_behind() {
+        let first = Source::Git("https://example.com/first/d.git".to_string());
+        let second = Source::Git("https://example.com/second/d.git".to_string());
+        let d_from = |source: &Source, req: &str| Dependency {
+            name: "d".to_string(),
+            requirement: VersionReq::parse(req).unwrap(),
+            source: source.clone(),
+        };
+        let mut registry = registry(&[]);
+        for (version, deps) in [
+            ("1.0.0", vec![d_from(&second, "*")]),
+            ("2.0.0", vec![d_from(&first, "^2.0.0")]),
+        ] {
+            registry.insert(
+                ("x".to_string(), at(version, source_of("x"))),
+                Package {
+                    deps,
+                    fix_version: VersionReq::STAR,
+                },
+            );
+        }
+        for source in [&first, &second] {
+            registry.insert(
+                ("d".to_string(), at("1.0.0", source.clone())),
+                Package {
+                    deps: vec![],
+                    fix_version: VersionReq::STAR,
+                },
+            );
+        }
+        assert_eq!(
+            resolve(&registry, &[("x", "*")]),
+            Ok(vec!["d@1.0.0".to_string(), "x@1.0.0".to_string()])
+        );
+    }
+
+    /// Two requirements that fetch one package from two sources conflict, and the message names
+    /// both sources.
+    #[test]
+    fn two_sources_of_one_package_conflict() {
+        let other = Source::Git("https://example.com/other/d.git".to_string());
+        let mut registry = registry(&[("d", "1.0.0", &[])]);
+        registry.insert(
+            ("d".to_string(), at("1.0.0", other.clone())),
+            Package {
+                deps: vec![],
+                fix_version: VersionReq::STAR,
+            },
+        );
+        registry.insert(
+            ("x".to_string(), at("1.0.0", source_of("x"))),
+            Package {
+                deps: vec![Dependency {
+                    name: "d".to_string(),
+                    requirement: VersionReq::STAR,
+                    source: other,
+                }],
+                fix_version: VersionReq::STAR,
+            },
+        );
+        let message = resolve(&registry, &[("d", "*"), ("x", "*")]).unwrap_err();
+        assert!(
+            message.contains("https://example.com/d.git")
+                && message.contains("https://example.com/other/d.git"),
+            "{}",
+            message
+        );
+    }
+
+    /// Retrieving a version that fails for a reason outside the version stops the resolution with
+    /// that error, also where an older version would avoid it.
+    #[test]
+    fn a_failure_to_retrieve_stops_the_resolution() {
+        let registry = registry(&[("x", "1.0.0", &[]), ("x", "2.0.0", &[])]);
+        let root_name = "root".to_string();
+        let root_version = at("0.1.0", Source::Local("/root".into()));
+        let package_retriever =
+            |name: &PackageName, version: &SourcedVersion, _: BuildConfigType| {
+                if *name == root_name {
+                    return Ok(Package {
+                        deps: vec![dependency("x", "*")],
+                        fix_version: VersionReq::STAR,
+                    });
+                }
+                if version.version == Version::new(2, 0, 0) {
+                    return Err(RetrievalError::Failed(Errors::from_msg(
+                        "the checkout failed".to_string(),
+                    )));
+                }
+                Ok(registry[&(name.clone(), version.clone())].clone())
+            };
+        let versions_retriever = |name: &PackageName, source: &Source| {
+            Ok(registry
+                .keys()
+                .filter(|(n, v)| n == name && v.source == *source)
+                .map(|(_, v)| v.version.clone())
+                .collect())
+        };
+        let message = resolve_dependency(
+            (&root_name, &root_version),
+            BuildConfigType::Build,
+            &Version::new(1, 6, 1),
+            &package_retriever,
+            &versions_retriever,
+        )
+        .map_err(|errs| errs.to_string())
+        .unwrap_err();
+        assert!(message.contains("the checkout failed"), "{}", message);
+    }
+
+    /// A package whose versions cannot be listed stops the resolution with the error of the
+    /// listing, also where an older version of the package that requires it would avoid it.
+    ///
+    /// `x` 2.0.0 requires `y`, whose versions cannot be listed; `x` 1.0.0 requires nothing.
+    #[test]
+    fn a_failure_to_list_versions_stops_the_resolution() {
+        let registry = registry(&[("x", "1.0.0", &[]), ("x", "2.0.0", &[("y", "*")])]);
+        let root_name = "root".to_string();
+        let root_version = at("0.1.0", Source::Local("/root".into()));
+        let package_retriever =
+            |name: &PackageName, version: &SourcedVersion, _: BuildConfigType| {
+                if *name == root_name {
+                    return Ok(Package {
+                        deps: vec![dependency("x", "*")],
+                        fix_version: VersionReq::STAR,
+                    });
+                }
+                Ok(registry[&(name.clone(), version.clone())].clone())
+            };
+        let versions_retriever = |name: &PackageName, source: &Source| {
+            if name == "y" {
+                return Err(Errors::from_msg("the repository is gone".to_string()));
+            }
+            Ok(registry
+                .keys()
+                .filter(|(n, v)| n == name && v.source == *source)
+                .map(|(_, v)| v.version.clone())
+                .collect())
+        };
+        let message = resolve_dependency(
+            (&root_name, &root_version),
+            BuildConfigType::Build,
+            &Version::new(1, 6, 1),
+            &package_retriever,
+            &versions_retriever,
+        )
+        .map_err(|errs| errs.to_string())
+        .unwrap_err();
+        assert!(message.contains("the repository is gone"), "{}", message);
+    }
+
+    /// Under the test configuration the root brings in its test dependencies, and every other
+    /// package brings in the dependencies of its `build` section alone.
+    ///
+    /// The root requires `x`, and `t` for its tests; `x` requires `u` for its own tests.
+    #[test]
+    fn only_the_root_brings_in_its_test_dependencies() {
+        let root_name = "root".to_string();
+        let root_version = at("0.1.0", Source::Local("/root".into()));
+        let package_retriever = |name: &PackageName, _: &SourcedVersion, mode: BuildConfigType| {
+            let (build, test): (&[(&str, &str)], &[(&str, &str)]) = match name.as_str() {
+                "root" => (&[("x", "*")], &[("t", "*")]),
+                "x" => (&[], &[("u", "*")]),
+                _ => (&[], &[]),
+            };
+            let mut deps = build
+                .iter()
+                .map(|(dep, req)| dependency(dep, req))
+                .collect::<Vec<_>>();
+            if mode == BuildConfigType::Test {
+                deps.extend(test.iter().map(|(dep, req)| dependency(dep, req)));
+            }
+            Ok(Package {
+                deps,
+                fix_version: VersionReq::STAR,
+            })
+        };
+        let versions_retriever = |_: &PackageName, _: &Source| Ok(vec![Version::new(1, 0, 0)]);
+        let chosen = resolve_dependency(
+            (&root_name, &root_version),
+            BuildConfigType::Test,
+            &Version::new(1, 6, 1),
+            &package_retriever,
+            &versions_retriever,
+        )
+        .map(|chosen| chosen.into_iter().map(|(name, _)| name).collect::<Vec<_>>())
+        .map_err(|errs| errs.to_string());
+        assert_eq!(chosen, Ok(vec!["t".to_string(), "x".to_string()]));
     }
 }

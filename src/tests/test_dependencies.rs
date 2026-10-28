@@ -588,20 +588,13 @@ mod integration_tests {
             ),
         )
         .expect("Failed to write the source of the upstream project");
-        release_upstream_version(repo_dir, name, version, "");
-    }
-
-    /// Commits a project file for `name` at `version` to the upstream repository at `repo_dir`,
-    /// and tags the commit with the version. The project accepts every compiler, and its project
-    /// file ends with `dependencies`, which holds `[[dependencies]]` entries.
-    fn release_upstream_version(repo_dir: &Path, name: &str, version: &str, dependencies: &str) {
-        release_upstream_version_for_fix(repo_dir, name, version, "*", dependencies);
+        release_upstream_version(repo_dir, name, version, "*", "");
     }
 
     /// Commits a project file for `name` at `version` to the upstream repository at `repo_dir`,
     /// and tags the commit with the version. The project file requires `fix_version` of the
     /// compiler, and ends with `dependencies`, which holds `[[dependencies]]` entries.
-    fn release_upstream_version_for_fix(
+    fn release_upstream_version(
         repo_dir: &Path,
         name: &str,
         version: &str,
@@ -633,6 +626,35 @@ mod integration_tests {
         )
     }
 
+    /// Writes at `project_dir` a root project named `name` that accepts every compiler and has the
+    /// `[[dependencies]]` entries `dependencies`, runs `fix deps update` there, and returns the lock
+    /// file it writes.
+    fn update_root_project(project_dir: &Path, name: &str, dependencies: &str) -> toml::Value {
+        fs::create_dir_all(project_dir).expect("Failed to create the root project");
+        fs::write(
+            project_dir.join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"{}\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+                 [build]\nfiles = [\"main.fix\"]\n\n{}",
+                name, dependencies
+            ),
+        )
+        .expect("Failed to write the project file of the root project");
+        let output = run_fix(project_dir, &["deps", "update"]);
+        assert_succeeded(&output, "fix deps update resolves the dependencies");
+        toml::from_str(&fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).unwrap()).unwrap()
+    }
+
+    /// The entry of the dependency `name` in the lock file `lock`.
+    fn locked_entry<'a>(lock: &'a toml::Value, name: &str) -> &'a toml::Value {
+        lock["dependencies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|dep| dep["name"].as_str() == Some(name))
+            .unwrap_or_else(|| panic!("the lock file has no \"{}\":\n{}", name, lock))
+    }
+
     /// When the root project pins an older version of a package and a dependency accepts a newer
     /// one as well, the pinned version is chosen.
     ///
@@ -644,7 +666,7 @@ mod integration_tests {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let common_repo = temp_dir.path().join("common");
         create_upstream_repo(&common_repo, "resolve-common", "1.0.0", "ResolveCommon");
-        release_upstream_version(&common_repo, "resolve-common", "1.1.0", "");
+        release_upstream_version(&common_repo, "resolve-common", "1.1.0", "*", "");
 
         let collection_repo = temp_dir.path().join("collection");
         create_upstream_repo(
@@ -657,33 +679,23 @@ mod integration_tests {
             &collection_repo,
             "resolve-collection",
             "1.0.0",
+            "*",
             &git_dependency_entry("resolve-common", "^1.0.0", &common_repo),
         );
 
-        let project_dir = temp_dir.path().join("root");
-        fs::create_dir_all(&project_dir).expect("Failed to create the root project");
-        fs::write(
-            project_dir.join("fixproj.toml"),
-            format!(
-                "[general]\nname = \"resolve-root\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
-                 [build]\nfiles = [\"main.fix\"]\n\n{}\n{}",
+        let lock = update_root_project(
+            &temp_dir.path().join("root"),
+            "resolve-root",
+            &format!(
+                "{}\n{}",
                 git_dependency_entry("resolve-collection", "=1.0.0", &collection_repo),
                 git_dependency_entry("resolve-common", "=1.0.0", &common_repo)
             ),
-        )
-        .expect("Failed to write the project file of the root project");
-
-        let output = run_fix(&project_dir, &["deps", "update"]);
-        assert_succeeded(&output, "fix deps update resolves the dependencies");
-        let lock: toml::Value =
-            toml::from_str(&fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).unwrap()).unwrap();
-        let common_version = lock["dependencies"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|dep| dep["name"].as_str() == Some("resolve-common"))
-            .map(|dep| dep["version"].as_str().unwrap().to_string());
-        assert_eq!(common_version.as_deref(), Some("1.0.0"));
+        );
+        assert_eq!(
+            locked_entry(&lock, "resolve-common")["version"].as_str(),
+            Some("1.0.0")
+        );
     }
 
     /// A version of a dependency whose `fix_version` rejects the running compiler is passed over,
@@ -693,29 +705,197 @@ mod integration_tests {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let lib_repo = temp_dir.path().join("lib");
         create_upstream_repo(&lib_repo, "resolve-for-fix", "1.0.0", "ResolveForFix");
-        release_upstream_version_for_fix(&lib_repo, "resolve-for-fix", "2.0.0", ">=99.0.0", "");
+        release_upstream_version(&lib_repo, "resolve-for-fix", "2.0.0", ">=99.0.0", "");
+
+        let lock = update_root_project(
+            &temp_dir.path().join("root"),
+            "resolve-for-fix-root",
+            &git_dependency_entry("resolve-for-fix", "*", &lib_repo),
+        );
+        assert_eq!(
+            locked_entry(&lock, "resolve-for-fix")["version"].as_str(),
+            Some("1.0.0")
+        );
+    }
+
+    /// A version passed over takes nothing with it: when it fetched a dependency from one
+    /// repository, the version chosen instead can fetch that dependency from another.
+    ///
+    /// `resolve-src-lib` 2.0.0 rejects the running compiler and fetches `resolve-src-dep` from one
+    /// repository; 1.0.0 fetches it from another.
+    #[test]
+    fn test_a_version_passed_over_leaves_no_source_behind() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let first_dep_repo = temp_dir.path().join("first-dep");
+        let second_dep_repo = temp_dir.path().join("second-dep");
+        for repo in [&first_dep_repo, &second_dep_repo] {
+            create_upstream_repo(repo, "resolve-src-dep", "1.0.0", "ResolveSrcDep");
+        }
+        let lib_repo = temp_dir.path().join("lib");
+        create_upstream_repo(&lib_repo, "resolve-src-lib", "0.1.0", "ResolveSrcLib");
+        release_upstream_version(
+            &lib_repo,
+            "resolve-src-lib",
+            "1.0.0",
+            "*",
+            &git_dependency_entry("resolve-src-dep", "*", &second_dep_repo),
+        );
+        release_upstream_version(
+            &lib_repo,
+            "resolve-src-lib",
+            "2.0.0",
+            ">=99.0.0",
+            &git_dependency_entry("resolve-src-dep", "*", &first_dep_repo),
+        );
+
+        let lock = update_root_project(
+            &temp_dir.path().join("root"),
+            "resolve-src-root",
+            &git_dependency_entry("resolve-src-lib", ">=1.0.0", &lib_repo),
+        );
+        assert_eq!(
+            locked_entry(&lock, "resolve-src-lib")["version"].as_str(),
+            Some("1.0.0")
+        );
+        assert_eq!(
+            locked_entry(&lock, "resolve-src-dep")["git"]["repo"].as_str(),
+            Some(second_dep_repo.to_string_lossy().as_ref())
+        );
+    }
+
+    /// `fix deps add` with no version requires the newest tagged version whose `fix_version`
+    /// accepts the running compiler, rather than a newer one that rejects it.
+    #[test]
+    fn test_deps_add_requires_the_newest_version_accepting_the_compiler() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let lib_repo = temp_dir.path().join("lib");
+        create_upstream_repo(&lib_repo, "add-for-fix", "1.0.0", "AddForFix");
+        release_upstream_version(&lib_repo, "add-for-fix", "2.0.0", ">=99.0.0", "");
+
+        let registry = temp_dir.path().join("registry.toml");
+        fs::write(
+            &registry,
+            format!(
+                "[[projects]]\nname = \"add-for-fix\"\ngit = \"{}\"\n",
+                lib_repo.to_string_lossy()
+            ),
+        )
+        .expect("Failed to write the registry file");
+        let home = temp_dir.path().join("home");
+        fs::create_dir_all(&home).expect("Failed to create the home directory");
+        fs::write(
+            home.join(".fixconfig.toml"),
+            format!("registries = [\"{}\"]\n", registry.to_string_lossy()),
+        )
+        .expect("Failed to write the config file");
 
         let project_dir = temp_dir.path().join("root");
         fs::create_dir_all(&project_dir).expect("Failed to create the root project");
         fs::write(
             project_dir.join("fixproj.toml"),
-            format!(
-                "[general]\nname = \"resolve-for-fix-root\"\nversion = \"0.1.0\"\n\
-                 fix_version = \"*\"\n\n[build]\nfiles = [\"main.fix\"]\n\n{}",
-                git_dependency_entry("resolve-for-fix", "*", &lib_repo)
-            ),
+            "[general]\nname = \"add-for-fix-root\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+             [build]\nfiles = [\"main.fix\"]\n",
         )
         .expect("Failed to write the project file of the root project");
-
-        let output = run_fix(&project_dir, &["deps", "update"]);
-        assert_succeeded(&output, "fix deps update resolves the dependencies");
-        let lock: toml::Value =
-            toml::from_str(&fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).unwrap()).unwrap();
+        let output = fix_command()
+            .args(["deps", "add", "add-for-fix"])
+            .current_dir(&project_dir)
+            .env("HOME", &home)
+            .output()
+            .expect("Failed to execute fix deps add");
+        assert_succeeded(&output, "fix deps add adds the project");
+        let project_file: toml::Value =
+            toml::from_str(&fs::read_to_string(project_dir.join("fixproj.toml")).unwrap()).unwrap();
         assert_eq!(
-            lock["dependencies"][0]["version"].as_str(),
+            project_file["dependencies"][0]["version"].as_str(),
             Some("1.0.0"),
             "{}",
-            lock
+            project_file
+        );
+    }
+
+    /// A project whose `fix_version` rejects the running compiler does not build, also when its
+    /// lock file is up to date and so no resolution runs.
+    #[test]
+    fn test_a_root_rejecting_the_compiler_does_not_build() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let project_dir = temp_dir.path();
+        let project_file = |fix_version: &str| {
+            format!(
+                "[general]\nname = \"fix-version-root\"\nversion = \"0.1.0\"\n\
+                 fix_version = \"{}\"\n\n[build]\nfiles = [\"main.fix\"]\n",
+                fix_version
+            )
+        };
+        fs::write(
+            project_dir.join("main.fix"),
+            "module Main;\n\nmain : IO ();\nmain = pure();\n",
+        )
+        .expect("Failed to write the source of the root project");
+        fs::write(project_dir.join("fixproj.toml"), project_file("*"))
+            .expect("Failed to write the project file of the root project");
+        assert_succeeded(
+            &run_fix(project_dir, &["build"]),
+            "fix build builds a project that accepts the compiler",
+        );
+
+        fs::write(project_dir.join("fixproj.toml"), project_file(">=99.0.0"))
+            .expect("Failed to write the project file of the root project");
+        let output = run_fix(project_dir, &["build"]);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success() && stderr.contains(">=99.0.0"),
+            "the build fails, naming the compiler versions the project requires:\n{}",
+            stderr
+        );
+    }
+
+    /// A lock file pinning a version of a dependency whose `fix_version` rejects the running
+    /// compiler, as a lock file written by a newer compiler can, fails the build.
+    #[test]
+    fn test_a_locked_version_rejecting_the_compiler_does_not_build() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let lib_repo = temp_dir.path().join("lib");
+        create_upstream_repo(&lib_repo, "locked-for-fix", "1.0.0", "LockedForFix");
+
+        let project_dir = temp_dir.path().join("root");
+        let mut lock = update_root_project(
+            &project_dir,
+            "locked-for-fix-root",
+            &git_dependency_entry("locked-for-fix", "*", &lib_repo),
+        );
+        fs::write(
+            project_dir.join("main.fix"),
+            "module Main;\n\nimport LockedForFix;\n\nmain : IO ();\n\
+             main = println(LockedForFix::upstream_value.to_string);\n",
+        )
+        .expect("Failed to write the source of the root project");
+
+        // Pin the lock file to a newer release that requires a newer compiler.
+        release_upstream_version(&lib_repo, "locked-for-fix", "2.0.0", ">=99.0.0", "");
+        let rev = Command::new("git")
+            .args(["rev-parse", "HEAD"])
+            .current_dir(&lib_repo)
+            .output()
+            .expect("Failed to run `git rev-parse`");
+        let rev = String::from_utf8(rev.stdout).unwrap().trim().to_string();
+        let entry = &mut lock["dependencies"][0];
+        entry["version"] = toml::Value::String("2.0.0".to_string());
+        entry["path"] =
+            toml::Value::String(entry["path"].as_str().unwrap().replace("1.0.0", "2.0.0"));
+        entry["git"]["rev"] = toml::Value::String(rev);
+        fs::write(
+            project_dir.join(LOCK_FILE_PATH),
+            toml::to_string(&lock).unwrap(),
+        )
+        .expect("Failed to write the lock file");
+
+        let output = run_fix(&project_dir, &["build"]);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success() && stderr.contains(">=99.0.0"),
+            "the build fails, naming the compiler versions the locked version requires:\n{}",
+            stderr
         );
     }
 

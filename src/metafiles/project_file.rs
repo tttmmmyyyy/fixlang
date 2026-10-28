@@ -8,8 +8,7 @@ use crate::{
         TRY_FIX_DEPS_UPDATE_TEST, WHOLE_PROGRAM_IN_ONE_UNIT, WHOLE_PROGRAM_IN_ONE_UNIT_STR,
     },
     dependency::lockfile::{
-        clone_git_repo, get_lock_file_path, get_versions_from_repo, DependencyLockFile,
-        LockFileType, ProjectSource,
+        get_lock_file_path, tagged_version_to_add, DependencyLockFile, LockFileType, ProjectSource,
     },
     error::Errors,
     hash::HashSource,
@@ -1371,38 +1370,27 @@ impl ProjectFile {
                     // When the version requirement is empty, try to use the latest tagged version.
                     let version = match version {
                         Some(v) => v.clone(),
-                        None => {
-                            let (_tmp_dir, repo) = clone_git_repo(&proj_info.git)?;
-                            let version_infos = get_versions_from_repo(&repo)?;
-                            let mut tagged_versions = version_infos
-                                .iter()
-                                .filter_map(|version_info| {
-                                    if version_info.tagged {
-                                        Some(version_info.version.clone())
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect::<Vec<_>>();
-                            tagged_versions.sort();
-                            if tagged_versions.is_empty() {
+                        None => match tagged_version_to_add(proj_name, &proj_info.git)? {
+                            None => {
                                 warn_msg(&format!(
                                     "Adding version requirement \"*\" for \"{}\" since there are no tagged versions. \
                                     This means that updating the lock file (which is done by `fix deps add` or `fix deps update`) may introduce breaking changes.",
                                     proj_name,
                                 ));
                                 "*".to_string()
-                            } else {
-                                let latest = tagged_versions.pop().unwrap();
-                                let latest =
-                                    format!("{}.{}.{}", latest.major, latest.minor, latest.patch);
-                                info_msg(&format!(
-                                    "Adding version requirement \"{}\" for \"{}\" which is the latest tagged version.",
-                                    latest, proj_name
-                                ));
-                                latest
                             }
-                        }
+                            Some(version) => {
+                                let version = format!(
+                                    "{}.{}.{}",
+                                    version.major, version.minor, version.patch
+                                );
+                                info_msg(&format!(
+                                    "Adding version requirement \"{}\" for \"{}\".",
+                                    version, proj_name
+                                ));
+                                version
+                            }
+                        },
                     };
 
                     let section_name = match mode {

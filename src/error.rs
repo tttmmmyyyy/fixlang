@@ -54,6 +54,16 @@ impl Display for Errors {
     }
 }
 
+/// Writes the diagnostics as `Display` does, so that an `Errors` passed out of a library through
+/// `std::error::Error` reads as the compiler prints it.
+impl fmt::Debug for Errors {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
+impl std::error::Error for Errors {}
+
 impl Errors {
     /// A collection holding no diagnostic.
     pub fn empty() -> Errors {

@@ -154,7 +154,7 @@ mod integration_tests {
         );
     }
 
-    // Test 2: tag pinning builds successfully.
+    // Test 2: tag pinning builds successfully, and no warning says the pin is ignored.
     #[test]
     fn test_git_tag_basic() {
         let (_temp_dir, project_dir) = setup_git_ref_test_env("tag_basic");
@@ -180,6 +180,12 @@ mod integration_tests {
         assert!(
             lock_content.contains("version = \"1.1.0\""),
             "Lock file should show version 1.1.0"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("only applied to direct dependencies"),
+            "the root's own pin is applied, so no warning says it is ignored:\n{}",
+            stderr
         );
     }
 
