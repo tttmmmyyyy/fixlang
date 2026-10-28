@@ -384,7 +384,7 @@ impl DependencyLockFileEntry {
     pub fn project_file(&self) -> Result<ProjectFile, Errors> {
         let proj_file_path = self.path.join(PROJECT_FILE_PATH);
         let mut pf = ProjectFile::read_file(&proj_file_path)?;
-        pf.is_fix_version_compatible()?;
+        pf.check_fix_version_compatible()?;
         pf.role = ProjectFileRole::Dependent;
         pf.source = Some(match &self.git {
             Some(g) => ProjectOrigin::Git {
@@ -724,11 +724,9 @@ fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Retriev
         };
 
         // Parse the version.
-        let parsed = Version::parse(name);
-        if parsed.is_err() {
+        let Ok(version) = Version::parse(name) else {
             return true; // Continue.
-        }
-        let version = parsed.unwrap();
+        };
 
         // Peel the OID to a commit. For annotated tags `oid` points to a tag
         // object, not the commit, so a later `find_commit` would fail; for
@@ -990,11 +988,11 @@ fn create_package_retriever(
 /// The versions retriever for `resolver::resolve_dependency`, which lists versions through the
 /// cache `pkgs`.
 fn create_version_retriever(
-    pkgs: ProjectsInfo,
+    projs: ProjectsInfo,
 ) -> Box<dyn Fn(&PackageName, &Source) -> Result<Vec<Version>, RetrievalError>> {
-    Box::new(move |pkg_name, source| {
-        let mut prjs = pkgs.projects.as_ref().lock().unwrap();
-        let prj = known_project(&mut prjs, pkg_name, source);
+    Box::new(move |prj_name, source| {
+        let mut projs = projs.projects.as_ref().lock().unwrap();
+        let prj = known_project(&mut projs, prj_name, source);
         prj.retrieve_versions()?;
         Ok(prj
             .versions
