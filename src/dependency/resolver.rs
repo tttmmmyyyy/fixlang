@@ -298,6 +298,24 @@ mod tests {
         );
     }
 
+    /// When the newest version of a package has dependencies no version satisfies, an older version
+    /// is chosen, and the requirements of the rejected version do not constrain it.
+    ///
+    /// `x` 2.0.0 requires `y` `^2.0.0`, which no version of `y` satisfies; `x` 1.0.0 requires `y`
+    /// `^1.0.0`.
+    #[test]
+    fn the_requirements_of_a_rejected_version_are_dropped() {
+        let registry = registry(&[
+            ("x", "1.0.0", &[("y", "^1.0.0")]),
+            ("x", "2.0.0", &[("y", "^2.0.0")]),
+            ("y", "1.0.0", &[]),
+        ]);
+        assert_eq!(
+            resolve(&registry, &[("x", "*")]),
+            Some(vec!["x@1.0.0".to_string(), "y@1.0.0".to_string()])
+        );
+    }
+
     /// Requirements that no choice of versions satisfies are reported as unresolvable.
     #[test]
     fn unsatisfiable_requirements_are_not_resolved() {
