@@ -22,7 +22,7 @@ use std::{
     cell::{Ref, RefCell},
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet},
-    fmt::{self, Display},
+    fmt::{self, Display, Formatter},
     path::PathBuf,
 };
 
@@ -38,7 +38,7 @@ pub enum Source {
 }
 
 impl Display for Source {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Source::Local(path) => write!(f, "{}", path.display()),
             Source::Git(url) => write!(f, "{}", url),
@@ -58,7 +58,7 @@ pub struct SourcedVersion {
 /// # Examples
 /// `1.0.0 from https://github.com/a/b.git`
 impl Display for SourcedVersion {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{} from {}", self.version, self.source)
     }
 }
@@ -361,7 +361,7 @@ impl VersionSet for Versions {
 /// `Only({1.0.0 at A, 1.1.0 at A})` is written `1.0.0 | 1.1.0 from A`, and `AllBut({1.0.0 at A})`
 /// is written `other than 1.0.0 from A`.
 impl Display for Versions {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let by_source = |vs: &BTreeSet<SourcedVersion>| {
             let mut groups: BTreeMap<&Source, Vec<String>> = BTreeMap::new();
             for v in vs {
