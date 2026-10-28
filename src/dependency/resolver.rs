@@ -32,183 +32,281 @@ pub type PackageRetriever<'a> =
 // It takes a package name and returns a list of versions which exist.
 pub type VersionRetriever<'a> = &'a dyn Fn(&PackageName) -> Result<Vec<Version>, Errors>;
 
-pub fn resolve_dependency<'a, 'b, 'c>(
+// Find a version of every package the root project depends on, directly or transitively, such that
+// every package's requirements are satisfied.
+// Returns the root package and the chosen packages, or None if no choice of versions satisfies all
+// the requirements.
+// If retriever functions rise an error, returns the error.
+pub fn resolve_dependency<'a, 'b>(
     root_proj: &ProjectFile,
     package_retriever: PackageRetriever<'a>,
     versions_retriever: VersionRetriever<'b>,
     mode: BuildConfigType,
 ) -> Result<Option<Vec<Package>>, Errors> {
-    try_use_package(
-        (&root_proj.general.name, &root_proj.general.version()),
-        &[],
+    let root = package_retriever(
+        &root_proj.general.name,
+        &root_proj.general.version(),
+        mode,
+    )?;
+    let requirements = root.deps.clone();
+    resolve_requirements(
+        vec![root],
+        requirements,
         package_retriever,
         versions_retriever,
-        mode,
         0,
     )
 }
 
-// Try to use a package.
-// It takes a NEW package `pkg` and other packages which are already version-fixed, and update `fixed` to satisfy the dependency, including the given `pkg`.
-// If the dependency cannot be resolved, returns None.
+// Choose versions for the packages named by `requirements` and not yet in `fixed`, together with
+// everything they depend on, so that every requirement is satisfied.
+// `requirements` holds the dependencies of the packages in `fixed`; the ones on packages already in
+// `fixed` are checked against the chosen version.
+// The search is depth-first and complete: when a choice leads to a conflict, the next version of the
+// most recently chosen package is tried, and so on back to the first choice.
+// Returns `fixed` extended by the chosen packages, or None if no choice satisfies all the
+// requirements.
 // If retriever functions rise an error, returns the error.
-fn try_use_package<'a, 'b, 'c>(
-    pkg: (&PackageName, &Version),
-    fixed: &[Package],
+fn resolve_requirements<'a, 'b>(
+    fixed: Vec<Package>,
+    requirements: Vec<Dependency>,
     package_retriever: PackageRetriever<'a>,
     versions_retriever: VersionRetriever<'b>,
-    mode: BuildConfigType,
-    indent: usize,
+    depth: usize,
 ) -> Result<Option<Vec<Package>>, Errors> {
-    let (pkg_name, pkg_version) = pkg;
+    let indent = " ".repeat(depth);
 
-    // `fixed` should not contain the given package.
-    assert!(!fixed.iter().any(|p| p.name == *pkg_name));
-
-    // Get the package information.
-    let package = package_retriever(pkg_name, pkg_version, mode)?;
-    let deps = package.deps.clone();
-
-    // Add the package to the fixed list.
-    let mut fixed = fixed.to_vec();
-    fixed.push(package);
-
-    // Try to resolve dependencies for this package.
-    // We try first dependencies with fewer possible versions.
-    let mut dep_range: Vec<(Dependency, usize)> = vec![]; // Pairs of Dependency and number of possible versions for the package.
-    for dep in deps.iter() {
-        let vers = versions_retriever(&dep.name)?;
-        let count = vers.iter().filter(|v| dep.requirement.matches(v)).count();
-        dep_range.push((dep.clone(), count));
-    }
-    dep_range.sort_by_key(|(_, count)| *count);
-    let deps = dep_range.iter().map(|(dep, _)| dep).collect::<Vec<_>>();
-    let mut ok = true;
-    for dep in deps {
-        if let Some(res) =
-            try_resolve_dependency(dep, &fixed, package_retriever, versions_retriever, indent)?
-        {
-            fixed = res;
-        } else {
-            ok = false;
-            break;
+    // Check the requirements on the packages whose versions are already chosen, and keep the others.
+    let mut open: Vec<Dependency> = vec![];
+    for req in requirements {
+        match fixed.iter().find(|p| p.name == req.name) {
+            Some(package) if req.requirement.matches(&package.version) => {}
+            Some(package) => {
+                info_msg(&format!(
+                    "{}Accepted \"{}@{}\" conflicts with the requirement `{}`. Backtrack.",
+                    indent, package.name, package.version, req.requirement
+                ));
+                return Ok(None);
+            }
+            None => open.push(req),
         }
     }
-
-    // If all dependecies are resolved, use this version.
-    if ok {
-        info_msg(&format!(
-            "{}Accept \"{}@{}\".",
-            " ".repeat(indent),
-            pkg_name,
-            pkg_version
-        ));
+    if open.is_empty() {
         return Ok(Some(fixed));
     }
-    return Ok(None);
-}
 
-// Resolve a dependency.
-// It takes a dependency and version-fixed packages, and update `fixed` to satisfy the dependency.
-// If the dependency cannot be resolved, returns None.
-// If retriever functions rise an error, returns the error.
-fn try_resolve_dependency<'a, 'b, 'c>(
-    dependency: &Dependency,
-    fixed: &[Package],
-    package_retriever: PackageRetriever<'a>,
-    versions_retriever: VersionRetriever<'b>,
-    indent: usize,
-) -> Result<Option<Vec<Package>>, Errors> {
-    info_msg(&format!(
-        "{}Resolving version requirement: \"{}@{}\".",
-        " ".repeat(indent),
-        dependency.name,
-        dependency.requirement
-    ));
-    let indent = indent + 1;
-
-    // In case the dependent package is already resolved,
-    // if the version satisfies the requirement, nothing to do.
-    // Otherwise, raise an error.
-    if let Some(package) = fixed.iter().find(|p| p.name == dependency.name) {
-        if dependency.requirement.matches(&package.version) {
-            info_msg(&format!(
-                "{}Already accepted \"{}@{}\" satisfies the requirement `{}`. OK.",
-                " ".repeat(indent),
-                dependency.name,
-                package.version,
-                dependency.requirement
-            ));
-            return Ok(Some(fixed.to_vec()));
-        } else {
-            info_msg(&format!(
-                "{}Already accpeted \"{}@{}\" conflicts with the requirement `{}`. Backtrack the process.",
-                " ".repeat(indent),
-                dependency.name,
-                package.version,
-                dependency.requirement
-            ));
-            return Ok(None);
+    // Choose the package with the fewest versions satisfying all its open requirements, so that a
+    // conflict shows itself after as few choices as possible.
+    let mut names: Vec<&PackageName> = vec![];
+    for req in &open {
+        if !names.contains(&&req.name) {
+            names.push(&req.name);
         }
     }
-
-    // Find the latest version which can be used.
-    let vers = versions_retriever(&dependency.name)?;
-    let mut vers_match = vers
+    let mut chosen: Option<(PackageName, Vec<Version>)> = None;
+    for name in names {
+        let candidates = candidate_versions(name, &open, versions_retriever)?;
+        if chosen
+            .as_ref()
+            .map_or(true, |(_, best)| candidates.len() < best.len())
+        {
+            chosen = Some((name.clone(), candidates));
+        }
+    }
+    let (name, candidates) = chosen.unwrap();
+    let reqs_text = open
         .iter()
-        .filter(|v| dependency.requirement.matches(v))
-        .collect::<Vec<_>>();
-    vers_match.sort();
-
-    // If no versions matches the requirement, raise an error here to show better error message.
-    if vers_match.is_empty() {
+        .filter(|req| req.name == name)
+        .map(|req| format!("`{}`", req.requirement))
+        .collect::<Vec<_>>()
+        .join(", ");
+    if candidates.is_empty() {
         info_msg(&format!(
-            "{}Found version(s) {}, but none satisfies the requirement \"{}\". Backtrack the process.",
-            " ".repeat(indent),
-            vers.iter()
-                .map(|v| format!("\"{}\"", v))
-                .collect::<Vec<_>>()
-                .join(", "),
-            dependency.requirement
+            "{}No version of \"{}\" satisfies {}. Backtrack.",
+            indent, name, reqs_text
         ));
         return Ok(None);
     }
+    info_msg(&format!(
+        "{}Resolving \"{}\" to satisfy {}.",
+        indent, name, reqs_text
+    ));
 
-    for version in vers_match.iter().rev() {
-        info_msg(&format!(
-            "{}Trying \"{}@{}\".",
-            " ".repeat(indent),
-            dependency.name,
-            version
-        ));
-        let indent = indent + 1;
-
-        // Try to use this version.
-        let fixed = try_use_package(
-            (&dependency.name, version),
-            fixed,
+    // The requirements on `name` hold for every candidate, so they are dropped.
+    open.retain(|req| req.name != name);
+    for version in &candidates {
+        info_msg(&format!("{} Trying \"{}@{}\".", indent, name, version));
+        let package = package_retriever(&name, version, BuildConfigType::Build)?;
+        let mut requirements = open.clone();
+        requirements.extend(package.deps.iter().cloned());
+        let mut next_fixed = fixed.clone();
+        next_fixed.push(package);
+        let res = resolve_requirements(
+            next_fixed,
+            requirements,
             package_retriever,
             versions_retriever,
-            BuildConfigType::Build,
-            indent,
+            depth + 1,
         )?;
-        if fixed.is_some() {
-            return Ok(fixed);
+        if res.is_some() {
+            return Ok(res);
         }
-
-        // Otherwise, try the next version.
-        info_msg(&format!(
-            "{}Reject version \"{}\" of \"{}\".",
-            " ".repeat(indent),
-            version,
-            dependency.name
-        ));
+        info_msg(&format!("{} Reject \"{}@{}\".", indent, name, version));
     }
-    // We have tried all versions, but none of them worked.
     info_msg(&format!(
-        "{}No version of `{}` was available. Backtrack the process.",
-        " ".repeat(indent),
-        dependency.name
+        "{}No version of \"{}\" was available. Backtrack.",
+        indent, name
     ));
     Ok(None)
+}
+
+// The versions of the package `name` that satisfy every requirement on it in `requirements`, newest
+// first.
+fn candidate_versions<'b>(
+    name: &PackageName,
+    requirements: &[Dependency],
+    versions_retriever: VersionRetriever<'b>,
+) -> Result<Vec<Version>, Errors> {
+    let mut versions = versions_retriever(name)?
+        .into_iter()
+        .filter(|v| {
+            requirements
+                .iter()
+                .filter(|req| &req.name == name)
+                .all(|req| req.requirement.matches(v))
+        })
+        .collect::<Vec<_>>();
+    versions.sort();
+    versions.reverse();
+    Ok(versions)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::misc::Map;
+
+    /// A registry of packages for the resolver: each entry is a package of one version and the
+    /// requirements it has, written as `("name", "version", &[("dep", "requirement")])`.
+    fn registry(
+        entries: &[(&str, &str, &[(&str, &str)])],
+    ) -> Map<(PackageName, Version), Package> {
+        let mut map = Map::default();
+        for (name, version, deps) in entries {
+            let package = Package {
+                name: name.to_string(),
+                version: Version::parse(version).unwrap(),
+                deps: deps
+                    .iter()
+                    .map(|(dep, req)| Dependency {
+                        name: dep.to_string(),
+                        requirement: VersionReq::parse(req).unwrap(),
+                    })
+                    .collect(),
+            };
+            map.insert((package.name.clone(), package.version.clone()), package);
+        }
+        map
+    }
+
+    /// Resolves the requirements `root_deps` of a root package against `registry`, and returns the
+    /// chosen packages other than the root as `name@version`, sorted.
+    fn resolve(
+        registry: &Map<(PackageName, Version), Package>,
+        root_deps: &[(&str, &str)],
+    ) -> Option<Vec<String>> {
+        let package_retriever = |name: &PackageName, version: &Version, _: BuildConfigType| {
+            Ok(registry[&(name.clone(), version.clone())].clone())
+        };
+        let versions_retriever = |name: &PackageName| {
+            Ok(registry
+                .keys()
+                .filter(|(n, _)| n == name)
+                .map(|(_, v)| v.clone())
+                .collect())
+        };
+        let root = Package {
+            name: "root".to_string(),
+            version: Version::new(0, 1, 0),
+            deps: vec![],
+        };
+        let requirements = root_deps
+            .iter()
+            .map(|(dep, req)| Dependency {
+                name: dep.to_string(),
+                requirement: VersionReq::parse(req).unwrap(),
+            })
+            .collect();
+        let fixed = resolve_requirements(
+            vec![root],
+            requirements,
+            &package_retriever,
+            &versions_retriever,
+            0,
+        )
+        .unwrap_or_else(|_| panic!("the retrievers of the test registry do not fail"))?;
+        let mut chosen = fixed[1..]
+            .iter()
+            .map(|p| format!("{}@{}", p.name, p.version))
+            .collect::<Vec<_>>();
+        chosen.sort();
+        Some(chosen)
+    }
+
+    /// When a package's dependency accepts several versions of a package and the root pins an older
+    /// one, the pinned version is chosen even though the dependency is resolved first.
+    #[test]
+    fn a_pinned_version_wins_over_a_newer_version_a_dependency_accepts() {
+        let registry = registry(&[
+            ("collection", "1.0.0", &[("common", "^1.0.0")]),
+            ("common", "1.0.0", &[]),
+            ("common", "1.1.0", &[]),
+        ]);
+        assert_eq!(
+            resolve(&registry, &[("collection", "=1.0.0"), ("common", "=1.0.0")]),
+            Some(vec![
+                "collection@1.0.0".to_string(),
+                "common@1.0.0".to_string()
+            ])
+        );
+    }
+
+    /// When the conflict shows itself only after a version of another package has been chosen, the
+    /// search returns to that choice and tries an older version.
+    ///
+    /// `a` has fewer versions than `b`, so it is chosen first, and its dependency `c` is chosen
+    /// next at its newest version 2.0.0. Every version of `b` requires `c` 1.0.0, so the search has
+    /// to go back to `c`.
+    #[test]
+    fn a_conflict_found_later_revisits_an_earlier_choice() {
+        let registry = registry(&[
+            ("a", "1.0.0", &[]),
+            ("a", "2.0.0", &[("c", "*")]),
+            ("b", "1.0.0", &[("c", "=1.0.0")]),
+            ("b", "2.0.0", &[("c", "=1.0.0")]),
+            ("b", "3.0.0", &[("c", "=1.0.0")]),
+            ("c", "1.0.0", &[]),
+            ("c", "2.0.0", &[]),
+        ]);
+        assert_eq!(
+            resolve(&registry, &[("a", "*"), ("b", "*")]),
+            Some(vec![
+                "a@2.0.0".to_string(),
+                "b@3.0.0".to_string(),
+                "c@1.0.0".to_string()
+            ])
+        );
+    }
+
+    /// Requirements that no choice of versions satisfies are reported as unresolvable.
+    #[test]
+    fn unsatisfiable_requirements_are_not_resolved() {
+        let registry = registry(&[
+            ("a", "1.0.0", &[("c", "=1.0.0")]),
+            ("b", "1.0.0", &[("c", "=2.0.0")]),
+            ("c", "1.0.0", &[]),
+            ("c", "2.0.0", &[]),
+        ]);
+        assert_eq!(resolve(&registry, &[("a", "*"), ("b", "*")]), None);
+    }
 }

@@ -563,30 +563,23 @@ mod integration_tests {
         );
     }
 
+    /// Runs `git` with `args` in `repo_dir`, and fails the test if it fails.
+    fn run_git(repo_dir: &Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .args(args)
+            .current_dir(repo_dir)
+            .status()
+            .unwrap_or_else(|err| panic!("Failed to run `git {:?}`: {}", args, err));
+        assert!(status.success(), "`git {:?}` failed", args);
+    }
+
     /// Creates a local upstream git repository at `repo_dir` holding a project of `name` at
     /// `version`, whose module is `module`, and tags the commit with the version.
     fn create_upstream_repo(repo_dir: &Path, name: &str, version: &str, module: &str) {
         fs::create_dir_all(repo_dir).expect("Failed to create the upstream directory");
-        let run = |args: &[&str]| {
-            let status = std::process::Command::new("git")
-                .args(args)
-                .current_dir(repo_dir)
-                .status()
-                .unwrap_or_else(|err| panic!("Failed to run `git {:?}`: {}", args, err));
-            assert!(status.success(), "`git {:?}` failed", args);
-        };
-        run(&["init", "-q", "-b", "main"]);
-        run(&["config", "user.email", "test@example.com"]);
-        run(&["config", "user.name", "Test"]);
-        fs::write(
-            repo_dir.join("fixproj.toml"),
-            format!(
-                "[general]\nname = \"{}\"\nversion = \"{}\"\nfix_version = \"*\"\n\n\
-                 [build]\nfiles = [\"lib.fix\"]\n",
-                name, version
-            ),
-        )
-        .expect("Failed to write the project file of the upstream project");
+        run_git(repo_dir, &["init", "-q", "-b", "main"]);
+        run_git(repo_dir, &["config", "user.email", "test@example.com"]);
+        run_git(repo_dir, &["config", "user.name", "Test"]);
         fs::write(
             repo_dir.join("lib.fix"),
             format!(
@@ -595,9 +588,89 @@ mod integration_tests {
             ),
         )
         .expect("Failed to write the source of the upstream project");
-        run(&["add", "fixproj.toml", "lib.fix"]);
-        run(&["commit", "-q", "-m", "init"]);
-        run(&["tag", version]);
+        release_upstream_version(repo_dir, name, version, "");
+    }
+
+    /// Commits to the upstream repository at `repo_dir` a project file for `name` at `version`,
+    /// which ends with `dependencies` (`[[dependencies]]` entries), and tags the commit with the
+    /// version.
+    fn release_upstream_version(repo_dir: &Path, name: &str, version: &str, dependencies: &str) {
+        fs::write(
+            repo_dir.join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"{}\"\nversion = \"{}\"\nfix_version = \"*\"\n\n\
+                 [build]\nfiles = [\"lib.fix\"]\n\n{}",
+                name, version, dependencies
+            ),
+        )
+        .expect("Failed to write the project file of the upstream project");
+        run_git(repo_dir, &["add", "fixproj.toml", "lib.fix"]);
+        run_git(repo_dir, &["commit", "-q", "-m", version]);
+        run_git(repo_dir, &["tag", version]);
+    }
+
+    /// A version of a dependency that a transitive requirement accepts is chosen again when a
+    /// requirement resolved later accepts only an older one.
+    ///
+    /// The root project requires `resolve-collection` `=1.0.0` and `resolve-common` `=1.0.0`, and
+    /// `resolve-collection` requires `resolve-common` `^1.0.0`, which `resolve-common` 1.1.0
+    /// satisfies as well. `resolve-common` 1.0.0 satisfies all three.
+    #[test]
+    fn test_a_pinned_version_is_chosen_over_a_newer_one_a_dependency_accepts() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let common = temp_dir.path().join("common");
+        create_upstream_repo(&common, "resolve-common", "1.0.0", "ResolveCommon");
+        release_upstream_version(&common, "resolve-common", "1.1.0", "");
+        let common_entry = |requirement: &str| {
+            format!(
+                "[[dependencies]]\nname = \"resolve-common\"\nversion = \"{}\"\n\
+                 git = {{ url = \"{}\" }}\n",
+                requirement,
+                common.to_string_lossy()
+            )
+        };
+
+        let collection = temp_dir.path().join("collection");
+        create_upstream_repo(&collection, "resolve-collection", "0.1.0", "ResolveCollection");
+        release_upstream_version(
+            &collection,
+            "resolve-collection",
+            "1.0.0",
+            &common_entry("^1.0.0"),
+        );
+
+        let project_dir = temp_dir.path().join("root");
+        fs::create_dir_all(&project_dir).expect("Failed to create the root project");
+        fs::write(
+            project_dir.join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"resolve-root\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+                 [build]\nfiles = [\"main.fix\"]\n\n\
+                 [[dependencies]]\nname = \"resolve-collection\"\nversion = \"=1.0.0\"\n\
+                 git = {{ url = \"{}\" }}\n\n{}",
+                collection.to_string_lossy(),
+                common_entry("=1.0.0")
+            ),
+        )
+        .expect("Failed to write the project file of the root project");
+
+        let output = fix_command()
+            .args(["deps", "update"])
+            .current_dir(&project_dir)
+            .output()
+            .expect("Failed to execute fix deps update");
+        assert!(
+            output.status.success(),
+            "fix deps update failed:\nstdout: {}\nstderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let lock = fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).expect("No lock file");
+        assert!(
+            lock.contains("name = \"resolve-common\"\nversion = \"1.0.0\""),
+            "the lock file holds resolve-common 1.0.0:\n{}",
+            lock
+        );
     }
 
     /// A project published through a git repository is declared by its url, so that is what the
