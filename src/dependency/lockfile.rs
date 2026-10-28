@@ -152,7 +152,7 @@ impl DependencyLockFile {
             "Resolving dependency for \"{}\"...",
             proj_file.general.name
         ));
-        let prjs = resolver::resolve_dependency(
+        let chosen = resolver::resolve_dependency(
             (&proj_file.general.name, &root_version),
             mode,
             &compiler_version(),
@@ -171,7 +171,7 @@ impl DependencyLockFile {
                 version: prj_version,
                 source,
             },
-        ) in prjs
+        ) in chosen
         {
             // Get the information of the dependent project.
             let prjs_info = prjs_info.projects.as_ref().lock().unwrap();

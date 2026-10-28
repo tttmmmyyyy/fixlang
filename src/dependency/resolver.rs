@@ -227,14 +227,14 @@ impl DependencyProvider for Provider<'_, '_> {
         range: &Versions,
         package_conflicts_counts: &PackageResolutionStatistics,
     ) -> Self::Priority {
-        let candidates = self
+        let candidate_count = self
             .known_versions_of(package)
             .iter()
             .filter(|v| range.contains(v))
             .count();
         (
             package_conflicts_counts.conflict_count(),
-            Reverse(candidates),
+            Reverse(candidate_count),
         )
     }
 
