@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::{LOCK_FILE_PATH, LOCK_FILE_TEST_PATH};
-    use crate::tests::test_util::{copy_dir_recursive, fix_command};
+    use crate::tests::test_util::{assert_succeeded, copy_dir_recursive, fix_command, run_fix};
     use std::{
         fs,
         io::{Read, Write},
@@ -660,23 +660,18 @@ mod integration_tests {
         )
         .expect("Failed to write the project file of the root project");
 
-        let output = fix_command()
-            .args(["deps", "update"])
-            .current_dir(&project_dir)
-            .output()
-            .expect("Failed to execute fix deps update");
-        assert!(
-            output.status.success(),
-            "fix deps update failed:\nstdout: {}\nstderr: {}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-        let lock = fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).expect("No lock file");
-        assert!(
-            lock.contains("name = \"resolve-common\"\nversion = \"1.0.0\""),
-            "the lock file holds resolve-common 1.0.0:\n{}",
-            lock
-        );
+        let output = run_fix(&project_dir, &["deps", "update"]);
+        assert_succeeded(&output, "fix deps update resolves the dependencies");
+        let lock: toml::Value =
+            toml::from_str(&fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).unwrap())
+                .unwrap();
+        let common_version = lock["dependencies"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|dep| dep["name"].as_str() == Some("resolve-common"))
+            .map(|dep| dep["version"].as_str().unwrap().to_string());
+        assert_eq!(common_version.as_deref(), Some("1.0.0"));
     }
 
     /// A project published through a git repository is declared by its url, so that is what the
