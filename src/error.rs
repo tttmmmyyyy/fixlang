@@ -85,13 +85,16 @@ impl Errors {
             .filter(|err| err.severity == Severity::Error)
     }
 
-    /// The texts of the error diagnostics, without their labels and source locations, joined by
-    /// spaces: what a sentence explaining a failure quotes.
+    /// The texts of the error diagnostics, without their labels, source locations and closing
+    /// periods, joined by "; ": what a sentence explaining a failure quotes.
+    ///
+    /// # Examples
+    /// Two diagnostics "Failed to open file." and "Not found." give `Failed to open file; Not found`.
     pub fn messages(&self) -> String {
         self.errors()
-            .map(|err| err.msg.trim_end())
+            .map(|err| err.msg.trim_end().trim_end_matches('.'))
             .collect::<Vec<_>>()
-            .join(" ")
+            .join("; ")
     }
 
     /// Whether this collection contains any diagnostic at all (errors or warnings).

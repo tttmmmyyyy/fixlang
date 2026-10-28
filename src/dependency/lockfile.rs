@@ -656,7 +656,7 @@ pub fn version_to_add(name: &ProjectName, url: &str) -> Result<VersionToAdd, Err
     project.retrieve_versions().map_err(|err| match err {
         RetrievalError::Fatal(errs) => errs,
         RetrievalError::Unusable(errs) => Errors::from_msg(format!(
-            "No version of \"{}\" can be used: {}",
+            "No version of \"{}\" can be used: {}.",
             name,
             errs.messages()
         )),
