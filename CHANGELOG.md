@@ -6,18 +6,18 @@
 
 #### Tool
 
-- #968: Dependency resolution passes over a version of a dependency whose `fix_version` does not accept the running compiler, and chooses the newest version that does. It used to fail as soon as it tried such a version. A version whose project file cannot be read is passed over in the same way.
-- #968: When no choice of versions satisfies every version requirement, the error now explains which requirements conflict.
-- #968: `fix deps add` with no version now requires the newest tagged version that dependency resolution can use: one whose project file can be read, gives the version of its tag, and has a `fix_version` that accepts the running compiler. It used to require the newest tagged version, whatever its project file said. When no version can be used, `fix deps add` fails and says why, leaving the project file as it was.
+- #968, #972: Dependency resolution passes over a version of a dependency whose `fix_version` does not accept the running compiler, and chooses the newest version that does. It used to fail as soon as it tried such a version. A version whose project file cannot be read is passed over in the same way.
+- #968, #972: When no choice of versions satisfies every version requirement, the error now explains which requirements conflict.
+- #968, #972: `fix deps add` with no version now requires the newest tagged version that dependency resolution can use: one whose project file can be read, gives the version of its tag, and has a `fix_version` that accepts the running compiler. It used to require the newest tagged version, whatever its project file said. When no version can be used, `fix deps add` fails and says why, leaving the project file as it was.
 
 ### Fixed
 
 #### Tool
 
 - #964: When a completion adds an import, the language server now leaves alone an `import` statement written in a comment or a string literal. It used to delete that statement from the comment or the string and add it to the import statements of the file.
-- #968: Dependency resolution now finds a choice of versions whenever one satisfies every version requirement. It could fail when one requirement on a project accepted a newer version than another requirement on that project allowed, as with `fix deps add a@=1.0.0 b@=1.0.0` where `a` requires `b` `^1.0.0` and `b` 1.1.0 exists.
-- #968: Dependency resolution no longer fails with "required twice with different sources" when the project that fetched a dependency from another repository was at a version the resolution passed over. Two requirements that fetch one project from two different repositories are now a conflict, which the resolution avoids by choosing other versions.
-- #968: `fix deps update` and `fix build` no longer warn that the `rev` or `tag` of a dependency in the root project file is ignored. The root project's `rev` and `tag` are applied.
+- #968, #972: Dependency resolution now finds a choice of versions whenever one satisfies every version requirement. It could fail when one requirement on a project accepted a newer version than another requirement on that project allowed, as with `fix deps add a@=1.0.0 b@=1.0.0` where `a` requires `b` `^1.0.0` and `b` 1.1.0 exists.
+- #968, #972: Dependency resolution no longer fails with "required twice with different sources" when the project that fetched a dependency from another repository was at a version the resolution passed over. Two requirements that fetch one project from two different repositories are now a conflict, which the resolution avoids by choosing other versions.
+- #968, #972: `fix deps update` and `fix build` no longer warn that the `rev` or `tag` of a dependency in the root project file is ignored. The root project's `rev` and `tag` are applied.
 
 ## [1.6.0] - 2026-10-24
 
