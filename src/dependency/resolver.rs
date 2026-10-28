@@ -145,13 +145,7 @@ pub fn resolve_dependency(
         }
         Err(PubGrubError::NoSolution(mut tree)) => {
             tree.collapse_no_versions();
-            let mut sources = Map::default();
-            collect_sources(&tree, &mut sources);
-            let met_at_several = sources
-                .into_iter()
-                .filter(|(_, sources)| sources.len() > 1)
-                .map(|(name, _)| name)
-                .collect();
+            let met_at_several = projects_met_at_several_sources(&tree);
             Err(Errors::from_msg(format!(
                 "Failed to resolve dependencies.\n{}",
                 DefaultStringReporter::report(&written_tree(&tree, &met_at_several))
@@ -446,6 +440,11 @@ impl Versions {
                     .or_default()
                     .push(v.version.to_string());
             }
+            assert!(
+                with_source || groups.len() <= 1,
+                "versions at several sources are written without them: {:?}",
+                vs
+            );
             groups
                 .iter()
                 .map(|(source, versions)| {
@@ -491,6 +490,8 @@ impl PartialEq for WrittenVersions {
 
 impl Eq for WrittenVersions {}
 
+/// The reporter of pubgrub compares the sets of a derivation tree and builds none of its own, so
+/// a set built here, which knows no project, is written without sources.
 impl VersionSet for WrittenVersions {
     type V = SourcedVersion;
 
@@ -531,6 +532,19 @@ impl Display for WrittenVersions {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         self.versions.write(f, self.with_source)
     }
+}
+
+/// The projects whose sets in `tree` hold or leave out versions at more than one source.
+fn projects_met_at_several_sources(
+    tree: &DerivationTree<PackageName, Versions, String>,
+) -> Set<PackageName> {
+    let mut sources = Map::default();
+    collect_sources(tree, &mut sources);
+    sources
+        .into_iter()
+        .filter(|(_, sources)| sources.len() > 1)
+        .map(|(name, _)| name)
+        .collect()
 }
 
 /// Adds to `sources` the sources of the versions each project's sets in `tree` hold or leave out.
