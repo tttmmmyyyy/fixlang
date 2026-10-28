@@ -14,8 +14,7 @@ use crate::{
 };
 use pubgrub::{
     DefaultStringReporter, Dependencies, DependencyConstraints, DependencyProvider,
-    PackageResolutionStatistics,
-    PubGrubError, Reporter, VersionSet,
+    PackageResolutionStatistics, PubGrubError, Reporter, VersionSet,
 };
 use semver::{Version, VersionReq};
 use std::{
@@ -87,7 +86,7 @@ pub enum RetrievalError {
     Unusable(Errors),
     /// Retrieving failed for a reason outside the version, as a repository that cannot be read
     /// does: the resolution stops.
-    Failed(Errors),
+    Fatal(Errors),
 }
 
 /// Retrieves a project at a version. The build configuration selects the dependencies the project
@@ -131,7 +130,7 @@ pub fn resolve_dependency(
             root.0.clone(),
             BTreeSet::from([root.1.clone()]),
         )])),
-        listed: RefCell::default(),
+        listed_sources: RefCell::default(),
     };
     match pubgrub::resolve(&provider, root.0.clone(), root.1.clone()) {
         Ok(selected) => {
@@ -168,7 +167,7 @@ struct Provider<'a, 'b> {
     /// has a requirement on. The solver asks only about these projects.
     known_versions: RefCell<Map<PackageName, BTreeSet<SourcedVersion>>>,
     /// The projects and sources whose versions `known_versions` holds.
-    listed: RefCell<Set<(PackageName, Source)>>,
+    listed_sources: RefCell<Set<(PackageName, Source)>>,
 }
 
 impl Provider<'_, '_> {
@@ -186,7 +185,7 @@ impl Provider<'_, '_> {
     /// versions there.
     fn versions_satisfying(&self, dependency: &Dependency) -> Result<Versions, Errors> {
         let key = (dependency.name.clone(), dependency.source.clone());
-        if !self.listed.borrow().contains(&key) {
+        if !self.listed_sources.borrow().contains(&key) {
             let versions = (self.versions_retriever)(&dependency.name, &dependency.source)?;
             self.known_versions
                 .borrow_mut()
@@ -196,7 +195,7 @@ impl Provider<'_, '_> {
                     version,
                     source: dependency.source.clone(),
                 }));
-            self.listed.borrow_mut().insert(key);
+            self.listed_sources.borrow_mut().insert(key);
         }
         Ok(Versions::Only(
             self.known_versions.borrow()[&dependency.name]
@@ -269,7 +268,7 @@ impl DependencyProvider for Provider<'_, '_> {
                     errs.to_string().trim_end()
                 )))
             }
-            Err(RetrievalError::Failed(errs)) => return Err(errs),
+            Err(RetrievalError::Fatal(errs)) => return Err(errs),
         };
         if !retrieved.fix_version.matches(&self.compiler_version) {
             return Ok(Dependencies::Unavailable(format!(
@@ -476,7 +475,10 @@ mod tests {
         versions_retriever: VersionRetriever<'_>,
     ) -> Result<Vec<(PackageName, SourcedVersion)>, String> {
         resolve_dependency(
-            (&ROOT.to_string(), &at("0.1.0", Source::Local("/root".into()))),
+            (
+                &ROOT.to_string(),
+                &at("0.1.0", Source::Local("/root".into())),
+            ),
             mode,
             &Version::new(1, 6, 1),
             package_retriever,
@@ -782,7 +784,7 @@ mod tests {
                     });
                 }
                 if version.version == Version::new(2, 0, 0) {
-                    return Err(RetrievalError::Failed(Errors::from_msg(
+                    return Err(RetrievalError::Fatal(Errors::from_msg(
                         "the checkout failed".to_string(),
                     )));
                 }
