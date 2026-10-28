@@ -32,6 +32,7 @@ use crate::misc::Map;
 use crate::misc::Set;
 use crate::object::array_storage_buf_padding;
 use crate::object::array_storage_is_aligned;
+use crate::object::build_abort_if;
 use crate::object::build_free_boxed;
 use crate::object::control_block_type;
 use crate::object::create_traverser;
@@ -1663,22 +1664,14 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// The builder is left in the block control reaches where `cond` fails, so what follows is
     /// emitted there.
     pub fn build_panic_if(&mut self, cond: IntValue<'c>, bb_name: &str, message: &str) {
-        let current_func = self.current_function();
-        let panic_bb = self
-            .context
-            .append_basic_block(current_func, &format!("panic_bb@{}", bb_name));
-        let continue_bb = self
-            .context
-            .append_basic_block(current_func, &format!("continue_bb@{}", bb_name));
-        self.builder()
-            .build_conditional_branch(cond, panic_bb, continue_bb)
-            .unwrap();
-        self.builder().position_at_end(panic_bb);
-        self.panic(message);
-        self.builder()
-            .build_unconditional_branch(continue_bb)
-            .unwrap();
-        self.builder().position_at_end(continue_bb);
+        let message_ptr = self.add_global_string(message).as_pointer_value();
+        build_abort_if(
+            self,
+            cond,
+            RUNTIME_STOP,
+            &[message_ptr.into()],
+            &format!("panic@{}", bb_name),
+        );
     }
 
     /// Abort, in compiler development mode, when the object at `obj_ptr` is shared where the
