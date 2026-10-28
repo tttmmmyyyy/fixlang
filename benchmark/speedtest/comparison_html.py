@@ -123,13 +123,16 @@ COMPARISONS = [
         "Fix built with --no-runtime-check",
         lambda case, case_dir: case.startswith("cp_") and not calls_acl(case_dir),
         "cp-library against C++ for the functions AtCoder Library does not have: the C++ "
-        "standard library, or a plain implementation. Only the function calls are measured. "
-        "Fix is built with --no-runtime-check; C++ with {compiler} -O3 -march=native.",
+        "standard library, or a plain implementation over the graph layout cp-library uses. Only "
+        "the function calls are measured. Fix is built with --no-runtime-check; C++ with "
+        "{compiler} -O3 -march=native.",
         "<p>cp-library against C++ for the functions AtCoder Library does not have. The C++ side "
         "is the C++ standard library (<code>std::next_permutation</code>) or a plain "
         "implementation of the same algorithm (Dijkstra's algorithm on "
-        "<code>std::priority_queue</code>, Bellman-Ford). As with AtCoder Library, both run on "
-        "the same large random input, and only the function calls are measured.</p>"
+        "<code>std::priority_queue</code>, Bellman-Ford). The graph algorithms run on the graph "
+        "layout cp-library uses: the edges of all vertices in one array, ordered by their source "
+        "vertex, with vertex numbers held in 4 bytes. As with AtCoder Library, both run on the "
+        "same large random input, and only the function calls are measured.</p>"
         "<p>The Fix programs are built with <code>--no-runtime-check</code>, and the C++ "
         "programs with {compiler} <code>-O3 -march=native -std=gnu++20</code>.</p>"),
 ]
