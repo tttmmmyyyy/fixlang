@@ -909,7 +909,7 @@ mod tests {
 
     /// A conflict between a few packages is resolved, or found unresolvable, without trying the
     /// combinations of the versions of packages that take no part in it. Trying them would retrieve
-    /// packages 4^12 times here.
+    /// packages more than a hundred million times here.
     #[test]
     fn a_conflict_does_not_make_the_search_try_unrelated_combinations() {
         for (c_requirement, expected_c) in [("=1.0.0", Some("c@1.0.0")), ("=3.0.0", None)] {
