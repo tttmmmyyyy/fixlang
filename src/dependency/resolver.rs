@@ -13,8 +13,8 @@ use crate::{
     misc::{Map, Set},
 };
 use pubgrub::{
-    DefaultStringReporter, Dependencies, DependencyConstraints, DependencyProvider,
-    PackageResolutionStatistics, PubGrubError, Reporter, VersionSet,
+    DefaultStringReporter, Dependencies, DependencyConstraints, DependencyProvider, DerivationTree,
+    Derived, External, PackageResolutionStatistics, PubGrubError, Reporter, Term, VersionSet,
 };
 use semver::{Version, VersionReq};
 use std::{
@@ -23,6 +23,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{self, Display, Formatter},
     path::PathBuf,
+    sync::Arc,
 };
 
 pub type PackageName = String;
@@ -144,9 +145,16 @@ pub fn resolve_dependency(
         }
         Err(PubGrubError::NoSolution(mut tree)) => {
             tree.collapse_no_versions();
+            let mut sources = Map::default();
+            collect_sources(&tree, &mut sources);
+            let met_at_several = sources
+                .into_iter()
+                .filter(|(_, sources)| sources.len() > 1)
+                .map(|(name, _)| name)
+                .collect();
             Err(Errors::from_msg(format!(
                 "Failed to resolve dependencies.\n{}",
-                DefaultStringReporter::report(&tree)
+                DefaultStringReporter::report(&written_tree(&tree, &met_at_several))
             )))
         }
         Err(PubGrubError::ErrorRetrievingDependencies { source, .. })
@@ -414,14 +422,22 @@ impl VersionSet for Versions {
     }
 }
 
-/// Writes the set as the explanation of a failed resolution shows it, the versions of each source
-/// together.
-///
-/// # Examples
-/// `Only({1.0.0 at A, 1.1.0 at A})` is written `1.0.0 | 1.1.0 from A`, and `AllBut({1.0.0 at A})`
-/// is written `other than 1.0.0 from A`.
-impl Display for Versions {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+impl Versions {
+    /// The versions the set holds or leaves out.
+    fn listed(&self) -> &BTreeSet<SourcedVersion> {
+        match self {
+            Versions::Only(vs) | Versions::AllBut(vs) => vs,
+        }
+    }
+
+    /// Writes the set as the explanation of a failed resolution shows it: the versions of each
+    /// source together, followed by the source when `with_source` holds.
+    ///
+    /// # Examples
+    /// `Only({1.0.0 at A, 1.1.0 at A})` is written `1.0.0 | 1.1.0 from A` with the source and
+    /// `1.0.0 | 1.1.0` without it, and `AllBut({1.0.0 at A})` is written `other than 1.0.0`
+    /// without it.
+    fn write(&self, f: &mut Formatter<'_>, with_source: bool) -> fmt::Result {
         let by_source = |vs: &BTreeSet<SourcedVersion>| {
             let mut groups: BTreeMap<&Source, Vec<String>> = BTreeMap::new();
             for v in vs {
@@ -432,7 +448,13 @@ impl Display for Versions {
             }
             groups
                 .iter()
-                .map(|(source, versions)| format!("{} from {}", versions.join(" | "), source))
+                .map(|(source, versions)| {
+                    if with_source {
+                        format!("{} from {}", versions.join(" | "), source)
+                    } else {
+                        versions.join(" | ")
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(" or ")
         };
@@ -442,6 +464,149 @@ impl Display for Versions {
             Versions::AllBut(vs) if vs.is_empty() => write!(f, "(any version)"),
             Versions::AllBut(vs) => write!(f, "other than {}", by_source(vs)),
         }
+    }
+}
+
+/// Writes the set with its sources.
+impl Display for Versions {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.write(f, true)
+    }
+}
+
+/// A set of versions as the explanation of a failed resolution writes it: with the sources only
+/// for a project the explanation meets at more than one source, where the source tells the versions
+/// apart. Two sets are equal when their versions are.
+#[derive(Clone, Debug)]
+struct WrittenVersions {
+    versions: Versions,
+    with_source: bool,
+}
+
+impl PartialEq for WrittenVersions {
+    fn eq(&self, other: &Self) -> bool {
+        self.versions == other.versions
+    }
+}
+
+impl Eq for WrittenVersions {}
+
+impl VersionSet for WrittenVersions {
+    type V = SourcedVersion;
+
+    fn empty() -> Self {
+        WrittenVersions {
+            versions: Versions::empty(),
+            with_source: false,
+        }
+    }
+
+    fn singleton(v: SourcedVersion) -> Self {
+        WrittenVersions {
+            versions: Versions::singleton(v),
+            with_source: false,
+        }
+    }
+
+    fn complement(&self) -> Self {
+        WrittenVersions {
+            versions: self.versions.complement(),
+            with_source: self.with_source,
+        }
+    }
+
+    fn intersection(&self, other: &Self) -> Self {
+        WrittenVersions {
+            versions: self.versions.intersection(&other.versions),
+            with_source: self.with_source || other.with_source,
+        }
+    }
+
+    fn contains(&self, v: &SourcedVersion) -> bool {
+        self.versions.contains(v)
+    }
+}
+
+impl Display for WrittenVersions {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.versions.write(f, self.with_source)
+    }
+}
+
+/// Adds to `sources` the sources of the versions each project's sets in `tree` hold or leave out.
+fn collect_sources(
+    tree: &DerivationTree<PackageName, Versions, String>,
+    sources: &mut Map<PackageName, Set<Source>>,
+) {
+    let mut add = |name: &PackageName, versions: &Versions| {
+        sources
+            .entry(name.clone())
+            .or_default()
+            .extend(versions.listed().iter().map(|v| v.source.clone()));
+    };
+    match tree {
+        DerivationTree::External(External::NotRoot(_, _)) => {}
+        DerivationTree::External(External::NoVersions(name, versions))
+        | DerivationTree::External(External::Custom(name, versions, _)) => add(name, versions),
+        DerivationTree::External(External::FromDependencyOf(name, versions, dep, dep_versions)) => {
+            add(name, versions);
+            add(dep, dep_versions);
+        }
+        DerivationTree::Derived(derived) => {
+            for (name, term) in &derived.terms {
+                match term {
+                    Term::Positive(versions) | Term::Negative(versions) => add(name, versions),
+                }
+            }
+            collect_sources(&derived.cause1, sources);
+            collect_sources(&derived.cause2, sources);
+        }
+    }
+}
+
+/// `tree` with its sets written with the sources for the projects in `met_at_several` alone.
+fn written_tree(
+    tree: &DerivationTree<PackageName, Versions, String>,
+    met_at_several: &Set<PackageName>,
+) -> DerivationTree<PackageName, WrittenVersions, String> {
+    let written = |name: &PackageName, versions: &Versions| WrittenVersions {
+        versions: versions.clone(),
+        with_source: met_at_several.contains(name),
+    };
+    match tree {
+        DerivationTree::External(external) => DerivationTree::External(match external {
+            External::NotRoot(name, version) => External::NotRoot(name.clone(), version.clone()),
+            External::NoVersions(name, versions) => {
+                External::NoVersions(name.clone(), written(name, versions))
+            }
+            External::Custom(name, versions, reason) => {
+                External::Custom(name.clone(), written(name, versions), reason.clone())
+            }
+            External::FromDependencyOf(name, versions, dep, dep_versions) => {
+                External::FromDependencyOf(
+                    name.clone(),
+                    written(name, versions),
+                    dep.clone(),
+                    written(dep, dep_versions),
+                )
+            }
+        }),
+        DerivationTree::Derived(derived) => DerivationTree::Derived(Derived {
+            terms: derived
+                .terms
+                .iter()
+                .map(|(name, term)| {
+                    let term = match term {
+                        Term::Positive(versions) => Term::Positive(written(name, versions)),
+                        Term::Negative(versions) => Term::Negative(written(name, versions)),
+                    };
+                    (name.clone(), term)
+                })
+                .collect(),
+            shared_id: derived.shared_id,
+            cause1: Arc::new(written_tree(&derived.cause1, met_at_several)),
+            cause2: Arc::new(written_tree(&derived.cause2, met_at_several)),
+        }),
     }
 }
 
@@ -678,7 +843,8 @@ mod tests {
     }
 
     /// Requirements that no choice of versions satisfies fail the resolution, and the message names
-    /// the two packages whose requirements conflict.
+    /// the two packages whose requirements conflict. A package met at one source is written
+    /// without it.
     #[test]
     fn unsatisfiable_requirements_are_explained() {
         let registry = registry(&[
@@ -690,8 +856,8 @@ mod tests {
         let message = resolve(&registry, &[("a", "*"), ("b", "*")]).unwrap_err();
         assert!(
             message.contains("Failed to resolve dependencies.")
-                && message.contains("depends on c 1.0.0 from https://example.com/c.git")
-                && message.contains("depends on c 2.0.0 from https://example.com/c.git"),
+                && message.contains("a 1.0.0 depends on c 1.0.0")
+                && message.contains("b 1.0.0 depends on c 2.0.0"),
             "{}",
             message
         );
