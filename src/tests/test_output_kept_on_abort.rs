@@ -182,3 +182,42 @@ pub fn test_a_check_reports_and_aborts_when_stdout_is_a_closed_pipe() {
         stderr
     );
 }
+
+/// Where standard output and standard error go to one pipe, the message of `undefined` comes after
+/// the lines the program printed before it.
+#[test]
+pub fn test_the_message_of_undefined_follows_what_was_printed_before_it() {
+    let source = source_with_a_runtime_zero(
+        r#"
+        println("printed before undefined");;
+        eval if zero == 0 { undefined("undefined reached") } else { 0 };
+        "#,
+    );
+    let (_dir, program) = build_program(&source, "basic", &[], None, "undefined");
+    let output = Command::new("sh")
+        .args(["-c", "exec \"$0\" 2>&1"])
+        .arg(&program)
+        .output()
+        .unwrap();
+    assert_eq!(output.status.signal(), Some(SIGABRT));
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "printed before undefined\nundefined reached\n"
+    );
+}
+
+/// `undefined` writes its message as it is, a `%` in it included.
+#[test]
+pub fn test_undefined_writes_a_message_holding_a_percent_sign_as_it_is() {
+    let source = source_with_a_runtime_zero(
+        r#"
+        eval if zero == 0 { undefined("100%% done") } else { 0 };
+        "#,
+    );
+    let output = run_source_capture(&source, runtime_checked_config());
+    assert_failed_with(
+        &output,
+        "100%% done",
+        "`undefined` should stop the program with its message",
+    );
+}
