@@ -626,10 +626,9 @@ mod integration_tests {
         )
     }
 
-    /// Writes at `project_dir` a root project named `name` that accepts every compiler and has the
-    /// `[[dependencies]]` entries `dependencies`, runs `fix deps update` there, and returns the lock
-    /// file it writes.
-    fn update_root_project(project_dir: &Path, name: &str, dependencies: &str) -> toml::Value {
+    /// Writes at `project_dir` the project file of a root project named `name` that accepts every
+    /// compiler and has the `[[dependencies]]` entries `dependencies`.
+    fn write_root_project(project_dir: &Path, name: &str, dependencies: &str) {
         fs::create_dir_all(project_dir).expect("Failed to create the root project");
         fs::write(
             project_dir.join("fixproj.toml"),
@@ -640,6 +639,12 @@ mod integration_tests {
             ),
         )
         .expect("Failed to write the project file of the root project");
+    }
+
+    /// Writes at `project_dir` a root project as `write_root_project` does, runs `fix deps update`
+    /// there, and returns the lock file it writes.
+    fn update_root_project(project_dir: &Path, name: &str, dependencies: &str) -> toml::Value {
+        write_root_project(project_dir, name, dependencies);
         let output = run_fix(project_dir, &["deps", "update"]);
         assert_succeeded(&output, "fix deps update resolves the dependencies");
         toml::from_str(&fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).unwrap()).unwrap()
@@ -790,13 +795,7 @@ mod integration_tests {
         .expect("Failed to write the config file");
 
         let project_dir = temp_dir.path().join("root");
-        fs::create_dir_all(&project_dir).expect("Failed to create the root project");
-        fs::write(
-            project_dir.join("fixproj.toml"),
-            "[general]\nname = \"add-for-fix-root\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
-             [build]\nfiles = [\"main.fix\"]\n",
-        )
-        .expect("Failed to write the project file of the root project");
+        write_root_project(&project_dir, "add-for-fix-root", "");
         let output = fix_command()
             .args(["deps", "add", "add-for-fix"])
             .current_dir(&project_dir)

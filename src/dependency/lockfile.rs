@@ -848,18 +848,27 @@ fn is_transient_git_failure(error: &git2::Error) -> bool {
     ) && !matches!(error.code(), ErrorCode::Auth | ErrorCode::Certificate)
 }
 
+/// The position of the project `name` at `source` among `projects`, if it is there.
+fn position_of_project(
+    projects: &[ProjectInfo],
+    name: &PackageName,
+    source: &Source,
+) -> Result<Option<usize>, Errors> {
+    for (i, project) in projects.iter().enumerate() {
+        if &project.name == name && &project.source.key()? == source {
+            return Ok(Some(i));
+        }
+    }
+    Ok(None)
+}
+
 /// The project `name` at `source` among `projects`, if it is there.
 fn find_project<'a>(
     projects: &'a [ProjectInfo],
     name: &PackageName,
     source: &Source,
 ) -> Result<Option<&'a ProjectInfo>, Errors> {
-    for project in projects {
-        if &project.name == name && &project.source.key()? == source {
-            return Ok(Some(project));
-        }
-    }
-    Ok(None)
+    Ok(position_of_project(projects, name, source)?.map(|i| &projects[i]))
 }
 
 /// The project `name` at `source` among `projects`, which the resolver has learned of from a
@@ -869,15 +878,13 @@ fn find_project_mut<'a>(
     name: &PackageName,
     source: &Source,
 ) -> Result<&'a mut ProjectInfo, Errors> {
-    for project in projects {
-        if &project.name == name && &project.source.key()? == source {
-            return Ok(project);
-        }
-    }
-    panic!(
-        "no requirement on \"{}\" from {} has been read",
-        name, source
-    )
+    let i = position_of_project(projects, name, source)?.unwrap_or_else(|| {
+        panic!(
+            "no requirement on \"{}\" from {} has been read",
+            name, source
+        )
+    });
+    Ok(&mut projects[i])
 }
 
 // Create package retriever which will be passed to `resolver::resolve_dependency`.
