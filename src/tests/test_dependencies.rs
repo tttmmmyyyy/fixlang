@@ -592,15 +592,28 @@ mod integration_tests {
     }
 
     /// Commits a project file for `name` at `version` to the upstream repository at `repo_dir`,
-    /// and tags the commit with the version. The project file ends with `dependencies`, which
-    /// holds `[[dependencies]]` entries.
+    /// and tags the commit with the version. The project accepts every compiler, and its project
+    /// file ends with `dependencies`, which holds `[[dependencies]]` entries.
     fn release_upstream_version(repo_dir: &Path, name: &str, version: &str, dependencies: &str) {
+        release_upstream_version_for_fix(repo_dir, name, version, "*", dependencies);
+    }
+
+    /// Commits a project file for `name` at `version` to the upstream repository at `repo_dir`,
+    /// and tags the commit with the version. The project file requires `fix_version` of the
+    /// compiler, and ends with `dependencies`, which holds `[[dependencies]]` entries.
+    fn release_upstream_version_for_fix(
+        repo_dir: &Path,
+        name: &str,
+        version: &str,
+        fix_version: &str,
+        dependencies: &str,
+    ) {
         fs::write(
             repo_dir.join("fixproj.toml"),
             format!(
-                "[general]\nname = \"{}\"\nversion = \"{}\"\nfix_version = \"*\"\n\n\
+                "[general]\nname = \"{}\"\nversion = \"{}\"\nfix_version = \"{}\"\n\n\
                  [build]\nfiles = [\"lib.fix\"]\n\n{}",
-                name, version, dependencies
+                name, version, fix_version, dependencies
             ),
         )
         .expect("Failed to write the project file of the upstream project");
@@ -663,8 +676,7 @@ mod integration_tests {
         let output = run_fix(&project_dir, &["deps", "update"]);
         assert_succeeded(&output, "fix deps update resolves the dependencies");
         let lock: toml::Value =
-            toml::from_str(&fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).unwrap())
-                .unwrap();
+            toml::from_str(&fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).unwrap()).unwrap();
         let common_version = lock["dependencies"]
             .as_array()
             .unwrap()
@@ -672,6 +684,39 @@ mod integration_tests {
             .find(|dep| dep["name"].as_str() == Some("resolve-common"))
             .map(|dep| dep["version"].as_str().unwrap().to_string());
         assert_eq!(common_version.as_deref(), Some("1.0.0"));
+    }
+
+    /// A version of a dependency whose `fix_version` rejects the running compiler is passed over,
+    /// and the newest version that accepts it is chosen.
+    #[test]
+    fn test_a_version_rejecting_the_compiler_is_passed_over() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let lib_repo = temp_dir.path().join("lib");
+        create_upstream_repo(&lib_repo, "resolve-for-fix", "1.0.0", "ResolveForFix");
+        release_upstream_version_for_fix(&lib_repo, "resolve-for-fix", "2.0.0", ">=99.0.0", "");
+
+        let project_dir = temp_dir.path().join("root");
+        fs::create_dir_all(&project_dir).expect("Failed to create the root project");
+        fs::write(
+            project_dir.join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"resolve-for-fix-root\"\nversion = \"0.1.0\"\n\
+                 fix_version = \"*\"\n\n[build]\nfiles = [\"main.fix\"]\n\n{}",
+                git_dependency_entry("resolve-for-fix", "*", &lib_repo)
+            ),
+        )
+        .expect("Failed to write the project file of the root project");
+
+        let output = run_fix(&project_dir, &["deps", "update"]);
+        assert_succeeded(&output, "fix deps update resolves the dependencies");
+        let lock: toml::Value =
+            toml::from_str(&fs::read_to_string(project_dir.join(LOCK_FILE_PATH)).unwrap()).unwrap();
+        assert_eq!(
+            lock["dependencies"][0]["version"].as_str(),
+            Some("1.0.0"),
+            "{}",
+            lock
+        );
     }
 
     /// A project published through a git repository is declared by its url, so that is what the

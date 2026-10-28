@@ -7,8 +7,8 @@ use crate::{
     dependency::resolver::{self, Dependency, Package, PackageName},
     error::Errors,
     metafiles::project_file::{
-        ProjectFile, ProjectFileDependency, ProjectFileDependencyGit, ProjectFileRole, ProjectName,
-        ProjectOrigin,
+        compiler_version, ProjectFile, ProjectFileDependency, ProjectFileDependencyGit,
+        ProjectFileRole, ProjectName, ProjectOrigin,
     },
     misc::{info_msg, to_absolute_path, warn_msg},
     project_fs::{
@@ -145,42 +145,32 @@ impl DependencyLockFile {
             "Resolving dependency for \"{}\"...",
             proj_file.general.name
         ));
-        let res = resolver::resolve_dependency(
-            proj_file,
+        let prjs = resolver::resolve_dependency(
+            (&proj_file.general.name, &proj_file.general.version()),
+            mode,
+            &compiler_version(),
             packages_retriever.as_ref(),
             versions_retriever.as_ref(),
-            mode,
         )?;
-        if res.is_none() {
-            return Err(Errors::from_msg(
-                "Failed to resolve dependencies.".to_string(),
-            ));
-        }
-        let prjs = res.unwrap();
 
         // Create a new lock file following the resolved dependencies.
         let mut lock_file = DependencyLockFile {
             proj_file_hash: proj_file.calculate_dependencies_hash(mode),
             dependencies: Vec::new(),
         };
-        for prj in prjs {
-            // Exclude the root project.
-            if prj.name == proj_file.general.name {
-                continue;
-            }
-
+        for (prj_name, prj_version) in prjs {
             // Get the information of the dependent project.
             let prjs_info = prjs_info.projects.as_ref().lock().unwrap();
             let prj_info = &prjs_info
                 .iter()
-                .find(|info| &info.name == &prj.name)
-                .expect(format!("\"{}\" not found in `projs_info`", prj.name).as_str());
+                .find(|info| &info.name == &prj_name)
+                .expect(format!("\"{}\" not found in `projs_info`", prj_name).as_str());
             let ver_info = prj_info
                 .versions
                 .as_ref()
                 .unwrap()
                 .iter()
-                .find(|info| &info.version == &prj.version)
+                .find(|info| &info.version == &prj_version)
                 .unwrap();
 
             // If the version is not tagged, then warn the user.
@@ -191,18 +181,18 @@ impl DependencyLockFile {
                     .collect::<String>();
                 warn_msg(&format!(
                     "No version tag is found for \"{}\", and using untagged version \"{}\" (commit {}).",
-                    prj.name, prj.version, short_commit
+                    prj_name, prj_version, short_commit
                 ));
             }
 
             // Create a new entry for the lock file.
             let dep = DependencyLockFileEntry {
-                name: prj.name.clone(),
-                version: prj.version.to_string(),
+                name: prj_name.clone(),
+                version: prj_version.to_string(),
                 path: match &prj_info.source {
                     ProjectSource::Local(path_buf) => path_buf.clone(),
                     ProjectSource::Git(_, _) => {
-                        git_dependency_install_path(&prj.name, &prj.version.to_string())
+                        git_dependency_install_path(&prj_name, &prj_version.to_string())
                     }
                 },
                 git: match &prj_info.source {
@@ -388,6 +378,7 @@ impl DependencyLockFileEntry {
     pub fn project_file(&self) -> Result<ProjectFile, Errors> {
         let proj_file_path = self.path.join(PROJECT_FILE_PATH);
         let mut pf = ProjectFile::read_file(&proj_file_path)?;
+        pf.is_fix_version_compatible()?;
         pf.role = ProjectFileRole::Dependent;
         pf.source = Some(match &self.git {
             Some(g) => ProjectOrigin::Git {
@@ -430,7 +421,7 @@ struct DependencyLockGit {
     rev: String,
 }
 
-// Convert a `ProjectFileDependency` to a `dependency_resolver::Dependency`.
+// Convert a `ProjectFileDependency` to a `resolver::Dependency`.
 fn project_file_dep_to_dependency(dep: &ProjectFileDependency) -> Dependency {
     let name = dep.name.clone();
     let requirement = dep.version();
@@ -822,13 +813,12 @@ fn project_file_to_package(proj_file: &ProjectFile, mode: BuildConfigType) -> Pa
         deps.push(dep);
     }
     Package {
-        name: proj_file.general.name.clone(),
-        version: proj_file.general.version(),
         deps,
+        fix_version: proj_file.fix_version(),
     }
 }
 
-// Create package retriever which will be passed to `package_resolver::resolve_dependency`.
+// Create package retriever which will be passed to `resolver::resolve_dependency`.
 fn create_package_retriever(
     projs: ProjectsInfo,
 ) -> Box<dyn Fn(&PackageName, &Version, BuildConfigType) -> Result<Package, Errors>> {
@@ -909,7 +899,7 @@ fn create_package_retriever(
     })
 }
 
-// Create version retriever which will be passed to `package_resolver::resolve_dependency`.
+// Create version retriever which will be passed to `resolver::resolve_dependency`.
 fn create_version_retriever(
     pkgs: ProjectsInfo,
 ) -> Box<dyn Fn(&PackageName) -> Result<Vec<Version>, Errors>> {

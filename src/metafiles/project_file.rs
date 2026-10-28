@@ -351,6 +351,7 @@ impl ProjectFile {
     pub fn read_root_file() -> Result<ProjectFile, Errors> {
         let proj_file_path = Path::new(PROJECT_FILE_PATH);
         let mut proj_file = ProjectFile::read_file(&proj_file_path)?;
+        proj_file.is_fix_version_compatible()?;
         proj_file.role = ProjectFileRole::Root;
         proj_file.source = Some(ProjectOrigin::Local(to_absolute_path(
             proj_file
@@ -361,9 +362,8 @@ impl ProjectFile {
         Ok(proj_file)
     }
 
-    /// Reads the project file at `path`, checks its fields, and checks that the project accepts the
-    /// running compiler's version. The returned file carries the default `role` and `source`, which
-    /// the loader sets to match where the file came from.
+    /// Reads the project file at `path` and checks its fields. The returned file carries the
+    /// default `role` and `source`, which the loader sets to match where the file came from.
     pub fn read_file(path: &Path) -> Result<Self, Errors> {
         let mut file = File::open(path).map_err(|e| {
             Errors::from_msg(format!(
@@ -409,9 +409,6 @@ impl ProjectFile {
 
         // Perform validation.
         proj_file.validate()?;
-
-        // Check if the project file is compatible with the current version of Fix.
-        proj_file.is_fix_version_compatible()?;
 
         Ok(proj_file)
     }
@@ -681,17 +678,14 @@ impl ProjectFile {
 
     /// Checks that the running compiler's version satisfies what this project requires of it.
     pub fn is_fix_version_compatible(&self) -> Result<(), Errors> {
-        if self
-            .fix_version()
-            .matches(&Version::parse(env!("CARGO_PKG_VERSION")).unwrap())
-        {
+        if self.fix_version().matches(&compiler_version()) {
             Ok(())
         } else {
             Err(Errors::from_msg(format!(
                 "The project \"{}\" requires Fix version \"{}\", but the current version of Fix is \"{}\".",
                 self.general.name,
                 self.fix_version(),
-                env!("CARGO_PKG_VERSION"),
+                compiler_version(),
             )))
         }
     }
@@ -1503,6 +1497,11 @@ impl ProjectFile {
         })?;
         Ok(reg_file)
     }
+}
+
+/// The version of the running compiler.
+pub fn compiler_version() -> Version {
+    Version::parse(env!("CARGO_PKG_VERSION")).unwrap()
 }
 
 #[cfg(test)]

@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+#### Tool
+
+- #968: Dependency resolution passes over a version of a dependency whose `fix_version` does not accept the running compiler, and chooses the newest version that does. It used to fail as soon as it tried such a version. A version whose project file cannot be read is passed over in the same way.
+- #968: When no choice of versions satisfies every version requirement, the error now explains which requirements conflict.
+
 ### Fixed
 
 #### Tool
