@@ -15,6 +15,7 @@ use std::{
     fs,
     io::{Read, Write},
     os::unix::process::ExitStatusExt,
+    path::Path,
     process::{Command, Stdio},
 };
 
@@ -131,15 +132,9 @@ pub fn test_the_report_follows_what_was_printed_before_the_check() {
         "#,
     );
     let (_dir, program) = build_program(&source, "basic", &[], None, "an index check");
-    let output = Command::new("sh")
-        .args(["-c", "exec \"$0\" 2>&1"])
-        .arg(&program)
-        .output()
-        .unwrap();
-    assert_eq!(output.status.signal(), Some(SIGABRT));
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "printed before the check\nIndex out of range: index=10, size=3\n"
+    assert_aborts_writing_to_one_pipe(
+        &program,
+        "printed before the check\nIndex out of range: index=10, size=3\n",
     );
 }
 
@@ -194,16 +189,19 @@ pub fn test_the_message_of_undefined_follows_what_was_printed_before_it() {
         "#,
     );
     let (_dir, program) = build_program(&source, "basic", &[], None, "undefined");
+    assert_aborts_writing_to_one_pipe(&program, "printed before undefined\nundefined reached\n");
+}
+
+/// Run `program` with its standard output and standard error going to one pipe, and assert that
+/// `abort` stops it and that the pipe receives `expected`.
+fn assert_aborts_writing_to_one_pipe(program: &Path, expected: &str) {
     let output = Command::new("sh")
         .args(["-c", "exec \"$0\" 2>&1"])
-        .arg(&program)
+        .arg(program)
         .output()
         .unwrap();
     assert_eq!(output.status.signal(), Some(SIGABRT));
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout),
-        "printed before undefined\nundefined reached\n"
-    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), expected);
 }
 
 /// `undefined` writes its message as it is, a `%` in it included.
