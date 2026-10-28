@@ -65,8 +65,40 @@ class Comparison:
 # What the tooltip of a case's rows adds about the case, where the comparison's own description
 # leaves out something a reader would assume otherwise.
 CASE_NOTES = {
+    "cp_maxflow": "Both run Dinic's algorithm. cp-library lays the residual graph out\n"
+                  "in one array ordered by source vertex; mf_graph keeps a vector per vertex.",
     "cp_bipartite": "AtCoder Library has no bipartite matching, so the C++ side solves it\n"
-                    "as a maximum flow with mf_graph, as cp-library does.",
+                    "as a maximum flow with mf_graph, as cp-library does, and reads the\n"
+                    "matching off the flow. cp-library lays the residual graph out in one\n"
+                    "array ordered by source vertex; mf_graph keeps a vector per vertex.",
+    "cp_mincostflow": "AtCoder Library's Dijkstra keeps the vertices reached over edges of\n"
+                      "reduced cost 0 out of the heap and builds the heap lazily; cp-library\n"
+                      "pushes every relaxed vertex to a binary heap.",
+    "cp_unionfind": "cp-library shortens paths by path halving; AtCoder Library compresses\n"
+                    "them fully, by recursion.",
+    "cp_lsegtree": "cp-library's fold leaves the tree as it is and composes the pending\n"
+                   "actions above the range; AtCoder Library's prod pushes them down first.",
+    "cp_ldsegtree": "cp-library keeps at each node the action not yet applied to the node's\n"
+                    "own value, and its fold leaves the tree as it is; AtCoder Library's\n"
+                    "lazy_segtree applies an action to a node's value as it stores it, and its\n"
+                    "prod pushes the actions down first.",
+    "cp_segtree": "cp-library halves a 64-bit index with / 2, which compiles to a signed\n"
+                  "division; AtCoder Library shifts an int.",
+    "cp_dsegtree": "cp-library halves a 64-bit index with / 2, which compiles to a signed\n"
+                   "division; AtCoder Library shifts an int.",
+    "cp_suffix_array": "Both run SA-IS. AtCoder Library holds the type of each suffix in a\n"
+                       "vector<bool> of bits; cp-library holds it in an Array Bool of bytes.",
+    "cp_z_algorithm": "AtCoder Library's z_algorithm on a string copies it into a vector<int>\n"
+                      "first; cp-library reads its bytes.",
+    "cp_pow_mod": "The two libraries run the same code. LLVM divides a 64-bit integer that\n"
+                  "fits in 32 bits with a 32-bit division; GCC divides it in 64 bits.",
+    "cp_inv_mod": "The two libraries run the same code. LLVM divides a 64-bit integer that\n"
+                  "fits in 32 bits with a 32-bit division; GCC divides it in 64 bits.",
+    "cp_floor_sum": "The two libraries run the same code. LLVM divides a 64-bit integer that\n"
+                    "fits in 32 bits with a 32-bit division; GCC divides it in 64 bits.",
+    "cp_crt": "The two libraries run the same code. LLVM divides a 64-bit integer that\n"
+              "fits in 32 bits with a 32-bit division; GCC divides it in 64 bits. Fix also\n"
+              "inlines crt and folds away its first round, whose modulus is 1.",
 }
 
 
@@ -105,17 +137,20 @@ COMPARISONS = [
         "Fix built with --no-runtime-check",
         lambda case, case_dir: case.startswith("cp_") and calls_acl(case_dir),
         "cp-library, a Fix library for competitive programming, against AtCoder Library on "
-        "large random inputs. Only the library calls are measured. C++ does not check array "
-        "bounds, so Fix is built with --no-runtime-check. C++ is built with {compiler} -O3 "
-        "-march=native.",
+        "large random inputs. Only the library calls are measured. The two libraries differ in "
+        "algorithm or data structure for some functions; the case's tooltip says how. Fix is "
+        "built with --no-runtime-check; C++ with {compiler} -O3 -march=native -DNDEBUG.",
         "<p><a href=\"https://github.com/tttmmmyyyy/cp-library\">cp-library</a>, a Fix library "
         "for competitive programming, against <a href=\"https://github.com/atcoder/ac-library\">"
-        "AtCoder Library</a>, the C++ library that AtCoder provides for its contests. Both run "
-        "the same algorithm on the same large random input. Only the library calls are "
+        "AtCoder Library</a>, the C++ library that AtCoder provides for its contests. Both solve "
+        "the same problem on the same large random input. Only the library calls are "
         "measured; generating the input is not.</p>"
+        "<p>This compares the libraries as they are written. For some functions they differ in "
+        "algorithm or data structure, and the tooltip of the case says how.</p>"
         "<p>C++ does not check array bounds, so the Fix programs are built with "
-        "<code>--no-runtime-check</code>. The C++ programs are built with {compiler} <code>-O3 "
-        "-march=native -std=gnu++20</code>.</p>"
+        "<code>--no-runtime-check</code>, and the C++ programs with <code>-DNDEBUG</code>, which "
+        "turns off the <code>assert</code>s in AtCoder Library. The C++ programs are built with "
+        "{compiler} <code>-O3 -march=native -std=gnu++20 -DNDEBUG</code>.</p>"
         "<p>AtCoder's judge runs Fix 1.1.0, and the compiler has become much faster since then, "
         "so these numbers are not reached there.</p>"),
     Comparison(
@@ -125,7 +160,7 @@ COMPARISONS = [
         "cp-library against C++ for the functions AtCoder Library does not have: the C++ "
         "standard library, or a plain implementation over the graph layout cp-library uses. Only "
         "the function calls are measured. Fix is built with --no-runtime-check; C++ with "
-        "{compiler} -O3 -march=native.",
+        "{compiler} -O3 -march=native -DNDEBUG.",
         "<p>cp-library against C++ for the functions AtCoder Library does not have. The C++ side "
         "is the C++ standard library (<code>std::next_permutation</code>) or a plain "
         "implementation of the same algorithm (Dijkstra's algorithm on "
@@ -134,7 +169,7 @@ COMPARISONS = [
         "vertex, with vertex numbers held in 4 bytes. As with AtCoder Library, both run on the "
         "same large random input, and only the function calls are measured.</p>"
         "<p>The Fix programs are built with <code>--no-runtime-check</code>, and the C++ "
-        "programs with {compiler} <code>-O3 -march=native -std=gnu++20</code>.</p>"),
+        "programs with {compiler} <code>-O3 -march=native -std=gnu++20 -DNDEBUG</code>.</p>"),
 ]
 
 
