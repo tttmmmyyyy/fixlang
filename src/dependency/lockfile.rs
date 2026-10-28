@@ -514,12 +514,10 @@ impl ProjectInfo {
     /// The project file at the given version. A project file that cannot be read makes the version
     /// unusable; a repository that cannot be read fails the retrieval.
     fn get_project_file(&mut self, version: &Version) -> Result<ProjectFile, RetrievalError> {
+        self.retrieve_versions()?;
         if let Some(proj_file) = self.proj_files.get(version) {
             return Ok(proj_file.clone());
         }
-
-        // Retrieve the versions if not retrieved yet.
-        self.retrieve_versions()?;
 
         // The resolver asks only for versions the versions retriever listed.
         let rev = self
@@ -530,19 +528,13 @@ impl ProjectInfo {
             .find(|info| &info.version == version)
             .unwrap_or_else(|| panic!("version {} of \"{}\" was not listed", version, self.name))
             .rev;
+        assert!(
+            self.is_git(),
+            "the project file of \"{}\" in a project directory is read as its version is listed",
+            self.name
+        );
 
-        // If the source is a project directory, open the project file and return it.
-        match &self.source {
-            ProjectSource::Local(proj_path) => {
-                let proj_file = ProjectFile::read_file(&proj_path.join(PROJECT_FILE_PATH))
-                    .map_err(RetrievalError::Unusable)?;
-                self.proj_files.insert(version.clone(), proj_file.clone());
-                return Ok(proj_file);
-            }
-            _ => (),
-        }
-
-        // If the source is a git repository, checkout the given revision and read the project file.
+        // Check out the commit of the version and read the project file.
         self.source
             .prepare_git_repository()
             .map_err(RetrievalError::Fatal)?;
@@ -660,11 +652,13 @@ pub enum VersionToAdd {
 /// compiler. A repository with no tag is judged by its newest commit. When no version is usable,
 /// the error says why each was left out.
 pub fn version_to_add(name: &ProjectName, url: &str) -> Result<VersionToAdd, Errors> {
-    let fatal = |err: RetrievalError| match err {
-        RetrievalError::Unusable(errs) | RetrievalError::Fatal(errs) => errs,
-    };
     let mut project = ProjectInfo::new(name.clone(), ProjectSource::Git(url.to_string(), None))?;
-    project.retrieve_versions().map_err(fatal)?;
+    project.retrieve_versions().map_err(|err| match err {
+        RetrievalError::Fatal(errs) => errs,
+        RetrievalError::Unusable(errs) => {
+            unreachable!("a repository lists its versions without leaving one out: {}", errs)
+        }
+    })?;
     let listed = project.versions.as_ref().unwrap();
     let any_tagged = listed.iter().any(|info| info.tagged);
     let mut candidates = listed
