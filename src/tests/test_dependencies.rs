@@ -9,7 +9,7 @@ mod integration_tests {
         io::{Read, Write},
         net::TcpListener,
         path::{Path, PathBuf},
-        process::Output,
+        process::{Command, Output},
         thread,
     };
     use tempfile::TempDir;
@@ -565,7 +565,7 @@ mod integration_tests {
 
     /// Runs `git` with `args` in `repo_dir`, and fails the test if it fails.
     fn run_git(repo_dir: &Path, args: &[&str]) {
-        let status = std::process::Command::new("git")
+        let status = Command::new("git")
             .args(args)
             .current_dir(repo_dir)
             .status()

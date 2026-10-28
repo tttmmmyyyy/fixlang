@@ -179,8 +179,10 @@ fn candidate_versions<'b>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{resolve_requirements, Dependency, Package, PackageName};
+    use crate::configuration::BuildConfigType;
     use crate::misc::Map;
+    use semver::{Version, VersionReq};
 
     /// The requirement `req` on the package `name`.
     fn dependency(name: &str, req: &str) -> Dependency {
