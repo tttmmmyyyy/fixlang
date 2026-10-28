@@ -986,7 +986,7 @@ fn create_package_retriever(
 }
 
 /// The versions retriever for `resolver::resolve_dependency`, which lists versions through the
-/// cache `pkgs`.
+/// cache `projs`.
 fn create_version_retriever(
     projs: ProjectsInfo,
 ) -> Box<dyn Fn(&PackageName, &Source) -> Result<Vec<Version>, RetrievalError>> {
