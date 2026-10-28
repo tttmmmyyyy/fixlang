@@ -17,7 +17,7 @@
 - #964: When a completion adds an import, the language server now leaves alone an `import` statement written in a comment or a string literal. It used to delete that statement from the comment or the string and add it to the import statements of the file.
 - #968: Dependency resolution now finds a choice of versions whenever one satisfies every version requirement. It could fail when one requirement on a project accepted a newer version than another requirement on that project allowed, as with `fix deps add a@=1.0.0 b@=1.0.0` where `a` requires `b` `^1.0.0` and `b` 1.1.0 exists.
 - #968: Dependency resolution no longer fails with "required twice with different sources" when the project that fetched a dependency from another repository was at a version the resolution passed over. Two requirements that fetch one project from two different repositories are now a conflict, which the resolution avoids by choosing other versions.
-- #968: `fix deps update` and `fix build` no longer warn that a `rev` or `tag` of a dependency is ignored when the root project file gives it, where it is applied.
+- #968: `fix deps update` and `fix build` no longer warn that the `rev` or `tag` of a dependency in the root project file is ignored. The root project's `rev` and `tag` are applied.
 
 ## [1.6.0] - 2026-10-24
 

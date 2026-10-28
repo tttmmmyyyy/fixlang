@@ -880,7 +880,8 @@ fn known_project<'a>(
     })
 }
 
-// Create package retriever which will be passed to `resolver::resolve_dependency`.
+/// The package retriever for `resolver::resolve_dependency`. It reads project files through the
+/// cache `projs`, and adds to it the projects their dependencies name.
 fn create_package_retriever(
     projs: ProjectsInfo,
 ) -> Box<dyn Fn(&PackageName, &SourcedVersion, BuildConfigType) -> Result<Package, RetrievalError>>
@@ -949,7 +950,8 @@ fn create_package_retriever(
     })
 }
 
-// Create version retriever which will be passed to `resolver::resolve_dependency`.
+/// The versions retriever for `resolver::resolve_dependency`, which lists versions through the
+/// cache `pkgs`.
 fn create_version_retriever(
     pkgs: ProjectsInfo,
 ) -> Box<dyn Fn(&PackageName, &Source) -> Result<Vec<Version>, Errors>> {

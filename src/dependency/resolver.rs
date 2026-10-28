@@ -52,7 +52,7 @@ pub struct SourcedVersion {
     pub source: Source,
 }
 
-/// Written as the explanation of a failed resolution shows a version of the root project.
+/// Writes the version followed by the source it is fetched from.
 ///
 /// # Examples
 /// `1.0.0 from https://github.com/a/b.git`
@@ -154,12 +154,17 @@ pub fn resolve_dependency(
     }
 }
 
-/// What the PubGrub solver asks about the projects: their versions, and the requirements and
-/// `fix_version` of each version.
+/// Answers the PubGrub solver's questions about the projects: their versions, and the
+/// requirements and `fix_version` of each version.
 struct Provider<'a, 'b> {
+    /// The name of the root project, whose dependencies are read under `mode`.
     root_name: PackageName,
+    /// The version of the root project.
     root_version: SourcedVersion,
+    /// The build configuration whose dependencies the root project brings in.
     mode: BuildConfigType,
+    /// The version of the running compiler, which the `fix_version` of every chosen version must
+    /// accept.
     compiler_version: Version,
     package_retriever: PackageRetriever<'a>,
     versions_retriever: VersionRetriever<'b>,
@@ -220,6 +225,7 @@ impl DependencyProvider for Provider<'_, '_> {
     type M = String;
     type Err = Errors;
 
+    /// Counts the conflicts `package` took part in, and its known versions in `range`.
     fn prioritize(
         &self,
         package: &PackageName,
@@ -237,6 +243,7 @@ impl DependencyProvider for Provider<'_, '_> {
         )
     }
 
+    /// The newest known version in `range`.
     fn choose_version(
         &self,
         package: &PackageName,
@@ -250,6 +257,9 @@ impl DependencyProvider for Provider<'_, '_> {
             .cloned())
     }
 
+    /// The requirements of `package` at `version`, read under `mode` for the root project and from
+    /// the `build` section for any other. A version that cannot be read, or whose `fix_version`
+    /// rejects the running compiler, is unavailable, with the reason.
     fn get_dependencies(
         &self,
         package: &PackageName,

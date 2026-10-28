@@ -1367,7 +1367,8 @@ impl ProjectFile {
                         proj_name, reg_loc
                     ));
 
-                    // When the version requirement is empty, try to use the latest tagged version.
+                    // When no version is given, require the newest tagged version that accepts
+                    // the running compiler.
                     let version = match version {
                         Some(v) => v.clone(),
                         None => match tagged_version_to_add(proj_name, &proj_info.git)? {

@@ -769,7 +769,7 @@ mod integration_tests {
     }
 
     /// `fix deps add` with no version requires the newest tagged version whose `fix_version`
-    /// accepts the running compiler, rather than a newer one that rejects it.
+    /// accepts the running compiler, passing over a newer one that rejects it.
     #[test]
     fn test_deps_add_requires_the_newest_version_accepting_the_compiler() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
