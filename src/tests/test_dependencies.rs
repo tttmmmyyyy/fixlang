@@ -609,6 +609,17 @@ mod integration_tests {
         run_git(repo_dir, &["tag", version]);
     }
 
+    /// A `[[dependencies]]` entry requiring `requirement` of the project `name` published through
+    /// the git repository at `repo_dir`.
+    fn git_dependency_entry(name: &str, requirement: &str, repo_dir: &Path) -> String {
+        format!(
+            "[[dependencies]]\nname = \"{}\"\nversion = \"{}\"\ngit = {{ url = \"{}\" }}\n",
+            name,
+            requirement,
+            repo_dir.to_string_lossy()
+        )
+    }
+
     /// A version of a dependency that a transitive requirement accepts is chosen again when a
     /// requirement resolved later accepts only an older one.
     ///
@@ -621,14 +632,6 @@ mod integration_tests {
         let common = temp_dir.path().join("common");
         create_upstream_repo(&common, "resolve-common", "1.0.0", "ResolveCommon");
         release_upstream_version(&common, "resolve-common", "1.1.0", "");
-        let common_entry = |requirement: &str| {
-            format!(
-                "[[dependencies]]\nname = \"resolve-common\"\nversion = \"{}\"\n\
-                 git = {{ url = \"{}\" }}\n",
-                requirement,
-                common.to_string_lossy()
-            )
-        };
 
         let collection = temp_dir.path().join("collection");
         create_upstream_repo(&collection, "resolve-collection", "0.1.0", "ResolveCollection");
@@ -636,7 +639,7 @@ mod integration_tests {
             &collection,
             "resolve-collection",
             "1.0.0",
-            &common_entry("^1.0.0"),
+            &git_dependency_entry("resolve-common", "^1.0.0", &common),
         );
 
         let project_dir = temp_dir.path().join("root");
@@ -645,11 +648,9 @@ mod integration_tests {
             project_dir.join("fixproj.toml"),
             format!(
                 "[general]\nname = \"resolve-root\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
-                 [build]\nfiles = [\"main.fix\"]\n\n\
-                 [[dependencies]]\nname = \"resolve-collection\"\nversion = \"=1.0.0\"\n\
-                 git = {{ url = \"{}\" }}\n\n{}",
-                collection.to_string_lossy(),
-                common_entry("=1.0.0")
+                 [build]\nfiles = [\"main.fix\"]\n\n{}\n{}",
+                git_dependency_entry("resolve-collection", "=1.0.0", &collection),
+                git_dependency_entry("resolve-common", "=1.0.0", &common)
             ),
         )
         .expect("Failed to write the project file of the root project");

@@ -103,17 +103,13 @@ fn resolve_requirements<'a, 'b>(
             names.push(&req.name);
         }
     }
-    let mut chosen: Option<(PackageName, Vec<Version>)> = None;
-    for name in names {
-        let candidates = candidate_versions(name, &open, versions_retriever)?;
-        if chosen
-            .as_ref()
-            .map_or(true, |(_, best)| candidates.len() < best.len())
-        {
-            chosen = Some((name.clone(), candidates));
-        }
-    }
-    let (name, candidates) = chosen.unwrap();
+    let (name, candidates) = names
+        .into_iter()
+        .map(|name| Ok((name.clone(), candidate_versions(name, &open, versions_retriever)?)))
+        .collect::<Result<Vec<_>, Errors>>()?
+        .into_iter()
+        .min_by_key(|(_, candidates)| candidates.len())
+        .expect("`open` is not empty, so some package is named by it");
     let reqs_text = open
         .iter()
         .filter(|req| req.name == name)
@@ -186,6 +182,14 @@ mod tests {
     use super::*;
     use crate::misc::Map;
 
+    /// The requirement `req` on the package `name`.
+    fn dependency(name: &str, req: &str) -> Dependency {
+        Dependency {
+            name: name.to_string(),
+            requirement: VersionReq::parse(req).unwrap(),
+        }
+    }
+
     /// A registry of packages for the resolver: each entry is a package of one version and the
     /// requirements it has, written as `("name", "version", &[("dep", "requirement")])`.
     fn registry(
@@ -196,13 +200,7 @@ mod tests {
             let package = Package {
                 name: name.to_string(),
                 version: Version::parse(version).unwrap(),
-                deps: deps
-                    .iter()
-                    .map(|(dep, req)| Dependency {
-                        name: dep.to_string(),
-                        requirement: VersionReq::parse(req).unwrap(),
-                    })
-                    .collect(),
+                deps: deps.iter().map(|(dep, req)| dependency(dep, req)).collect(),
             };
             map.insert((package.name.clone(), package.version.clone()), package);
         }
@@ -232,10 +230,7 @@ mod tests {
         };
         let requirements = root_deps
             .iter()
-            .map(|(dep, req)| Dependency {
-                name: dep.to_string(),
-                requirement: VersionReq::parse(req).unwrap(),
-            })
+            .map(|(dep, req)| dependency(dep, req))
             .collect();
         let fixed = resolve_requirements(
             vec![root],
