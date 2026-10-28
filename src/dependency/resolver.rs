@@ -291,23 +291,30 @@ impl DependencyProvider for Provider<'_, '_> {
         } else {
             BuildConfigType::Build
         };
-        // The root's project file is the one being resolved, so a failure to read what it
-        // requires is reported as it is, rather than as a version to leave out.
-        let unavailable = |reason: String| {
+        // Leaves this version out for the reason `predicate` gives, a sentence about the version
+        // with its subject left out. The root's project file is the one being resolved, so for
+        // the root the reason is reported as an error, rather than as a version to leave out.
+        let unavailable = |predicate: String| {
             if is_root {
-                Err(Errors::from_msg(reason))
+                Err(Errors::from_msg(format!("\"{}\" {}.", package, predicate)))
             } else {
-                Ok(Dependencies::Unavailable(format!("because {}", reason)))
+                Ok(Dependencies::Unavailable(format!(
+                    "because it {}",
+                    predicate
+                )))
             }
         };
         let retrieved = match (self.package_retriever)(package, version, mode) {
             Ok(retrieved) => retrieved,
-            Err(RetrievalError::Unusable(errs)) => return unavailable(errs.messages()),
+            Err(RetrievalError::Unusable(errs)) if is_root => return Err(errs),
+            Err(RetrievalError::Unusable(errs)) => {
+                return unavailable(format!("could not be read: {}", errs.messages()))
+            }
             Err(RetrievalError::Fatal(errs)) => return Err(errs),
         };
         if !retrieved.fix_version.matches(&self.compiler_version) {
             return unavailable(format!(
-                "it requires Fix {}, and this is Fix {}",
+                "requires Fix {}, and this is Fix {}",
                 retrieved.fix_version, self.compiler_version
             ));
         }
@@ -329,7 +336,7 @@ impl DependencyProvider for Provider<'_, '_> {
                 Ok(versions) => versions,
                 Err(RetrievalError::Unusable(errs)) => {
                     return unavailable(format!(
-                        "its dependency \"{}\" from {} could not be read: {}",
+                        "depends on \"{}\" from {}, which could not be read: {}",
                         dependency.name,
                         dependency.source,
                         errs.messages()
@@ -339,7 +346,7 @@ impl DependencyProvider for Provider<'_, '_> {
             };
             if versions == Versions::empty() {
                 return unavailable(format!(
-                    "it requires \"{}\" {} from {}, where {}",
+                    "requires \"{}\" {} from {}, where {}",
                     dependency.name,
                     dependency.requirement,
                     dependency.source,

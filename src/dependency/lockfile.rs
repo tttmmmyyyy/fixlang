@@ -505,7 +505,7 @@ impl ProjectInfo {
             }
             ProjectSource::Git(_url, repo) => {
                 let repo = &repo.as_mut().unwrap().1;
-                self.versions = Some(get_versions_from_repo(repo).map_err(RetrievalError::Fatal)?);
+                self.versions = Some(get_versions_from_repo(repo)?);
             }
         }
         Ok(())
@@ -655,9 +655,11 @@ pub fn version_to_add(name: &ProjectName, url: &str) -> Result<VersionToAdd, Err
     let mut project = ProjectInfo::new(name.clone(), ProjectSource::Git(url.to_string(), None))?;
     project.retrieve_versions().map_err(|err| match err {
         RetrievalError::Fatal(errs) => errs,
-        RetrievalError::Unusable(errs) => {
-            unreachable!("a repository lists its versions without leaving one out: {}", errs)
-        }
+        RetrievalError::Unusable(errs) => Errors::from_msg(format!(
+            "No version of \"{}\" can be used: {}",
+            name,
+            errs.messages()
+        )),
     })?;
     let listed = project.versions.as_ref().unwrap();
     let any_tagged = listed.iter().any(|info| info.tagged);
@@ -704,8 +706,11 @@ pub fn version_to_add(name: &ProjectName, url: &str) -> Result<VersionToAdd, Err
     )))
 }
 
-// Get versions from a git repository.
-pub fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Errors> {
+/// The versions of the project in the git repository `repo`, one for each version tag.
+///
+/// A repository with no version tag lists the version its newest commit's project file gives; when
+/// that file cannot be read, the repository is unusable.
+fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, RetrievalError> {
     let mut versions: Vec<VersionInfo> = vec![];
 
     // First, look for tags.
@@ -750,7 +755,7 @@ pub fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Err
 
         return true;
     })
-    .map_err(|e| Errors::from_msg_err("Failed to iterate over tags", e))?;
+    .map_err(|e| RetrievalError::Fatal(Errors::from_msg_err("Failed to iterate over tags", e)))?;
 
     // If any version tag is found, return them.
     if !versions.is_empty() {
@@ -758,17 +763,22 @@ pub fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Err
     }
 
     // If no version tag is found, look for "fixproj.toml" file and use the version from it.
+    let fatal = RetrievalError::Fatal;
     let head = repo
         .head()
-        .map_err(|e| Errors::from_msg_err("Failed to get HEAD", e))?;
-    let head_oid = head
-        .target()
-        .ok_or_else(|| Errors::from_msg("HEAD does not point to any commit.".to_string()))?;
+        .map_err(|e| fatal(Errors::from_msg_err("Failed to get HEAD", e)))?;
+    let head_oid = head.target().ok_or_else(|| {
+        fatal(Errors::from_msg(
+            "HEAD does not point to any commit.".to_string(),
+        ))
+    })?;
     let work_dir = repo.workdir().ok_or_else(|| {
-        Errors::from_msg("Repository does not have a working directory.".to_string())
+        fatal(Errors::from_msg(
+            "Repository does not have a working directory.".to_string(),
+        ))
     })?;
     let proj_file_path = work_dir.join(PROJECT_FILE_PATH);
-    let proj_file = ProjectFile::read_file(&proj_file_path)?;
+    let proj_file = ProjectFile::read_file(&proj_file_path).map_err(RetrievalError::Unusable)?;
     versions.push(VersionInfo {
         version: proj_file.general.version(),
         rev: head_oid,
