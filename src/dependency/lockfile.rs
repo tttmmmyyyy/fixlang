@@ -12,7 +12,7 @@ use crate::{
         compiler_version, ProjectFile, ProjectFileDependencyGit, ProjectFileRole, ProjectName,
         ProjectOrigin,
     },
-    misc::{info_msg, to_absolute_path, warn_msg},
+    misc::{info_msg, to_absolute_path, warn_msg, Map},
     project_fs::{
         create_dir_guarding_project_links, remove_inside_dot_fixlang, DOT_FIXLANG_LINK_HINT,
     },
@@ -117,12 +117,13 @@ impl DependencyLockFile {
             let (version, _oid) = proj_info.resolve_pinned_ref(git)?;
 
             // Verify name matches.
-            if proj_info.proj_files[0].general.name != dep.name {
+            let pinned_name = &proj_info.proj_files[&version].general.name;
+            if *pinned_name != dep.name {
                 return Err(Errors::from_msg(format!(
                     "Dependency \"{}\" pinned to {} resolves to project \"{}\", which has a different name.",
                     dep.name,
                     git.ref_description(),
-                    proj_info.proj_files[0].general.name
+                    pinned_name
                 )));
             }
 
@@ -441,7 +442,10 @@ struct ProjectInfo {
     /// `source` as the resolver identifies it, with a directory made absolute.
     source_id: Source,
     versions: Option<Vec<VersionInfo>>, // Available versions. None if not retrieved yet.
-    proj_files: Vec<ProjectFile>,       // Project files at different versions.
+    /// The project files read so far, each under the version listed for the commit or the
+    /// directory it was read from. A file can name another version than the one it is listed
+    /// under, so the key is the listed version.
+    proj_files: Map<Version, ProjectFile>,
 }
 
 impl ProjectInfo {
@@ -456,7 +460,7 @@ impl ProjectInfo {
             source_id: source.to_source()?,
             source,
             versions: None,
-            proj_files: Vec::new(),
+            proj_files: Map::default(),
         })
     }
 
@@ -471,32 +475,37 @@ impl ProjectInfo {
             rev: Oid::zero(),
             tagged: false,
         }]);
-        project.proj_files = vec![proj_file.clone()];
+        project
+            .proj_files
+            .insert(proj_file.general.version(), proj_file.clone());
         Ok(project)
     }
 
-    // See into `self.source` and retrieve versions available for this package.
-    fn retrieve_versions(&mut self) -> Result<(), Errors> {
+    /// Lists the versions of the project at its source, once. A project directory whose project
+    /// file cannot be read is unusable; a repository that cannot be read fails the retrieval.
+    fn retrieve_versions(&mut self) -> Result<(), RetrievalError> {
         // If the versions are already retrieved, do nothing.
         if self.versions.is_some() {
             return Ok(());
         }
-        self.source.prepare_git_repository()?;
+        self.source
+            .prepare_git_repository()
+            .map_err(RetrievalError::Fatal)?;
         match &mut self.source {
             ProjectSource::Local(proj_path) => {
-                // Read the project file.
-                let proj_file_path = proj_path.clone().join(PROJECT_FILE_PATH);
-                let proj_file = ProjectFile::read_file(&proj_file_path)?;
-                let ver = proj_file.general.version();
+                let proj_file = ProjectFile::read_file(&proj_path.join(PROJECT_FILE_PATH))
+                    .map_err(RetrievalError::Unusable)?;
+                let version = proj_file.general.version();
                 self.versions = Some(vec![VersionInfo {
-                    version: ver,
+                    version: version.clone(),
                     rev: Oid::zero(),
                     tagged: false,
                 }]);
+                self.proj_files.insert(version, proj_file);
             }
             ProjectSource::Git(_url, repo) => {
                 let repo = &repo.as_mut().unwrap().1;
-                self.versions = Some(get_versions_from_repo(repo)?);
+                self.versions = Some(get_versions_from_repo(repo).map_err(RetrievalError::Fatal)?);
             }
         }
         Ok(())
@@ -505,15 +514,12 @@ impl ProjectInfo {
     /// The project file at the given version. A project file that cannot be read makes the version
     /// unusable; a repository that cannot be read fails the retrieval.
     fn get_project_file(&mut self, version: &Version) -> Result<ProjectFile, RetrievalError> {
-        // See into the cache field `self.proj_files`.
-        for proj_file in &self.proj_files {
-            if &proj_file.general.version() == version {
-                return Ok(proj_file.clone());
-            }
+        if let Some(proj_file) = self.proj_files.get(version) {
+            return Ok(proj_file.clone());
         }
 
         // Retrieve the versions if not retrieved yet.
-        self.retrieve_versions().map_err(RetrievalError::Fatal)?;
+        self.retrieve_versions()?;
 
         // The resolver asks only for versions the versions retriever listed.
         let rev = self
@@ -530,7 +536,7 @@ impl ProjectInfo {
             ProjectSource::Local(proj_path) => {
                 let proj_file = ProjectFile::read_file(&proj_path.join(PROJECT_FILE_PATH))
                     .map_err(RetrievalError::Unusable)?;
-                self.proj_files.push(proj_file.clone());
+                self.proj_files.insert(version.clone(), proj_file.clone());
                 return Ok(proj_file);
             }
             _ => (),
@@ -556,8 +562,30 @@ impl ProjectInfo {
             .map_err(|e| failure("check out the commit", e))?;
         let proj_file = ProjectFile::read_file(&repo.workdir().unwrap().join(PROJECT_FILE_PATH))
             .map_err(RetrievalError::Unusable)?;
-        self.proj_files.push(proj_file.clone());
+        self.proj_files.insert(version.clone(), proj_file.clone());
 
+        Ok(proj_file)
+    }
+
+    /// The project file at the given version, checked to name this project at that version. A
+    /// version whose project file cannot be read, or names another project or version, is
+    /// unusable.
+    fn usable_project_file(&mut self, version: &Version) -> Result<ProjectFile, RetrievalError> {
+        let proj_file = self.get_project_file(version)?;
+        if proj_file.general.name != self.name {
+            return Err(RetrievalError::Unusable(Errors::from_msg(format!(
+                "\"{}\" is found, but a different project name \"{}\" is specified in its project file.",
+                self.name, proj_file.general.name
+            ))));
+        }
+        if proj_file.general.version() != *version {
+            return Err(RetrievalError::Unusable(Errors::from_msg(format!(
+                "\"{}@{}\" is found, but a different version \"{}\" is specified in its project file.",
+                self.name,
+                version,
+                proj_file.general.version()
+            ))));
+        }
         Ok(proj_file)
     }
 
@@ -591,7 +619,7 @@ impl ProjectInfo {
             rev: oid,
             tagged: true,
         }]);
-        self.proj_files.push(proj_file);
+        self.proj_files.insert(version.clone(), proj_file);
 
         Ok((version, oid))
     }
@@ -618,43 +646,68 @@ fn resolve_git_ref(repo: &Repository, git: &ProjectFileDependencyGit) -> Result<
     }
 }
 
-/// The tagged version of the project `name` in the git repository at `url` that `fix deps add`
-/// writes a requirement for: the newest one whose project file accepts the running compiler, or the
-/// newest one when none does. `None` when the repository has no tagged version.
-pub fn tagged_version_to_add(name: &ProjectName, url: &str) -> Result<Option<Version>, Errors> {
+/// The version of a project that `fix deps add` writes a requirement for.
+pub enum VersionToAdd {
+    /// This tagged version.
+    Tagged(Version),
+    /// The repository has no tagged version, and its newest commit is usable.
+    Untagged,
+}
+
+/// Chooses the version of the project `name` in the git repository at `url` that `fix deps add`
+/// writes a requirement for: the newest tagged version the resolution can use, that is, one whose
+/// project file can be read, names this project at that version, and accepts the running
+/// compiler. A repository with no tag is judged by its newest commit. When no version is usable,
+/// the error says why each was left out.
+pub fn version_to_add(name: &ProjectName, url: &str) -> Result<VersionToAdd, Errors> {
+    let fatal = |err: RetrievalError| match err {
+        RetrievalError::Unusable(errs) | RetrievalError::Fatal(errs) => errs,
+    };
     let mut project = ProjectInfo::new(name.clone(), ProjectSource::Git(url.to_string(), None))?;
-    project.retrieve_versions()?;
-    let mut tagged = project
-        .versions
-        .as_ref()
-        .unwrap()
+    project.retrieve_versions().map_err(fatal)?;
+    let listed = project.versions.as_ref().unwrap();
+    let any_tagged = listed.iter().any(|info| info.tagged);
+    let mut candidates = listed
         .iter()
-        .filter(|info| info.tagged)
+        .filter(|info| info.tagged == any_tagged)
         .map(|info| info.version.clone())
         .collect::<Vec<_>>();
-    tagged.sort();
-    let Some(newest) = tagged.last().cloned() else {
-        return Ok(None);
-    };
-    for version in tagged.iter().rev() {
-        match project.get_project_file(version) {
+    candidates.sort();
+    candidates.reverse();
+
+    let mut passed_over = vec![];
+    for version in &candidates {
+        let reason = match project.usable_project_file(version) {
             Ok(proj_file) if proj_file.fix_version().matches(&compiler_version()) => {
-                if *version != newest {
+                if !passed_over.is_empty() {
                     info_msg(&format!(
-                        "The newest tagged version {} of \"{}\" does not accept Fix {}; using {}.",
-                        newest,
+                        "Passing over newer versions of \"{}\": {}.",
                         name,
-                        compiler_version(),
-                        version
+                        passed_over.join("; ")
                     ));
                 }
-                return Ok(Some(version.clone()));
+                return Ok(if any_tagged {
+                    VersionToAdd::Tagged(version.clone())
+                } else {
+                    VersionToAdd::Untagged
+                });
             }
-            Ok(_) | Err(RetrievalError::Unusable(_)) => continue,
+            Ok(proj_file) => format!(
+                "{} requires Fix {}, and this is Fix {}",
+                version,
+                proj_file.fix_version(),
+                compiler_version()
+            ),
+            Err(RetrievalError::Unusable(errs)) => format!("{}: {}", version, errs.messages()),
             Err(RetrievalError::Fatal(errs)) => return Err(errs),
-        }
+        };
+        passed_over.push(reason);
     }
-    Ok(Some(newest))
+    Err(Errors::from_msg(format!(
+        "No version of \"{}\" can be used: {}.",
+        name,
+        passed_over.join("; ")
+    )))
 }
 
 // Get versions from a git repository.
@@ -890,27 +943,7 @@ fn create_package_retriever(
         let mut projs = projs.projects.as_ref().lock().unwrap();
         let prj = known_project(&mut projs, prj_name, &ver.source);
 
-        // Get the project file of the package at the given version.
-        let proj_file = prj.get_project_file(&ver.version)?;
-
-        // Check that the project name is correct.
-        if &proj_file.general.name != prj_name {
-            return Err(RetrievalError::Unusable(Errors::from_msg(format!(
-                "\"{}\" is found, but a different project name \"{}\" is specified in its project file.",
-                prj_name,
-                proj_file.general.name
-            ))));
-        }
-
-        // Check that the project version is correct.
-        if proj_file.general.version() != ver.version {
-            return Err(RetrievalError::Unusable(Errors::from_msg(format!(
-                "\"{}@{}\" is found, but a different version \"{}\" is specified in its project file.",
-                prj_name,
-                ver.version,
-                proj_file.general.version()
-            ))));
-        }
+        let proj_file = prj.usable_project_file(&ver.version)?;
 
         // Read the dependencies, and add the projects they name to the cache, so that the versions
         // retriever finds them. The dependencies of the root follow `mode`; the resolver passes
@@ -954,7 +987,7 @@ fn create_package_retriever(
 /// cache `pkgs`.
 fn create_version_retriever(
     pkgs: ProjectsInfo,
-) -> Box<dyn Fn(&PackageName, &Source) -> Result<Vec<Version>, Errors>> {
+) -> Box<dyn Fn(&PackageName, &Source) -> Result<Vec<Version>, RetrievalError>> {
     Box::new(move |pkg_name, source| {
         let mut prjs = pkgs.projects.as_ref().lock().unwrap();
         let prj = known_project(&mut prjs, pkg_name, source);

@@ -85,6 +85,15 @@ impl Errors {
             .filter(|err| err.severity == Severity::Error)
     }
 
+    /// The texts of the error diagnostics, without their labels and source locations, joined by
+    /// spaces: what a sentence explaining a failure quotes.
+    pub fn messages(&self) -> String {
+        self.errors()
+            .map(|err| err.msg.trim_end())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
     /// Whether this collection contains any diagnostic at all (errors or warnings).
     pub fn has_diagnostics(&self) -> bool {
         !self.errs.is_empty()

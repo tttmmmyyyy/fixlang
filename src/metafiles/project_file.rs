@@ -8,7 +8,8 @@ use crate::{
         TRY_FIX_DEPS_UPDATE_TEST, WHOLE_PROGRAM_IN_ONE_UNIT, WHOLE_PROGRAM_IN_ONE_UNIT_STR,
     },
     dependency::lockfile::{
-        get_lock_file_path, tagged_version_to_add, DependencyLockFile, LockFileType, ProjectSource,
+        get_lock_file_path, version_to_add, DependencyLockFile, LockFileType, ProjectSource,
+        VersionToAdd,
     },
     error::Errors,
     hash::HashSource,
@@ -1371,8 +1372,8 @@ impl ProjectFile {
                     // the running compiler.
                     let version = match version {
                         Some(v) => v.clone(),
-                        None => match tagged_version_to_add(proj_name, &proj_info.git)? {
-                            None => {
+                        None => match version_to_add(proj_name, &proj_info.git)? {
+                            VersionToAdd::Untagged => {
                                 warn_msg(&format!(
                                     "Adding version requirement \"*\" for \"{}\" since there are no tagged versions. \
                                     This means that updating the lock file (which is done by `fix deps add` or `fix deps update`) may introduce breaking changes.",
@@ -1380,7 +1381,7 @@ impl ProjectFile {
                                 ));
                                 "*".to_string()
                             }
-                            Some(version) => {
+                            VersionToAdd::Tagged(version) => {
                                 let version = format!(
                                     "{}.{}.{}",
                                     version.major, version.minor, version.patch

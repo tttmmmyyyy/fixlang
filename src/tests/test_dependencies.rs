@@ -768,6 +768,105 @@ mod integration_tests {
         );
     }
 
+    /// Commits to the upstream repository at `repo_dir` a project file for `name` that claims
+    /// `file_version`, and tags the commit `tag`: a release whose author forgot to update the
+    /// version in the project file. The project has no dependency.
+    fn release_with_a_stale_version(repo_dir: &Path, name: &str, tag: &str, file_version: &str) {
+        fs::write(
+            repo_dir.join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"{}\"\nversion = \"{}\"\nfix_version = \"*\"\n\n\
+                 [build]\nfiles = [\"lib.fix\"]\n",
+                name, file_version
+            ),
+        )
+        .expect("Failed to write the project file of the upstream project");
+        run_git(repo_dir, &["commit", "-q", "-am", tag]);
+        run_git(repo_dir, &["tag", tag]);
+    }
+
+    /// A tag whose project file names another version is passed over, and lends nothing to the
+    /// version it names: the lock file holds the dependencies of that version's own project file.
+    ///
+    /// The tag 1.1.0 of `stale-lib` carries a project file that still says 1.0.0 and requires
+    /// nothing; the tag 1.0.0 requires `stale-dep`.
+    #[test]
+    fn test_a_tag_naming_another_version_lends_no_project_file() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let dep_repo = temp_dir.path().join("dep");
+        create_upstream_repo(&dep_repo, "stale-dep", "1.0.0", "StaleDep");
+        let lib_repo = temp_dir.path().join("lib");
+        create_upstream_repo(&lib_repo, "stale-lib", "0.1.0", "StaleLib");
+        release_upstream_version(
+            &lib_repo,
+            "stale-lib",
+            "1.0.0",
+            "*",
+            &git_dependency_entry("stale-dep", "*", &dep_repo),
+        );
+        release_with_a_stale_version(&lib_repo, "stale-lib", "1.1.0", "1.0.0");
+
+        let lock = update_root_project(
+            &temp_dir.path().join("root"),
+            "stale-root",
+            &git_dependency_entry("stale-lib", "*", &lib_repo),
+        );
+        assert_eq!(
+            locked_entry(&lock, "stale-lib")["version"].as_str(),
+            Some("1.0.0")
+        );
+        assert_eq!(
+            locked_entry(&lock, "stale-dep")["version"].as_str(),
+            Some("1.0.0")
+        );
+    }
+
+    /// Runs `fix deps add <name>` in a new root project under `temp_dir`, with a registry that
+    /// lists `name` at the git repository `repo`. Returns the run and the project file after it.
+    fn deps_add_from_registry(
+        temp_dir: &Path,
+        name: &str,
+        repo: &Path,
+    ) -> (std::process::Output, String) {
+        let registry = temp_dir.join("registry.toml");
+        fs::write(
+            &registry,
+            format!(
+                "[[projects]]\nname = \"{}\"\ngit = \"{}\"\n",
+                name,
+                repo.to_string_lossy()
+            ),
+        )
+        .expect("Failed to write the registry file");
+        let home = temp_dir.join("home");
+        fs::create_dir_all(&home).expect("Failed to create the home directory");
+        fs::write(
+            home.join(".fixconfig.toml"),
+            format!("registries = [\"{}\"]\n", registry.to_string_lossy()),
+        )
+        .expect("Failed to write the config file");
+
+        let project_dir = temp_dir.join("root");
+        write_root_project(&project_dir, "deps-add-root", "");
+        let output = fix_command()
+            .args(["deps", "add", name])
+            .current_dir(&project_dir)
+            .env("HOME", &home)
+            .output()
+            .expect("Failed to execute fix deps add");
+        let project_file = fs::read_to_string(project_dir.join("fixproj.toml")).unwrap();
+        (output, project_file)
+    }
+
+    /// The version requirement `fix deps add` wrote into `project_file` for its one dependency, or
+    /// `None` when the project file has no dependency.
+    fn added_requirement(project_file: &str) -> Option<String> {
+        let project_file: toml::Value = toml::from_str(project_file).unwrap();
+        project_file
+            .get("dependencies")
+            .map(|deps| deps[0]["version"].as_str().unwrap().to_string())
+    }
+
     /// `fix deps add` with no version requires the newest tagged version whose `fix_version`
     /// accepts the running compiler, passing over a newer one that rejects it.
     #[test]
@@ -777,40 +876,49 @@ mod integration_tests {
         create_upstream_repo(&lib_repo, "add-for-fix", "1.0.0", "AddForFix");
         release_upstream_version(&lib_repo, "add-for-fix", "2.0.0", ">=99.0.0", "");
 
-        let registry = temp_dir.path().join("registry.toml");
-        fs::write(
-            &registry,
-            format!(
-                "[[projects]]\nname = \"add-for-fix\"\ngit = \"{}\"\n",
-                lib_repo.to_string_lossy()
-            ),
-        )
-        .expect("Failed to write the registry file");
-        let home = temp_dir.path().join("home");
-        fs::create_dir_all(&home).expect("Failed to create the home directory");
-        fs::write(
-            home.join(".fixconfig.toml"),
-            format!("registries = [\"{}\"]\n", registry.to_string_lossy()),
-        )
-        .expect("Failed to write the config file");
-
-        let project_dir = temp_dir.path().join("root");
-        write_root_project(&project_dir, "add-for-fix-root", "");
-        let output = fix_command()
-            .args(["deps", "add", "add-for-fix"])
-            .current_dir(&project_dir)
-            .env("HOME", &home)
-            .output()
-            .expect("Failed to execute fix deps add");
+        let (output, project_file) =
+            deps_add_from_registry(temp_dir.path(), "add-for-fix", &lib_repo);
         assert_succeeded(&output, "fix deps add adds the project");
-        let project_file: toml::Value =
-            toml::from_str(&fs::read_to_string(project_dir.join("fixproj.toml")).unwrap()).unwrap();
-        assert_eq!(
-            project_file["dependencies"][0]["version"].as_str(),
-            Some("1.0.0"),
-            "{}",
-            project_file
+        assert_eq!(added_requirement(&project_file).as_deref(), Some("1.0.0"));
+    }
+
+    /// `fix deps add` with no version passes over a tag whose project file names another version,
+    /// as the resolution does, and requires the newest tag the resolution can use.
+    #[test]
+    fn test_deps_add_passes_over_a_tag_naming_another_version() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let lib_repo = temp_dir.path().join("lib");
+        create_upstream_repo(&lib_repo, "add-stale", "1.0.0", "AddStale");
+        release_with_a_stale_version(&lib_repo, "add-stale", "1.1.0", "1.0.0");
+
+        let (output, project_file) =
+            deps_add_from_registry(temp_dir.path(), "add-stale", &lib_repo);
+        assert_succeeded(&output, "fix deps add adds the project");
+        assert_eq!(added_requirement(&project_file).as_deref(), Some("1.0.0"));
+    }
+
+    /// `fix deps add` of a project no version of which the resolution can use fails, saying why,
+    /// and leaves the project file as it was.
+    ///
+    /// The repository has no tag, and its newest commit rejects the running compiler.
+    #[test]
+    fn test_deps_add_with_no_usable_version_leaves_the_project_file() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let lib_repo = temp_dir.path().join("lib");
+        create_upstream_repo(&lib_repo, "add-none", "1.0.0", "AddNone");
+        release_upstream_version(&lib_repo, "add-none", "2.0.0", ">=99.0.0", "");
+        for tag in ["1.0.0", "2.0.0"] {
+            run_git(&lib_repo, &["tag", "-d", tag]);
+        }
+
+        let (output, project_file) = deps_add_from_registry(temp_dir.path(), "add-none", &lib_repo);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !output.status.success() && stderr.contains(">=99.0.0"),
+            "fix deps add fails, naming the compiler versions the project requires:\n{}",
+            stderr
         );
+        assert_eq!(added_requirement(&project_file), None, "{}", project_file);
     }
 
     /// A project whose `fix_version` rejects the running compiler does not build, also when its

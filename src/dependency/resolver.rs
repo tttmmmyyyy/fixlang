@@ -95,7 +95,8 @@ pub type PackageRetriever<'a> =
     &'a dyn Fn(&PackageName, &SourcedVersion, BuildConfigType) -> Result<Package, RetrievalError>;
 
 /// Lists the versions a project exists in at a source.
-pub type VersionRetriever<'a> = &'a dyn Fn(&PackageName, &Source) -> Result<Vec<Version>, Errors>;
+pub type VersionRetriever<'a> =
+    &'a dyn Fn(&PackageName, &Source) -> Result<Vec<Version>, RetrievalError>;
 
 /// Chooses a version of every project the root project depends on, directly or transitively, such
 /// that every version requirement holds, every project comes from the one source all requirements
@@ -188,7 +189,7 @@ impl Provider<'_, '_> {
     /// The versions of `dependency.name` at `dependency.source` that satisfy
     /// `dependency.requirement`. The first requirement read on a project at a source lists its
     /// versions there.
-    fn versions_satisfying(&self, dependency: &Dependency) -> Result<Versions, Errors> {
+    fn versions_satisfying(&self, dependency: &Dependency) -> Result<Versions, RetrievalError> {
         let key = (dependency.name.clone(), dependency.source.clone());
         if !self.listed_sources.borrow().contains(&key) {
             let versions = (self.versions_retriever)(&dependency.name, &dependency.source)?;
@@ -211,6 +212,25 @@ impl Provider<'_, '_> {
                 .cloned()
                 .collect(),
         ))
+    }
+
+    /// Says which versions of `name` exist at `source`, for an explanation of a requirement no
+    /// version there satisfies.
+    ///
+    /// # Examples
+    /// `the versions are 1.0.0 and 1.1.0`, or `no version exists`.
+    fn describe_versions_at(&self, name: &PackageName, source: &Source) -> String {
+        let versions = self
+            .known_versions_of(name)
+            .iter()
+            .filter(|v| &v.source == source)
+            .map(|v| v.version.to_string())
+            .collect::<Vec<_>>();
+        match versions.as_slice() {
+            [] => "no version exists".to_string(),
+            [only] => format!("the version is {}", only),
+            [rest @ .., last] => format!("the versions are {} and {}", rest.join(", "), last),
+        }
     }
 }
 
@@ -265,26 +285,31 @@ impl DependencyProvider for Provider<'_, '_> {
         package: &PackageName,
         version: &SourcedVersion,
     ) -> Result<Dependencies<PackageName, Versions, String>, Errors> {
-        let mode = if *package == self.root_name && *version == self.root_version {
+        let is_root = *package == self.root_name && *version == self.root_version;
+        let mode = if is_root {
             self.mode
         } else {
             BuildConfigType::Build
         };
+        // The root's project file is the one being resolved, so a failure to read what it
+        // requires is reported as it is, rather than as a version to leave out.
+        let unavailable = |reason: String| {
+            if is_root {
+                Err(Errors::from_msg(reason))
+            } else {
+                Ok(Dependencies::Unavailable(format!("because {}", reason)))
+            }
+        };
         let retrieved = match (self.package_retriever)(package, version, mode) {
             Ok(retrieved) => retrieved,
-            Err(RetrievalError::Unusable(errs)) => {
-                return Ok(Dependencies::Unavailable(format!(
-                    "because it could not be read: {}",
-                    errs.to_string().trim_end()
-                )))
-            }
+            Err(RetrievalError::Unusable(errs)) => return unavailable(errs.messages()),
             Err(RetrievalError::Fatal(errs)) => return Err(errs),
         };
         if !retrieved.fix_version.matches(&self.compiler_version) {
-            return Ok(Dependencies::Unavailable(format!(
-                "because it requires Fix {}, and this is Fix {}",
+            return unavailable(format!(
+                "it requires Fix {}, and this is Fix {}",
                 retrieved.fix_version, self.compiler_version
-            )));
+            ));
         }
         assert_eq!(
             retrieved
@@ -298,17 +323,36 @@ impl DependencyProvider for Provider<'_, '_> {
             package,
             version
         );
-        let constraints = retrieved
-            .deps
-            .iter()
-            .map(|dependency| {
-                Ok((
-                    dependency.name.clone(),
-                    self.versions_satisfying(dependency)?,
-                ))
-            })
-            .collect::<Result<DependencyConstraints<_, _>, Errors>>()?;
-        Ok(Dependencies::Available(constraints))
+        let mut constraints = vec![];
+        for dependency in &retrieved.deps {
+            let versions = match self.versions_satisfying(dependency) {
+                Ok(versions) => versions,
+                Err(RetrievalError::Unusable(errs)) => {
+                    return unavailable(format!(
+                        "its dependency \"{}\" from {} could not be read: {}",
+                        dependency.name,
+                        dependency.source,
+                        errs.messages()
+                    ))
+                }
+                Err(RetrievalError::Fatal(errs)) => return Err(errs),
+            };
+            if versions == Versions::empty() {
+                return unavailable(format!(
+                    "it requires \"{}\" {} from {}, where {}",
+                    dependency.name,
+                    dependency.requirement,
+                    dependency.source,
+                    self.describe_versions_at(&dependency.name, &dependency.source)
+                ));
+            }
+            constraints.push((dependency.name.clone(), versions));
+        }
+        Ok(Dependencies::Available(
+            constraints
+                .into_iter()
+                .collect::<DependencyConstraints<_, _>>(),
+        ))
     }
 }
 
@@ -830,7 +874,9 @@ mod tests {
             };
         let versions_retriever = |name: &PackageName, source: &Source| {
             if name == "y" {
-                return Err(Errors::from_msg("the repository is gone".to_string()));
+                return Err(RetrievalError::Fatal(Errors::from_msg(
+                    "the repository is gone".to_string(),
+                )));
             }
             Ok(versions_in(&registry, name, source))
         };
@@ -841,6 +887,74 @@ mod tests {
         )
         .unwrap_err();
         assert!(message.contains("the repository is gone"), "{}", message);
+    }
+
+    /// A version requiring a package whose source cannot be read, as a directory with no project
+    /// file cannot, is left out, and an older version is chosen. When the root itself requires
+    /// such a package, the resolution stops with the error of reading it.
+    ///
+    /// `x` 2.0.0 requires `y`, whose versions cannot be read; `x` 1.0.0 requires nothing.
+    #[test]
+    fn a_version_requiring_an_unreadable_package_is_left_out() {
+        let registry = registry(&[("x", "1.0.0", &[]), ("x", "2.0.0", &[("y", "*")])]);
+        let package_retriever = |root_deps: &'static [(&'static str, &'static str)]| {
+            let registry = &registry;
+            move |name: &PackageName, version: &SourcedVersion, _: BuildConfigType| {
+                if name == ROOT {
+                    return Ok(Package {
+                        deps: root_deps.iter().map(|(n, r)| dependency(n, r)).collect(),
+                        fix_version: VersionReq::STAR,
+                    });
+                }
+                Ok(registry[&(name.clone(), version.clone())].clone())
+            }
+        };
+        let versions_retriever = |name: &PackageName, source: &Source| {
+            if name == "y" {
+                return Err(RetrievalError::Unusable(Errors::from_msg(
+                    "the project file is missing".to_string(),
+                )));
+            }
+            Ok(versions_in(&registry, name, source))
+        };
+        assert_eq!(
+            resolve_root(
+                BuildConfigType::Build,
+                &package_retriever(&[("x", "*")]),
+                &versions_retriever,
+            )
+            .map(|chosen| chosen
+                .into_iter()
+                .map(|(name, v)| format!("{}@{}", name, v.version))
+                .collect::<Vec<_>>()),
+            Ok(vec!["x@1.0.0".to_string()])
+        );
+        let message = resolve_root(
+            BuildConfigType::Build,
+            &package_retriever(&[("y", "*")]),
+            &versions_retriever,
+        )
+        .unwrap_err();
+        assert!(
+            message.contains("the project file is missing") && !message.contains("unavailable"),
+            "{}",
+            message
+        );
+    }
+
+    /// A requirement no existing version satisfies is explained with the requirement and the
+    /// versions that do exist.
+    #[test]
+    fn a_requirement_no_version_satisfies_is_explained() {
+        let registry = registry(&[("x", "1.0.0", &[("y", "^2.0.0")]), ("y", "1.0.0", &[])]);
+        let message = resolve(&registry, &[("x", "*")]).unwrap_err();
+        assert!(
+            message.contains(
+                "requires \"y\" ^2.0.0 from https://example.com/y.git, where the version is 1.0.0"
+            ),
+            "{}",
+            message
+        );
     }
 
     /// Under the test configuration the root brings in its test dependencies, and every other
