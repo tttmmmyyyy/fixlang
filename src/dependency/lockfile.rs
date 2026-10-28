@@ -474,15 +474,20 @@ impl ProjectInfo {
             proj_file.general.name.clone(),
             ProjectSource::Local(proj_file.path.parent().unwrap().to_path_buf()),
         )?;
-        project.versions = Some(vec![VersionInfo {
-            version: proj_file.general.version(),
-            rev: Oid::zero(),
-            tagged: false,
-        }]);
-        project
-            .proj_files
-            .insert(proj_file.general.version(), proj_file.clone());
+        project.set_one_version(proj_file.clone(), Oid::zero(), false);
         Ok(project)
+    }
+
+    /// Lists the version `proj_file` gives as the one version of the project, at the commit `rev`
+    /// (zero for a project directory), and caches the file.
+    fn set_one_version(&mut self, proj_file: ProjectFile, rev: Oid, tagged: bool) {
+        let version = proj_file.general.version();
+        self.versions = Some(vec![VersionInfo {
+            version: version.clone(),
+            rev,
+            tagged,
+        }]);
+        self.proj_files.insert(version, proj_file);
     }
 
     /// Lists the versions of the project at its source, once. A project directory whose project
@@ -499,13 +504,7 @@ impl ProjectInfo {
             ProjectSource::Local(proj_path) => {
                 let proj_file = ProjectFile::read_file(&proj_path.join(PROJECT_FILE_PATH))
                     .map_err(RetrievalError::Unusable)?;
-                let version = proj_file.general.version();
-                self.versions = Some(vec![VersionInfo {
-                    version: version.clone(),
-                    rev: Oid::zero(),
-                    tagged: false,
-                }]);
-                self.proj_files.insert(version, proj_file);
+                self.set_one_version(proj_file, Oid::zero(), false);
             }
             ProjectSource::Git(_url, repo) => {
                 let repo = &repo.as_mut().unwrap().1;
@@ -608,15 +607,7 @@ impl ProjectInfo {
         let proj_file = ProjectFile::read_file(&repo.workdir().unwrap().join(PROJECT_FILE_PATH))?;
 
         let version = proj_file.general.version();
-
-        // Pre-populate versions (single entry) and proj_files cache.
-        self.versions = Some(vec![VersionInfo {
-            version: version.clone(),
-            rev: oid,
-            tagged: true,
-        }]);
-        self.proj_files.insert(version.clone(), proj_file);
-
+        self.set_one_version(proj_file, oid, true);
         Ok((version, oid))
     }
 }
@@ -797,7 +788,8 @@ pub struct VersionInfo {
     pub version: Version,
     /// The commit of the version, or zero for a project directory.
     rev: Oid,
-    /// Whether a version tag names the version, rather than the project file of the newest commit.
+    /// Whether a version tag names the version. The version a repository with no tag lists, that of
+    /// its newest commit, is untagged.
     pub tagged: bool,
 }
 
