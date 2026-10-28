@@ -39,12 +39,17 @@ NO_COUNTERPART = 2
 # deal, so the comparison is between the languages rather than between the instruction sets they
 # were allowed to use. `../crosslang/build.sh` builds the Fix, C and Rust programs for its own
 # question, and spells the same C and Rust recipes.
+#
+# The C++ counterparts are read against the Fix case built with `--no-runtime-check`, so they are
+# built with `-DNDEBUG`: AtCoder Library checks its arguments with `assert`, and a check one side
+# runs and the other does not is not a difference between the libraries.
 BUILD = {
     "c": (["gcc", "-O3", "-march=native", "ref.c", "-o", "ref_c", "-lm"], "ref.c", "ref_c"),
     "rust": (["rustc", "-O", "-C", "target-cpu=native", "ref.rs", "-o", "ref_rust"],
              "ref.rs", "ref_rust"),
-    "cpp": (["g++", "-O3", "-march=native", "-std=gnu++20", "-I", str(HERE / "ac-library"),
-             "-I", str(HERE / "cases" / "_support"), "ref.cpp", "-o", "ref_cpp"],
+    "cpp": (["g++", "-O3", "-march=native", "-std=gnu++20", "-DNDEBUG",
+             "-I", str(HERE / "ac-library"), "-I", str(HERE / "cases" / "_support"),
+             "ref.cpp", "-o", "ref_cpp"],
             "ref.cpp", "ref_cpp"),
 }
 

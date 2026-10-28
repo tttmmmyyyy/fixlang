@@ -17,9 +17,12 @@ int main() {
     vector<ll> fs(m);
     for (int k = 0; k < m; k++) fs[k] = (sol[ii[k]] != ff[k] && sol[jj[k]] != gg[k]) ? sol[ii[k]] : ff[k];
     speedtest::perf_enable();
-    atcoder::two_sat ts(n);
-    for (int k = 0; k < m; k++) ts.add_clause(ii[k], fs[k] == 1, jj[k], gg[k] == 1);
-    bool ok = ts.satisfiable();
+    bool ok;
+    {
+        atcoder::two_sat ts(n);
+        for (int k = 0; k < m; k++) ts.add_clause(ii[k], fs[k] == 1, jj[k], gg[k] == 1);
+        ok = ts.satisfiable();
+    }
     speedtest::perf_disable();
     return speedtest::check("1\n", "%d\n", ok ? 1 : 0);
 }
