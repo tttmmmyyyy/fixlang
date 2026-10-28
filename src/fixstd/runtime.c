@@ -23,7 +23,7 @@ The C functions and values the Fix standard library is implemented with.
 // code.
 #define FIXRUNTIME_STOPS __attribute__((noreturn, cold))
 
-// Defined at the end of this file, and called by the functions before it.
+// Defined after the reporters below, which call it.
 static FIXRUNTIME_STOPS void fixruntime_stopf(const char *format, ...)
     __attribute__((format(printf, 1, 2)));
 

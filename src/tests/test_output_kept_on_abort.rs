@@ -7,8 +7,8 @@ use crate::{
     constants::COMPILER_TEST_WORKING_PATH,
     misc::function_name,
     tests::test_util::{
-        assert_failed_with, build_program, run_source_capture, runtime_checked_config,
-        source_with_a_runtime_zero,
+        assert_failed_with, build_program, integer_operations_checked_config, run_source_capture,
+        runtime_checked_config, source_with_a_runtime_zero,
     },
 };
 use std::{
@@ -77,9 +77,7 @@ pub fn test_stdout_is_kept_when_an_overflow_check_stops_the_program() {
         println("not reached");;
         "#,
     );
-    let mut config = runtime_checked_config();
-    config.check_integer_operations = true;
-    let output = run_source_capture(&source, config);
+    let output = run_source_capture(&source, integer_operations_checked_config());
     assert_failed_with(
         &output,
         "Signed integer overflow",
