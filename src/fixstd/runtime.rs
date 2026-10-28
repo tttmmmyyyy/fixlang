@@ -8,8 +8,9 @@ use inkwell::types::{BasicMetadataTypeEnum, FunctionType};
 use inkwell::values::{BasicValue, FunctionValue};
 use inkwell::AddressSpace;
 
-/// The runtime function that ends the program where a check has failed. It returns to no one.
-pub const RUNTIME_ABORT: &str = "fixruntime_abort";
+/// The runtime function that ends the program where a check has failed, writing the C string it
+/// takes to standard error as the report. It returns to no one.
+pub const RUNTIME_STOP: &str = "fixruntime_stop";
 /// The runtime function that reports an array index outside the array and ends the program. It
 /// takes the index and the size, and returns to no one.
 pub const RUNTIME_INDEX_OUT_OF_RANGE: &str = "fixruntime_index_out_of_range";
@@ -33,8 +34,6 @@ pub const RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE: &str = "fixruntime_shift_amount_out
 /// of the integer type it is converted to, and ends the program. It takes the conversion's name and
 /// the value widened to `double`, and returns to no one.
 pub const RUNTIME_FLOAT_TO_INTEGER_OUT_OF_RANGE: &str = "fixruntime_float_to_integer_out_of_range";
-/// The runtime function that writes a C string to standard error, followed by a newline.
-pub const RUNTIME_EPRINTLN: &str = "fixruntime_eprintln";
 /// libc `sprintf`, which writes a formatted value into a buffer the caller provides.
 pub const RUNTIME_SPRINTF: &str = "sprintf";
 /// libc `pthread_once`, which runs an initializer at the first thread to reach it and makes every
@@ -96,7 +95,8 @@ pub fn compiler_defined_c_function_reason(name: &str, output: OutputFileType) ->
 /// `mode` is `Declare`, the bodies of the ones implemented here when it is `Implement`.
 pub fn build_runtime<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     let i64_ty = gc.context.i64_type();
-    declare_noreturn_runtime_function(gc, mode, RUNTIME_ABORT, &[]);
+    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
+    declare_noreturn_runtime_function(gc, mode, RUNTIME_STOP, &[ptr_ty.into()]);
     declare_noreturn_runtime_function(
         gc,
         mode,
@@ -106,7 +106,6 @@ pub fn build_runtime<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
     declare_noreturn_runtime_function(gc, mode, RUNTIME_NEGATIVE_ARRAY_SIZE, &[i64_ty.into()]);
     declare_noreturn_runtime_function(gc, mode, RUNTIME_ARRAY_SIZE_OVERFLOW, &[i64_ty.into()]);
     let i32_ty = gc.context.i32_type();
-    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
     declare_noreturn_runtime_function(
         gc,
         mode,
@@ -132,7 +131,6 @@ pub fn build_runtime<'c, 'm>(gc: &mut Generator<'c, 'm>, mode: BuildMode) {
         RUNTIME_FLOAT_TO_INTEGER_OUT_OF_RANGE,
         &[ptr_ty.into(), gc.context.f64_type().into()],
     );
-    build_eprintln_function(gc, mode);
     build_sprintf_function(gc, mode);
     if gc.config.threaded {
         build_pthread_once_function(gc, mode);
@@ -165,8 +163,8 @@ pub enum BuildMode {
 /// merge) keeps contributing a `poison` value to the merge, forcing an aggregate phi that hides the
 /// array size and defeats bounds-check elimination.
 ///
-/// The functions declared here are the ones `runtime.c` defines with `FIXRUNTIME_STOPS`, and the two
-/// sets must stay the same.
+/// The functions declared here are the ones `runtime.c` defines with `FIXRUNTIME_STOPS` and without
+/// `static`, and the two sets must stay the same.
 fn declare_noreturn_runtime_function<'c, 'm>(
     gc: &Generator<'c, 'm>,
     mode: BuildMode,
@@ -225,14 +223,6 @@ fn declare_or_lookup_runtime_function<'c, 'm>(
                 .unwrap_or_else(|| panic!("Runtime function {} is not declared", name)),
         ),
     }
-}
-
-/// Declare `fixruntime_eprintln`, which writes a C string to stderr followed by a newline and
-/// flushes it.
-fn build_eprintln_function<'c, 'm>(gc: &Generator<'c, 'm>, mode: BuildMode) {
-    let ptr_ty = gc.context.ptr_type(AddressSpace::from(0));
-    let fn_ty = gc.context.void_type().fn_type(&[ptr_ty.into()], false);
-    declare_external_runtime_function(gc, mode, RUNTIME_EPRINTLN, fn_ty);
 }
 
 /// Declare `sprintf`, which takes the output buffer and the format string and goes on to take the
@@ -386,7 +376,7 @@ fn declare_allocator_function<'c, 'm>(
 #[cfg(test)]
 mod tests {
     use super::{
-        compiler_defined_c_function_reason, RUNTIME_ABORT, RUNTIME_GET_ARGC, RUNTIME_MALLOC,
+        compiler_defined_c_function_reason, RUNTIME_GET_ARGC, RUNTIME_MALLOC, RUNTIME_STOP,
     };
     use crate::configuration::OutputFileType;
     use crate::constants::C_ENTRY_POINT_NAME;
@@ -406,7 +396,7 @@ mod tests {
         )
         .is_none());
         for output in [OutputFileType::Executable, OutputFileType::DynamicLibrary] {
-            assert!(compiler_defined_c_function_reason(RUNTIME_ABORT, output).is_some());
+            assert!(compiler_defined_c_function_reason(RUNTIME_STOP, output).is_some());
             assert!(compiler_defined_c_function_reason(RUNTIME_GET_ARGC, output).is_some());
             assert!(compiler_defined_c_function_reason(RUNTIME_MALLOC, output).is_none());
             assert!(compiler_defined_c_function_reason("free", output).is_none());
