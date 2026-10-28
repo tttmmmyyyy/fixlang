@@ -255,17 +255,17 @@ static int fixruntime_backtrace_full_callback(void *data, uintptr_t pc,
 
 #endif // BACKTRACE
 
-// Stops the program, writing to standard error the report that `format` and the values after it
-// make, followed by a newline, and then the call stack it stopped at where the runtime was built
-// with `BACKTRACE` defined.
+// Stops the program. It writes to standard error the report that `format` and the values after it
+// make, followed by a newline. Where the runtime was built with `BACKTRACE` defined, it then writes
+// the call stack it stopped at.
 //
 // Every output stream is flushed first, because `abort` discards what the C library still holds in
 // a buffer: standard output written to a file or a pipe is buffered in blocks, so the lines a
 // program printed before a check stopped it would be lost. The flush comes before the report, so
 // that where standard output and standard error go to one place, the report follows those lines.
 //
-// SIGPIPE is ignored from the start, so that a flush to a pipe whose reader has gone fails instead
-// of ending the program, and the report, the call stack and the stop by `abort` still follow.
+// SIGPIPE is ignored before the flush, so that a flush to a pipe whose reader has gone fails instead
+// of ending the program. The report, the call stack and `abort` then still follow.
 //
 // `fflush(NULL)` takes the lock of each stream, as `exit` does with glibc 2.38 and later. So where
 // another thread holds a stream's lock, such as a thread waiting to read standard input, the
