@@ -897,7 +897,7 @@ mod integration_tests {
         assert_eq!(added_requirement(&project_file).as_deref(), Some("1.0.0"));
     }
 
-    /// `fix deps add` of a project no version of which the resolution can use fails, saying why,
+    /// When the resolution can use no version of the project, `fix deps add` fails, saying why,
     /// and leaves the project file as it was.
     ///
     /// The repository has no tag, and its newest commit rejects the running compiler.

@@ -443,7 +443,7 @@ struct ProjectInfo {
     source_id: Source,
     versions: Option<Vec<VersionInfo>>, // Available versions. None if not retrieved yet.
     /// The project files read so far, each under the version listed for the commit or the
-    /// directory it was read from. A file can name another version than the one it is listed
+    /// directory it was read from. A file can name a different version from the one it is listed
     /// under, so the key is the listed version.
     proj_files: Map<Version, ProjectFile>,
 }

@@ -292,8 +292,8 @@ impl DependencyProvider for Provider<'_, '_> {
             BuildConfigType::Build
         };
         // Leaves this version out for the reason `predicate` gives, a sentence about the version
-        // with its subject left out. The root's project file is the one being resolved, so for
-        // the root the reason is reported as an error, rather than as a version to leave out.
+        // with its subject left out. For the root, whose project file is the one being resolved,
+        // the reason is reported as an error.
         let unavailable = |predicate: String| {
             if is_root {
                 Err(Errors::from_msg(format!("\"{}\" {}.", package, predicate)))
@@ -896,8 +896,8 @@ mod tests {
         assert!(message.contains("the repository is gone"), "{}", message);
     }
 
-    /// A version requiring a package whose source cannot be read, as a directory with no project
-    /// file cannot, is left out, and an older version is chosen. When the root itself requires
+    /// A version requiring a package whose source cannot be read, such as a directory with no
+    /// project file, is left out, and an older version is chosen. When the root itself requires
     /// such a package, the resolution stops with the error of reading it.
     ///
     /// `x` 2.0.0 requires `y`, whose versions cannot be read; `x` 1.0.0 requires nothing.

@@ -1368,8 +1368,8 @@ impl ProjectFile {
                         proj_name, reg_loc
                     ));
 
-                    // When no version is given, require the newest tagged version that accepts
-                    // the running compiler.
+                    // When no version is given, require the newest tagged version that the
+                    // dependency resolution can use.
                     let version = match version {
                         Some(v) => v.clone(),
                         None => match version_to_add(proj_name, &proj_info.git)? {
