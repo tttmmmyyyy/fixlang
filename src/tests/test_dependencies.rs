@@ -3,7 +3,9 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::{LOCK_FILE_PATH, LOCK_FILE_TEST_PATH};
-    use crate::tests::test_util::{assert_succeeded, copy_dir_recursive, fix_command, run_fix};
+    use crate::tests::test_util::{
+        assert_succeeded, copy_dir_recursive, fix_command, run_fix, run_git,
+    };
     use std::{
         fs,
         io::{Read, Write},
@@ -561,16 +563,6 @@ mod integration_tests {
              of `DepB` does not displace:\n{}",
             stderr
         );
-    }
-
-    /// Runs `git` with `args` in `repo_dir`, and fails the test if it fails.
-    fn run_git(repo_dir: &Path, args: &[&str]) {
-        let status = Command::new("git")
-            .args(args)
-            .current_dir(repo_dir)
-            .status()
-            .unwrap_or_else(|err| panic!("Failed to run `git {:?}`: {}", args, err));
-        assert!(status.success(), "`git {:?}` failed", args);
     }
 
     /// Creates a local upstream git repository at `repo_dir` holding a project of `name` at
