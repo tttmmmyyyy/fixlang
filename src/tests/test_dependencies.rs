@@ -629,17 +629,17 @@ mod integration_tests {
     #[test]
     fn test_a_pinned_version_is_chosen_over_a_newer_one_a_dependency_accepts() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let common = temp_dir.path().join("common");
-        create_upstream_repo(&common, "resolve-common", "1.0.0", "ResolveCommon");
-        release_upstream_version(&common, "resolve-common", "1.1.0", "");
+        let common_repo = temp_dir.path().join("common");
+        create_upstream_repo(&common_repo, "resolve-common", "1.0.0", "ResolveCommon");
+        release_upstream_version(&common_repo, "resolve-common", "1.1.0", "");
 
-        let collection = temp_dir.path().join("collection");
-        create_upstream_repo(&collection, "resolve-collection", "0.1.0", "ResolveCollection");
+        let collection_repo = temp_dir.path().join("collection");
+        create_upstream_repo(&collection_repo, "resolve-collection", "0.1.0", "ResolveCollection");
         release_upstream_version(
-            &collection,
+            &collection_repo,
             "resolve-collection",
             "1.0.0",
-            &git_dependency_entry("resolve-common", "^1.0.0", &common),
+            &git_dependency_entry("resolve-common", "^1.0.0", &common_repo),
         );
 
         let project_dir = temp_dir.path().join("root");
@@ -649,8 +649,8 @@ mod integration_tests {
             format!(
                 "[general]\nname = \"resolve-root\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
                  [build]\nfiles = [\"main.fix\"]\n\n{}\n{}",
-                git_dependency_entry("resolve-collection", "=1.0.0", &collection),
-                git_dependency_entry("resolve-common", "=1.0.0", &common)
+                git_dependency_entry("resolve-collection", "=1.0.0", &collection_repo),
+                git_dependency_entry("resolve-common", "=1.0.0", &common_repo)
             ),
         )
         .expect("Failed to write the project file of the root project");
