@@ -634,7 +634,12 @@ mod integration_tests {
         release_upstream_version(&common_repo, "resolve-common", "1.1.0", "");
 
         let collection_repo = temp_dir.path().join("collection");
-        create_upstream_repo(&collection_repo, "resolve-collection", "0.1.0", "ResolveCollection");
+        create_upstream_repo(
+            &collection_repo,
+            "resolve-collection",
+            "0.1.0",
+            "ResolveCollection",
+        );
         release_upstream_version(
             &collection_repo,
             "resolve-collection",

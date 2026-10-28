@@ -48,11 +48,7 @@ pub fn resolve_dependency<'a, 'b>(
     versions_retriever: VersionRetriever<'b>,
     mode: BuildConfigType,
 ) -> Result<Option<Vec<Package>>, Errors> {
-    let root = package_retriever(
-        &root_proj.general.name,
-        &root_proj.general.version(),
-        mode,
-    )?;
+    let root = package_retriever(&root_proj.general.name, &root_proj.general.version(), mode)?;
     let requirements = root.deps.clone();
     resolve_requirements(
         vec![root],
@@ -115,7 +111,12 @@ fn resolve_requirements<'a, 'b>(
     }
     let (name, candidates) = names
         .into_iter()
-        .map(|name| Ok((name.clone(), candidate_versions(name, &open, versions_retriever)?)))
+        .map(|name| {
+            Ok((
+                name.clone(),
+                candidate_versions(name, &open, versions_retriever)?,
+            ))
+        })
         .collect::<Result<Vec<_>, Errors>>()?
         .into_iter()
         .min_by_key(|(_, candidates)| candidates.len())
@@ -204,9 +205,7 @@ mod tests {
 
     /// A registry of packages for the resolver: each entry is a package of one version and the
     /// requirements it has, written as `("name", "version", &[("dep", "requirement")])`.
-    fn registry(
-        entries: &[(&str, &str, &[(&str, &str)])],
-    ) -> Map<(PackageName, Version), Package> {
+    fn registry(entries: &[(&str, &str, &[(&str, &str)])]) -> Map<(PackageName, Version), Package> {
         let mut map = Map::default();
         for (name, version, deps) in entries {
             let package = Package {
