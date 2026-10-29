@@ -1033,7 +1033,8 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            message.contains("the project file is missing") && !message.contains("unavailable"),
+            message.contains("the project file is missing")
+                && !message.contains("Failed to resolve dependencies"),
             "{}",
             message
         );
@@ -1240,6 +1241,87 @@ mod tests {
              So, because \"root\" requires \"d\" =1.0.0 from https://example.com/d.git and \"x\", \
              the requirements of \"root\" cannot all be satisfied.\n\
              HINT: Every requirement on one project must name the same source."
+        );
+    }
+    /// A conclusion that a package needs one of several others names them as alternatives.
+    ///
+    /// `b` 1.0.0 requires `f` 2.0.0 and `b` 1.1.0 requires `g` 2.0.0, so every version of `b`
+    /// needs one of the two, and neither both.
+    #[test]
+    fn a_package_needing_one_of_several_is_explained_with_alternatives() {
+        let registry = registry(&[
+            ("b", "1.0.0", &[("f", "^2.0.0")]),
+            ("b", "1.1.0", &[("g", "^2.0.0")]),
+            ("f", "1.0.0", &[]),
+            ("f", "2.0.0", &[]),
+            ("g", "1.0.0", &[]),
+            ("g", "2.0.0", &[]),
+        ]);
+        assert_eq!(
+            resolve(&registry, &[("b", "*"), ("f", "^1.0.0"), ("g", "^1.0.0")]).unwrap_err(),
+            "error: Failed to resolve dependencies.\n\
+             Because \"b\" 1.0.0 requires \"f\" ^2.0.0 and \"b\" 1.1.0 requires \"g\" ^2.0.0, \
+             every version of \"b\" indirectly requires \"f\" 2.0.0 or \"g\" 2.0.0.\n\
+             And because \"root\" requires \"b\", \"root\" indirectly requires \"f\" 2.0.0 or \
+             \"g\" 2.0.0.\n\
+             So, because \"root\" also requires \"f\" ^1.0.0 and \"g\" ^1.0.0, the requirements of \
+             \"root\" cannot all be satisfied."
+        );
+    }
+
+    /// A requirement of `*`, which leaves out pre-releases, is written out where the versions it
+    /// accepts are not every version.
+    #[test]
+    fn a_requirement_of_any_version_leaving_out_a_pre_release_is_written_out() {
+        let only_a_pre_release = registry(&[("y", "1.0.0-alpha", &[])]);
+        assert_eq!(
+            resolve(&only_a_pre_release, &[("y", "*")]).unwrap_err(),
+            "error: \"root\" requires \"y\" *, which no version satisfies \
+             (https://example.com/y.git has only \"y\" 1.0.0-alpha)."
+        );
+        let with_a_pre_release = registry(&[
+            ("x", "1.0.0", &[("y", "*")]),
+            ("y", "1.0.0", &[]),
+            ("y", "2.0.0-beta.1", &[]),
+        ]);
+        let message =
+            resolve(&with_a_pre_release, &[("x", "*"), ("y", "=2.0.0-beta.1")]).unwrap_err();
+        assert!(
+            message.contains("\"root\" requires \"x\", which requires \"y\" *,"),
+            "{}",
+            message
+        );
+    }
+
+    /// Versions of one package that fetch a dependency from different sources leave no hint about
+    /// sources, since no two of them are used together.
+    ///
+    /// `y` 1.0.0 requires `d` from one repository and `y` 2.0.0 from another, and every `d`
+    /// requires a newer Fix.
+    #[test]
+    fn alternative_versions_fetching_from_two_sources_give_no_hint_about_sources() {
+        let first = Source::Git("https://example.com/first/d.git".to_string());
+        let second = Source::Git("https://example.com/second/d.git".to_string());
+        let mut registry = registry(&[]);
+        for (version, source) in [("1.0.0", &first), ("2.0.0", &second)] {
+            add(
+                &mut registry,
+                "y",
+                at(version, source_of("y")),
+                vec![dependency_from("d", "*", source.clone())],
+            );
+            add(&mut registry, "d", at("1.0.0", source.clone()), vec![]);
+            registry
+                .get_mut(&("d".to_string(), at("1.0.0", source.clone())))
+                .unwrap()
+                .fix_version = VersionReq::parse("^1.7.0").unwrap();
+        }
+        let message = resolve(&registry, &[("y", "*")]).unwrap_err();
+        assert!(
+            message.contains("HINT: Use a newer Fix")
+                && !message.contains("HINT: Every requirement on one project must name the same"),
+            "{}",
+            message
         );
     }
 }

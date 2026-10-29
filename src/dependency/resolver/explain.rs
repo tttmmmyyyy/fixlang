@@ -154,16 +154,12 @@ impl Unavailability {
     }
 }
 
-/// The project `name` quoted, followed by `requirement` unless it accepts every version.
+/// The project `name` quoted, followed by `requirement`.
 ///
 /// # Examples
-/// `"json" ^1.0.0`, or `"json"` for `*`.
+/// `"json" ^1.0.0`.
 fn written_requirement(name: &PackageName, requirement: &VersionReq) -> String {
-    if *requirement == VersionReq::STAR {
-        format!("\"{}\"", name)
-    } else {
-        format!("\"{}\" {}", name, requirement)
-    }
+    format!("\"{}\" {}", name, requirement)
 }
 
 /// Joins `items` into one phrase, with `conjunction` before the last.
@@ -268,6 +264,50 @@ fn rejects_the_compiler(tree: &DerivationTree<PackageName, Versions, Unavailabil
     }
 }
 
+/// Whether `tree` holds two requirements on one project that name different sources and can be
+/// in effect together: requirements of two projects, or of versions one project can be at.
+fn requires_one_project_from_two_sources(
+    tree: &DerivationTree<PackageName, Versions, Unavailability>,
+) -> bool {
+    let mut requirements = vec![];
+    collect_requirements(tree, &mut requirements);
+    let sources = |versions: &Versions| {
+        versions
+            .listed()
+            .iter()
+            .map(|v| v.source.clone())
+            .collect::<BTreeSet<_>>()
+    };
+    requirements
+        .iter()
+        .enumerate()
+        .any(|(i, (p1, s1, d1, t1))| {
+            requirements[..i].iter().any(|(p2, s2, d2, t2)| {
+                d1 == d2
+                    && sources(t1).is_disjoint(&sources(t2))
+                    && (p1 != p2 || s1.intersection(s2) != Versions::empty())
+            })
+        })
+}
+
+/// Adds to `requirements` every requirement `tree` holds, as the depender, its versions, the
+/// project required and the versions required.
+fn collect_requirements<'t>(
+    tree: &'t DerivationTree<PackageName, Versions, Unavailability>,
+    requirements: &mut Vec<(&'t PackageName, &'t Versions, &'t PackageName, &'t Versions)>,
+) {
+    match tree {
+        DerivationTree::External(External::FromDependencyOf(p, s, d, t)) => {
+            requirements.push((p, s, d, t))
+        }
+        DerivationTree::External(_) => {}
+        DerivationTree::Derived(derived) => {
+            collect_requirements(&derived.cause1, requirements);
+            collect_requirements(&derived.cause2, requirements);
+        }
+    }
+}
+
 /// The message of a failed resolution: the explanation of `tree`, which derives that the
 /// requirements of the root project conflict, preceded by the version of the running compiler when
 /// a version is left out for rejecting it, and followed by a `HINT:` line for each kind of conflict
@@ -303,7 +343,7 @@ pub(super) fn explain(
             provider.compiler_version
         ));
     }
-    if !explainer.met_at_several.is_empty() {
+    if requires_one_project_from_two_sources(tree) {
         lines.push("HINT: Every requirement on one project must name the same source.".to_string());
     }
     lines.join("\n")
@@ -470,10 +510,18 @@ impl Explainer<'_, '_, '_> {
             }
         }
         let written = written?;
-        if self.provider.listed_versions_accepted_by(written) != self.known_in(dep, dep_versions) {
+        let accepted = self.provider.listed_versions_accepted_by(written);
+        if accepted != self.known_in(dep, dep_versions) {
             return None;
         }
-        let requirement = written_requirement(dep, &written.requirement);
+        // `*` leaves out pre-releases, so it is written out unless it accepts every version.
+        let requirement = if written.requirement == VersionReq::STAR
+            && accepted.len() == self.provider.versions_at(dep, &written.source).len()
+        {
+            format!("\"{}\"", dep)
+        } else {
+            written_requirement(dep, &written.requirement)
+        };
         Some(if self.met_at_several.contains(dep) {
             format!("{} from {}", requirement, written.source)
         } else {
@@ -672,7 +720,13 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
             (0, _) => format!("{} must be used", join_with("or", &required)),
             (1, true) => format!("{} cannot be used", used[0]),
             (_, true) if root_used => {
-                format!("{} cannot use {}", used[0], join_with("and", &used[1..]))
+                let together = if used.len() > 2 { " together" } else { "" };
+                format!(
+                    "{} cannot use {}{}",
+                    used[0],
+                    join_with("and", &used[1..]),
+                    together
+                )
             }
             (_, true) => format!("{} cannot be used together", join_with("and", &used)),
             (count, false) => {
@@ -688,7 +742,7 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
                     "{} {} {}",
                     join_with("and", &used),
                     verb,
-                    join_with("and", &required)
+                    join_with("or", &required)
                 )
             }
         }
