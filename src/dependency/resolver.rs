@@ -420,14 +420,7 @@ impl Versions {
 impl Display for Versions {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let by_source = |vs: &BTreeSet<SourcedVersion>| {
-            let mut groups: BTreeMap<&Source, Vec<String>> = BTreeMap::new();
-            for v in vs {
-                groups
-                    .entry(&v.source)
-                    .or_default()
-                    .push(v.version.to_string());
-            }
-            groups
+            group_by_source(vs)
                 .iter()
                 .map(|(source, versions)| format!("{} from {}", versions.join(" | "), source))
                 .collect::<Vec<_>>()
@@ -442,9 +435,21 @@ impl Display for Versions {
     }
 }
 
+/// The versions in `versions`, written, grouped by their source.
+fn group_by_source(versions: &BTreeSet<SourcedVersion>) -> BTreeMap<&Source, Vec<String>> {
+    let mut groups: BTreeMap<&Source, Vec<String>> = BTreeMap::new();
+    for v in versions {
+        groups
+            .entry(&v.source)
+            .or_default()
+            .push(v.version.to_string());
+    }
+    groups
+}
+
 /// Why a version of a project is left out of the choice.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub enum Unavailability {
+enum Unavailability {
     /// The version could not be read, for the reason given.
     Unreadable(String),
     /// The `fix_version` of each of the versions, none of which accepts `compiler`, the version of
@@ -750,6 +755,17 @@ impl Explainer<'_, '_, '_> {
             .collect()
     }
 
+    /// Whether `versions` holds every version of `name` the provider has listed.
+    fn holds_every_version(&self, name: &PackageName, versions: &Versions) -> bool {
+        self.known_in(name, versions).len() == self.provider.known_versions_of(name).len()
+    }
+
+    /// Whether `versions` holds every version of `name` the provider has listed, of which there
+    /// are several.
+    fn holds_every_one_of_several(&self, name: &PackageName, versions: &Versions) -> bool {
+        self.provider.known_versions_of(name).len() > 1 && self.holds_every_version(name, versions)
+    }
+
     /// Writes `versions`, some of the listed versions of `name`, as alternatives. For a project met
     /// at several sources, the versions of each source are followed by the source, and all the
     /// versions of a source are written as the source alone.
@@ -764,14 +780,7 @@ impl Explainer<'_, '_, '_> {
                 .collect::<Vec<_>>();
             return join_with("or", &versions);
         }
-        let mut groups: BTreeMap<&Source, Vec<String>> = BTreeMap::new();
-        for v in versions {
-            groups
-                .entry(&v.source)
-                .or_default()
-                .push(v.version.to_string());
-        }
-        let groups = groups
+        let groups = group_by_source(versions)
             .into_iter()
             .map(|(source, group)| {
                 let listed_at_source = self.provider.versions_at(name, source).len();
@@ -793,12 +802,10 @@ impl Explainer<'_, '_, '_> {
         if self.is_root(name) {
             return format!("\"{}\"", name);
         }
-        let held = self.known_in(name, versions);
-        let listed = self.provider.known_versions_of(name).len();
-        if held.len() == listed && listed > 1 {
+        if self.holds_every_one_of_several(name, versions) {
             format!("every version of \"{}\"", name)
         } else {
-            format!("\"{}\" {}", name, self.list(name, &held))
+            format!("\"{}\" {}", name, self.list(name, &self.known_in(name, versions)))
         }
     }
 
@@ -807,12 +814,10 @@ impl Explainer<'_, '_, '_> {
     /// # Examples
     /// `"common" 1.1.0`, or `"common"` for every version.
     fn object(&self, name: &PackageName, versions: &Versions) -> String {
-        let held = self.known_in(name, versions);
-        let listed = self.provider.known_versions_of(name).len();
-        if held.len() == listed && !self.met_at_several.contains(name) {
+        if self.holds_every_version(name, versions) && !self.met_at_several.contains(name) {
             format!("\"{}\"", name)
         } else {
-            format!("\"{}\" {}", name, self.list(name, &held))
+            format!("\"{}\" {}", name, self.list(name, &self.known_in(name, versions)))
         }
     }
 
@@ -980,9 +985,7 @@ impl Explainer<'_, '_, '_> {
                     })
                     .collect::<Vec<_>>()
                     .join(", ");
-                if self.known_in(name, versions).len()
-                    == self.provider.known_versions_of(name).len()
-                {
+                if self.holds_every_version(name, versions) {
                     format!(
                         "no version of \"{}\" supports Fix {} ({})",
                         name, compiler, each
@@ -1075,9 +1078,7 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
         // A version used alone is the subject of the sentence, and several used together are what
         // the sentence is about.
         if let ([(name, versions)], true) = (&used[..], required.is_empty()) {
-            let held = self.known_in(name, versions).len();
-            let listed = self.provider.known_versions_of(name).len();
-            if held == listed && listed > 1 {
+            if self.holds_every_one_of_several(name, versions) {
                 return format!("no version of \"{}\" can be used", name);
             }
         }
