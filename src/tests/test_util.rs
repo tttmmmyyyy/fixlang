@@ -1207,6 +1207,16 @@ pub fn run_fix(project_dir: &Path, args: &[&str]) -> Output {
         .expect("Failed to execute fix")
 }
 
+/// Runs `git` with `args` in `repo_dir`, and fails the test if it fails.
+pub fn run_git(repo_dir: &Path, args: &[&str]) {
+    let status = Command::new("git")
+        .args(args)
+        .current_dir(repo_dir)
+        .status()
+        .unwrap_or_else(|err| panic!("Failed to run `git {:?}`: {}", args, err));
+    assert!(status.success(), "`git {:?}` failed", args);
+}
+
 /// Asserts that `output` succeeded, quoting both streams otherwise.
 ///
 /// # Arguments
