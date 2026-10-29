@@ -845,23 +845,23 @@ impl Explainer<'_, '_, '_> {
         dep: &PackageName,
         dep_versions: &Versions,
     ) -> Option<String> {
-        let dependers = if self.is_root(depender) {
+        let listed_depender_versions = if self.is_root(depender) {
             BTreeSet::from([self.provider.root_version.clone()])
         } else {
             self.known_in(depender, depender_versions)
         };
         let all_requirements = self.provider.requirements.borrow();
         let mut written: Option<&Dependency> = None;
-        for version in &dependers {
-            let requirement = all_requirements
+        for version in &listed_depender_versions {
+            let dependency = all_requirements
                 .get(&(depender.clone(), version.clone()))?
                 .iter()
-                .find(|requirement| requirement.name == *dep)?;
+                .find(|dependency| dependency.name == *dep)?;
             match written {
-                None => written = Some(requirement),
+                None => written = Some(dependency),
                 Some(written) => {
-                    if written.requirement != requirement.requirement
-                        || written.source != requirement.source
+                    if written.requirement != dependency.requirement
+                        || written.source != dependency.source
                     {
                         return None;
                     }
@@ -926,18 +926,21 @@ impl Explainer<'_, '_, '_> {
         use External::FromDependencyOf;
         if let (FromDependencyOf(p1, s1, d1, t1), FromDependencyOf(p2, s2, d2, t2)) = (fact1, fact2)
         {
-            for ((p, s, q, t), (q2, s2, r, u)) in [
+            for ((p, s, q, t), (q2, q2_versions, r, u)) in [
                 ((p1, s1, d1, t1), (p2, s2, d2, t2)),
                 ((p2, s2, d2, t2), (p1, s1, d1, t1)),
             ] {
                 let required = self.known_in(q, t);
-                if q == q2 && !required.is_empty() && required.is_subset(&self.known_in(q, s2)) {
+                if q == q2
+                    && !required.is_empty()
+                    && required.is_subset(&self.known_in(q, q2_versions))
+                {
                     return format!(
                         "{} {} {}, which requires {}",
                         self.subject(p, s),
                         self.requires(p),
                         self.required(p, s, q, t),
-                        self.required(q, s2, r, u)
+                        self.required(q, q2_versions, r, u)
                     );
                 }
             }
