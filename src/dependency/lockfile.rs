@@ -386,7 +386,7 @@ impl DependencyLockFileEntry {
     pub fn project_file(&self) -> Result<ProjectFile, Errors> {
         let proj_file_path = self.path.join(PROJECT_FILE_PATH);
         let mut pf = ProjectFile::read_file(&proj_file_path)?;
-        pf.is_fix_version_compatible()?;
+        pf.check_fix_version_compatible()?;
         pf.role = ProjectFileRole::Dependent;
         pf.source = Some(match &self.git {
             Some(g) => ProjectOrigin::Git {
@@ -429,21 +429,24 @@ struct DependencyLockGit {
     rev: String,
 }
 
-// Following structures are used to cache project information retrieved by file IO or network IO.
-
-/// The projects the resolution has learned of, each at one source.
+/// The projects the resolution has learned of, each at one source. It caches what reading files and
+/// the network told about them.
 #[derive(Clone, Default)]
 struct ProjectsInfo {
     /// The projects, the root project first.
     projects: Arc<Mutex<Vec<ProjectInfo>>>,
 }
 
+/// What the resolution knows of one project at one source.
 struct ProjectInfo {
+    /// The name of the project.
     name: ProjectName,
+    /// Where the project is fetched from, written as the project file that requires it gives it.
     source: ProjectSource,
     /// `source` as the resolver identifies it, with a directory made absolute.
     source_id: Source,
-    versions: Option<Vec<VersionInfo>>, // Available versions. None if not retrieved yet.
+    /// The versions at the source, or `None` before they are listed.
+    versions: Option<Vec<VersionInfo>>,
     /// The project files read so far, each under the version listed for the commit or the
     /// directory it was read from. A file can name a different version from the one it is listed
     /// under, so the key is the listed version.
@@ -451,6 +454,7 @@ struct ProjectInfo {
 }
 
 impl ProjectInfo {
+    /// Whether the project is fetched from a git repository.
     pub fn is_git(&self) -> bool {
         matches!(self.source, ProjectSource::Git(_, _))
     }
@@ -472,15 +476,20 @@ impl ProjectInfo {
             proj_file.general.name.clone(),
             ProjectSource::Local(proj_file.path.parent().unwrap().to_path_buf()),
         )?;
-        project.versions = Some(vec![VersionInfo {
-            version: proj_file.general.version(),
-            rev: Oid::zero(),
-            tagged: false,
-        }]);
-        project
-            .proj_files
-            .insert(proj_file.general.version(), proj_file.clone());
+        project.set_one_version(proj_file.clone(), Oid::zero(), false);
         Ok(project)
+    }
+
+    /// Lists the version `proj_file` gives as the one version of the project, at the commit `rev`
+    /// (zero for a project directory), and caches the file.
+    fn set_one_version(&mut self, proj_file: ProjectFile, rev: Oid, tagged: bool) {
+        let version = proj_file.general.version();
+        self.versions = Some(vec![VersionInfo {
+            version: version.clone(),
+            rev,
+            tagged,
+        }]);
+        self.proj_files.insert(version, proj_file);
     }
 
     /// Lists the versions of the project at its source, once. A project directory whose project
@@ -497,13 +506,7 @@ impl ProjectInfo {
             ProjectSource::Local(proj_path) => {
                 let proj_file = ProjectFile::read_file(&proj_path.join(PROJECT_FILE_PATH))
                     .map_err(RetrievalError::Unusable)?;
-                let version = proj_file.general.version();
-                self.versions = Some(vec![VersionInfo {
-                    version: version.clone(),
-                    rev: Oid::zero(),
-                    tagged: false,
-                }]);
-                self.proj_files.insert(version, proj_file);
+                self.set_one_version(proj_file, Oid::zero(), false);
             }
             ProjectSource::Git(_url, repo) => {
                 let repo = &repo.as_mut().unwrap().1;
@@ -606,20 +609,12 @@ impl ProjectInfo {
         let proj_file = ProjectFile::read_file(&repo.workdir().unwrap().join(PROJECT_FILE_PATH))?;
 
         let version = proj_file.general.version();
-
-        // Pre-populate versions (single entry) and proj_files cache.
-        self.versions = Some(vec![VersionInfo {
-            version: version.clone(),
-            rev: oid,
-            tagged: true,
-        }]);
-        self.proj_files.insert(version.clone(), proj_file);
-
+        self.set_one_version(proj_file, oid, true);
         Ok((version, oid))
     }
 }
 
-// Resolve a rev or tag specification to a git OID.
+/// The commit the `rev` or `tag` of `git` names in `repo`.
 fn resolve_git_ref(repo: &Repository, git: &ProjectFileDependencyGit) -> Result<Oid, Errors> {
     if let Some(rev) = &git.rev {
         let obj = repo
@@ -735,11 +730,9 @@ fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Retriev
         };
 
         // Parse the version.
-        let parsed = Version::parse(name);
-        if parsed.is_err() {
+        let Ok(version) = Version::parse(name) else {
             return true; // Continue.
-        }
-        let version = parsed.unwrap();
+        };
 
         // Peel the OID to a commit. For annotated tags `oid` points to a tag
         // object, not the commit, so a later `find_commit` would fail; for
@@ -794,16 +787,21 @@ fn get_versions_from_repo(repo: &Repository) -> Result<Vec<VersionInfo>, Retriev
     Ok(versions)
 }
 
+/// A version of a project, as its source lists it.
 pub struct VersionInfo {
     pub version: Version,
-    rev: Oid,         // Empty if source is `ProjectDir`.
-    pub tagged: bool, // True if the version is tagged.
+    /// The commit of the version, or zero for a project directory.
+    rev: Oid,
+    /// Whether a version tag names the version. The version a repository with no tag lists, that of
+    /// its newest commit, is untagged.
+    pub tagged: bool,
 }
 
+/// Where a project is fetched from, with the clone of a git repository once it is made.
 pub enum ProjectSource {
-    // Just a fix project created at the given path.
+    /// The project directory at this path.
     Local(PathBuf),
-    // Remote git repository. The second field is a temporary directory where the repository is cloned.
+    /// The git repository at this URL, and the temporary directory it is cloned into.
     Git(String, Option<(TempDir, Repository)>),
 }
 
@@ -817,7 +815,7 @@ impl ProjectSource {
         })
     }
 
-    // Get the git repository, assuming it is already prepared.
+    /// The clone of the git repository, which `prepare_git_repository` has made.
     fn get_git_repository(&mut self) -> &mut Repository {
         match self {
             ProjectSource::Local(_path_buf) => {
@@ -827,7 +825,7 @@ impl ProjectSource {
         }
     }
 
-    // Open the git repository and return it.
+    /// Clones the git repository, once. A project directory needs nothing.
     fn prepare_git_repository(&mut self) -> Result<(), Errors> {
         match self {
             ProjectSource::Local(_path_buf) => {
@@ -994,13 +992,13 @@ fn create_package_retriever(
 }
 
 /// The versions retriever for `resolver::resolve_dependency`, which lists versions through the
-/// cache `pkgs`.
+/// cache `projs`.
 fn create_version_retriever(
-    pkgs: ProjectsInfo,
+    projs: ProjectsInfo,
 ) -> Box<dyn Fn(&PackageName, &Source) -> Result<Vec<Version>, RetrievalError>> {
-    Box::new(move |pkg_name, source| {
-        let mut prjs = pkgs.projects.as_ref().lock().unwrap();
-        let prj = known_project(&mut prjs, pkg_name, source);
+    Box::new(move |prj_name, source| {
+        let mut projs = projs.projects.as_ref().lock().unwrap();
+        let prj = known_project(&mut projs, prj_name, source);
         prj.retrieve_versions()?;
         Ok(prj
             .versions

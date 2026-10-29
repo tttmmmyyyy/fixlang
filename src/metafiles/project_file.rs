@@ -351,7 +351,7 @@ impl ProjectFile {
     pub fn read_root_file() -> Result<ProjectFile, Errors> {
         let proj_file_path = Path::new(PROJECT_FILE_PATH);
         let mut proj_file = ProjectFile::read_file(&proj_file_path)?;
-        proj_file.is_fix_version_compatible()?;
+        proj_file.check_fix_version_compatible()?;
         proj_file.role = ProjectFileRole::Root;
         proj_file.source = Some(ProjectOrigin::Local(to_absolute_path(
             proj_file
@@ -677,7 +677,7 @@ impl ProjectFile {
     }
 
     /// Checks that the running compiler's version satisfies what this project requires of it.
-    pub fn is_fix_version_compatible(&self) -> Result<(), Errors> {
+    pub fn check_fix_version_compatible(&self) -> Result<(), Errors> {
         if self.fix_version().matches(&compiler_version()) {
             Ok(())
         } else {
