@@ -2480,7 +2480,7 @@ pub fn create_traverser<'c, 'm>(
                 .unwrap();
             gc.builder().position_at_end(unknown_work_bb);
             if gc.config.develop_mode {
-                gc.panic("A traverser was called with a work it was not generated for.\n");
+                gc.panic("A traverser was called with a work it was not generated for.");
             }
             gc.builder().build_unreachable().unwrap();
 

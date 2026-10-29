@@ -21,6 +21,10 @@ The C functions and values the Fix standard library is implemented with.
 // Marks a function that stops the program. `cold` places it in `.text.unlikely`, apart from the
 // code the program runs, so that the size of such a function does not shift the addresses of that
 // code.
+//
+// The functions marked with it, apart from the `static` one, are the ones that
+// `declare_noreturn_runtime_function` in `runtime.rs` declares to the generated code, and the two
+// sets must stay the same.
 #define FIXRUNTIME_STOPS __attribute__((noreturn, cold))
 
 // Defined after the reporters below, which call it through `fixruntime_stopf`.
@@ -143,9 +147,10 @@ const char *fixruntime_getenv(const char *name)
     return getenv(name);
 }
 
-// Each of the four below prints what went wrong to standard error and stops the program: an index
-// fell outside its array, an array size was below zero, an array size was wider than the address
-// space, or a signed operation's result did not fit its type.
+// Each of the six reporters below prints what went wrong to standard error and stops the program:
+// an index fell outside its array, an array size was below zero, an array size was wider than the
+// address space, a signed operation's result did not fit its type, a shift amount was outside the
+// width of its type, or a float did not fit the integer type it was converted to.
 FIXRUNTIME_STOPS void fixruntime_index_out_of_range(int64_t idx, int64_t size)
 {
     fixruntime_stopf("Index out of range: index=%" PRId64 ", size=%" PRId64, idx, size);

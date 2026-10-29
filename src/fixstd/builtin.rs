@@ -8050,10 +8050,6 @@ impl BuiltinOp for UndefinedInternalOp {
             let c_str = get_array_storage_buf(gc, &msg);
             gc.call_runtime(RUNTIME_STOP, &[c_str.into()]);
         } else {
-            // Runtime check is disabled.
-            // Just generate unreachable instruction.
-
-            // Generate unreachable instruction.
             gc.builder().build_unreachable().unwrap();
 
             // To satisfy LLVM, we need to create a valid control flow.

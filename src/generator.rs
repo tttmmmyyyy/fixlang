@@ -1735,7 +1735,7 @@ impl<'c, 'm> Generator<'c, 'm> {
             .unwrap();
 
         self.builder().position_at_end(shared_bb);
-        self.panic("A value proven uniquely owned was reached while shared.\n");
+        self.panic("A value proven uniquely owned was reached while shared.");
         self.builder()
             .build_unconditional_branch(unique_bb)
             .unwrap();

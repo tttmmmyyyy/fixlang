@@ -4,11 +4,10 @@
 //! buffers it in blocks, so a printed line stays in the buffer until something flushes it.
 
 use crate::{
-    constants::COMPILER_TEST_WORKING_PATH,
     misc::function_name,
     tests::test_util::{
         assert_failed_with, build_program, integer_operations_checked_config, run_source_capture,
-        runtime_checked_config, source_with_a_runtime_zero,
+        runtime_checked_config, source_with_a_runtime_zero, working_file_path, SIGABRT,
     },
 };
 use std::{
@@ -18,9 +17,6 @@ use std::{
     path::Path,
     process::{Command, Stdio},
 };
-
-/// The signal `abort` stops a program with.
-const SIGABRT: i32 = 6;
 
 /// A line printed to standard output before an index check stops the program is kept.
 #[test]
@@ -93,8 +89,7 @@ pub fn test_stdout_is_kept_when_an_overflow_check_stops_the_program() {
 /// the program.
 #[test]
 pub fn test_an_open_file_keeps_what_was_written_when_a_check_stops_the_program() {
-    fs::create_dir_all(COMPILER_TEST_WORKING_PATH).unwrap();
-    let file_path = format!("{}/{}.txt", COMPILER_TEST_WORKING_PATH, function_name!());
+    let file_path = working_file_path(function_name!(), "txt");
     let _ = fs::remove_file(&file_path);
     let source = source_with_a_runtime_zero(&format!(
         r#"
