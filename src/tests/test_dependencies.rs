@@ -703,10 +703,10 @@ mod integration_tests {
         );
     }
 
-    /// A version of a dependency whose `fix_version` rejects the running compiler is passed over,
+    /// A version of a dependency whose `fix_version` rejects the running compiler is skipped,
     /// and the newest version that accepts it is chosen.
     #[test]
-    fn test_a_version_rejecting_the_compiler_is_passed_over() {
+    fn test_a_version_rejecting_the_compiler_is_skipped() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let lib_repo = temp_dir.path().join("lib");
         create_upstream_repo(&lib_repo, "resolve-for-fix", "1.0.0", "ResolveForFix");
@@ -723,13 +723,13 @@ mod integration_tests {
         );
     }
 
-    /// A version passed over takes nothing with it: when it fetched a dependency from one
+    /// A skipped version takes nothing with it: when it fetched a dependency from one
     /// repository, the version chosen instead can fetch that dependency from another.
     ///
     /// `resolve-src-lib` 2.0.0 rejects the running compiler and fetches `resolve-src-dep` from one
     /// repository; 1.0.0 fetches it from another.
     #[test]
-    fn test_a_version_passed_over_leaves_no_source_behind() {
+    fn test_a_skipped_version_leaves_no_source_behind() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let first_dep_repo = temp_dir.path().join("first-dep");
         let second_dep_repo = temp_dir.path().join("second-dep");
@@ -785,7 +785,7 @@ mod integration_tests {
         run_git(repo_dir, &["tag", tag]);
     }
 
-    /// A tag whose project file names another version is passed over, and lends nothing to the
+    /// A tag whose project file names another version is skipped, and lends nothing to the
     /// version it names: the lock file holds the dependencies of that version's own project file.
     ///
     /// The tag 1.1.0 of `stale-lib` carries a project file that still says 1.0.0 and requires
@@ -868,7 +868,7 @@ mod integration_tests {
     }
 
     /// `fix deps add` with no version requires the newest tagged version whose `fix_version`
-    /// accepts the running compiler, passing over a newer one that rejects it.
+    /// accepts the running compiler, skipping a newer one that rejects it.
     #[test]
     fn test_deps_add_requires_the_newest_version_accepting_the_compiler() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
@@ -899,10 +899,10 @@ mod integration_tests {
         );
     }
 
-    /// `fix deps add` with no version passes over a tag whose project file names another version,
+    /// `fix deps add` with no version skips a tag whose project file names another version,
     /// as the resolution does, and requires the newest tag the resolution can use.
     #[test]
-    fn test_deps_add_passes_over_a_tag_naming_another_version() {
+    fn test_deps_add_skips_a_tag_naming_another_version() {
         let temp_dir = TempDir::new().expect("Failed to create temp directory");
         let lib_repo = temp_dir.path().join("lib");
         create_upstream_repo(&lib_repo, "add-stale", "1.0.0", "AddStale");

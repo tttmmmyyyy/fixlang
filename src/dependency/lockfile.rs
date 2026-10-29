@@ -673,15 +673,15 @@ pub fn version_to_add(name: &ProjectName, url: &str) -> Result<VersionToAdd, Err
     candidates.sort();
     candidates.reverse();
 
-    let mut passed_over = vec![];
+    let mut skipped = vec![];
     for version in &candidates {
         let reason = match project.usable_project_file(version) {
             Ok(proj_file) if proj_file.fix_version().matches(&compiler_version()) => {
-                if !passed_over.is_empty() {
+                if !skipped.is_empty() {
                     info_msg(&format!(
-                        "Passing over newer versions of \"{}\": {}.",
+                        "Skipping newer versions of \"{}\": {}.",
                         name,
-                        passed_over.join("; ")
+                        skipped.join("; ")
                     ));
                 }
                 return Ok(if any_tagged {
@@ -703,12 +703,12 @@ pub fn version_to_add(name: &ProjectName, url: &str) -> Result<VersionToAdd, Err
             Err(RetrievalError::Unusable(errs)) => Unavailability::Unreadable(errs.messages()),
             Err(RetrievalError::Fatal(errs)) => return Err(errs),
         };
-        passed_over.push(format!("{} {}", version, reason));
+        skipped.push(format!("{} {}", version, reason));
     }
     Err(Errors::from_msg(format!(
         "No version of \"{}\" can be used: {}.",
         name,
-        passed_over.join("; ")
+        skipped.join("; ")
     )))
 }
 
