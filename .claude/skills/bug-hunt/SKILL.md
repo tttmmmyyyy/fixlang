@@ -182,6 +182,23 @@ Untested code is where a latent bug survives, because a tested path carrying a b
 
 **A test that names the case it declines to cover is the cheapest form of this.** A test's doc routinely explains why it chose the input it chose, and such a sentence is the author telling you which neighbouring case they decided not to exercise, together with the reason they believed it was uninteresting. Check the reason rather than the choice. When it says two *inputs* are equivalent, the case may genuinely be covered; when it says one *stage* treats them alike — a widening that is a no-op at that width, a conversion that is the identity for that type, a path that short-circuits for that size — then every stage after that one is still untested on it, and that is where the bug sits. So read the test files the target owns for the sentences that justify an input, take each case such a sentence names, and run it.
 
+#### Check the connectives where a formula is turned into prose
+
+Code that writes a logical object out as words — a conflict between requirements, a type
+constraint, a set of candidates, a condition in a diagnostic — has to choose its connectives: *and*
+or *or*, *every* or *some*, *requires* or *cannot be used with*. The object fixes which one is true,
+and the code usually picks one per shape of the object without checking it against the object's
+meaning. A clause that forbids a conjunction, for instance, turns its negated parts into a
+disjunction: "not (P and not Y and not Z)" says P needs Y *or* Z, and a writer that joins Y and Z
+with *and* claims a requirement nobody has. The sentence reads fluently either way, so a reader of
+the output never notices, and a test written from the output pins the wrong word.
+
+Write down the truth condition of each shape the writer handles, then build an input where each
+part has **two** members — two negated terms, two alternatives, two sources — and read the sentence
+against the condition. One member hides the bug, since *and* and *or* of one thing say the same.
+Look first where sibling branches of the same writer disagree on a connective for parts of the same
+kind.
+
 #### Run a pass over its own output
 
 A pass that mints names, markers or counters — a fresh-name counter starting at zero, a prefix it
