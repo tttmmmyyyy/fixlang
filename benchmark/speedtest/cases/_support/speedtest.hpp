@@ -49,6 +49,9 @@ inline void perf_start() {
 }
 
 // Count what runs between these two, as `PerfControl::measure` counts the evaluation of its work.
+// The Fix program frees what its work built and does not return before `measure` ends, so a
+// counterpart builds those in a block that closes before `perf_disable`, and only the result
+// outlives it.
 inline void perf_enable() { perf_send("enable\n"); }
 inline void perf_disable() { perf_send("disable\n"); }
 

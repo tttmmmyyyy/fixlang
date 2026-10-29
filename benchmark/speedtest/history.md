@@ -2,6 +2,20 @@
 
 Newer is above.
 
+**From the `6d79074` row on, the C++ counterparts of the `cp_*` cases run under the conditions
+their Fix cases run under, and their columns are not comparable with earlier rows.** They are built
+with `-DNDEBUG`, as the Fix cases are built with `--no-runtime-check`. What their work builds is
+freed inside the counted region, as the Fix programs free it. `cp_bipartite` reads the matching off
+the flow, and `cp_convolution` holds its input and output as `mint`, as `main.fix` holds them as
+`ZP`. `cp_dijkstra` and `cp_bellman_ford` run on the graph layout of cp-library's `Graph` in place
+of `vector<vector<pair<int, ll>>>`. No Fix column moved by more than 0.01% in instructions from the
+`6be6e97` row. The ratio of the C++ instruction count to the Fix one moved from 1.98 to 1.14
+(`cp_dijkstra`), 1.90 to 1.08 (`cp_bellman_ford`), 1.78 to 1.43 (`cp_unionfind`), 1.26 to 1.16
+(`cp_scc`), 1.12 to 1.07 (`cp_twosat`), 1.95 to 2.09 (`cp_maxflow`), 1.86 to 2.02
+(`cp_bipartite`), 1.10 to 1.14 (`cp_pow_mod`), 1.28 to 1.25 (`cp_lcp_array`), 0.91 to 0.89
+(`cp_dsegtree`), 0.90 to 0.88 (`cp_segtree`) and 0.74 to 0.73 (`cp_floor_sum`), and by 0.01 or less
+in the other ten cases.
+
 **The third `25fef64` row builds the `cp_*` cases and `cp_lib_prime_list` on cp-library 0.15.1
 (`9c22359`) in place of `5fd757b`.** In between, `factorize`, `factorize_flat`, `calc_totient` and
 `_calc_primitive_root` divide once per candidate divisor. None of the cases calls the first three,
