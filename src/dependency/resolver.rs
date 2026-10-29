@@ -1854,4 +1854,143 @@ mod tests {
         .map(|chosen| chosen.into_iter().map(|(name, _)| name).collect::<Vec<_>>());
         assert_eq!(chosen, Ok(vec!["t".to_string(), "x".to_string()]));
     }
+
+    /// Versions of a package left out for different reasons are not explained as one: the message
+    /// gives the reason of each.
+    ///
+    /// `x` 1.0.0 cannot be read, and `x` 2.0.0 requires a newer Fix.
+    #[test]
+    fn versions_left_out_for_different_reasons_are_explained_each() {
+        let mut registry = registry(&[("x", "1.0.0", &[]), ("x", "2.0.0", &[])]);
+        registry
+            .get_mut(&("x".to_string(), at("2.0.0", source_of("x"))))
+            .unwrap()
+            .fix_version = VersionReq::parse("^1.7.0").unwrap();
+        let message = resolve_with(&registry, &[dependency("x", "*")], &[("x", "1.0.0")])
+            .chosen
+            .unwrap_err();
+        assert!(
+            message.contains("\"x\" 1.0.0 could not be read: the tag is broken")
+                && message.contains("\"x\" 2.0.0 requires Fix ^1.7.0"),
+            "{}",
+            message
+        );
+    }
+
+    /// Every version of a package left out for rejecting the running compiler is explained in one
+    /// sentence, however many there are.
+    #[test]
+    fn many_versions_rejecting_the_compiler_are_explained_together() {
+        let mut registry = registry(&[
+            ("x", "1.0.0", &[]),
+            ("x", "1.1.0", &[]),
+            ("x", "1.2.0", &[]),
+            ("x", "1.3.0", &[]),
+        ]);
+        for (version, req) in [
+            ("1.0.0", "^1.7.0"),
+            ("1.1.0", "^1.8.0"),
+            ("1.2.0", "^1.9.0"),
+            ("1.3.0", "^1.9.0"),
+        ] {
+            registry
+                .get_mut(&("x".to_string(), at(version, source_of("x"))))
+                .unwrap()
+                .fix_version = VersionReq::parse(req).unwrap();
+        }
+        assert_eq!(
+            resolve(&registry, &[("x", "*")]).unwrap_err(),
+            "error: Failed to resolve dependencies.\n\
+             This is Fix 1.6.1.\n\
+             \n\
+             Because \"root\" requires \"x\" and no version of \"x\" supports Fix 1.6.1 (1.0.0 \
+             requires Fix ^1.7.0, 1.1.0 requires Fix ^1.8.0, 1.2.0 requires Fix ^1.9.0, 1.3.0 \
+             requires Fix ^1.9.0), the requirements of \"root\" cannot all be satisfied.\n\
+             HINT: Use a newer Fix, or require versions that support Fix 1.6.1."
+        );
+    }
+
+    /// A version requiring a package whose source cannot be read is explained with the package, its
+    /// source, and why it could not be read.
+    ///
+    /// Every version of `x` requires `y`, whose versions cannot be read.
+    #[test]
+    fn a_requirement_on_an_unreadable_package_is_explained() {
+        let registry = registry(&[("x", "1.0.0", &[("y", "*")]), ("x", "2.0.0", &[("y", "*")])]);
+        let package_retriever =
+            |name: &PackageName, version: &SourcedVersion, _: BuildConfigType| {
+                if name == ROOT {
+                    return Ok(Package {
+                        deps: vec![dependency("x", "*")],
+                        fix_version: VersionReq::STAR,
+                    });
+                }
+                Ok(registry[&(name.clone(), version.clone())].clone())
+            };
+        let versions_retriever = |name: &PackageName, source: &Source| {
+            if name == "y" {
+                return Err(RetrievalError::Unusable(Errors::from_msg(
+                    "the project file is missing".to_string(),
+                )));
+            }
+            Ok(versions_in(&registry, name, source))
+        };
+        assert_eq!(
+            resolve_root(
+                BuildConfigType::Build,
+                &package_retriever,
+                &versions_retriever,
+            )
+            .unwrap_err(),
+            "error: Failed to resolve dependencies.\n\
+             Because \"root\" requires \"x\" and every version of \"x\" requires \"y\" from \
+             https://example.com/y.git, which could not be read: the project file is missing, the \
+             requirements of \"root\" cannot all be satisfied."
+        );
+    }
+
+    /// A requirement on a package with no version at its source is explained as such.
+    #[test]
+    fn a_requirement_on_a_package_with_no_version_is_explained() {
+        let registry = registry(&[("x", "1.0.0", &[("y", "^1.0.0")])]);
+        assert_eq!(
+            resolve(&registry, &[("x", "*")]).unwrap_err(),
+            "error: Failed to resolve dependencies.\n\
+             Because \"root\" requires \"x\" and \"x\" 1.0.0 requires \"y\" ^1.0.0, which no \
+             version satisfies (https://example.com/y.git has no version of \"y\"), the \
+             requirements of \"root\" cannot all be satisfied."
+        );
+    }
+
+    /// Where the explanation meets a package at two sources, the versions it writes of that package
+    /// carry their source, and a source whose every version they hold is written alone.
+    ///
+    /// The root requires `d` 1.0.0 from one repository, and every version of `x` requires `d` from
+    /// another.
+    #[test]
+    fn the_versions_of_a_package_met_at_two_sources_carry_the_source() {
+        let other = Source::Git("https://example.com/other/d.git".to_string());
+        let mut registry = registry(&[("d", "1.0.0", &[]), ("d", "2.0.0", &[])]);
+        for version in ["1.0.0", "2.0.0"] {
+            add(&mut registry, "d", at(version, other.clone()), vec![]);
+        }
+        for (version, req) in [("1.0.0", "^1.0.0"), ("2.0.0", "*")] {
+            add(
+                &mut registry,
+                "x",
+                at(version, source_of("x")),
+                vec![dependency_from("d", req, other.clone())],
+            );
+        }
+        assert_eq!(
+            resolve(&registry, &[("d", "=1.0.0"), ("x", "*")]).unwrap_err(),
+            "error: Failed to resolve dependencies.\n\
+             Because \"x\" 1.0.0 requires \"d\" ^1.0.0 from https://example.com/other/d.git and \
+             \"x\" 2.0.0 requires \"d\" from https://example.com/other/d.git, every version of \
+             \"x\" indirectly requires \"d\" from https://example.com/other/d.git.\n\
+             So, because \"root\" requires \"d\" =1.0.0 from https://example.com/d.git and \"x\", \
+             the requirements of \"root\" cannot all be satisfied.\n\
+             HINT: Every requirement on one project must name the same source."
+        );
+    }
 }
