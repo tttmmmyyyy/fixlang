@@ -207,15 +207,17 @@ impl Provider<'_, '_> {
                 }));
             self.listed_sources.borrow_mut().insert(key);
         }
-        Ok(Versions::Only(
-            self.known_versions.borrow()[&dependency.name]
-                .iter()
-                .filter(|v| {
-                    v.source == dependency.source && dependency.requirement.matches(&v.version)
-                })
-                .cloned()
-                .collect(),
-        ))
+        Ok(Versions::Only(self.listed_versions_accepted_by(dependency)))
+    }
+
+    /// The versions of `dependency.name` the provider has listed at `dependency.source` that
+    /// satisfy `dependency.requirement`.
+    fn listed_versions_accepted_by(&self, dependency: &Dependency) -> BTreeSet<SourcedVersion> {
+        self.known_versions_of(&dependency.name)
+            .iter()
+            .filter(|v| v.source == dependency.source && dependency.requirement.matches(&v.version))
+            .cloned()
+            .collect()
     }
 
     /// The versions of `name` at `source`, which the provider has listed.
@@ -302,7 +304,7 @@ impl DependencyProvider for Provider<'_, '_> {
         };
         if !retrieved.fix_version.matches(&self.compiler_version) {
             return unavailable(Unavailability::RejectsCompiler {
-                requirements: BTreeMap::from([(version.clone(), retrieved.fix_version)]),
+                fix_versions: BTreeMap::from([(version.clone(), retrieved.fix_version)]),
                 compiler: self.compiler_version.clone(),
             });
         }
@@ -455,7 +457,7 @@ enum Unavailability {
     /// The `fix_version` of each of the versions, none of which accepts `compiler`, the version of
     /// the running compiler.
     RejectsCompiler {
-        requirements: BTreeMap<SourcedVersion, VersionReq>,
+        fix_versions: BTreeMap<SourcedVersion, VersionReq>,
         compiler: Version,
     },
     /// The version requires `name` from `source`, which could not be read for the reason given.
@@ -474,43 +476,38 @@ enum Unavailability {
     },
 }
 
-/// Writes the reason as a sentence about the version, with its subject left out.
+/// Writes the reason as a sentence about the versions left out, with its subject left out.
 ///
 /// # Examples
-/// `requires Fix ^1.7.0, and this is Fix 1.6.1`, or `requires "json" ^2.0.0 from
-/// https://github.com/x/json.git, where the versions are 1.0.0 and 1.1.0`.
+/// `requires Fix ^1.7.0, and this is Fix 1.6.1`, or `requires "json" ^2.0.0, which no version
+/// satisfies (https://github.com/x/json.git has only "json" 1.0.0 and 1.1.0)`.
 impl Display for Unavailability {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Unavailability::Unreadable(message) => write!(f, "could not be read: {}", message),
+            Unavailability::Unreadable(message) => write!(f, "could not be read ({})", message),
             Unavailability::RejectsCompiler {
-                requirements,
+                fix_versions,
                 compiler,
-            } => {
-                let requirements = requirements
-                    .iter()
-                    .map(|(version, requirement)| {
-                        if requirements.len() == 1 {
-                            requirement.to_string()
-                        } else {
-                            format!("{} at {}", requirement, version.version)
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                write!(
+            } => match fix_versions.values().collect::<Vec<_>>()[..] {
+                [fix_version] => write!(
                     f,
                     "requires Fix {}, and this is Fix {}",
-                    join_with("and", &requirements),
-                    compiler
-                )
-            }
+                    fix_version, compiler
+                ),
+                _ => write!(
+                    f,
+                    "does not support Fix {} ({})",
+                    compiler,
+                    self.fix_version_of_each()
+                ),
+            },
             Unavailability::DependencyUnreadable {
                 name,
                 source,
                 message,
             } => write!(
                 f,
-                "requires \"{}\" from {}, which could not be read: {}",
+                "requires \"{}\" from {}, which could not be read ({})",
                 name, source, message
             ),
             Unavailability::NoVersionSatisfies {
@@ -519,25 +516,67 @@ impl Display for Unavailability {
                 source,
                 existing,
             } => {
-                let existing = match existing.as_slice() {
-                    [] => "no version exists".to_string(),
-                    [only] => format!("the version is {}", only),
-                    versions => format!(
-                        "the versions are {}",
-                        join_with(
-                            "and",
-                            &versions.iter().map(Version::to_string).collect::<Vec<_>>()
-                        )
-                    ),
+                let existing = if existing.is_empty() {
+                    format!("has no version of \"{}\"", name)
+                } else {
+                    let existing = existing.iter().map(Version::to_string).collect::<Vec<_>>();
+                    format!("has only \"{}\" {}", name, join_with("and", &existing))
                 };
                 write!(
                     f,
-                    "requires {} from {}, where {}",
+                    "requires {}, which no version satisfies ({} {})",
                     written_requirement(name, requirement),
                     source,
                     existing
                 )
             }
+        }
+    }
+}
+
+impl Unavailability {
+    /// The `fix_version` of each version a rejection of the compiler leaves out.
+    ///
+    /// # Examples
+    /// `1.0.0 requires Fix ^1.7.0, 1.1.0 requires Fix ^1.8.0`.
+    fn fix_version_of_each(&self) -> String {
+        let Unavailability::RejectsCompiler { fix_versions, .. } = self else {
+            unreachable!("not a rejection of the compiler: {:?}", self)
+        };
+        fix_versions
+            .iter()
+            .map(|(version, fix_version)| {
+                format!("{} requires Fix {}", version.version, fix_version)
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// One reason for leaving out the versions left out for `self` and for `other`, if they are
+    /// left out for one reason: the same one, or the rejection of the compiler, whose
+    /// `fix_version`s are put together.
+    fn merge(&self, other: &Unavailability) -> Option<Unavailability> {
+        match (self, other) {
+            (
+                Unavailability::RejectsCompiler {
+                    fix_versions: fix_versions1,
+                    compiler,
+                },
+                Unavailability::RejectsCompiler {
+                    fix_versions: fix_versions2,
+                    compiler: compiler2,
+                },
+            ) => {
+                assert_eq!(compiler, compiler2, "two compilers in one resolution");
+                let mut fix_versions = fix_versions1.clone();
+                fix_versions.extend(fix_versions2.clone());
+                Some(Unavailability::RejectsCompiler {
+                    fix_versions,
+                    compiler: compiler.clone(),
+                })
+            }
+            _ if self == other => Some(self.clone()),
+            _ => None,
         }
     }
 }
@@ -563,35 +602,6 @@ fn join_with(conjunction: &str, items: &[String]) -> String {
         [] => String::new(),
         [only] => only.clone(),
         [rest @ .., last] => format!("{} {} {}", rest.join(", "), conjunction, last),
-    }
-}
-
-impl Unavailability {
-    /// One reason for leaving out the versions left out for `self` and for `other`, if they are
-    /// left out for one reason: the same one, or the rejection of the compiler, whose requirements
-    /// are put together.
-    fn merge(&self, other: &Unavailability) -> Option<Unavailability> {
-        match (self, other) {
-            (
-                Unavailability::RejectsCompiler {
-                    requirements: requirements1,
-                    compiler,
-                },
-                Unavailability::RejectsCompiler {
-                    requirements: requirements2,
-                    ..
-                },
-            ) => {
-                let mut requirements = requirements1.clone();
-                requirements.extend(requirements2.clone());
-                Some(Unavailability::RejectsCompiler {
-                    requirements,
-                    compiler: compiler.clone(),
-                })
-            }
-            _ if self == other => Some(self.clone()),
-            _ => None,
-        }
     }
 }
 
@@ -700,7 +710,7 @@ fn explain(
     let explainer = Explainer {
         provider,
         met_at_several: projects_met_at_several_sources(tree),
-        root_mentioned: Cell::new(false),
+        root_requirement_written: Cell::new(false),
     };
     let mut lines = vec!["Failed to resolve dependencies.".to_string()];
     let rejects_the_compiler = rejects_the_compiler(tree);
@@ -736,8 +746,9 @@ struct Explainer<'e, 'a, 'b> {
     /// their sources, which tell them apart.
     met_at_several: Set<PackageName>,
     /// Whether the explanation has written a requirement of the root project, so that the next one
-    /// is written as a requirement it also has.
-    root_mentioned: Cell<bool>,
+    /// is written as a requirement it also has. The reporter of pubgrub asks for the lines in the
+    /// order it writes them, and each line is built from its first word to its last.
+    root_requirement_written: Cell<bool>,
 }
 
 impl Explainer<'_, '_, '_> {
@@ -772,7 +783,7 @@ impl Explainer<'_, '_, '_> {
     ///
     /// # Examples
     /// `1.0.0 or 1.1.0`, and for a project met at several sources, `1.0.0 from A or from B`.
-    fn list(&self, name: &PackageName, versions: &BTreeSet<SourcedVersion>) -> String {
+    fn alternatives(&self, name: &PackageName, versions: &BTreeSet<SourcedVersion>) -> String {
         if !self.met_at_several.contains(name) {
             let versions = versions
                 .iter()
@@ -805,7 +816,11 @@ impl Explainer<'_, '_, '_> {
         if self.holds_every_one_of_several(name, versions) {
             format!("every version of \"{}\"", name)
         } else {
-            format!("\"{}\" {}", name, self.list(name, &self.known_in(name, versions)))
+            format!(
+                "\"{}\" {}",
+                name,
+                self.alternatives(name, &self.known_in(name, versions))
+            )
         }
     }
 
@@ -817,7 +832,11 @@ impl Explainer<'_, '_, '_> {
         if self.holds_every_version(name, versions) && !self.met_at_several.contains(name) {
             format!("\"{}\"", name)
         } else {
-            format!("\"{}\" {}", name, self.list(name, &self.known_in(name, versions)))
+            format!(
+                "\"{}\" {}",
+                name,
+                self.alternatives(name, &self.known_in(name, versions))
+            )
         }
     }
 
@@ -869,14 +888,7 @@ impl Explainer<'_, '_, '_> {
             }
         }
         let written = written?;
-        let accepted = self
-            .provider
-            .known_versions_of(dep)
-            .iter()
-            .filter(|v| v.source == written.source && written.requirement.matches(&v.version))
-            .cloned()
-            .collect::<BTreeSet<_>>();
-        if accepted != self.known_in(dep, dep_versions) {
+        if self.provider.listed_versions_accepted_by(written) != self.known_in(dep, dep_versions) {
             return None;
         }
         let requirement = written_requirement(dep, &written.requirement);
@@ -887,10 +899,10 @@ impl Explainer<'_, '_, '_> {
         })
     }
 
-    /// The verb of a requirement `depender` has: `also requires` for a requirement of the root
-    /// project after the explanation has written one.
-    fn requires(&self, depender: &PackageName) -> &'static str {
-        if self.is_root(depender) && self.root_mentioned.replace(true) {
+    /// The verb of a requirement `depender` has, which the explanation is about to write:
+    /// `also requires` for a requirement of the root project after the explanation has written one.
+    fn requirement_verb(&self, depender: &PackageName) -> &'static str {
+        if self.is_root(depender) && self.root_requirement_written.replace(true) {
             "also requires"
         } else {
             "requires"
@@ -938,7 +950,7 @@ impl Explainer<'_, '_, '_> {
                     return format!(
                         "{} {} {}, which requires {}",
                         self.subject(p, s),
-                        self.requires(p),
+                        self.requirement_verb(p),
                         self.required(p, s, q, t),
                         self.required(q, q2_versions, r, u)
                     );
@@ -948,7 +960,7 @@ impl Explainer<'_, '_, '_> {
                 return format!(
                     "{} {} {} and {}",
                     self.subject(p1, s1),
-                    self.requires(p1),
+                    self.requirement_verb(p1),
                     self.required(p1, s1, d1, t1),
                     self.required(p2, s2, d2, t2)
                 );
@@ -964,62 +976,35 @@ impl Explainer<'_, '_, '_> {
         format!("{} and {}", first, self.format_external(second))
     }
 
-    /// The sentence saying that `name` at `versions` is left out for `reason`.
-    fn unavailable(
+    /// The sentence saying that `name` at `versions` is left out for `reason`. A rejection of the
+    /// compiler is written without the version of the compiler, which precedes the explanation, and
+    /// one of every version as such; every other reason is written as its `Display` writes it.
+    fn unavailability_sentence(
         &self,
         name: &PackageName,
         versions: &Versions,
         reason: &Unavailability,
     ) -> String {
-        let subject = self.subject(name, versions);
         match reason {
-            Unavailability::RejectsCompiler { requirements, .. } if requirements.len() == 1 => {
-                let requirement = requirements.values().next().unwrap();
-                format!("{} requires Fix {}", subject, requirement)
-            }
-            Unavailability::RejectsCompiler {
-                requirements,
-                compiler,
-            } => {
-                let each = requirements
-                    .iter()
-                    .map(|(version, requirement)| {
-                        format!("{} requires Fix {}", version.version, requirement)
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                if self.holds_every_version(name, versions) {
-                    format!(
-                        "no version of \"{}\" supports Fix {} ({})",
-                        name, compiler, each
-                    )
-                } else {
-                    format!("{} does not support Fix {} ({})", subject, compiler, each)
-                }
-            }
-            Unavailability::NoVersionSatisfies {
-                name: dep,
-                requirement,
-                source,
-                existing,
-            } => {
-                let existing = if existing.is_empty() {
-                    format!("has no version of \"{}\"", dep)
-                } else {
-                    let existing = existing.iter().map(Version::to_string).collect::<Vec<_>>();
-                    format!("has only \"{}\" {}", dep, join_with("and", &existing))
-                };
+            Unavailability::RejectsCompiler { fix_versions, .. } if fix_versions.len() == 1 => {
+                let fix_version = fix_versions.values().next().unwrap();
                 format!(
-                    "{} requires {}, which no version satisfies ({} {})",
-                    subject,
-                    written_requirement(dep, requirement),
-                    source,
-                    existing
+                    "{} requires Fix {}",
+                    self.subject(name, versions),
+                    fix_version
                 )
             }
-            Unavailability::Unreadable(_) | Unavailability::DependencyUnreadable { .. } => {
-                format!("{} {}", subject, reason)
+            Unavailability::RejectsCompiler { compiler, .. }
+                if self.holds_every_version(name, versions) =>
+            {
+                format!(
+                    "no version of \"{}\" supports Fix {} ({})",
+                    name,
+                    compiler,
+                    reason.fix_version_of_each()
+                )
             }
+            _ => format!("{} {}", self.subject(name, versions), reason),
         }
     }
 }
@@ -1035,19 +1020,21 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
             External::NotRoot(name, _) => {
                 format!("the dependencies of \"{}\" are being resolved", name)
             }
-            External::NoVersions(name, versions) => {
-                format!("no version of \"{}\" in {} exists", name, versions)
+            External::NoVersions(name, _) => {
+                format!("no version of \"{}\" can be chosen", name)
             }
             External::FromDependencyOf(depender, depender_versions, dep, dep_versions) => {
                 let subject = self.subject(depender, depender_versions);
                 format!(
                     "{} {} {}",
                     subject,
-                    self.requires(depender),
+                    self.requirement_verb(depender),
                     self.required(depender, depender_versions, dep, dep_versions)
                 )
             }
-            External::Custom(name, versions, reason) => self.unavailable(name, versions, reason),
+            External::Custom(name, versions, reason) => {
+                self.unavailability_sentence(name, versions, reason)
+            }
         }
     }
 
@@ -1101,7 +1088,7 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
             (_, true) => format!("{} cannot be used together", join_with("and", &used)),
             (count, false) => {
                 if root_used {
-                    self.root_mentioned.set(true);
+                    self.root_requirement_written.set(true);
                 }
                 let verb = if count == 1 {
                     "indirectly requires"
@@ -1568,7 +1555,7 @@ mod tests {
     }
 
     /// A version whose `fix_version` rejects the running compiler is left out, and an older version
-    /// that accepts it is chosen. When no version accepts it, the message says so.
+    /// that accepts it is chosen. When no version accepts it, the resolution fails.
     #[test]
     fn a_version_rejecting_the_compiler_is_left_out() {
         let mut registry = registry(&[("x", "1.0.0", &[]), ("x", "2.0.0", &[])]);
@@ -1820,8 +1807,8 @@ mod tests {
         let registry = registry(&[("y", "1.0.0", &[]), ("y", "1.1.0", &[])]);
         assert_eq!(
             resolve(&registry, &[("y", "^2.0.0")]).unwrap_err(),
-            "error: \"root\" requires \"y\" ^2.0.0 from https://example.com/y.git, where the \
-             versions are 1.0.0 and 1.1.0."
+            "error: \"root\" requires \"y\" ^2.0.0, which no version satisfies \
+             (https://example.com/y.git has only \"y\" 1.0.0 and 1.1.0)."
         );
     }
 
@@ -1874,7 +1861,7 @@ mod tests {
             .chosen
             .unwrap_err();
         assert!(
-            message.contains("\"x\" 1.0.0 could not be read: the tag is broken")
+            message.contains("\"x\" 1.0.0 could not be read (the tag is broken)")
                 && message.contains("\"x\" 2.0.0 requires Fix ^1.7.0"),
             "{}",
             message
@@ -1948,7 +1935,7 @@ mod tests {
             .unwrap_err(),
             "error: Failed to resolve dependencies.\n\
              Because \"root\" requires \"x\" and every version of \"x\" requires \"y\" from \
-             https://example.com/y.git, which could not be read: the project file is missing, the \
+             https://example.com/y.git, which could not be read (the project file is missing), the \
              requirements of \"root\" cannot all be satisfied."
         );
     }
