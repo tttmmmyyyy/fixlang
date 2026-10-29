@@ -317,7 +317,7 @@ fn collect_requirements<'t>(
 /// ```text
 /// Failed to resolve dependencies.
 /// Because "app" requires "collection" ^1.0.0, which requires "common" ^1.1.0, "app" indirectly requires "common" 1.1.0.
-/// So, because "app" also requires "common" =1.0.0, the requirements of "app" cannot all be satisfied.
+/// So, because "app" also requires "common" =1.0.0, the requirements of "app" cannot be satisfied.
 /// ```
 pub(super) fn explain(
     provider: &Provider<'_, '_>,
@@ -355,7 +355,7 @@ pub(super) fn explain(
 /// The explanation is a series of lines, each stating a fact the resolution met and what follows
 /// from it: a fact is a requirement of a version, or a version left out, and what follows is that a
 /// version cannot be used or that a project indirectly requires another. The last line concludes
-/// that the requirements of the root project cannot all be satisfied.
+/// that the requirements of the root project cannot be satisfied.
 struct Explainer<'e, 'a, 'b> {
     /// The provider that ran the resolution, which holds the versions it listed and their
     /// requirements.
@@ -539,7 +539,7 @@ impl Explainer<'_, '_, '_> {
         }
     }
 
-    /// Whether `terms` says that the requirements of the root project cannot all be satisfied,
+    /// Whether `terms` says that the requirements of the root project cannot be satisfied,
     /// which the last line of the explanation concludes.
     fn concludes(&self, terms: &pubgrub::Map<PackageName, Term<Versions>>) -> bool {
         terms.is_empty()
@@ -681,7 +681,7 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
     fn format_terms(&self, terms: &pubgrub::Map<PackageName, Term<Versions>>) -> String {
         if self.concludes(terms) {
             return format!(
-                "the requirements of \"{}\" cannot all be satisfied",
+                "the requirements of \"{}\" cannot be satisfied",
                 self.provider.root_name
             );
         }

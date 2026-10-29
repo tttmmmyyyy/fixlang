@@ -705,7 +705,7 @@ mod tests {
              Because \"root\" requires \"collection\" ^1.0.0, which requires \"common\" ^1.1.0, \
              \"root\" indirectly requires \"common\" 1.1.0.\n\
              So, because \"root\" also requires \"common\" =1.0.0, the requirements of \"root\" \
-             cannot all be satisfied."
+             cannot be satisfied."
         );
     }
 
@@ -727,7 +727,7 @@ mod tests {
              Because every version of \"a\" requires \"c\" =1.0.0 and every version of \"b\" \
              requires \"c\" =2.0.0, \"a\" and \"b\" cannot be used together.\n\
              So, because \"root\" requires \"a\" ^1.0.0 and \"b\" ^1.0.0, the requirements of \
-             \"root\" cannot all be satisfied."
+             \"root\" cannot be satisfied."
         );
     }
 
@@ -756,8 +756,8 @@ mod tests {
              1.1.0 indirectly requires \"y\" 2.0.0.\n\
              And because \"foo\" 1.1.0 requires \"y\" ^1.0.0, \"foo\" 1.1.0 cannot be used.\n\
              And because \"foo\" 1.0.0 cannot be used (1), no version of \"foo\" can be used.\n\
-             So, because \"root\" requires \"foo\" ^1.0.0, the requirements of \"root\" cannot all \
-             be satisfied."
+             So, because \"root\" requires \"foo\" ^1.0.0, the requirements of \"root\" cannot be \
+             satisfied."
         );
     }
 
@@ -856,7 +856,7 @@ mod tests {
              Because no version of \"json\" supports Fix 1.6.1 (1.0.0 requires Fix ^1.7.0, 1.1.0 \
              requires Fix ^1.8.0) and \"web\" 1.0.0 requires \"json\" ^1.0.0, \"web\" 1.0.0 cannot \
              be used.\n\
-             So, because \"root\" requires \"web\" ^1.0.0, the requirements of \"root\" cannot all be \
+             So, because \"root\" requires \"web\" ^1.0.0, the requirements of \"root\" cannot be \
              satisfied.\n\
              HINT: Use a newer Fix, or require versions that support Fix 1.6.1."
         );
@@ -915,7 +915,7 @@ mod tests {
             "error: Failed to resolve dependencies.\n\
              Because \"root\" requires \"d\" from https://example.com/d.git and \"x\" 1.0.0 \
              requires \"d\" from https://example.com/other/d.git, \"root\" cannot use \"x\".\n\
-             So, because \"root\" also requires \"x\", the requirements of \"root\" cannot all be \
+             So, because \"root\" also requires \"x\", the requirements of \"root\" cannot be \
              satisfied.\n\
              HINT: Every requirement on one project must name the same source."
         );
@@ -1055,7 +1055,7 @@ mod tests {
             "error: Failed to resolve dependencies.\n\
              Because \"root\" requires \"x\" and every version of \"x\" requires \"y\" ^2.0.0, \
              which no version satisfies (https://example.com/y.git has only \"y\" 1.0.0 and \
-             1.1.0), the requirements of \"root\" cannot all be satisfied."
+             1.1.0), the requirements of \"root\" cannot be satisfied."
         );
     }
 
@@ -1155,7 +1155,7 @@ mod tests {
              \n\
              Because \"root\" requires \"x\" and no version of \"x\" supports Fix 1.6.1 (1.0.0 \
              requires Fix ^1.7.0, 1.1.0 requires Fix ^1.8.0, 1.2.0 requires Fix ^1.9.0, 1.3.0 \
-             requires Fix ^1.9.0), the requirements of \"root\" cannot all be satisfied.\n\
+             requires Fix ^1.9.0), the requirements of \"root\" cannot be satisfied.\n\
              HINT: Use a newer Fix, or require versions that support Fix 1.6.1."
         );
     }
@@ -1195,7 +1195,7 @@ mod tests {
             "error: Failed to resolve dependencies.\n\
              Because \"root\" requires \"x\" and every version of \"x\" requires \"y\" from \
              https://example.com/y.git, which could not be read (the project file is missing), the \
-             requirements of \"root\" cannot all be satisfied."
+             requirements of \"root\" cannot be satisfied."
         );
     }
 
@@ -1208,7 +1208,7 @@ mod tests {
             "error: Failed to resolve dependencies.\n\
              Because \"root\" requires \"x\" and \"x\" 1.0.0 requires \"y\" ^1.0.0, which no \
              version satisfies (https://example.com/y.git has no version of \"y\"), the \
-             requirements of \"root\" cannot all be satisfied."
+             requirements of \"root\" cannot be satisfied."
         );
     }
 
@@ -1239,7 +1239,7 @@ mod tests {
              \"x\" 2.0.0 requires \"d\" from https://example.com/other/d.git, every version of \
              \"x\" indirectly requires \"d\" from https://example.com/other/d.git.\n\
              So, because \"root\" requires \"d\" =1.0.0 from https://example.com/d.git and \"x\", \
-             the requirements of \"root\" cannot all be satisfied.\n\
+             the requirements of \"root\" cannot be satisfied.\n\
              HINT: Every requirement on one project must name the same source."
         );
     }
@@ -1265,7 +1265,7 @@ mod tests {
              And because \"root\" requires \"b\", \"root\" indirectly requires \"f\" 2.0.0 or \
              \"g\" 2.0.0.\n\
              So, because \"root\" also requires \"f\" ^1.0.0 and \"g\" ^1.0.0, the requirements of \
-             \"root\" cannot all be satisfied."
+             \"root\" cannot be satisfied."
         );
     }
 
@@ -1340,7 +1340,7 @@ mod tests {
              Because \"root\" requires \"collection\" ^1.0.0, which requires \"common\" 1.1.0, \
              \"root\" indirectly requires \"common\" 1.1.0.\n\
              So, because \"root\" also requires \"common\" =1.0.0, the requirements of \"root\" \
-             cannot all be satisfied."
+             cannot be satisfied."
         );
     }
 }
