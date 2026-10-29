@@ -234,13 +234,18 @@ impl Provider<'_, '_> {
 }
 
 impl DependencyProvider for Provider<'_, '_> {
+    /// A project, by its name.
     type P = PackageName;
+    /// A version of a project, together with its source.
     type V = SourcedVersion;
+    /// A set of versions of a project.
     type VS = Versions;
     /// Decides first the projects that took part in more conflicts, then those with fewer versions
     /// left to choose from.
     type Priority = (u32, Reverse<usize>);
+    /// Why a version is left out of the choice.
     type M = Unavailability;
+    /// What stops the resolution.
     type Err = Errors;
 
     /// Counts the conflicts `package` took part in, and its known versions in `range`.
