@@ -8,8 +8,8 @@ use crate::{
         TRY_FIX_DEPS_UPDATE_TEST, WHOLE_PROGRAM_IN_ONE_UNIT, WHOLE_PROGRAM_IN_ONE_UNIT_STR,
     },
     dependency::lockfile::{
-        clone_git_repo, get_lock_file_path, get_versions_from_repo, DependencyLockFile,
-        LockFileType, ProjectSource,
+        get_lock_file_path, version_to_add, DependencyLockFile, LockFileType, ProjectSource,
+        VersionToAdd,
     },
     error::Errors,
     hash::HashSource,
@@ -23,7 +23,7 @@ use crate::{
 };
 use regex::Regex;
 use reqwest::Url;
-use semver::{Version, VersionReq};
+use semver::{BuildMetadata, Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
@@ -351,6 +351,7 @@ impl ProjectFile {
     pub fn read_root_file() -> Result<ProjectFile, Errors> {
         let proj_file_path = Path::new(PROJECT_FILE_PATH);
         let mut proj_file = ProjectFile::read_file(&proj_file_path)?;
+        proj_file.check_fix_version_compatible()?;
         proj_file.role = ProjectFileRole::Root;
         proj_file.source = Some(ProjectOrigin::Local(to_absolute_path(
             proj_file
@@ -361,9 +362,8 @@ impl ProjectFile {
         Ok(proj_file)
     }
 
-    /// Reads the project file at `path`, checks its fields, and checks that the project accepts the
-    /// running compiler's version. The returned file carries the default `role` and `source`, which
-    /// the loader sets to match where the file came from.
+    /// Reads the project file at `path` and checks its fields. The returned file carries the
+    /// default `role` and `source`, which the loader sets to match where the file came from.
     pub fn read_file(path: &Path) -> Result<Self, Errors> {
         let mut file = File::open(path).map_err(|e| {
             Errors::from_msg(format!(
@@ -409,9 +409,6 @@ impl ProjectFile {
 
         // Perform validation.
         proj_file.validate()?;
-
-        // Check if the project file is compatible with the current version of Fix.
-        proj_file.is_fix_version_compatible()?;
 
         Ok(proj_file)
     }
@@ -680,18 +677,15 @@ impl ProjectFile {
     }
 
     /// Checks that the running compiler's version satisfies what this project requires of it.
-    pub fn is_fix_version_compatible(&self) -> Result<(), Errors> {
-        if self
-            .fix_version()
-            .matches(&Version::parse(env!("CARGO_PKG_VERSION")).unwrap())
-        {
+    pub fn check_fix_version_compatible(&self) -> Result<(), Errors> {
+        if self.fix_version().matches(&compiler_version()) {
             Ok(())
         } else {
             Err(Errors::from_msg(format!(
                 "The project \"{}\" requires Fix version \"{}\", but the current version of Fix is \"{}\".",
                 self.general.name,
                 self.fix_version(),
-                env!("CARGO_PKG_VERSION"),
+                compiler_version(),
             )))
         }
     }
@@ -1374,41 +1368,34 @@ impl ProjectFile {
                         proj_name, reg_loc
                     ));
 
-                    // When the version requirement is empty, try to use the latest tagged version.
+                    // When no version is given, require the newest tagged version that the
+                    // dependency resolution can use.
                     let version = match version {
                         Some(v) => v.clone(),
-                        None => {
-                            let (_tmp_dir, repo) = clone_git_repo(&proj_info.git)?;
-                            let version_infos = get_versions_from_repo(&repo)?;
-                            let mut tagged_versions = version_infos
-                                .iter()
-                                .filter_map(|version_info| {
-                                    if version_info.tagged {
-                                        Some(version_info.version.clone())
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect::<Vec<_>>();
-                            tagged_versions.sort();
-                            if tagged_versions.is_empty() {
+                        None => match version_to_add(proj_name, &proj_info.git)? {
+                            VersionToAdd::Untagged => {
                                 warn_msg(&format!(
                                     "Adding version requirement \"*\" for \"{}\" since there are no tagged versions. \
                                     This means that updating the lock file (which is done by `fix deps add` or `fix deps update`) may introduce breaking changes.",
                                     proj_name,
                                 ));
                                 "*".to_string()
-                            } else {
-                                let latest = tagged_versions.pop().unwrap();
-                                let latest =
-                                    format!("{}.{}.{}", latest.major, latest.minor, latest.patch);
-                                info_msg(&format!(
-                                    "Adding version requirement \"{}\" for \"{}\" which is the latest tagged version.",
-                                    latest, proj_name
-                                ));
-                                latest
                             }
-                        }
+                            VersionToAdd::Tagged(version) => {
+                                // The pre-release is kept, since a requirement without it
+                                // rejects the version it names.
+                                let version = Version {
+                                    build: BuildMetadata::EMPTY,
+                                    ..version
+                                }
+                                .to_string();
+                                info_msg(&format!(
+                                    "Adding version requirement \"{}\" for \"{}\".",
+                                    version, proj_name
+                                ));
+                                version
+                            }
+                        },
                     };
 
                     let section_name = match mode {
@@ -1503,6 +1490,11 @@ impl ProjectFile {
         })?;
         Ok(reg_file)
     }
+}
+
+/// The version of the running compiler.
+pub fn compiler_version() -> Version {
+    Version::parse(env!("CARGO_PKG_VERSION")).unwrap()
 }
 
 #[cfg(test)]

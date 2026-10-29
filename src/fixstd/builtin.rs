@@ -31,8 +31,8 @@ use crate::constants::{
     TUPLE_UNBOX, U128_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
 };
 use crate::fixstd::runtime::{
-    RUNTIME_ABORT, RUNTIME_EPRINTLN, RUNTIME_FLOAT_TO_INTEGER_OUT_OF_RANGE, RUNTIME_REALLOC,
-    RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE, RUNTIME_SIGNED_OVERFLOW,
+    RUNTIME_FLOAT_TO_INTEGER_OUT_OF_RANGE, RUNTIME_REALLOC, RUNTIME_SHIFT_AMOUNT_OUT_OF_RANGE,
+    RUNTIME_SIGNED_OVERFLOW, RUNTIME_STOP,
 };
 use crate::generator::{Generator, Object};
 use crate::hash::HashSource;
@@ -8045,25 +8045,11 @@ pub struct UndefinedInternalOp {
 impl BuiltinOp for UndefinedInternalOp {
     fn generate<'c, 'm>(&self, gc: &mut Generator<'c, 'm>, ty: &Arc<TypeNode>) -> Object<'c> {
         if gc.config.runtime_check() {
-            // Runtime check is enabled.
-            // Print the message and abort the program.
-
-            // Get the first argument.
+            // Stop the program with the message as the report.
             let msg = gc.get_scoped_obj(&self.msg_name);
-
-            // Get the pointer to the message.
             let c_str = get_array_storage_buf(gc, &msg);
-
-            // Write it to stderr, and flush.
-            gc.call_runtime(RUNTIME_EPRINTLN, &[c_str.into()]);
-
-            // Abort the program.
-            gc.call_runtime(RUNTIME_ABORT, &[]);
+            gc.call_runtime(RUNTIME_STOP, &[c_str.into()]);
         } else {
-            // Runtime check is disabled.
-            // Just generate unreachable instruction.
-
-            // Generate unreachable instruction.
             gc.builder().build_unreachable().unwrap();
 
             // To satisfy LLVM, we need to create a valid control flow.

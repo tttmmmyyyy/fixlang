@@ -1,6 +1,6 @@
 use crate::{
     configuration::Configuration,
-    tests::test_util::{test_source, test_source_fail},
+    tests::test_util::{runtime_checked_config, test_source, test_source_fail},
 };
 
 #[test]
@@ -34,9 +34,7 @@ pub fn test_undefined_reached() {
             pure()
         );
     "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
-    test_source_fail(&source, config, "Undefined reached");
+    test_source_fail(&source, runtime_checked_config(), "Undefined reached");
 }
 
 #[test]
@@ -56,7 +54,5 @@ pub fn test_undefined_reached_via_global_eval() {
             pure()
         );
     "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
-    test_source_fail(&source, config, "Undefined reached");
+    test_source_fail(&source, runtime_checked_config(), "Undefined reached");
 }

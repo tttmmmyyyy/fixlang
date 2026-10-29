@@ -995,16 +995,11 @@ impl ObjectFieldType {
         // Panic unless the tag is the expected one.
         let is_tag_match =
             ObjectFieldType::build_union_tag_matches(gc, expected_tag, actual_tag, "is_tag_match");
-        let current_func = gc.current_function();
-        let mismatch_bb = gc.context.append_basic_block(current_func, "mismatch_bb");
-        let match_bb = gc.context.append_basic_block(current_func, "match_bb");
-        gc.builder()
-            .build_conditional_branch(is_tag_match, match_bb, mismatch_bb)
+        let is_tag_mismatch = gc
+            .builder()
+            .build_not(is_tag_match, "is_tag_mismatch")
             .unwrap();
-        gc.builder().position_at_end(mismatch_bb);
-        gc.panic("Union variant mismatch");
-        gc.builder().build_unconditional_branch(match_bb).unwrap();
-        gc.builder().position_at_end(match_bb);
+        gc.build_panic_if(is_tag_mismatch, "union_tag", "Union variant mismatch");
     }
 
     /// The field of a struct at `field_idx`, taken at the struct's own reference to it: nothing is
@@ -2485,7 +2480,7 @@ pub fn create_traverser<'c, 'm>(
                 .unwrap();
             gc.builder().position_at_end(unknown_work_bb);
             if gc.config.develop_mode {
-                gc.panic("A traverser was called with a work it was not generated for.\n");
+                gc.panic("A traverser was called with a work it was not generated for.");
             }
             gc.builder().build_unreachable().unwrap();
 

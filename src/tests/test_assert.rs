@@ -1,6 +1,6 @@
 use crate::{
     configuration::Configuration,
-    tests::test_util::{test_source, test_source_fail},
+    tests::test_util::{runtime_checked_config, test_source, test_source_fail},
 };
 
 #[test]
@@ -28,8 +28,5 @@ pub fn test_assert_fail() {
             pure()
         );
     "#;
-    let mut config = Configuration::develop_mode();
-    config.no_runtime_check = false;
-    // config.set_valgrind(ValgrindTool::None);
-    test_source_fail(&source, config, "test_assert_fail");
+    test_source_fail(&source, runtime_checked_config(), "test_assert_fail");
 }
