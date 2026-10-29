@@ -18,7 +18,8 @@ static long distance(const char *a, long m, const char *b, long n) {
         long tl = m; m = n; n = tl;
     }
     long *prev = malloc((m + 1) * sizeof(long));
-    long *cur = malloc((m + 1) * sizeof(long));
+    // Zeroed, as the Fix and Rust programs zero theirs.
+    long *cur = calloc(m + 1, sizeof(long));
     for (long i = 0; i <= m; i++) prev[i] = i;
     for (long j = 1; j <= n; j++) {
         cur[0] = j;

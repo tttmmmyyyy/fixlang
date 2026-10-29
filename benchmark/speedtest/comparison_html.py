@@ -65,6 +65,8 @@ class Comparison:
 # What the tooltip of a case's rows adds about the case, where the comparison's own description
 # leaves out something a reader would assume otherwise.
 CASE_NOTES = {
+    "nbody": "C and Rust fix the number of bodies, 5, at compile time; Fix reads it\n"
+             "from the array at run time.",
     "cp_maxflow": "Both run Dinic's algorithm. cp-library lays the residual graph out\n"
                   "in one array ordered by source vertex; mf_graph keeps a vector per vertex.",
     "cp_bipartite": "AtCoder Library has no bipartite matching, so the C++ side solves it\n"
@@ -115,7 +117,7 @@ COMPARISONS = [
         lambda case, _: not case.startswith("cp_"),
         "Programs from the Computer Language Benchmarks Game, recursive Fibonacci, and a few "
         "loops over arrays. C does not check array bounds, so Fix is built with "
-        "--no-runtime-check. C is built with {compiler} -O3 -march=native.",
+        "--no-runtime-check. C is built with {compiler} -O3 -march=native -ffp-contract=off.",
         "<p>Small programs written the same way in both languages: programs from the "
         "<a href=\"https://benchmarksgame-team.pages.debian.net/benchmarksgame/\">Computer "
         "Language Benchmarks Game</a> (n-body, mandelbrot, fannkuch-redux, binary-trees), "
@@ -123,7 +125,9 @@ COMPARISONS = [
         "<p>C does not check array bounds, so the Fix programs are built with "
         "<code>--no-runtime-check</code>. This option turns off bounds checks and the other "
         "checks that stop a program on an error. The C programs are built with "
-        "{compiler} <code>-O3 -march=native</code>.</p>"),
+        "{compiler} <code>-O3 -march=native -ffp-contract=off</code>. The last option keeps "
+        "gcc from fusing a floating-point multiply and add into one instruction, which rounds "
+        "once; Fix and Rust round after each of the two.</p>"),
     Comparison(
         "rust", "rust", "Fix vs Rust", "Rust", "rustc", "", "Fix built with runtime checks",
         lambda case, _: not case.startswith("cp_"),
@@ -139,7 +143,8 @@ COMPARISONS = [
         "cp-library, a Fix library for competitive programming, against AtCoder Library on "
         "large random inputs. Only the library calls are measured. The two libraries differ in "
         "algorithm or data structure for some functions; the case's tooltip says how. Fix is "
-        "built with --no-runtime-check; C++ with {compiler} -O3 -march=native -DNDEBUG.",
+        "built with --no-runtime-check; C++ with {compiler} -O3 -march=native "
+        "-ffp-contract=off -DNDEBUG.",
         "<p><a href=\"https://github.com/tttmmmyyyy/cp-library\">cp-library</a>, a Fix library "
         "for competitive programming, against <a href=\"https://github.com/atcoder/ac-library\">"
         "AtCoder Library</a>, the C++ library that AtCoder provides for its contests. Both solve "
@@ -150,7 +155,8 @@ COMPARISONS = [
         "<p>C++ does not check array bounds, so the Fix programs are built with "
         "<code>--no-runtime-check</code>, and the C++ programs with <code>-DNDEBUG</code>, which "
         "turns off the <code>assert</code>s in AtCoder Library. The C++ programs are built with "
-        "{compiler} <code>-O3 -march=native -std=gnu++20 -DNDEBUG</code>.</p>"
+        "{compiler} <code>-O3 -march=native -ffp-contract=off -std=gnu++20 "
+        "-DNDEBUG</code>.</p>"
         "<p>AtCoder's judge runs Fix 1.1.0, and the compiler has become much faster since then, "
         "so these numbers are not reached there.</p>"),
     Comparison(
@@ -160,7 +166,7 @@ COMPARISONS = [
         "cp-library against C++ for the functions AtCoder Library does not have: the C++ "
         "standard library, or a plain implementation over the graph layout cp-library uses. Only "
         "the function calls are measured. Fix is built with --no-runtime-check; C++ with "
-        "{compiler} -O3 -march=native -DNDEBUG.",
+        "{compiler} -O3 -march=native -ffp-contract=off -DNDEBUG.",
         "<p>cp-library against C++ for the functions AtCoder Library does not have. The C++ side "
         "is the C++ standard library (<code>std::next_permutation</code>) or a plain "
         "implementation of the same algorithm (Dijkstra's algorithm on "
@@ -169,7 +175,8 @@ COMPARISONS = [
         "vertex, with vertex numbers held in 4 bytes. As with AtCoder Library, both run on the "
         "same large random input, and only the function calls are measured.</p>"
         "<p>The Fix programs are built with <code>--no-runtime-check</code>, and the C++ "
-        "programs with {compiler} <code>-O3 -march=native -std=gnu++20 -DNDEBUG</code>.</p>"),
+        "programs with {compiler} <code>-O3 -march=native -ffp-contract=off -std=gnu++20 "
+        "-DNDEBUG</code>.</p>"),
 ]
 
 
