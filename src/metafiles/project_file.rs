@@ -23,7 +23,7 @@ use crate::{
 };
 use regex::Regex;
 use reqwest::Url;
-use semver::{Version, VersionReq};
+use semver::{BuildMetadata, Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
@@ -1382,10 +1382,13 @@ impl ProjectFile {
                                 "*".to_string()
                             }
                             VersionToAdd::Tagged(version) => {
-                                let version = format!(
-                                    "{}.{}.{}",
-                                    version.major, version.minor, version.patch
-                                );
+                                // The pre-release is kept, since a requirement without it
+                                // rejects the version it names.
+                                let version = Version {
+                                    build: BuildMetadata::EMPTY,
+                                    ..version
+                                }
+                                .to_string();
                                 info_msg(&format!(
                                     "Adding version requirement \"{}\" for \"{}\".",
                                     version, proj_name

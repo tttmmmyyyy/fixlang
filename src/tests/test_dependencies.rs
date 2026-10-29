@@ -882,6 +882,23 @@ mod integration_tests {
         assert_eq!(added_requirement(&project_file).as_deref(), Some("1.0.0"));
     }
 
+    /// `fix deps add` with no version, when the newest tag is a pre-release, requires that version
+    /// with its pre-release, so the requirement accepts the version it names.
+    #[test]
+    fn test_deps_add_requires_a_pre_release_with_its_pre_release() {
+        let temp_dir = TempDir::new().expect("Failed to create temp directory");
+        let lib_repo = temp_dir.path().join("lib");
+        create_upstream_repo(&lib_repo, "add-beta", "1.0.0", "AddBeta");
+        release_upstream_version(&lib_repo, "add-beta", "2.0.0-beta", "*", "");
+
+        let (output, project_file) = deps_add_from_registry(temp_dir.path(), "add-beta", &lib_repo);
+        assert_succeeded(&output, "fix deps add adds the project");
+        assert_eq!(
+            added_requirement(&project_file).as_deref(),
+            Some("2.0.0-beta")
+        );
+    }
+
     /// `fix deps add` with no version passes over a tag whose project file names another version,
     /// as the resolution does, and requires the newest tag the resolution can use.
     #[test]
