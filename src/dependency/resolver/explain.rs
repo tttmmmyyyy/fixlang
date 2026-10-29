@@ -17,7 +17,7 @@ use std::{
 
 /// Why a version of a project is left out of the choice.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(super) enum Unavailability {
+pub(crate) enum Unavailability {
     /// The version could not be read, for the reason given.
     Unreadable(String),
     /// The `fix_version` of each version rejects the running compiler.

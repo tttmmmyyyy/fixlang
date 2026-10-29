@@ -27,7 +27,8 @@ use std::{
 
 mod explain;
 
-use explain::{explain, merge_left_out_versions, Unavailability};
+pub(crate) use explain::Unavailability;
+use explain::{explain, merge_left_out_versions};
 
 pub type PackageName = String;
 

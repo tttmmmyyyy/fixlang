@@ -6,6 +6,7 @@ use crate::{
     },
     dependency::resolver::{
         self, Dependency, Package, PackageName, RetrievalError, Source, SourcedVersion,
+        Unavailability,
     },
     error::Errors,
     metafiles::project_file::{
@@ -22,6 +23,7 @@ use rand::{thread_rng, Rng};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::BTreeMap,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
     thread,
@@ -688,16 +690,20 @@ pub fn version_to_add(name: &ProjectName, url: &str) -> Result<VersionToAdd, Err
                     VersionToAdd::Untagged
                 });
             }
-            Ok(proj_file) => format!(
-                "{} requires Fix {}, and this is Fix {}",
-                version,
-                proj_file.fix_version(),
-                compiler_version()
-            ),
-            Err(RetrievalError::Unusable(errs)) => format!("{}: {}", version, errs.messages()),
+            Ok(proj_file) => Unavailability::RejectsCompiler {
+                fix_versions: BTreeMap::from([(
+                    SourcedVersion {
+                        version: version.clone(),
+                        source: Source::Git(url.to_string()),
+                    },
+                    proj_file.fix_version(),
+                )]),
+                compiler: compiler_version(),
+            },
+            Err(RetrievalError::Unusable(errs)) => Unavailability::Unreadable(errs.messages()),
             Err(RetrievalError::Fatal(errs)) => return Err(errs),
         };
-        passed_over.push(reason);
+        passed_over.push(format!("{} {}", version, reason));
     }
     Err(Errors::from_msg(format!(
         "No version of \"{}\" can be used: {}.",
