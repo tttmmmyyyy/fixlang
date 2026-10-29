@@ -2,8 +2,7 @@
 """Wall-clock time for the binaries `build.sh` produced, as the minimum of N runs.
 
 The public benchmark sites report wall time, and neither instruction counts nor cycles
-predict it reliably: `fannkuch` runs 2.20x C's instructions and 1.08x its time, `fib` the
-other way round. The minimum is the run least disturbed by everything else on the machine,
+predict it reliably. The minimum is the run least disturbed by everything else on the machine,
 but it is still wall time, so this refuses to measure a busy one.
 
 The programs take no arguments -- they carry the input the case fixes -- so process startup

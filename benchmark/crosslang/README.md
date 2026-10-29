@@ -44,7 +44,7 @@ answers.
 
 ```
 gcc -shared -fPIC -O2 allocations.c -o allocations.so -ldl
-LD_PRELOAD=$PWD/allocations.so ./bin/fannkuch_fix
+LD_PRELOAD=$PWD/allocations.so ./bin/binary_trees_fix
 ```
 
 ## Two measurements, two questions
@@ -54,8 +54,7 @@ give the same number whatever else the machine is doing. Every language is built
 with the features it has, there as here.
 
 **Wall time** is what the public sites report, and the instruction count does not predict it.
-`fannkuch` executes 2.20x C's instructions and takes 1.08x its time. Both numbers are worth
-quoting, and neither substitutes for the other.
+Both numbers are worth quoting, and neither substitutes for the other.
 
 **Split accesses** fill a hole the instruction count leaves: a load or store crossing a
 64-byte cache line costs the load/store unit twice while counting as one instruction. The

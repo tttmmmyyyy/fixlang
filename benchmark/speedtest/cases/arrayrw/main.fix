@@ -1,7 +1,9 @@
 module Main;
 
 import Speedtest::check_answer;
-import Std::{loop, IO, Array::{@, fill, set}, LoopState::{break, continue}, Monad::pure};
+import Std::{
+    loop, IO, Array::{@, fill, set, to_iter}, Iterator::sum, LoopState::{break, continue}, Monad::pure
+};
 
 // Tight in-place array read+write: `arr.set(i, arr.@(i) + 1)` over a 1000-element
 // array, repeated many times. The array is only ever held by the loop state, so
@@ -20,6 +22,6 @@ main = (
         );
         continue $ (k + 1, arr)
     );
-    check_answer("arrayrw", arr.@(0), 200000);;
+    check_answer("arrayrw", arr.to_iter.sum, 200000000);;
     pure()
 );

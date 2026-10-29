@@ -2,6 +2,17 @@
 
 Newer is above.
 
+**From the second `6d79074` row on, the C and Rust counterparts do the work their Fix cases do,
+and their columns are not comparable with earlier rows.** C and C++ are built with
+`-ffp-contract=off`, so gcc no longer fuses a multiply and an add into one FMA instruction, which
+Fix and Rust do not do. The C program of `levenshtein` zeroes its second row, as the Fix and Rust
+programs do. `arrayrw` checks the sum of every element in all three languages. The C and Rust
+programs of `fannkuch` carry a scratch buffer, as `fannkuch_scratch` does and `fannkuch` does
+not, so they moved to `fannkuch_scratch`, and `fannkuch` has no counterpart. Measured with one
+compiler, `6d79074`, on both rows, the C instruction count moved by +15.30% (`nbody`), +11.69%
+(`levenshtein`) and +7.47% (`mandelbrot`). No other column of the 189 measured on both rows moved
+by more than 0.01%.
+
 **From the `6d79074` row on, the C++ counterparts of the `cp_*` cases run under the conditions
 their Fix cases run under, and their columns are not comparable with earlier rows.** They are built
 with `-DNDEBUG`, as the Fix cases are built with `--no-runtime-check`. What their work builds is
