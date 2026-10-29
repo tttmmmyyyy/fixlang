@@ -20,24 +20,31 @@ use std::{
 pub(super) enum Unavailability {
     /// The version could not be read, for the reason given.
     Unreadable(String),
-    /// The `fix_version` of each of the versions, none of which accepts `compiler`, the version of
-    /// the running compiler.
+    /// The `fix_version` of each version rejects the running compiler.
     RejectsCompiler {
+        /// The `fix_version` of each version left out.
         fix_versions: BTreeMap<SourcedVersion, VersionReq>,
+        /// The version of the running compiler.
         compiler: Version,
     },
-    /// The version requires `name` from `source`, which could not be read for the reason given.
+    /// The version requires a project whose versions could not be read.
     DependencyUnreadable {
+        /// The project required.
         name: PackageName,
+        /// The source the version requires `name` from.
         source: Source,
+        /// Why the versions of `name` could not be read.
         message: String,
     },
-    /// The version requires `name` `requirement` from `source`, where `existing` are the versions,
-    /// none of which satisfies it.
+    /// The version has a requirement that no version at its source satisfies.
     NoVersionSatisfies {
+        /// The project required.
         name: PackageName,
+        /// The requirement on `name`, as the project file writes it.
         requirement: VersionReq,
+        /// The source the version requires `name` from.
         source: Source,
+        /// The versions of `name` at `source`.
         existing: Vec<Version>,
     },
 }
@@ -118,9 +125,9 @@ impl Unavailability {
             .join(", ")
     }
 
-    /// One reason for leaving out the versions left out for `self` and for `other`, if they are
-    /// left out for one reason: the same one, or the rejection of the compiler, whose
-    /// `fix_version`s are put together.
+    /// Combines `self` and `other` into one reason that covers the versions left out for either.
+    /// Two equal reasons give that reason, and two rejections of the compiler give one rejection
+    /// with the `fix_version`s of both. Any other pair gives `None`.
     fn merge(&self, other: &Unavailability) -> Option<Unavailability> {
         match (self, other) {
             (
@@ -171,8 +178,9 @@ fn join_with(conjunction: &str, items: &[String]) -> String {
     }
 }
 
-/// Merges, throughout `tree`, two versions of one project left out for one reason into one, so
-/// that the explanation states the reason once for all of them.
+/// Throughout `tree`, replaces each derivation from two sets of versions of one project, left out
+/// for reasons `Unavailability::merge` combines, with one fact that leaves out both sets. The
+/// explanation then states the reason once for all of them.
 pub(super) fn merge_left_out_versions(
     tree: &mut DerivationTree<PackageName, Versions, Unavailability>,
 ) {
@@ -309,6 +317,8 @@ pub(super) fn explain(
 /// version cannot be used or that a project indirectly requires another. The last line concludes
 /// that the requirements of the root project cannot all be satisfied.
 struct Explainer<'e, 'a, 'b> {
+    /// The provider that ran the resolution, which holds the versions it listed and their
+    /// requirements.
     provider: &'e Provider<'a, 'b>,
     /// The projects the explanation meets at more than one source, whose versions it writes with
     /// their sources, which tell them apart.
@@ -320,6 +330,7 @@ struct Explainer<'e, 'a, 'b> {
 }
 
 impl Explainer<'_, '_, '_> {
+    /// Whether `name` is the project being resolved.
     fn is_root(&self, name: &PackageName) -> bool {
         *name == self.provider.root_name
     }
@@ -408,9 +419,12 @@ impl Explainer<'_, '_, '_> {
         }
     }
 
-    /// What `depender` at `depender_versions` requires of `dep`: the requirement its project file
-    /// writes, when every one of those versions writes the same one and it accepts exactly the
-    /// listed versions in `dep_versions`, and those versions otherwise.
+    /// What `depender` at `depender_versions` requires of `dep`. When all those versions write
+    /// the same requirement on `dep`, and it accepts exactly the listed versions in
+    /// `dep_versions`, this is that requirement. Otherwise it is the versions in `dep_versions`.
+    ///
+    /// # Examples
+    /// `"common" ^1.1.0` as the project file writes it, or `"common" 1.1.0`.
     fn required(
         &self,
         depender: &PackageName,
@@ -422,9 +436,9 @@ impl Explainer<'_, '_, '_> {
             .unwrap_or_else(|| self.object(dep, dep_versions))
     }
 
-    /// The requirement on `dep` that every version of `depender` in `depender_versions` writes, if
-    /// they all write one and the same, and it accepts exactly the listed versions in
-    /// `dep_versions`.
+    /// The requirement on `dep` that every version of `depender` in `depender_versions` writes.
+    /// Gives it only when all those versions write the same one and it accepts exactly the listed
+    /// versions in `dep_versions`.
     fn written_requirement_on(
         &self,
         depender: &PackageName,
@@ -545,8 +559,13 @@ impl Explainer<'_, '_, '_> {
     }
 
     /// The sentence saying that `name` at `versions` is left out for `reason`. A rejection of the
-    /// compiler is written without the version of the compiler, which precedes the explanation, and
-    /// one of every version as such; every other reason is written as its `Display` writes it.
+    /// compiler by one version gives its `fix_version` alone, since the line before the explanation
+    /// gives the version of the compiler. A rejection by every version of `name` is written as one
+    /// sentence about the project. Every other reason is written as its `Display` writes it.
+    ///
+    /// # Examples
+    /// `"json" 1.1.0 requires Fix ^1.8.0`, or `no version of "json" supports Fix 1.6.1 (1.0.0
+    /// requires Fix ^1.7.0, 1.1.0 requires Fix ^1.8.0)`.
     fn unavailability_sentence(
         &self,
         name: &PackageName,
@@ -580,6 +599,8 @@ impl Explainer<'_, '_, '_> {
 impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_, '_> {
     type Output = String;
 
+    /// Writes one fact: a requirement as its project file writes it, a version left out with its
+    /// reason, the resolution of the root, or a project with no version to choose.
     fn format_external(
         &self,
         external: &External<PackageName, Versions, Unavailability>,
@@ -606,9 +627,9 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
         }
     }
 
-    /// Writes what an incompatibility derives, which is that its terms cannot all hold: the versions
-    /// of a positive term cannot be used, and the projects of the positive terms require those of
-    /// the negative ones.
+    /// Writes what an incompatibility derives, which is that its terms cannot all hold: the
+    /// versions of a positive term cannot be used, and the projects of the positive terms require
+    /// those of the negative ones.
     fn format_terms(&self, terms: &pubgrub::Map<PackageName, Term<Versions>>) -> String {
         if self.concludes(terms) {
             return format!(
@@ -633,13 +654,13 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
             })
             .collect::<Vec<_>>();
         let root_used = used.iter().any(|(name, _)| self.is_root(name));
-        // A version used alone is the subject of the sentence, and several used together are what
-        // the sentence is about.
         if let ([(name, versions)], true) = (&used[..], required.is_empty()) {
             if self.holds_every_one_of_several(name, versions) {
                 return format!("no version of \"{}\" can be used", name);
             }
         }
+        // A single project used is the subject of the sentence. Several projects used are joined as
+        // the objects of `cannot be used together` or `together indirectly require`.
         let used = if let [(name, versions)] = used[..] {
             vec![self.subject(name, versions)]
         } else {
@@ -673,6 +694,8 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
         }
     }
 
+    /// Writes `Because <fact> and <fact>, <conclusion>.`, where two requirements along one chain
+    /// are written as the chain.
     fn explain_both_external(
         &self,
         external1: &External<PackageName, Versions, Unavailability>,
@@ -683,6 +706,8 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
         format!("Because {}, {}.", facts, self.format_terms(current_terms))
     }
 
+    /// Writes `Because <conclusion> (<n>) and <conclusion> (<m>), <conclusion>.`, citing two
+    /// earlier lines by their numbers.
     fn explain_both_ref(
         &self,
         ref_id1: usize,
@@ -703,6 +728,8 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
         )
     }
 
+    /// Writes `Because <conclusion> (<n>) and <fact>, <conclusion>.`, citing an earlier line by its
+    /// number.
     fn explain_ref_and_external(
         &self,
         ref_id: usize,
@@ -721,6 +748,7 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
         )
     }
 
+    /// Writes `And because <fact>, <conclusion>.`, or `So, because` on the last line.
     fn and_explain_external(
         &self,
         external: &External<PackageName, Versions, Unavailability>,
@@ -735,6 +763,8 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
         )
     }
 
+    /// Writes `And because <conclusion> (<n>), <conclusion>.`, or `So, because` on the last line,
+    /// citing an earlier line by its number.
     fn and_explain_ref(
         &self,
         ref_id: usize,
@@ -751,6 +781,8 @@ impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_
         )
     }
 
+    /// Writes `And because <fact> and <fact>, <conclusion>.`, or `So, because` on the last line,
+    /// where two requirements along one chain are written as the chain.
     fn and_explain_prior_and_external(
         &self,
         prior_external: &External<PackageName, Versions, Unavailability>,

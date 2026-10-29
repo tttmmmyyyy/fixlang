@@ -439,7 +439,7 @@ impl Display for Versions {
     }
 }
 
-/// The versions in `versions`, written, grouped by their source.
+/// The versions in `versions` as text, grouped by their source.
 fn group_by_source(versions: &BTreeSet<SourcedVersion>) -> BTreeMap<&Source, Vec<String>> {
     let mut groups: BTreeMap<&Source, Vec<String>> = BTreeMap::new();
     for v in versions {
@@ -1098,8 +1098,8 @@ mod tests {
         assert_eq!(chosen, Ok(vec!["t".to_string(), "x".to_string()]));
     }
 
-    /// Versions of a package left out for different reasons are not explained as one: the message
-    /// gives the reason of each.
+    /// Versions of a package left out for different reasons are explained one by one, each with its
+    /// own reason.
     ///
     /// `x` 1.0.0 cannot be read, and `x` 2.0.0 requires a newer Fix.
     #[test]
