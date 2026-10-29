@@ -7,7 +7,7 @@
 #### Tool
 
 - #968, #972: Dependency resolution passes over a version of a dependency whose `fix_version` does not accept the running compiler, and chooses the newest version that does. It used to fail as soon as it tried such a version. A version whose project file cannot be read is passed over in the same way.
-- #968, #972: When no choice of versions satisfies every version requirement, the error now explains which requirements conflict.
+- #968, #972: When no choice of versions satisfies every version requirement, the error now explains which requirements conflict, following them from the root project through the projects that bring them in, with each requirement written as its project file writes it. A `HINT:` line follows when a version needs a newer Fix, or when one project is fetched from two sources.
 - #968, #972: `fix deps add` with no version now requires the newest tagged version that dependency resolution can use: one whose project file can be read, gives the version of its tag, and has a `fix_version` that accepts the running compiler. It used to require the newest tagged version, whatever its project file said. When no version can be used, `fix deps add` fails and says why, leaving the project file as it was.
 
 ### Fixed

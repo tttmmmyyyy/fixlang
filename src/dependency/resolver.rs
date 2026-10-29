@@ -14,11 +14,12 @@ use crate::{
 };
 use pubgrub::{
     DefaultStringReporter, Dependencies, DependencyConstraints, DependencyProvider, DerivationTree,
-    Derived, External, PackageResolutionStatistics, PubGrubError, Reporter, Term, VersionSet,
+    Derived, External, PackageResolutionStatistics, PubGrubError, ReportFormatter, Reporter, Term,
+    VersionSet,
 };
 use semver::{Version, VersionReq};
 use std::{
-    cell::{Ref, RefCell},
+    cell::{Cell, Ref, RefCell},
     cmp::Reverse,
     collections::{BTreeMap, BTreeSet},
     fmt::{self, Display, Formatter},
@@ -133,6 +134,7 @@ pub fn resolve_dependency(
             BTreeSet::from([root.1.clone()]),
         )])),
         listed_sources: RefCell::default(),
+        requirements: RefCell::default(),
     };
     match pubgrub::resolve(&provider, root.0.clone(), root.1.clone()) {
         Ok(selected) => {
@@ -145,11 +147,8 @@ pub fn resolve_dependency(
         }
         Err(PubGrubError::NoSolution(mut tree)) => {
             tree.collapse_no_versions();
-            let met_at_several = projects_met_at_several_sources(&tree);
-            Err(Errors::from_msg(format!(
-                "Failed to resolve dependencies.\n{}",
-                DefaultStringReporter::report(&written_tree(&tree, &met_at_several))
-            )))
+            merge_left_out_versions(&mut tree);
+            Err(Errors::from_msg(explain(&provider, &tree)))
         }
         Err(PubGrubError::ErrorRetrievingDependencies { source, .. })
         | Err(PubGrubError::ErrorChoosingVersion { source, .. })
@@ -176,6 +175,9 @@ struct Provider<'a, 'b> {
     known_versions: RefCell<Map<PackageName, BTreeSet<SourcedVersion>>>,
     /// The projects and sources whose versions `known_versions` holds.
     listed_sources: RefCell<Set<(PackageName, Source)>>,
+    /// The requirements of each retrieved version that is not left out, as its project file
+    /// writes them.
+    requirements: RefCell<Map<(PackageName, SourcedVersion), Vec<Dependency>>>,
 }
 
 impl Provider<'_, '_> {
@@ -216,23 +218,13 @@ impl Provider<'_, '_> {
         ))
     }
 
-    /// Says which versions of `name` exist at `source`, for an explanation of a requirement no
-    /// version there satisfies.
-    ///
-    /// # Examples
-    /// `the versions are 1.0.0 and 1.1.0`, or `no version exists`.
-    fn describe_versions_at(&self, name: &PackageName, source: &Source) -> String {
-        let versions = self
-            .known_versions_of(name)
+    /// The versions of `name` at `source`, which the provider has listed.
+    fn versions_at(&self, name: &PackageName, source: &Source) -> Vec<Version> {
+        self.known_versions_of(name)
             .iter()
             .filter(|v| &v.source == source)
-            .map(|v| v.version.to_string())
-            .collect::<Vec<_>>();
-        match versions.as_slice() {
-            [] => "no version exists".to_string(),
-            [only] => format!("the version is {}", only),
-            [rest @ .., last] => format!("the versions are {} and {}", rest.join(", "), last),
-        }
+            .map(|v| v.version.clone())
+            .collect()
     }
 }
 
@@ -243,8 +235,7 @@ impl DependencyProvider for Provider<'_, '_> {
     /// Decides first the projects that took part in more conflicts, then those with fewer versions
     /// left to choose from.
     type Priority = (u32, Reverse<usize>);
-    /// Why a version is left out of the choice, written to follow "are unavailable".
-    type M = String;
+    type M = Unavailability;
     type Err = Errors;
 
     /// Counts the conflicts `package` took part in, and its known versions in `range`.
@@ -281,44 +272,39 @@ impl DependencyProvider for Provider<'_, '_> {
 
     /// The requirements of `package` at `version`, read under `mode` for the root project and from
     /// the `build` section for any other. A version that cannot be read, or whose `fix_version`
-    /// rejects the running compiler, is unavailable, with the reason.
+    /// rejects the running compiler, is unavailable, with the reason. For the root, whose project
+    /// file is the one being resolved, the reason is reported as an error.
     fn get_dependencies(
         &self,
         package: &PackageName,
         version: &SourcedVersion,
-    ) -> Result<Dependencies<PackageName, Versions, String>, Errors> {
+    ) -> Result<Dependencies<PackageName, Versions, Unavailability>, Errors> {
         let is_root = *package == self.root_name && *version == self.root_version;
         let mode = if is_root {
             self.mode
         } else {
             BuildConfigType::Build
         };
-        // Leaves this version out for the reason `predicate` gives, a sentence about the version
-        // with its subject left out. For the root, whose project file is the one being resolved,
-        // the reason is reported as an error.
-        let unavailable = |predicate: String| {
+        let unavailable = |reason: Unavailability| {
             if is_root {
-                Err(Errors::from_msg(format!("\"{}\" {}.", package, predicate)))
+                Err(Errors::from_msg(format!("\"{}\" {}.", package, reason)))
             } else {
-                Ok(Dependencies::Unavailable(format!(
-                    "because it {}",
-                    predicate
-                )))
+                Ok(Dependencies::Unavailable(reason))
             }
         };
         let retrieved = match (self.package_retriever)(package, version, mode) {
             Ok(retrieved) => retrieved,
             Err(RetrievalError::Unusable(errs)) if is_root => return Err(errs),
             Err(RetrievalError::Unusable(errs)) => {
-                return unavailable(format!("could not be read: {}", errs.messages()))
+                return unavailable(Unavailability::Unreadable(errs.messages()))
             }
             Err(RetrievalError::Fatal(errs)) => return Err(errs),
         };
         if !retrieved.fix_version.matches(&self.compiler_version) {
-            return unavailable(format!(
-                "requires Fix {}, and this is Fix {}",
-                retrieved.fix_version, self.compiler_version
-            ));
+            return unavailable(Unavailability::RejectsCompiler {
+                requirements: BTreeMap::from([(version.clone(), retrieved.fix_version)]),
+                compiler: self.compiler_version.clone(),
+            });
         }
         assert_eq!(
             retrieved
@@ -337,26 +323,27 @@ impl DependencyProvider for Provider<'_, '_> {
             let versions = match self.versions_satisfying(dependency) {
                 Ok(versions) => versions,
                 Err(RetrievalError::Unusable(errs)) => {
-                    return unavailable(format!(
-                        "depends on \"{}\" from {}, which could not be read: {}",
-                        dependency.name,
-                        dependency.source,
-                        errs.messages()
-                    ))
+                    return unavailable(Unavailability::DependencyUnreadable {
+                        name: dependency.name.clone(),
+                        source: dependency.source.clone(),
+                        message: errs.messages(),
+                    })
                 }
                 Err(RetrievalError::Fatal(errs)) => return Err(errs),
             };
             if versions == Versions::empty() {
-                return unavailable(format!(
-                    "requires \"{}\" {} from {}, where {}",
-                    dependency.name,
-                    dependency.requirement,
-                    dependency.source,
-                    self.describe_versions_at(&dependency.name, &dependency.source)
-                ));
+                return unavailable(Unavailability::NoVersionSatisfies {
+                    name: dependency.name.clone(),
+                    requirement: dependency.requirement.clone(),
+                    source: dependency.source.clone(),
+                    existing: self.versions_at(&dependency.name, &dependency.source),
+                });
             }
             constraints.push((dependency.name.clone(), versions));
         }
+        self.requirements
+            .borrow_mut()
+            .insert((package.clone(), version.clone()), retrieved.deps);
         Ok(Dependencies::Available(
             constraints
                 .into_iter()
@@ -423,15 +410,15 @@ impl Versions {
             Versions::Only(vs) | Versions::AllBut(vs) => vs,
         }
     }
+}
 
-    /// Writes the set as the explanation of a failed resolution shows it: the versions of each
-    /// source together, followed by the source when `with_source` holds.
-    ///
-    /// # Examples
-    /// `Only({1.0.0 at A, 1.1.0 at A})` is written `1.0.0 | 1.1.0 from A` with the source and
-    /// `1.0.0 | 1.1.0` without it, and `AllBut({1.0.0 at A})` is written `other than 1.0.0`
-    /// without it.
-    fn write(&self, f: &mut Formatter<'_>, with_source: bool) -> fmt::Result {
+/// Writes the versions of each source together, followed by the source.
+///
+/// # Examples
+/// `Only({1.0.0 at A, 1.1.0 at A})` is written `1.0.0 | 1.1.0 from A`, and `AllBut({1.0.0 at A})`
+/// is written `other than 1.0.0 from A`.
+impl Display for Versions {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         let by_source = |vs: &BTreeSet<SourcedVersion>| {
             let mut groups: BTreeMap<&Source, Vec<String>> = BTreeMap::new();
             for v in vs {
@@ -440,20 +427,9 @@ impl Versions {
                     .or_default()
                     .push(v.version.to_string());
             }
-            assert!(
-                with_source || groups.len() <= 1,
-                "versions at several sources are written without them: {:?}",
-                vs
-            );
             groups
                 .iter()
-                .map(|(source, versions)| {
-                    if with_source {
-                        format!("{} from {}", versions.join(" | "), source)
-                    } else {
-                        versions.join(" | ")
-                    }
-                })
+                .map(|(source, versions)| format!("{} from {}", versions.join(" | "), source))
                 .collect::<Vec<_>>()
                 .join(" or ")
         };
@@ -466,77 +442,186 @@ impl Versions {
     }
 }
 
-/// Writes the set with its sources.
-impl Display for Versions {
+/// Why a version of a project is left out of the choice.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Unavailability {
+    /// The version could not be read, for the reason given.
+    Unreadable(String),
+    /// The `fix_version` of each of the versions, none of which accepts `compiler`, the version of
+    /// the running compiler.
+    RejectsCompiler {
+        requirements: BTreeMap<SourcedVersion, VersionReq>,
+        compiler: Version,
+    },
+    /// The version requires `name` from `source`, which could not be read for the reason given.
+    DependencyUnreadable {
+        name: PackageName,
+        source: Source,
+        message: String,
+    },
+    /// The version requires `name` `requirement` from `source`, where `existing` are the versions,
+    /// none of which satisfies it.
+    NoVersionSatisfies {
+        name: PackageName,
+        requirement: VersionReq,
+        source: Source,
+        existing: Vec<Version>,
+    },
+}
+
+/// Writes the reason as a sentence about the version, with its subject left out.
+///
+/// # Examples
+/// `requires Fix ^1.7.0, and this is Fix 1.6.1`, or `requires "json" ^2.0.0 from
+/// https://github.com/x/json.git, where the versions are 1.0.0 and 1.1.0`.
+impl Display for Unavailability {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.write(f, true)
+        match self {
+            Unavailability::Unreadable(message) => write!(f, "could not be read: {}", message),
+            Unavailability::RejectsCompiler {
+                requirements,
+                compiler,
+            } => {
+                let requirements = requirements
+                    .iter()
+                    .map(|(version, requirement)| {
+                        if requirements.len() == 1 {
+                            requirement.to_string()
+                        } else {
+                            format!("{} at {}", requirement, version.version)
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                write!(
+                    f,
+                    "requires Fix {}, and this is Fix {}",
+                    join_with("and", &requirements),
+                    compiler
+                )
+            }
+            Unavailability::DependencyUnreadable {
+                name,
+                source,
+                message,
+            } => write!(
+                f,
+                "requires \"{}\" from {}, which could not be read: {}",
+                name, source, message
+            ),
+            Unavailability::NoVersionSatisfies {
+                name,
+                requirement,
+                source,
+                existing,
+            } => {
+                let existing = match existing.as_slice() {
+                    [] => "no version exists".to_string(),
+                    [only] => format!("the version is {}", only),
+                    versions => format!(
+                        "the versions are {}",
+                        join_with(
+                            "and",
+                            &versions.iter().map(Version::to_string).collect::<Vec<_>>()
+                        )
+                    ),
+                };
+                write!(
+                    f,
+                    "requires {} from {}, where {}",
+                    written_requirement(name, requirement),
+                    source,
+                    existing
+                )
+            }
+        }
     }
 }
 
-/// A set of versions as the explanation of a failed resolution writes it: with the sources only
-/// for a project the explanation meets at more than one source, where the source tells the versions
-/// apart. Two sets are equal when their versions are.
-#[derive(Clone, Debug)]
-struct WrittenVersions {
-    versions: Versions,
-    with_source: bool,
-}
-
-impl PartialEq for WrittenVersions {
-    fn eq(&self, other: &Self) -> bool {
-        self.versions == other.versions
+/// The project `name` quoted, followed by `requirement` unless it accepts every version.
+///
+/// # Examples
+/// `"json" ^1.0.0`, or `"json"` for `*`.
+fn written_requirement(name: &PackageName, requirement: &VersionReq) -> String {
+    if *requirement == VersionReq::STAR {
+        format!("\"{}\"", name)
+    } else {
+        format!("\"{}\" {}", name, requirement)
     }
 }
 
-impl Eq for WrittenVersions {}
-
-/// The reporter of pubgrub compares the sets of a derivation tree and builds none of its own, so
-/// a set built here, which knows no project, is written without sources.
-impl VersionSet for WrittenVersions {
-    type V = SourcedVersion;
-
-    fn empty() -> Self {
-        WrittenVersions {
-            versions: Versions::empty(),
-            with_source: false,
-        }
-    }
-
-    fn singleton(v: SourcedVersion) -> Self {
-        WrittenVersions {
-            versions: Versions::singleton(v),
-            with_source: false,
-        }
-    }
-
-    fn complement(&self) -> Self {
-        WrittenVersions {
-            versions: self.versions.complement(),
-            with_source: self.with_source,
-        }
-    }
-
-    fn intersection(&self, other: &Self) -> Self {
-        WrittenVersions {
-            versions: self.versions.intersection(&other.versions),
-            with_source: self.with_source || other.with_source,
-        }
-    }
-
-    fn contains(&self, v: &SourcedVersion) -> bool {
-        self.versions.contains(v)
+/// Joins `items` into one phrase, with `conjunction` before the last.
+///
+/// # Examples
+/// `["1.0.0", "1.1.0", "1.2.0"]` joined with `or` is `1.0.0, 1.1.0 or 1.2.0`.
+fn join_with(conjunction: &str, items: &[String]) -> String {
+    match items {
+        [] => String::new(),
+        [only] => only.clone(),
+        [rest @ .., last] => format!("{} {} {}", rest.join(", "), conjunction, last),
     }
 }
 
-impl Display for WrittenVersions {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        self.versions.write(f, self.with_source)
+impl Unavailability {
+    /// One reason for leaving out the versions left out for `self` and for `other`, if they are
+    /// left out for one reason: the same one, or the rejection of the compiler, whose requirements
+    /// are put together.
+    fn merge(&self, other: &Unavailability) -> Option<Unavailability> {
+        match (self, other) {
+            (
+                Unavailability::RejectsCompiler {
+                    requirements: requirements1,
+                    compiler,
+                },
+                Unavailability::RejectsCompiler {
+                    requirements: requirements2,
+                    ..
+                },
+            ) => {
+                let mut requirements = requirements1.clone();
+                requirements.extend(requirements2.clone());
+                Some(Unavailability::RejectsCompiler {
+                    requirements,
+                    compiler: compiler.clone(),
+                })
+            }
+            _ if self == other => Some(self.clone()),
+            _ => None,
+        }
     }
+}
+
+/// Merges, throughout `tree`, two versions of one project left out for one reason into one, so
+/// that the explanation states the reason once for all of them.
+fn merge_left_out_versions(tree: &mut DerivationTree<PackageName, Versions, Unavailability>) {
+    let DerivationTree::Derived(derived) = tree else {
+        return;
+    };
+    merge_left_out_versions(Arc::make_mut(&mut derived.cause1));
+    merge_left_out_versions(Arc::make_mut(&mut derived.cause2));
+    let (
+        DerivationTree::External(External::Custom(name1, _, reason1)),
+        DerivationTree::External(External::Custom(name2, _, reason2)),
+    ) = (derived.cause1.as_ref(), derived.cause2.as_ref())
+    else {
+        return;
+    };
+    // The two causes leave out the versions of one project, and what they derive is that neither
+    // version can be chosen.
+    let [(name, Term::Positive(versions))] = derived.terms.iter().collect::<Vec<_>>()[..] else {
+        return;
+    };
+    if name1 != name || name2 != name {
+        return;
+    }
+    let Some(reason) = reason1.merge(reason2) else {
+        return;
+    };
+    *tree = DerivationTree::External(External::Custom(name.clone(), versions.clone(), reason));
 }
 
 /// The projects whose sets in `tree` hold or leave out versions at more than one source.
 fn projects_met_at_several_sources(
-    tree: &DerivationTree<PackageName, Versions, String>,
+    tree: &DerivationTree<PackageName, Versions, Unavailability>,
 ) -> Set<PackageName> {
     let mut sources = Map::default();
     collect_sources(tree, &mut sources);
@@ -549,7 +634,7 @@ fn projects_met_at_several_sources(
 
 /// Adds to `sources` the sources of the versions each project's sets in `tree` hold or leave out.
 fn collect_sources(
-    tree: &DerivationTree<PackageName, Versions, String>,
+    tree: &DerivationTree<PackageName, Versions, Unavailability>,
     sources: &mut Map<PackageName, Set<Source>>,
 ) {
     let mut add = |name: &PackageName, versions: &Versions| {
@@ -578,49 +663,548 @@ fn collect_sources(
     }
 }
 
-/// `tree` with its sets written with the sources for the projects in `met_at_several` alone.
-fn written_tree(
-    tree: &DerivationTree<PackageName, Versions, String>,
-    met_at_several: &Set<PackageName>,
-) -> DerivationTree<PackageName, WrittenVersions, String> {
-    let written = |name: &PackageName, versions: &Versions| WrittenVersions {
-        versions: versions.clone(),
-        with_source: met_at_several.contains(name),
-    };
+/// Whether some version in `tree` is left out because its `fix_version` rejects the running
+/// compiler.
+fn rejects_the_compiler(tree: &DerivationTree<PackageName, Versions, Unavailability>) -> bool {
     match tree {
-        DerivationTree::External(external) => DerivationTree::External(match external {
-            External::NotRoot(name, version) => External::NotRoot(name.clone(), version.clone()),
-            External::NoVersions(name, versions) => {
-                External::NoVersions(name.clone(), written(name, versions))
+        DerivationTree::External(External::Custom(_, _, reason)) => {
+            matches!(reason, Unavailability::RejectsCompiler { .. })
+        }
+        DerivationTree::External(_) => false,
+        DerivationTree::Derived(derived) => {
+            rejects_the_compiler(&derived.cause1) || rejects_the_compiler(&derived.cause2)
+        }
+    }
+}
+
+/// The message of a failed resolution: the explanation of `tree`, which derives that the
+/// requirements of the root project conflict, preceded by the version of the running compiler when
+/// a version is left out for rejecting it, and followed by a `HINT:` line for each kind of conflict
+/// the user can act on.
+///
+/// # Examples
+/// ```text
+/// Failed to resolve dependencies.
+/// Because "app" requires "collection" ^1.0.0, which requires "common" ^1.1.0, "app" indirectly requires "common" 1.1.0.
+/// So, because "app" also requires "common" =1.0.0, the requirements of "app" cannot all be satisfied.
+/// ```
+fn explain(
+    provider: &Provider<'_, '_>,
+    tree: &DerivationTree<PackageName, Versions, Unavailability>,
+) -> String {
+    let explainer = Explainer {
+        provider,
+        met_at_several: projects_met_at_several_sources(tree),
+        root_mentioned: Cell::new(false),
+    };
+    let mut lines = vec!["Failed to resolve dependencies.".to_string()];
+    let rejects_the_compiler = rejects_the_compiler(tree);
+    if rejects_the_compiler {
+        lines.push(format!("This is Fix {}.", provider.compiler_version));
+        lines.push(String::new());
+    }
+    lines.push(DefaultStringReporter::report_with_formatter(
+        tree, &explainer,
+    ));
+    if rejects_the_compiler {
+        lines.push(format!(
+            "HINT: Use a newer Fix, or require versions that support Fix {}.",
+            provider.compiler_version
+        ));
+    }
+    if !explainer.met_at_several.is_empty() {
+        lines.push("HINT: Every requirement on one project must name the same source.".to_string());
+    }
+    lines.join("\n")
+}
+
+/// Words the explanation of a failed resolution for the user: a project is named by its name in
+/// quotes, a requirement as the project file writes it, and the root project without its version.
+///
+/// The explanation is a series of lines, each stating a fact the resolution met and what follows
+/// from it: a fact is a requirement of a version, or a version left out, and what follows is that a
+/// version cannot be used or that a project indirectly requires another. The last line concludes
+/// that the requirements of the root project cannot all be satisfied.
+struct Explainer<'e, 'a, 'b> {
+    provider: &'e Provider<'a, 'b>,
+    /// The projects the explanation meets at more than one source, whose versions it writes with
+    /// their sources, which tell them apart.
+    met_at_several: Set<PackageName>,
+    /// Whether the explanation has written a requirement of the root project, so that the next one
+    /// is written as a requirement it also has.
+    root_mentioned: Cell<bool>,
+}
+
+impl Explainer<'_, '_, '_> {
+    fn is_root(&self, name: &PackageName) -> bool {
+        *name == self.provider.root_name
+    }
+
+    /// The versions of `name` the provider has listed that `versions` holds.
+    fn known_in(&self, name: &PackageName, versions: &Versions) -> BTreeSet<SourcedVersion> {
+        self.provider
+            .known_versions_of(name)
+            .iter()
+            .filter(|v| versions.contains(v))
+            .cloned()
+            .collect()
+    }
+
+    /// Writes `versions`, some of the listed versions of `name`, as alternatives. For a project met
+    /// at several sources, the versions of each source are followed by the source, and all the
+    /// versions of a source are written as the source alone.
+    ///
+    /// # Examples
+    /// `1.0.0 or 1.1.0`, and for a project met at several sources, `1.0.0 from A or from B`.
+    fn list(&self, name: &PackageName, versions: &BTreeSet<SourcedVersion>) -> String {
+        if !self.met_at_several.contains(name) {
+            let versions = versions
+                .iter()
+                .map(|v| v.version.to_string())
+                .collect::<Vec<_>>();
+            return join_with("or", &versions);
+        }
+        let mut groups: BTreeMap<&Source, Vec<String>> = BTreeMap::new();
+        for v in versions {
+            groups
+                .entry(&v.source)
+                .or_default()
+                .push(v.version.to_string());
+        }
+        let groups = groups
+            .into_iter()
+            .map(|(source, group)| {
+                let listed_at_source = self.provider.versions_at(name, source).len();
+                if group.len() == listed_at_source {
+                    format!("from {}", source)
+                } else {
+                    format!("{} from {}", join_with("or", &group), source)
+                }
+            })
+            .collect::<Vec<_>>();
+        join_with("or", &groups)
+    }
+
+    /// `name` at `versions`, as the subject of a sentence.
+    ///
+    /// # Examples
+    /// `"json" 1.0.0`, `"json" 1.0.0 or 1.1.0`, `every version of "json"`, or `"app"` for the root.
+    fn subject(&self, name: &PackageName, versions: &Versions) -> String {
+        if self.is_root(name) {
+            return format!("\"{}\"", name);
+        }
+        let held = self.known_in(name, versions);
+        let listed = self.provider.known_versions_of(name).len();
+        if held.len() == listed && listed > 1 {
+            format!("every version of \"{}\"", name)
+        } else {
+            format!("\"{}\" {}", name, self.list(name, &held))
+        }
+    }
+
+    /// `name` at `versions`, as what a project requires.
+    ///
+    /// # Examples
+    /// `"common" 1.1.0`, or `"common"` for every version.
+    fn object(&self, name: &PackageName, versions: &Versions) -> String {
+        let held = self.known_in(name, versions);
+        let listed = self.provider.known_versions_of(name).len();
+        if held.len() == listed && !self.met_at_several.contains(name) {
+            format!("\"{}\"", name)
+        } else {
+            format!("\"{}\" {}", name, self.list(name, &held))
+        }
+    }
+
+    /// What `depender` at `depender_versions` requires of `dep`: the requirement its project file
+    /// writes, when every one of those versions writes the same one and it accepts exactly the
+    /// listed versions in `dep_versions`, and those versions otherwise.
+    fn required(
+        &self,
+        depender: &PackageName,
+        depender_versions: &Versions,
+        dep: &PackageName,
+        dep_versions: &Versions,
+    ) -> String {
+        self.written_requirement_on(depender, depender_versions, dep, dep_versions)
+            .unwrap_or_else(|| self.object(dep, dep_versions))
+    }
+
+    /// The requirement on `dep` that every version of `depender` in `depender_versions` writes, if
+    /// they all write one and the same, and it accepts exactly the listed versions in
+    /// `dep_versions`.
+    fn written_requirement_on(
+        &self,
+        depender: &PackageName,
+        depender_versions: &Versions,
+        dep: &PackageName,
+        dep_versions: &Versions,
+    ) -> Option<String> {
+        let dependers = if self.is_root(depender) {
+            BTreeSet::from([self.provider.root_version.clone()])
+        } else {
+            self.known_in(depender, depender_versions)
+        };
+        let all_requirements = self.provider.requirements.borrow();
+        let mut written: Option<&Dependency> = None;
+        for version in &dependers {
+            let requirement = all_requirements
+                .get(&(depender.clone(), version.clone()))?
+                .iter()
+                .find(|requirement| requirement.name == *dep)?;
+            match written {
+                None => written = Some(requirement),
+                Some(written) => {
+                    if written.requirement != requirement.requirement
+                        || written.source != requirement.source
+                    {
+                        return None;
+                    }
+                }
             }
-            External::Custom(name, versions, reason) => {
-                External::Custom(name.clone(), written(name, versions), reason.clone())
+        }
+        let written = written?;
+        let accepted = self
+            .provider
+            .known_versions_of(dep)
+            .iter()
+            .filter(|v| v.source == written.source && written.requirement.matches(&v.version))
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        if accepted != self.known_in(dep, dep_versions) {
+            return None;
+        }
+        let requirement = written_requirement(dep, &written.requirement);
+        Some(if self.met_at_several.contains(dep) {
+            format!("{} from {}", requirement, written.source)
+        } else {
+            requirement
+        })
+    }
+
+    /// The verb of a requirement `depender` has: `also requires` for a requirement of the root
+    /// project after the explanation has written one.
+    fn requires(&self, depender: &PackageName) -> &'static str {
+        if self.is_root(depender) && self.root_mentioned.replace(true) {
+            "also requires"
+        } else {
+            "requires"
+        }
+    }
+
+    /// Whether `terms` says that the requirements of the root project cannot all be satisfied,
+    /// which the last line of the explanation concludes.
+    fn concludes(&self, terms: &pubgrub::Map<PackageName, Term<Versions>>) -> bool {
+        terms.is_empty()
+            || (terms.len() == 1
+                && matches!(terms.get(&self.provider.root_name), Some(Term::Positive(_))))
+    }
+
+    /// The opening of a line that adds a fact to the lines before it: `So, because` on the last
+    /// line, and `And because` on the others.
+    fn and_because(&self, terms: &pubgrub::Map<PackageName, Term<Versions>>) -> &'static str {
+        if self.concludes(terms) {
+            "So, because"
+        } else {
+            "And because"
+        }
+    }
+
+    /// Two facts, joined: a requirement of a project followed by one of the project it requires is
+    /// written as one chain, and two requirements of one project as one requirement of both.
+    /// Otherwise, a requirement of the root project comes first.
+    fn two_facts(
+        &self,
+        fact1: &External<PackageName, Versions, Unavailability>,
+        fact2: &External<PackageName, Versions, Unavailability>,
+    ) -> String {
+        use External::FromDependencyOf;
+        if let (FromDependencyOf(p1, s1, d1, t1), FromDependencyOf(p2, s2, d2, t2)) = (fact1, fact2)
+        {
+            for ((p, s, q, t), (q2, s2, r, u)) in [
+                ((p1, s1, d1, t1), (p2, s2, d2, t2)),
+                ((p2, s2, d2, t2), (p1, s1, d1, t1)),
+            ] {
+                let required = self.known_in(q, t);
+                if q == q2 && !required.is_empty() && required.is_subset(&self.known_in(q, s2)) {
+                    return format!(
+                        "{} {} {}, which requires {}",
+                        self.subject(p, s),
+                        self.requires(p),
+                        self.required(p, s, q, t),
+                        self.required(q, s2, r, u)
+                    );
+                }
             }
-            External::FromDependencyOf(name, versions, dep, dep_versions) => {
-                External::FromDependencyOf(
-                    name.clone(),
-                    written(name, versions),
-                    dep.clone(),
-                    written(dep, dep_versions),
+            if p1 == p2 && s1 == s2 {
+                return format!(
+                    "{} {} {} and {}",
+                    self.subject(p1, s1),
+                    self.requires(p1),
+                    self.required(p1, s1, d1, t1),
+                    self.required(p2, s2, d2, t2)
+                );
+            }
+        }
+        let is_root_requirement = |fact: &External<_, _, _>| matches!(fact, FromDependencyOf(p, _, _, _) if self.is_root(p));
+        let (first, second) = if is_root_requirement(fact2) && !is_root_requirement(fact1) {
+            (fact2, fact1)
+        } else {
+            (fact1, fact2)
+        };
+        let first = self.format_external(first);
+        format!("{} and {}", first, self.format_external(second))
+    }
+
+    /// The sentence saying that `name` at `versions` is left out for `reason`.
+    fn unavailable(
+        &self,
+        name: &PackageName,
+        versions: &Versions,
+        reason: &Unavailability,
+    ) -> String {
+        let subject = self.subject(name, versions);
+        match reason {
+            Unavailability::RejectsCompiler { requirements, .. } if requirements.len() == 1 => {
+                let requirement = requirements.values().next().unwrap();
+                format!("{} requires Fix {}", subject, requirement)
+            }
+            Unavailability::RejectsCompiler {
+                requirements,
+                compiler,
+            } => {
+                let each = requirements
+                    .iter()
+                    .map(|(version, requirement)| {
+                        format!("{} requires Fix {}", version.version, requirement)
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                if self.known_in(name, versions).len()
+                    == self.provider.known_versions_of(name).len()
+                {
+                    format!(
+                        "no version of \"{}\" supports Fix {} ({})",
+                        name, compiler, each
+                    )
+                } else {
+                    format!("{} does not support Fix {} ({})", subject, compiler, each)
+                }
+            }
+            Unavailability::NoVersionSatisfies {
+                name: dep,
+                requirement,
+                source,
+                existing,
+            } => {
+                let existing = if existing.is_empty() {
+                    format!("has no version of \"{}\"", dep)
+                } else {
+                    let existing = existing.iter().map(Version::to_string).collect::<Vec<_>>();
+                    format!("has only \"{}\" {}", dep, join_with("and", &existing))
+                };
+                format!(
+                    "{} requires {}, which no version satisfies ({} {})",
+                    subject,
+                    written_requirement(dep, requirement),
+                    source,
+                    existing
                 )
             }
-        }),
-        DerivationTree::Derived(derived) => DerivationTree::Derived(Derived {
-            terms: derived
-                .terms
-                .iter()
-                .map(|(name, term)| {
-                    let term = match term {
-                        Term::Positive(versions) => Term::Positive(written(name, versions)),
-                        Term::Negative(versions) => Term::Negative(written(name, versions)),
-                    };
-                    (name.clone(), term)
-                })
-                .collect(),
-            shared_id: derived.shared_id,
-            cause1: Arc::new(written_tree(&derived.cause1, met_at_several)),
-            cause2: Arc::new(written_tree(&derived.cause2, met_at_several)),
-        }),
+            Unavailability::Unreadable(_) | Unavailability::DependencyUnreadable { .. } => {
+                format!("{} {}", subject, reason)
+            }
+        }
+    }
+}
+
+impl ReportFormatter<PackageName, Versions, Unavailability> for Explainer<'_, '_, '_> {
+    type Output = String;
+
+    fn format_external(
+        &self,
+        external: &External<PackageName, Versions, Unavailability>,
+    ) -> String {
+        match external {
+            External::NotRoot(name, _) => {
+                format!("the dependencies of \"{}\" are being resolved", name)
+            }
+            External::NoVersions(name, versions) => {
+                format!("no version of \"{}\" in {} exists", name, versions)
+            }
+            External::FromDependencyOf(depender, depender_versions, dep, dep_versions) => {
+                let subject = self.subject(depender, depender_versions);
+                format!(
+                    "{} {} {}",
+                    subject,
+                    self.requires(depender),
+                    self.required(depender, depender_versions, dep, dep_versions)
+                )
+            }
+            External::Custom(name, versions, reason) => self.unavailable(name, versions, reason),
+        }
+    }
+
+    /// Writes what an incompatibility derives, which is that its terms cannot all hold: the versions
+    /// of a positive term cannot be used, and the projects of the positive terms require those of
+    /// the negative ones.
+    fn format_terms(&self, terms: &pubgrub::Map<PackageName, Term<Versions>>) -> String {
+        if self.concludes(terms) {
+            return format!(
+                "the requirements of \"{}\" cannot all be satisfied",
+                self.provider.root_name
+            );
+        }
+        let mut terms = terms.iter().collect::<Vec<_>>();
+        terms.sort_by_key(|(name, _)| (!self.is_root(name), name.to_string()));
+        let used = terms
+            .iter()
+            .filter_map(|(name, term)| match term {
+                Term::Positive(versions) => Some((*name, versions)),
+                Term::Negative(_) => None,
+            })
+            .collect::<Vec<_>>();
+        let required = terms
+            .iter()
+            .filter_map(|(name, term)| match term {
+                Term::Negative(versions) => Some(self.object(name, versions)),
+                Term::Positive(_) => None,
+            })
+            .collect::<Vec<_>>();
+        let root_used = used.iter().any(|(name, _)| self.is_root(name));
+        // A version used alone is the subject of the sentence, and several used together are what
+        // the sentence is about.
+        if let ([(name, versions)], true) = (&used[..], required.is_empty()) {
+            let held = self.known_in(name, versions).len();
+            let listed = self.provider.known_versions_of(name).len();
+            if held == listed && listed > 1 {
+                return format!("no version of \"{}\" can be used", name);
+            }
+        }
+        let used = if let [(name, versions)] = used[..] {
+            vec![self.subject(name, versions)]
+        } else {
+            used.iter()
+                .map(|(name, versions)| self.object(name, versions))
+                .collect()
+        };
+        match (used.len(), required.is_empty()) {
+            (0, _) => format!("{} must be used", join_with("or", &required)),
+            (1, true) => format!("{} cannot be used", used[0]),
+            (_, true) if root_used => {
+                format!("{} cannot use {}", used[0], join_with("and", &used[1..]))
+            }
+            (_, true) => format!("{} cannot be used together", join_with("and", &used)),
+            (count, false) => {
+                if root_used {
+                    self.root_mentioned.set(true);
+                }
+                let verb = if count == 1 {
+                    "indirectly requires"
+                } else {
+                    "together indirectly require"
+                };
+                format!(
+                    "{} {} {}",
+                    join_with("and", &used),
+                    verb,
+                    join_with("and", &required)
+                )
+            }
+        }
+    }
+
+    fn explain_both_external(
+        &self,
+        external1: &External<PackageName, Versions, Unavailability>,
+        external2: &External<PackageName, Versions, Unavailability>,
+        current_terms: &pubgrub::Map<PackageName, Term<Versions>>,
+    ) -> String {
+        let facts = self.two_facts(external1, external2);
+        format!("Because {}, {}.", facts, self.format_terms(current_terms))
+    }
+
+    fn explain_both_ref(
+        &self,
+        ref_id1: usize,
+        derived1: &Derived<PackageName, Versions, Unavailability>,
+        ref_id2: usize,
+        derived2: &Derived<PackageName, Versions, Unavailability>,
+        current_terms: &pubgrub::Map<PackageName, Term<Versions>>,
+    ) -> String {
+        let fact1 = self.format_terms(&derived1.terms);
+        let fact2 = self.format_terms(&derived2.terms);
+        format!(
+            "Because {} ({}) and {} ({}), {}.",
+            fact1,
+            ref_id1,
+            fact2,
+            ref_id2,
+            self.format_terms(current_terms)
+        )
+    }
+
+    fn explain_ref_and_external(
+        &self,
+        ref_id: usize,
+        derived: &Derived<PackageName, Versions, Unavailability>,
+        external: &External<PackageName, Versions, Unavailability>,
+        current_terms: &pubgrub::Map<PackageName, Term<Versions>>,
+    ) -> String {
+        let fact1 = self.format_terms(&derived.terms);
+        let fact2 = self.format_external(external);
+        format!(
+            "Because {} ({}) and {}, {}.",
+            fact1,
+            ref_id,
+            fact2,
+            self.format_terms(current_terms)
+        )
+    }
+
+    fn and_explain_external(
+        &self,
+        external: &External<PackageName, Versions, Unavailability>,
+        current_terms: &pubgrub::Map<PackageName, Term<Versions>>,
+    ) -> String {
+        let fact = self.format_external(external);
+        format!(
+            "{} {}, {}.",
+            self.and_because(current_terms),
+            fact,
+            self.format_terms(current_terms)
+        )
+    }
+
+    fn and_explain_ref(
+        &self,
+        ref_id: usize,
+        derived: &Derived<PackageName, Versions, Unavailability>,
+        current_terms: &pubgrub::Map<PackageName, Term<Versions>>,
+    ) -> String {
+        let fact = self.format_terms(&derived.terms);
+        format!(
+            "{} {} ({}), {}.",
+            self.and_because(current_terms),
+            fact,
+            ref_id,
+            self.format_terms(current_terms)
+        )
+    }
+
+    fn and_explain_prior_and_external(
+        &self,
+        prior_external: &External<PackageName, Versions, Unavailability>,
+        external: &External<PackageName, Versions, Unavailability>,
+        current_terms: &pubgrub::Map<PackageName, Term<Versions>>,
+    ) -> String {
+        let facts = self.two_facts(prior_external, external);
+        format!(
+            "{} {}, {}.",
+            self.and_because(current_terms),
+            facts,
+            self.format_terms(current_terms)
+        )
     }
 }
 
@@ -724,7 +1308,7 @@ mod tests {
             package_retriever,
             versions_retriever,
         )
-        .map_err(|errs| errs.to_string())
+        .map_err(|errs| errs.to_string().trim_end().to_string())
     }
 
     /// The outcome of resolving against a registry.
@@ -856,24 +1440,75 @@ mod tests {
         );
     }
 
-    /// Requirements that no choice of versions satisfies fail the resolution, and the message names
-    /// the two packages whose requirements conflict. A package met at one source is written
-    /// without it.
+    /// A requirement of the root that conflicts with one it has through another package is
+    /// explained along the chain of requirements, each written as the package writes it. A package
+    /// met at one source is written without it.
     #[test]
-    fn unsatisfiable_requirements_are_explained() {
+    fn a_conflict_through_a_dependency_is_explained_along_the_chain() {
+        let registry = registry(&[
+            ("collection", "1.0.0", &[("common", "^1.1.0")]),
+            ("common", "1.0.0", &[]),
+            ("common", "1.1.0", &[]),
+        ]);
+        assert_eq!(
+            resolve(&registry, &[("collection", "^1.0.0"), ("common", "=1.0.0")]).unwrap_err(),
+            "error: Failed to resolve dependencies.\n\
+             Because \"root\" requires \"collection\" ^1.0.0, which requires \"common\" ^1.1.0, \
+             \"root\" indirectly requires \"common\" 1.1.0.\n\
+             So, because \"root\" also requires \"common\" =1.0.0, the requirements of \"root\" \
+             cannot all be satisfied."
+        );
+    }
+
+    /// Two packages whose every version requires conflicting versions of a third are explained as
+    /// two packages that cannot be used together.
+    #[test]
+    fn two_packages_requiring_conflicting_versions_are_explained() {
         let registry = registry(&[
             ("a", "1.0.0", &[("c", "=1.0.0")]),
+            ("a", "1.1.0", &[("c", "=1.0.0")]),
             ("b", "1.0.0", &[("c", "=2.0.0")]),
+            ("b", "1.1.0", &[("c", "=2.0.0")]),
             ("c", "1.0.0", &[]),
             ("c", "2.0.0", &[]),
         ]);
-        let message = resolve(&registry, &[("a", "*"), ("b", "*")]).unwrap_err();
-        assert!(
-            message.contains("Failed to resolve dependencies.")
-                && message.contains("a 1.0.0 depends on c 1.0.0")
-                && message.contains("b 1.0.0 depends on c 2.0.0"),
-            "{}",
-            message
+        assert_eq!(
+            resolve(&registry, &[("a", "^1.0.0"), ("b", "^1.0.0")]).unwrap_err(),
+            "error: Failed to resolve dependencies.\n\
+             Because every version of \"a\" requires \"c\" =1.0.0 and every version of \"b\" \
+             requires \"c\" =2.0.0, \"a\" and \"b\" cannot be used together.\n\
+             So, because \"root\" requires \"a\" ^1.0.0 and \"b\" ^1.0.0, the requirements of \
+             \"root\" cannot all be satisfied."
+        );
+    }
+
+    /// A conflict reached along two branches is explained branch by branch, and the conclusion of
+    /// the first is referred to by its number where the second uses it.
+    #[test]
+    fn a_conflict_along_two_branches_is_explained_by_branch() {
+        let registry = registry(&[
+            ("foo", "1.0.0", &[("a", "^1.0.0"), ("b", "^1.0.0")]),
+            ("foo", "1.1.0", &[("x", "^1.0.0"), ("y", "^1.0.0")]),
+            ("a", "1.0.0", &[("b", "^2.0.0")]),
+            ("b", "1.0.0", &[]),
+            ("b", "2.0.0", &[]),
+            ("x", "1.0.0", &[("y", "^2.0.0")]),
+            ("y", "1.0.0", &[]),
+            ("y", "2.0.0", &[]),
+        ]);
+        assert_eq!(
+            resolve(&registry, &[("foo", "^1.0.0")]).unwrap_err(),
+            "error: Failed to resolve dependencies.\n\
+             Because \"foo\" 1.0.0 requires \"a\" ^1.0.0, which requires \"b\" ^2.0.0, \"foo\" \
+             1.0.0 indirectly requires \"b\" 2.0.0.\n\
+             And because \"foo\" 1.0.0 requires \"b\" ^1.0.0, \"foo\" 1.0.0 cannot be used. (1)\n\
+             \n\
+             Because \"foo\" 1.1.0 requires \"x\" ^1.0.0, which requires \"y\" ^2.0.0, \"foo\" \
+             1.1.0 indirectly requires \"y\" 2.0.0.\n\
+             And because \"foo\" 1.1.0 requires \"y\" ^1.0.0, \"foo\" 1.1.0 cannot be used.\n\
+             And because \"foo\" 1.0.0 cannot be used (1), no version of \"foo\" can be used.\n\
+             So, because \"root\" requires \"foo\" ^1.0.0, the requirements of \"root\" cannot all \
+             be satisfied."
         );
     }
 
@@ -946,11 +1581,35 @@ mod tests {
         );
 
         requires(&mut registry, "1.0.0", "^1.7.0");
-        let message = resolve(&registry, &[("x", "*")]).unwrap_err();
-        assert!(
-            message.contains("requires Fix ^1.7.0, and this is Fix 1.6.1"),
-            "{}",
-            message
+        assert!(resolve(&registry, &[("x", "*")]).is_err());
+    }
+
+    /// The versions of a package left out because they reject the running compiler are explained
+    /// together, after the version of the running compiler, and followed by a hint.
+    #[test]
+    fn versions_rejecting_the_compiler_are_explained_together() {
+        let mut registry = registry(&[
+            ("json", "1.0.0", &[]),
+            ("json", "1.1.0", &[]),
+            ("web", "1.0.0", &[("json", "^1.0.0")]),
+        ]);
+        for (version, req) in [("1.0.0", "^1.7.0"), ("1.1.0", "^1.8.0")] {
+            registry
+                .get_mut(&("json".to_string(), at(version, source_of("json"))))
+                .unwrap()
+                .fix_version = VersionReq::parse(req).unwrap();
+        }
+        assert_eq!(
+            resolve(&registry, &[("web", "^1.0.0")]).unwrap_err(),
+            "error: Failed to resolve dependencies.\n\
+             This is Fix 1.6.1.\n\
+             \n\
+             Because no version of \"json\" supports Fix 1.6.1 (1.0.0 requires Fix ^1.7.0, 1.1.0 \
+             requires Fix ^1.8.0) and \"web\" 1.0.0 requires \"json\" ^1.0.0, \"web\" 1.0.0 cannot \
+             be used.\n\
+             So, because \"root\" requires \"web\" ^1.0.0, the requirements of \"root\" cannot all be \
+             satisfied.\n\
+             HINT: Use a newer Fix, or require versions that support Fix 1.6.1."
         );
     }
 
@@ -990,7 +1649,7 @@ mod tests {
     }
 
     /// Two requirements that fetch one package from two sources conflict, and the message names
-    /// both sources.
+    /// both sources, followed by a hint.
     #[test]
     fn two_sources_of_one_package_conflict() {
         let other = Source::Git("https://example.com/other/d.git".to_string());
@@ -1002,12 +1661,14 @@ mod tests {
             at("1.0.0", source_of("x")),
             vec![dependency_from("d", "*", other)],
         );
-        let message = resolve(&registry, &[("d", "*"), ("x", "*")]).unwrap_err();
-        assert!(
-            message.contains("https://example.com/d.git")
-                && message.contains("https://example.com/other/d.git"),
-            "{}",
-            message
+        assert_eq!(
+            resolve(&registry, &[("d", "*"), ("x", "*")]).unwrap_err(),
+            "error: Failed to resolve dependencies.\n\
+             Because \"root\" requires \"d\" from https://example.com/d.git and \"x\" 1.0.0 \
+             requires \"d\" from https://example.com/other/d.git, \"root\" cannot use \"x\".\n\
+             So, because \"root\" also requires \"x\", the requirements of \"root\" cannot all be \
+             satisfied.\n\
+             HINT: Every requirement on one project must name the same source."
         );
     }
 
@@ -1130,17 +1791,33 @@ mod tests {
     }
 
     /// A requirement no existing version satisfies is explained with the requirement and the
-    /// versions that do exist.
+    /// versions that do exist, once for all the versions that have it.
     #[test]
     fn a_requirement_no_version_satisfies_is_explained() {
-        let registry = registry(&[("x", "1.0.0", &[("y", "^2.0.0")]), ("y", "1.0.0", &[])]);
-        let message = resolve(&registry, &[("x", "*")]).unwrap_err();
-        assert!(
-            message.contains(
-                "requires \"y\" ^2.0.0 from https://example.com/y.git, where the version is 1.0.0"
-            ),
-            "{}",
-            message
+        let registry = registry(&[
+            ("x", "1.0.0", &[("y", "^2.0.0")]),
+            ("x", "1.1.0", &[("y", "^2.0.0")]),
+            ("y", "1.0.0", &[]),
+            ("y", "1.1.0", &[]),
+        ]);
+        assert_eq!(
+            resolve(&registry, &[("x", "*")]).unwrap_err(),
+            "error: Failed to resolve dependencies.\n\
+             Because \"root\" requires \"x\" and every version of \"x\" requires \"y\" ^2.0.0, \
+             which no version satisfies (https://example.com/y.git has only \"y\" 1.0.0 and \
+             1.1.0), the requirements of \"root\" cannot all be satisfied."
+        );
+    }
+
+    /// A requirement the root writes that no existing version satisfies stops the resolution with
+    /// the requirement and the versions that do exist.
+    #[test]
+    fn a_requirement_of_the_root_no_version_satisfies_is_reported() {
+        let registry = registry(&[("y", "1.0.0", &[]), ("y", "1.1.0", &[])]);
+        assert_eq!(
+            resolve(&registry, &[("y", "^2.0.0")]).unwrap_err(),
+            "error: \"root\" requires \"y\" ^2.0.0 from https://example.com/y.git, where the \
+             versions are 1.0.0 and 1.1.0."
         );
     }
 
