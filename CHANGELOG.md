@@ -4,6 +4,10 @@
 
 ### Fixed
 
+#### Language
+
+- #707, #966: A program stopped by a runtime check, such as an index out of range or `undefined`, now keeps what it wrote before it stopped, and writes its report after those lines. When its standard output went to a file or a pipe, as with `./prog > log`, the lines it had printed were lost, and so was what it had written to a file it had not closed.
+
 #### Tool
 
 - #964: When a completion adds an import, the language server now leaves alone an `import` statement written in a comment or a string literal. It used to delete that statement from the comment or the string and add it to the import statements of the file.

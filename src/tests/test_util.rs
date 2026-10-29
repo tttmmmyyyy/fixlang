@@ -851,6 +851,24 @@ pub fn integer_operations_checked_no_runtime_check_config() -> Configuration {
     config
 }
 
+/// The path of the file `<name>.<extension>` in the directory where the tests write their files,
+/// creating that directory if it does not exist yet.
+pub fn working_file_path(name: &str, extension: &str) -> String {
+    fs::create_dir_all(COMPILER_TEST_WORKING_PATH).unwrap();
+    format!("{}/{}.{}", COMPILER_TEST_WORKING_PATH, name, extension)
+}
+
+/// The signal `abort` stops a program with.
+pub const SIGABRT: i32 = 6;
+
+/// A configuration whose runtime checks are on, so that the checks that stop a program are part
+/// of it.
+pub fn runtime_checked_config() -> Configuration {
+    let mut config = Configuration::develop_mode();
+    config.no_runtime_check = false;
+    config
+}
+
 /// Runs `body` under `config` as the body of a program that binds `zero` to a `Std::I64` the
 /// compiler cannot fold, and fails the test unless the program exits with code 0.
 pub fn test_with_a_runtime_zero(body: &str, config: Configuration) {
