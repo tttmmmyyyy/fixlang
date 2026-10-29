@@ -1324,4 +1324,23 @@ mod tests {
             message
         );
     }
+    /// Depender versions that write different requirements accepting the same versions are
+    /// explained with those versions, since no one requirement is the one every version writes.
+    #[test]
+    fn requirements_written_differently_are_explained_by_their_versions() {
+        let registry = registry(&[
+            ("collection", "1.0.0", &[("common", "^1.1.0")]),
+            ("collection", "1.1.0", &[("common", ">=1.1.0, <2.0.0")]),
+            ("common", "1.0.0", &[]),
+            ("common", "1.1.0", &[]),
+        ]);
+        assert_eq!(
+            resolve(&registry, &[("collection", "^1.0.0"), ("common", "=1.0.0")]).unwrap_err(),
+            "error: Failed to resolve dependencies.\n\
+             Because \"root\" requires \"collection\" ^1.0.0, which requires \"common\" 1.1.0, \
+             \"root\" indirectly requires \"common\" 1.1.0.\n\
+             So, because \"root\" also requires \"common\" =1.0.0, the requirements of \"root\" \
+             cannot all be satisfied."
+        );
+    }
 }
