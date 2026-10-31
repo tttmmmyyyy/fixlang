@@ -325,8 +325,8 @@ fn the_language_server_runs_no_command_of_a_git_dependency() {
     );
 }
 
-/// The argv of a preliminary command that writes to `file` a module `module_name` defining
-/// `value_name : I64` as 42, written as a TOML array literal.
+/// A preliminary command, as a TOML array literal, that writes to `file` a module `module_name`
+/// defining `value_name : I64` as 42.
 fn generate_module_command(file: &str, module_name: &str, value_name: &str) -> String {
     format!(
         "[\"sh\", \"-c\", \"printf 'module {module_name};\\\\n\\\\n{value_name} : I64;\\\\n{value_name} = 42;\\\\n' > {file}\"]"

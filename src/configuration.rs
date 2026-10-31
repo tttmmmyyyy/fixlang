@@ -409,8 +409,8 @@ pub struct ProjectSources {
 
 /// A source file that a project file lists.
 ///
-/// A preliminary command may write the file, so whether it exists is checked when the sources are
-/// read rather than when the project file is read; the entry is kept for that check to point at.
+/// A preliminary command may write the file, so its existence is checked when the sources are read,
+/// after the commands have run. An error of that check points at `entry`.
 #[derive(Clone)]
 pub struct ListedSourceFile {
     /// The file, resolved against the directory holding the project file.
