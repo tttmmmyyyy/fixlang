@@ -2373,7 +2373,7 @@ impl Program {
         let mut file_to_project: Map<PathBuf, &ProjectSources> = Map::default();
         for project in &config.project_sources {
             for file in &project.files {
-                let Ok(path) = to_absolute_path(file) else {
+                let Ok(path) = to_absolute_path(&file.path) else {
                     continue;
                 };
                 file_to_project.insert(path, project);

@@ -1,7 +1,7 @@
 use crate::{
     configuration::{
-        BuildConfigType, Configuration, FixOptimizationLevel, LinkType, OutputFileType,
-        ProjectSources, Sanitizer, ValgrindTool,
+        BuildConfigType, Configuration, FixOptimizationLevel, LinkType, ListedSourceFile,
+        OutputFileType, ProjectSources, Sanitizer, ValgrindTool,
     },
     constants::{
         PROJECT_FILE_PATH, SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE,
@@ -622,48 +622,45 @@ impl ProjectFile {
     ///
     /// * `mode` - `Test` also takes the files listed in the `[build.test]` section.
     pub fn get_files(&self, mode: BuildConfigType) -> Vec<PathBuf> {
-        self.source_file_entries(mode)
-            .iter()
-            .map(|entry| self.join_to_project_dir(entry.get_ref()))
+        self.listed_source_files(mode)
+            .into_iter()
+            .map(|file| file.path)
             .collect()
     }
 
-    /// The paths of the source files a test build compiles beside the ones an ordinary build
-    /// compiles, resolved against the project directory. A file the `[build.test]` section repeats
-    /// from the `build` section is one of the ordinary sources, so it stays out.
-    fn get_test_only_files(&self) -> Vec<PathBuf> {
-        let build_files: Set<PathBuf> =
-            self.get_files(BuildConfigType::Build).into_iter().collect();
-        self.test_only_file_entries()
-            .iter()
-            .map(|entry| self.join_to_project_dir(entry.get_ref()))
-            .filter(|path| !build_files.contains(path))
-            .collect()
-    }
-
-    /// Checks that every source file listed in the project file exists on disk. Each error points at
-    /// the offending entry, so an editor attaches the problem to the project file, which is where
-    /// its cause is.
+    /// This project's own source files, each paired with the entry listing it.
     ///
     /// # Arguments
     ///
-    /// * `mode` - `Test` also checks the files listed in the `[build.test]` section.
-    fn check_source_files_exist(&self, mode: BuildConfigType) -> Result<(), Errors> {
-        let mut errors = Errors::empty();
-        for entry in self.source_file_entries(mode) {
-            if self.join_to_project_dir(entry.get_ref()).exists() {
-                continue;
-            }
-            let span = entry.span();
-            errors.append(Errors::from_msg_srcs(
-                format!(
-                    "Source file \"{}\" does not exist.",
-                    entry.get_ref().to_string_lossy()
-                ),
-                &[&Some(self.project_file_span(span.start, span.end))],
-            ));
+    /// * `mode` - `Test` also takes the files listed in the `[build.test]` section.
+    fn listed_source_files(&self, mode: BuildConfigType) -> Vec<ListedSourceFile> {
+        self.source_file_entries(mode)
+            .into_iter()
+            .map(|entry| self.listed_source_file(entry))
+            .collect()
+    }
+
+    /// The source files a test build compiles beside the ones an ordinary build compiles, each
+    /// paired with the entry listing it. A file the `[build.test]` section repeats from the
+    /// `build` section is one of the ordinary sources, so it stays out.
+    fn test_only_source_files(&self) -> Vec<ListedSourceFile> {
+        let build_files: Set<PathBuf> =
+            self.get_files(BuildConfigType::Build).into_iter().collect();
+        self.test_only_file_entries()
+            .into_iter()
+            .map(|entry| self.listed_source_file(entry))
+            .filter(|file| !build_files.contains(&file.path))
+            .collect()
+    }
+
+    /// The source file a `files` entry of this project file lists.
+    fn listed_source_file(&self, entry: &Spanned<PathBuf>) -> ListedSourceFile {
+        let span = entry.span();
+        ListedSourceFile {
+            path: self.join_to_project_dir(entry.get_ref()),
+            listed_as: entry.get_ref().clone(),
+            listed_at: self.project_file_span(span.start, span.end),
         }
-        errors.to_result()
     }
 
     /// The compiler versions this project builds with, as its `fix_version` field requires. A
@@ -757,10 +754,6 @@ impl ProjectFile {
             mode = BuildConfigType::Build;
         }
 
-        // Reject missing source files up front, so that the error points at the project-file entry
-        // naming the file and an editor attaches it there.
-        self.check_source_files_exist(mode)?;
-
         // Record what this project provides and what it declares, so that an import reaching past
         // the projects it declares can be told from one that stays within them. The sources of a
         // test build carry declarations of their own, since the test dependencies are the ones the
@@ -770,7 +763,7 @@ impl ProjectFile {
             version: self.general.version.clone(),
             origin: project_origin.clone(),
             declared_dependencies: self.declared_dependency_names(BuildConfigType::Build),
-            files: self.get_files(BuildConfigType::Build),
+            files: self.listed_source_files(BuildConfigType::Build),
         });
         if mode == BuildConfigType::Test {
             config.project_sources.push(ProjectSources {
@@ -778,7 +771,7 @@ impl ProjectFile {
                 version: self.general.version.clone(),
                 origin: project_origin.clone(),
                 declared_dependencies: self.declared_dependency_names(BuildConfigType::Test),
-                files: self.get_test_only_files(),
+                files: self.test_only_source_files(),
             });
         }
 
