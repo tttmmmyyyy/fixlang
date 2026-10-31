@@ -324,3 +324,90 @@ fn the_language_server_runs_no_command_of_a_git_dependency() {
         "the language server ran the dependency's command"
     );
 }
+
+/// The argv of a preliminary command that writes to `file` a module `module_name` defining
+/// `value_name : I64` as 42, written as a TOML array literal.
+fn generate_module_command(file: &str, module_name: &str, value_name: &str) -> String {
+    format!(
+        "[\"sh\", \"-c\", \"printf 'module {module_name};\\\\n\\\\n{value_name} : I64;\\\\n{value_name} = 42;\\\\n' > {file}\"]"
+    )
+}
+
+/// Verifies that the source files the commands write may be listed in both sections, and that
+/// `fix run` and `fix test` build a project before any of those files exists.
+#[test]
+fn listed_sources_a_command_writes_are_built() {
+    let dir = TempDir::new().unwrap();
+    fs::write(
+        dir.path().join("fixproj.toml"),
+        format!(
+            "[general]\nname = \"proj\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+             [build]\nfiles = [\"main.fix\", \"gen.fix\"]\npreliminary_commands = [{}]\n\n\
+             [build.test]\nfiles = [\"test.fix\", \"gen_test.fix\"]\npreliminary_commands = [{}]\n",
+            generate_module_command("gen.fix", "Gen", "answer"),
+            generate_module_command("gen_test.fix", "GenTest", "expected"),
+        ),
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("main.fix"),
+        "module Main;\n\nimport Gen;\n\nmain : IO ();\nmain = println(answer.to_string);\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("test.fix"),
+        "module Test;\n\nimport Gen;\nimport GenTest;\n\n\
+         test : IO ();\ntest = assert_eq(|_| \"\", answer, expected);\n",
+    )
+    .unwrap();
+
+    let output = run_fix(dir.path(), &["run"]);
+    assert_succeeded(&output, "`fix run` should succeed.");
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "42\n");
+    fs::remove_file(dir.path().join("gen.fix")).unwrap();
+    assert_succeeded(
+        &run_fix(dir.path(), &["test"]),
+        "`fix test` should succeed.",
+    );
+}
+
+/// Verifies that a git dependency may list a source file its command writes, and that the project
+/// depending on it builds.
+#[test]
+fn a_listed_source_a_dependency_command_writes_is_built() {
+    let dir = TempDir::new().unwrap();
+    let repo = dir.path().join("dep-repo");
+    fs::create_dir(&repo).unwrap();
+    create_git_repo(
+        &repo,
+        &[(
+            "fixproj.toml",
+            &format!(
+                "[general]\nname = \"dep\"\nversion = \"0.1.0\"\nfix_version = \"*\"\n\n\
+                 [build]\nfiles = [\"gen.fix\"]\npreliminary_commands = [{}]\n",
+                generate_module_command("gen.fix", "Dep", "answer")
+            ),
+        )],
+    );
+    let proj = dir.path().join("proj");
+    fs::create_dir(&proj).unwrap();
+    write_project(
+        &proj,
+        "root",
+        "[]",
+        "[]",
+        &format!(
+            "\n[[dependencies]]\nname = \"dep\"\ngit = {{ url = \"file://{}\" }}\n",
+            repo.display()
+        ),
+    );
+    fs::write(
+        proj.join("main.fix"),
+        "module Main;\n\nimport Dep;\n\nmain : IO ();\nmain = println(Dep::answer.to_string);\n",
+    )
+    .unwrap();
+
+    let output = run_fix(&proj, &["run"]);
+    assert_succeeded(&output, "`fix run` should succeed.");
+    assert_eq!(String::from_utf8_lossy(&output.stdout), "42\n");
+}

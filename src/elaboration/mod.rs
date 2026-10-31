@@ -193,6 +193,8 @@ pub fn read_file(path: &Path) -> Result<String, String> {
 /// Load all source files specified in the configuration, together with the Fix examples it
 /// carries, link them, and return the resulting `Program`.
 pub fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
+    config.check_listed_source_files_exist()?;
+
     // Create `Std` module.
     let mut program = make_std_mod(config)?;
 

@@ -3093,7 +3093,7 @@ Fixプログラムをビルドする際の設定は、以下の場所に記述�
             <td>なし</td>
             <td>マージ</td>
             <td>影響する</td>
-            <td>コンパイル前に実行するコマンド</td>
+            <td>コンパイル前に実行するコマンド。コマンドは、<code>files</code> に書いたソースファイルを生成してもかまいません。<code>fix build</code>、<code>fix run</code>、<code>fix test</code> は、コマンドを実行した後でソースファイルを読みます。<code>fix check</code> と言語サーバーはコマンドを実行しないので、一度ビルドしてそのファイルを生成するまで、そのファイルを読めません。</td>
         </tr>
         <tr>
             <td>threaded</td>
