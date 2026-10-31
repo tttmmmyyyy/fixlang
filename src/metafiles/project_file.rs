@@ -622,17 +622,20 @@ impl ProjectFile {
     ///
     /// * `mode` - `Test` also takes the files listed in the `[build.test]` section.
     pub fn get_files(&self, mode: BuildConfigType) -> Vec<PathBuf> {
-        self.source_file_entries(mode)
-            .iter()
-            .map(|entry| self.join_to_project_dir(entry.get_ref()))
+        self.listed_source_files(mode)
+            .into_iter()
+            .map(|file| file.path)
             .collect()
     }
 
-    /// The source files an ordinary build compiles, each paired with the entry listing it.
-    fn build_source_files(&self) -> Vec<ListedSourceFile> {
-        self.build
-            .files
-            .iter()
+    /// This project's own source files, each paired with the entry listing it.
+    ///
+    /// # Arguments
+    ///
+    /// * `mode` - `Test` also takes the files listed in the `[build.test]` section.
+    fn listed_source_files(&self, mode: BuildConfigType) -> Vec<ListedSourceFile> {
+        self.source_file_entries(mode)
+            .into_iter()
             .map(|entry| self.listed_source_file(entry))
             .collect()
     }
@@ -644,7 +647,7 @@ impl ProjectFile {
         let build_files: Set<PathBuf> =
             self.get_files(BuildConfigType::Build).into_iter().collect();
         self.test_only_file_entries()
-            .iter()
+            .into_iter()
             .map(|entry| self.listed_source_file(entry))
             .filter(|file| !build_files.contains(&file.path))
             .collect()
@@ -656,7 +659,7 @@ impl ProjectFile {
         ListedSourceFile {
             path: self.join_to_project_dir(entry.get_ref()),
             listed_as: entry.get_ref().clone(),
-            entry: self.project_file_span(span.start, span.end),
+            listed_at: self.project_file_span(span.start, span.end),
         }
     }
 
@@ -760,7 +763,7 @@ impl ProjectFile {
             version: self.general.version.clone(),
             origin: project_origin.clone(),
             declared_dependencies: self.declared_dependency_names(BuildConfigType::Build),
-            files: self.build_source_files(),
+            files: self.listed_source_files(BuildConfigType::Build),
         });
         if mode == BuildConfigType::Test {
             config.project_sources.push(ProjectSources {

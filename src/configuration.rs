@@ -410,7 +410,7 @@ pub struct ProjectSources {
 /// A source file that a project file lists.
 ///
 /// A preliminary command may write the file, so its existence is checked when the sources are read,
-/// after the commands have run. An error of that check points at `entry`.
+/// after the commands have run. An error of that check points at `listed_at`.
 #[derive(Clone)]
 pub struct ListedSourceFile {
     /// The file, resolved against the directory holding the project file.
@@ -418,7 +418,7 @@ pub struct ListedSourceFile {
     /// The file as the project file writes it.
     pub listed_as: PathBuf,
     /// The entry of the project file that lists the file.
-    pub entry: Span,
+    pub listed_at: Span,
 }
 
 impl ProjectSources {
@@ -836,7 +836,7 @@ impl Configuration {
                     "Source file \"{}\" does not exist.",
                     file.listed_as.to_string_lossy()
                 ),
-                &[&Some(file.entry.clone())],
+                &[&Some(file.listed_at.clone())],
             ));
         }
         errors.to_result()
