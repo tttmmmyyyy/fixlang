@@ -810,10 +810,16 @@ impl Configuration {
     /// Every source file the program is compiled from: the ones each project supplies, in the
     /// order the projects were configured, and then the ones no project supplies.
     pub fn source_files(&self) -> impl Iterator<Item = &PathBuf> {
+        self.listed_source_files()
+            .map(|file| &file.path)
+            .chain(self.extra_source_files.iter())
+    }
+
+    /// The source files the projects list, in the order the projects were configured.
+    fn listed_source_files(&self) -> impl Iterator<Item = &ListedSourceFile> {
         self.project_sources
             .iter()
-            .flat_map(|sources| sources.files.iter().map(|file| &file.path))
-            .chain(self.extra_source_files.iter())
+            .flat_map(|sources| &sources.files)
     }
 
     /// Checks that every source file the projects list exists on disk. Each error points at the
@@ -821,11 +827,7 @@ impl Configuration {
     /// project file, which is where its cause is.
     pub fn check_listed_source_files_exist(&self) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        for file in self
-            .project_sources
-            .iter()
-            .flat_map(|sources| &sources.files)
-        {
+        for file in self.listed_source_files() {
             if file.path.exists() {
                 continue;
             }
