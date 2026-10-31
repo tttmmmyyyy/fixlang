@@ -2987,7 +2987,7 @@ The following table shows how each setting is handled.
             <td>None</td>
             <td>Merge</td>
             <td>Affects</td>
-            <td>Commands to be executed before compilation. A command may write a source file listed in <code>files</code>: <code>fix build</code>, <code>fix run</code> and <code>fix test</code> read the source files after running the commands. <code>fix check</code>, <code>fix docs</code> and the language server run no command, so they read such a file once a build has written it.</td>
+            <td>Commands to be executed before compilation. A command may write a source file listed in <code>files</code>: <code>fix build</code>, <code>fix run</code> and <code>fix test</code> read the source files after running the commands. The other subcommands, such as <code>fix check</code>, <code>fix docs</code> and the language server, run no command, so they read such a file once <code>fix test</code> has written it.</td>
         </tr>
         <tr>
             <td>threaded</td>

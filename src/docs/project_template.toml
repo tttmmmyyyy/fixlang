@@ -92,8 +92,8 @@ files = ["main.fix"]
 ## Preliminary commands to be executed before the Fix program is compiled.
 ## This is useful when you need to compile a object files / library before compiling the Fix program.
 ## A command may also write a source file listed in `files`: `fix build`, `fix run` and `fix test` read
-## the source files after running the commands. `fix check`, `fix docs` and the language server run no
-## command, so they read such a file once a build has written it.
+## the source files after running the commands. The other subcommands, such as `fix check`, `fix docs` and
+## the language server, run no command, so they read such a file once `fix test` has written it.
 ## (Experimental) Furthermore, you can change the Fix compiler options by outputting lines with specific formats in the preliminary commands.
 ## At the moment, the following formats are supported.
 ## - `fix.ld_flags=(...)`: Specify flags to pass to the linker. Specify flags separated by spaces in `...`. Example: `fix.ld_flags=-L/path/to/lib -lmylib`.
