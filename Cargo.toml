@@ -1,6 +1,6 @@
 [package]
 name = "fixlang"
-version = "1.6.0"
+version = "1.6.1"
 edition = "2021"
 license = "MIT"
 
@@ -41,6 +41,7 @@ mimalloc = "0.1.48"
 stacker = "0.1"
 typetag = "0.2"
 dyn-clone = "1.0"
+pubgrub = "0.4.0"
 
 [lib]
 name = "fixlang"

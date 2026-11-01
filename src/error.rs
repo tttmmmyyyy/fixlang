@@ -54,6 +54,16 @@ impl Display for Errors {
     }
 }
 
+/// Writes the diagnostics as `Display` does, so that an `Errors` passed out of a library through
+/// `std::error::Error` reads as the compiler prints it.
+impl fmt::Debug for Errors {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(self, f)
+    }
+}
+
+impl std::error::Error for Errors {}
+
 impl Errors {
     /// A collection holding no diagnostic.
     pub fn empty() -> Errors {
@@ -73,6 +83,18 @@ impl Errors {
         self.errs
             .iter()
             .filter(|err| err.severity == Severity::Error)
+    }
+
+    /// The texts of the error diagnostics, without their labels, source locations and closing
+    /// periods, joined by "; ": what a sentence explaining a failure quotes.
+    ///
+    /// # Examples
+    /// Two diagnostics "Failed to open file." and "Not found." give `Failed to open file; Not found`.
+    pub fn messages(&self) -> String {
+        self.errors()
+            .map(|err| err.msg.trim_end().trim_end_matches('.'))
+            .collect::<Vec<_>>()
+            .join("; ")
     }
 
     /// Whether this collection contains any diagnostic at all (errors or warnings).

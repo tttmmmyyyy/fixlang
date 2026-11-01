@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+### Changed
+
+#### Tool
+
+- #968, #972: Dependency resolution skips a version of a dependency whose `fix_version` does not accept the running compiler, and chooses the newest version that does. It used to fail as soon as it tried such a version. A version whose project file cannot be read is skipped in the same way.
+- #968, #972: When no choice of versions satisfies every version requirement, the error now explains which requirements conflict, following them from the root project through the projects that bring them in, with each requirement written as its project file writes it. A `HINT:` line follows when a version needs a newer Fix, or when one project is fetched from two sources.
+- #968, #972: `fix deps add` with no version now requires the newest tagged version that dependency resolution can use: one whose project file can be read, gives the version of its tag, and has a `fix_version` that accepts the running compiler. It used to require the newest tagged version, whatever its project file said. When no version can be used, `fix deps add` fails and says why, leaving the project file as it was.
+
+### Fixed
+
+#### Language
+
+- #707, #966: A program stopped by a runtime check, such as an index out of range or `undefined`, now keeps what it wrote before it stopped, and writes its report after those lines. When its standard output went to a file or a pipe, as with `./prog > log`, the lines it had printed were lost, and so was what it had written to a file it had not closed.
+
+#### Tool
+
+- #982, #984: `fix build`, `fix run` and `fix test` now build a project whose `preliminary_commands` write a source file listed in `files`, also when that file does not exist yet, as on a fresh clone. Since 1.5.0 they failed with `Source file "..." does not exist.` before running the commands.
+- #964: When a completion adds an import, the language server now leaves alone an `import` statement written in a comment or a string literal. It used to delete that statement from the comment or the string and add it to the import statements of the file.
+- #968, #972: Dependency resolution now finds a choice of versions whenever one satisfies every version requirement. It could fail when one requirement on a project accepted a newer version than another requirement on that project allowed, as with `fix deps add a@=1.0.0 b@=1.0.0` where `a` requires `b` `^1.0.0` and `b` 1.1.0 exists.
+- #968, #972: Dependency resolution no longer fails with "required twice with different sources" when the project that fetched a dependency from another repository was at a version the resolution skipped. Two requirements that fetch one project from two different repositories are now a conflict, which the resolution avoids by choosing other versions.
+- #968, #972: `fix deps update` and `fix build` no longer warn that the `rev` or `tag` of a dependency in the root project file is ignored. The root project's `rev` and `tag` are applied.
+- #972: `fix deps add` with no version, when the newest tag is a pre-release such as `2.0.0-beta`, now requires `2.0.0-beta`. It used to require `2.0.0`, which that version does not satisfy.
+
+## [1.6.0] - 2026-10-24
+
 ### Added
 
 #### Language
@@ -40,6 +65,9 @@
 - #841: The type errors of a program are now reported in the same order on every build. The order used to change from one run to the next when the program had several of them.
 - #927: When cloning the git repository of a dependency fails because of the network, for example when the connection is cut off midway, `fix` now tries again up to four times, waiting about 1 s, 2 s, 4 s and 8 s before them. A repository that does not exist on GitHub and a certificate that fails verification are still reported at once.
 - #947, #950: `fix build`, `fix run` and `fix test` no longer ask for approval before running the `preliminary_commands` of a project, and `--allow-preliminary-commands` now only prints a warning. The approval did not stop an untrusted project, whose `ld_flags` and built program run without it. "Security" in Document.md says which subcommands run what a project supplies.
+- #780: `install.sh` now lists the releases newest first and offers the newest full release as the default. The default used to be whichever release GitHub listed first, which could be a pre-release such as `v1.5.0-rc.1`. Pre-releases are marked `(pre-release)` in the list, and you can install one by typing its name.
+- #812, #818: Unless `--with-private` is given, `fix docs` now leaves out the entities in a namespace or a module whose name starts with `_`, the members and the associated types of a trait whose names start with `_`, and the implementations of a trait or for a type whose name starts with `_`.
+- #812, #818: In completion, the language server ranks an entity of a dependency or of `Std` last when its name, or any part of its namespace or module name, starts with `_`.
 
 #### Std
 
@@ -50,12 +78,6 @@
 - #827: The standard library's translations of Ryu, which writes a floating point number as text, and of fast_float, which reads one, are now taken under the Boost Software License 1.0 instead of the Apache License 2.0 and the MIT License. The Boost Software License asks no copyright notice of a program in the form of machine code a compiler made, so a program built by `fix` that you distribute needs no notice of them.
 - #760, #827: If a program has changed the floating point rounding mode from the default (round to nearest), for example by calling C's `fesetround` through FFI, `F64::from_string` and `F32::from_string` may now return the number next to the nearest one.
 - #541, #811: `CChar` is now `U8` on a target where C's `char` without `signed` or `unsigned` is unsigned, such as Linux on arm64. It used to be `I8` on every target, which read a `char` above 127 from a C function as a negative number there.
-
-#### Tool
-
-- #780: `install.sh` now lists the releases newest first and offers the newest full release as the default. The default used to be whichever release GitHub listed first, which could be a pre-release such as `v1.5.0-rc.1`. Pre-releases are marked `(pre-release)` in the list, and you can install one by typing its name.
-- #812, #818: Unless `--with-private` is given, `fix docs` now leaves out the entities in a namespace or a module whose name starts with `_`, the members and the associated types of a trait whose names start with `_`, and the implementations of a trait or for a type whose name starts with `_`.
-- #812, #818: In completion, the language server ranks an entity of a dependency or of `Std` last when its name, or any part of its namespace or module name, starts with `_`.
 
 ### Fixed
 

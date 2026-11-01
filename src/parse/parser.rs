@@ -3396,6 +3396,8 @@ fn parse_import_item_node(pair: Pair<Rule>, ctx: &mut ParseContext) -> ImportTre
     }
 }
 
+/// The import statements a `file_only_import_statements` pair holds, each imported into the module
+/// the pair declares.
 fn parse_import_statements(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -3404,13 +3406,14 @@ fn parse_import_statements(
     let mut pairs = pair.into_inner();
     let mod_info = parse_module_defn(pairs.next().unwrap(), ctx);
     ctx.module_name = mod_info.name;
-    let mut import_stmts = vec![];
-    for pair in pairs {
-        if pair.as_rule() != Rule::import_statement {
-            break;
-        }
-        import_stmts.push(parse_import_statement(pair, ctx));
-    }
+    let import_stmts = pairs
+        .filter_map(|pair| match pair.as_rule() {
+            Rule::import_statement => Some(parse_import_statement(pair, ctx)),
+            // The literals read outside the statements, and the end of the source.
+            Rule::expr_string_lit | Rule::expr_u8_lit | Rule::EOI => None,
+            rule => unreachable!("{:?} between import statements", rule),
+        })
+        .collect();
     Ok(import_stmts)
 }
 

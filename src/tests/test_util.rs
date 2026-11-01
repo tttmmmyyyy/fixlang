@@ -851,6 +851,24 @@ pub fn integer_operations_checked_no_runtime_check_config() -> Configuration {
     config
 }
 
+/// The path of the file `<name>.<extension>` in the directory where the tests write their files,
+/// creating that directory if it does not exist yet.
+pub fn working_file_path(name: &str, extension: &str) -> String {
+    fs::create_dir_all(COMPILER_TEST_WORKING_PATH).unwrap();
+    format!("{}/{}.{}", COMPILER_TEST_WORKING_PATH, name, extension)
+}
+
+/// The signal `abort` stops a program with.
+pub const SIGABRT: i32 = 6;
+
+/// A configuration whose runtime checks are on, so that the checks that stop a program are part
+/// of it.
+pub fn runtime_checked_config() -> Configuration {
+    let mut config = Configuration::develop_mode();
+    config.no_runtime_check = false;
+    config
+}
+
 /// Runs `body` under `config` as the body of a program that binds `zero` to a `Std::I64` the
 /// compiler cannot fold, and fails the test unless the program exits with code 0.
 pub fn test_with_a_runtime_zero(body: &str, config: Configuration) {
@@ -1187,6 +1205,16 @@ pub fn run_fix(project_dir: &Path, args: &[&str]) -> Output {
         .current_dir(project_dir)
         .output()
         .expect("Failed to execute fix")
+}
+
+/// Runs `git` with `args` in `repo_dir`, and fails the test if it fails.
+pub fn run_git(repo_dir: &Path, args: &[&str]) {
+    let status = Command::new("git")
+        .args(args)
+        .current_dir(repo_dir)
+        .status()
+        .unwrap_or_else(|err| panic!("Failed to run `git {:?}`: {}", args, err));
+    assert!(status.success(), "`git {:?}` failed", args);
 }
 
 /// Asserts that `output` succeeded, quoting both streams otherwise.

@@ -8,6 +8,7 @@ mod tests {
         find_sort_text, wait_for_completion_items, LspCompletionCtx,
     };
     use super::super::lsp_client::LspClient;
+    use super::super::text_edit::{apply_lsp_edits, parse_text_edits};
     use crate::ast::name::FullName;
     use serde_json::{json, Value};
     use std::{fs, path::Path, time::Duration};
@@ -176,6 +177,43 @@ mod tests {
                 col
             );
         }
+
+        ctx.shutdown();
+    }
+
+    /// Completing a value of a module the file imports only part of attaches edits that add the
+    /// value to the file's import statement, and leave an `import` written in a comment or a
+    /// string literal as it stands.
+    #[test]
+    fn test_completion_auto_import_edits_the_import_statements_alone() {
+        let mut ctx = LspCompletionCtx::setup("completion-auto-import", &["lib.fix", "main.fix"]);
+        let source = fs::read_to_string(ctx.project_dir.join("main.fix")).unwrap();
+        let (line, text) = source
+            .lines()
+            .enumerate()
+            .find(|(_, text)| text.contains("Lib::other_value"))
+            .unwrap();
+        let col = text.find("other_value").unwrap() + "other_v".len();
+
+        let items = ctx.complete("main.fix", line as u32, col as u32);
+        let item = items
+            .iter()
+            .find(|it| it.get("label").and_then(|l| l.as_str()) == Some("Lib::other_value"))
+            .cloned()
+            .expect("`Lib::other_value` is a candidate");
+        let resolved = ctx.resolve(item);
+        let edits = resolved
+            .get("additionalTextEdits")
+            .and_then(|v| v.as_array())
+            .unwrap_or_else(|| panic!("the resolved item carries import edits: {}", resolved));
+
+        assert_eq!(
+            apply_lsp_edits(&source, &parse_text_edits(edits)),
+            source.replace(
+                "import Lib::lib_value;\n\n//",
+                "import Lib::{lib_value, other_value};\n\n//"
+            )
+        );
 
         ctx.shutdown();
     }

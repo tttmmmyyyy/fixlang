@@ -7,8 +7,8 @@ use crate::constants::STD_NAME;
 use crate::write_log;
 use lsp_types::TextEdit;
 
-// Generate TextEdits that erase all existing import statements in a file.
-// Returns a vector of TextEdit objects that delete import statement lines.
+/// The edits that erase each of `import_stmts` written in `content`, together with the blank
+/// lines that follow it.
 pub fn create_text_edits_to_erase_imports(
     content: &str,
     import_stmts: &[ImportStatement],
@@ -50,8 +50,7 @@ pub fn create_text_edits_to_erase_imports(
     text_edits
 }
 
-// Generate a TextEdit that inserts import statements at the end of the module definition.
-// Returns a TextEdit object that inserts the import statements.
+/// The edit that writes `new_import_stmts` after the `module` declaration, one statement a line.
 pub fn create_text_edit_to_insert_imports(
     module_info: &ModuleInfo,
     new_import_stmts: &[ImportStatement],
@@ -76,28 +75,24 @@ pub fn create_text_edit_to_insert_imports(
     }
 }
 
-pub(super) fn create_text_edit_to_import(
+pub(crate) fn create_text_edit_to_import(
     item_name: &FullName,
     latest_content: &mut LatestContent,
 ) -> Vec<TextEdit> {
     if !item_name.is_global() {
         return vec![];
     }
-    let mod_info = latest_content.get_module_info();
-    if mod_info.is_none() {
+    let Some(mod_info) = latest_content.get_module_info().clone() else {
         return vec![];
-    }
-    let mod_info = mod_info.as_ref().unwrap().clone();
+    };
     let mod_name = mod_info.name.clone();
     // No need to import if the item is defined in the same module.
     if item_name.module() == mod_name {
         return vec![];
     }
-    let import_stmts = latest_content.get_import_stmts();
-    if import_stmts.is_none() {
+    let Some(import_stmts) = latest_content.get_import_stmts().clone() else {
         return vec![];
-    }
-    let import_stmts = import_stmts.as_ref().unwrap().clone();
+    };
 
     // Check if the standard library is imported explicitly.
     let import_std_explicitly = import_stmts
@@ -114,9 +109,8 @@ pub(super) fn create_text_edit_to_import(
 
     // If any import_statement's source is None, it is abnormal, so return.
     if import_stmts.iter().any(|imp| imp.source.is_none()) {
-        let msg = format!(
-            "In create_text_edit_import_to_use, found an import statement with None source.",
-        );
+        let msg =
+            format!("In create_text_edit_to_import, found an import statement with None source.",);
         write_log!("{}", msg);
         return vec![];
     }

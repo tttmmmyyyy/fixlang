@@ -10,5 +10,5 @@ fn main() {
             arr[i] = arr[i] + 1;
         }
     }
-    assert_eq!(arr[0], 200_000);
+    assert_eq!(arr.iter().sum::<i64>(), 200_000_000);
 }

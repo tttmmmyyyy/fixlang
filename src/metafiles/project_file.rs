@@ -1,15 +1,15 @@
 use crate::{
     configuration::{
-        BuildConfigType, Configuration, FixOptimizationLevel, LinkType, OutputFileType,
-        ProjectSources, Sanitizer, ValgrindTool,
+        BuildConfigType, Configuration, FixOptimizationLevel, LinkType, ListedSourceFile,
+        OutputFileType, ProjectSources, Sanitizer, ValgrindTool,
     },
     constants::{
         PROJECT_FILE_PATH, SAMPLE_MAIN_FILE_PATH, SAMPLE_TEST_FILE_PATH, TRY_FIX_DEPS_UPDATE,
         TRY_FIX_DEPS_UPDATE_TEST, WHOLE_PROGRAM_IN_ONE_UNIT, WHOLE_PROGRAM_IN_ONE_UNIT_STR,
     },
     dependency::lockfile::{
-        clone_git_repo, get_lock_file_path, get_versions_from_repo, DependencyLockFile,
-        LockFileType, ProjectSource,
+        get_lock_file_path, version_to_add, DependencyLockFile, LockFileType, ProjectSource,
+        VersionToAdd,
     },
     error::Errors,
     hash::HashSource,
@@ -23,7 +23,7 @@ use crate::{
 };
 use regex::Regex;
 use reqwest::Url;
-use semver::{Version, VersionReq};
+use semver::{BuildMetadata, Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
@@ -351,6 +351,7 @@ impl ProjectFile {
     pub fn read_root_file() -> Result<ProjectFile, Errors> {
         let proj_file_path = Path::new(PROJECT_FILE_PATH);
         let mut proj_file = ProjectFile::read_file(&proj_file_path)?;
+        proj_file.check_fix_version_compatible()?;
         proj_file.role = ProjectFileRole::Root;
         proj_file.source = Some(ProjectOrigin::Local(to_absolute_path(
             proj_file
@@ -361,9 +362,8 @@ impl ProjectFile {
         Ok(proj_file)
     }
 
-    /// Reads the project file at `path`, checks its fields, and checks that the project accepts the
-    /// running compiler's version. The returned file carries the default `role` and `source`, which
-    /// the loader sets to match where the file came from.
+    /// Reads the project file at `path` and checks its fields. The returned file carries the
+    /// default `role` and `source`, which the loader sets to match where the file came from.
     pub fn read_file(path: &Path) -> Result<Self, Errors> {
         let mut file = File::open(path).map_err(|e| {
             Errors::from_msg(format!(
@@ -409,9 +409,6 @@ impl ProjectFile {
 
         // Perform validation.
         proj_file.validate()?;
-
-        // Check if the project file is compatible with the current version of Fix.
-        proj_file.is_fix_version_compatible()?;
 
         Ok(proj_file)
     }
@@ -625,48 +622,45 @@ impl ProjectFile {
     ///
     /// * `mode` - `Test` also takes the files listed in the `[build.test]` section.
     pub fn get_files(&self, mode: BuildConfigType) -> Vec<PathBuf> {
-        self.source_file_entries(mode)
-            .iter()
-            .map(|entry| self.join_to_project_dir(entry.get_ref()))
+        self.listed_source_files(mode)
+            .into_iter()
+            .map(|file| file.path)
             .collect()
     }
 
-    /// The paths of the source files a test build compiles beside the ones an ordinary build
-    /// compiles, resolved against the project directory. A file the `[build.test]` section repeats
-    /// from the `build` section is one of the ordinary sources, so it stays out.
-    fn get_test_only_files(&self) -> Vec<PathBuf> {
-        let build_files: Set<PathBuf> =
-            self.get_files(BuildConfigType::Build).into_iter().collect();
-        self.test_only_file_entries()
-            .iter()
-            .map(|entry| self.join_to_project_dir(entry.get_ref()))
-            .filter(|path| !build_files.contains(path))
-            .collect()
-    }
-
-    /// Checks that every source file listed in the project file exists on disk. Each error points at
-    /// the offending entry, so an editor attaches the problem to the project file, which is where
-    /// its cause is.
+    /// This project's own source files, each paired with the entry listing it.
     ///
     /// # Arguments
     ///
-    /// * `mode` - `Test` also checks the files listed in the `[build.test]` section.
-    fn check_source_files_exist(&self, mode: BuildConfigType) -> Result<(), Errors> {
-        let mut errors = Errors::empty();
-        for entry in self.source_file_entries(mode) {
-            if self.join_to_project_dir(entry.get_ref()).exists() {
-                continue;
-            }
-            let span = entry.span();
-            errors.append(Errors::from_msg_srcs(
-                format!(
-                    "Source file \"{}\" does not exist.",
-                    entry.get_ref().to_string_lossy()
-                ),
-                &[&Some(self.project_file_span(span.start, span.end))],
-            ));
+    /// * `mode` - `Test` also takes the files listed in the `[build.test]` section.
+    fn listed_source_files(&self, mode: BuildConfigType) -> Vec<ListedSourceFile> {
+        self.source_file_entries(mode)
+            .into_iter()
+            .map(|entry| self.listed_source_file(entry))
+            .collect()
+    }
+
+    /// The source files a test build compiles beside the ones an ordinary build compiles, each
+    /// paired with the entry listing it. A file the `[build.test]` section repeats from the
+    /// `build` section is one of the ordinary sources, so it stays out.
+    fn test_only_source_files(&self) -> Vec<ListedSourceFile> {
+        let build_files: Set<PathBuf> =
+            self.get_files(BuildConfigType::Build).into_iter().collect();
+        self.test_only_file_entries()
+            .into_iter()
+            .map(|entry| self.listed_source_file(entry))
+            .filter(|file| !build_files.contains(&file.path))
+            .collect()
+    }
+
+    /// The source file a `files` entry of this project file lists.
+    fn listed_source_file(&self, entry: &Spanned<PathBuf>) -> ListedSourceFile {
+        let span = entry.span();
+        ListedSourceFile {
+            path: self.join_to_project_dir(entry.get_ref()),
+            listed_as: entry.get_ref().clone(),
+            listed_at: self.project_file_span(span.start, span.end),
         }
-        errors.to_result()
     }
 
     /// The compiler versions this project builds with, as its `fix_version` field requires. A
@@ -680,18 +674,15 @@ impl ProjectFile {
     }
 
     /// Checks that the running compiler's version satisfies what this project requires of it.
-    pub fn is_fix_version_compatible(&self) -> Result<(), Errors> {
-        if self
-            .fix_version()
-            .matches(&Version::parse(env!("CARGO_PKG_VERSION")).unwrap())
-        {
+    pub fn check_fix_version_compatible(&self) -> Result<(), Errors> {
+        if self.fix_version().matches(&compiler_version()) {
             Ok(())
         } else {
             Err(Errors::from_msg(format!(
                 "The project \"{}\" requires Fix version \"{}\", but the current version of Fix is \"{}\".",
                 self.general.name,
                 self.fix_version(),
-                env!("CARGO_PKG_VERSION"),
+                compiler_version(),
             )))
         }
     }
@@ -763,10 +754,6 @@ impl ProjectFile {
             mode = BuildConfigType::Build;
         }
 
-        // Reject missing source files up front, so that the error points at the project-file entry
-        // naming the file and an editor attaches it there.
-        self.check_source_files_exist(mode)?;
-
         // Record what this project provides and what it declares, so that an import reaching past
         // the projects it declares can be told from one that stays within them. The sources of a
         // test build carry declarations of their own, since the test dependencies are the ones the
@@ -776,7 +763,7 @@ impl ProjectFile {
             version: self.general.version.clone(),
             origin: project_origin.clone(),
             declared_dependencies: self.declared_dependency_names(BuildConfigType::Build),
-            files: self.get_files(BuildConfigType::Build),
+            files: self.listed_source_files(BuildConfigType::Build),
         });
         if mode == BuildConfigType::Test {
             config.project_sources.push(ProjectSources {
@@ -784,7 +771,7 @@ impl ProjectFile {
                 version: self.general.version.clone(),
                 origin: project_origin.clone(),
                 declared_dependencies: self.declared_dependency_names(BuildConfigType::Test),
-                files: self.get_test_only_files(),
+                files: self.test_only_source_files(),
             });
         }
 
@@ -1374,41 +1361,34 @@ impl ProjectFile {
                         proj_name, reg_loc
                     ));
 
-                    // When the version requirement is empty, try to use the latest tagged version.
+                    // When no version is given, require the newest tagged version that the
+                    // dependency resolution can use.
                     let version = match version {
                         Some(v) => v.clone(),
-                        None => {
-                            let (_tmp_dir, repo) = clone_git_repo(&proj_info.git)?;
-                            let version_infos = get_versions_from_repo(&repo)?;
-                            let mut tagged_versions = version_infos
-                                .iter()
-                                .filter_map(|version_info| {
-                                    if version_info.tagged {
-                                        Some(version_info.version.clone())
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect::<Vec<_>>();
-                            tagged_versions.sort();
-                            if tagged_versions.is_empty() {
+                        None => match version_to_add(proj_name, &proj_info.git)? {
+                            VersionToAdd::Untagged => {
                                 warn_msg(&format!(
                                     "Adding version requirement \"*\" for \"{}\" since there are no tagged versions. \
                                     This means that updating the lock file (which is done by `fix deps add` or `fix deps update`) may introduce breaking changes.",
                                     proj_name,
                                 ));
                                 "*".to_string()
-                            } else {
-                                let latest = tagged_versions.pop().unwrap();
-                                let latest =
-                                    format!("{}.{}.{}", latest.major, latest.minor, latest.patch);
-                                info_msg(&format!(
-                                    "Adding version requirement \"{}\" for \"{}\" which is the latest tagged version.",
-                                    latest, proj_name
-                                ));
-                                latest
                             }
-                        }
+                            VersionToAdd::Tagged(version) => {
+                                // The pre-release is kept, since a requirement without it
+                                // rejects the version it names.
+                                let version = Version {
+                                    build: BuildMetadata::EMPTY,
+                                    ..version
+                                }
+                                .to_string();
+                                info_msg(&format!(
+                                    "Adding version requirement \"{}\" for \"{}\".",
+                                    version, proj_name
+                                ));
+                                version
+                            }
+                        },
                     };
 
                     let section_name = match mode {
@@ -1503,6 +1483,11 @@ impl ProjectFile {
         })?;
         Ok(reg_file)
     }
+}
+
+/// The version of the running compiler.
+pub fn compiler_version() -> Version {
+    Version::parse(env!("CARGO_PKG_VERSION")).unwrap()
 }
 
 #[cfg(test)]

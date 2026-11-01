@@ -26,13 +26,15 @@ int main() {
     auto cs = speedtest::rands(q, 998244353, 5), ds = speedtest::rands(q, 998244353, 6);
     vector<S> v(n); for (int i = 0; i < n; i++) v[i] = {mint(init[i]), 1};
     speedtest::perf_enable();
-    atcoder::lazy_segtree<S, op, e, F, mapping, composition, id> t(v);
     ll acc = 0;
-    for (int i = 0; i < q; i++) {
-        ll a = aa[i], b = bb[i];
-        ll l = min(a, b), r = max(a, b);
-        if (ts[i] == 0) { t.apply(l, r + 1, F{mint(cs[i]), mint(ds[i])}); continue; }
-        acc += t.prod(l, r + 1).a.val();
+    {
+        atcoder::lazy_segtree<S, op, e, F, mapping, composition, id> t(v);
+        for (int i = 0; i < q; i++) {
+            ll a = aa[i], b = bb[i];
+            ll l = min(a, b), r = max(a, b);
+            if (ts[i] == 0) { t.apply(l, r + 1, F{mint(cs[i]), mint(ds[i])}); continue; }
+            acc += t.prod(l, r + 1).a.val();
+        }
     }
     speedtest::perf_disable();
     return speedtest::check("50032478004588\n", "%lld\n", acc);

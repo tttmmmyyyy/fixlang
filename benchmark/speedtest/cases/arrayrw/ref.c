@@ -11,6 +11,8 @@ int main(void) {
     for (int i = 0; i < 1000; i++) arr[i] = 0;
     for (long k = 0; k < iters; k++)
         for (int i = 0; i < 1000; i++) arr[i] = arr[i] + 1;
-    if (arr[0] != 200000) { fprintf(stderr, "arrayrw: %ld\n", arr[0]); return 1; }
+    long sum = 0;
+    for (int i = 0; i < 1000; i++) sum += arr[i];
+    if (sum != 200000000) { fprintf(stderr, "arrayrw: %ld\n", sum); return 1; }
     return 0;
 }

@@ -568,4 +568,35 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(written, statements);
     }
+
+    /// Verifies that the import statements of a source are those written in its code, before or
+    /// after its other declarations, and that an `import` inside a comment, a string literal or a
+    /// name is skipped. A string literal runs past a `\"` and across a line break, and the
+    /// character literal `'"'` opens no string, so the statement after it is read.
+    #[test]
+    fn test_import_statements_are_read_from_code_alone() {
+        let source = r#"module Main;
+
+import Lib::f;
+// Write `import Lib::g;` to use `g`.
+/* import Lib::h; */
+message : String = "import Lib::i;";
+escaped : String = "Write \"import Lib::l;\" to use l.";
+lines : String = "first line
+import Lib::m;
+";
+quote : U8 = '"';
+reimport Lib::j;
+import Lib::k;
+"#;
+        let parsed = panic_if_err(parse_str_import_statements(
+            PathBuf::from("main.fix"),
+            source,
+        ));
+        let written = parsed
+            .iter()
+            .map(|statement| statement.stringify())
+            .collect::<Vec<_>>();
+        assert_eq!(written, ["import Lib::f;", "import Lib::k;"]);
+    }
 }

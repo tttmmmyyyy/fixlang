@@ -16,6 +16,7 @@ use crate::misc::{
     path_relative_to, platform_thread_sanitizer_supported, platform_valgrind_supported, warn_msg,
     Map, Set,
 };
+use crate::parse::sourcefile::Span;
 use crate::preliminary_command::PreliminaryCommand;
 use crate::target_triple::build_target_triple;
 use build_time::build_time_utc;
@@ -402,8 +403,22 @@ pub struct ProjectSources {
     pub origin: ProjectOrigin,
     /// The projects declared as dependencies of these sources, by name.
     pub declared_dependencies: Set<ProjectName>,
-    /// The source files, resolved to paths.
-    pub files: Vec<PathBuf>,
+    /// The source files.
+    pub files: Vec<ListedSourceFile>,
+}
+
+/// A source file that a project file lists.
+///
+/// A preliminary command may write the file, so its existence is checked when the sources are read,
+/// after the commands have run. An error of that check points at `listed_at`.
+#[derive(Clone)]
+pub struct ListedSourceFile {
+    /// The file, resolved against the directory holding the project file.
+    pub path: PathBuf,
+    /// The file as the project file writes it.
+    pub listed_as: PathBuf,
+    /// The entry of the project file that lists the file.
+    pub listed_at: Span,
 }
 
 impl ProjectSources {
@@ -795,10 +810,36 @@ impl Configuration {
     /// Every source file the program is compiled from: the ones each project supplies, in the
     /// order the projects were configured, and then the ones no project supplies.
     pub fn source_files(&self) -> impl Iterator<Item = &PathBuf> {
+        self.listed_source_files()
+            .map(|file| &file.path)
+            .chain(self.extra_source_files.iter())
+    }
+
+    /// The source files the projects list, in the order the projects were configured.
+    fn listed_source_files(&self) -> impl Iterator<Item = &ListedSourceFile> {
         self.project_sources
             .iter()
-            .flat_map(|sources| sources.files.iter())
-            .chain(self.extra_source_files.iter())
+            .flat_map(|sources| &sources.files)
+    }
+
+    /// Checks that every source file the projects list exists on disk. Each error points at the
+    /// entry of the project file listing the file, so an editor attaches the problem to the
+    /// project file, which is where its cause is.
+    pub fn check_listed_source_files_exist(&self) -> Result<(), Errors> {
+        let mut errors = Errors::empty();
+        for file in self.listed_source_files() {
+            if file.path.exists() {
+                continue;
+            }
+            errors.append(Errors::from_msg_srcs(
+                format!(
+                    "Source file \"{}\" does not exist.",
+                    file.listed_as.to_string_lossy()
+                ),
+                &[&Some(file.listed_at.clone())],
+            ));
+        }
+        errors.to_result()
     }
 
     /// Where `--emit-llvm` writes one compilation unit's LLVM IR: a `.ll` file beside the output

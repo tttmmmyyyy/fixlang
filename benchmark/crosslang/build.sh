@@ -32,7 +32,7 @@ for name in $(comparable_cases); do
     # `../speedtest/reference.py` spells the same two counterpart recipes for its own question.
     (cd "$CASES/$name" \
         && "$FIX" build -O max --allow-preliminary-commands -o "$BIN/${name}_fix" >/dev/null \
-        && gcc -O3 -march=native ref.c -o "$BIN/${name}_c" -lm \
+        && gcc -O3 -march=native -ffp-contract=off ref.c -o "$BIN/${name}_c" -lm \
         && rustc -O -C target-cpu=native ref.rs -o "$BIN/${name}_rust" 2>/dev/null)
     echo "   $name"
 done

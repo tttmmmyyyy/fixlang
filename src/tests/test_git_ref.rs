@@ -3,11 +3,10 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::LOCK_FILE_PATH;
-    use crate::tests::test_util::{copy_dir_recursive, fix_command};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command, run_git};
     use std::{
         fs,
         path::{Path, PathBuf},
-        process::Command,
     };
     use tempfile::TempDir;
 
@@ -17,19 +16,10 @@ mod integration_tests {
     fn create_annotated_tag_upstream(repo_dir: &Path, version: &str) {
         fs::create_dir_all(repo_dir).expect("Failed to create upstream dir");
 
-        let run = |args: &[&str]| {
-            let status = Command::new("git")
-                .args(args)
-                .current_dir(repo_dir)
-                .status()
-                .unwrap_or_else(|e| panic!("Failed to run `git {:?}`: {}", args, e));
-            assert!(status.success(), "`git {:?}` failed", args);
-        };
-
-        run(&["init", "-q", "-b", "main"]);
+        run_git(repo_dir, &["init", "-q", "-b", "main"]);
         // Local identity so commit succeeds regardless of the env's git config.
-        run(&["config", "user.email", "test@example.com"]);
-        run(&["config", "user.name", "Test"]);
+        run_git(repo_dir, &["config", "user.email", "test@example.com"]);
+        run_git(repo_dir, &["config", "user.name", "Test"]);
 
         let proj_toml = format!(
             "[general]\n\
@@ -51,10 +41,13 @@ mod integration_tests {
         )
         .expect("Failed to write lib.fix");
 
-        run(&["add", "fixproj.toml", "lib.fix"]);
-        run(&["commit", "-q", "-m", "init"]);
+        run_git(repo_dir, &["add", "fixproj.toml", "lib.fix"]);
+        run_git(repo_dir, &["commit", "-q", "-m", "init"]);
         // -a creates an annotated tag (a tag object) rather than a lightweight tag.
-        run(&["tag", "-a", version, "-m", &format!("release {}", version)]);
+        run_git(
+            repo_dir,
+            &["tag", "-a", version, "-m", &format!("release {}", version)],
+        );
     }
 
     /// Writes a minimal consumer fix project at `consumer_dir` that depends on
@@ -125,7 +118,7 @@ mod integration_tests {
         let _ = fix_command().arg("clean").current_dir(project_dir).output();
     }
 
-    // Test 1: rev pinning builds successfully.
+    /// rev pinning builds successfully.
     #[test]
     fn test_git_rev_basic() {
         let (_temp_dir, project_dir) = setup_git_ref_test_env("rev_basic");
@@ -154,7 +147,7 @@ mod integration_tests {
         );
     }
 
-    // Test 2: tag pinning builds successfully.
+    /// tag pinning builds successfully, and no warning says the pin is ignored.
     #[test]
     fn test_git_tag_basic() {
         let (_temp_dir, project_dir) = setup_git_ref_test_env("tag_basic");
@@ -181,9 +174,15 @@ mod integration_tests {
             lock_content.contains("version = \"1.1.0\""),
             "Lock file should show version 1.1.0"
         );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            !stderr.contains("only applied to direct dependencies"),
+            "the root's own pin is applied, so no warning says it is ignored:\n{}",
+            stderr
+        );
     }
 
-    // Test 3: rev + version (version requirement satisfied).
+    /// rev + version (version requirement satisfied).
     #[test]
     fn test_git_rev_with_version_ok() {
         let (_temp_dir, project_dir) = setup_git_ref_test_env("rev_with_version_ok");
@@ -201,7 +200,7 @@ mod integration_tests {
         );
     }
 
-    // Test 4: rev + version (version requirement NOT satisfied → error).
+    /// rev + version (version requirement NOT satisfied → error).
     #[test]
     fn test_git_rev_with_version_fail() {
         let (_temp_dir, project_dir) = setup_git_ref_test_env("rev_with_version_fail");
@@ -224,7 +223,7 @@ mod integration_tests {
         );
     }
 
-    // Test 5: rev and tag both specified → validation error.
+    /// rev and tag both specified → validation error.
     #[test]
     fn test_git_rev_and_tag_conflict() {
         let (_temp_dir, project_dir) = setup_git_ref_test_env("rev_and_tag_conflict");
@@ -247,7 +246,7 @@ mod integration_tests {
         );
     }
 
-    // Test 6: fix deps update does not change tag-pinned dependency.
+    /// fix deps update does not change tag-pinned dependency.
     #[test]
     fn test_git_tag_update_stable() {
         let (_temp_dir, project_dir) = setup_git_ref_test_env("tag_update_stable");
@@ -295,7 +294,7 @@ mod integration_tests {
         );
     }
 
-    // Test 7: Root pins with tag, transitive dep A requires compatible version range → success.
+    /// Root pins with tag, transitive dep A requires compatible version range → success.
     #[test]
     fn test_transitive_root_pins_ok() {
         let (_temp_dir, project_dir) = setup_git_ref_test_env("transitive_root_pins_ok");
@@ -324,7 +323,7 @@ mod integration_tests {
         );
     }
 
-    // Test 8: Root pins with tag, transitive dep A requires incompatible version range → error.
+    /// Root pins with tag, transitive dep A requires incompatible version range → error.
     #[test]
     fn test_transitive_root_pins_fail() {
         let (_temp_dir, project_dir) = setup_git_ref_test_env("transitive_root_pins_fail");
@@ -347,7 +346,7 @@ mod integration_tests {
         );
     }
 
-    // Test 9: Root uses version range, A pins with tag → A's pin is ignored, SemVer resolution used.
+    /// Root uses version range, A pins with tag → A's pin is ignored, SemVer resolution used.
     // A pins math to tag v0.1.3 which is OUTSIDE root's ^1.0 range.
     // If A's pin were respected, the build would fail. Success proves the pin is ignored.
     #[test]
@@ -378,7 +377,7 @@ mod integration_tests {
         );
     }
 
-    // Test 10: Both root and A pin with different tags → Root's pin is used, A's pin is ignored.
+    /// Both root and A pin with different tags → Root's pin is used, A's pin is ignored.
     #[test]
     fn test_transitive_both_pin() {
         let (_temp_dir, project_dir) = setup_git_ref_test_env("transitive_both_pin");
