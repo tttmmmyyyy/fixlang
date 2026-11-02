@@ -1,8 +1,8 @@
 use super::{
     closure_specialization, collapse_constructions, constant_array_literals,
     dead_symbol_elimination, decapture_scope_functions, defunctionalize_fix, inline, inline_local,
-    optimize_act, remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args, uncurry,
-    unwrap_newtype,
+    lambda_set, optimize_act, remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args,
+    uncurry, unwrap_newtype,
 };
 use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
 
@@ -95,6 +95,21 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config.enable_inline_local_optimization(),
         "inline_local",
         |prg| inline_local::run(prg, config.num_worker_thread),
+    );
+
+    // Infer the lambda sets of the program and the copies they ask for, at the place where closure
+    // specialization reads the program, and dump them. The program is left as it is.
+    run_pass(
+        prg,
+        config,
+        config.enable_closure_specialization() && (config.develop_mode || config.emit_symbols),
+        "lambda_set",
+        |prg| {
+            let dump_step = config
+                .emit_symbols
+                .then(|| format!("{}", prg.optimization_step));
+            lambda_set::run(prg, dump_step)
+        },
     );
 
     // Give a function that takes a struct a twin taking one argument per field of it, so that a

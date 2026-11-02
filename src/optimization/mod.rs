@@ -11,6 +11,7 @@ mod eta_expansion;
 mod find_usage_of_name;
 mod inline;
 mod inline_local;
+pub(crate) mod lambda_set;
 mod let_elimination;
 mod minted_names;
 mod move_bodies;

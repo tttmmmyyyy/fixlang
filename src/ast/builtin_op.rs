@@ -2,6 +2,7 @@ use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::generator::{Generator, Object};
+use crate::optimization::lambda_set::BuiltinFlow;
 use crate::rc_ir::ast::{FieldPath, RcTarget, UniqueCheckOperand};
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::locality::ExtShape;
@@ -108,6 +109,19 @@ pub trait BuiltinOp: DynClone + Send + Sync {
     /// so that the lambda captures nothing and needs no closure object.
     fn env_operand(&self) -> Option<EnvOperand> {
         None
+    }
+
+    /// How the functions this op's operands hold flow into its result, for lambda set inference.
+    /// Default: every place of a function in the operands and the result is a closure built at run
+    /// time.
+    ///
+    /// The default is always sound: a value at an erased place stays a closure, and a closure works
+    /// wherever a function does. An op that moves values without calling them or putting them out
+    /// of the program's sight declares the flow instead, so that what passes through it keeps the
+    /// lambda set it had. An op calling a function operand erases that operand's own slot, since
+    /// the code it generates calls a closure.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        flow.erase_all();
     }
 
     /// The container operand and boxed-leaf path whose runtime uniqueness this op branches on, for

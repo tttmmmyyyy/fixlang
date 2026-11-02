@@ -44,6 +44,7 @@ use crate::object::{
     get_array_storage_buf, read_alloc_offset, union_tag_value, write_alloc_offset, CapacityCheck,
     ObjectFieldType,
 };
+use crate::optimization::lambda_set::BuiltinFlow;
 use crate::optimization::rename::generate_new_names;
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{FieldPath, RcState, RcTarget, UniqueCheckOperand};
@@ -3007,6 +3008,9 @@ impl BuiltinOp for ArrayUnsafeEmptyOp {
         vec![&mut self.capacity_name]
     }
 
+    /// The array comes back with no element.
+    fn lambda_set_flow(&self, _flow: &mut BuiltinFlow) {}
+
     fn result_prov(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -3099,6 +3103,13 @@ impl BuiltinOp for ArrayUnsafeGetBoundsUncheckedOp {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.idx_name]
+    }
+
+    /// The element read is the array's element.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let arr = flow.operand(0);
+        let elem = flow.type_arg(&arr, 0);
+        flow.same(&elem, &flow.result());
     }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
@@ -3235,6 +3246,11 @@ impl BuiltinOp for ArrayTruncateBoundsUncheckedOp {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.len_name]
+    }
+
+    /// The array comes back with fewer of its elements.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        flow.same(&flow.operand(0), &flow.result());
     }
 
     fn unique_check_operand(
@@ -3398,6 +3414,14 @@ impl BuiltinOp for ArrayAppendValueCapacityUncheckedOp {
             &mut self.value_name,
             &mut self.count_name,
         ]
+    }
+
+    /// The value becomes elements of the array that comes back.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let arr = flow.operand(0);
+        flow.same(&arr, &flow.result());
+        let elem = flow.type_arg(&arr, 0);
+        flow.same(&elem, &flow.operand(1));
     }
 
     fn unique_check_operand(
@@ -3742,6 +3766,11 @@ impl BuiltinOp for ArraySetCapacityBoundsUncheckedOp {
         vec![&mut self.arr_name, &mut self.cap_name]
     }
 
+    /// The array comes back with its elements.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        flow.same(&flow.operand(0), &flow.result());
+    }
+
     fn unique_check_operand(
         &self,
         arg_tys: &[Arc<TypeNode>],
@@ -3920,6 +3949,13 @@ impl BuiltinOp for ArrayAppendCapacityUncheckedOp {
         vec![&mut self.dst_name, &mut self.src_name]
     }
 
+    /// The elements of `src` join those of `dst`, which comes back.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let dst = flow.operand(0);
+        flow.same(&dst, &flow.result());
+        flow.same(&dst, &flow.operand(1));
+    }
+
     fn unique_check_operand(
         &self,
         arg_tys: &[Arc<TypeNode>],
@@ -4088,6 +4124,13 @@ impl BuiltinOp for ArrayCopyCapacityBoundsUncheckedOp {
         ]
     }
 
+    /// The elements of `src` join those of `dst`, which comes back.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let dst = flow.operand(0);
+        flow.same(&dst, &flow.result());
+        flow.same(&dst, &flow.operand(1));
+    }
+
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == COPY_SRC_ARG
     }
@@ -4251,6 +4294,11 @@ impl BuiltinOp for ArrayGrowSizeOp {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.len_name]
+    }
+
+    /// The array comes back with its elements.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        flow.same(&flow.operand(0), &flow.result());
     }
 
     fn unique_check_operand(
@@ -4550,6 +4598,14 @@ impl BuiltinOp for ArraySetOp {
         ]
     }
 
+    /// The value becomes an element of the array that comes back.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let arr = flow.operand(0);
+        flow.same(&arr, &flow.result());
+        let elem = flow.type_arg(&arr, 0);
+        flow.same(&elem, &flow.operand(2));
+    }
+
     fn unique_check_operand(
         &self,
         arg_tys: &[Arc<TypeNode>],
@@ -4737,6 +4793,11 @@ impl BuiltinOp for ArraySwapOp {
         vec![&mut self.array_name, &mut self.i_name, &mut self.j_name]
     }
 
+    /// The array comes back with its elements.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        flow.same(&flow.operand(0), &flow.result());
+    }
+
     fn unique_check_operand(
         &self,
         arg_tys: &[Arc<TypeNode>],
@@ -4907,6 +4968,18 @@ impl BuiltinOp for ArrayPunchOp {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name, &mut self.idx_name]
+    }
+
+    /// The element moved out and the punched array that comes back hold the array's elements.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let arr = flow.operand(0);
+        let elem = flow.type_arg(&arr, 0);
+        let result = flow.result();
+        let punched = flow.field(&result, 0);
+        let punched_elem = flow.type_arg(&punched, 0);
+        flow.same(&punched_elem, &elem);
+        let moved = flow.field(&result, 1);
+        flow.same(&moved, &elem);
     }
 
     fn unique_check_operand(
@@ -5094,6 +5167,16 @@ impl BuiltinOp for PunchedArrayPlugOp {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.elem_name, &mut self.punched_name]
+    }
+
+    /// The element and the punched array's elements become the array's elements.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let result = flow.result();
+        let elem = flow.type_arg(&result, 0);
+        let punched = flow.operand(1);
+        let punched_elem = flow.type_arg(&punched, 0);
+        flow.same(&elem, &punched_elem);
+        flow.same(&elem, &flow.operand(0));
     }
 
     fn unique_check_operand(
@@ -5340,6 +5423,9 @@ impl BuiltinOp for ArrayGetSizeOp {
         vec![&mut self.arr_name]
     }
 
+    /// Only the size is read.
+    fn lambda_set_flow(&self, _flow: &mut BuiltinFlow) {}
+
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
     }
@@ -5404,6 +5490,9 @@ impl BuiltinOp for ArrayGetCapacityOp {
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.arr_name]
     }
+
+    /// Only the capacity is read.
+    fn lambda_set_flow(&self, _flow: &mut BuiltinFlow) {}
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
@@ -5528,6 +5617,12 @@ impl BuiltinOp for StructGetOp {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
+    }
+
+    /// The value read is the field's.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let field = flow.field(&flow.operand(0), self.field_index());
+        flow.same(&field, &flow.result());
     }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
@@ -6155,6 +6250,17 @@ impl BuiltinOp for StructPunchOp {
         vec![&mut self.var_name]
     }
 
+    /// The punched struct is laid out as the struct, and the field moved out is the struct's.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let s = flow.operand(0);
+        let result = flow.result();
+        let punched = flow.field(&result, 1);
+        flow.same(&punched, &s);
+        let moved = flow.field(&result, 0);
+        let field = flow.field(&s, self.field_idx);
+        flow.same(&moved, &field);
+    }
+
     fn unique_check_operand(
         &self,
         arg_tys: &[Arc<TypeNode>],
@@ -6336,6 +6442,14 @@ impl BuiltinOp for StructPlugInOp {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.punched_struct_name, &mut self.field_name]
+    }
+
+    /// The struct is laid out as the punched struct, and the value becomes its field.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let result = flow.result();
+        flow.same(&flow.operand(0), &result);
+        let field = flow.field(&result, self.field_idx);
+        flow.same(&field, &flow.operand(1));
     }
 
     fn unique_check_operand(
@@ -7331,6 +7445,14 @@ impl BuiltinOp for StructSetOp {
         vec![&mut self.value_name, &mut self.struct_name]
     }
 
+    /// The value becomes the field of the struct that comes back.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let s = flow.operand(1);
+        flow.same(&s, &flow.result());
+        let field = flow.field(&s, self.field_idx as usize);
+        flow.same(&field, &flow.operand(0));
+    }
+
     fn unique_check_operand(
         &self,
         arg_tys: &[Arc<TypeNode>],
@@ -7508,6 +7630,12 @@ impl BuiltinOp for MakeUnionOp {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.field_name]
+    }
+
+    /// The payload becomes the variant's.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let payload = flow.field(&flow.result(), self.field_idx);
+        flow.same(&payload, &flow.operand(0));
     }
 
     fn result_prov(
@@ -7696,6 +7824,12 @@ impl BuiltinOp for UnionAsOp {
         vec![&mut self.union_arg_name]
     }
 
+    /// The value read is the variant's payload.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let payload = flow.field(&flow.operand(0), self.field_idx);
+        flow.same(&payload, &flow.result());
+    }
+
     fn borrows_operand(&self, i: usize, arg_tys: &[Arc<TypeNode>], type_env: &TypeEnv) -> bool {
         // `as` takes exactly the union, so `arg_tys[0]` is it; its variant `field_idx` is the payload.
         i == 0 && Self::borrows_union(&arg_tys[0].field_types(type_env)[self.field_idx], type_env)
@@ -7851,6 +7985,9 @@ impl BuiltinOp for UnionIsOp {
         vec![&mut self.union_arg_name]
     }
 
+    /// Only the tag is read.
+    fn lambda_set_flow(&self, _flow: &mut BuiltinFlow) {}
+
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
         i == 0
     }
@@ -7975,6 +8112,17 @@ impl BuiltinOp for UnionModOp {
         vec![&mut self.union_name, &mut self.modifier_name]
     }
 
+    /// The modifier is called as a closure on the payload, and what it returns becomes the payload.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let u = flow.operand(0);
+        flow.same(&u, &flow.result());
+        let payload = flow.field(&u, self.field_idx);
+        let modifier = flow.operand(1);
+        flow.erase_own(&modifier);
+        flow.same(&flow.type_arg(&modifier, 0), &payload);
+        flow.same(&flow.type_arg(&modifier, 1), &payload);
+    }
+
     fn result_locality(
         &self,
         result_ty: &Arc<TypeNode>,
@@ -8072,6 +8220,9 @@ impl BuiltinOp for UndefinedInternalOp {
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.msg_name]
     }
+
+    /// The op returns no value.
+    fn lambda_set_flow(&self, _flow: &mut BuiltinFlow) {}
 
     fn result_prov(
         &self,
@@ -8476,6 +8627,13 @@ impl BuiltinOp for IsUniqueOp {
         vec![&mut self.var_name]
     }
 
+    /// The value comes back unchanged beside the flag.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let result = flow.result();
+        let value = flow.field(&result, 1);
+        flow.same(&value, &flow.operand(0));
+    }
+
     // This op returns the answer to the program: `Debug::assert_unique` turns it into a halt and
     // `Destructor::mutate_unique_io` into a copy of the resource.
     fn observes_uniqueness(&self) -> bool {
@@ -8666,6 +8824,13 @@ impl BuiltinOp for ArrayIsStorageUniqueOp {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
+    }
+
+    /// The array comes back unchanged beside the flag.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        let result = flow.result();
+        let arr = flow.field(&result, 1);
+        flow.same(&arr, &flow.operand(0));
     }
 
     // This op returns the answer to the program: `Debug::assert_unique` turns it into a halt and
@@ -9922,6 +10087,11 @@ impl BuiltinOp for MarkThreadedOp {
 
     fn free_vars_mut(&mut self) -> Vec<&mut FullName> {
         vec![&mut self.var_name]
+    }
+
+    /// The value comes back unchanged.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        flow.same(&flow.operand(0), &flow.result());
     }
 
     fn result_prov(
