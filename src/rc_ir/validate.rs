@@ -757,7 +757,7 @@ mod tests {
     }
 
     /// A closure-ABI function without the capture parameter is caught, one direction of the
-    /// agreement between a function's arrow type and its parameter list.
+    /// agreement between a function's type and its parameter list.
     #[test]
     #[should_panic(expected = "capture-present=false disagrees with closure-ABI=true")]
     fn rejects_capture_missing_for_closure_abi() {
@@ -814,7 +814,7 @@ mod tests {
     }
 
     /// A func-ABI function carrying a capture parameter is caught, the other direction of the
-    /// agreement between a function's arrow type and its parameter list.
+    /// agreement between a function's type and its parameter list.
     #[test]
     #[should_panic(expected = "capture-present=true disagrees with closure-ABI=false")]
     fn rejects_capture_present_for_func_abi() {

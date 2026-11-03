@@ -370,7 +370,7 @@ impl BuiltinTypeName {
     }
 }
 
-/// `Std::Arrow`, the type constructor `->` of function types.
+/// `Std::Arrow`, the type constructor `->` of arrow types.
 pub const ARROW_TYPE: BuiltinTypeName = BuiltinTypeName {
     namespace: &[STD_NAME],
     name: ARROW_NAME,
@@ -508,14 +508,14 @@ pub const U128_TYPE: BuiltinTypeName = BuiltinTypeName {
     name: U128_NAME,
 };
 
-/// The name `::Std::Arrow` of the type constructor of function types, written as an absolute name.
+/// The name `::Std::Arrow` of the type constructor of arrow types, written as an absolute name.
 pub fn make_arrow_name_abs() -> FullName {
     let mut name = ARROW_TYPE.to_fullname();
     name.set_absolute();
     name
 }
 
-/// The type constructor of function types: `a -> b` is this constructor applied to `a` and `b`.
+/// The type constructor of arrow types: `a -> b` is this constructor applied to `a` and `b`.
 pub fn make_arrow_tycon() -> TyCon {
     TyCon::new(make_arrow_name_abs())
 }
@@ -547,14 +547,17 @@ pub fn make_functor_name() -> FullName {
 /// The name of the func type constructor taking `arity` arguments.
 ///
 /// # Examples
-/// `make_func_name(2)` is `#Func2`.
-pub fn make_func_name(arity: u32) -> Name {
+/// `make_func_tycon_name(2)` is `#Func2`.
+pub fn make_func_tycon_name(arity: u32) -> Name {
     format!("{}{}", FUNC_NAME, arity)
 }
 
 /// The func type constructor `Std::#Func{arity}`.
 pub fn make_func_tycon(arity: u32) -> TyCon {
-    TyCon::new(FullName::from_strs(&[STD_NAME], &make_func_name(arity)))
+    TyCon::new(FullName::from_strs(
+        &[STD_NAME],
+        &make_func_tycon_name(arity),
+    ))
 }
 
 pub fn make_array_tycon() -> TyCon {
@@ -562,7 +565,7 @@ pub fn make_array_tycon() -> TyCon {
 }
 
 /// The number of arguments of `tc`, when it is a func type constructor `Std::#Func{n}`.
-pub fn is_func_tycon(tc: &TyCon) -> Option<u32> {
+pub fn func_tycon_arity(tc: &TyCon) -> Option<u32> {
     if !tc.name.namespace.is(&[STD_NAME]) {
         return None;
     }

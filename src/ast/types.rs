@@ -16,7 +16,7 @@ use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionT
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use crate::error::Errors;
 use crate::fixstd::builtin::{
-    get_tuple_n, is_func_tycon, make_arrow_name_abs, make_func_tycon, make_unit_ty,
+    func_tycon_arity, get_tuple_n, make_arrow_name_abs, make_func_tycon, make_unit_ty,
     BuiltinTypeName, ARRAY_STORAGE_TYPE, ARRAY_TYPE, ARROW_TYPE, BOOL_TYPE, DESTRUCTOR_TYPE,
     DYNAMIC_OBJECT_TYPE, F32_TYPE, F64_TYPE, I128_TYPE, I16_TYPE, I32_TYPE, I64_TYPE, I8_TYPE,
     IO_TYPE, PTR_TYPE, PUNCHED_ARRAY_TYPE, STRING_TYPE, U128_TYPE, U16_TYPE, U32_TYPE, U64_TYPE,
@@ -189,7 +189,7 @@ pub enum TyConVariant {
     /// A built-in type laid out as a single machine scalar, such as `Std::I64` or `Std::Ptr`.
     /// `Std::IOState` is one too, and carries nothing.
     Primitive,
-    /// The function type constructor `->`, whose values are closures.
+    /// The arrow type constructor `->`, whose values are closures.
     Arrow,
     /// `Std::Array`, whose one field is the type its elements share.
     Array,
@@ -358,7 +358,7 @@ impl TyCon {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
 
-    /// Whether this is the type constructor `->` that heads a function type.
+    /// Whether this is the type constructor `->` that heads an arrow type.
     pub fn is_arrow(&self) -> bool {
         ARROW_TYPE.is(&self.name)
     }
@@ -1210,7 +1210,7 @@ impl TypeNode {
         ret
     }
 
-    /// This function type split into its argument types and the result type they lead to.
+    /// This arrow type split into its argument types and the result type they lead to.
     ///
     /// # Arguments
     /// * `vars_limit` — how many argument types to take at most. The split stops before an arrow
@@ -1396,7 +1396,7 @@ impl TypeNode {
     /// Whether this type is one of the `Std::#Func{n}` constructors, a pointer to code of `n`
     /// arguments that carries no captured value.
     pub fn is_func(&self) -> bool {
-        self.toplevel_tycon_satisfies(|tc| is_func_tycon(tc).is_some())
+        self.toplevel_tycon_satisfies(|tc| func_tycon_arity(tc).is_some())
     }
 
     /// Whether this type is `Std::Array`.
@@ -2144,7 +2144,7 @@ pub fn type_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
 
 /// The arrow type `src -> dst`.
 pub fn type_arrow(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
-    type_arrow_with_source(src, dst, None)
+    type_arrow_with_arrow_src(src, dst, None)
 }
 
 /// The arrow type `src -> dst`, with the `->` itself written at `arrow_src`.
@@ -2152,7 +2152,7 @@ pub fn type_arrow(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
 /// # Arguments
 /// * `arrow_src` — where the `->` itself was written, which a report drawn on the arrow points
 ///   at.
-pub fn type_arrow_with_source(
+pub fn type_arrow_with_arrow_src(
     src: Arc<TypeNode>,
     dst: Arc<TypeNode>,
     arrow_src: Option<Span>,

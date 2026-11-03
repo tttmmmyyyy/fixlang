@@ -1491,7 +1491,7 @@ fn lifted_lambda_func(cap: &CaptureStruct, lam: &Arc<ExprNode>) -> Arc<ExprNode>
     internalize_let_to_var_at_head(&func)
 }
 
-/// The function type taking `doms` in order and returning `codom`, which is what `collect_app_src`
+/// The arrow type taking `doms` in order and returning `codom`, which is what `collect_app_src`
 /// takes apart.
 fn fun_ty(doms: &[Arc<TypeNode>], codom: Arc<TypeNode>) -> Arc<TypeNode> {
     let mut ty = codom;

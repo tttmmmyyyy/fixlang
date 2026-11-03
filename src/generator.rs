@@ -2598,7 +2598,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 gc.build_traverser_work_nonnull_boxed(&obj, work, state);
             });
         } else if obj.is_func() {
-            // Nothing to do for function pointers.
+            // Nothing to do for a func.
         } else {
             // Unboxed case (includes a lambda object).
             match create_traverser(&obj.ty, &vec![], self, Some(work), state) {

@@ -374,7 +374,7 @@ impl<'a> Lowerer<'a> {
         } else {
             assert!(
                 captures.is_empty() && remade.is_empty(),
-                "a uncurried function cannot have captures"
+                "a func cannot have captures"
             );
             None
         };
