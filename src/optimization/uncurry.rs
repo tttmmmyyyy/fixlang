@@ -16,7 +16,7 @@ use crate::{
         program::{Program, Symbol},
         types::type_func,
     },
-    constants::{FUNC_ARGS_MAX, INSTANCIATED_NAME_SEPARATOR, STD_NAME},
+    constants::{FUNC_ARGS_MAX, INSTANCIATED_NAME_SEPARATOR, STD_NAME, UNCURRIED_FUNC_SUFFIX},
     fixstd::stdlib::FIX_NAME,
     misc::{for_each_on_compiler_threads, map_on_compiler_threads, Map},
     optimization::eta_expansion,
@@ -181,7 +181,7 @@ pub fn is_std_fix(name: &FullName) -> bool {
 /// # Examples
 /// `g` with 2 arguments becomes `g#func2`.
 fn convert_to_func_name(name: &mut Name, n_args: usize) {
-    *name += &format!("#func{}", n_args);
+    *name += &format!("{}{}", UNCURRIED_FUNC_SUFFIX, n_args);
 }
 
 /// The uncurried function taking `n_args` arguments that `expr`, the body of a global, becomes.
