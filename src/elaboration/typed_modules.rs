@@ -347,7 +347,7 @@ pub struct TypedModules {
     stored: Map<BodyLocation, StoredBody>,
     /// The typed expressions read back so far, so that a value instantiated at several types is
     /// read once.
-    read: Map<BodyLocation, TypedExpr>,
+    read_back: Map<BodyLocation, TypedExpr>,
     /// The source files the spans read back point into, by path.
     source_files: Map<PathBuf, SourceFile>,
 }
@@ -367,15 +367,13 @@ impl Program {
     /// `TYPED_MODULES_PATH` do not record, and adds those that pass to the files.
     ///
     /// A body the file of its module records is left as it was parsed, and its typed expression is
-    /// read back when instantiation asks for it (`typed_expr_at`).
+    /// read back when instantiation asks for it (`typed_body`).
     pub fn check_bodies_through_typed_modules(
         &mut self,
         tc: &TypeCheckContext,
         modules: &[Name],
         config: &Configuration,
     ) -> Result<(), Errors> {
-        // A check that swallows type errors reports none, so what it passes is not known to pass.
-        assert!(!tc.error_tolerant);
         let mut errors = Errors::empty();
 
         // The spans read back share the source files the parser made.
@@ -402,7 +400,9 @@ impl Program {
                 Path::new(TYPED_MODULES_PATH).join(module_file_name(&module, &module_hash)),
             );
             let record =
-                SourceFile::sharing(&mut self.typed_modules.source_files, || read_record(&path));
+                SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
+                    read_record(&path)
+                });
             let record = match record {
                 Ok(Some((record, _bodies_end))) => record,
                 Ok(None) => ModuleRecord::default(),
@@ -435,12 +435,12 @@ impl Program {
         // Check the rest, and keep what passes with no diagnostic for the files.
         let mut new_entries: Map<Name, Vec<NewEntry>> = Map::default();
         let locs = to_check.iter().map(|(loc, _, _)| loc.clone()).collect();
-        let results = self.check_bodies(locs, tc, None, config)?;
+        let results = self.check_bodies(locs, tc);
         for ((loc, module, identity), (checked_loc, checked)) in to_check.into_iter().zip(results) {
             assert!(loc == checked_loc, "`check_bodies` answered out of order");
             match checked {
                 Ok(checked) => {
-                    if !checked.diagnostics.has_diagnostics() {
+                    if checked.passed() {
                         new_entries.entry(module).or_default().push(NewEntry {
                             bytes: postcard::to_allocvec(&(&identity, &checked.te)).unwrap(),
                             identity,
@@ -469,7 +469,7 @@ impl Program {
     /// body, and the one `Program::global_values` holds otherwise.
     ///
     /// A body the file no longer holds is type-checked again.
-    pub fn typed_expr_at(
+    pub fn typed_body(
         &mut self,
         loc: &BodyLocation,
         tc: &TypeCheckContext,
@@ -478,12 +478,13 @@ impl Program {
             let (te, _scm, _module) = self.body_at(loc);
             return Ok(te.clone());
         };
-        if let Some(te) = self.typed_modules.read.get(loc) {
+        if let Some(te) = self.typed_modules.read_back.get(loc) {
             return Ok(te.clone());
         }
-        let read = SourceFile::sharing(&mut self.typed_modules.source_files, || {
-            read_body(&stored.path, &stored.range, &stored.identity)
-        });
+        let read =
+            SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
+                read_body(&stored.path, &stored.range, &stored.identity)
+            });
         let te = match read {
             Ok(Some(te)) => te,
             failed => {
@@ -491,14 +492,38 @@ impl Program {
                     warn_unreadable_file(&stored.path, &why);
                 }
                 // The opaque types of the body are already known from the record.
-                let checked = self.check_body(loc, &self.create_name_resolution_env(), tc, None)?;
+                let checked = self.check_body(loc, &self.create_name_resolution_env(), tc)?;
                 if checked.diagnostics.has_error() {
                     return Err(checked.diagnostics);
                 }
                 checked.te
             }
         };
-        self.typed_modules.read.insert(loc.clone(), te.clone());
+        self.typed_modules.read_back.insert(loc.clone(), te.clone());
         Ok(te)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ast::program::TypedExpr;
+    use crate::elaboration::typecheckcache::EntityIdentity;
+    use crate::fixstd::builtin::{expr_int_lit, make_u128_ty};
+
+    /// An integer literal wider than 64 bits reads back from the form a body takes in a module's
+    /// file with every bit it was written with.
+    #[test]
+    fn an_integer_literal_wider_than_64_bits_reads_back_from_a_module_file() {
+        let identity: EntityIdentity = "Main::wide\nU128".to_string();
+        let expr = TypedExpr::from_expr(expr_int_lit(u128::MAX, make_u128_ty(), None));
+        let bytes = postcard::to_allocvec(&(&identity, &expr)).unwrap();
+        let ((read_identity, read), rest): ((EntityIdentity, TypedExpr), _) =
+            postcard::take_from_bytes(&bytes).unwrap();
+        assert!(rest.is_empty(), "bytes follow the body");
+        assert_eq!(read_identity, identity);
+        assert_eq!(
+            read.expr.get_builtin().op.name(),
+            format!("int({})", u128::MAX)
+        );
     }
 }

@@ -110,7 +110,7 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
                 ));
             }
             TypeCheckStore::InMemory(cache) => {
-                errors.eat_err(program.resolve_namespace_and_check_type_in_modules(
+                errors.eat_err(program.check_bodies_through_memory_cache(
                     &typechecker,
                     &target_module_names,
                     diag_config.target_symbols.as_deref(),

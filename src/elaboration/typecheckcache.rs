@@ -1,51 +1,16 @@
 use crate::{ast::name::FullName, ast::program::TypedExpr, ast::types::Scheme};
 use std::{
     collections::{BTreeMap, VecDeque},
-    panic::RefUnwindSafe,
     sync::{Arc, Mutex, MutexGuard},
 };
 
 /// A type-check cache held by the threads that check a program together.
-pub type SharedTypeCheckCache = Arc<dyn TypeCheckCache + Send + Sync>;
-
-/// Keeps the expressions produced by type checking, so that a value asked for again under the same
-/// type and the same sources is taken back instead of checked afresh.
-///
-/// `RefUnwindSafe` is a supertrait so that `Arc<dyn TypeCheckCache + Send + Sync>` satisfies
-/// `UnwindSafe`, which a closure carrying one across a `catch_unwind` boundary requires.
-pub trait TypeCheckCache: RefUnwindSafe {
-    /// Stores `expr` as the result of checking the global value `name` against `type_`, under the
-    /// hash of the sources that value depends on.
-    fn save_cache(
-        &self,
-        expr: &TypedExpr,
-        name: &FullName,
-        type_: &Arc<Scheme>,
-        version_hash: &str,
-    );
-    /// Answers with the expression stored for the global value `name` checked against `type_`
-    /// under `version_hash`.
-    fn load_cache(
-        &self,
-        name: &FullName,
-        type_: &Arc<Scheme>,
-        version_hash: &str,
-    ) -> Option<TypedExpr>;
-}
+pub type SharedTypeCheckCache = Arc<MemoryCache>;
 
 /// The entity a cache entry belongs to: a global value, together with the type it was checked
 /// against. A cache that lets two entities meet in one entry hands one of them the typed
 /// expression of the other, and the read installs it without checking it.
 pub type EntityIdentity = String;
-
-/// The entry of an in-memory cache one check reads and writes: the cache, and the hash of the
-/// sources the checked body depends on.
-pub struct CacheSlot {
-    /// The cache.
-    pub cache: SharedTypeCheckCache,
-    /// The `module_dependency_hash` of the module the body is defined in.
-    pub version_hash: String,
-}
 
 /// The hash of the sources the entity depends on, which tells the entries of one entity apart.
 type VersionHash = String;
@@ -86,6 +51,40 @@ impl MemoryCache {
         }
     }
 
+    /// Stores `expr` as the result of checking the global value `name` against `type_`, under the
+    /// hash of the sources that value depends on. It goes in front of the entity's versions, and
+    /// the versions stored longest ago are dropped to stay within `CACHE_GENERATION`.
+    pub fn save(&self, expr: &TypedExpr, name: &FullName, type_: &Arc<Scheme>, version_hash: &str) {
+        let entity_id = entity_identity(name, type_);
+        let version_hash = version_hash.to_string();
+        let mut entries = self.lock_data();
+        let versions = entries.entry(entity_id).or_insert_with(|| VecDeque::new());
+        // If the cache is full, remove the oldest entry.
+        while versions.len() >= CACHE_GENERATION as usize {
+            versions.pop_back();
+        }
+        versions.push_front((version_hash, expr.clone()));
+    }
+
+    /// The expression stored for the global value `name` checked against `type_` under
+    /// `version_hash`.
+    pub fn load(
+        &self,
+        name: &FullName,
+        type_: &Arc<Scheme>,
+        version_hash: &str,
+    ) -> Option<TypedExpr> {
+        let entity_id = entity_identity(name, type_);
+        let entries = self.lock_data();
+        let versions = entries.get(&entity_id)?;
+        let expr = versions
+            .iter()
+            .find(|(hash, _)| hash == version_hash)?
+            .1
+            .clone();
+        Some(expr)
+    }
+
     /// The entries, locked.
     ///
     /// A thread that panics while it holds the lock poisons it, and the entries are whole when
@@ -99,78 +98,20 @@ impl MemoryCache {
     }
 }
 
-impl TypeCheckCache for MemoryCache {
-    /// Puts the expression at the front of the entity's versions, dropping the versions stored
-    /// longest ago to stay within `CACHE_GENERATION`.
-    fn save_cache(
-        &self,
-        expr: &TypedExpr,
-        name: &FullName,
-        type_: &Arc<Scheme>,
-        version_hash: &str,
-    ) {
-        let entity_id = entity_identity(name, type_);
-        let version_hash = version_hash.to_string();
-        let mut entries = self.lock_data();
-        let versions = entries.entry(entity_id).or_insert_with(|| VecDeque::new());
-        // If the cache is full, remove the oldest entry.
-        while versions.len() >= CACHE_GENERATION as usize {
-            versions.pop_back();
-        }
-        versions.push_front((version_hash, expr.clone()));
-    }
-
-    /// Searches the entity's versions for the one stored under `version_hash`.
-    fn load_cache(
-        &self,
-        name: &FullName,
-        type_: &Arc<Scheme>,
-        version_hash: &str,
-    ) -> Option<TypedExpr> {
-        let entity_id = entity_identity(name, type_);
-        let version_hash = version_hash.to_string();
-        let entries = self.lock_data();
-        let versions = entries.get(&entity_id)?;
-        let expr = versions
-            .iter()
-            .find(|(hash, _)| hash == &version_hash)?
-            .1
-            .clone();
-        Some(expr)
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{entity_identity, MemoryCache, TypeCheckCache};
+    use super::{entity_identity, MemoryCache};
     use crate::{
-        ast::expr::expr_var,
-        ast::name::FullName,
-        ast::program::TypedExpr,
-        ast::types::Scheme,
-        fixstd::builtin::{expr_int_lit, make_i64_ty, make_u128_ty},
+        ast::expr::expr_var, ast::name::FullName, ast::program::TypedExpr, ast::types::Scheme,
+        fixstd::builtin::make_i64_ty,
     };
     use std::panic::{catch_unwind, AssertUnwindSafe};
-
-    /// An integer literal wider than 64 bits reads back from the format of a cache file with every
-    /// bit it was written with.
-    #[test]
-    fn an_integer_literal_wider_than_64_bits_reads_back_from_the_cache_format() {
-        let expr = TypedExpr::from_expr(expr_int_lit(u128::MAX, make_u128_ty(), None));
-        let bytes = postcard::to_allocvec(&expr).unwrap();
-        let (read, rest): (TypedExpr, _) = postcard::take_from_bytes(&bytes).unwrap();
-        assert!(rest.is_empty(), "bytes follow the expression");
-        assert_eq!(
-            read.expr.get_builtin().op.name(),
-            format!("int({})", u128::MAX)
-        );
-    }
 
     /// The namespace a value is written under is part of the entity its entry belongs to. Two
     /// values of one module, each under a namespace of its own, agree on their remaining name, on
     /// their type, and on the sources they are checked from, so the namespace alone tells their
-    /// entries apart. Every cache reads the entity through `entity_identity`, so pinning it here
-    /// reaches the entries held in memory as well as those given a file.
+    /// entries apart. Both caches read the entity through `entity_identity`, so pinning it here
+    /// reaches the entries held in memory as well as those of the files of `TYPED_MODULES_PATH`.
     #[test]
     fn entities_of_names_differing_only_in_namespace_stay_apart() {
         let scheme = Scheme::from_type(make_i64_ty());
@@ -197,7 +138,7 @@ mod tests {
         let name = FullName::from_strs(&["Main"], "answer");
         let scheme = Scheme::from_type(make_i64_ty());
         let expr = TypedExpr::from_expr(expr_var(name.clone(), None));
-        cache.save_cache(&expr, &name, &scheme, "0");
+        cache.save(&expr, &name, &scheme, "0");
 
         let held = catch_unwind(AssertUnwindSafe(|| {
             let _entries = cache.lock_data();
@@ -206,12 +147,12 @@ mod tests {
         assert!(held.is_err(), "the panic is what poisons the lock");
 
         assert!(
-            cache.load_cache(&name, &scheme, "0").is_some(),
+            cache.load(&name, &scheme, "0").is_some(),
             "the entry stored before the panic is expected to answer",
         );
-        cache.save_cache(&expr, &name, &scheme, "1");
+        cache.save(&expr, &name, &scheme, "1");
         assert!(
-            cache.load_cache(&name, &scheme, "1").is_some(),
+            cache.load(&name, &scheme, "1").is_some(),
             "an entry stored after the panic is expected to answer",
         );
     }

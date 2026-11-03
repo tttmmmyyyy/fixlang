@@ -1208,7 +1208,7 @@ pub fn run_diagnostics(
     typecheck_cache: SharedTypeCheckCache,
     live_overrides: Arc<Map<PathBuf, String>>,
 ) -> Result<DiagnosticsResult, Errors> {
-    // Every call elaborates the whole project, and the shared `TypeCheckCache` is what keeps that
+    // Every call elaborates the whole project, and the shared `MemoryCache` is what keeps that
     // cheap. It keys results by `(name, scheme, module_dependency_hash)`, and the dependency hash
     // folds in the source hash of every transitive dependency, so an edited file invalidates the
     // globals of its own module and of the modules that import it, transitively; every other

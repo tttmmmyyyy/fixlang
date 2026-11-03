@@ -21,7 +21,7 @@ use std::{
 /// The content and the hash are computed on the first request and kept, so a file that is asked
 /// for many times is read once. The path is what a serialized `SourceFile` carries; the content
 /// and the hash are read again wherever it is deserialized, unless the deserialization runs inside
-/// `SourceFile::sharing`.
+/// `SourceFile::with_shared_source_files`.
 ///
 /// The fields it serializes must stay in sync with `SerializedSourceFile`.
 #[derive(Clone, Serialize)]
@@ -53,13 +53,13 @@ struct SerializedSourceFile {
 
 thread_local! {
     /// The source files the deserializations running on this thread hand out, by path, while
-    /// `SourceFile::sharing` runs; `None` outside it.
+    /// `SourceFile::with_shared_source_files` runs; `None` outside it.
     static SHARED_SOURCE_FILES: RefCell<Option<Map<PathBuf, SourceFile>>> =
         const { RefCell::new(None) };
 }
 
 impl<'de> Deserialize<'de> for SourceFile {
-    /// Inside `SourceFile::sharing`, the `SourceFile` of a path is the one shared by every
+    /// Inside `SourceFile::with_shared_source_files`, the `SourceFile` of a path is the one shared by every
     /// deserialized span of that path, so its content is read once however many spans point into
     /// it.
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
@@ -119,18 +119,31 @@ impl SourceFile {
     /// Runs `deserialize`, handing every `SourceFile` it deserializes out of `shared`, the source
     /// files by path. A path `shared` lacks gets a `SourceFile` added to it.
     ///
-    /// Panics when it runs inside another `sharing` on the same thread.
-    pub fn sharing<R>(shared: &mut Map<PathBuf, SourceFile>, deserialize: impl FnOnce() -> R) -> R {
+    /// Panics when it runs inside another `with_shared_source_files` on the same thread.
+    pub fn with_shared_source_files<R>(
+        shared: &mut Map<PathBuf, SourceFile>,
+        deserialize: impl FnOnce() -> R,
+    ) -> R {
+        /// Puts the source files back into `shared` when it is dropped, so that they return, and
+        /// the thread is left outside any sharing, however `deserialize` ends.
+        struct Restore<'s>(&'s mut Map<PathBuf, SourceFile>);
+        impl Drop for Restore<'_> {
+            fn drop(&mut self) {
+                *self.0 = SHARED_SOURCE_FILES
+                    .with(|cell| cell.borrow_mut().take())
+                    .unwrap_or_default();
+            }
+        }
+
         SHARED_SOURCE_FILES.with(|cell| {
             let previous = cell.borrow_mut().replace(take(shared));
             assert!(
                 previous.is_none(),
-                "`SourceFile::sharing` runs inside another"
+                "`SourceFile::with_shared_source_files` runs inside another"
             );
         });
-        let result = deserialize();
-        SHARED_SOURCE_FILES.with(|cell| *shared = cell.borrow_mut().take().unwrap());
-        result
+        let _restore = Restore(shared);
+        deserialize()
     }
 
     /// The content of the file. It is read from disk on the first request and kept for the later

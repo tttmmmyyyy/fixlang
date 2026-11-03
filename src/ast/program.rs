@@ -28,9 +28,7 @@ use crate::elaboration::desugar_opaque::{
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
-use crate::elaboration::typecheckcache::{
-    entity_identity, CacheSlot, EntityIdentity, SharedTypeCheckCache,
-};
+use crate::elaboration::typecheckcache::{entity_identity, EntityIdentity, SharedTypeCheckCache};
 use crate::elaboration::typed_modules::{warning_facts, TypedModules, WarningFact};
 use crate::error::{
     Error, Errors, WARN_DEPRECATED, WARN_MISSING_PATTERN_FIELD, WARN_UNDECLARED_DEPENDENCY,
@@ -338,6 +336,22 @@ pub struct CheckedBody {
     /// The tolerated diagnostics the check produced. See `check_type` for the rules on what counts
     /// as "tolerated".
     pub diagnostics: Errors,
+    /// Whether the check swallowed type errors (`TypeCheckContext::error_tolerant`).
+    pub error_tolerant: bool,
+}
+
+impl CheckedBody {
+    /// Whether a cache may record the body, so that a later run takes it back without checking it.
+    ///
+    /// A later run reports nothing about a body it takes back, so a cache records only what a strict
+    /// check accepted. Two things disqualify a result:
+    ///
+    /// - a tolerated diagnostic, which the next run owes the user and would not produce again;
+    /// - an `error_tolerant` check, which swallows every type error and reports none, so its
+    ///   result would enter as a clean entry and the value would be published as type-correct.
+    pub fn passed(&self) -> bool {
+        !self.error_tolerant && !self.diagnostics.has_diagnostics()
+    }
 }
 
 /// An expression with all of its subexpressions typed, which is what a type check produces and what
@@ -1273,8 +1287,6 @@ impl Program {
     ///
     /// # Arguments
     /// * `nrenv` — the environment `create_name_resolution_env` gives.
-    /// * `cache` — the in-memory cache entry the result is looked up in and stored to, when the
-    ///   caller keeps one.
     ///
     /// # Returns
     /// * `Ok(checked)` — the body was checked; `checked.diagnostics` may still carry tolerated
@@ -1288,7 +1300,6 @@ impl Program {
         loc: &BodyLocation,
         nrenv: &Arc<NameResolutionEnv>,
         tc: &TypeCheckContext,
-        cache: Option<&CacheSlot>,
     ) -> Result<CheckedBody, Errors> {
         let (te, req_scm, def_mod) = self.body_at(loc);
         if let Some(impl_idx) = loc.impl_idx {
@@ -1315,21 +1326,6 @@ impl Program {
             }
         }
 
-        if let Some(cache) = cache {
-            if let Some(mut te) =
-                cache
-                    .cache
-                    .load_cache(&loc.val_name, req_scm, &cache.version_hash)
-            {
-                return Ok(CheckedBody {
-                    opaque_types: take(&mut te.opaque_types),
-                    te,
-                    import_required: Map::default(),
-                    diagnostics: Errors::empty(),
-                });
-            }
-        }
-
         let def_mod = self.find_mod(&def_mod).unwrap();
         let mut nrctx = NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
         let mut te = te.clone();
@@ -1349,20 +1345,6 @@ impl Program {
         tc.fill_opaque_concrete_types(&mut te.opaque_types);
         te.equalities = tc.local_assumed_eqs;
 
-        // A run whose `load_cache` finds the expression returns it without checking it, so the
-        // cache may hold only what a strict check accepted. Two things disqualify a result:
-        //
-        // - a tolerated diagnostic, which the next run owes the user and would not produce again;
-        // - an `error_tolerant` check, which swallows every type error and reports none, so its
-        //   result would enter as a clean entry and the value would be published as type-correct.
-        if let Some(cache) = cache {
-            if !tc.error_tolerant && !diagnostics.has_diagnostics() {
-                cache
-                    .cache
-                    .save_cache(&te, &loc.val_name, req_scm, &cache.version_hash);
-            }
-        }
-
         // The names the expression refers to that its module has to import.
         nrctx.add_import_required(tc.import_required);
 
@@ -1371,48 +1353,24 @@ impl Program {
             te,
             import_required: nrctx.import_required,
             diagnostics,
+            error_tolerant: tc.error_tolerant,
         })
     }
 
     /// Checks the bodies at `locs` on the compiler threads, answering with the result of each in
     /// the order of `locs`.
-    ///
-    /// # Arguments
-    /// * `cache` — the in-memory cache the results are looked up in and stored to, when the caller
-    ///   keeps one. Its entries are keyed by the `module_dependency_hash` of the module each body
-    ///   is defined in.
     pub fn check_bodies(
         &self,
         locs: Vec<BodyLocation>,
         tc: &TypeCheckContext,
-        cache: Option<&SharedTypeCheckCache>,
-        config: &Configuration,
-    ) -> Result<Vec<(BodyLocation, Result<CheckedBody, Errors>)>, Errors> {
+    ) -> Vec<(BodyLocation, Result<CheckedBody, Errors>)> {
         let nrenv = self.create_name_resolution_env();
-        let mut tasks = vec![];
-        for loc in locs {
-            let slot = match cache {
-                Some(cache) => {
-                    let (_te, _scm, def_mod) = self.body_at(&loc);
-                    Some(CacheSlot {
-                        cache: cache.clone(),
-                        version_hash: self.module_dependency_hash(&def_mod, config)?,
-                    })
-                }
-                None => None,
-            };
-            tasks.push((loc, slot));
-        }
-        // The cost of checking one value is highly uneven (a cache hit costs ~30 μs, a miss
-        // ~300 ms), so each thread takes the next task as soon as it finishes one.
-        Ok(map_on_compiler_threads(
-            tasks,
-            tc.num_worker_threads,
-            |(loc, slot)| {
-                let checked = self.check_body(&loc, &nrenv, tc, slot.as_ref());
-                (loc, checked)
-            },
-        ))
+        // The cost of checking one value is highly uneven, so each thread takes the next task as
+        // soon as it finishes one.
+        map_on_compiler_threads(locs, tc.num_worker_threads, |loc| {
+            let checked = self.check_body(&loc, &nrenv, tc);
+            (loc, checked)
+        })
     }
 
     /// Puts what checking the body at `loc` produced into `self`: the typed expression in place of
@@ -1452,14 +1410,15 @@ impl Program {
         ))
     }
 
-    /// Resolve namespaces in, and typecheck the bodies of, global
-    /// values declared in `modules`, through the in-memory cache `cache`.
+    /// Resolves namespaces in, and type-checks, the bodies of the global values declared in
+    /// `modules`, serving from `cache` each body it holds under the `module_dependency_hash` of the
+    /// body's module, and storing there each body that passes.
     ///
     /// # Arguments
     /// * `target_symbols` — when `Some`, restrict checking to globals
     ///   whose name is in the slice; when `None`, check every global
     ///   declared in `modules`.
-    pub fn resolve_namespace_and_check_type_in_modules(
+    pub fn check_bodies_through_memory_cache(
         &mut self,
         tc: &TypeCheckContext,
         modules: &[Name],
@@ -1468,12 +1427,54 @@ impl Program {
         config: &Configuration,
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-        let locs = self.body_locations_in_modules(modules, target_symbols);
-        for (loc, checked) in self.check_bodies(locs, tc, Some(cache), config)? {
+
+        // Serve the bodies the cache holds.
+        let mut module_hashes: Map<Name, String> = Map::default();
+        let mut to_check = vec![];
+        for loc in self.body_locations_in_modules(modules, target_symbols) {
+            let (_te, scm, module) = self.body_at(&loc);
+            let module_hash = match module_hashes.get(&module) {
+                Some(hash) => hash.clone(),
+                None => {
+                    let hash = self.module_dependency_hash(&module, config)?;
+                    module_hashes.insert(module, hash.clone());
+                    hash
+                }
+            };
+            match cache.load(&loc.val_name, scm, &module_hash) {
+                Some(mut te) => {
+                    let checked = CheckedBody {
+                        opaque_types: take(&mut te.opaque_types),
+                        te,
+                        import_required: Map::default(),
+                        diagnostics: Errors::empty(),
+                        error_tolerant: false,
+                    };
+                    errors.append(self.install_checked_body(&loc, checked));
+                }
+                None => to_check.push((loc, module_hash)),
+            }
+        }
+
+        // Check the rest, and store what passes.
+        let locs = to_check.iter().map(|(loc, _)| loc.clone()).collect();
+        let results = self.check_bodies(locs, tc);
+        for ((loc, module_hash), (checked_loc, checked)) in to_check.into_iter().zip(results) {
+            assert!(loc == checked_loc, "a check answered for another body");
             match checked {
-                // Carry tolerated diagnostics (holes, cannot-infer, etc.) forward, but still
-                // install the typed expression so the LSP can hover on its sub-expressions.
-                Ok(checked) => errors.append(self.install_checked_body(&loc, checked)),
+                Ok(checked) => {
+                    if checked.passed() {
+                        let (_te, scm, _module) = self.body_at(&loc);
+                        let te = TypedExpr {
+                            opaque_types: checked.opaque_types.clone(),
+                            ..checked.te.clone()
+                        };
+                        cache.save(&te, &loc.val_name, scm, &module_hash);
+                    }
+                    // Carry tolerated diagnostics (holes, cannot-infer, etc.) forward, but still
+                    // install the typed expression so the LSP can hover on its sub-expressions.
+                    errors.append(self.install_checked_body(&loc, checked));
+                }
                 Err(e) => errors.append(e),
             }
         }
@@ -1490,7 +1491,7 @@ impl Program {
     /// symbol is a trait method.
     ///
     /// Assumes that the bodies of all global values have been checked, by
-    /// `check_bodies_through_typed_modules` or `resolve_namespace_and_check_type_in_modules`.
+    /// `check_bodies_through_typed_modules` or `check_bodies_through_memory_cache`.
     fn instantiate_symbol(
         &mut self,
         sym: &mut Symbol,
@@ -1529,7 +1530,7 @@ impl Program {
                 }))
             }
         };
-        let te = self.typed_expr_at(
+        let te = self.typed_body(
             &BodyLocation {
                 val_name: sym.generic_name.clone(),
                 impl_idx,
