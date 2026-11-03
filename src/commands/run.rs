@@ -6,6 +6,7 @@ use crate::project_fs::remove_inside_dot_fixlang;
 use rand::{thread_rng, Rng};
 use std::fs;
 use std::io;
+use std::mem;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
@@ -72,7 +73,7 @@ pub fn with_temporary_executable<T>(
     // For parallel execution, use different file name for each execution.
     let exec_path = PathBuf::from(RUN_PATH).join(format!("a{}.out", thread_rng().gen::<u64>()));
     let user_specified_out_path =
-        std::mem::replace(&mut config.out_file_path, Some(exec_path.clone()));
+        mem::replace(&mut config.out_file_path, Some(exec_path.clone()));
 
     config.validate_run_settings()?;
 
