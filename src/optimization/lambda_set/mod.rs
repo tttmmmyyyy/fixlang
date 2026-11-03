@@ -78,6 +78,16 @@ mod tests {
         prg
     }
 
+    /// `source` in the form the pass reads in the compiler: `program_of` after `inline` and
+    /// `inline_local`, which leave a getter's body, a builtin reading the struct by name, in its
+    /// caller.
+    fn program_after_inlining(source: &str) -> Program {
+        let mut prg = program_of(source);
+        crate::optimization::inline::run(&mut prg, false, 0);
+        crate::optimization::inline_local::run(&mut prg, 0);
+        prg
+    }
+
     /// The lambda sets of a program and the copies they ask for.
     struct Inferred<'p> {
         prg: &'p Program,
@@ -377,5 +387,129 @@ main = (
         let sets = inf.sets_at("use_seg", &[0]);
         assert_eq!(sets.len(), 1);
         assert_eq!(inf.writers(sets[0]), vec![main_lam()]);
+    }
+
+    /// A type taking a type constructor without its arguments, given `Array`, tracks the function a
+    /// field of each node holds through the array of children the constructor makes: the function
+    /// walking the tree gets the two lambdas the program puts in the nodes.
+    #[test]
+    fn test_a_function_in_a_tree_built_over_a_type_constructor_argument_keeps_its_set() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+type [f : * -> *] Rose f = box struct { kids : f (Rose f), op : I64 -> I64 };
+
+call_rose : Rose Array -> I64 -> I64;
+call_rose = |r, x| r.@kids.to_iter.fold((r.@op)(x), |k, acc| acc + call_rose(k, x));
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let leaf = Rose { kids : [], op : |x| x - n };
+    let r = Rose { kids : [leaf], op : |x| x + 100 };
+    println(call_rose(r, 5).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("call_rose", &[0]);
+        assert_eq!(sets.len(), 1);
+        assert_eq!(inf.writers(sets[0]), vec![main_lam(), main_lam()]);
+    }
+
+    /// A global array of functions that one caller extends with a lambda of its own and another
+    /// passes as it is: the function taking the array is copied for each, and the set of the
+    /// elements holds the global's lambda in both, beside the caller's in the first.
+    #[test]
+    fn test_a_global_array_of_functions_extended_by_a_caller_keeps_its_own_lambda() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+table : Array (I64 -> I64);
+table = [|x| x + 1000];
+
+run_all : I64 -> Array (I64 -> I64) -> I64 -> I64;
+run_all = |d, fs, x| if d > 0 { run_all(d - 1, fs, x) } else { fs.to_iter.fold(0, |f, acc| acc + f(x)) };
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let a = run_all(n, table.push_back(|x| x * n), 3);
+    let b = run_all(n, table, 4);
+    println((a + b).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let mut sets: Vec<Vec<Option<String>>> = inf
+            .sets_at("run_all", &[1, 0, 0])
+            .into_iter()
+            .map(|s| sorted(inf.writers(s)))
+            .collect();
+        sets.sort();
+        assert_eq!(
+            sets,
+            vec![
+                vec![main_lam(), Some("table".to_string())],
+                vec![Some("table".to_string())],
+            ]
+        );
+    }
+
+    /// A function field rewritten through `mod_`, which punches the field out and plugs the new
+    /// value back in, holds both the lambda put in first and the one wrapping it.
+    #[test]
+    fn test_a_function_field_rewritten_by_mod_holds_the_wrapping_lambda() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+type Seg = box struct { op : I64 -> I64, data : Array I64 };
+
+use_seg : I64 -> Seg -> I64;
+use_seg = |d, s| if d > 0 { use_seg(d - 1, s) } else { (s.@op)(s.@data.@(0)) };
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let s = Seg { op : |x| x + n, data : [1, 2] };
+    let s = if n > 1 { s } else { s.mod_op(|f| |x| f(x) * 2) };
+    println(use_seg(n, s).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("use_seg", &[1, 0]);
+        assert_eq!(sets.len(), 1);
+        assert_eq!(inf.writers(sets[0]), vec![main_lam(), main_lam()]);
+    }
+
+    /// An element of an array of functions rewritten through `Array::mod`, which punches the
+    /// element out and plugs the new value back in, leaves the array's elements holding both the
+    /// lambda put in first and the one wrapping it.
+    #[test]
+    fn test_an_array_element_rewritten_by_mod_holds_the_wrapping_lambda() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+run_first : I64 -> Array (I64 -> I64) -> I64;
+run_first = |d, fs| if d > 0 { run_first(d - 1, fs) } else { (fs.@(0))(d) };
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let fs = [|x| x + n];
+    let fs = if n > 1 { fs } else { fs.mod(0, |f| |x| f(x) * 2) };
+    println(run_first(n, fs).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("run_first", &[1, 0, 0]);
+        assert_eq!(sets.len(), 1);
+        assert_eq!(inf.writers(sets[0]), vec![main_lam(), main_lam()]);
     }
 }
