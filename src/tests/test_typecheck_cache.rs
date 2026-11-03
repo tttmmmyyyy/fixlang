@@ -72,7 +72,7 @@ fn test_the_module_dependency_hash_covers_the_c_numeric_types() {
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::{DOT_FIXLANG, TYPED_MODULES_PATH};
-    use crate::tests::test_util::{fix_command, run_fix};
+    use crate::tests::test_util::run_fix;
     use std::fs;
     use std::path::Path;
     use std::process::Command;
@@ -104,11 +104,7 @@ mod integration_tests {
             )
         };
         let run = || {
-            let output = fix_command()
-                .args(["run", "--file", "main.fix"])
-                .current_dir(temp.path())
-                .output()
-                .expect("Failed to execute fix run");
+            let output = run_fix(temp.path(), &["run", "--file", "main.fix"]);
             String::from_utf8_lossy(&output.stdout).trim().to_string()
         };
 
@@ -266,11 +262,7 @@ main = println((1, 2, 3, 4, 5, 6, 7).to_string + no_such_value);
 
     /// Runs `fix check` in `dir` and returns everything it told the user.
     fn check(dir: &Path) -> String {
-        let output = fix_command()
-            .arg("check")
-            .current_dir(dir)
-            .output()
-            .expect("failed to run fix check");
+        let output = run_fix(dir, &["check"]);
         String::from_utf8_lossy(&output.stdout).to_string()
             + &String::from_utf8_lossy(&output.stderr)
     }
