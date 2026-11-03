@@ -72,8 +72,7 @@ pub fn with_temporary_executable<T>(
 
     // For parallel execution, use different file name for each execution.
     let exec_path = PathBuf::from(RUN_PATH).join(format!("a{}.out", thread_rng().gen::<u64>()));
-    let user_specified_out_path =
-        mem::replace(&mut config.out_file_path, Some(exec_path.clone()));
+    let user_specified_out_path = mem::replace(&mut config.out_file_path, Some(exec_path.clone()));
 
     config.validate_run_settings()?;
 
