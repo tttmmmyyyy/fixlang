@@ -13,8 +13,8 @@ use crate::{
         program::Program,
     },
     constants::CAP_NAME,
-    graph::Graph,
     misc::{Map, Set},
+    optimization::call_graph::call_graph_of,
 };
 use std::{collections::VecDeque, mem, rc::Rc, sync::Arc};
 
@@ -134,28 +134,16 @@ pub fn infer(prg: &Program, layout: &SlotLayout) -> Analysis {
 fn components_callees_first(prg: &Program) -> Vec<Vec<FullName>> {
     let mut names: Vec<FullName> = prg.symbols.keys().cloned().collect();
     names.sort();
-    let index: Map<FullName, usize> = names
-        .iter()
-        .enumerate()
-        .map(|(i, n)| (n.clone(), i))
-        .collect();
-    let mut graph = Graph::new(names.clone());
-    for (i, name) in names.iter().enumerate() {
-        let expr = prg.symbols[name].expr.as_ref().unwrap();
-        let mut callees: Vec<usize> = expr
-            .free_vars()
-            .iter()
-            .filter_map(|n| index.get(n).copied())
-            .collect();
-        callees.sort();
-        for j in callees {
-            graph.connect_idx(i, j);
-        }
-    }
+    let (graph, _) = call_graph_of(&prg.symbols, names);
     graph
         .components_dependencies_first()
         .into_iter()
-        .map(|component| component.into_iter().map(|i| names[i].clone()).collect())
+        .map(|component| {
+            component
+                .into_iter()
+                .map(|i| graph.get(i).clone())
+                .collect()
+        })
         .collect()
 }
 

@@ -1,4 +1,5 @@
 mod application_inlining;
+mod call_graph;
 mod capture_struct;
 mod closure_specialization;
 mod collapse_constructions;
