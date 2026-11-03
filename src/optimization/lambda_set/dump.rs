@@ -11,7 +11,7 @@ use crate::misc::{Map, Set};
 use std::fmt::Write;
 
 /// The text of a dump of `analysis` and `spec`: the scheme of each symbol, with what each of its
-/// lambda sets holds and why one is erased, then the copies the program asks for, each symbol's
+/// lambda sets holds and why one is Dynamic, then the copies the program asks for, each symbol's
 /// type annotated with the concrete sets of the copy, and the sets those name.
 pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayout) -> String {
     let mut out = String::new();
@@ -92,7 +92,7 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
 }
 
 /// The members of the variable `v`, each lambda with the variables its owner is given by, and
-/// each erasure with its reason.
+/// each `Member::Dynamic` with its reason.
 fn describe_members(
     solver: &mut Solver,
     v: SetVar,
@@ -123,7 +123,7 @@ fn describe_members(
                 lam,
                 owner: Owner::Current,
             } => format!("{}[current]", lambda_names[lam as usize]),
-            Member::Erased(e) => format!("* ({})", e.to_string()),
+            Member::Dynamic(e) => format!("Dynamic ({})", e.to_string()),
         };
         if !texts.contains(&text) {
             texts.push(text);
@@ -138,7 +138,7 @@ fn describe_set(store: &SetStore, id: SetId, lambda_names: &[String]) -> String 
         .elems(id)
         .iter()
         .map(|e| match e {
-            Elem::Erased => "*".to_string(),
+            Elem::Dynamic => "Dynamic".to_string(),
             Elem::Lam(lam, args) => {
                 let args: Vec<String> = args.iter().map(|a| format!("#{}", a)).collect();
                 format!("{}[{}]", lambda_names[*lam as usize], args.join(", "))

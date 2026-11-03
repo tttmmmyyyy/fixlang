@@ -117,7 +117,7 @@ impl<'a> Solve<'a> {
         let elems = members
             .iter()
             .map(|m| match m {
-                Member::Erased(_) => PendingElem::Erased,
+                Member::Dynamic(_) => PendingElem::Dynamic,
                 Member::Lam {
                     lam,
                     owner: Owner::Instance(owner_args),

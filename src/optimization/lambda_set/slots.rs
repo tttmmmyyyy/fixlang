@@ -1,7 +1,7 @@
 // The places in a type where a lambda set is attached, and the annotated types that carry one set
 // variable at each.
 
-use super::solver::{ErasureKind, SetVar, Solver};
+use super::solver::{DynamicKind, SetVar, Solver};
 use crate::{
     ast::{
         name::Name,
@@ -44,7 +44,7 @@ struct GroupSlots {
 enum Binding {
     /// A type whose slots are the given variables.
     Linked(Arc<TypeNode>, Vec<SetVar>),
-    /// A type none of whose slots are tracked: each read of one gets new variables, erased.
+    /// A type none of whose slots are tracked: each read of one gets new variables, made Dynamic.
     Untracked(Arc<TypeNode>),
 }
 
@@ -68,7 +68,7 @@ enum OwnSource<'a> {
         cursor: usize,
     },
     /// The declaration is that of a newtype expanded at an argument a type constructor was given
-    /// without its arguments. Its own slots are new variables, erased for `reason`.
+    /// without its arguments. Its own slots are new variables, made Dynamic for `reason`.
     Untracked(TyCon),
 }
 
@@ -288,7 +288,7 @@ impl<'e> SlotLayout<'e> {
     }
 
     /// `ty` annotated with a new variable at each slot. A slot whose functions the runtime calls is
-    /// erased.
+    /// made Dynamic.
     pub fn fresh(&self, ty: &Arc<TypeNode>, solver: &mut Solver) -> AType {
         let mut slots = vec![];
         self.fresh_slots(ty, solver, &mut slots);
@@ -320,7 +320,7 @@ impl<'e> SlotLayout<'e> {
             for called_by in &self.group_slots(group).called_by_runtime {
                 let v = solver.fresh();
                 if let Some(called_by) = called_by {
-                    solver.erase(v, ErasureKind::CalledByRuntime(called_by.clone()));
+                    solver.make_dynamic(v, DynamicKind::CalledByRuntime(called_by.clone()));
                 }
                 out.push(v);
             }
@@ -330,12 +330,12 @@ impl<'e> SlotLayout<'e> {
         }
     }
 
-    /// `ty` annotated with a new variable at each slot, every one of them erased for `reason`.
+    /// `ty` annotated with a new variable at each slot, every one of them made Dynamic for `reason`.
     fn untracked(&self, ty: &Arc<TypeNode>, reason: &TyCon, solver: &mut Solver) -> Vec<SetVar> {
         (0..self.slot_count(ty))
             .map(|_| {
                 let v = solver.fresh();
-                solver.erase(v, ErasureKind::TypeConstructorArgument(reason.clone()));
+                solver.make_dynamic(v, DynamicKind::TypeConstructorArgument(reason.clone()));
                 v
             })
             .collect()
@@ -531,7 +531,10 @@ impl<'e> SlotLayout<'e> {
                         let reason = reason.clone();
                         for _ in 0..self.own_slot_count(tc) {
                             let v = solver.fresh();
-                            solver.erase(v, ErasureKind::TypeConstructorArgument(reason.clone()));
+                            solver.make_dynamic(
+                                v,
+                                DynamicKind::TypeConstructorArgument(reason.clone()),
+                            );
                             out.push(v);
                         }
                     }
@@ -577,7 +580,7 @@ impl<'e> SlotLayout<'e> {
         }
         for _ in 0..self.own_slot_count(tc) {
             let v = solver.fresh();
-            solver.erase(v, ErasureKind::TypeConstructorArgument(tc.clone()));
+            solver.make_dynamic(v, DynamicKind::TypeConstructorArgument(tc.clone()));
             out.push(v);
         }
         for arg in args {

@@ -10,7 +10,7 @@ pub type SetId = u32;
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Elem {
     /// A value only a closure built at run time stands for.
-    Erased,
+    Dynamic,
     /// The values the lambda builds in the copy of its symbol that the sets give its parameters
     /// (`Lambda::params`).
     Lam(LamId, Vec<SetId>),
@@ -27,7 +27,7 @@ pub enum Ref {
 
 /// An element of a set a system handed to `SetStore::intern` defines.
 pub enum PendingElem {
-    Erased,
+    Dynamic,
     Lam(LamId, Vec<Ref>),
 }
 
@@ -123,7 +123,7 @@ impl SetStore {
                 let elems = system[i]
                     .iter()
                     .map(|e| match e {
-                        PendingElem::Erased => Elem::Erased,
+                        PendingElem::Dynamic => Elem::Dynamic,
                         PendingElem::Lam(lam, args) => Elem::Lam(
                             *lam,
                             args.iter()
@@ -202,7 +202,7 @@ impl SetStore {
                 Candidate::Local(i) => system[*i]
                     .iter()
                     .map(|e| match e {
-                        PendingElem::Erased => (None, vec![]),
+                        PendingElem::Dynamic => (None, vec![]),
                         PendingElem::Lam(lam, args) => (
                             Some(*lam),
                             args.iter()
@@ -220,7 +220,7 @@ impl SetStore {
                 Candidate::Known(id) => self.sets[*id as usize]
                     .iter()
                     .map(|e| match e {
-                        Elem::Erased => (None, vec![]),
+                        Elem::Dynamic => (None, vec![]),
                         Elem::Lam(lam, args) => (
                             Some(*lam),
                             args.iter().map(|a| known_child(self, *a)).collect(),
@@ -293,7 +293,7 @@ impl SetStore {
                 elems[*c]
                     .iter()
                     .map(|(lam, children)| match lam {
-                        None => Elem::Erased,
+                        None => Elem::Dynamic,
                         Some(lam) => Elem::Lam(
                             *lam,
                             children

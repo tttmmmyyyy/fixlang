@@ -3,7 +3,7 @@
 use super::{
     flow::BuiltinFlow,
     slots::{AType, SlotLayout},
-    solver::{Erasure, ErasureKind, LamId, Member, Owner, SetVar, Solver},
+    solver::{DynamicKind, DynamicReason, LamId, Member, Owner, SetVar, Solver},
 };
 use crate::{
     ast::{
@@ -80,8 +80,8 @@ pub struct Scheme {
 pub enum SchemeMember {
     /// `Member::Lam`, with the owner's variables given as classes.
     Lam { lam: LamId, args: Vec<u32> },
-    /// `Member::Erased`.
-    Erased(Rc<Erasure>),
+    /// `Member::Dynamic`.
+    Dynamic(Rc<DynamicReason>),
 }
 
 /// The lambda sets of a program.
@@ -117,10 +117,10 @@ pub fn infer(prg: &Program, layout: &SlotLayout) -> Analysis {
     }
     let mut roots = vec![];
     if let Some(entry) = &prg.entry_io_value {
-        roots.push((entry.clone(), ErasureKind::Entry));
+        roots.push((entry.clone(), DynamicKind::Entry));
     }
     for export in &prg.export_statements {
-        roots.push((export.value_expr.clone().unwrap(), ErasureKind::Export));
+        roots.push((export.value_expr.clone().unwrap(), DynamicKind::Export));
     }
     let root = infer_component(prg, layout, &mut analysis, vec![], roots);
     analysis.components.push(root);
@@ -163,13 +163,13 @@ fn components_callees_first(prg: &Program) -> Vec<Vec<FullName>> {
 
 /// Infers the component of `symbols`, given the components it refers to in `analysis`. The
 /// component of the entry holds no symbol and gives `roots` instead: the expressions the runtime
-/// reads, each with what erases its type.
+/// reads, each with what makes its type Dynamic.
 fn infer_component(
     prg: &Program,
     layout: &SlotLayout,
     analysis: &mut Analysis,
     symbols: Vec<FullName>,
-    roots: Vec<(Arc<ExprNode>, ErasureKind)>,
+    roots: Vec<(Arc<ExprNode>, DynamicKind)>,
 ) -> Component {
     let id = analysis.components.len();
     for s in &symbols {
@@ -205,7 +205,7 @@ fn infer_component(
     inferencer.enter_symbol(None);
     for (expr, kind) in &roots {
         let ty = inferencer.infer(expr);
-        inferencer.analysis.solver.erase_all(&ty, kind);
+        inferencer.analysis.solver.make_all_dynamic(&ty, kind);
     }
     let Inferencer {
         lambdas,
@@ -422,7 +422,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
     }
 
     /// The annotated type of the name `name` read by a builtin operation. `CAP_NAME` is the capture
-    /// of the innermost lambda, which only a closure object holds, so that lambda is erased.
+    /// of the innermost lambda, which only a closure object holds, so that lambda's set is Dynamic.
     fn operand(&mut self, name: &FullName) -> AType {
         if name.is_local() && name.name == CAP_NAME {
             let frame = *self
@@ -433,7 +433,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
             let own = ty.slots[0];
             self.analysis
                 .solver
-                .erase(own, ErasureKind::ReadsOwnCapture);
+                .make_dynamic(own, DynamicKind::ReadsOwnCapture);
             return ty;
         }
         self.reference(name)
@@ -533,7 +533,7 @@ fn instantiate(scheme: &Scheme, solver: &mut Solver) -> Vec<SetVar> {
                     lam: *lam,
                     owner: Owner::Instance(args.iter().map(|a| vars[*a as usize]).collect()),
                 },
-                SchemeMember::Erased(e) => Member::Erased(e.clone()),
+                SchemeMember::Dynamic(e) => Member::Dynamic(e.clone()),
             };
             solver.add(vars[class], member);
         }
@@ -633,7 +633,7 @@ fn generalize(
                     owner: Owner::Current,
                     ..
                 } => unreachable!("every lambda of the component has its owner given by now"),
-                Member::Erased(e) => SchemeMember::Erased(e),
+                Member::Dynamic(e) => SchemeMember::Dynamic(e),
             };
             if !scheme_members.contains(&scheme_member) {
                 scheme_members.push(scheme_member);
@@ -716,7 +716,7 @@ fn lambda_params(
                             lam_stack.push(other);
                         }
                     }
-                    Member::Erased(_) => {}
+                    Member::Dynamic(_) => {}
                 }
             }
             continue;

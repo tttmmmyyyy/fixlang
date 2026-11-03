@@ -8118,7 +8118,7 @@ impl BuiltinOp for UnionModOp {
         flow.same(&u, &flow.result());
         let payload = flow.field(&u, self.field_idx);
         let modifier = flow.operand(1);
-        flow.erase_own(&modifier);
+        flow.make_own_dynamic(&modifier);
         flow.same(&flow.type_arg(&modifier, 0), &payload);
         flow.same(&flow.type_arg(&modifier, 1), &payload);
     }

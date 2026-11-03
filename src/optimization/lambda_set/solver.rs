@@ -18,7 +18,7 @@ pub enum Member {
     /// The values the lambda `lam` builds, inside the copy of its symbol that `owner` names.
     Lam { lam: LamId, owner: Owner },
     /// A value only a closure built at run time can stand for.
-    Erased(Rc<Erasure>),
+    Dynamic(Rc<DynamicReason>),
 }
 
 /// Which copy of the symbol holding a lambda builds the values a `Member::Lam` stands for.
@@ -33,18 +33,18 @@ pub enum Owner {
     Instance(Vec<SetVar>),
 }
 
-/// Why a lambda set holds `Member::Erased`.
+/// Why a lambda set holds `Member::Dynamic`.
 #[derive(Clone, PartialEq, Eq)]
-pub struct Erasure {
-    pub kind: ErasureKind,
-    /// The symbol whose body the erasure was found in. `None` for the program's entry and the
+pub struct DynamicReason {
+    pub kind: DynamicKind,
+    /// The symbol whose body the reason was found in. `None` for the program's entry and the
     /// values it exports.
     pub at: Option<FullName>,
 }
 
 /// The kinds of place whose values have to be closures built at run time.
 #[derive(Clone, PartialEq, Eq)]
-pub enum ErasureKind {
+pub enum DynamicKind {
     /// The type of the program's entry `IO` value, which the runtime runs.
     Entry,
     /// The type of a value exported to C.
@@ -61,20 +61,20 @@ pub enum ErasureKind {
     ReadsOwnCapture,
 }
 
-impl Erasure {
-    /// How the erasure reads in a dump.
+impl DynamicReason {
+    /// How the reason reads in a dump.
     pub fn to_string(&self) -> String {
         let kind = match &self.kind {
-            ErasureKind::Entry => "the entry value".to_string(),
-            ErasureKind::Export => "an exported value".to_string(),
-            ErasureKind::Builtin(op) => format!("builtin {}", op),
-            ErasureKind::CalledByRuntime(tc) => {
+            DynamicKind::Entry => "the entry value".to_string(),
+            DynamicKind::Export => "an exported value".to_string(),
+            DynamicKind::Builtin(op) => format!("builtin {}", op),
+            DynamicKind::CalledByRuntime(tc) => {
                 format!("called by the runtime in {}", tc.to_string())
             }
-            ErasureKind::TypeConstructorArgument(tc) => {
+            DynamicKind::TypeConstructorArgument(tc) => {
                 format!("inside a type argument of {}", tc.to_string())
             }
-            ErasureKind::ReadsOwnCapture => "a lambda reading its own capture".to_string(),
+            DynamicKind::ReadsOwnCapture => "a lambda reading its own capture".to_string(),
         };
         match &self.at {
             Some(at) => format!("{} (in {})", kind, at.to_string()),
@@ -92,7 +92,7 @@ pub struct Solver {
     size: Vec<u32>,
     /// What each root holds. A variable that is not a root holds nothing here.
     members: Vec<Vec<Member>>,
-    /// The symbol whose body is being inferred, recorded in the erasures found there.
+    /// The symbol whose body is being inferred, recorded in the reasons for Dynamic found there.
     current_symbol: Option<FullName>,
 }
 
@@ -107,7 +107,7 @@ impl Solver {
         }
     }
 
-    /// Records `symbol` as the one whose body the erasures found from now on are in.
+    /// Records `symbol` as the one whose body the reasons for Dynamic found from now on are in.
     pub fn set_current_symbol(&mut self, symbol: Option<FullName>) {
         self.current_symbol = symbol;
     }
@@ -177,26 +177,26 @@ impl Solver {
 
     /// Records that the values at `v` are closures built at run time, for the reason `kind`, found
     /// in the current symbol. A reason the variable already holds is not recorded twice.
-    pub fn erase(&mut self, v: SetVar, kind: ErasureKind) {
-        let erasure = Erasure {
+    pub fn make_dynamic(&mut self, v: SetVar, kind: DynamicKind) {
+        let reason = DynamicReason {
             kind,
             at: self.current_symbol.clone(),
         };
         let root = self.find(v);
         let members = &mut self.members[root.0 as usize];
         let known = members.iter().any(|m| match m {
-            Member::Erased(e) => **e == erasure,
+            Member::Dynamic(e) => **e == reason,
             _ => false,
         });
         if !known {
-            members.push(Member::Erased(Rc::new(erasure)));
+            members.push(Member::Dynamic(Rc::new(reason)));
         }
     }
 
     /// Records that every slot of `ty` is a closure built at run time, for the reason `kind`.
-    pub fn erase_all(&mut self, ty: &AType, kind: &ErasureKind) {
+    pub fn make_all_dynamic(&mut self, ty: &AType, kind: &DynamicKind) {
         for v in &ty.slots {
-            self.erase(*v, kind.clone());
+            self.make_dynamic(*v, kind.clone());
         }
     }
 

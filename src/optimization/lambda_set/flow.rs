@@ -2,22 +2,22 @@
 
 use super::{
     slots::{AType, SlotLayout},
-    solver::{ErasureKind, Solver},
+    solver::{DynamicKind, Solver},
 };
 
 /// The operands and the result of one builtin operation, for its `BuiltinOp::lambda_set_flow` to
 /// say how the functions they hold flow between them.
 ///
 /// A rule declares a flow by making two places the same (`same`), and declares a place whose
-/// values are closures the operation builds or calls at run time by erasing it (`erase`,
-/// `erase_own`). A place the rule says nothing about holds nothing the operation put there, which
+/// values are closures the operation builds or calls at run time by making it Dynamic
+/// (`make_dynamic`, `make_own_dynamic`). A place the rule says nothing about holds nothing the operation put there, which
 /// is right for an operation that moves no function into it.
 pub struct BuiltinFlow<'a, 'e> {
     layout: &'a SlotLayout<'e>,
     solver: &'a mut Solver,
     operands: Vec<AType>,
     result: AType,
-    /// The name of the operation, recorded in what it erases.
+    /// The name of the operation, recorded in the places it makes Dynamic.
     op_name: String,
 }
 
@@ -68,27 +68,27 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
     }
 
     /// Declares every slot of `ty` a place of closures built at run time.
-    pub fn erase(&mut self, ty: &AType) {
-        let kind = ErasureKind::Builtin(self.op_name.clone());
-        self.solver.erase_all(ty, &kind);
+    pub fn make_dynamic(&mut self, ty: &AType) {
+        let kind = DynamicKind::Builtin(self.op_name.clone());
+        self.solver.make_all_dynamic(ty, &kind);
     }
 
     /// Declares the own slots of `ty` (for a function, the closure itself, leaving what it takes
     /// and returns) places of closures built at run time.
-    pub fn erase_own(&mut self, ty: &AType) {
-        let kind = ErasureKind::Builtin(self.op_name.clone());
+    pub fn make_own_dynamic(&mut self, ty: &AType) {
+        let kind = DynamicKind::Builtin(self.op_name.clone());
         for v in self.layout.own_slots(ty) {
-            self.solver.erase(*v, kind.clone());
+            self.solver.make_dynamic(*v, kind.clone());
         }
     }
 
     /// Declares every slot of every operand and of the result a place of closures built at run time.
     /// This is the rule of an operation that declares none.
-    pub fn erase_all(&mut self) {
-        let kind = ErasureKind::Builtin(self.op_name.clone());
+    pub fn make_all_dynamic(&mut self) {
+        let kind = DynamicKind::Builtin(self.op_name.clone());
         for operand in &self.operands {
-            self.solver.erase_all(operand, &kind);
+            self.solver.make_all_dynamic(operand, &kind);
         }
-        self.solver.erase_all(&self.result, &kind);
+        self.solver.make_all_dynamic(&self.result, &kind);
     }
 }
