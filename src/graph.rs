@@ -178,6 +178,26 @@ impl<T> Graph<T> {
         scc_ids
     }
 
+    /// The strongly connected components, each listing its nodes in increasing order, and each
+    /// placed after every other component it has a path to.
+    pub fn components_dependencies_first(&self) -> Vec<Vec<usize>> {
+        let scc_ids = self.compute_sccs();
+        let count = scc_ids.iter().max().map_or(0, |m| m + 1);
+        let mut components = vec![vec![]; count];
+        for (node, id) in scc_ids.iter().enumerate() {
+            components[*id].push(node);
+        }
+        // `compute_sccs` gives a component an id no larger than that of any component it reaches.
+        components.reverse();
+        components
+    }
+
+    /// Whether the strongly connected component `component` holds a cycle: it has more than one
+    /// node, or its one node has an edge to itself.
+    pub fn is_cycle(&self, component: &[usize]) -> bool {
+        component.len() > 1 || self.edges[component[0]].contains(&component[0])
+    }
+
     // Helper function for the first DFS (DFS1)
     fn scc_dfs1(&self, u: usize, visited: &mut Vec<bool>, finish_order: &mut VecDeque<usize>) {
         visited[u] = true;
@@ -275,6 +295,33 @@ mod tests {
 
         let scc_ids = graph.compute_sccs();
         assert_eq!(scc_ids, [0, 0, 1, 1, 0, 2, 2, 3]);
+    }
+
+    #[test]
+    fn test_components_dependencies_first() {
+        // 0 -> 1 <-> 2 -> 3, 4 -> 4, 5 -> 3
+        let graph = Graph::new_with_edges(
+            vec!['a', 'b', 'c', 'd', 'e', 'f'],
+            vec![vec![1], vec![2], vec![1, 3], vec![], vec![4], vec![3]],
+        );
+        let components = graph.components_dependencies_first();
+        let mut position = vec![0; graph.len()];
+        for (i, component) in components.iter().enumerate() {
+            for node in component {
+                position[*node] = i;
+            }
+        }
+        let mut sorted = components.clone();
+        sorted.sort();
+        assert_eq!(sorted, vec![vec![0], vec![1, 2], vec![3], vec![4], vec![5]]);
+        assert!(position[3] < position[1]);
+        assert!(position[1] < position[0]);
+        assert!(position[3] < position[5]);
+        let cycles: Vec<bool> = sorted.iter().map(|c| graph.is_cycle(c)).collect();
+        assert_eq!(cycles, vec![false, true, false, true, false]);
+
+        let graph: Graph<char> = Graph::new_with_edges(vec![], vec![]);
+        assert!(graph.components_dependencies_first().is_empty());
     }
 
     #[test]

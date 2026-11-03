@@ -101,32 +101,20 @@ impl SetStore {
     pub fn intern(&mut self, system: Vec<Vec<PendingElem>>) -> Vec<SetId> {
         let n = system.len();
         let mut graph = Graph::new((0..n).collect::<Vec<usize>>());
-        let mut self_loop = vec![false; n];
         for (i, elems) in system.iter().enumerate() {
             for elem in elems {
                 if let PendingElem::Lam(_, args) = elem {
                     for arg in args {
                         if let Ref::Local(j) = arg {
                             graph.connect_idx(i, *j);
-                            if *j == i {
-                                self_loop[i] = true;
-                            }
                         }
                     }
                 }
             }
         }
-        // A path from i to j gives i an id no larger than j's, so a set comes after the sets it
-        // refers to when the ids are taken from the largest down.
-        let scc_ids = graph.compute_sccs();
-        let count = scc_ids.iter().max().map_or(0, |m| m + 1);
-        let mut components: Vec<Vec<usize>> = vec![vec![]; count];
-        for (i, id) in scc_ids.iter().enumerate() {
-            components[*id].push(i);
-        }
         let mut resolved: Vec<Option<SetId>> = vec![None; n];
-        for component in components.iter().rev() {
-            if component.len() == 1 && !self_loop[component[0]] {
+        for component in graph.components_dependencies_first() {
+            if !graph.is_cycle(&component) {
                 let i = component[0];
                 let elems = system[i]
                     .iter()
@@ -145,7 +133,7 @@ impl SetStore {
                     .collect();
                 resolved[i] = Some(self.insert(elems, false));
             } else {
-                self.intern_cycle(component, &system, &mut resolved);
+                self.intern_cycle(&component, &system, &mut resolved);
             }
         }
         resolved.into_iter().map(|id| id.unwrap()).collect()

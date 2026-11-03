@@ -152,15 +152,11 @@ fn components_callees_first(prg: &Program) -> Vec<Vec<FullName>> {
             graph.connect_idx(i, j);
         }
     }
-    // A path from i to j gives i an id no larger than j's, so the callees come at the larger ids.
-    let scc_ids = graph.compute_sccs();
-    let count = scc_ids.iter().max().map_or(0, |m| m + 1);
-    let mut components = vec![vec![]; count];
-    for (i, id) in scc_ids.iter().enumerate() {
-        components[*id].push(names[i].clone());
-    }
-    components.reverse();
-    components
+    graph
+        .components_dependencies_first()
+        .into_iter()
+        .map(|component| component.into_iter().map(|i| names[i].clone()).collect())
+        .collect()
 }
 
 /// Infers the component of `symbols`, given the components it refers to in `analysis`. The

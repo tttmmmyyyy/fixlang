@@ -147,14 +147,18 @@ impl<'e> SlotLayout<'e> {
                 graph.connect_idx(i, index[&to]);
             }
         }
-        let scc_ids = graph.compute_sccs();
-        let group_count = scc_ids.iter().max().map_or(0, |m| m + 1);
-        self.group_members = vec![vec![]; group_count];
-        for (i, tc) in tycons.iter().enumerate() {
-            self.group_of.insert(tc.clone(), scc_ids[i]);
-            self.group_members[scc_ids[i]].push(tc.clone());
+        for (group, component) in graph
+            .components_dependencies_first()
+            .into_iter()
+            .enumerate()
+        {
+            let members: Vec<TyCon> = component.into_iter().map(|i| tycons[i].clone()).collect();
+            for tc in &members {
+                self.group_of.insert(tc.clone(), group);
+            }
+            self.group_members.push(members);
         }
-        *self.group_slots.borrow_mut() = vec![None; group_count];
+        *self.group_slots.borrow_mut() = vec![None; self.group_members.len()];
     }
 
     /// Appends to `out` each struct, union or array that `ty` (a declared field type) owns slots of:

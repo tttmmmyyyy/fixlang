@@ -408,25 +408,13 @@ impl Program {
         // Every resolution of a cycle determines the others and none of them a type, so the
         // strongly connected component is what the report is about. A component of one resolution
         // is a cycle when that resolution's concrete type is written in terms of itself.
-        let refers_to_itself: Vec<bool> = edges
-            .iter()
-            .enumerate()
-            .map(|(node, targets)| targets.contains(&node))
-            .collect();
         let graph = Graph::new_with_edges(resolutions, edges);
-        let component_of_node = graph.compute_sccs();
-        let mut nodes_of_component: Map<usize, Vec<usize>> = Map::default();
-        for (node, component) in component_of_node.iter().enumerate() {
-            nodes_of_component.entry(*component).or_default().push(node);
-        }
-
         let mut errors = Errors::empty();
-        for component in 0..nodes_of_component.len() {
-            let component_nodes = &nodes_of_component[&component];
-            if component_nodes.len() == 1 && !refers_to_itself[component_nodes[0]] {
-                continue;
+        // The cycles are reported each before the cycles it reaches.
+        for component in graph.components_dependencies_first().iter().rev() {
+            if graph.is_cycle(component) {
+                errors.append(opaque_cycle_error(&graph, component));
             }
-            errors.append(opaque_cycle_error(&graph, component_nodes));
         }
         errors.to_result()
     }
