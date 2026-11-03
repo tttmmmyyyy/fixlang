@@ -99,19 +99,14 @@ pub fn run(prg: &mut Program, config: &Configuration) {
 
     // Infer the lambda sets of the program and the copies they ask for, ahead of the passes that
     // specialize closures, and leave the program as it is. With `emit_symbols`, write them to a
-    // dump.
-    run_pass(
-        prg,
-        config,
-        config.enable_closure_specialization() && (config.develop_mode || config.emit_symbols),
-        "lambda_set",
-        |prg| {
-            let dump_step = config
-                .emit_symbols
-                .then(|| format!("{}", prg.optimization_step));
-            lambda_set::run(prg, dump_step)
-        },
-    );
+    // dump named after the step the program is at.
+    if config.enable_closure_specialization() && (config.develop_mode || config.emit_symbols) {
+        let _sw = StopWatch::new("lambda_set::run", config.verbose);
+        let dump_step = config
+            .emit_symbols
+            .then(|| format!("{}", prg.optimization_step));
+        lambda_set::run(prg, dump_step);
+    }
 
     // Give a function that takes a struct a twin taking one argument per field of it, so that a
     // closure a field holds becomes an argument the stages after it can follow.
