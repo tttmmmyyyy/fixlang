@@ -18,15 +18,21 @@ mod slots;
 mod solver;
 mod specialize;
 
-use crate::{ast::program::Program, constants::DOT_FIXLANG};
+use crate::{
+    ast::program::Program,
+    constants::DOT_FIXLANG,
+    error::panic_if_err,
+    project_fs::{write_file_guarding_project_links, DOT_FIXLANG_LINK_HINT},
+};
 pub use flow::BuiltinFlow;
 use infer::infer;
 use slots::SlotLayout;
 use specialize::specialize;
-use std::{fs::File, io::Write, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 /// Infers the lambda sets of `prg` and the copies they ask for, leaving the program as it is. With
-/// `dump_step`, writes them to a file under `.fixlang` named after it.
+/// `dump_step`, writes them to a file under `.fixlang` named after it; a failure to write it ends
+/// the process with the error printed.
 pub fn run(prg: &Program, dump_step: Option<String>) {
     let layout = SlotLayout::new(&prg.type_env);
     let mut analysis = infer(prg, &layout);
@@ -34,8 +40,11 @@ pub fn run(prg: &Program, dump_step: Option<String>) {
     if let Some(step) = dump_step {
         let text = dump::render(&mut analysis, &spec, &layout);
         let path = PathBuf::from(format!("{}/{}.lambda_sets.txt", DOT_FIXLANG, step));
-        let mut file = File::create(&path).unwrap();
-        file.write_all(text.as_bytes()).unwrap();
+        panic_if_err(write_file_guarding_project_links(
+            &path,
+            DOT_FIXLANG_LINK_HINT,
+            |tmp_path| fs::write(tmp_path, &text),
+        ));
     }
 }
 
