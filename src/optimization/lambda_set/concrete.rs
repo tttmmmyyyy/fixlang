@@ -44,7 +44,7 @@ pub struct SetStore {
     /// The elements of each set, sorted.
     sets: Vec<Vec<Elem>>,
     /// The set holding each list of elements.
-    index: Map<Vec<Elem>, SetId>,
+    id_of: Map<Vec<Elem>, SetId>,
     /// Whether each set lies on a cycle: it reaches itself through the elements of the sets it holds.
     on_cycle: Vec<bool>,
     /// The sets lying on a cycle, in increasing order: the ids whose `on_cycle` is true, kept apart
@@ -84,7 +84,7 @@ impl SetStore {
     pub fn new() -> Self {
         SetStore {
             sets: vec![],
-            index: Map::default(),
+            id_of: Map::default(),
             on_cycle: vec![],
             cyclic: vec![],
         }
@@ -144,7 +144,7 @@ impl SetStore {
     fn insert(&mut self, mut elems: Vec<Elem>, on_cycle: bool) -> SetId {
         elems.sort();
         elems.dedup();
-        if let Some(id) = self.index.get(&elems) {
+        if let Some(id) = self.id_of.get(&elems) {
             assert!(
                 !on_cycle,
                 "a set on a cycle is inserted, though it is held already"
@@ -153,7 +153,7 @@ impl SetStore {
         }
         let id = self.sets.len() as SetId;
         self.sets.push(elems.clone());
-        self.index.insert(elems, id);
+        self.id_of.insert(elems, id);
         self.on_cycle.push(on_cycle);
         if on_cycle {
             self.cyclic.push(id);

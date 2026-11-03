@@ -73,7 +73,7 @@ pub struct Scheme {
     /// The members of each class.
     pub classes: Vec<Vec<SchemeMember>>,
     /// For each symbol of the component, the class of each slot of its type.
-    pub symbol_slots: Vec<Vec<u32>>,
+    pub slot_classes: Vec<Vec<u32>>,
 }
 
 /// A member of a class of a `Scheme`.
@@ -100,7 +100,7 @@ pub struct Analysis {
 
 impl Analysis {
     /// The component of the program's entry and the values it exports.
-    pub fn root(&self) -> usize {
+    pub fn entry_component(&self) -> usize {
         self.components.len() - 1
     }
 }
@@ -178,7 +178,7 @@ fn infer_component(
         env: Map::default(),
         frames: vec![],
         lambdas: vec![],
-        current_members: vec![],
+        vars_holding_current: vec![],
         sites: vec![],
         lam_counter: 0,
     };
@@ -194,11 +194,18 @@ fn infer_component(
     }
     let Inferencer {
         lambdas,
-        current_members,
+        vars_holding_current,
         sites,
         ..
     } = inferencer;
-    generalize(analysis, symbols, types, lambdas, current_members, sites)
+    generalize(
+        analysis,
+        symbols,
+        types,
+        lambdas,
+        vars_holding_current,
+        sites,
+    )
 }
 
 /// What a lambda under inference records about its term, which decides the parameters it depends on.
@@ -237,7 +244,7 @@ struct Inferencer<'a, 'p, 'e> {
     /// The lambdas of the component.
     lambdas: Vec<LamTerm>,
     /// The variables a `Member::Lam` with `Owner::Current` was added to.
-    current_members: Vec<SetVar>,
+    vars_holding_current: Vec<SetVar>,
     /// The references made in the bodies to symbols of other components.
     sites: Vec<Site>,
     /// How many lambdas of the current symbol's body have been met.
@@ -323,7 +330,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                         owner: Owner::Current,
                     },
                 );
-                self.current_members.push(own);
+                self.vars_holding_current.push(own);
                 if let Some(parent) = self.frames.last() {
                     self.lambdas[*parent].children.push(lam);
                 }
@@ -478,7 +485,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         let position = callee.symbols.iter().position(|s| s == name).unwrap();
         let vars = instantiate(&callee.scheme, &mut self.analysis.solver);
         let callee = &self.analysis.components[component];
-        let slots: Vec<SetVar> = callee.scheme.symbol_slots[position]
+        let slots: Vec<SetVar> = callee.scheme.slot_classes[position]
             .iter()
             .map(|c| vars[*c as usize])
             .collect();
@@ -556,14 +563,14 @@ fn instantiate(scheme: &Scheme, solver: &mut Solver) -> Vec<SetVar> {
 }
 
 /// The component inferred from the annotated `types` of its `symbols`, its `lambdas`, the
-/// variables `current_members` holding a lambda of it, and its references `sites`: the parameters
-/// are found, each lambda is given the ones it depends on, and the scheme is built.
+/// variables `vars_holding_current` its lambdas were added to, and its references `sites`: the
+/// parameters are found, each lambda is given the ones it depends on, and the scheme is built.
 fn generalize(
     analysis: &mut Analysis,
     symbols: Vec<FullName>,
     types: Vec<AType>,
     lambdas: Vec<LamTerm>,
-    current_members: Vec<SetVar>,
+    vars_holding_current: Vec<SetVar>,
     sites: Vec<Site>,
 ) -> Component {
     let solver = &mut analysis.solver;
@@ -589,7 +596,7 @@ fn generalize(
         let depends_on = lambda_params(solver, &lambdas, &term_index, term.lam, &param_index);
         analysis.lambdas[term.lam as usize].params = depends_on;
     }
-    for v in current_members {
+    for v in vars_holding_current {
         let members = mem::take(solver.members_mut(v));
         let members = members
             .into_iter()
@@ -655,7 +662,7 @@ fn generalize(
         }
         classes[class_of[&v] as usize] = scheme_members;
     }
-    let symbol_slots = types
+    let slot_classes = types
         .iter()
         .map(|ty| {
             ty.slots
@@ -684,7 +691,7 @@ fn generalize(
         sites: deduped_sites,
         scheme: Scheme {
             classes,
-            symbol_slots,
+            slot_classes,
         },
     }
 }

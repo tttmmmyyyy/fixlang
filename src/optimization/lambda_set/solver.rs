@@ -40,7 +40,7 @@ pub struct DynamicReason {
     pub kind: DynamicKind,
     /// The symbol whose body the reason was found in. `None` for the program's entry and the
     /// values it exports.
-    pub at: Option<FullName>,
+    pub found_in: Option<FullName>,
 }
 
 /// The kinds of place whose values have to be closures built at run time.
@@ -77,7 +77,7 @@ impl DynamicReason {
             }
             DynamicKind::ReadsOwnCapture => "a lambda reading its own capture".to_string(),
         };
-        match &self.at {
+        match &self.found_in {
             Some(at) => format!("{} (in {})", kind, at.to_string()),
             None => kind,
         }
@@ -186,7 +186,7 @@ impl Solver {
     pub fn make_dynamic(&mut self, v: SetVar, kind: DynamicKind) {
         let reason = DynamicReason {
             kind,
-            at: self.current_symbol.clone(),
+            found_in: self.current_symbol.clone(),
         };
         let root = self.find(v);
         let members = &mut self.members[root.0 as usize];

@@ -36,7 +36,7 @@ pub fn specialize(analysis: &mut Analysis) -> Specialization {
         instance_of: Map::default(),
         queue: VecDeque::new(),
     };
-    copies.request(analysis.root(), vec![]);
+    copies.request(analysis.entry_component(), vec![]);
     let param_indices: Vec<Map<SetVar, usize>> = analysis
         .components
         .iter()
@@ -45,7 +45,7 @@ pub fn specialize(analysis: &mut Analysis) -> Specialization {
     while let Some(k) = copies.queue.pop_front() {
         let component = copies.instances[k].component;
         let args = copies.instances[k].args.clone();
-        let mut solve = Solve {
+        let mut equations = CopyEquations {
             solver: &mut analysis.solver,
             param_index: &param_indices[component],
             args: &args,
@@ -56,11 +56,11 @@ pub fn specialize(analysis: &mut Analysis) -> Specialization {
             .sites
             .iter()
             .map(|site| {
-                let refs = site.args.iter().map(|a| solve.reference(*a)).collect();
+                let refs = site.args.iter().map(|a| equations.reference(*a)).collect();
                 (site.component, refs)
             })
             .collect();
-        let system = solve.finish();
+        let system = equations.finish();
         let ids = store.intern(system);
         for (callee, refs) in site_refs {
             let callee_args: Vec<SetId> = refs
@@ -107,7 +107,7 @@ impl Copies {
 }
 
 /// The equations of the sets of the variables of one copy of a component.
-struct Solve<'a> {
+struct CopyEquations<'a> {
     /// The variables of the program, read for the members of each one the copy refers to.
     solver: &'a mut Solver,
     /// The position of each parameter of the component.
@@ -120,7 +120,7 @@ struct Solve<'a> {
     system: Vec<Option<Vec<PendingElem>>>,
 }
 
-impl<'a> Solve<'a> {
+impl<'a> CopyEquations<'a> {
     /// The set of the variable `v` in the copy: the set given to it where it is a parameter, and
     /// its equation otherwise.
     fn reference(&mut self, v: SetVar) -> Ref {

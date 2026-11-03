@@ -34,9 +34,9 @@ pub struct AType {
 /// and an occurrence of a member in a member's field stands for those same slots. That is what
 /// keeps the slots of a recursive type finite.
 struct GroupSlots {
-    /// For each own slot, the type constructor whose functions the runtime calls there, if any.
-    /// A value there is always a closure built at run time.
-    called_by_runtime: Vec<Option<TyCon>>,
+    /// One entry per own slot of the group: the type constructor whose runtime calls the functions
+    /// at that slot, if any. A value at such a slot is always a closure built at run time.
+    own_slots: Vec<Option<TyCon>>,
     /// For each member and each of its fields, the own slot the field's first own slot is.
     field_offsets: Map<TyCon, Vec<usize>>,
 }
@@ -189,28 +189,28 @@ impl<'e> SlotLayout<'e> {
         if let Some(slots) = &self.group_slots.borrow()[group] {
             return slots.clone();
         }
-        let mut called_by_runtime = vec![];
+        let mut own_slots = vec![];
         let mut field_offsets = Map::default();
         for member in &self.group_members[group] {
             let mut offsets = vec![];
             let info = self.type_env.tycon_info(member);
             for field in &info.fields {
-                offsets.push(called_by_runtime.len());
+                offsets.push(own_slots.len());
                 if !self.type_env.is_unwrapped_newtype(member) {
-                    self.count_own_slots(&field.ty, group, &mut called_by_runtime);
+                    self.push_own_slots(&field.ty, group, &mut own_slots);
                 }
             }
             field_offsets.insert(member.clone(), offsets);
         }
         for member in &self.group_members[group] {
             if DESTRUCTOR_TYPE.is(&member.name) {
-                for slot in &mut called_by_runtime {
+                for slot in &mut own_slots {
                     *slot = Some(member.clone());
                 }
             }
         }
         let slots = Arc::new(GroupSlots {
-            called_by_runtime,
+            own_slots,
             field_offsets,
         });
         self.group_slots.borrow_mut()[group] = Some(slots.clone());
@@ -219,7 +219,7 @@ impl<'e> SlotLayout<'e> {
 
     /// Appends to `own` an entry for each own slot that the declared field type `ty` of a member of
     /// `group` gives the group, in the order `walk_declared` reads them.
-    fn count_own_slots(&self, ty: &Arc<TypeNode>, group: usize, own: &mut Vec<Option<TyCon>>) {
+    fn push_own_slots(&self, ty: &Arc<TypeNode>, group: usize, own: &mut Vec<Option<TyCon>>) {
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
         match &spine[0].ty {
@@ -239,14 +239,14 @@ impl<'e> SlotLayout<'e> {
                     let layout_tc = self.layout_tycon(tc);
                     let tc_group = self.group_of[&layout_tc];
                     if tc_group != group {
-                        own.extend(self.group_slots(tc_group).called_by_runtime.iter().cloned());
+                        own.extend(self.group_slots(tc_group).own_slots.iter().cloned());
                     }
                 }
             }
             _ => panic!("the type `{}` has an unexpected head", ty.to_string()),
         }
         for arg in args {
-            self.count_own_slots(arg, group, own);
+            self.push_own_slots(arg, group, own);
         }
     }
 
@@ -256,7 +256,7 @@ impl<'e> SlotLayout<'e> {
             return 1;
         }
         let group = self.group_of[&self.layout_tycon(tc)];
-        self.group_slots(group).called_by_runtime.len()
+        self.group_slots(group).own_slots.len()
     }
 
     /// The number of slots of `ty`.
@@ -311,7 +311,7 @@ impl<'e> SlotLayout<'e> {
             out.push(solver.fresh());
         } else {
             let group = self.group_of[&self.layout_tycon(&tc)];
-            for called_by in &self.group_slots(group).called_by_runtime {
+            for called_by in &self.group_slots(group).own_slots {
                 let v = solver.fresh();
                 if let Some(called_by) = called_by {
                     solver.make_dynamic(v, DynamicKind::CalledByRuntime(called_by.clone()));
@@ -403,7 +403,7 @@ impl<'e> SlotLayout<'e> {
         let group = self.group_of[&layout_tc];
         let group_slots = self.group_slots(group);
         let info = self.type_env.tycon_info(&layout_tc);
-        let own_count = group_slots.called_by_runtime.len();
+        let own_count = group_slots.own_slots.len();
         let mut env: Map<Name, Binding> = Map::default();
         for (i, tv) in info.tyvars.iter().enumerate() {
             let arg = self.type_arg(ty, i);
