@@ -118,54 +118,47 @@ flowchart LR
 モジュールごとに 1 ファイルを置く。キャッシュキーは今と同じ `module_dependency_hash` で、モジュールが依存するソースのハッシュ、構文解析と型検査が依存する設定（`elaboration_hash`）、コンパイラのビルド時刻から作る。ファイル名は、モジュール名を一対一に符号化したものと、キャッシュキーのダイジェストから作る（今の `cache_file_name` のように英数字以外を `_` にすると、`A.B` と `A_B` が同じ名前になる）。
 
 ```rust
-/// The type-check results of one module, kept in one file under the module's
-/// `module_dependency_hash`.
-struct ModuleCacheFile {
-    /// The typed expressions of the entities in `record`, one after another,
-    /// each serialized with postcard after its `EntityIdentity`.
-    bodies: [u8],
-    record: ModuleRecord,
-    /// Where each typed expression lies in `bodies`.
-    index: Map<EntityIdentity, ByteRange>,
-}
-
-/// The entities of the module that passed a type check producing no diagnostic,
-/// with the facts later phases read off their typed expressions.
-struct ModuleRecord {
-    passed: Set<EntityIdentity>,
-    /// The concrete types of the opaque types of the passed entities.
+/// What a module's file records of one body.
+struct EntityEntry {
+    /// Where the body's identity and typed expression lie in the file.
+    body: Range<u64>,
+    /// The concrete type each opaque type constructor of the body stands for.
     opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>,
-    /// What the warnings after type checking are derived from.
+    /// The facts about the body a warning after type checking may be derived from.
     warning_facts: Vec<WarningFact>,
 }
 
-/// A fact about a typed expression that a warning may be derived from,
-/// whatever the configuration.
+/// The bodies a module's file holds, by their identity.
+type ModuleRecord = Map<EntityIdentity, EntityEntry>;
+
+/// A fact about a typed expression that a warning after type checking may be
+/// derived from, whatever the configuration.
 enum WarningFact {
     /// The expression uses the global value `name` at `span`.
     GlobalUse { name: FullName, span: Span },
-    /// A struct pattern at `span` names the fields `written` of `tycon`.
+    /// A struct pattern at `span` names the fields `written` of `tycon`, and
+    /// writes no `_` after them.
     StructPattern { span: Span, tycon: Arc<TyCon>, written: Vec<Name> },
 }
 ```
 
-ファイル 1 つの中身は、次の順に並ぶ。ID は各本体の前に書いた `EntityIdentity` である。
+ファイル 1 つの中身は、次の順に並ぶ。ID は各本体の前に書いた `EntityIdentity` である。末尾の footer は、`ModuleRecord` の位置と長さと、このコンパイラが書いたファイルであることを示す 8 バイトを持つ。
 
 ```
-[ID][本体 A] [ID][本体 B] [ID][本体 C] ... [ModuleRecord] [インデックス]
+[ID][本体 A] [ID][本体 B] [ID][本体 C] ... [ModuleRecord] [footer]
 ```
 
-2 回目以降のビルドは、全モジュールの `ModuleRecord` とインデックスを毎回読む。本体は、インスタンス化が要求したものだけを、インデックスで場所を引き、ID を照合して読む。
+2 回目以降のビルドは、全モジュールの `ModuleRecord` を毎回読む。本体は、インスタンス化が要求したものだけを、`ModuleRecord` で場所を引き、ID を照合して読む。
 
 - **`EntityIdentity`**: 型検査の 1 単位を指す。グローバル値なら名前と型スキーム、トレイトのメソッドの実装なら、メソッドの名前と実装の型スキームと実装を書いたモジュールである。今のキャッシュのキーと同じものを指す。
-- **`ModuleRecord` が保証すること**: `passed` の各要素が、同じキャッシュキーのもとで、診断を 1 つも出さずに型検査を通ったこと。診断を 1 つも出さない型検査とは、通常のビルドの型検査（`error_tolerant` でない検査）が、エラーも、穴（`?`）などの許容された診断も出さなかったことを指す。今のキャッシュも、この条件を満たした結果だけを書く。トレイトの実装なら、実装の型が宣言と一致すること（`check_scheme_equivalent`）も含む。
-- **2 回目以降のビルド**: 宣言から分かる今回の本体の集合と `passed` を比べ、`passed` にある本体は型検査を省く。`passed` にない本体だけを型検査する。Std の本体の集合は、使うタプルのサイズで増える（9 要素のタプルを使うと Std の値が 107 個増え、Std のキャッシュキーは変わらない）。集合で比べるので、こうして増えた本体も型検査される。
-- **新しく通った本体を加える**: 古い本体のバイト列をそのまま写し、新しい本体を足して、`ModuleRecord` とインデックスを書き直した新しいファイルを作り、`replace_file` で置き換える。Std のファイルは約 7 MB で、書き直しは数十 ms の見込みである。`passed` は増える一方なので、タプルのサイズが違う `fix build` と `fix test` を交互に実行しても、両方を一度ずつ実行した後は型検査し直さない。
-- **診断の出た本体**: `passed` に入れず、ファイルにも書かない。毎回型検査し直す。
+- **`ModuleRecord` が保証すること**: `ModuleRecord` にある各本体が、同じキャッシュキーのもとで、診断を 1 つも出さずに型検査を通ったこと。診断を 1 つも出さない型検査とは、通常のビルドの型検査（`error_tolerant` でない検査）が、エラーも、穴（`?`）などの許容された診断も出さなかったことを指す。今のキャッシュも、この条件を満たした結果だけを書く。トレイトの実装なら、実装の型が宣言と一致すること（`check_scheme_equivalent`）も含む。
+- **2 回目以降のビルド**: 宣言から分かる今回の本体の集合と `ModuleRecord` を比べ、`ModuleRecord` にある本体は型検査を省く。`ModuleRecord` にない本体だけを型検査する。Std の本体の集合は、使うタプルのサイズで増える（9 要素のタプルを使うと Std の値が 107 個増え、Std のキャッシュキーは変わらない）。集合で比べるので、こうして増えた本体も型検査される。
+- **新しく通った本体を加える**: その時点のファイルを読み直し、古い本体のバイト列を同じ位置にそのまま写し、新しい本体を足して、`ModuleRecord` を書き直した新しいファイルを作り、`replace_file` で置き換える。古い本体の位置が変わらないので、前に読んだ `ModuleRecord` の位置は、書き直した後のファイルでも同じ本体を指す。Std のファイルは約 7 MB で、書き直しは数十 ms の見込みである。`ModuleRecord` の本体は増える一方なので、タプルのサイズが違う `fix build` と `fix test` を交互に実行しても、両方を一度ずつ実行した後は型検査し直さない。
+- **診断の出た本体**: ファイルに書かない。毎回型検査し直す。
 - **古いファイル**: 新しいキャッシュキーのファイルを書き終えたら、同じモジュールの、キャッシュキーの違うファイルを消す。
 - **キャッシュキーが成り立つ条件**: 本体の中身は、その `EntityIdentity` と、モジュールのキャッシュキーが覆うもので決まる。たとえば、タプルの実装の中身はサイズだけで決まり、アクセサの中身はそのモジュールの構造体の定義で決まる。今の値ごとのキャッシュも同じ条件に立っている。実装では、この条件をコメントと assert に書く。
 
-2 回目以降のビルドで型検査する本体は、次のように決まる。図では、新しいサイズのタプルを使ったので、実装が 1 つ増えている。
+2 回目以降のビルドで型検査する本体は、次のように決まる（段階 1 から）。図では、新しいサイズのタプルを使ったので、実装が 1 つ増えている。
 
 ```mermaid
 flowchart LR
@@ -175,12 +168,12 @@ flowchart LR
         a1[実装 A]
         n1[タプルの新しい実装]
     end
-    subgraph passed[record.passed]
+    subgraph passed[ModuleRecord]
         f2[値 f]
         g2[値 g]
         a2[実装 A]
     end
-    n1 -- passed にない --> tc[型検査]
+    n1 -- ModuleRecord にない --> tc[型検査]
     tc -- 通った --> w["古いバイト列 + 新しい本体<br/>-> replace_file"]
     w -- 加える --> passed
 ```
@@ -219,14 +212,14 @@ struct CheckedBody {
 }
 ```
 
-どちらの関数も、ファイルがない、壊れている、書けなかった、のどの場合も「なかった」として作り直すので、結果は同じになる。違うのは、かかる時間だけである。ファイルを読むときは、インデックスと本体を同じファイル記述子から読み、本体の前に書いた `EntityIdentity` が求めたものと一致することを確かめる。読んでいる途中で別のプロセスがファイルを置き換えても、別の本体を読まない。
+どちらの関数も、ファイルがない、壊れている、書けなかった、のどの場合も「なかった」として作り直すので、結果は同じになる。違うのは、かかる時間だけである。本体を読むときは、本体の前に書いた `EntityIdentity` が求めたものと一致することを確かめる。別のプロセスがファイルを書き直しても、古い本体の位置は変わらない。別のキャッシュキーのファイルに置き換わって消えたときは、本体を型検査し直す。
 
 読み戻した位置（`Span`）は、ソースファイルをパスで共有する `SourceFile` を指すようにする。今のシリアライズは `SourceFile` の中身を落とすので、読み戻した位置はそれぞれ別の `SourceFile` を持つ。`-g` のビルドでは、デバッグ情報の行番号を求めるたびに、その `SourceFile` がファイル全体（std.fix は 743 KB）を読んで持つ。そのため、今の 2 回目以降のビルドは、`-g` で最大 RSS が 327 MB から 766 MB になっている。
 
 ### 全本体を型検査するフェーズ
 
 ```
-targets = every entity of every module that is not in its module's record.passed
+targets = every entity of every module that its module's record lacks
 
 run targets on the compiler threads, at most k in flight:   // モジュールをまたいで流す
     checked = typed_body(entity)        // body_ast -> 不透明型で包む -> check_scheme_equivalent -> 型検査
@@ -248,7 +241,7 @@ report all diagnostics and warnings; stop on an error
 
 このフェーズが終わると、すべての値の不透明型の具体型が決まっている。型検査のエラーを全部報告してからインスタンス化に進む順序も、今と同じである。
 
-`fix check` は、このフェーズで終わる。`fix check` と言語サーバを区別する印（`SubCommand::Check`、または `DiagnosticsConfig` の旗）を足し、`fix check` だけがこの流れを通るようにする。言語サーバと `fix edit explicit-import` は、今の `SubCommand::Diagnostics` の経路のまま、本体を全部メモリに持つ。言語サーバは、型検査しない依存ライブラリの本体の AST もたどるからである（参照の検索、名前の変更、セマンティックハイライト、補完）。
+`fix check` は、このフェーズで終わる。型検査の結果をどこに持つかを、設定の `TypeCheckStore` で表す。`TypedModules` は typed-modules のファイルに持ち、`InMemory` は呼び出し側が持つメモリのキャッシュに持つ。`fix build` と `fix check` は `TypedModules`、言語サーバは `InMemory` を使うので、`fix check` だけがこの流れを通る。言語サーバと `fix edit explicit-import` は、今の `SubCommand::Diagnostics` の経路のまま、本体を全部メモリに持つ。言語サーバは、型検査しない依存ライブラリの本体の AST もたどるからである（参照の検索、名前の変更、セマンティックハイライト、補完）。
 
 ### インスタンス化
 
@@ -262,7 +255,7 @@ typed-modules に書く型付きの本体は、今のキャッシュが書く `T
 
 ### 2 回目以降のビルド
 
-何も編集していなければ、全部の本体が `passed` に入っている。読むのは、全モジュールの `ModuleRecord` とインデックス、それにインスタンス化が要求した本体だけである。依存 26 個のプロジェクトなら、9,904 ファイルの代わりに、271 ファイルの `ModuleRecord` とインデックスと、使う本体のぶんを読む。利用者が自分のモジュールを編集したときは、そのモジュールと、それに依存するモジュールだけを型検査し直す。
+何も編集していなければ、全部の本体が `ModuleRecord` にある。読むのは、全モジュールの `ModuleRecord` と、インスタンス化が要求した本体だけである。依存 26 個のプロジェクトなら、9,904 ファイルの代わりに、271 ファイルの `ModuleRecord` と、使う本体のぶんを読む。利用者が自分のモジュールを編集したときは、そのモジュールと、それに依存するモジュールだけを型検査し直す。
 
 短くなるのは型検査のフェーズである。依存 26 個のプロジェクトの 2 回目以降のビルドでは、CPU 12 個で 1.53 秒のうち 0.44 秒、ページキャッシュを破棄した CPU 1 個で 2.99 秒のうち 2.01 秒が、このフェーズにかかっている。全ソースの構文解析と宣言の処理は残る。
 
@@ -272,11 +265,11 @@ typed-modules に書く型付きの本体は、今のキャッシュが書く `T
 
 ### 段階 1: typed-modules と `ModuleRecord`、要求された本体だけを読むインスタンス化
 
-- キャッシュを typed-modules にする。`passed` にある本体は、実装の型の検査も型検査も省く。
+- キャッシュを typed-modules にする。`ModuleRecord` にある本体は、実装の型の検査も型検査も省く。
 - 型検査の後の警告を `warning_facts` から出す。
 - インスタンス化は `typed_body` で本体を取り出す。読み戻した位置の `SourceFile` を共有する。
-- `fix check` を言語サーバの経路と区別する。
-- `passed` にない本体は、この段階では今と同じく全部を型検査してメモリに持つ。
+- `fix check` を言語サーバの経路と区別する（`TypeCheckStore`）。
+- `ModuleRecord` にない本体は、この段階では今と同じく全部を型検査してメモリに持つ。
 
 改善するもの: #985 と #824 の、キャッシュから読む量。#343 の大半。2 回目以降のビルドのメモリ（使わない型付きの本体を読まなくなる）。
 
@@ -327,9 +320,9 @@ typed-modules に書く型付きの本体は、今のキャッシュが書く `T
 | #985 の扱い | 2 回目以降に読む量を目的に入れ、一つの設計で扱う。到達しない本体の型検査を省くフラグは作らない。 |
 | インスタンス化に必要な本体の取り出し方 | 先に全部を型検査してキャッシュに書いて捨て、インスタンス化は「キャッシュから読む。なければ型検査する」で取り出す。 |
 | ストレージとコンパイル時間 | 次の目標。簡単に減らせるならこの設計に含め、そうでなければ将来減らせる形にする。 |
-| `ModuleRecord` が保証するもの | 通った `EntityIdentity` の集合と、その不透明型の具体型。今回の本体の集合と比べ、記録にないものだけを型検査し、通ったらファイルを作り直して加える。 |
+| `ModuleRecord` が保証するもの | 通った本体（`EntityIdentity`）ごとの、ファイルの中の位置と、不透明型の具体型と、警告の元になる事実。今回の本体の集合と比べ、記録にないものだけを型検査し、通ったらファイルを作り直して加える。 |
 | 型検査の後の警告 | 警告の元になる事実を `ModuleRecord` に入れ、毎回の設定と宣言から出し直す。 |
-| キャッシュのファイルの形 | モジュールごとに 1 ファイル（型付きの本体 + `ModuleRecord` + インデックス）。古いキャッシュキーのファイルは、書くときに消す。 |
+| キャッシュのファイルの形 | モジュールごとに 1 ファイル（型付きの本体 + `ModuleRecord`）。古いキャッシュキーのファイルは、書くときに消す。 |
 | 今の形のキャッシュの扱い | 新しい形は別のフォルダ（`.fixlang/cache/typed-modules`）に置く。今のフォルダ `.fixlang/cache/typecheck` は消さない。 |
 | 本体の AST の持ち方 | ソースから構文解析した本体は parsed-modules に書いて捨て、`body_ast` で読み戻す。ファイルになければソースファイルを構文解析する。生成した本体はメモリに持つ。不透明型で包む処理は型検査の入口へ移す。 |
 | 構文解析の結果の置き場所 | `.fixlang/cache/parsed-modules` にソースファイルごとに置き、ビルドをまたいで残す。 |

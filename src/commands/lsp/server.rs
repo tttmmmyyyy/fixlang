@@ -11,7 +11,7 @@ use super::util::{get_current_dir, path_to_uri, span_to_location, span_to_range,
 use super::workspace_symbol;
 use crate::ast::import::ImportStatement;
 use crate::ast::program::{ModuleInfo, Program};
-use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig};
+use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig, TypeCheckStore};
 use crate::constants::PROJECT_FILE_PATH;
 use crate::dependency::lockfile::LockFileType;
 use crate::elaboration::elaborate_via_config;
@@ -1254,7 +1254,7 @@ pub fn run_diagnostics(
         live_source_overrides: live_overrides,
         ..Default::default()
     })?;
-    config.type_check_cache = typecheck_cache.clone();
+    config.type_check_store = TypeCheckStore::InMemory(typecheck_cache.clone());
 
     // Set up the configuration by the project file.
     proj_file.set_config(&mut config)?;

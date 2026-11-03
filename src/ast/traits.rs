@@ -16,7 +16,6 @@ use crate::ast::types::{
 use crate::constants::ERR_MISSING_TRAIT_IMPL;
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext, UnifOrOtherErr};
-use crate::elaboration::typecheckcache::FileCache;
 use crate::error::{Error, Errors};
 use crate::fixstd::builtin::make_boxed_trait;
 use crate::misc::{generate_fresh_varnames, insert_to_map_vec, Map, Set};
@@ -1074,7 +1073,6 @@ impl TraitEnv {
             TypeEnv::default(),
             kind_env,
             Map::default(),
-            Arc::new(FileCache::new()),
             0,
             false,
         );

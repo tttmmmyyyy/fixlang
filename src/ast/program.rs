@@ -5,7 +5,7 @@ use crate::ast::expr::{expr_var, Expr, ExprNode, Var};
 use crate::ast::import::{is_accessible, ImportItem, ImportStatement};
 use crate::ast::kind_scope::KindEnv;
 use crate::ast::name::{is_private_name, FullName, Name, NameSpace};
-use crate::ast::pattern::{Pattern, PatternNode};
+use crate::ast::pattern::PatternNode;
 use crate::ast::traits::{TraitAlias, TraitDefn, TraitEnv, TraitId, TraitImpl};
 use crate::ast::type_env::TypeEnv;
 use crate::ast::typedecl::{describe_field_names, Field, TypeDeclValue, TypeDefn};
@@ -28,6 +28,10 @@ use crate::elaboration::desugar_opaque::{
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
+use crate::elaboration::typecheckcache::{
+    entity_identity, CacheSlot, EntityIdentity, SharedTypeCheckCache,
+};
+use crate::elaboration::typed_modules::{warning_facts, TypedModules, WarningFact};
 use crate::error::{
     Error, Errors, WARN_DEPRECATED, WARN_MISSING_PATTERN_FIELD, WARN_UNDECLARED_DEPENDENCY,
 };
@@ -53,7 +57,7 @@ use serde_json::json;
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::Write;
-use std::mem::replace;
+use std::mem::{replace, take};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::vec;
@@ -309,6 +313,32 @@ impl SymbolExpr {
     }
 }
 
+/// Where a body lies in `Program::global_values`: the body of a simple value, or of one
+/// implementation of a trait member.
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct BodyLocation {
+    /// The global value.
+    pub val_name: FullName,
+    /// Which implementation of the trait member, an index into `SymbolExpr::Method`; `None` for a
+    /// simple value.
+    pub impl_idx: Option<usize>,
+}
+
+/// What checking one body produced.
+pub struct CheckedBody {
+    /// The body, with namespaces resolved and types assigned. Its `opaque_types` is empty; they
+    /// are in `opaque_types` here.
+    pub te: TypedExpr,
+    /// The concrete type each opaque type constructor of the body stands for.
+    pub opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>,
+    /// The names the body referred to that the module it is defined in has to import, keyed by
+    /// that module.
+    pub import_required: Map<Name, Vec<FullName>>,
+    /// The tolerated diagnostics the check produced. See `check_type` for the rules on what counts
+    /// as "tolerated".
+    pub diagnostics: Errors,
+}
+
 /// An expression with all of its subexpressions typed, which is what a type check produces and what
 /// the type-check cache holds.
 #[derive(Clone, Serialize, Deserialize)]
@@ -520,6 +550,9 @@ pub struct Program {
     /// The errors the compiler carries on past, to report as diagnostics once the work that can
     /// still be done is done.
     pub deferred_errors: Errors,
+    /// The bodies whose typed expressions lie in the files of `TYPED_MODULES_PATH`, which
+    /// `global_values` holds as they were parsed.
+    pub typed_modules: TypedModules,
     /// The names each module refers to and therefore has to import, keyed by that module.
     pub import_required: Map<Name, Set<FullName>>,
 
@@ -658,6 +691,7 @@ impl Program {
             export_statements: vec![],
             deprecation_statements: vec![],
             deferred_errors: Errors::empty(),
+            typed_modules: TypedModules::default(),
             import_required: Default::default(),
             optimization_step: 0,
             opaque_types: Map::default(),
@@ -1154,60 +1188,136 @@ impl Program {
         errors.to_result()
     }
 
-    /// Resolve namespaces, resolve type aliases, and run the type
-    /// checker for a single value's expression.
+    /// The body at `loc`: the expression, the type scheme it is checked against, and the module it
+    /// is defined in.
+    pub fn body_at(&self, loc: &BodyLocation) -> (&TypedExpr, &Arc<Scheme>, Name) {
+        let gv = &self.global_values[&loc.val_name];
+        match (&gv.expr, loc.impl_idx) {
+            (SymbolExpr::Simple(te), None) => (te, &gv.scm, loc.val_name.module()),
+            (SymbolExpr::Method(impls), Some(i)) => {
+                let impl_ = &impls[i];
+                (&impl_.expr, &impl_.scm, impl_.define_module.clone())
+            }
+            _ => panic!(
+                "`{}` is not the kind of value its location says",
+                loc.val_name.to_string()
+            ),
+        }
+    }
+
+    /// The identity under which the body at `loc` is cached: the name of the value and the type the
+    /// body is checked against.
+    pub fn entity_identity_at(&self, loc: &BodyLocation) -> EntityIdentity {
+        let (_te, scm, _def_mod) = self.body_at(loc);
+        entity_identity(&loc.val_name, scm)
+    }
+
+    /// Every body of the global values named in `val_names`: a simple value's body, and each
+    /// implementation of a trait member that `method_impl_filter` accepts.
+    pub fn body_locations(
+        &self,
+        val_names: &[FullName],
+        method_impl_filter: impl Fn(&TraitMemberImpl) -> bool,
+    ) -> Vec<BodyLocation> {
+        let mut locs = vec![];
+        for val_name in val_names {
+            match &self.global_values[val_name].expr {
+                SymbolExpr::Simple(_) => locs.push(BodyLocation {
+                    val_name: val_name.clone(),
+                    impl_idx: None,
+                }),
+                SymbolExpr::Method(impls) => {
+                    for (i, impl_) in impls.iter().enumerate() {
+                        if method_impl_filter(impl_) {
+                            locs.push(BodyLocation {
+                                val_name: val_name.clone(),
+                                impl_idx: Some(i),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        locs
+    }
+
+    /// Resolves namespaces in the body at `loc` and type-checks it. For a trait method
+    /// implementation, first checks that its signature agrees with the trait member definition.
     ///
     /// # Arguments
-    /// * `te` — the expression to be namespace-resolved and type-checked.
-    /// * `req_scm` — the type scheme that the expression should have.
-    /// * `val_name` — the name of the expression, e.g., `Std::ToString::to_string`.
-    /// * `def_mod` — the module where the expression is defined. For a
-    ///   trait method implementation this may differ from `val_name.module()`.
-    /// * `nrctx` — the name resolution context. Pass one built by
-    ///   `NameResolutionContext::new` on the module the expression is defined in and the
-    ///   environment `create_name_resolution_env` gives.
-    /// * `version_hash` — hash of everything `te` is type-checked from, used
-    ///   to detect or invalidate the cache file. Pass one created by
-    ///   `program.module_dependency_hash(define_module, config)`.
+    /// * `nrenv` — the environment `create_name_resolution_env` gives.
+    /// * `cache` — the in-memory cache entry the result is looked up in and stored to, when the
+    ///   caller keeps one.
     ///
     /// # Returns
-    /// * `Ok((te, errors))` — namespace resolution and substitution
-    ///   completed; `te` is the typed expression. `errors` may still
-    ///   carry tolerated diagnostics from `check_type` (holes,
-    ///   cannot-infer, unsatisfied predicates, disjoint equalities).
-    ///   The caller should always save `te` (so the LSP can hover on
-    ///   it) and propagate `errors`. The cache is written only for a
-    ///   strict check that produced no `errors`.
-    /// * `Err(errs)` — a hard failure happened before substitution
-    ///   completed (e.g. resolve_namespace, resolve_type_aliases, or
-    ///   the substitution itself blew up). No useful typed expression
-    ///   to propagate.
-    fn resolve_namespace_and_check_type_sub(
-        mut te: TypedExpr,
-        req_scm: &Arc<Scheme>,
-        val_name: &FullName,
-        def_mod: &ModuleInfo,
-        nrctx: &mut NameResolutionContext,
-        version_hash: &str,
-        mut tc: TypeCheckContext,
-    ) -> Result<(TypedExpr, Errors), Errors> {
-        // Load type-checking cache file.
-        let cached_te = tc.cache.load_cache(val_name, req_scm, version_hash);
-        if cached_te.is_some() {
-            // If cache is available,
-            te = cached_te.unwrap();
-            return Ok((te, Errors::empty()));
+    /// * `Ok(checked)` — the body was checked; `checked.diagnostics` may still carry tolerated
+    ///   diagnostics from `check_type` (holes, cannot-infer, unsatisfied predicates, disjoint
+    ///   equalities). The caller should always install `checked` (so the LSP can hover on it) and
+    ///   propagate its diagnostics.
+    /// * `Err(errs)` — a hard failure happened before the check completed (e.g. a signature that
+    ///   disagrees with the trait member, resolve_namespace, resolve_type_aliases, or the
+    ///   substitution itself blew up). No useful typed expression to propagate.
+    pub fn check_body(
+        &self,
+        loc: &BodyLocation,
+        nrenv: &Arc<NameResolutionEnv>,
+        tc: &TypeCheckContext,
+        cache: Option<&CacheSlot>,
+    ) -> Result<CheckedBody, Errors> {
+        let (te, req_scm, def_mod) = self.body_at(loc);
+        if loc.impl_idx.is_some() {
+            let gv = &self.global_values[&loc.val_name];
+            let SymbolExpr::Method(impls) = &gv.expr else {
+                unreachable!()
+            };
+            let impl_ = &impls[loc.impl_idx.unwrap()];
+            // Check that the type signature given by implementor is equivalent to the type scheme
+            // obtained from the trait member definition.
+            if UnifOrOtherErr::extract_others(tc.check_scheme_equivalent(
+                req_scm,
+                &impl_.scm_via_defn,
+                &[],
+            ))?
+            .is_err()
+            {
+                return Err(impl_signature_mismatch_error(
+                    req_scm,
+                    &impl_.scm_via_defn,
+                    &te.expr.source.as_ref().map(|s| s.to_head_character()),
+                    &gv.decl_src.as_ref().map(|s| s.to_head_character()),
+                ));
+            }
         }
 
+        if let Some(cache) = cache {
+            if let Some(mut te) =
+                cache
+                    .cache
+                    .load_cache(&loc.val_name, req_scm, &cache.version_hash)
+            {
+                return Ok(CheckedBody {
+                    opaque_types: take(&mut te.opaque_types),
+                    te,
+                    import_required: Map::default(),
+                    diagnostics: Errors::empty(),
+                });
+            }
+        }
+
+        let def_mod = self.find_mod(&def_mod).unwrap();
+        let mut nrctx = NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
+        let mut te = te.clone();
+
         // Perform namespace inference.
-        te.expr = te.expr.resolve_namespace(nrctx)?;
+        te.expr = te.expr.resolve_namespace(&mut nrctx)?;
 
         // Resolve type aliases in expression.
         te.expr = te.expr.resolve_type_aliases(&tc.type_env)?;
 
         // Perform type-checking.
+        let mut tc = tc.clone();
         tc.current_module = Some(def_mod.clone());
-        let (typed_expr, check_errors) = tc.check_type(te.expr.clone(), req_scm.clone())?;
+        let (typed_expr, diagnostics) = tc.check_type(te.expr.clone(), req_scm.clone())?;
         te.expr = typed_expr;
         // Fill in the concrete rhs for opaque type resolutions set up during desugaring.
         tc.fill_opaque_concrete_types(&mut te.opaque_types);
@@ -1219,14 +1329,81 @@ impl Program {
         // - a tolerated diagnostic, which the next run owes the user and would not produce again;
         // - an `error_tolerant` check, which swallows every type error and reports none, so its
         //   result would enter as a clean entry and the value would be published as type-correct.
-        if !tc.error_tolerant && !check_errors.has_diagnostics() {
-            tc.cache.save_cache(&te, val_name, req_scm, version_hash);
+        if let Some(cache) = cache {
+            if !tc.error_tolerant && !diagnostics.has_diagnostics() {
+                cache
+                    .cache
+                    .save_cache(&te, &loc.val_name, req_scm, &cache.version_hash);
+            }
         }
 
-        // Add names required to be imported found in type-checking to NameResolutionContext's import_required.
+        // The names the expression refers to that its module has to import.
         nrctx.add_import_required(tc.import_required);
 
-        Ok((te, check_errors))
+        Ok(CheckedBody {
+            opaque_types: take(&mut te.opaque_types),
+            te,
+            import_required: nrctx.import_required,
+            diagnostics,
+        })
+    }
+
+    /// Checks the bodies at `locs` on the compiler threads, answering with the result of each in
+    /// the order of `locs`.
+    ///
+    /// # Arguments
+    /// * `cache` — the in-memory cache the results are looked up in and stored to, when the caller
+    ///   keeps one. Its entries are keyed by the `module_dependency_hash` of the module each body
+    ///   is defined in.
+    pub fn check_bodies(
+        &self,
+        locs: Vec<BodyLocation>,
+        tc: &TypeCheckContext,
+        cache: Option<&SharedTypeCheckCache>,
+        config: &Configuration,
+    ) -> Result<Vec<(BodyLocation, Result<CheckedBody, Errors>)>, Errors> {
+        let nrenv = self.create_name_resolution_env();
+        let mut tasks = vec![];
+        for loc in locs {
+            let slot = match cache {
+                Some(cache) => {
+                    let (_te, _scm, def_mod) = self.body_at(&loc);
+                    Some(CacheSlot {
+                        cache: cache.clone(),
+                        version_hash: self.module_dependency_hash(&def_mod, config)?,
+                    })
+                }
+                None => None,
+            };
+            tasks.push((loc, slot));
+        }
+        // The cost of checking one value is highly uneven (a cache hit costs ~30 μs, a miss
+        // ~300 ms), so each thread takes the next task as soon as it finishes one.
+        Ok(map_on_compiler_threads(
+            tasks,
+            tc.num_worker_threads,
+            |(loc, slot)| {
+                let checked = self.check_body(&loc, &nrenv, tc, slot.as_ref());
+                (loc, checked)
+            },
+        ))
+    }
+
+    /// Puts what checking the body at `loc` produced into `self`: the typed expression in place of
+    /// the body, the concrete types of its opaque types, and the names its module has to import.
+    /// Answers with the tolerated diagnostics the check produced.
+    pub fn install_checked_body(&mut self, loc: &BodyLocation, checked: CheckedBody) -> Errors {
+        for (k, mut v) in checked.opaque_types {
+            self.opaque_types.entry(k).or_default().append(&mut v);
+        }
+        self.merge_import_required(checked.import_required);
+        let gv = self.global_values.get_mut(&loc.val_name).unwrap();
+        match (&mut gv.expr, loc.impl_idx) {
+            (SymbolExpr::Simple(e), None) => *e = checked.te,
+            (SymbolExpr::Method(impls), Some(i)) => impls[i].expr = checked.te,
+            _ => unreachable!(),
+        }
+        checked.diagnostics
     }
 
     /// Builds the program-wide table that name resolution reads: every type constructor, trait
@@ -1244,7 +1421,7 @@ impl Program {
     }
 
     /// Resolve namespaces in, and typecheck the bodies of, global
-    /// values declared in `modules`.
+    /// values declared in `modules`, through the in-memory cache `cache`.
     ///
     /// # Arguments
     /// * `target_symbols` — when `Some`, restrict checking to globals
@@ -1255,6 +1432,7 @@ impl Program {
         tc: &TypeCheckContext,
         modules: &[Name],
         target_symbols: Option<&[FullName]>,
+        cache: &SharedTypeCheckCache,
         config: &Configuration,
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
@@ -1277,23 +1455,23 @@ impl Program {
                     }
                 }
                 SymbolExpr::Method(_) => {
-                    // We filter methods by `method_impl_filter`.
+                    // We filter methods by the module their implementations are defined in.
                     names_to_check.push(name.clone());
                 }
             }
         }
+        let locs = self.body_locations(&names_to_check, |method| {
+            modules.contains(&method.define_module)
+        });
 
-        // Method implementations to be checked.
-        let modules = modules.to_vec();
-        let method_impl_filter =
-            |method: &TraitMemberImpl| Ok(modules.contains(&method.define_module));
-
-        errors.eat_err(self.resolve_namespace_and_check_type(
-            tc,
-            &names_to_check,
-            method_impl_filter,
-            config,
-        ));
+        for (loc, checked) in self.check_bodies(locs, tc, Some(cache), config)? {
+            match checked {
+                // Carry tolerated diagnostics (holes, cannot-infer, etc.) forward, but still
+                // install the typed expression so the LSP can hover on its sub-expressions.
+                Ok(checked) => errors.append(self.install_checked_body(&loc, checked)),
+                Err(e) => errors.append(e),
+            }
+        }
 
         // The concrete types of opaque types are known only once the values are checked, and a
         // cycle among them has to be reported before instantiation puts each in the other's place.
@@ -1302,203 +1480,12 @@ impl Program {
         errors.to_result()
     }
 
-    /// Resolves namespaces in, and type-checks, the global values named in `val_names`, updating
-    /// their `TypedExpr` in `self.global_values` in place.
-    ///
-    /// # Arguments
-    /// * `method_impl_filter` — decides, for each implementation of a trait method the names cover,
-    ///   whether this run checks it.
-    pub fn resolve_namespace_and_check_type(
-        &mut self,
-        tc: &TypeCheckContext,
-        val_names: &[FullName],
-        method_impl_filter: impl Fn(&TraitMemberImpl) -> Result<bool, Errors>,
-        config: &Configuration,
-    ) -> Result<(), Errors> {
-        let nrenv = self.create_name_resolution_env();
-
-        /// What checking one value produced. The typed expression and any tolerated diagnostics
-        /// come together so the caller can save the typed expression for the LSP even when the
-        /// value didn't type-check cleanly. See `check_type` for the rules on what counts as
-        /// "tolerated".
-        struct CheckTaskOutput {
-            /// The value's expression, with namespaces resolved and types assigned.
-            te: TypedExpr,
-            /// The names the expression referred to that the module it is defined in has to
-            /// import, keyed by that module.
-            import_required: Map<Name, Vec<FullName>>,
-            /// The tolerated diagnostics the check produced.
-            errors: Errors,
-        }
-        /// One value to check: its expression and the type scheme it is checked against, and the
-        /// place in `self` its result belongs to.
-        struct CheckTask<'p> {
-            /// The global value to check.
-            val_name: &'p FullName,
-            /// Which implementation of the trait method to check; `None` for a simple value.
-            method_impl_idx: Option<usize>,
-            /// The expression to resolve namespaces in and type-check.
-            te: &'p TypedExpr,
-            /// The type scheme the expression is checked against.
-            scm: &'p Arc<Scheme>,
-            /// The module the expression is defined in.
-            def_mod: ModuleInfo,
-            /// The hash the type-checking cache keys the result by.
-            version_hash: String,
-            /// For a trait method implementation, what its signature is checked against first.
-            trait_member: Option<TraitMemberSignature<'p>>,
-        }
-        /// The trait member definition that the signature of a trait method implementation must
-        /// agree with.
-        struct TraitMemberSignature<'p> {
-            /// The type scheme obtained from the trait member definition.
-            scm_via_defn: &'p Arc<Scheme>,
-            /// Where the trait member is declared.
-            decl_src: &'p Option<Span>,
-        }
-        let mut tasks: Vec<CheckTask> = vec![];
-
-        // Create tasks.
-        for val_name in val_names {
-            let gv = self.global_values.get(val_name).unwrap();
-            match &gv.expr {
-                SymbolExpr::Simple(e) => {
-                    let def_mod = self.find_mod(&val_name.module()).unwrap();
-                    let version_hash = self.module_dependency_hash(&def_mod.name, config)?;
-                    tasks.push(CheckTask {
-                        val_name,
-                        method_impl_idx: None,
-                        te: e,
-                        scm: &gv.scm,
-                        def_mod,
-                        version_hash,
-                        trait_member: None,
-                    });
-                }
-                SymbolExpr::Method(impls) => {
-                    for (i, impl_) in impls.iter().enumerate() {
-                        // Select method implementation.
-                        if !method_impl_filter(impl_)? {
-                            continue;
-                        }
-                        let def_mod = self.find_mod(&impl_.define_module).unwrap();
-                        let version_hash = self.module_dependency_hash(&def_mod.name, config)?;
-                        tasks.push(CheckTask {
-                            val_name,
-                            method_impl_idx: Some(i),
-                            te: &impl_.expr,
-                            scm: &impl_.scm,
-                            def_mod,
-                            version_hash,
-                            trait_member: Some(TraitMemberSignature {
-                                scm_via_defn: &impl_.scm_via_defn,
-                                decl_src: &gv.decl_src,
-                            }),
-                        });
-                    }
-                }
-            };
-        }
-
-        /// What one task produced, together with the place in `self` it belongs to.
-        struct CheckResult {
-            /// The global value the task checked.
-            val_name: FullName,
-            /// The typed expression the check produced, or the errors that stopped it.
-            output: Result<CheckTaskOutput, Errors>,
-            /// Which implementation of the trait method the task checked; `None` for a simple
-            /// value.
-            method_impl_idx: Option<usize>,
-        }
-        /// Resolves namespaces in the expression of `task` and type-checks it. For a trait method
-        /// implementation, first checks that its signature agrees with the trait member definition.
-        fn run_check_task(
-            task: &CheckTask,
-            nrenv: &Arc<NameResolutionEnv>,
-            tc: &TypeCheckContext,
-        ) -> Result<CheckTaskOutput, Errors> {
-            if let Some(trait_member) = &task.trait_member {
-                // Check that the type signature given by implementor is equivalent to the type
-                // scheme obtained from the trait member definition.
-                if UnifOrOtherErr::extract_others(tc.check_scheme_equivalent(
-                    task.scm,
-                    trait_member.scm_via_defn,
-                    &[],
-                ))?
-                .is_err()
-                {
-                    return Err(impl_signature_mismatch_error(
-                        task.scm,
-                        trait_member.scm_via_defn,
-                        &task.te.expr.source.as_ref().map(|s| s.to_head_character()),
-                        &trait_member
-                            .decl_src
-                            .as_ref()
-                            .map(|s| s.to_head_character()),
-                    ));
-                }
-            }
-            let mut nrctx = NameResolutionContext::new(task.def_mod.name.clone(), nrenv.clone());
-            let (te, errors) = Program::resolve_namespace_and_check_type_sub(
-                task.te.clone(),
-                task.scm,
-                task.val_name,
-                &task.def_mod,
-                &mut nrctx,
-                &task.version_hash,
-                tc.clone(),
-            )?;
-            Ok(CheckTaskOutput {
-                te,
-                import_required: nrctx.import_required,
-                errors,
-            })
-        }
-        // The cost of checking one value is highly uneven (a cache hit costs ~30 μs, a miss
-        // ~300 ms), so each thread takes the next task as soon as it finishes one.
-        let results = map_on_compiler_threads(tasks, tc.num_worker_threads, |task| CheckResult {
-            output: run_check_task(&task, &nrenv, tc),
-            val_name: task.val_name.clone(),
-            method_impl_idx: task.method_impl_idx,
-        });
-
-        // Store the results into members of `self`.
-        let mut errors = Errors::empty();
-        for result in results {
-            if result.output.is_err() {
-                errors.append(result.output.err().unwrap());
-                continue;
-            }
-            let mut output = result.output.ok().unwrap();
-            // Carry tolerated diagnostics (holes, cannot-infer, etc.)
-            // forward, but still install the typed expression below so
-            // the LSP can hover on its sub-expressions.
-            errors.append(output.errors);
-            for (k, mut v) in output.te.opaque_types.drain() {
-                self.opaque_types.entry(k).or_default().append(&mut v);
-            }
-            self.merge_import_required(output.import_required);
-            let gv = self.global_values.get_mut(&result.val_name).unwrap();
-            match &mut gv.expr {
-                SymbolExpr::Simple(e) => {
-                    *e = output.te;
-                }
-                SymbolExpr::Method(impls) => {
-                    let impl_idx = result.method_impl_idx.unwrap();
-                    impls[impl_idx].expr = output.te;
-                }
-            };
-        }
-
-        errors.to_result()
-    }
-
     /// Fills `sym.expr` with the typed expression of `sym.generic_name`
     /// specialized to `sym.ty`, picking the matching implementation when the
     /// symbol is a trait method.
     ///
-    /// Assumes that `resolve_namespace_and_check_type_in_modules` has already
-    /// run over all global values.
+    /// Assumes that the bodies of all global values have been checked, by
+    /// `check_bodies_through_typed_modules` or `resolve_namespace_and_check_type_in_modules`.
     fn instantiate_symbol(
         &mut self,
         sym: &mut Symbol,
@@ -1516,28 +1503,34 @@ impl Program {
             tc.are_unifiable(&method_ty, &sym.ty)
         };
 
-        // Select the typed expression to specialize.
+        // Select the body to specialize.
         let gv = self.global_values.get(&sym.generic_name).unwrap();
-        let te = match &gv.expr {
-            SymbolExpr::Simple(e) => e,
+        let impl_idx = match &gv.expr {
+            SymbolExpr::Simple(_) => None,
             SymbolExpr::Method(impls) => {
                 let mut matching = None;
-                for method in impls {
+                for (i, method) in impls.iter().enumerate() {
                     if method_type_matches(method)? {
-                        matching = Some(method);
+                        matching = Some(i);
                         break;
                     }
                 }
-                let method = matching.unwrap_or_else(|| {
+                Some(matching.unwrap_or_else(|| {
                     panic!(
                         "no implementation of `{}` has the type `{}`",
                         sym.generic_name.to_string(),
                         sym.ty.to_string()
                     )
-                });
-                &method.expr
+                }))
             }
         };
+        let te = self.typed_expr_at(
+            &BodyLocation {
+                val_name: sym.generic_name.clone(),
+                impl_idx,
+            },
+            tc,
+        )?;
 
         // Specialize the typed expression to `sym.ty` and resolve opaque types.
         let mut tc = tc.clone();
@@ -2203,9 +2196,36 @@ impl Program {
     /// deprecated items, and the struct patterns that leave out fields without `_`. They are
     /// reported alongside the elaborated program.
     pub fn collect_diagnostics_of_typed_program(&self, config: &Configuration) -> Errors {
-        let mut diagnostics = self.collect_deprecation_diagnostics(config);
-        diagnostics.append(self.collect_missing_pattern_field_diagnostics(config));
+        let facts = self.warning_facts_of_bodies();
+        let mut diagnostics = self.collect_deprecation_diagnostics(&facts, config);
+        diagnostics.append(self.collect_missing_pattern_field_diagnostics(&facts, config));
         diagnostics
+    }
+
+    /// The facts a warning after type checking may be derived from, of every body of every global
+    /// value, grouped by the global value. A body whose typed expression lies in its module's file
+    /// is answered by what the file records of it.
+    fn warning_facts_of_bodies(&self) -> Vec<(&GlobalValue, Vec<WarningFact>)> {
+        let mut facts_by_value = vec![];
+        for (name, gv) in &self.global_values {
+            let mut facts = vec![];
+            let impl_idxs: Vec<Option<usize>> = match &gv.expr {
+                SymbolExpr::Simple(_) => vec![None],
+                SymbolExpr::Method(impls) => (0..impls.len()).map(Some).collect(),
+            };
+            for impl_idx in impl_idxs {
+                let loc = BodyLocation {
+                    val_name: name.clone(),
+                    impl_idx,
+                };
+                match self.typed_modules.stored_warning_facts(&loc) {
+                    Some(stored) => facts.extend(stored.iter().cloned()),
+                    None => facts.append(&mut warning_facts(&self.body_at(&loc).0.expr)),
+                }
+            }
+            facts_by_value.push((gv, facts));
+        }
+        facts_by_value
     }
 
     /// The uses of items marked `DEPRECATED[...]` that this program makes, as warnings, or as
@@ -2214,7 +2234,11 @@ impl Program {
     /// The diagnostics are scoped to the user's own code by `Configuration.root_source_files`: a
     /// use is reported where its source span lies in one of those files, so that what is reported
     /// is what the user can edit.
-    fn collect_deprecation_diagnostics(&self, config: &Configuration) -> Errors {
+    fn collect_deprecation_diagnostics(
+        &self,
+        facts: &[(&GlobalValue, Vec<WarningFact>)],
+        config: &Configuration,
+    ) -> Errors {
         let mut diagnostics = Errors::empty();
         // Exhaustive match: a new `DeprecationMode` variant must be handled here.
         let promote_to_error = match config.deprecation_mode {
@@ -2225,7 +2249,7 @@ impl Program {
 
         let user_files = UserSourceFiles::of(config);
 
-        for (_gv_name, gv) in &self.global_values {
+        for (gv, facts) in facts {
             // Skip uses inside an item that is itself deprecated. This is the
             // standard "deprecated context" rule shared by Rust, Java, C# and
             // Swift: a deprecated helper calling another deprecated helper
@@ -2234,28 +2258,20 @@ impl Program {
             if gv.deprecation.is_some() {
                 continue;
             }
-            let mut uses: Vec<(FullName, Option<Span>)> = vec![];
-            gv.expr.walk_var_uses(&mut |var, src| {
-                if var.name.is_global() {
-                    uses.push((var.name.clone(), src.clone()));
-                }
-            });
-            for (used_name, use_src) in uses {
-                let target = match self.global_values.get(&used_name) {
-                    Some(t) => t,
-                    None => continue,
+            for fact in facts {
+                let WarningFact::GlobalUse {
+                    name: used_name,
+                    span,
+                } = fact
+                else {
+                    continue;
                 };
-                let info = match &target.deprecation {
-                    Some(i) => i,
-                    None => continue,
-                };
-                // Without a span we can't tell which file the use lives
-                // in, so we drop it: a use without a source location is
-                // synthetic (compiler-generated wrappers, builtin bridges)
-                // and not something the user can act on.
-                let span = match &use_src {
-                    Some(s) => s,
-                    None => continue,
+                let Some(info) = self
+                    .global_values
+                    .get(used_name)
+                    .and_then(|target| target.deprecation.as_ref())
+                else {
+                    continue;
                 };
                 if !user_files.contains_span(span) {
                     continue;
@@ -2265,6 +2281,7 @@ impl Program {
                     used_name.to_string(),
                     info.message
                 );
+                let use_src = Some(span.clone());
                 let mut err = if promote_to_error {
                     Error::from_msg_srcs(msg, &[&use_src])
                 } else {
@@ -2286,43 +2303,47 @@ impl Program {
     ///
     /// The diagnostics are scoped to the user's own code by `Configuration.root_source_files`, as
     /// `collect_deprecation_diagnostics` scopes its own.
-    fn collect_missing_pattern_field_diagnostics(&self, config: &Configuration) -> Errors {
+    fn collect_missing_pattern_field_diagnostics(
+        &self,
+        facts: &[(&GlobalValue, Vec<WarningFact>)],
+        config: &Configuration,
+    ) -> Errors {
         let user_files = UserSourceFiles::of(config);
-        let mut reports: Vec<(Span, Arc<TyCon>, Vec<Name>)> = vec![];
-        for gv in self.global_values.values() {
-            gv.expr.walk_patterns(&mut |pat| {
-                pat.walk_nodes(&mut |node| {
-                    let Pattern::Struct(tc, fields, false) = &node.pattern else {
-                        return;
-                    };
-                    let Some(span) = &node.info.source else {
-                        return;
-                    };
-                    if !user_files.contains_span(span) {
-                        return;
-                    }
-                    // A head that names no struct, which the language server's error-tolerant
-                    // check leaves in place, has no fields to compare against.
-                    let Some(ti) = self
-                        .type_env
-                        .tycons()
-                        .get(tc)
-                        .filter(|ti| ti.variant == TyConVariant::Struct)
-                    else {
-                        return;
-                    };
-                    let written: Set<&Name> = fields.iter().map(|(name, _, _)| name).collect();
-                    let missing: Vec<Name> = ti
-                        .fields
-                        .iter()
-                        .filter(|f| !written.contains(&f.name))
-                        .map(|f| f.name.clone())
-                        .collect();
-                    if !missing.is_empty() {
-                        reports.push((span.clone(), tc.clone(), missing));
-                    }
-                });
-            });
+        let mut reports: Vec<(&Span, &Arc<TyCon>, Vec<Name>)> = vec![];
+        for (_gv, facts) in facts {
+            for fact in facts {
+                let WarningFact::StructPattern {
+                    span,
+                    tycon,
+                    written,
+                } = fact
+                else {
+                    continue;
+                };
+                if !user_files.contains_span(span) {
+                    continue;
+                }
+                // A head that names no struct, which the language server's error-tolerant
+                // check leaves in place, has no fields to compare against.
+                let Some(ti) = self
+                    .type_env
+                    .tycons()
+                    .get(tycon)
+                    .filter(|ti| ti.variant == TyConVariant::Struct)
+                else {
+                    continue;
+                };
+                let written: Set<&Name> = written.iter().collect();
+                let missing: Vec<Name> = ti
+                    .fields
+                    .iter()
+                    .filter(|f| !written.contains(&f.name))
+                    .map(|f| f.name.clone())
+                    .collect();
+                if !missing.is_empty() {
+                    reports.push((span, tycon, missing));
+                }
+            }
         }
         // The values are held in a map, so an order is chosen here to keep the report the same
         // from one build to the next.
@@ -2341,7 +2362,7 @@ impl Program {
                     tc.to_string(),
                     pronoun,
                 ),
-                &[&Some(span)],
+                &[&Some(span.clone())],
             );
             err.code = Some(WARN_MISSING_PATTERN_FIELD);
             err.data = Some(json!(missing));
@@ -3333,7 +3354,6 @@ impl Program {
             self.type_env(),
             self.kind_env(),
             self.mod_to_import_stmts.clone(),
-            config.type_check_cache.clone(),
             config.num_worker_thread,
             error_tolerant,
         );

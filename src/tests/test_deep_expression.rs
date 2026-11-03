@@ -8,7 +8,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::constants::TYPE_CHECK_CACHE_PATH;
+    use crate::constants::TYPED_MODULES_PATH;
     use crate::misc::Map;
     use crate::tests::test_util::{fix_build_source_command, fix_command_at_opt_level};
     use std::fs;
@@ -57,7 +57,7 @@ mod integration_tests {
     /// A run that reads an entry returns what it holds and writes nothing, so an entry whose file
     /// is untouched by a second run is one that second run read.
     fn cache_entry_times(dir: &Path) -> Map<PathBuf, SystemTime> {
-        fs::read_dir(dir.join(TYPE_CHECK_CACHE_PATH))
+        fs::read_dir(dir.join(TYPED_MODULES_PATH))
             .expect("the type-check cache directory should exist after a compilation")
             .map(|entry| {
                 let entry = entry.expect("a cache entry should be readable");

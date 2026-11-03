@@ -3,9 +3,10 @@ pub mod desugar_opaque;
 pub mod name_resolution;
 pub mod typecheck;
 pub mod typecheckcache;
+pub mod typed_modules;
 
 use crate::ast::program::Program;
-use crate::configuration::{Configuration, OutputFileType, SubCommand};
+use crate::configuration::{Configuration, OutputFileType, SubCommand, TypeCheckStore};
 use crate::error::Errors;
 use crate::fixstd::builtin::make_io_unit_ty;
 use crate::fixstd::stdlib::{make_std_mod, make_tuple_traits_mod};
@@ -99,12 +100,25 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
         let _sw = StopWatch::new("typecheck", config.verbose);
         let target_module_names = program.modules_from_files(&diag_config.files)?;
         let mut errors = Errors::empty();
-        errors.eat_err(program.resolve_namespace_and_check_type_in_modules(
-            &typechecker,
-            &target_module_names,
-            diag_config.target_symbols.as_deref(),
-            config,
-        ));
+        match &config.type_check_store {
+            TypeCheckStore::TypedModules => {
+                assert!(diag_config.target_symbols.is_none());
+                errors.eat_err(program.check_bodies_through_typed_modules(
+                    &typechecker,
+                    &target_module_names,
+                    config,
+                ));
+            }
+            TypeCheckStore::InMemory(cache) => {
+                errors.eat_err(program.resolve_namespace_and_check_type_in_modules(
+                    &typechecker,
+                    &target_module_names,
+                    diag_config.target_symbols.as_deref(),
+                    cache,
+                    config,
+                ));
+            }
+        }
         program.deferred_errors.append(errors);
         program
             .deferred_errors
@@ -117,12 +131,11 @@ fn elaborate(mut program: Program, config: &Configuration) -> Result<Program, Er
     {
         let _sw = StopWatch::new("typecheck", config.verbose);
         let all_module_names: Vec<_> = program.modules.iter().map(|m| m.name.clone()).collect();
-        program.resolve_namespace_and_check_type_in_modules(
-            &typechecker,
-            &all_module_names,
-            None,
-            config,
-        )?;
+        assert!(matches!(
+            config.type_check_store,
+            TypeCheckStore::TypedModules
+        ));
+        program.check_bodies_through_typed_modules(&typechecker, &all_module_names, config)?;
     }
 
     program

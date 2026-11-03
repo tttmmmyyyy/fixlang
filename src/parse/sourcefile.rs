@@ -1,10 +1,13 @@
+use crate::misc::Map;
 use crate::{elaboration::read_file, error::Errors, misc::to_absolute_path, parse::parser::Rule};
 use colored::{Color, Colorize};
 use pest::iterators::Pair;
 use serde::{Deserialize, Serialize};
 use std::{
+    cell::RefCell,
     cmp::Ordering,
     hash::{Hash, Hasher},
+    mem::take,
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -13,8 +16,9 @@ use std::{
 ///
 /// The content and the hash are computed on the first request and kept, so a file that is asked
 /// for many times is read once. The path is what a serialized `SourceFile` carries; the content
-/// and the hash are read again wherever it is deserialized.
-#[derive(Clone, Serialize, Deserialize)]
+/// and the hash are read again wherever it is deserialized, unless the deserialization runs inside
+/// `SourceFile::sharing`.
+#[derive(Clone, Serialize)]
 pub struct SourceFile {
     /// The path the file is read from. It names the file: two `SourceFile`s are equal, and are
     /// ordered, by this path alone.
@@ -31,6 +35,45 @@ pub struct SourceFile {
     /// The path of an assembled source is chosen for its origin, so two sources of one path share
     /// their origin, as equality by path requires.
     origin: Option<Arc<SourceOrigin>>,
+}
+
+/// What a serialized `SourceFile` carries: the fields `SourceFile` serializes, in its order.
+#[derive(Deserialize)]
+struct SerializedSourceFile {
+    file_path: PathBuf,
+    origin: Option<Arc<SourceOrigin>>,
+}
+
+thread_local! {
+    /// The source files the deserializations running on this thread hand out, by path, while
+    /// `SourceFile::sharing` runs; `None` outside it.
+    static SHARED_SOURCE_FILES: RefCell<Option<Map<PathBuf, SourceFile>>> =
+        const { RefCell::new(None) };
+}
+
+impl<'de> Deserialize<'de> for SourceFile {
+    /// Inside `SourceFile::sharing`, the `SourceFile` of a path is the one shared by every
+    /// deserialized span of that path, so its content is read once however many spans point into
+    /// it.
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let SerializedSourceFile { file_path, origin } =
+            SerializedSourceFile::deserialize(deserializer)?;
+        let fresh = |file_path: PathBuf| SourceFile {
+            file_path,
+            string: Arc::new(Mutex::new(None)),
+            hash: Arc::new(Mutex::new(None)),
+            origin,
+        };
+        Ok(
+            SHARED_SOURCE_FILES.with(|shared| match shared.borrow_mut().as_mut() {
+                Some(shared) => shared
+                    .entry(file_path.clone())
+                    .or_insert_with(|| fresh(file_path))
+                    .clone(),
+                None => fresh(file_path),
+            }),
+        )
+    }
 }
 
 impl PartialEq for SourceFile {
@@ -66,6 +109,21 @@ impl Hash for SourceFile {
 }
 
 impl SourceFile {
+    /// Runs `deserialize`, handing every `SourceFile` it deserializes out of `shared`, the source
+    /// files by path. A path `shared` lacks gets a `SourceFile` added to it.
+    pub fn sharing<R>(shared: &mut Map<PathBuf, SourceFile>, deserialize: impl FnOnce() -> R) -> R {
+        SHARED_SOURCE_FILES.with(|cell| {
+            let previous = cell.borrow_mut().replace(take(shared));
+            assert!(
+                previous.is_none(),
+                "`SourceFile::sharing` runs inside another"
+            );
+        });
+        let result = deserialize();
+        SHARED_SOURCE_FILES.with(|cell| *shared = cell.borrow_mut().take().unwrap());
+        result
+    }
+
     /// The content of the file. It is read from disk on the first request and kept for the later
     /// ones.
     pub fn string(&self) -> Result<String, Errors> {
