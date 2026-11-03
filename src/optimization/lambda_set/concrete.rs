@@ -320,3 +320,44 @@ impl SetStore {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{PendingElem, Ref, SetStore};
+
+    // A set containing itself, `s = {lam0, lam1[s]}`, is the same set however far it is unfolded:
+    // within one system, two equations unfolding to the same tree get one set, and a later system
+    // writing it unfolded once gets the set the store holds. A set whose tree differs, `{lam1[t]}`
+    // with `t` itself, is another set.
+    #[test]
+    fn test_a_set_containing_itself_is_held_once_however_far_it_is_unfolded() {
+        let mut store = SetStore::new();
+        let folded = store.intern(vec![vec![
+            PendingElem::Lam(0, vec![]),
+            PendingElem::Lam(1, vec![Ref::Local(0)]),
+        ]]);
+        assert_eq!(folded.len(), 1);
+        let s = folded[0];
+
+        let unfolded = store.intern(vec![
+            vec![
+                PendingElem::Lam(0, vec![]),
+                PendingElem::Lam(1, vec![Ref::Local(1)]),
+            ],
+            vec![
+                PendingElem::Lam(0, vec![]),
+                PendingElem::Lam(1, vec![Ref::Local(0)]),
+            ],
+        ]);
+        assert_eq!(unfolded, vec![s, s]);
+
+        let through_known = store.intern(vec![vec![
+            PendingElem::Lam(0, vec![]),
+            PendingElem::Lam(1, vec![Ref::Known(s)]),
+        ]]);
+        assert_eq!(through_known, vec![s]);
+
+        let other = store.intern(vec![vec![PendingElem::Lam(1, vec![Ref::Local(0)])]]);
+        assert_ne!(other[0], s);
+    }
+}
