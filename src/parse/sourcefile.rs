@@ -118,6 +118,8 @@ impl Hash for SourceFile {
 impl SourceFile {
     /// Runs `deserialize`, handing every `SourceFile` it deserializes out of `shared`, the source
     /// files by path. A path `shared` lacks gets a `SourceFile` added to it.
+    ///
+    /// Panics when it runs inside another `sharing` on the same thread.
     pub fn sharing<R>(shared: &mut Map<PathBuf, SourceFile>, deserialize: impl FnOnce() -> R) -> R {
         SHARED_SOURCE_FILES.with(|cell| {
             let previous = cell.borrow_mut().replace(take(shared));

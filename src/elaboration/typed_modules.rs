@@ -19,7 +19,7 @@
 // The record is valid because a body is determined by its `EntityIdentity` together with what the
 // module's `module_dependency_hash` covers. The set of bodies a module has can still differ between
 // two builds under one hash (the implementations `Std` carries for tuples follow the sizes the
-// program uses), which is why a build compares bodies, not modules, against the record.
+// program uses), which is why a build looks up each body in the record.
 
 use crate::ast::expr::ExprNode;
 use crate::ast::name::{FullName, Name};
@@ -103,7 +103,7 @@ struct EntityEntry {
 /// The bodies a module's file holds, by their identity.
 type ModuleRecord = Map<EntityIdentity, EntityEntry>;
 
-/// The last bytes of a module's file: they mark the file as one this module wrote.
+/// The last bytes of a module's file: they mark the file as a file of type-checked modules.
 const FILE_MAGIC: &[u8; 8] = b"FIXTYMOD";
 
 /// The length of the footer: the offset of the record, its length, and `FILE_MAGIC`.
@@ -142,7 +142,7 @@ fn module_file_name(module: &Name, module_hash: &str) -> String {
 }
 
 /// The record of the file at `path`, and where its bodies end. A file that does not exist answers
-/// `None`; one that cannot be read, or is not a file this module wrote, answers the reason.
+/// `None`; one that cannot be read, or is not a file of type-checked modules, answers the reason.
 fn read_record(path: &Path) -> Result<Option<(ModuleRecord, u64)>, String> {
     let mut file = match File::open(path) {
         Ok(file) => file,
@@ -220,10 +220,13 @@ fn read_body(
 
 /// A body passed by this build's type check, to be added to its module's file.
 struct NewEntry {
+    /// The entity the body belongs to, which the record lists the body by.
     identity: EntityIdentity,
     /// The identity and the typed expression, serialized as the file holds them.
     bytes: Vec<u8>,
+    /// The concrete type each opaque type constructor of the body stands for.
     opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>,
+    /// The facts about the body a warning after type checking may be derived from.
     warning_facts: Vec<WarningFact>,
 }
 
@@ -332,6 +335,7 @@ fn warn_unreadable_file(path: &Path, why: &str) {
 struct StoredBody {
     /// The file.
     path: Arc<PathBuf>,
+    /// The entity the body belongs to, which the file writes in front of the body.
     identity: EntityIdentity,
     /// Where the body lies in the file.
     range: Range<u64>,

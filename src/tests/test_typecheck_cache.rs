@@ -460,8 +460,8 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         );
     }
 
-    /// `Std` carries the implementations of a tuple for each size the program uses, so the bodies
-    /// of `Std` differ between two programs whose sources `Std`'s file is keyed by alike. A build
+    /// `Std` carries the implementations of a tuple for each size the program uses, so two programs
+    /// that give `Std` the same hash can need different bodies of it. A build
     /// using a larger tuple adds the bodies it checks to the file, and a build going back to the
     /// smaller tuple finds every body it needs there, and writes nothing.
     #[test]

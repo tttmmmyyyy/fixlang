@@ -1281,9 +1281,8 @@ impl Program {
     ///   diagnostics from `check_type` (holes, cannot-infer, unsatisfied predicates, disjoint
     ///   equalities). The caller should always install `checked` (so the LSP can hover on it) and
     ///   propagate its diagnostics.
-    /// * `Err(errs)` — a hard failure happened before the check completed (e.g. a signature that
-    ///   disagrees with the trait member, resolve_namespace, resolve_type_aliases, or the
-    ///   substitution itself blew up). No useful typed expression to propagate.
+    /// * `Err(errs)` — the check stopped before it produced a typed expression, as when the
+    ///   signature of a trait method implementation disagrees with the trait member.
     pub fn check_body(
         &self,
         loc: &BodyLocation,
