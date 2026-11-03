@@ -164,6 +164,8 @@ impl<'e> SlotLayout<'e> {
     /// Appends to `out` each struct, union or array that `ty` (a declared field type) owns slots of:
     /// the layout constructor of each one occurring applied to all its arguments, outside the
     /// head of an application of a type variable.
+    ///
+    /// Must stay in sync with `push_own_slots` on which type constructors own slots.
     fn collect_owning_tycons(&self, ty: &Arc<TypeNode>, out: &mut Vec<TyCon>) {
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
@@ -219,6 +221,9 @@ impl<'e> SlotLayout<'e> {
 
     /// Appends to `own` an entry for each own slot that the declared field type `ty` of a member of
     /// `group` gives the group, in the order `walk_declared` reads them.
+    ///
+    /// Must stay in sync with `walk_declared` on the order a declared type is read in, and with
+    /// `collect_owning_tycons` on which type constructors own slots.
     fn push_own_slots(&self, ty: &Arc<TypeNode>, group: usize, own: &mut Vec<Option<TyCon>>) {
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
@@ -439,6 +444,8 @@ impl<'e> SlotLayout<'e> {
 
     /// Appends to `out` the slots of the declared type `ty` read at the instance `env` binds its
     /// type variables to: the slots of the type `TypeNode::field_types` gives for it there.
+    ///
+    /// Must stay in sync with `push_own_slots` on the order a declared type is read in.
     fn walk_declared(
         &self,
         ty: &Arc<TypeNode>,
