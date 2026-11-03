@@ -247,7 +247,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
         if observing.contains(&func.name) {
             continue;
         }
-        if func.capture.is_none() && func_has_borrowable_param(func, &owned_leaves, type_env) {
+        if !func.takes_capture() && func_has_borrowable_param(func, &owned_leaves, type_env) {
             borrow_versions.insert(func.name.clone(), borrow_funcref(&func.name));
         }
     }
