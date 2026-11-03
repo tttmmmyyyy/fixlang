@@ -549,7 +549,7 @@ fn lambda_over(params: &[Arc<Var>], doms: &[Arc<TypeNode>], body: Arc<ExprNode>)
     expr
 }
 
-/// The function type taking `doms` in order and returning `codom`.
+/// The arrow type taking `doms` in order and returning `codom`.
 fn fun_ty(doms: &[Arc<TypeNode>], codom: Arc<TypeNode>) -> Arc<TypeNode> {
     let mut ty = codom;
     for dom in doms.iter().rev() {

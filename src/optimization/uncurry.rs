@@ -124,9 +124,9 @@ fn with_uncurried_funcs(sym_name: FullName, sym: Symbol) -> Vec<(FullName, Symbo
         };
         let ty = expr.type_.clone().unwrap();
         let mut name = sym_name.clone();
-        convert_to_func_name(name.name_as_mut(), n_args);
+        convert_to_uncurried_func_name(name.name_as_mut(), n_args);
         let mut generic_name = sym.generic_name.clone();
-        convert_to_func_name(generic_name.name_as_mut(), n_args);
+        convert_to_uncurried_func_name(generic_name.name_as_mut(), n_args);
         funcs.push((
             name.clone(),
             Symbol {
@@ -155,7 +155,7 @@ fn uncurried_symbol<'a>(
     }
     for n_args in (1..=max_args).rev() {
         let mut name = value_name.clone();
-        convert_to_func_name(name.name_as_mut(), n_args);
+        convert_to_uncurried_func_name(name.name_as_mut(), n_args);
         if let Some(sym) = symbols.get(&name) {
             return Some(sym);
         }
@@ -182,7 +182,7 @@ pub fn is_std_fix(name: &FullName) -> bool {
 ///
 /// # Examples
 /// `g` with 2 arguments becomes `g#func2`.
-fn convert_to_func_name(name: &mut Name, n_args: usize) {
+fn convert_to_uncurried_func_name(name: &mut Name, n_args: usize) {
     *name += &format!("{}{}", UNCURRIED_FUNC_SUFFIX, n_args);
 }
 
@@ -297,7 +297,7 @@ fn replace_closure_call_with_func_call(
                 }
                 f_func.name = global.clone();
             }
-            convert_to_func_name(&mut f_func.name.name, args.len());
+            convert_to_uncurried_func_name(&mut f_func.name.name, args.len());
             if !funcs.contains_key(&f_func.name) {
                 // The global has no uncurried function taking this many arguments, so the call
                 // stays as it is.
