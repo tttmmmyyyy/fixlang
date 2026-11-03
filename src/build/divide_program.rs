@@ -253,7 +253,8 @@ fn global_types_including_synthesized(
         // A closure function is reached by an indirect call through the capture the body it was
         // lifted from builds, so its name is mentioned only in that body's own unit and it is
         // declared where code generation reaches it. Naming it here would have the unit defining it
-        // declare an accessor instead, since only a func is a global whose value is the function itself.
+        // declare an accessor instead, since only a func is a global whose value is the function
+        // itself.
         if !func.takes_capture() {
             types.insert(fref.name.clone(), func.fn_ty.clone());
         }

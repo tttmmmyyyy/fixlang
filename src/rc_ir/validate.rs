@@ -50,8 +50,8 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
 
     for func in prog.funcs.values() {
         // A capture parameter is present exactly for the closure ABI: it is the trailing capture-
-        // pointer parameter a closure projects its captures from, and the func ABI has none. A clone
-        // that copies the arrow type but sets the wrong capture would mis-lower the ABI.
+        // pointer parameter a closure projects its captures from, and the func ABI has none. A
+        // clone that copies the function's type but sets the wrong capture would mis-lower the ABI.
         if func.capture.is_some() != func.fn_ty.is_arrow() {
             panic!(
                 "[RC IR validate] {}: `{}` capture-present={} disagrees with closure-ABI={}",

@@ -292,7 +292,7 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
 
-    // Uncurried functions
+    // The func types `#Func{n}`.
     for arity in 1..=FUNC_ARGS_MAX {
         ret.insert(
             make_func_tycon(arity),
@@ -544,10 +544,15 @@ pub fn make_functor_name() -> FullName {
     FullName::from_strs(&[STD_NAME], FUNCTOR_NAME)
 }
 
+/// The name of the func type constructor taking `arity` arguments.
+///
+/// # Examples
+/// `make_func_name(2)` is `#Func2`.
 pub fn make_func_name(arity: u32) -> Name {
     format!("{}{}", FUNC_NAME, arity)
 }
 
+/// The func type constructor `Std::#Func{arity}`.
 pub fn make_func_tycon(arity: u32) -> TyCon {
     TyCon::new(FullName::from_strs(&[STD_NAME], &make_func_name(arity)))
 }
@@ -556,7 +561,7 @@ pub fn make_array_tycon() -> TyCon {
     TyCon::new(ARRAY_TYPE.to_fullname())
 }
 
-// If the given tycon is that of a func type, returns its arity
+/// The number of arguments of `tc`, when it is a func type constructor `Std::#Func{n}`.
 pub fn is_func_tycon(tc: &TyCon) -> Option<u32> {
     if !tc.name.namespace.is(&[STD_NAME]) {
         return None;

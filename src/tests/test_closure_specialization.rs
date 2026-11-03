@@ -105,9 +105,9 @@ mod integration_tests {
     /// records: raising the allowance the budget grants leaves this count where it is.
     const DEEP_RELAY_COPIES: usize = 7;
 
-    /// The segment `uncurry` appends to the name of a function it gives a uncurried function,
-    /// which is what a call in the RC IR names. A capture list is named after the lambda that
-    /// receives it and carries no such segment, so this is what tells a call from a type.
+    /// The segment `uncurry` appends to the name of a global to name each of its uncurried
+    /// functions, which is what a call in the RC IR names. A capture list is named after the lambda
+    /// that receives it and carries no such segment, so this is what tells a call from a type.
     const FUNC_SEGMENT: &str = UNCURRIED_FUNC_SUFFIX;
 
     /// What `inlined_body` prints: the first element of the array at or above 5 sits at index 3.

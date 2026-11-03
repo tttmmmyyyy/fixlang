@@ -3036,13 +3036,13 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Add the LLVM function a Fix lambda of type `fn_ty` compiles into, under `name`, and return it.
-    /// A uncurried function is one of the program's globals, so it is external where another
+    /// An uncurried function is one of the program's globals, so it is external where another
     /// compilation unit reaches it by name; a closure function is internal to the unit that lifted
     /// it, so LLVM resolves a collision between two such names by renaming one of them.
     ///
-    /// A uncurried function is also registered as the value of `name`, because the bodies that call it
-    /// read it by name. Registering here is what leaves no way to declare one and reach it through a
-    /// name that resolves to nothing.
+    /// An uncurried function is also registered as the value of `name`, because the bodies that
+    /// call it read it by name. Registering here is what leaves no way to declare one and reach it
+    /// through a name that resolves to nothing.
     ///
     /// The linkage decided here is also what decides the RC IR's reachability roots: a function
     /// another unit may call has to be one dead-code elimination keeps. `divide_among_units` takes a
@@ -3612,9 +3612,9 @@ pub(crate) fn object_file_symbol_name(name: &FullName) -> String {
     )
 }
 
-/// The name of the LLVM function through which the global `name`, of a type other than a func type, is
-/// obtained. It is the name every module — the one defining the global and the ones calling into
-/// it — declares and looks the accessor up under.
+/// The name of the LLVM function through which the global `name`, of a type other than a func
+/// type, is obtained. It is the name every module — the one defining the global and the ones
+/// calling into it — declares and looks the accessor up under.
 pub(crate) fn global_accessor_name(name: &FullName) -> String {
     format!("Get#{}", object_file_symbol_name(name))
 }

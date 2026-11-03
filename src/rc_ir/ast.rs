@@ -235,8 +235,8 @@ impl MatchArm {
 pub enum RcRhs {
     /// Move / rename `y := x`, consuming `x`.
     Var(RcVar),
-    /// A closure call or a direct call of an uncurried function, with the callee as the first variable. Code
-    /// generation dispatches on the callee type.
+    /// A closure call or a direct call of an uncurried function, with the callee as the first
+    /// variable. Code generation dispatches on the callee type.
     App(RcVar, Vec<RcVar>),
     /// A closure value: a top-level function together with its captured variables. It lowers to an
     /// unboxed `{funptr, capture-object pointer}` pair; only the capture object is boxed (a null

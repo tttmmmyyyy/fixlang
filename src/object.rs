@@ -2249,7 +2249,7 @@ pub fn create_obj<'c, 'm>(
     assert!(ty.is_ground());
     assert!(ty.is_dynamic() || capture.is_empty());
     assert!(array_capacity.is_some() == ty.is_array_storage());
-    assert!(!ty.is_func()); // A func type is not supported: no object of one is ever created.
+    assert!(!ty.is_func()); // No object of a func type is ever created.
 
     let context = gc.context;
     let object_type = ty.get_object_type(capture, gc.type_env());

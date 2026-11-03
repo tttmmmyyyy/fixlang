@@ -32,9 +32,9 @@ mod integration_tests {
 
     /// Build the case project with `--emit-rc-ir Main` and return the dumped RC IR of the `Main`
     /// module. The build works at the `max` optimization level: the borrow versions and the routing
-    /// these tests assert on exist only for uncurried functions, which the higher
-    /// optimization levels produce — at `none` the same code stays as closures with no uncurried
-    /// version to borrow.
+    /// these tests assert on exist only for uncurried functions, which the higher optimization
+    /// levels produce — at `none` the same code stays as closures with no uncurried function to
+    /// borrow.
     fn emit_main_rc_ir(project_dir: &Path) -> String {
         emit_rc_ir(project_dir, "Main", "rc_ir.Main.post.txt")
     }
