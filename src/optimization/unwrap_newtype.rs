@@ -185,7 +185,7 @@ impl<'a> ExprUnwrapper<'a> {
         assert!(var_name.is_local());
         let ty = state.scope.get_local(&var_name.name).unwrap().unwrap();
         self.type_env
-            .is_unwrapped_newtype(ty.toplevel_tycon().unwrap().as_ref())
+            .is_unwrapped_newtype(ty.head_tycon().as_ref())
     }
 }
 
@@ -228,7 +228,7 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
             // set : F -> F -> F = |f, s| f
             let field_ty = new_ty;
             let struct_ty = old_ty;
-            let struct_tc = struct_ty.toplevel_tycon().unwrap();
+            let struct_tc = struct_ty.head_tycon();
             if self.type_env.is_unwrapped_newtype(struct_tc.as_ref()) {
                 let field_name = set.value_name.clone();
                 expr = expr_var(field_name, expr.source.clone()).set_type(field_ty);
@@ -256,7 +256,7 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
             // =>
             // plug_in : () -> F -> F = |_, f| f
             let struct_ty = old_ty;
-            let struct_tc = struct_ty.toplevel_tycon().unwrap();
+            let struct_tc = struct_ty.head_tycon();
             if self.type_env.is_unwrapped_newtype(struct_tc.as_ref()) {
                 let field_ty = new_ty;
                 let field_name = plug_in.field_name.clone();

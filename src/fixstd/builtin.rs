@@ -1879,8 +1879,8 @@ fn build_float_to_int_range_check<'c, 'm>(
 
     let reported_conversion = format!(
         "{} to {}",
-        from_ty.toplevel_tycon().unwrap().name.name,
-        to_ty.toplevel_tycon().unwrap().name.name
+        from_ty.head_tycon().name.name,
+        to_ty.head_tycon().name.name
     );
     let reported_conversion_ptr = gc
         .add_global_string(&reported_conversion)
@@ -10019,7 +10019,7 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 // Run either an IO or an IOState runner based on the type of the given value.
 pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
-    if io.ty.toplevel_tycon().unwrap().is_io() {
+    if io.ty.head_tycon().is_io() {
         return run_io(gc, io);
     }
     // The other value run here is the runner an `IO` holds, which `run_ios_runner` applies to an
@@ -10911,7 +10911,7 @@ fn build_integer_arithmetic<'c, 'm>(
     }
     // Only a signed type has a range an operation can leave: an unsigned one is taken modulo two
     // to its width, so every result is a value of the type.
-    let is_signed = ty.toplevel_tycon().unwrap().is_signed_integer();
+    let is_signed = ty.head_tycon().is_signed_integer();
     if is_signed && gc.config.checks_integer_operations() {
         if operation.is_division() {
             // A division carries no intrinsic reporting the overflow, so the check stands in front
@@ -11039,7 +11039,7 @@ fn build_abort_on_integer_operation<'c, 'm>(
     operands: &[IntValue<'c>],
     bb_name: &str,
 ) {
-    let reported_operation = format!("{} {}", ty.toplevel_tycon().unwrap().name.name, operation);
+    let reported_operation = format!("{} {}", ty.head_tycon().name.name, operation);
     let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
     let i64_ty = gc.context.i64_type();
     let i128_ty = gc.context.i128_type();
