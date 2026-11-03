@@ -512,4 +512,64 @@ main = (
         assert_eq!(sets.len(), 1);
         assert_eq!(inf.writers(sets[0]), vec![main_lam(), main_lam()]);
     }
+
+    /// A lambda capturing a struct depends on every set the struct's type carries, the sets of the
+    /// fields its body leaves unread included: the struct is part of its capture. Here the body
+    /// reads the field `f` of the captured `p` only through the getter, which inlining leaves as a
+    /// builtin reading `p` by name, and the field `g` not at all.
+    #[test]
+    fn test_a_lambda_depends_on_the_sets_of_a_struct_it_captures() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+type P = box struct { f : I64 -> I64, g : I64 -> I64 };
+
+mk : I64 -> P -> I64 -> I64;
+mk = |d, p| if d > 0 { mk(d - 1, p) } else { |x| (p.@f)(x) };
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let f = |x| x + n;
+    let a = mk(n, P { f : f, g : |x| x + 2 })(1);
+    let b = mk(n, P { f : f, g : |x| x * 3 })(1);
+    println((a + b).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let (c, _) = inf.component_of("mk");
+        let ty = inf.type_of("mk");
+        let p_ty = inf.layout.type_arg(&inf.layout.type_arg(&ty, 1), 0);
+        let p_slots: Vec<usize> = inf
+            .layout
+            .own_slots(&p_ty)
+            .to_vec()
+            .iter()
+            .map(|v| {
+                let root = inf.analysis.solver.find(*v);
+                inf.analysis.components[c]
+                    .params
+                    .iter()
+                    .position(|p| *p == root)
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(p_slots.len(), 2);
+        let inner = inf
+            .analysis
+            .lambdas
+            .iter()
+            .find(|l| l.symbol.name.starts_with("mk") && l.index == 2)
+            .unwrap();
+        for p in p_slots {
+            assert!(
+                inner.params.contains(&p),
+                "the lambda capturing `p` depends on {:?}, missing parameter {}",
+                inner.params,
+                p
+            );
+        }
+    }
 }

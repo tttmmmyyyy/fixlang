@@ -214,8 +214,9 @@ struct LamTerm {
     lam: LamId,
     /// The annotated type of the lambda expression.
     ty: AType,
-    /// The variables of the nodes of its body that no lambda inside it holds, of its parameter,
-    /// and of the references to other components made there.
+    /// The variables of the nodes of its body that no lambda inside it holds, of the names builtin
+    /// operations there read, of its parameter, and of the references to other components made
+    /// there.
     vars: Vec<SetVar>,
     /// The lambdas written directly inside its body.
     children: Vec<LamId>,
@@ -444,8 +445,10 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         lam
     }
 
-    /// The annotated type of the name `name` read by a builtin operation. `CAP_NAME` is the capture
-    /// of the innermost lambda, which only a closure object holds, so that lambda's set is Dynamic.
+    /// The annotated type of the name `name` read by a builtin operation, recorded in the innermost
+    /// lambda's term: a name read only by a builtin is still part of what the lambda captures.
+    /// `CAP_NAME` is the capture of the innermost lambda, which only a closure object holds, so
+    /// that lambda's set is Dynamic.
     fn operand(&mut self, name: &FullName) -> AType {
         if name.is_local() && name.name == CAP_NAME {
             let frame = *self
@@ -459,7 +462,9 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 .make_dynamic(own, DynamicKind::ReadsOwnCapture);
             return ty;
         }
-        self.reference(name)
+        let ty = self.reference(name);
+        self.record(&ty);
+        ty
     }
 
     /// The annotated type of a reference to the name `name`.
