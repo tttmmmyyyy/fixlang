@@ -572,4 +572,69 @@ main = (
             );
         }
     }
+
+    /// The source of a chain of `depth` symbols over `both`, which builds a value from two: each
+    /// symbol of the chain refers twice to the one below. With `of_functions` the symbols are
+    /// functions of a `P` passing it down, otherwise global values. `both` and each function of
+    /// the chain recurse, so that no inlining collapses the chain.
+    fn doubling_chain(depth: usize, of_functions: bool) -> String {
+        let mut source = String::from(
+            "module Main;\n\
+             type P = box struct { run : I64 -> I64 };\n\
+             both : P -> P -> P;\n\
+             both = |a, b| if (a.@run)(0) < -1000000 { both(b, a) } \
+             else { P { run : |x| (a.@run)((b.@run)(x)) } };\n",
+        );
+        if of_functions {
+            source += "c0 : P -> P;\n\
+                       c0 = |a| if (a.@run)(0) < -1000000 { c0(a) } \
+                       else { P { run : |x| (a.@run)(x) + 1 } };\n";
+            for i in 1..=depth {
+                source += &format!(
+                    "c{i} : P -> P;\n\
+                     c{i} = |a| if (a.@run)(0) < -1000000 {{ c{i}(a) }} \
+                     else {{ both(c{j}(a), c{j}(a)) }};\n",
+                    j = i - 1
+                );
+            }
+            source += &format!(
+                "main : IO ();\nmain = (let k = *get_args.map(|args| args.@size); \
+                 println((c{depth}(P {{ run : |x| x + k }}).@run)(k).to_string));\n"
+            );
+        } else {
+            source += "c0 : P;\nc0 = P { run : |x| x + 1 };\n";
+            for i in 1..=depth {
+                source += &format!("c{i} : P;\nc{i} = both(c{j}, c{j});\n", j = i - 1);
+            }
+            source += &format!(
+                "main : IO ();\nmain = (let k = *get_args.map(|args| args.@size); \
+                 println((c{depth}.@run)(k).to_string));\n"
+            );
+        }
+        source
+    }
+
+    /// A symbol referring twice to one whose scheme has internal classes gets the two copies of
+    /// them merged into one, so that along a chain of such symbols the scheme of each stays as
+    /// small as the one below rather than doubling: for global values, and for functions whose
+    /// internal classes depend on their parameter.
+    #[test]
+    fn test_a_chain_of_symbols_referring_twice_to_the_one_below_keeps_its_schemes_small() {
+        for of_functions in [false, true] {
+            let prg = program_of(&doubling_chain(12, of_functions));
+            let inf = Inferred::new(&prg);
+            let (c, _) = inf.component_of("c12");
+            let classes = inf.analysis.components[c].scheme.classes.len();
+            assert!(
+                classes <= 16,
+                "the scheme at the top of the chain of {} has {} classes",
+                if of_functions {
+                    "functions"
+                } else {
+                    "global values"
+                },
+                classes
+            );
+        }
+    }
 }
