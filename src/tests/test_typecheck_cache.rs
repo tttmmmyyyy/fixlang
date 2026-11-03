@@ -163,19 +163,9 @@ main = println("s");
     /// `extra_args` to `fix build` as well, and returns what the compiler wrote to stderr. The
     /// program is written to `out` in that directory.
     fn build(dir: &Path, file: &str, extra_args: &[&str]) -> String {
-        let build_output = fix_command()
-            .args(["build", "--file", file, "-o", "out"])
-            .args(extra_args)
-            .current_dir(dir)
-            .output()
-            .expect("failed to run fix build");
-        assert!(
-            build_output.status.success(),
-            "fix build failed in {}:\n{}",
-            dir.display(),
-            String::from_utf8_lossy(&build_output.stderr)
-        );
-        String::from_utf8_lossy(&build_output.stderr).to_string()
+        let (built, stderr) = try_build(dir, file, extra_args);
+        assert!(built, "fix build failed in {}:\n{}", dir.display(), stderr);
+        stderr
     }
 
     /// A deprecation warning is collected after type checking, out of the typed expression and the
@@ -410,12 +400,13 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         files
     }
 
-    /// Runs `fix build` on `main.fix` in `dir` with `extra_args`, and answers with whether it
-    /// succeeded and what it wrote to stderr.
-    fn try_build(dir: &Path, extra_args: &[&str]) -> (bool, String) {
+    /// Runs `fix build` on the Fix source `file`, named as the working directory `dir` reaches it,
+    /// passing `extra_args` as well, and answers with whether it succeeded and what it wrote to
+    /// stderr. The program is written to `out` in that directory.
+    fn try_build(dir: &Path, file: &str, extra_args: &[&str]) -> (bool, String) {
         let output = run_fix(
             dir,
-            &[&["build", "--file", "main.fix", "-o", "out"], extra_args].concat(),
+            &[&["build", "--file", file, "-o", "out"], extra_args].concat(),
         );
         (
             output.status.success(),
@@ -440,7 +431,7 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         let dir = temp.path();
         fs::write(dir.join("main.fix"), DEPRECATED_USE).expect("Failed to write main.fix");
 
-        let (allowed_built, allowed_stderr) = try_build(dir, &["--allow-deprecated"]);
+        let (allowed_built, allowed_stderr) = try_build(dir, "main.fix", &["--allow-deprecated"]);
         assert!(allowed_built, "stderr: {}", allowed_stderr);
         assert!(
             !allowed_stderr.contains("is deprecated"),
@@ -448,7 +439,7 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
             allowed_stderr
         );
 
-        let (denied_built, denied_stderr) = try_build(dir, &["--deny-deprecated"]);
+        let (denied_built, denied_stderr) = try_build(dir, "main.fix", &["--deny-deprecated"]);
         assert!(
             !denied_built,
             "a build denying deprecated uses succeeded on a program using one"
@@ -541,7 +532,7 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
             *byte = 0xff;
         }
         fs::write(&main_file, &damaged_body).expect("Failed to damage the cache file");
-        let (built, stderr) = try_build(dir, &[]);
+        let (built, stderr) = try_build(dir, "main.fix", &[]);
         assert!(built, "stderr: {}", stderr);
         assert!(
             stderr.contains("Failed to read cache file"),
@@ -555,7 +546,7 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         let len = damaged_footer.len();
         damaged_footer[len - 1] ^= 0xff;
         fs::write(&main_file, &damaged_footer).expect("Failed to damage the cache file");
-        let (built, stderr) = try_build(dir, &[]);
+        let (built, stderr) = try_build(dir, "main.fix", &[]);
         assert!(built, "stderr: {}", stderr);
         assert!(
             stderr.contains("Failed to read cache file"),
