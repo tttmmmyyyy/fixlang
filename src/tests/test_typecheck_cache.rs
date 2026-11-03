@@ -504,9 +504,11 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         );
     }
 
-    /// A file of the type-check cache whose bytes were damaged costs a build the check it could
-    /// have skipped, and nothing else. Damaging the record makes the build check the module again;
-    /// damaging a body the record points to makes instantiation check that body again.
+    /// A file of the type-check cache whose bytes were damaged costs one build the check it could
+    /// have skipped, and nothing else: that build writes what it checked back to the file, and the
+    /// build after it reads the file as the first build wrote it. Damaging the record makes the
+    /// build check the module again; damaging a body the record points to makes instantiation check
+    /// that body again.
     #[test]
     fn a_build_recovers_from_a_damaged_cache_file() {
         let temp = TempDir::new().expect("Failed to create temp directory");
@@ -540,6 +542,14 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
             stderr
         );
         assert_eq!(run_out(dir), "3");
+        let (built, stderr) = try_build(dir, "main.fix", &[]);
+        assert!(built, "stderr: {}", stderr);
+        assert!(
+            !stderr.contains("Failed to read cache file"),
+            "the build after the one checking the damaged body again found it damaged still.\n\
+             stderr: {}",
+            stderr
+        );
 
         // The footer ends the file.
         let mut damaged_footer = written.clone();

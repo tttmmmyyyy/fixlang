@@ -24,7 +24,7 @@
 use crate::ast::expr::ExprNode;
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::Pattern;
-use crate::ast::program::{BodyLocation, Program, TypedExpr};
+use crate::ast::program::{BodyLocation, CheckedBody, Program, TypedExpr};
 use crate::ast::types::{OpaqueTyConResolution, TyCon};
 use crate::configuration::Configuration;
 use crate::constants::TYPED_MODULES_PATH;
@@ -141,8 +141,55 @@ fn module_file_name(module: &Name, module_hash: &str) -> String {
     )
 }
 
+/// Where the record lies in a file of `len` bytes that ends in `footer`, or `None` when the footer
+/// is not one a file of type-checked modules ends in.
+fn record_range(footer: &[u8], len: u64) -> Option<Range<u64>> {
+    if footer.len() as u64 != FOOTER_LEN || &footer[16..] != FILE_MAGIC {
+        return None;
+    }
+    let offset = u64::from_le_bytes(footer[0..8].try_into().unwrap());
+    let record_len = u64::from_le_bytes(footer[8..16].try_into().unwrap());
+    if offset.checked_add(record_len) != Some(len - FOOTER_LEN) {
+        return None;
+    }
+    Some(offset..offset + record_len)
+}
+
+/// The record serialized as `bytes`, in a file whose bodies end at `bodies_end`.
+fn decode_record(bytes: &[u8], bodies_end: u64) -> Result<ModuleRecord, String> {
+    let entries: Vec<(EntityIdentity, EntityEntry)> =
+        postcard::from_bytes(bytes).map_err(|e| e.to_string())?;
+    if entries
+        .iter()
+        .any(|(_, entry)| entry.body.start > entry.body.end || entry.body.end > bodies_end)
+    {
+        return Err("its record points past its bodies".to_string());
+    }
+    Ok(entries.into_iter().collect())
+}
+
+/// The typed expression `bytes` hold, which a module's file writes after the identity of its
+/// body; the reason when the bytes are not the body of `identity`.
+fn decode_body(bytes: &[u8], identity: &EntityIdentity) -> Result<TypedExpr, String> {
+    let ((found, expr), rest): ((EntityIdentity, TypedExpr), _) =
+        postcard::take_from_bytes(bytes).map_err(|e| e.to_string())?;
+    if !rest.is_empty() || &found != identity {
+        return Err(format!(
+            "it holds another body where the body of `{}` was recorded",
+            identity.replace('\n', " : ")
+        ));
+    }
+    Ok(expr)
+}
+
+/// The message for a file that is not one of type-checked modules.
+const NOT_A_MODULE_FILE: &str = "it is not a file of type-checked modules";
+
 /// The record of the file at `path`, and where its bodies end. A file that does not exist answers
 /// `None`; one that cannot be read, or is not a file of type-checked modules, answers the reason.
+///
+/// Only the footer and the record are read, so that a build reads of a module's bodies only those
+/// it asks for later.
 fn read_record(path: &Path) -> Result<Option<(ModuleRecord, u64)>, String> {
     let mut file = match File::open(path) {
         Ok(file) => file,
@@ -157,33 +204,37 @@ fn read_record(path: &Path) -> Result<Option<(ModuleRecord, u64)>, String> {
         let mut footer = [0u8; FOOTER_LEN as usize];
         file.seek(SeekFrom::Start(len - FOOTER_LEN))?;
         file.read_exact(&mut footer)?;
-        if &footer[16..] != FILE_MAGIC {
+        let Some(range) = record_range(&footer, len) else {
             return Ok(None);
-        }
-        let offset = u64::from_le_bytes(footer[0..8].try_into().unwrap());
-        let record_len = u64::from_le_bytes(footer[8..16].try_into().unwrap());
-        if offset.checked_add(record_len) != Some(len - FOOTER_LEN) {
-            return Ok(None);
-        }
-        let mut record = vec![0u8; record_len as usize];
-        file.seek(SeekFrom::Start(offset))?;
+        };
+        let mut record = vec![0u8; (range.end - range.start) as usize];
+        file.seek(SeekFrom::Start(range.start))?;
         file.read_exact(&mut record)?;
-        Ok(Some((record, offset)))
+        Ok(Some((record, range.start)))
     };
-    let (record, bodies_end) = match read(&mut file) {
-        Ok(Some(read)) => read,
-        Ok(None) => return Err("it is not a file of type-checked modules".to_string()),
-        Err(e) => return Err(e.to_string()),
-    };
-    let entries: Vec<(EntityIdentity, EntityEntry)> =
-        postcard::from_bytes(&record).map_err(|e| e.to_string())?;
-    if entries
-        .iter()
-        .any(|(_, entry)| entry.body.start > entry.body.end || entry.body.end > bodies_end)
-    {
-        return Err("its record points past its bodies".to_string());
+    match read(&mut file) {
+        Ok(Some((record, bodies_end))) => {
+            Ok(Some((decode_record(&record, bodies_end)?, bodies_end)))
+        }
+        Ok(None) => Err(NOT_A_MODULE_FILE.to_string()),
+        Err(e) => Err(e.to_string()),
     }
-    Ok(Some((entries.into_iter().collect(), bodies_end)))
+}
+
+/// The record of the module file `bytes`, and the bytes of its bodies.
+fn decode_module_file(mut bytes: Vec<u8>) -> Result<(ModuleRecord, Vec<u8>), String> {
+    let len = bytes.len() as u64;
+    if len < FOOTER_LEN {
+        return Err(NOT_A_MODULE_FILE.to_string());
+    }
+    let footer = &bytes[(len - FOOTER_LEN) as usize..];
+    let range = record_range(footer, len).ok_or_else(|| NOT_A_MODULE_FILE.to_string())?;
+    let record = decode_record(
+        &bytes[range.start as usize..range.end as usize],
+        range.start,
+    )?;
+    bytes.truncate(range.start as usize);
+    Ok((record, bytes))
 }
 
 /// The typed expression of the body `identity` lying at `range` in the file at `path`. A file that
@@ -207,15 +258,7 @@ fn read_body(
     file.seek(SeekFrom::Start(range.start))
         .and_then(|_| file.read_exact(&mut bytes))
         .map_err(|e| e.to_string())?;
-    let ((found, expr), rest): ((EntityIdentity, TypedExpr), _) =
-        postcard::take_from_bytes(&bytes).map_err(|e| e.to_string())?;
-    if !rest.is_empty() || &found != identity {
-        return Err(format!(
-            "it holds another body where the body of `{}` was recorded",
-            identity.replace('\n', " : ")
-        ));
-    }
-    Ok(Some(expr))
+    decode_body(&bytes, identity).map(Some)
 }
 
 /// A body passed by this build's type check, to be added to its module's file.
@@ -230,11 +273,28 @@ struct NewEntry {
     warning_facts: Vec<WarningFact>,
 }
 
+impl NewEntry {
+    /// The entry of the body `identity` that `checked` passed.
+    fn of(identity: EntityIdentity, checked: &CheckedBody) -> Self {
+        assert!(
+            checked.passed(),
+            "a cache entry for a body that did not pass"
+        );
+        NewEntry {
+            bytes: postcard::to_allocvec(&(&identity, &checked.te)).unwrap(),
+            identity,
+            opaque_types: checked.opaque_types.clone(),
+            warning_facts: warning_facts(&checked.te.expr),
+        }
+    }
+}
+
 /// Adds `new` to the file of `module` checked under `module_hash`, in `dir`, and removes the files of
 /// `module` checked under any other hash.
 ///
 /// The file is read again here, so that the bodies another build added to it since this build read
-/// it are kept. A body the file already holds is kept as it is.
+/// it are kept. A body the file already holds is kept as it is, unless its bytes are not the body,
+/// which `new` then replaces.
 fn add_to_module_file(
     dir: &Path,
     module: &Name,
@@ -243,17 +303,17 @@ fn add_to_module_file(
 ) -> io::Result<()> {
     let file_name = module_file_name(module, module_hash);
     let path = dir.join(&file_name);
-    let (mut bytes, mut record) = match read_record(&path) {
-        Ok(Some((record, bodies_end))) => {
-            let mut bytes = fs::read(&path)?;
-            bytes.truncate(bodies_end as usize);
-            (bytes, record)
-        }
-        Ok(None) | Err(_) => (vec![], ModuleRecord::default()),
+    let (mut record, mut bytes) = match fs::read(&path) {
+        Ok(bytes) => decode_module_file(bytes).unwrap_or_default(),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Default::default(),
+        Err(e) => return Err(e),
     };
     for entry in new {
-        if record.contains_key(&entry.identity) {
-            continue;
+        if let Some(held) = record.get(&entry.identity) {
+            let held = &bytes[held.body.start as usize..held.body.end as usize];
+            if decode_body(held, &entry.identity).is_ok() {
+                continue;
+            }
         }
         let start = bytes.len() as u64;
         bytes.extend_from_slice(&entry.bytes);
@@ -292,7 +352,10 @@ fn add_to_module_file(
 
 /// Adds the bodies of `new_entries` to the files of their modules, each checked under the hash
 /// `module_hashes` gives. A file that cannot be written is reported as a warning.
-fn add_to_module_files(new_entries: Map<Name, Vec<NewEntry>>, module_hashes: &Map<Name, String>) {
+fn add_to_module_files(
+    new_entries: Map<Name, Vec<NewEntry>>,
+    module_hashes: &Map<Name, Arc<String>>,
+) {
     let dir = match create_dir_guarding_project_links(
         Path::new(TYPED_MODULES_PATH),
         DOT_FIXLANG_LINK_HINT,
@@ -306,7 +369,7 @@ fn add_to_module_files(new_entries: Map<Name, Vec<NewEntry>>, module_hashes: &Ma
         }
     };
     for (module, entries) in new_entries {
-        let module_hash = &module_hashes[&module];
+        let module_hash = module_hashes[&module].as_str();
         if let Err(e) = add_to_module_file(&dir, &module, module_hash, entries) {
             warn_msg(&format!(
                 "Failed to write cache file \"{}\": {}.",
@@ -330,6 +393,10 @@ fn warn_unreadable_file(path: &Path, why: &str) {
 /// A body whose typed expression lies in its module's file, and which `Program::global_values`
 /// holds as it was parsed.
 struct StoredBody {
+    /// The module the body is defined in.
+    module: Name,
+    /// The `module_dependency_hash` of `module`, which the file is named after.
+    module_hash: Arc<String>,
     /// The file.
     path: Arc<PathBuf>,
     /// The entity the body belongs to, which the file writes in front of the body.
@@ -392,10 +459,10 @@ impl Program {
         }
 
         // Skip the bodies the files record.
-        let mut module_hashes: Map<Name, String> = Map::default();
+        let mut module_hashes: Map<Name, Arc<String>> = Map::default();
         let mut to_check: Vec<(BodyLocation, Name, EntityIdentity)> = vec![];
         for (module, locs) in bodies_by_module {
-            let module_hash = self.module_dependency_hash(&module, config)?;
+            let module_hash = Arc::new(self.module_dependency_hash(&module, config)?);
             let path = Arc::new(
                 Path::new(TYPED_MODULES_PATH).join(module_file_name(&module, &module_hash)),
             );
@@ -419,6 +486,8 @@ impl Program {
                         self.typed_modules.stored.insert(
                             loc,
                             StoredBody {
+                                module: module.clone(),
+                                module_hash: module_hash.clone(),
                                 path: path.clone(),
                                 identity,
                                 range: entry.body.clone(),
@@ -441,12 +510,10 @@ impl Program {
             match checked {
                 Ok(checked) => {
                     if checked.passed() {
-                        new_entries.entry(module).or_default().push(NewEntry {
-                            bytes: postcard::to_allocvec(&(&identity, &checked.te)).unwrap(),
-                            identity,
-                            opaque_types: checked.opaque_types.clone(),
-                            warning_facts: warning_facts(&checked.te.expr),
-                        });
+                        new_entries
+                            .entry(module)
+                            .or_default()
+                            .push(NewEntry::of(identity, &checked));
                     }
                     errors.append(self.install_checked_body(&loc, checked));
                 }
@@ -468,7 +535,8 @@ impl Program {
     /// program was checked through `check_bodies_through_typed_modules` and the file recorded the
     /// body, and the one `Program::global_values` holds otherwise.
     ///
-    /// A body the file no longer holds is type-checked again.
+    /// A body the file no longer holds is type-checked again, and written back to the file, so that
+    /// the next build reads it.
     pub fn typed_body(
         &mut self,
         loc: &BodyLocation,
@@ -495,6 +563,16 @@ impl Program {
                 let checked = self.check_body(loc, &self.create_name_resolution_env(), tc)?;
                 if checked.diagnostics.has_error() {
                     return Err(checked.diagnostics);
+                }
+                if checked.passed() {
+                    let stored = &self.typed_modules.stored[loc];
+                    let module_hashes =
+                        Map::from_iter([(stored.module.clone(), stored.module_hash.clone())]);
+                    let new_entries = Map::from_iter([(
+                        stored.module.clone(),
+                        vec![NewEntry::of(stored.identity.clone(), &checked)],
+                    )]);
+                    add_to_module_files(new_entries, &module_hashes);
                 }
                 checked.te
             }
