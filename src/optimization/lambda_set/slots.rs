@@ -257,21 +257,14 @@ impl<'e> SlotLayout<'e> {
         if let Some(count) = self.slot_counts.borrow().get(ty) {
             return *count;
         }
+        let tc = head_tycon(ty);
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
-        let count = match &spine[0].ty {
-            Type::TyCon(tc) => {
-                if args.len() < self.arity(tc) {
-                    0
-                } else {
-                    self.assert_not_unwrapped_newtype(tc, ty);
-                    self.own_slot_count(tc) + args.iter().map(|a| self.slot_count(a)).sum::<usize>()
-                }
-            }
-            _ => panic!(
-                "the type `{}` of a value is headed by no type constructor",
-                ty.to_string()
-            ),
+        let count = if args.len() < self.arity(&tc) {
+            0
+        } else {
+            self.assert_not_unwrapped_newtype(&tc, ty);
+            self.own_slot_count(&tc) + args.iter().map(|a| self.slot_count(a)).sum::<usize>()
         };
         self.slot_counts.borrow_mut().insert(ty.clone(), count);
         count
@@ -300,23 +293,17 @@ impl<'e> SlotLayout<'e> {
 
     /// Appends to `out` a new variable for each slot of `ty`, as `fresh` makes them.
     fn fresh_slots(&self, ty: &Arc<TypeNode>, solver: &mut Solver, out: &mut Vec<SetVar>) {
+        let tc = head_tycon(ty);
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
-        let tc = match &spine[0].ty {
-            Type::TyCon(tc) => tc,
-            _ => panic!(
-                "the type `{}` of a value is headed by no type constructor",
-                ty.to_string()
-            ),
-        };
-        if args.len() < self.arity(tc) {
+        if args.len() < self.arity(&tc) {
             return;
         }
-        self.assert_not_unwrapped_newtype(tc, ty);
+        self.assert_not_unwrapped_newtype(&tc, ty);
         if tc.is_arrow() {
             out.push(solver.fresh());
         } else {
-            let group = self.group_of[&self.layout_tycon(tc)];
+            let group = self.group_of[&self.layout_tycon(&tc)];
             for called_by in &self.group_slots(group).called_by_runtime {
                 let v = solver.fresh();
                 if let Some(called_by) = called_by {
@@ -330,29 +317,12 @@ impl<'e> SlotLayout<'e> {
         }
     }
 
-    /// `ty` annotated with a new variable at each slot, every one of them made Dynamic for `reason`.
-    fn untracked(&self, ty: &Arc<TypeNode>, reason: &TyCon, solver: &mut Solver) -> Vec<SetVar> {
-        (0..self.slot_count(ty))
-            .map(|_| {
-                let v = solver.fresh();
-                solver.make_dynamic(v, DynamicKind::TypeConstructorArgument(reason.clone()));
-                v
-            })
-            .collect()
-    }
-
     /// The `i`-th type argument of `ty`, with its slots.
     pub fn type_arg(&self, ty: &AType, i: usize) -> AType {
+        let tc = head_tycon(&ty.ty);
         let spine = ty.ty.flatten_type_application();
-        let tc = match &spine[0].ty {
-            Type::TyCon(tc) => tc,
-            _ => panic!(
-                "the type `{}` is headed by no type constructor",
-                ty.ty.to_string()
-            ),
-        };
         let args = &spine[1..];
-        let mut start = self.own_slot_count(tc);
+        let mut start = self.own_slot_count(&tc);
         for arg in &args[..i] {
             start += self.slot_count(arg);
         }
@@ -380,13 +350,10 @@ impl<'e> SlotLayout<'e> {
         pos: &mut usize,
         show: &mut dyn FnMut(SetVar) -> String,
     ) -> String {
+        let tc = head_tycon(ty);
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
-        let tc = match &spine[0].ty {
-            Type::TyCon(tc) => tc,
-            _ => return ty.to_string(),
-        };
-        if args.len() < self.arity(tc) {
+        if args.len() < self.arity(&tc) {
             return ty.to_string();
         }
         if tc.is_arrow() {
@@ -396,7 +363,7 @@ impl<'e> SlotLayout<'e> {
             let ret = self.annotate_at(&args[1], slots, pos, show);
             return format!("({} -[{}]-> {})", param, own, ret);
         }
-        let own_count = self.own_slot_count(tc);
+        let own_count = self.own_slot_count(&tc);
         let own: Vec<String> = (0..own_count).map(|i| show(slots[*pos + i])).collect();
         *pos += own_count;
         let mut text = tc.to_string();
@@ -416,7 +383,7 @@ impl<'e> SlotLayout<'e> {
 
     /// The own slots of `ty`: the slots its outermost type constructor owns.
     pub fn own_slots<'a>(&self, ty: &'a AType) -> &'a [SetVar] {
-        let tc = ty.ty.toplevel_tycon().unwrap();
+        let tc = head_tycon(&ty.ty);
         &ty.slots[..self.own_slot_count(&tc)]
     }
 
@@ -424,7 +391,7 @@ impl<'e> SlotLayout<'e> {
     /// element of the array `ty`, with its slots. `solver` gives the new variables of a place the
     /// slots of `ty` leave untracked.
     pub fn field(&self, ty: &AType, field: usize, solver: &mut Solver) -> AType {
-        let tc = ty.ty.toplevel_tycon().unwrap();
+        let tc = head_tycon(&ty.ty);
         let layout_tc = self.layout_tycon(&tc);
         let group = self.group_of[&layout_tc];
         let group_slots = self.group_slots(group);
@@ -483,7 +450,7 @@ impl<'e> SlotLayout<'e> {
                         Binding::Linked(_, slots) => out.extend(slots.iter().copied()),
                         Binding::Untracked(arg_ty) => {
                             let reason = untracked_reason(source);
-                            out.extend(self.untracked(arg_ty, &reason, solver))
+                            push_untracked(self.slot_count(arg_ty), &reason, solver, out);
                         }
                     }
                     return;
@@ -493,14 +460,8 @@ impl<'e> SlotLayout<'e> {
                 // owns none of its slots. The arguments here are written in the declaration, so
                 // they are read as it reads them, each once and in order.
                 let mut head_args: Vec<Binding> = vec![];
+                let head_tc = head_tycon(binding.ty());
                 let head_spine = binding.ty().flatten_type_application();
-                let head_tc = match &head_spine[0].ty {
-                    Type::TyCon(tc) => tc.clone(),
-                    _ => panic!(
-                        "the type argument `{}` is headed by no type constructor",
-                        binding.ty().to_string()
-                    ),
-                };
                 for given in &head_spine[1..] {
                     head_args.push(Binding::Untracked(given.clone()));
                 }
@@ -528,15 +489,7 @@ impl<'e> SlotLayout<'e> {
                         }
                     }
                     OwnSource::Untracked(reason) => {
-                        let reason = reason.clone();
-                        for _ in 0..self.own_slot_count(tc) {
-                            let v = solver.fresh();
-                            solver.make_dynamic(
-                                v,
-                                DynamicKind::TypeConstructorArgument(reason.clone()),
-                            );
-                            out.push(v);
-                        }
+                        push_untracked(self.own_slot_count(tc), reason, solver, out);
                     }
                 }
                 for arg in args {
@@ -578,17 +531,34 @@ impl<'e> SlotLayout<'e> {
             self.walk_declared(&info.fields[0].ty, &env, &mut source, solver, out);
             return;
         }
-        for _ in 0..self.own_slot_count(tc) {
-            let v = solver.fresh();
-            solver.make_dynamic(v, DynamicKind::TypeConstructorArgument(tc.clone()));
-            out.push(v);
-        }
+        push_untracked(self.own_slot_count(tc), tc, solver, out);
         for arg in args {
             match arg {
                 Binding::Linked(_, slots) => out.extend(slots),
-                Binding::Untracked(ty) => out.extend(self.untracked(&ty, tc, solver)),
+                Binding::Untracked(ty) => push_untracked(self.slot_count(&ty), tc, solver, out),
             }
         }
+    }
+}
+
+/// The type constructor at the head of `ty`, the type of a value or a type argument given to a
+/// declaration.
+fn head_tycon(ty: &Arc<TypeNode>) -> Arc<TyCon> {
+    ty.toplevel_tycon().unwrap_or_else(|| {
+        panic!(
+            "the type `{}` is headed by no type constructor",
+            ty.to_string()
+        )
+    })
+}
+
+/// Appends to `out` `count` new variables, each made Dynamic as a place inside a type argument of
+/// `reason`.
+fn push_untracked(count: usize, reason: &TyCon, solver: &mut Solver, out: &mut Vec<SetVar>) {
+    for _ in 0..count {
+        let v = solver.fresh();
+        solver.make_dynamic(v, DynamicKind::TypeConstructorArgument(reason.clone()));
+        out.push(v);
     }
 }
 

@@ -10,7 +10,7 @@ use super::{
 ///
 /// A rule declares a flow by making two places the same (`same`), and declares a place whose
 /// values are closures the operation builds or calls at run time by making it Dynamic
-/// (`make_dynamic`, `make_own_dynamic`). A place the rule says nothing about holds nothing the operation put there, which
+/// (`make_own_dynamic`, `make_all_dynamic`). A place the rule says nothing about holds nothing the operation put there, which
 /// is right for an operation that moves no function into it.
 pub struct BuiltinFlow<'a, 'e> {
     layout: &'a SlotLayout<'e>,
@@ -65,12 +65,6 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
     /// out of the other.
     pub fn same(&mut self, a: &AType, b: &AType) {
         self.solver.unify(a, b);
-    }
-
-    /// Declares every slot of `ty` a place of closures built at run time.
-    pub fn make_dynamic(&mut self, ty: &AType) {
-        let kind = DynamicKind::Builtin(self.op_name.clone());
-        self.solver.make_all_dynamic(ty, &kind);
     }
 
     /// Declares the own slots of `ty` (for a function, the closure itself, leaving what it takes

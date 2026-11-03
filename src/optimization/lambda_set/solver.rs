@@ -112,6 +112,11 @@ impl Solver {
         self.current_symbol = symbol;
     }
 
+    /// The symbol whose body is being inferred, `None` while the roots of the program are.
+    pub fn current_symbol(&self) -> Option<&FullName> {
+        self.current_symbol.as_ref()
+    }
+
     /// A new variable, holding nothing.
     pub fn fresh(&mut self) -> SetVar {
         let v = self.parent.len() as u32;

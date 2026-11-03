@@ -194,7 +194,6 @@ fn infer_component(
         lambdas: vec![],
         current_members: vec![],
         sites: vec![],
-        current_symbol: None,
         lam_counter: 0,
     };
     for (i, s) in symbols.iter().enumerate() {
@@ -246,7 +245,6 @@ struct Inferencer<'a, 'p, 'e> {
     /// The variables a `Member::Lam` with `Owner::Current` was added to.
     current_members: Vec<SetVar>,
     sites: Vec<Site>,
-    current_symbol: Option<FullName>,
     /// How many lambdas of the current symbol's body have been met.
     lam_counter: u32,
 }
@@ -254,15 +252,19 @@ struct Inferencer<'a, 'p, 'e> {
 impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
     /// Starts inferring the body of `symbol`, or the roots where `None`.
     fn enter_symbol(&mut self, symbol: Option<FullName>) {
-        self.analysis.solver.set_current_symbol(symbol.clone());
-        self.current_symbol = symbol;
+        self.analysis.solver.set_current_symbol(symbol);
         self.lam_counter = 0;
     }
 
     /// Records the variables of `ty`, met inside the innermost lambda, as part of its term.
     fn record(&mut self, ty: &AType) {
+        self.record_vars(&ty.slots);
+    }
+
+    /// Records `vars`, met inside the innermost lambda, as part of its term.
+    fn record_vars(&mut self, vars: &[SetVar]) {
         if let Some(frame) = self.frames.last() {
-            self.lambdas[*frame].vars.extend(ty.slots.iter().copied());
+            self.lambdas[*frame].vars.extend(vars.iter().copied());
         }
     }
 
@@ -393,9 +395,20 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
             }
             Expr::FFICall(_, _, _, _, args, _) => {
                 for arg in args {
-                    self.infer(arg);
+                    let arg = self.infer(arg);
+                    assert!(
+                        arg.slots.is_empty(),
+                        "the C function argument of type `{}` holds a function",
+                        arg.ty.to_string()
+                    );
                 }
-                self.layout.fresh(&ty, &mut self.analysis.solver)
+                let result = self.layout.fresh(&ty, &mut self.analysis.solver);
+                assert!(
+                    result.slots.is_empty(),
+                    "the C function result of type `{}` holds a function",
+                    ty.to_string()
+                );
+                result
             }
             Expr::Eval(side, main) => {
                 self.infer(side);
@@ -411,9 +424,11 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         let lam = self.analysis.lambdas.len() as LamId;
         self.analysis.lambdas.push(Lambda {
             symbol: self
-                .current_symbol
-                .clone()
-                .expect("the roots of the program hold no lambda"),
+                .analysis
+                .solver
+                .current_symbol()
+                .expect("the roots of the program hold no lambda")
+                .clone(),
             index: self.lam_counter,
             params: vec![],
         });
@@ -467,9 +482,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
             .map(|c| vars[*c as usize])
             .collect();
         let args = vars[..callee.params.len()].to_vec();
-        if let Some(frame) = self.frames.last() {
-            self.lambdas[*frame].vars.extend(args.iter().copied());
-        }
+        self.record_vars(&args);
         self.sites.push(Site { component, args });
         AType {
             ty: self.prg.symbols[name].ty.clone(),

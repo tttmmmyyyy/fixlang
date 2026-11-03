@@ -45,7 +45,8 @@ pub struct SetStore {
     index: Map<Vec<Elem>, SetId>,
     /// Whether each set lies on a cycle: it reaches itself through the elements of the sets it holds.
     on_cycle: Vec<bool>,
-    /// The sets lying on a cycle.
+    /// The sets lying on a cycle, in increasing order: the ids whose `on_cycle` is true, kept apart
+    /// so that interning a cycle reads them without a scan of the store.
     cyclic: Vec<SetId>,
 }
 
