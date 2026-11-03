@@ -137,8 +137,8 @@ impl ExprVisitor for AppInliner {
     /// `let_elimination` relies on these placements, so a change to one of them goes there too.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Get the argument of the application. An application carries one argument until uncurrying
-        // rewrites the call onto an uncurried function, and a call it has rewritten names the function
-        // outright, so there is nothing to move an argument into.
+        // rewrites the call onto an uncurried function, and a call it has rewritten names the
+        // function outright, so there is nothing to move an argument into.
         let args = expr.get_app_args();
         if args.len() != 1 {
             return EndVisitResult::unchanged(expr);

@@ -1387,8 +1387,8 @@ impl TypeNode {
         self.toplevel_tycon_satisfies(|tc| name.is(&tc.name))
     }
 
-    /// Whether this type is an arrow type `a -> b`, whose value is a closure: the code to run paired
-    /// with the values it captured.
+    /// Whether this type is an arrow type `a -> b`, whose value is a closure: the code to run
+    /// paired with the values it captured.
     pub fn is_arrow(&self) -> bool {
         self.toplevel_tycon_satisfies(TyCon::is_arrow)
     }

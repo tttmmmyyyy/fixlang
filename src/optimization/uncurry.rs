@@ -1,9 +1,10 @@
 /*
 Uncurrying optimization
 
-Give each global `g : T1 -> ... -> Tn -> R` an uncurried function `g#funck` for each `k` up to `n`:
-a function of type `#Funck T1 ... Tk (T(k+1) -> ... -> R)` that takes its first `k` arguments at once
-and captures nothing. Then rewrite each call `g(a1)...(ak)` into the call `g#funck(a1, ..., ak)`.
+Give each global `g : T1 -> ... -> Tn -> R` an uncurried function `g#func{k}` for each `k` up to
+`n`: a function of type `#Func{k} T1 ... Tk (T{k+1} -> ... -> R)` that takes its first `k` arguments
+at once and captures nothing. Then rewrite each call `g(a1)...(ak)` into the call
+`g#func{k}(a1, ..., ak)`.
 
 Higher-order uncurrying (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) is not implemented.
 */
@@ -23,9 +24,10 @@ use crate::{
 };
 use std::{mem, sync::Arc};
 
-/// Defines the uncurried functions of each global, taking one, two, ... arguments, then rewrites the
-/// calls, export statements and entry IO value of the program onto the uncurried function taking the
-/// number of arguments they supply. The symbols are rewritten on up to `num_threads` threads.
+/// Defines the uncurried functions of each global, taking one, two, ... arguments, then rewrites
+/// the calls, export statements and entry IO value of the program onto the uncurried function
+/// taking the number of arguments they supply. The symbols are rewritten on up to `num_threads`
+/// threads.
 ///
 /// Returns the uncurried functions it defined, which a later `replace_calls_with_funcs` takes.
 pub fn run(prg: &mut Program, num_threads: usize) -> UncurriedFuncs {
@@ -82,8 +84,8 @@ pub fn run(prg: &mut Program, num_threads: usize) -> UncurriedFuncs {
 /// number of arguments it supplies, on up to `num_threads` threads.
 ///
 /// A call of an uncurried function whose result is applied to more arguments is merged into one
-/// call of a longer one. So running this again after other passes rewrites the calls those passes bring
-/// together.
+/// call of a longer one. So running this again after other passes rewrites the calls those passes
+/// bring together.
 ///
 /// # Examples
 /// `g(a)(b)` becomes `g#func2(a, b)`, and so does `g#func1(a)(b)`.
@@ -248,8 +250,8 @@ fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<E
     (vars, val)
 }
 
-/// `expr` with the call it makes of a global rewritten onto the uncurried function taking that
-/// many arguments.
+/// `expr`, when it is a call of a global, rewritten onto the uncurried function taking as many
+/// arguments as the call supplies.
 ///
 /// # Arguments
 /// * `funcs` — the uncurried functions the program defines. A call is rewritten only when
@@ -273,9 +275,9 @@ fn replace_closure_call_with_func_call(
             }
             let mut f_func = v.as_ref().clone();
             if fun_ty.is_func() {
-                // An uncurried function of a global, called with its arguments and then the arguments of what
-                // it returns: `g#funcN(a1, ..., aN)(b1, ..., bM)` becomes
-                // `g#func(N+M)(a1, ..., aN, b1, ..., bM)`.
+                // An uncurried function of a global, called with its arguments and then the
+                // arguments of what it returns: `g#func{N}(a1, ..., aN)(b1, ..., bM)` becomes
+                // `g#func{N+M}(a1, ..., aN, b1, ..., bM)`.
                 let Some((global, n_args)) = funcs.get(&f_func.name) else {
                     unreachable!(
                         "the global `{}` of a func type is not an uncurried function `run` defined",
@@ -297,7 +299,8 @@ fn replace_closure_call_with_func_call(
             }
             convert_to_func_name(&mut f_func.name.name, args.len());
             if !funcs.contains_key(&f_func.name) {
-                // If uncurried function is not defined, do not apply uncurry.
+                // The global has no uncurried function taking this many arguments, so the call
+                // stays as it is.
                 return expr.clone();
             }
             let result_ty = expr.type_.clone().unwrap();
@@ -313,8 +316,8 @@ fn replace_closure_call_with_func_call(
     }
 }
 
-/// `expr` with every call of a global it makes rewritten onto the uncurried function taking that
-/// many arguments.
+/// `expr` with every call of a global in it rewritten onto the uncurried function taking as many
+/// arguments as the call supplies.
 fn replace_closure_calls_with_func_calls(
     expr: &Arc<ExprNode>,
     funcs: &UncurriedFuncs,
