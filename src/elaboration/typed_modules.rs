@@ -292,10 +292,7 @@ fn add_to_module_file(
 
 /// Adds the bodies of `new_entries` to the files of their modules, each checked under the hash
 /// `module_hashes` gives. A file that cannot be written is reported as a warning.
-fn add_to_module_files(
-    new_entries: Map<Name, Vec<NewEntry>>,
-    module_hashes: &Map<Name, String>,
-) {
+fn add_to_module_files(new_entries: Map<Name, Vec<NewEntry>>, module_hashes: &Map<Name, String>) {
     let dir = match create_dir_guarding_project_links(
         Path::new(TYPED_MODULES_PATH),
         DOT_FIXLANG_LINK_HINT,

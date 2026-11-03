@@ -499,14 +499,13 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         write_main(small);
         build(dir, "main.fix", &[]);
         assert_eq!(run_out(dir), small);
-        let std_files =
-            |files: &[(String, SystemTime)]| -> Vec<(String, SystemTime)> {
-                files
-                    .iter()
-                    .filter(|(name, _)| name.starts_with("Std_"))
-                    .cloned()
-                    .collect()
-            };
+        let std_files = |files: &[(String, SystemTime)]| -> Vec<(String, SystemTime)> {
+            files
+                .iter()
+                .filter(|(name, _)| name.starts_with("Std_"))
+                .cloned()
+                .collect()
+        };
         assert_eq!(
             std_files(&cache_files(dir)),
             std_files(&after_large),
