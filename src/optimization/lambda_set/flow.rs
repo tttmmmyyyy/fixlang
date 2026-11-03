@@ -2,7 +2,7 @@
 
 use super::{
     slots::{AType, SlotLayout},
-    solver::{DynamicKind, Solver},
+    solver::{DynamicKind, Member, Solver},
 };
 
 /// The operands and the result of one builtin operation, for its `BuiltinOp::lambda_set_flow` to
@@ -74,6 +74,19 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
         for v in self.layout.own_slots(ty) {
             self.solver.make_dynamic(*v, kind.clone());
         }
+    }
+
+    /// Whether an own slot of some operand holds `Member::Dynamic`, as the rule of an operation
+    /// that applies a function operand makes the own slot of that operand.
+    pub fn has_dynamic_operand_own_slot(&mut self) -> bool {
+        self.operands.iter().any(|operand| {
+            self.layout.own_slots(operand).iter().any(|v| {
+                self.solver
+                    .members(*v)
+                    .iter()
+                    .any(|m| matches!(m, Member::Dynamic(_)))
+            })
+        })
     }
 
     /// Declares every slot of every operand and of the result a place of closures built at run time.

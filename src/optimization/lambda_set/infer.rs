@@ -283,6 +283,12 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                     b.op.name(),
                 );
                 b.op.lambda_set_flow(&mut flow);
+                assert!(
+                    !b.op.applies_a_function_operand() || flow.has_dynamic_operand_own_slot(),
+                    "the builtin `{}` applies a function operand, but its lambda set flow makes \
+                     the own slot of no operand Dynamic",
+                    b.op.name()
+                );
                 result
             }
             Expr::App(func, args) => {
