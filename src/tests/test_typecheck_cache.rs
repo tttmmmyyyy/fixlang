@@ -439,17 +439,17 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         let dir = temp.path();
         fs::write(dir.join("main.fix"), DEPRECATED_USE).expect("Failed to write main.fix");
 
-        let (allowed, allowed_stderr) = try_build(dir, &["--allow-deprecated"]);
-        assert!(allowed, "stderr: {}", allowed_stderr);
+        let (allowed_built, allowed_stderr) = try_build(dir, &["--allow-deprecated"]);
+        assert!(allowed_built, "stderr: {}", allowed_stderr);
         assert!(
             !allowed_stderr.contains("is deprecated"),
             "a build allowing deprecated uses reported one.\nstderr: {}",
             allowed_stderr
         );
 
-        let (denied, denied_stderr) = try_build(dir, &["--deny-deprecated"]);
+        let (denied_built, denied_stderr) = try_build(dir, &["--deny-deprecated"]);
         assert!(
-            !denied,
+            !denied_built,
             "a build denying deprecated uses succeeded on a program using one"
         );
         assert!(
@@ -551,10 +551,10 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         assert_eq!(run_out(dir), "3");
 
         // The footer ends the file.
-        let mut damaged_record = written.clone();
-        let len = damaged_record.len();
-        damaged_record[len - 1] ^= 0xff;
-        fs::write(&main_file, &damaged_record).expect("Failed to damage the cache file");
+        let mut damaged_footer = written.clone();
+        let len = damaged_footer.len();
+        damaged_footer[len - 1] ^= 0xff;
+        fs::write(&main_file, &damaged_footer).expect("Failed to damage the cache file");
         let (built, stderr) = try_build(dir, &[]);
         assert!(built, "stderr: {}", stderr);
         assert!(

@@ -238,8 +238,8 @@ fn add_to_module_file(
     module_hash: &str,
     new: Vec<NewEntry>,
 ) -> io::Result<()> {
-    let name = module_file_name(module, module_hash);
-    let path = dir.join(&name);
+    let file_name = module_file_name(module, module_hash);
+    let path = dir.join(&file_name);
     let (mut bytes, mut record) = match read_record(&path) {
         Ok(Some((record, bodies_end))) => {
             let mut bytes = fs::read(&path)?;
@@ -278,10 +278,10 @@ fn add_to_module_file(
     // The temporary files `replace_file` writes begin with a dot, which no prefix does.
     let prefix = module_file_prefix(module);
     for dir_entry in fs::read_dir(dir)? {
-        let file_name = dir_entry?.file_name();
-        let file_name = file_name.to_string_lossy();
-        if file_name.starts_with(&prefix) && file_name != name.as_str() {
-            let _ = fs::remove_file(dir.join(file_name.as_ref()));
+        let entry_name = dir_entry?.file_name();
+        let entry_name = entry_name.to_string_lossy();
+        if entry_name.starts_with(&prefix) && entry_name != file_name.as_str() {
+            let _ = fs::remove_file(dir.join(entry_name.as_ref()));
         }
     }
     Ok(())
