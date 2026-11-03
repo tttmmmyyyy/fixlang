@@ -1241,6 +1241,32 @@ impl Program {
         locs
     }
 
+    /// Every body defined in `modules`: a simple value whose name is in one of them, and each
+    /// implementation of a trait member defined in one of them.
+    ///
+    /// # Arguments
+    /// * `target_symbols` — when `Some`, restrict the bodies to those of the global values whose
+    ///   name is in the slice.
+    pub fn body_locations_in_modules(
+        &self,
+        modules: &[Name],
+        target_symbols: Option<&[FullName]>,
+    ) -> Vec<BodyLocation> {
+        let target_set: Option<Set<&FullName>> = target_symbols.map(|s| s.iter().collect());
+        let names: Vec<FullName> = self
+            .global_values
+            .iter()
+            .filter(|(name, _)| target_set.as_ref().map_or(true, |set| set.contains(name)))
+            .filter(|(name, gv)| match gv.expr {
+                SymbolExpr::Simple(_) => modules.contains(&name.module()),
+                // Methods are filtered by the module their implementations are defined in.
+                SymbolExpr::Method(_) => true,
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+        self.body_locations(&names, |method| modules.contains(&method.define_module))
+    }
+
     /// Resolves namespaces in the body at `loc` and type-checks it. For a trait method
     /// implementation, first checks that its signature agrees with the trait member definition.
     ///
@@ -1265,12 +1291,12 @@ impl Program {
         cache: Option<&CacheSlot>,
     ) -> Result<CheckedBody, Errors> {
         let (te, req_scm, def_mod) = self.body_at(loc);
-        if loc.impl_idx.is_some() {
+        if let Some(impl_idx) = loc.impl_idx {
             let gv = &self.global_values[&loc.val_name];
             let SymbolExpr::Method(impls) = &gv.expr else {
                 unreachable!()
             };
-            let impl_ = &impls[loc.impl_idx.unwrap()];
+            let impl_ = &impls[impl_idx];
             // Check that the type signature given by implementor is equivalent to the type scheme
             // obtained from the trait member definition.
             if UnifOrOtherErr::extract_others(tc.check_scheme_equivalent(
@@ -1393,9 +1419,7 @@ impl Program {
     /// the body, the concrete types of its opaque types, and the names its module has to import.
     /// Answers with the tolerated diagnostics the check produced.
     pub fn install_checked_body(&mut self, loc: &BodyLocation, checked: CheckedBody) -> Errors {
-        for (k, mut v) in checked.opaque_types {
-            self.opaque_types.entry(k).or_default().append(&mut v);
-        }
+        self.add_opaque_types(checked.opaque_types);
         self.merge_import_required(checked.import_required);
         let gv = self.global_values.get_mut(&loc.val_name).unwrap();
         match (&mut gv.expr, loc.impl_idx) {
@@ -1404,6 +1428,14 @@ impl Program {
             _ => unreachable!(),
         }
         checked.diagnostics
+    }
+
+    /// Adds the concrete types the opaque type constructors of one body stand for to
+    /// `self.opaque_types`.
+    pub fn add_opaque_types(&mut self, opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>) {
+        for (k, mut v) in opaque_types {
+            self.opaque_types.entry(k).or_default().append(&mut v);
+        }
     }
 
     /// Builds the program-wide table that name resolution reads: every type constructor, trait
@@ -1436,34 +1468,7 @@ impl Program {
         config: &Configuration,
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
-
-        let target_set: Option<Set<&FullName>> = target_symbols.map(|s| s.iter().collect());
-
-        // Names of global values to be checked.
-        let mut names_to_check: Vec<FullName> = vec![];
-        for (name, gv) in self.global_values.iter() {
-            if let Some(set) = target_set.as_ref() {
-                if !set.contains(name) {
-                    continue;
-                }
-            }
-            match gv.expr {
-                SymbolExpr::Simple(_) => {
-                    // Check simple values only if they are in `modules`.
-                    if modules.contains(&name.module()) {
-                        names_to_check.push(name.clone());
-                    }
-                }
-                SymbolExpr::Method(_) => {
-                    // We filter methods by the module their implementations are defined in.
-                    names_to_check.push(name.clone());
-                }
-            }
-        }
-        let locs = self.body_locations(&names_to_check, |method| {
-            modules.contains(&method.define_module)
-        });
-
+        let locs = self.body_locations_in_modules(modules, target_symbols);
         for (loc, checked) in self.check_bodies(locs, tc, Some(cache), config)? {
             match checked {
                 // Carry tolerated diagnostics (holes, cannot-infer, etc.) forward, but still
@@ -2209,15 +2214,7 @@ impl Program {
         let mut facts_by_value = vec![];
         for (name, gv) in &self.global_values {
             let mut facts = vec![];
-            let impl_idxs: Vec<Option<usize>> = match &gv.expr {
-                SymbolExpr::Simple(_) => vec![None],
-                SymbolExpr::Method(impls) => (0..impls.len()).map(Some).collect(),
-            };
-            for impl_idx in impl_idxs {
-                let loc = BodyLocation {
-                    val_name: name.clone(),
-                    impl_idx,
-                };
+            for loc in self.body_locations(std::slice::from_ref(name), |_| true) {
                 match self.typed_modules.stored_warning_facts(&loc) {
                     Some(stored) => facts.extend(stored.iter().cloned()),
                     None => facts.append(&mut warning_facts(&self.body_at(&loc).0.expr)),

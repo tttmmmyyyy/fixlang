@@ -24,7 +24,7 @@
 use crate::ast::expr::ExprNode;
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::Pattern;
-use crate::ast::program::{BodyLocation, Program, SymbolExpr, TypedExpr};
+use crate::ast::program::{BodyLocation, Program, TypedExpr};
 use crate::ast::types::{OpaqueTyConResolution, TyCon};
 use crate::configuration::Configuration;
 use crate::constants::TYPED_MODULES_PATH;
@@ -177,7 +177,10 @@ fn read_record(path: &Path) -> Result<Option<(ModuleRecord, u64)>, String> {
     };
     let entries: Vec<(EntityIdentity, EntityEntry)> =
         postcard::from_bytes(&record).map_err(|e| e.to_string())?;
-    if entries.iter().any(|(_, entry)| entry.body.end > bodies_end) {
+    if entries
+        .iter()
+        .any(|(_, entry)| entry.body.start > entry.body.end || entry.body.end > bodies_end)
+    {
         return Err("its record points past its bodies".to_string());
     }
     Ok(Some((entries.into_iter().collect(), bodies_end)))
@@ -284,6 +287,46 @@ fn add_to_module_file(
     Ok(())
 }
 
+/// Adds the bodies of `new_entries` to the files of their modules, each checked under the hash
+/// `module_hashes` gives. A file that cannot be written is reported as a warning.
+fn add_to_module_files(
+    new_entries: Map<Name, Vec<NewEntry>>,
+    module_hashes: &Map<Name, String>,
+) {
+    let dir = match create_dir_guarding_project_links(
+        Path::new(TYPED_MODULES_PATH),
+        DOT_FIXLANG_LINK_HINT,
+    ) {
+        Ok(dir) => dir,
+        Err(errs) => {
+            for err in errs.errors() {
+                warn_msg(&err.msg);
+            }
+            return;
+        }
+    };
+    for (module, entries) in new_entries {
+        let module_hash = &module_hashes[&module];
+        if let Err(e) = add_to_module_file(&dir, &module, module_hash, entries) {
+            warn_msg(&format!(
+                "Failed to write cache file \"{}\": {}.",
+                dir.join(module_file_name(&module, module_hash))
+                    .to_string_lossy(),
+                e
+            ));
+        }
+    }
+}
+
+/// Reports, as a warning, that the file at `path` could not be read for `why`.
+fn warn_unreadable_file(path: &Path, why: &str) {
+    warn_msg(&format!(
+        "Failed to read cache file \"{}\": {}.",
+        path.to_string_lossy(),
+        why
+    ));
+}
+
 /// A body whose typed expression lies in its module's file, and which `Program::global_values`
 /// holds as it was parsed.
 struct StoredBody {
@@ -343,17 +386,8 @@ impl Program {
         }
 
         // The bodies of `modules`, by the module each is defined in.
-        let names: Vec<FullName> = self
-            .global_values
-            .iter()
-            .filter(|(name, gv)| match gv.expr {
-                SymbolExpr::Simple(_) => modules.contains(&name.module()),
-                SymbolExpr::Method(_) => true,
-            })
-            .map(|(name, _)| name.clone())
-            .collect();
         let mut bodies_by_module: Map<Name, Vec<BodyLocation>> = Map::default();
-        for loc in self.body_locations(&names, |method| modules.contains(&method.define_module)) {
+        for loc in self.body_locations_in_modules(modules, None) {
             let (_te, _scm, module) = self.body_at(&loc);
             bodies_by_module.entry(module).or_default().push(loc);
         }
@@ -372,11 +406,7 @@ impl Program {
                 Ok(Some((record, _bodies_end))) => record,
                 Ok(None) => ModuleRecord::default(),
                 Err(why) => {
-                    warn_msg(&format!(
-                        "Failed to read cache file \"{}\": {}.",
-                        path.to_string_lossy(),
-                        why
-                    ));
+                    warn_unreadable_file(&path, &why);
                     ModuleRecord::default()
                 }
             };
@@ -384,12 +414,7 @@ impl Program {
                 let identity = self.entity_identity_at(&loc);
                 match record.get(&identity) {
                     Some(entry) => {
-                        for (k, v) in &entry.opaque_types {
-                            self.opaque_types
-                                .entry(k.clone())
-                                .or_default()
-                                .extend(v.iter().cloned());
-                        }
+                        self.add_opaque_types(entry.opaque_types.clone());
                         self.typed_modules.stored.insert(
                             loc,
                             StoredBody {
@@ -410,7 +435,8 @@ impl Program {
         let mut new_entries: Map<Name, Vec<NewEntry>> = Map::default();
         let locs = to_check.iter().map(|(loc, _, _)| loc.clone()).collect();
         let results = self.check_bodies(locs, tc, None, config)?;
-        for ((loc, module, identity), (_loc, checked)) in to_check.into_iter().zip(results) {
+        for ((loc, module, identity), (checked_loc, checked)) in to_check.into_iter().zip(results) {
+            assert!(loc == checked_loc, "`check_bodies` answered out of order");
             match checked {
                 Ok(checked) => {
                     if !checked.diagnostics.has_diagnostics() {
@@ -427,30 +453,7 @@ impl Program {
             }
         }
         if !new_entries.is_empty() {
-            match create_dir_guarding_project_links(
-                Path::new(TYPED_MODULES_PATH),
-                DOT_FIXLANG_LINK_HINT,
-            ) {
-                Ok(dir) => {
-                    for (module, entries) in new_entries {
-                        if let Err(e) =
-                            add_to_module_file(&dir, &module, &module_hashes[&module], entries)
-                        {
-                            warn_msg(&format!(
-                                "Failed to write cache file \"{}\": {}.",
-                                dir.join(module_file_name(&module, &module_hashes[&module]))
-                                    .to_string_lossy(),
-                                e
-                            ));
-                        }
-                    }
-                }
-                Err(errs) => {
-                    for err in errs.errors() {
-                        warn_msg(&err.msg);
-                    }
-                }
-            }
+            add_to_module_files(new_entries, &module_hashes);
         }
 
         // The concrete types of opaque types are known only once the values are checked, and a
@@ -484,11 +487,7 @@ impl Program {
             Ok(Some(te)) => te,
             failed => {
                 if let Err(why) = failed {
-                    warn_msg(&format!(
-                        "Failed to read cache file \"{}\": {}.",
-                        stored.path.to_string_lossy(),
-                        why
-                    ));
+                    warn_unreadable_file(&stored.path, &why);
                 }
                 // The opaque types of the body are already known from the record.
                 let checked = self.check_body(loc, &self.create_name_resolution_env(), tc, None)?;

@@ -72,7 +72,7 @@ fn test_the_module_dependency_hash_covers_the_c_numeric_types() {
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::{DOT_FIXLANG, TYPED_MODULES_PATH};
-    use crate::tests::test_util::fix_command;
+    use crate::tests::test_util::{fix_command, run_fix};
     use std::fs;
     use std::path::Path;
     use std::process::Command;
@@ -412,12 +412,10 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
     /// Runs `fix build` on `main.fix` in `dir` with `extra_args`, and answers with whether it
     /// succeeded and what it wrote to stderr.
     fn try_build(dir: &Path, extra_args: &[&str]) -> (bool, String) {
-        let output = fix_command()
-            .args(["build", "--file", "main.fix", "-o", "out"])
-            .args(extra_args)
-            .current_dir(dir)
-            .output()
-            .expect("failed to run fix build");
+        let output = run_fix(
+            dir,
+            &[&["build", "--file", "main.fix", "-o", "out"], extra_args].concat(),
+        );
         (
             output.status.success(),
             String::from_utf8_lossy(&output.stderr).to_string(),

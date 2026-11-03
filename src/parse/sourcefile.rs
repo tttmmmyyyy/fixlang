@@ -18,6 +18,8 @@ use std::{
 /// for many times is read once. The path is what a serialized `SourceFile` carries; the content
 /// and the hash are read again wherever it is deserialized, unless the deserialization runs inside
 /// `SourceFile::sharing`.
+///
+/// The fields it serializes must stay in sync with `SerializedSourceFile`.
 #[derive(Clone, Serialize)]
 pub struct SourceFile {
     /// The path the file is read from. It names the file: two `SourceFile`s are equal, and are
@@ -37,7 +39,8 @@ pub struct SourceFile {
     origin: Option<Arc<SourceOrigin>>,
 }
 
-/// What a serialized `SourceFile` carries: the fields `SourceFile` serializes, in its order.
+/// What a serialized `SourceFile` carries: the fields `SourceFile` serializes, in its order. Must
+/// stay in sync with the fields `SourceFile` does not mark `#[serde(skip)]`.
 #[derive(Deserialize)]
 struct SerializedSourceFile {
     file_path: PathBuf,
