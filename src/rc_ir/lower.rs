@@ -43,7 +43,7 @@ enum PendingBinding {
 
 /// The result of lowering one AST symbol.
 enum LoweredSymbol {
-    /// A symbol of funptr type, which becomes a top-level function under the symbol's own name.
+    /// A symbol of func type, which becomes a top-level function under the symbol's own name.
     Func(RcFunc),
     /// A symbol of any other type, which becomes a global value computed by its initializer.
     Global(RcGlobalInit),
@@ -264,7 +264,7 @@ impl<'a> Lowerer<'a> {
 
     // --- symbols ---
 
-    /// Lower one instantiated symbol: a funptr symbol becomes a top-level function under the
+    /// Lower one instantiated symbol: a func symbol becomes a top-level function under the
     /// symbol's own name, and a symbol of any other type becomes the initializer of a global value.
     /// The counters naming the lambdas lifted out and the local variables minted restart here, so
     /// both are numbered within the symbol they were written in.
@@ -274,8 +274,8 @@ impl<'a> Lowerer<'a> {
         self.fresh_counter = 0;
         self.symbol_tag = md5_hex(&sym.name.to_string())[..SYMBOL_TAG_LENGTH].to_string();
         let expr = sym.expr.as_ref().expect("symbol has no expression");
-        if sym.ty.is_funptr() {
-            // A funptr symbol is a top-level function whose expression is a (possibly multi-param)
+        if sym.ty.is_func() {
+            // A func symbol is a top-level function whose expression is a (possibly multi-param)
             // lambda.
             let expr = expr.set_type(sym.ty.clone());
             let func_ref = FuncRef {
@@ -289,7 +289,7 @@ impl<'a> Lowerer<'a> {
                 sym.inline_into_callers,
             ))
         } else {
-            // A non-funptr symbol is a global value; lower its initializer.
+            // A non-func symbol is a global value; lower its initializer.
             let init = self.lower_body(expr);
             LoweredSymbol::Global(RcGlobalInit {
                 symbol: sym.name.clone(),
@@ -314,7 +314,7 @@ impl<'a> Lowerer<'a> {
     ///
     /// # Arguments
     /// * `captures` — the values the closure stores, already resolved to the enclosing RC IR
-    ///   variables, in the order it stores them. For a funptr, which captures nothing, it is empty.
+    ///   variables, in the order it stores them. For a func, which captures nothing, it is empty.
     /// * `remade` — the captured names the closure leaves out, with the type each was captured at.
     ///   The body reads them like any other captured name, so each is bound here to a value made on
     ///   the spot; `lower_lam` says which names these are and why one made here is the value that
@@ -342,7 +342,7 @@ impl<'a> Lowerer<'a> {
         }
 
         let mut bindings = vec![];
-        let capture = if lam_ty.is_closure() {
+        let capture = if lam_ty.is_arrow() {
             let mut capture_var = self.fresh_var("cap", make_dynamic_object_ty(), None);
             // A non-empty capture is a real allocation, so the capture object is non-null; an empty
             // capture is the null pointer. Recording this lets the capture's release skip the null
@@ -374,7 +374,7 @@ impl<'a> Lowerer<'a> {
         } else {
             assert!(
                 captures.is_empty() && remade.is_empty(),
-                "a funptr function cannot have captures"
+                "a uncurried function cannot have captures"
             );
             None
         };

@@ -238,7 +238,7 @@ fn covered_leaves(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> V
 pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcProgram {
     let owned_leaves = infer_ownership(prog, type_env);
 
-    // The funptr functions that get a borrow version, and the name of that version. Only funptr
+    // The uncurried functions that get a borrow version, and the name of that version. Only uncurried
     // functions are considered: a closure is reached only by an indirect call, which keeps the
     // all-`Own` original, so a borrow clone of it would never be routed to.
     let mut borrow_versions: Map<FuncRef, FuncRef> = Map::default();

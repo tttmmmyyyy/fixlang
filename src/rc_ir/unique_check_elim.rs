@@ -16,7 +16,7 @@
 //! uniqueness it passes.
 //!
 //! The clone keyed on all-`Dynamic` inputs (nothing known) keeps the original function's name; every
-//! other key gets a fresh name. Only funptr functions are specialized — a closure is reached only
+//! other key gets a fresh name. Only uncurried functions are specialized — a closure is reached only
 //! indirectly, so it keeps its single all-`Dynamic` version. Every function keeps its all-`Dynamic`
 //! version, since this pass reads no root set and so takes any function to be callable;
 //! specialization only adds the more specific clones the call sites reach, and
@@ -220,7 +220,7 @@ impl<'a> Specializer<'a> {
     }
 
     /// Route a direct call: retarget the callee to the clone for the argument uniqueness this call
-    /// passes, requesting that clone. Specialization reaches a callee that names a funptr function;
+    /// passes, requesting that clone. Specialization reaches a callee that names a uncurried function;
     /// a callee that is a closure value, and one that names a closure, keep the canonical version.
     fn retarget_call(&mut self, call: &RcVar, callee: &RcVar, inputs: &[Uniqueness]) -> RcVar {
         let Some(cref) = specializable_callee(self.prog, callee, &self.reaches_unique_check) else {

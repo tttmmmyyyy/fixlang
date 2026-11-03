@@ -3,7 +3,7 @@ use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::PatternNode;
 use crate::ast::program::EndNode;
 use crate::ast::type_env::TypeEnv;
-use crate::ast::types::{type_fun, TyCon, TypeNode};
+use crate::ast::types::{type_arrow, TyCon, TypeNode};
 use crate::constants::{CAP_NAME, FORMAT_LINE_LIMIT, HOLE_NAME, STD_NAME};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
@@ -1722,7 +1722,7 @@ pub fn expr_abs_many(mut vars: Vec<Arc<Var>>, mut val: Arc<ExprNode>) -> Arc<Exp
 // Create abstract expression `|{var}| {val}`, and set the inferred type.
 pub fn expr_abs_typed(var: Arc<Var>, var_ty: Arc<TypeNode>, val: Arc<ExprNode>) -> Arc<ExprNode> {
     let expr = expr_abs(vec![var], val.clone(), None);
-    let abs_ty = type_fun(var_ty, val.type_.as_ref().unwrap().clone());
+    let abs_ty = type_arrow(var_ty, val.type_.as_ref().unwrap().clone());
     expr.set_type(abs_ty)
 }
 

@@ -32,7 +32,7 @@ pub fn boxed_leaf_paths(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> Vec<FieldPath
         if ty.is_fully_unboxed(type_env) {
             return;
         }
-        if ty.is_closure() {
+        if ty.is_arrow() {
             path.push(CLOSURE_CAPTURE_IDX as usize);
             out.push(path.clone());
             path.pop();

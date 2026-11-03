@@ -18,7 +18,7 @@ use crate::{
         pattern::{Pattern, PatternNode},
         program::{Program, Symbol},
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
-        types::{type_fun, TyCon, TyConInfo, TypeNode},
+        types::{type_arrow, TyCon, TyConInfo, TypeNode},
     },
     constants::{
         CAP_LIST_PREFIX, CAP_NAME, CLOSURE_CALL_LAM_SUFFIX, CLOSURE_CAP_NAME, CLOSURE_LAM_SUFFIX,
@@ -694,7 +694,7 @@ fn realize_all(
         let expr = match &narrowed {
             Some(narrowed) => {
                 let codom = expr.type_.as_ref().unwrap().get_lambda_dst();
-                expr.set_type(type_fun(narrowed.cap.ty.clone(), codom))
+                expr.set_type(type_arrow(narrowed.cap.ty.clone(), codom))
             }
             None => expr,
         };
@@ -965,7 +965,7 @@ fn specializable_slots_of(
         }
 
         // A specializable argument must have a type of function.
-        if param_tys[param_idx].is_closure()
+        if param_tys[param_idx].is_arrow()
             && reaches_a_direct_call(param_name, &body, specializable_slots, lifted)
         {
             slots.insert(Slot::arg(param_idx));
@@ -977,7 +977,7 @@ fn specializable_slots_of(
     if let Some(cap) = lifted.capture_struct(&sym.name) {
         if let Some((field_names, cap_body)) = capture_list_destructuring(&body, &cap.tycon) {
             for (position, (_, field_ty)) in cap.fields().iter().enumerate() {
-                if field_ty.is_closure()
+                if field_ty.is_arrow()
                     && reaches_a_direct_call(
                         &field_names[position],
                         &cap_body,
@@ -1378,10 +1378,10 @@ impl ClosureSpecializationVisitor {
         let cap_names = lam.lambda_cap_names();
 
         // For each captured name, get the type the field holding it is declared at. A name holding a
-        // bare capture list is captured at the closure type it wraps back into, so that every
+        // bare capture list is captured at the arrow type it wraps back into, so that every
         // capture field is declared at a type narrowing leaves alone — which is what makes wrapping
         // available at a field whose value will not be narrowed. The construction below reads such a
-        // name at the closure type, and the wrapping rule repairs it when the rewritten expression is
+        // name at the arrow type, and the wrapping rule repairs it when the rewritten expression is
         // visited again.
         let cap_names_types = cap_names
             .iter()
@@ -1496,7 +1496,7 @@ fn lifted_lambda_func(cap: &CaptureStruct, lam: &Arc<ExprNode>) -> Arc<ExprNode>
 fn fun_ty(doms: &[Arc<TypeNode>], codom: Arc<TypeNode>) -> Arc<TypeNode> {
     let mut ty = codom;
     for dom in doms.iter().rev() {
-        ty = type_fun(dom.clone(), ty);
+        ty = type_arrow(dom.clone(), ty);
     }
     ty
 }
@@ -1762,7 +1762,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
             return StartVisitResult::VisitChildren;
         }
         // Fix the type of this lambda expression
-        let new_lambda_ty = type_fun(cap_list_ty, lam_ty.get_lambda_dst());
+        let new_lambda_ty = type_arrow(cap_list_ty, lam_ty.get_lambda_dst());
         let expr = expr.set_type(new_lambda_ty);
         return StartVisitResult::ReplaceAndRevisit(expr);
     }
@@ -1780,7 +1780,7 @@ impl ExprVisitor for ClosureSpecializationVisitor {
         if codom_ty.to_string() == body_ty.to_string() {
             return EndVisitResult::unchanged(expr);
         }
-        let new_lambda_ty = type_fun(dom_ty, body_ty.clone());
+        let new_lambda_ty = type_arrow(dom_ty, body_ty.clone());
         let expr = expr.set_type(new_lambda_ty);
         EndVisitResult::changed(expr)
     }
