@@ -546,7 +546,7 @@ fn instantiate(scheme: &Scheme, solver: &mut Solver) -> Vec<SetVar> {
                     lam: *lam,
                     owner: Owner::Instance(args.iter().map(|a| vars[*a as usize]).collect()),
                 },
-                SchemeMember::Dynamic(e) => Member::Dynamic(e.clone()),
+                SchemeMember::Dynamic(reason) => Member::Dynamic(reason.clone()),
             };
             solver.add(vars[class], member);
         }
@@ -646,7 +646,7 @@ fn generalize(
                     owner: Owner::Current,
                     ..
                 } => unreachable!("every lambda of the component has its owner given by now"),
-                Member::Dynamic(e) => SchemeMember::Dynamic(e),
+                Member::Dynamic(reason) => SchemeMember::Dynamic(reason),
             };
             if !scheme_members.contains(&scheme_member) {
                 scheme_members.push(scheme_member);

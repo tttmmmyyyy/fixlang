@@ -123,7 +123,7 @@ fn describe_members(
                 lam,
                 owner: Owner::Current,
             } => format!("{}[current]", lambda_names[lam as usize]),
-            Member::Dynamic(e) => format!("Dynamic ({})", e.to_string()),
+            Member::Dynamic(reason) => format!("Dynamic ({})", reason.to_string()),
         };
         if !texts.contains(&text) {
             texts.push(text);

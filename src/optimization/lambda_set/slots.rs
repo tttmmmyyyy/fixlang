@@ -387,10 +387,10 @@ impl<'e> SlotLayout<'e> {
         &ty.slots[..self.own_slot_count(&tc)]
     }
 
-    /// The field `field` of the struct, the variant `field` of the union, or (with `field` 0) the
-    /// element of the array `ty`, with its slots. `solver` gives the new variables of a place the
-    /// slots of `ty` leave untracked.
-    pub fn field(&self, ty: &AType, field: usize, solver: &mut Solver) -> AType {
+    /// The field `field_idx` of the struct, the variant `field_idx` of the union, or (with
+    /// `field_idx` 0) the element of the array `ty`, with its slots. `solver` gives the new
+    /// variables of a place the slots of `ty` leave untracked.
+    pub fn field(&self, ty: &AType, field_idx: usize, solver: &mut Solver) -> AType {
         let tc = head_tycon(&ty.ty);
         let layout_tc = self.layout_tycon(&tc);
         let group = self.group_of[&layout_tc];
@@ -405,22 +405,22 @@ impl<'e> SlotLayout<'e> {
         let mut source = OwnSource::Declared {
             group,
             own: &ty.slots[..own_count],
-            cursor: group_slots.field_offsets[&layout_tc][field],
+            cursor: group_slots.field_offsets[&layout_tc][field_idx],
         };
         let mut slots = vec![];
         self.walk_declared(
-            &info.fields[field].ty,
+            &info.fields[field_idx].ty,
             &env,
             &mut source,
             solver,
             &mut slots,
         );
-        let field_ty = ty.ty.field_types(self.type_env)[field].clone();
+        let field_ty = ty.ty.field_types(self.type_env)[field_idx].clone();
         assert_eq!(
             slots.len(),
             self.slot_count(&field_ty),
             "the field {} of `{}` is read with a number of slots its type `{}` does not have",
-            field,
+            field_idx,
             ty.ty.to_string(),
             field_ty.to_string()
         );

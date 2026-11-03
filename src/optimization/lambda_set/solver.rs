@@ -190,7 +190,7 @@ impl Solver {
         let root = self.find(v);
         let members = &mut self.members[root.0 as usize];
         let known = members.iter().any(|m| match m {
-            Member::Dynamic(e) => **e == reason,
+            Member::Dynamic(known) => **known == reason,
             _ => false,
         });
         if !known {

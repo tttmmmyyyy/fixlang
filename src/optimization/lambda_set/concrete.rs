@@ -235,9 +235,9 @@ impl SetStore {
         let mut block = vec![0usize; candidates.len()];
         let mut block_count = 1;
         loop {
-            let mut next_block: Map<(usize, Vec<(Option<LamId>, Vec<ChildKey>)>), usize> =
+            let mut block_of_signature: Map<(usize, Vec<(Option<LamId>, Vec<ChildKey>)>), usize> =
                 Map::default();
-            let mut next = vec![0usize; candidates.len()];
+            let mut next_block = vec![0usize; candidates.len()];
             for (c, c_elems) in elems.iter().enumerate() {
                 let mut signature: Vec<(Option<LamId>, Vec<ChildKey>)> = c_elems
                     .iter()
@@ -256,12 +256,12 @@ impl SetStore {
                     .collect();
                 signature.sort();
                 signature.dedup();
-                let count = next_block.len();
-                next[c] = *next_block.entry((block[c], signature)).or_insert(count);
+                let count = block_of_signature.len();
+                next_block[c] = *block_of_signature.entry((block[c], signature)).or_insert(count);
             }
-            let stable = next_block.len() == block_count;
-            block = next;
-            block_count = next_block.len();
+            let stable = block_of_signature.len() == block_count;
+            block = next_block;
+            block_count = block_of_signature.len();
             if stable {
                 break;
             }
