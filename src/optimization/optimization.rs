@@ -97,8 +97,9 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| inline_local::run(prg, config.num_worker_thread),
     );
 
-    // Infer the lambda sets of the program and the copies they ask for, at the place where closure
-    // specialization reads the program, and dump them. The program is left as it is.
+    // Infer the lambda sets of the program and the copies they ask for, ahead of the passes that
+    // specialize closures, and leave the program as it is. With `emit_symbols`, write them to a
+    // dump.
     run_pass(
         prg,
         config,

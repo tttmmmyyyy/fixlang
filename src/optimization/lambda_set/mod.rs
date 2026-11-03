@@ -78,6 +78,7 @@ mod tests {
     }
 
     impl<'p> Inferred<'p> {
+        /// Infers the lambda sets of `prg` and the copies they ask for.
         fn new(prg: &'p Program) -> Self {
             let layout = SlotLayout::new(&prg.type_env);
             let mut analysis = infer(prg, &layout);
@@ -168,17 +169,19 @@ mod tests {
         }
     }
 
+    /// `v` in ascending order, Dynamic (`None`) first.
     fn sorted(mut v: Vec<Option<String>>) -> Vec<Option<String>> {
         v.sort();
         v
     }
 
+    /// What `Inferred::writers` gives a lambda written in `main`.
     fn main_lam() -> Option<String> {
         Some("main".to_string())
     }
 
-    // A function given a different lambda at each of two calls gets a copy for each, and in each
-    // the function parameter's set holds the one lambda that call passes.
+    /// A function given a different lambda at each of two calls gets a copy for each, and in each
+    /// the function parameter's set holds the one lambda that call passes.
     #[test]
     fn test_a_function_given_two_lambdas_is_copied_once_for_each() {
         let prg = program_of(
@@ -206,9 +209,9 @@ main = (
         }
     }
 
-    // A recursion that passes itself a lambda wrapping the function it was given puts that lambda
-    // in the same set as the one from outside: the program asks for one copy, and the set of that
-    // copy holds the wrapping lambda, which captures a function of the set itself.
+    /// A recursion that passes itself a lambda wrapping the function it was given puts that lambda
+    /// in the same set as the one from outside: the program asks for one copy, and the set of that
+    /// copy holds the wrapping lambda, which captures a function of the set itself.
     #[test]
     fn test_a_recursion_wrapping_its_function_asks_for_one_copy_of_a_set_holding_itself() {
         let prg = program_of(
@@ -246,10 +249,10 @@ main = (
         assert!(holds_itself);
     }
 
-    // Folding an array of functions into their composition puts in the state a lambda capturing
-    // the state itself, so the set of the result holds a lambda that captures a function of the
-    // set: however long the chain grows at run time, the set has the two lambdas, and the program
-    // asks for one copy.
+    /// Folding an array of functions into their composition puts in the state a lambda capturing
+    /// the state itself, so the set of the result holds a lambda that captures a function of the
+    /// set: however long the chain grows at run time, the set has the two lambdas, and the program
+    /// asks for one copy.
     #[test]
     fn test_a_fold_composing_functions_asks_for_one_copy_of_a_set_holding_itself() {
         let prg = program_of(
@@ -285,9 +288,9 @@ main = (
         assert!(holds_itself);
     }
 
-    // A `Std::fix` that `defunctionalize_fix` leaves applies the function it is given to a closure
-    // the combinator builds at run time, so the set of that function holds Dynamic beside the
-    // lambda passed.
+    /// A `Std::fix` that `defunctionalize_fix` leaves applies the function it is given to a closure
+    /// the combinator builds at run time, so the set of that function holds Dynamic beside the
+    /// lambda passed.
     #[test]
     fn test_a_function_given_to_fix_is_dynamic() {
         let prg = program_of(
@@ -310,9 +313,9 @@ main = (
         assert_eq!(sorted(inf.writers(sets[0])), vec![None, main_lam()]);
     }
 
-    // The runtime runs the entry `IO` value, and C code calls an exported function through each
-    // arrow its type has, so those sets hold Dynamic. `main` leaves `twice` alone, so that the
-    // export is what asks for every copy of it.
+    /// The runtime runs the entry `IO` value, and C code calls an exported function through each
+    /// arrow its type has, so those sets hold Dynamic. `main` leaves `twice` alone, so that the
+    /// export is what asks for every copy of it.
     #[test]
     fn test_the_entry_and_an_exported_value_are_dynamic() {
         let prg = program_of(
@@ -338,9 +341,9 @@ main = println("exported");
         }
     }
 
-    // A lambda in a field of a struct keeps its set through the getter, the setter of another
-    // field and an `if` choosing between two versions of the struct: the function taking the
-    // struct gets the one lambda put in the field.
+    /// A lambda in a field of a struct keeps its set through the getter, the setter of another
+    /// field and an `if` choosing between two versions of the struct: the function taking the
+    /// struct gets the one lambda put in the field.
     #[test]
     fn test_a_lambda_in_a_struct_field_keeps_its_set() {
         let prg = program_of(

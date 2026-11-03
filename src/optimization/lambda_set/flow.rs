@@ -10,8 +10,8 @@ use super::{
 ///
 /// A rule declares a flow by making two places the same (`same`), and declares a place whose
 /// values are closures the operation builds or calls at run time by making it Dynamic
-/// (`make_own_dynamic`, `make_all_dynamic`). A place the rule says nothing about holds nothing the operation put there, which
-/// is right for an operation that moves no function into it.
+/// (`make_own_dynamic`, `make_all_dynamic`). A place the rule says nothing about holds nothing the
+/// operation put there, which is right for an operation that moves no function into it.
 pub struct BuiltinFlow<'a, 'e> {
     layout: &'a SlotLayout<'e>,
     solver: &'a mut Solver,
@@ -40,7 +40,7 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
         }
     }
 
-    /// The `i`-th operand.
+    /// The `i`-th operand, in the order `BuiltinOp::free_vars` lists them.
     pub fn operand(&self, i: usize) -> AType {
         self.operands[i].clone()
     }

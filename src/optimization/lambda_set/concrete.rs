@@ -27,7 +27,9 @@ pub enum Ref {
 
 /// An element of a set a system handed to `SetStore::intern` defines.
 pub enum PendingElem {
+    /// `Elem::Dynamic`.
     Dynamic,
+    /// `Elem::Lam`, with each set given as a `Ref`.
     Lam(LamId, Vec<Ref>),
 }
 
@@ -53,7 +55,9 @@ pub struct SetStore {
 /// A set compared while a cyclic system is interned: a set of the system or one the store holds.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum Candidate {
+    /// The set of an equation of the system, by its position.
     Local(usize),
+    /// A set the store holds that lies on a cycle.
     Known(SetId),
 }
 
@@ -69,11 +73,14 @@ enum Child {
 /// A child as the partition refinement compares it.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum ChildKey {
+    /// A candidate, by the class of the partition it is in.
     Block(usize),
+    /// A set the store holds that lies on no cycle.
     Fixed(SetId),
 }
 
 impl SetStore {
+    /// A store holding no set.
     pub fn new() -> Self {
         SetStore {
             sets: vec![],
@@ -257,7 +264,9 @@ impl SetStore {
                 signature.sort();
                 signature.dedup();
                 let count = block_of_signature.len();
-                next_block[c] = *block_of_signature.entry((block[c], signature)).or_insert(count);
+                next_block[c] = *block_of_signature
+                    .entry((block[c], signature))
+                    .or_insert(count);
             }
             let stable = block_of_signature.len() == block_count;
             block = next_block;
@@ -326,10 +335,10 @@ impl SetStore {
 mod tests {
     use super::{PendingElem, Ref, SetStore};
 
-    // A set containing itself, `s = {lam0, lam1[s]}`, is the same set however far it is unfolded:
-    // within one system, two equations unfolding to the same tree get one set, and a later system
-    // writing it unfolded once gets the set the store holds. A set whose tree differs, `{lam1[t]}`
-    // with `t` itself, is another set.
+    /// A set containing itself, `s = {lam0, lam1[s]}`, is the same set however far it is unfolded:
+    /// within one system, two equations unfolding to the same tree get one set, and a later system
+    /// writing it unfolded once gets the set the store holds. A set whose tree differs, `{lam1[t]}`
+    /// with `t` itself, is another set.
     #[test]
     fn test_a_set_containing_itself_is_held_once_however_far_it_is_unfolded() {
         let mut store = SetStore::new();

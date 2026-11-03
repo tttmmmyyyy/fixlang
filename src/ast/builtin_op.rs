@@ -112,14 +112,13 @@ pub trait BuiltinOp: DynClone + Send + Sync {
     }
 
     /// How the functions this op's operands hold flow into its result, for lambda set inference.
-    /// Default: every place of a function in the operands and the result is a closure built at run
-    /// time.
+    /// Default: every function the operands and the result hold is a closure built at run time.
     ///
     /// The default is always sound: a value at a Dynamic place stays a closure, and a closure works
-    /// wherever a function does. An op that moves values without calling them or putting them out
-    /// of the program's sight declares the flow instead, so that what passes through it keeps the
-    /// lambda set it had. An op calling a function operand makes that operand's own slot Dynamic, since
-    /// the code it generates calls a closure.
+    /// wherever a function does. An op that moves values without calling them or handing them to
+    /// code outside the program declares the flow instead, so that what passes through it keeps
+    /// the lambda set it had. An op that calls a function operand makes that operand's own slot
+    /// Dynamic, since the code it generates calls a closure.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
         flow.make_all_dynamic();
     }

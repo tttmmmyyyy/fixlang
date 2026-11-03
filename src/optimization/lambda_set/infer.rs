@@ -70,6 +70,7 @@ pub struct Site {
 /// the members recorded for them. The first classes are the parameters of the component, in order,
 /// and the others are the variables their members name.
 pub struct Scheme {
+    /// The members of each class.
     pub classes: Vec<Vec<SchemeMember>>,
     /// For each symbol of the component, the class of each slot of its type.
     pub symbol_slots: Vec<Vec<u32>>,
@@ -93,6 +94,7 @@ pub struct Analysis {
     pub component_of: Map<FullName, usize>,
     /// The lambdas of the program.
     pub lambdas: Vec<Lambda>,
+    /// The lambda set variables of every component, and what each holds.
     pub solver: Solver,
 }
 
@@ -217,6 +219,7 @@ fn infer_component(
 
 /// What a lambda under inference records about its term, which decides the parameters it depends on.
 struct LamTerm {
+    /// The lambda, as its index into `Analysis::lambdas`.
     lam: LamId,
     /// The annotated type of the lambda expression.
     ty: AType,
@@ -229,11 +232,18 @@ struct LamTerm {
 
 /// The walk inferring the bodies of one component.
 struct Inferencer<'a, 'p, 'e> {
+    /// The program the bodies are read from.
     prg: &'p Program,
+    /// The slots of the program's types.
     layout: &'a SlotLayout<'e>,
+    /// The components inferred so far, and the variables and lambdas this component adds to them.
     analysis: &'a mut Analysis,
+    /// The index the component takes in `Analysis::components`.
     component: usize,
+    /// The symbols of the component.
     symbols: &'a [FullName],
+    /// The annotated type of each symbol, in the order of `symbols`. A reference from inside the
+    /// component gets this type itself.
     types: &'a [AType],
     /// The annotated types of the local names in scope, the innermost binding of a name last.
     env: Map<FullName, Vec<AType>>,
@@ -244,6 +254,7 @@ struct Inferencer<'a, 'p, 'e> {
     lambdas: Vec<LamTerm>,
     /// The variables a `Member::Lam` with `Owner::Current` was added to.
     current_members: Vec<SetVar>,
+    /// The references made in the bodies to symbols of other components.
     sites: Vec<Site>,
     /// How many lambdas of the current symbol's body have been met.
     lam_counter: u32,

@@ -23,7 +23,9 @@ use std::{cell::RefCell, sync::Arc};
 /// arguments it is applied to.
 #[derive(Clone)]
 pub struct AType {
+    /// The Fix type.
     pub ty: Arc<TypeNode>,
+    /// The variable at each slot of `ty`, in the order the slots are read off it.
     pub slots: Vec<SetVar>,
 }
 
@@ -68,7 +70,8 @@ enum OwnSource<'a> {
         cursor: usize,
     },
     /// The declaration is that of a newtype expanded at an argument a type constructor was given
-    /// without its arguments. Its own slots are new variables, made Dynamic for `reason`.
+    /// without its arguments. Its own slots are new variables, made Dynamic as places inside a
+    /// type argument of the newtype.
     Untracked(TyCon),
 }
 

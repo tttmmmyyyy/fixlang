@@ -5,8 +5,8 @@ use crate::{configuration::Configuration, tests::test_util::test_source};
 // and through the fields and the state of a loop. Each runs under the development configuration,
 // so the inference runs on it and the result is checked under valgrind.
 
-// A recursion that passes itself a lambda wrapping the function it was given: the lambda at depth
-// `n` captures the one at depth `n - 1`.
+/// A recursion that passes itself a lambda wrapping the function it was given: the lambda at depth
+/// `n` captures the one at depth `n - 1`.
 #[test]
 fn test_a_recursion_wrapping_its_function_computes_the_wrapped_chain() {
     let source = r#"
@@ -25,8 +25,8 @@ fn test_a_recursion_wrapping_its_function_computes_the_wrapped_chain() {
     test_source(source, Configuration::develop_mode());
 }
 
-// Folding an array of functions into their composition: the state captures the state of the step
-// before, as long a chain as the array.
+/// Folding an array of functions into their composition: the state captures the state of the step
+/// before, as long a chain as the array.
 #[test]
 fn test_a_fold_composing_functions_applies_them_in_order() {
     let source = r#"
@@ -48,8 +48,8 @@ fn test_a_fold_composing_functions_applies_them_in_order() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A `fix` whose argument reaches it through a parameter, so that `defunctionalize_fix` leaves the
-// combinator in place.
+/// A `fix` whose argument reaches it through a parameter, so that `defunctionalize_fix` leaves the
+/// combinator in place.
 #[test]
 fn test_a_fix_given_its_function_through_a_parameter_recurses() {
     let source = r#"
@@ -69,7 +69,7 @@ fn test_a_fix_given_its_function_through_a_parameter_recurses() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A lambda the callee chooses in place of the one it was given, joining it at an `if`.
+/// A lambda the callee chooses in place of the one it was given, joining it at an `if`.
 #[test]
 fn test_a_lambda_the_callee_chooses_over_the_given_one_runs() {
     let source = r#"
@@ -92,8 +92,8 @@ fn test_a_lambda_the_callee_chooses_over_the_given_one_runs() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A struct carrying its operation in a field, rebuilt by a setter, chosen at an `if` and carried as
-// the state of a loop, as a segment tree carries its monoid.
+/// A struct carrying its operation in a field, rebuilt by a setter, chosen at an `if` and carried
+/// as the state of a loop, as a segment tree carries its monoid.
 #[test]
 fn test_a_function_in_a_struct_field_survives_the_state_of_a_loop() {
     let source = r#"

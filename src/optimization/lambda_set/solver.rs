@@ -29,13 +29,14 @@ pub enum Owner {
     /// body depends on.
     Current,
     /// The copy given by these variables, one per parameter of the lambda the member names, in the
-    /// order `Analysis::lambda_params` lists them.
+    /// order `Lambda::params` lists them.
     Instance(Vec<SetVar>),
 }
 
 /// Why a lambda set holds `Member::Dynamic`.
 #[derive(Clone, PartialEq, Eq)]
 pub struct DynamicReason {
+    /// The kind of place whose values have to be closures.
     pub kind: DynamicKind,
     /// The symbol whose body the reason was found in. `None` for the program's entry and the
     /// values it exports.

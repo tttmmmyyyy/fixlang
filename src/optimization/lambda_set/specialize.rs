@@ -11,13 +11,17 @@ use std::collections::VecDeque;
 
 /// A copy of a component: the concrete lambda set given to each of its parameters.
 pub struct Instance {
+    /// The component, as its index into `Analysis::components`.
     pub component: usize,
+    /// The set given to each parameter, in the order of `Component::params`.
     pub args: Vec<SetId>,
 }
 
 /// The copies a program needs, found from its entry and the values it exports.
 pub struct Specialization {
+    /// The concrete sets the copies name.
     pub store: SetStore,
+    /// The copies, in the order they were first asked for: the copy of the root first.
     pub instances: Vec<Instance>,
 }
 
@@ -77,6 +81,7 @@ pub fn specialize(analysis: &mut Analysis) -> Specialization {
 
 /// The copies found so far, and those of them whose references are still to be followed.
 struct Copies {
+    /// The copies, in the order they were first asked for.
     instances: Vec<Instance>,
     /// The index into `instances` of each copy, by its component and the sets of its parameters.
     instance_of: Map<(usize, Vec<SetId>), usize>,
@@ -103,6 +108,7 @@ impl Copies {
 
 /// The equations of the sets of the variables of one copy of a component.
 struct Solve<'a> {
+    /// The variables of the program, read for the members of each one the copy refers to.
     solver: &'a mut Solver,
     /// The position of each parameter of the component.
     param_index: &'a Map<SetVar, usize>,
