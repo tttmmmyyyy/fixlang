@@ -1,8 +1,12 @@
-use crate::misc::Map;
-use crate::{elaboration::read_file, error::Errors, misc::to_absolute_path, parse::parser::Rule};
+use crate::{
+    elaboration::read_file,
+    error::Errors,
+    misc::{to_absolute_path, Map},
+    parse::parser::Rule,
+};
 use colored::{Color, Colorize};
 use pest::iterators::Pair;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -58,7 +62,7 @@ impl<'de> Deserialize<'de> for SourceFile {
     /// Inside `SourceFile::sharing`, the `SourceFile` of a path is the one shared by every
     /// deserialized span of that path, so its content is read once however many spans point into
     /// it.
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let SerializedSourceFile { file_path, origin } =
             SerializedSourceFile::deserialize(deserializer)?;
         let fresh = |file_path: PathBuf| SourceFile {

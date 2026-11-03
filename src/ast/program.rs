@@ -59,6 +59,7 @@ use std::fs::File;
 use std::io::Write;
 use std::mem::{replace, take};
 use std::path::{Path, PathBuf};
+use std::slice;
 use std::sync::Arc;
 use std::vec;
 
@@ -2214,7 +2215,7 @@ impl Program {
         let mut facts_by_value = vec![];
         for (name, gv) in &self.global_values {
             let mut facts = vec![];
-            for loc in self.body_locations(std::slice::from_ref(name), |_| true) {
+            for loc in self.body_locations(slice::from_ref(name), |_| true) {
                 match self.typed_modules.stored_warning_facts(&loc) {
                     Some(stored) => facts.extend(stored.iter().cloned()),
                     None => facts.append(&mut warning_facts(&self.body_at(&loc).0.expr)),

@@ -76,6 +76,7 @@ mod integration_tests {
     use std::fs;
     use std::path::Path;
     use std::process::Command;
+    use std::time::SystemTime;
     use tempfile::TempDir;
 
     /// The version hash of a cache entry comes from the sources of the module the value's name
@@ -393,7 +394,7 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
     }
 
     /// The files of the type-check cache under `dir`, by name, with when each was last written.
-    fn cache_files(dir: &Path) -> Vec<(String, std::time::SystemTime)> {
+    fn cache_files(dir: &Path) -> Vec<(String, SystemTime)> {
         let mut files: Vec<_> = fs::read_dir(dir.join(TYPED_MODULES_PATH))
             .expect("Failed to read the type-check cache directory")
             .map(|entry| {
@@ -499,7 +500,7 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         build(dir, "main.fix", &[]);
         assert_eq!(run_out(dir), small);
         let std_files =
-            |files: &[(String, std::time::SystemTime)]| -> Vec<(String, std::time::SystemTime)> {
+            |files: &[(String, SystemTime)]| -> Vec<(String, SystemTime)> {
                 files
                     .iter()
                     .filter(|(name, _)| name.starts_with("Std_"))
