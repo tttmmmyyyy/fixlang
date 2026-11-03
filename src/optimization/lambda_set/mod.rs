@@ -19,17 +19,18 @@ mod solver;
 mod specialize;
 
 pub use flow::BuiltinFlow;
-
 use crate::{ast::program::Program, constants::DOT_FIXLANG};
+use infer::infer;
 use slots::SlotLayout;
+use specialize::specialize;
 use std::{fs::File, io::Write, path::PathBuf};
 
 /// Infers the lambda sets of `prg` and the copies they ask for, leaving the program as it is. With
 /// `dump_step`, writes them to a file under `.fixlang` named after it.
 pub fn run(prg: &Program, dump_step: Option<String>) {
     let layout = SlotLayout::new(&prg.type_env);
-    let mut analysis = infer::infer(prg, &layout);
-    let spec = specialize::specialize(&mut analysis);
+    let mut analysis = infer(prg, &layout);
+    let spec = specialize(&mut analysis);
     if let Some(step) = dump_step {
         let text = dump::render(&mut analysis, &spec, &layout);
         let path = PathBuf::from(format!("{}/{}.lambda_sets.txt", DOT_FIXLANG, step));
@@ -42,9 +43,9 @@ pub fn run(prg: &Program, dump_step: Option<String>) {
 mod tests {
     use super::{
         concrete::{Elem, SetId},
-        infer::{self, Analysis},
+        infer::{infer, Analysis},
         slots::{AType, SlotLayout},
-        specialize::{self, Specialization},
+        specialize::{specialize, Specialization},
     };
     use crate::{
         ast::program::Program,
@@ -79,8 +80,8 @@ mod tests {
     impl<'p> Inferred<'p> {
         fn new(prg: &'p Program) -> Self {
             let layout = SlotLayout::new(&prg.type_env);
-            let mut analysis = infer::infer(prg, &layout);
-            let spec = specialize::specialize(&mut analysis);
+            let mut analysis = infer(prg, &layout);
+            let spec = specialize(&mut analysis);
             Inferred {
                 prg,
                 layout,

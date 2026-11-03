@@ -16,7 +16,7 @@ use crate::{
     graph::Graph,
     misc::{Map, Set},
 };
-use std::{collections::VecDeque, rc::Rc, sync::Arc};
+use std::{collections::VecDeque, mem, rc::Rc, sync::Arc};
 
 /// A lambda of the program: an `Expr::Lam` in the body of a symbol.
 pub struct Lambda {
@@ -589,7 +589,7 @@ fn generalize(
         analysis.lambdas[term.lam as usize].params = depends_on;
     }
     for v in current_members {
-        let members = std::mem::take(solver.members_mut(v));
+        let members = mem::take(solver.members_mut(v));
         let members = members
             .into_iter()
             .map(|m| match m {

@@ -2,7 +2,7 @@
 
 use super::slots::AType;
 use crate::ast::{name::FullName, types::TyCon};
-use std::rc::Rc;
+use std::{mem, rc::Rc};
 
 /// A lambda set variable: the set of lambdas a value of function type can be at one place of the
 /// program. Two places whose values flow into each other share one variable.
@@ -155,7 +155,7 @@ impl Solver {
         };
         self.parent[drop.0 as usize] = keep.0;
         self.size[keep.0 as usize] += self.size[drop.0 as usize];
-        let moved = std::mem::take(&mut self.members[drop.0 as usize]);
+        let moved = mem::take(&mut self.members[drop.0 as usize]);
         self.members[keep.0 as usize].extend(moved);
     }
 
