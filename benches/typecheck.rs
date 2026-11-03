@@ -1,8 +1,9 @@
 // Criterion-based benchmarks for the Fix typechecker.
 //
 // Three scenarios, each measuring full parse + elaboration + typecheck
-// of a Fix program with a *cold* TypeCheckCache (a fresh in-memory
-// cache per iteration, so every global value is a cache miss):
+// of a Fix program with a *cold* type-check cache (each iteration builds
+// in a fresh working directory, whose `.fixlang` holds no cache, so every
+// global value is checked):
 //
 // - std_only      : minimal Main.fix on top of `std.fix` (~baseline)
 // - small_project : Main.fix with ~30 user globals
@@ -17,14 +18,43 @@
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use fixlang::configuration::{Configuration, OutputFileType, SubCommand};
 use fixlang::elaboration::elaborate_via_config;
-use fixlang::elaboration::typecheckcache::MemoryCache;
 use fixlang::misc::save_temporary_source;
-use std::sync::Arc;
+use std::env;
+use std::path::Path;
+use tempfile::TempDir;
 
-/// Build a release-mode `Configuration` whose single user source file
-/// is `source` saved to a temp path, with a fresh in-memory typecheck
-/// cache and the output stopping after typecheck.
-fn build_config(source: &str, name_hint: &str) -> Configuration {
+/// An iteration of a benchmark: the working directory it builds in, which lives as long as the
+/// iteration, and the configuration of the build.
+struct Iteration {
+    dir: TempDir,
+    config: Configuration,
+}
+
+impl Iteration {
+    /// Elaborates the program of the configuration in the iteration's directory, and makes the
+    /// directory the benchmark started in the working directory again, where Criterion writes its
+    /// reports. Answers with the iteration's directory, so that Criterion removes it outside the
+    /// measurement.
+    fn elaborate(self, started_in: &Path) -> TempDir {
+        let _ = elaborate_via_config(&self.config);
+        if let Err(e) = env::set_current_dir(started_in) {
+            panic!("set_current_dir failed after an iteration: {}", e);
+        }
+        self.dir
+    }
+}
+
+/// Make a fresh temporary directory the working directory, and build there a release-mode
+/// `Configuration` whose single user source file is `source`, with the output stopping after
+/// typecheck.
+fn build_config(source: &str, name_hint: &str) -> Iteration {
+    let dir = match TempDir::new() {
+        Ok(d) => d,
+        Err(e) => panic!("TempDir::new failed in bench setup: {}", e),
+    };
+    if let Err(e) = env::set_current_dir(dir.path()) {
+        panic!("set_current_dir failed in bench setup: {}", e);
+    }
     let saved = match save_temporary_source(source, name_hint) {
         Ok(s) => s,
         Err(e) => panic!("save_temporary_source failed in bench setup: {}", e),
@@ -34,9 +64,8 @@ fn build_config(source: &str, name_hint: &str) -> Configuration {
         Err(e) => panic!("Configuration::release_mode failed: {}", e),
     };
     config.output_file_type = OutputFileType::DynamicLibrary;
-    config.type_check_cache = Arc::new(MemoryCache::new());
     config.add_user_source_file(saved.file_path);
-    config
+    Iteration { dir, config }
 }
 
 /// Generate a Fix source with `n` chained globals, a handful of trait
@@ -101,14 +130,13 @@ fn synthetic_source(n: usize) -> String {
 /// no user globals, measuring fixed typecheck overhead.
 fn bench_std_only(c: &mut Criterion) {
     let source = "module Main;\nmain : IO ();\nmain = pure();\n";
+    let started_in = env::current_dir().expect("the working directory cannot be read");
     let mut group = c.benchmark_group("typecheck");
     group.sample_size(20);
     group.bench_function("std_only", |b| {
         b.iter_with_setup(
             || build_config(source, "bench_std_only"),
-            |cfg| {
-                let _ = elaborate_via_config(&cfg);
-            },
+            |iteration| iteration.elaborate(&started_in),
         );
     });
     group.finish();
@@ -118,15 +146,14 @@ fn bench_std_only(c: &mut Criterion) {
 /// globals, throughput reported per global.
 fn bench_small_project(c: &mut Criterion) {
     let source = synthetic_source(30);
+    let started_in = env::current_dir().expect("the working directory cannot be read");
     let mut group = c.benchmark_group("typecheck");
     group.sample_size(20);
     group.throughput(Throughput::Elements(30));
     group.bench_function("small_project_30gv", |b| {
         b.iter_with_setup(
             || build_config(&source, "bench_small_project"),
-            |cfg| {
-                let _ = elaborate_via_config(&cfg);
-            },
+            |iteration| iteration.elaborate(&started_in),
         );
     });
     group.finish();
@@ -136,15 +163,14 @@ fn bench_small_project(c: &mut Criterion) {
 /// globals, throughput reported per global.
 fn bench_medium_project(c: &mut Criterion) {
     let source = synthetic_source(300);
+    let started_in = env::current_dir().expect("the working directory cannot be read");
     let mut group = c.benchmark_group("typecheck");
     group.sample_size(10);
     group.throughput(Throughput::Elements(300));
     group.bench_function("medium_project_300gv", |b| {
         b.iter_with_setup(
             || build_config(&source, "bench_medium_project"),
-            |cfg| {
-                let _ = elaborate_via_config(&cfg);
-            },
+            |iteration| iteration.elaborate(&started_in),
         );
     });
     group.finish();
