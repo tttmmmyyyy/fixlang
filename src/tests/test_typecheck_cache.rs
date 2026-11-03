@@ -602,4 +602,111 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
             );
         }
     }
+
+    /// The cache records the concrete type each opaque type of a body stands for. A build that
+    /// reads such a body from the cache gets the types from the record, and builds the program the
+    /// first build did.
+    #[test]
+    fn a_build_reading_a_body_with_an_opaque_type_from_the_cache_builds_the_program() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("main.fix"),
+            r#"module Main;
+
+evens : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+evens = |n| Iterator::range(0, n).filter(|i| i % 2 == 0);
+
+main : IO ();
+main = println $ evens(10).fold(0, |i, s| s + i).to_string;
+"#,
+        )
+        .expect("Failed to write main.fix");
+
+        build(dir, "main.fix", &[]);
+        assert_eq!(run_out(dir), "20");
+        let after_first = cache_files(dir);
+
+        build(dir, "main.fix", &[]);
+        assert_eq!(
+            cache_files(dir),
+            after_first,
+            "the second build checked a body again instead of reading it from the cache"
+        );
+        assert_eq!(run_out(dir), "20");
+    }
+
+    /// The warning on a struct pattern that leaves out fields without `_` is derived from what the
+    /// cache records of the body, so a build reading the body from the cache reports it as the
+    /// build that checked the body did.
+    #[test]
+    fn a_warm_cache_keeps_the_missing_pattern_field_warning() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("main.fix"),
+            r#"module Main;
+
+type S = struct { x : I64, y : I64 };
+
+main : IO ();
+main = (
+    let S { x } = S { x : 1, y : 2 };
+    println(x.to_string)
+);
+"#,
+        )
+        .expect("Failed to write main.fix");
+
+        for build_name in ["the build checking the body", "the build reading the cache"] {
+            let stderr = build(dir, "main.fix", &[]);
+            assert!(
+                stderr.contains("This pattern leaves out the"),
+                "{} reported no missing field.\nstderr: {}",
+                build_name,
+                stderr
+            );
+        }
+    }
+
+    /// A build writing the file of one module removes the files of that module's other hashes, and
+    /// keeps the files of every other module, whatever their names begin with.
+    #[test]
+    fn a_build_after_an_edit_keeps_the_files_of_the_other_modules() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("sub.fix"),
+            "module Main.Sub;\n\nvalue : I64;\nvalue = 1;\n",
+        )
+        .expect("Failed to write sub.fix");
+        let write_main = |answer: &str| {
+            fs::write(
+                dir.join("main.fix"),
+                format!(
+                    "module Main;\nimport Main.Sub;\n\nmain : IO ();\nmain = println $ (Main.Sub::value + {}).to_string;\n",
+                    answer
+                ),
+            )
+            .expect("Failed to write main.fix");
+        };
+        let both_files = ["--file", "sub.fix"];
+
+        // The second build finds every body in the cache, so the cache then holds the bodies of
+        // both modules, and the build after the edit writes the file of `Main` alone.
+        write_main("1");
+        build(dir, "main.fix", &both_files);
+        build(dir, "main.fix", &both_files);
+        write_main("2");
+        build(dir, "main.fix", &both_files);
+        assert_eq!(run_out(dir), "3");
+        let after_edit = cache_files(dir);
+
+        build(dir, "main.fix", &both_files);
+        assert_eq!(
+            cache_files(dir),
+            after_edit,
+            "the build after the edit removed a file of another module"
+        );
+    }
 }
