@@ -18,8 +18,8 @@ mod slots;
 mod solver;
 mod specialize;
 
-pub use flow::BuiltinFlow;
 use crate::{ast::program::Program, constants::DOT_FIXLANG};
+pub use flow::BuiltinFlow;
 use infer::infer;
 use slots::SlotLayout;
 use specialize::specialize;
@@ -244,6 +244,70 @@ main = (
             Elem::Dynamic => false,
         });
         assert!(holds_itself);
+    }
+
+    // Folding an array of functions into their composition puts in the state a lambda capturing
+    // the state itself, so the set of the result holds a lambda that captures a function of the
+    // set: however long the chain grows at run time, the set has the two lambdas, and the program
+    // asks for one copy.
+    #[test]
+    fn test_a_fold_composing_functions_asks_for_one_copy_of_a_set_holding_itself() {
+        let prg = program_of(
+            r#"
+module Main;
+
+compose_all : Array (I64 -> I64) -> I64 -> I64;
+compose_all = |fs| fs.to_iter.fold(|x| x, |f, acc| |x| f(acc(x)));
+
+main : IO ();
+main = (
+    let k = *get_args.map(|args| args.@size);
+    let fs = [|x| x + k, |x| x * 2];
+    println(compose_all(fs)(3).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("compose_all", &[1]);
+        assert_eq!(sets.len(), 1);
+        let s = sets[0];
+        assert_eq!(
+            inf.writers(s),
+            vec![
+                Some("compose_all".to_string()),
+                Some("compose_all".to_string())
+            ]
+        );
+        let holds_itself = inf.spec.store.elems(s).iter().any(|e| match e {
+            Elem::Lam(_, args) => args.contains(&s),
+            Elem::Dynamic => false,
+        });
+        assert!(holds_itself);
+    }
+
+    // A `Std::fix` that `defunctionalize_fix` leaves applies the function it is given to a closure
+    // the combinator builds at run time, so the set of that function holds Dynamic beside the
+    // lambda passed.
+    #[test]
+    fn test_a_function_given_to_fix_is_dynamic() {
+        let prg = program_of(
+            r#"
+module Main;
+
+run_fixed : ((I64 -> I64) -> I64 -> I64) -> I64 -> I64;
+run_fixed = |step, n| fix(step)(n);
+
+main : IO ();
+main = (
+    let k = 3;
+    println(run_fixed(|loop, i| if i == 0 { 0 } else { k * i + loop(i - 1) }, 10).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("run_fixed", &[0]);
+        assert_eq!(sets.len(), 1);
+        assert_eq!(sorted(inf.writers(sets[0])), vec![None, main_lam()]);
     }
 
     // The runtime runs the entry `IO` value, and C code calls an exported function through each
