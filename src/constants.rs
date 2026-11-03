@@ -153,6 +153,8 @@ pub const SPLIT_ARG_SUFFIX: &str = "#split_arg";
 /// The suffix, followed by a counter, of the global function the argument of an application of
 /// `Std::fix` is lifted to.
 pub const FIX_DEFUNCT_SUFFIX: &str = "#fix_defunct";
+/// The suffix, followed by the number of arguments it takes, of an uncurried function of a global.
+pub const UNCURRIED_FUNC_SUFFIX: &str = "#func";
 /// The prefix of the type constructor naming a capture struct that `defunctionalize_fix` builds. The
 /// struct carries the values that the argument of an application of `Std::fix` captures to the
 /// global function that argument is lifted to.

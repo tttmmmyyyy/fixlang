@@ -11,7 +11,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::constants::{CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX};
+    use crate::constants::{CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX, UNCURRIED_FUNC_SUFFIX};
     use crate::misc::{Map, Set};
     use crate::tests::test_util::{fix_command_at_opt_level, read_rc_ir_dump, setup_case_projects};
     use std::path::{Path, PathBuf};
@@ -108,7 +108,7 @@ mod integration_tests {
     /// The segment `uncurry` appends to the name of a function it gives a uncurried function,
     /// which is what a call in the RC IR names. A capture list is named after the lambda that
     /// receives it and carries no such segment, so this is what tells a call from a type.
-    const FUNC_SEGMENT: &str = "#func";
+    const FUNC_SEGMENT: &str = UNCURRIED_FUNC_SUFFIX;
 
     /// What `inlined_body` prints: the first element of the array at or above 5 sits at index 3.
     const INLINED_BODY_OUTPUT: &str = "3";
