@@ -78,6 +78,16 @@ mod tests {
         prg
     }
 
+    /// `source` in the form the pass reads in the compiler: `program_of` after `inline` and
+    /// `inline_local`, which leave a getter's body, a builtin reading the struct by name, in its
+    /// caller.
+    fn program_after_inlining(source: &str) -> Program {
+        let mut prg = program_of(source);
+        crate::optimization::inline::run(&mut prg, false, 0);
+        crate::optimization::inline_local::run(&mut prg, 0);
+        prg
+    }
+
     /// The lambda sets of a program and the copies they ask for.
     struct Inferred<'p> {
         prg: &'p Program,
@@ -377,5 +387,254 @@ main = (
         let sets = inf.sets_at("use_seg", &[0]);
         assert_eq!(sets.len(), 1);
         assert_eq!(inf.writers(sets[0]), vec![main_lam()]);
+    }
+
+    /// A type taking a type constructor without its arguments, given `Array`, tracks the function a
+    /// field of each node holds through the array of children the constructor makes: the function
+    /// walking the tree gets the two lambdas the program puts in the nodes.
+    #[test]
+    fn test_a_function_in_a_tree_built_over_a_type_constructor_argument_keeps_its_set() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+type [f : * -> *] Rose f = box struct { kids : f (Rose f), op : I64 -> I64 };
+
+call_rose : Rose Array -> I64 -> I64;
+call_rose = |r, x| r.@kids.to_iter.fold((r.@op)(x), |k, acc| acc + call_rose(k, x));
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let leaf = Rose { kids : [], op : |x| x - n };
+    let r = Rose { kids : [leaf], op : |x| x + 100 };
+    println(call_rose(r, 5).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("call_rose", &[0]);
+        assert_eq!(sets.len(), 1);
+        assert_eq!(inf.writers(sets[0]), vec![main_lam(), main_lam()]);
+    }
+
+    /// A global array of functions that one caller extends with a lambda of its own and another
+    /// passes as it is: the function taking the array is copied for each, and the set of the
+    /// elements holds the global's lambda in both, beside the caller's in the first.
+    #[test]
+    fn test_a_global_array_of_functions_extended_by_a_caller_keeps_its_own_lambda() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+table : Array (I64 -> I64);
+table = [|x| x + 1000];
+
+run_all : I64 -> Array (I64 -> I64) -> I64 -> I64;
+run_all = |d, fs, x| if d > 0 { run_all(d - 1, fs, x) } else { fs.to_iter.fold(0, |f, acc| acc + f(x)) };
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let a = run_all(n, table.push_back(|x| x * n), 3);
+    let b = run_all(n, table, 4);
+    println((a + b).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let mut sets: Vec<Vec<Option<String>>> = inf
+            .sets_at("run_all", &[1, 0, 0])
+            .into_iter()
+            .map(|s| sorted(inf.writers(s)))
+            .collect();
+        sets.sort();
+        assert_eq!(
+            sets,
+            vec![
+                vec![main_lam(), Some("table".to_string())],
+                vec![Some("table".to_string())],
+            ]
+        );
+    }
+
+    /// A function field rewritten through `mod_`, which punches the field out and plugs the new
+    /// value back in, holds both the lambda put in first and the one wrapping it.
+    #[test]
+    fn test_a_function_field_rewritten_by_mod_holds_the_wrapping_lambda() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+type Seg = box struct { op : I64 -> I64, data : Array I64 };
+
+use_seg : I64 -> Seg -> I64;
+use_seg = |d, s| if d > 0 { use_seg(d - 1, s) } else { (s.@op)(s.@data.@(0)) };
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let s = Seg { op : |x| x + n, data : [1, 2] };
+    let s = if n > 1 { s } else { s.mod_op(|f| |x| f(x) * 2) };
+    println(use_seg(n, s).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("use_seg", &[1, 0]);
+        assert_eq!(sets.len(), 1);
+        assert_eq!(inf.writers(sets[0]), vec![main_lam(), main_lam()]);
+    }
+
+    /// An element of an array of functions rewritten through `Array::mod`, which punches the
+    /// element out and plugs the new value back in, leaves the array's elements holding both the
+    /// lambda put in first and the one wrapping it.
+    #[test]
+    fn test_an_array_element_rewritten_by_mod_holds_the_wrapping_lambda() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+run_first : I64 -> Array (I64 -> I64) -> I64;
+run_first = |d, fs| if d > 0 { run_first(d - 1, fs) } else { (fs.@(0))(d) };
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let fs = [|x| x + n];
+    let fs = if n > 1 { fs } else { fs.mod(0, |f| |x| f(x) * 2) };
+    println(run_first(n, fs).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let sets = inf.sets_at("run_first", &[1, 0, 0]);
+        assert_eq!(sets.len(), 1);
+        assert_eq!(inf.writers(sets[0]), vec![main_lam(), main_lam()]);
+    }
+
+    /// A lambda capturing a struct depends on every set the struct's type carries, the sets of the
+    /// fields its body leaves unread included: the struct is part of its capture. Here the body
+    /// reads the field `f` of the captured `p` only through the getter, which inlining leaves as a
+    /// builtin reading `p` by name, and the field `g` not at all.
+    #[test]
+    fn test_a_lambda_depends_on_the_sets_of_a_struct_it_captures() {
+        let prg = program_after_inlining(
+            r#"
+module Main;
+
+type P = box struct { f : I64 -> I64, g : I64 -> I64 };
+
+mk : I64 -> P -> I64 -> I64;
+mk = |d, p| if d > 0 { mk(d - 1, p) } else { |x| (p.@f)(x) };
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let f = |x| x + n;
+    let a = mk(n, P { f : f, g : |x| x + 2 })(1);
+    let b = mk(n, P { f : f, g : |x| x * 3 })(1);
+    println((a + b).to_string)
+);
+"#,
+        );
+        let mut inf = Inferred::new(&prg);
+        let (c, _) = inf.component_of("mk");
+        let ty = inf.type_of("mk");
+        let p_ty = inf.layout.type_arg(&inf.layout.type_arg(&ty, 1), 0);
+        let p_slots: Vec<usize> = inf
+            .layout
+            .own_slots(&p_ty)
+            .to_vec()
+            .iter()
+            .map(|v| {
+                let root = inf.analysis.solver.find(*v);
+                inf.analysis.components[c]
+                    .params
+                    .iter()
+                    .position(|p| *p == root)
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(p_slots.len(), 2);
+        let inner = inf
+            .analysis
+            .lambdas
+            .iter()
+            .find(|l| l.symbol.name.starts_with("mk") && l.index == 2)
+            .unwrap();
+        for p in p_slots {
+            assert!(
+                inner.params.contains(&p),
+                "the lambda capturing `p` depends on {:?}, missing parameter {}",
+                inner.params,
+                p
+            );
+        }
+    }
+
+    /// The source of a chain of `depth` symbols over `both`, which builds a value from two: each
+    /// symbol of the chain refers twice to the one below. With `of_functions` the symbols are
+    /// functions of a `P` passing it down, otherwise global values. `both` and each function of
+    /// the chain recurse, so that no inlining collapses the chain.
+    fn doubling_chain(depth: usize, of_functions: bool) -> String {
+        let mut source = String::from(
+            "module Main;\n\
+             type P = box struct { run : I64 -> I64 };\n\
+             both : P -> P -> P;\n\
+             both = |a, b| if (a.@run)(0) < -1000000 { both(b, a) } \
+             else { P { run : |x| (a.@run)((b.@run)(x)) } };\n",
+        );
+        if of_functions {
+            source += "c0 : P -> P;\n\
+                       c0 = |a| if (a.@run)(0) < -1000000 { c0(a) } \
+                       else { P { run : |x| (a.@run)(x) + 1 } };\n";
+            for i in 1..=depth {
+                source += &format!(
+                    "c{i} : P -> P;\n\
+                     c{i} = |a| if (a.@run)(0) < -1000000 {{ c{i}(a) }} \
+                     else {{ both(c{j}(a), c{j}(a)) }};\n",
+                    j = i - 1
+                );
+            }
+            source += &format!(
+                "main : IO ();\nmain = (let k = *get_args.map(|args| args.@size); \
+                 println((c{depth}(P {{ run : |x| x + k }}).@run)(k).to_string));\n"
+            );
+        } else {
+            source += "c0 : P;\nc0 = P { run : |x| x + 1 };\n";
+            for i in 1..=depth {
+                source += &format!("c{i} : P;\nc{i} = both(c{j}, c{j});\n", j = i - 1);
+            }
+            source += &format!(
+                "main : IO ();\nmain = (let k = *get_args.map(|args| args.@size); \
+                 println((c{depth}.@run)(k).to_string));\n"
+            );
+        }
+        source
+    }
+
+    /// A symbol referring twice to one whose scheme has internal classes gets the two copies of
+    /// them merged into one, so that along a chain of such symbols the scheme of each stays as
+    /// small as the one below rather than doubling: for global values, and for functions whose
+    /// internal classes depend on their parameter.
+    #[test]
+    fn test_a_chain_of_symbols_referring_twice_to_the_one_below_keeps_its_schemes_small() {
+        for of_functions in [false, true] {
+            let prg = program_of(&doubling_chain(12, of_functions));
+            let inf = Inferred::new(&prg);
+            let (c, _) = inf.component_of("c12");
+            let classes = inf.analysis.components[c].scheme.classes.len();
+            assert!(
+                classes <= 16,
+                "the scheme at the top of the chain of {} has {} classes",
+                if of_functions {
+                    "functions"
+                } else {
+                    "global values"
+                },
+                classes
+            );
+        }
     }
 }

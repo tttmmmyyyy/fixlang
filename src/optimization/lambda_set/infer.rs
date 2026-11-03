@@ -72,6 +72,11 @@ pub struct Site {
 pub struct Scheme {
     /// The members of each class.
     pub classes: Vec<Vec<SchemeMember>>,
+    /// For each class that depends on no parameter, the variable of the component it stands for.
+    /// What such a class holds is the same in every reference, so every reference shares that
+    /// variable: copying it per reference would double the classes of a symbol that refers twice
+    /// to one holding them, at each level of a chain of such symbols.
+    pub shared: Vec<Option<SetVar>>,
     /// For each symbol of the component, the class of each slot of its type.
     pub slot_classes: Vec<Vec<u32>>,
 }
@@ -214,8 +219,9 @@ struct LamTerm {
     lam: LamId,
     /// The annotated type of the lambda expression.
     ty: AType,
-    /// The variables of the nodes of its body that no lambda inside it holds, of its parameter,
-    /// and of the references to other components made there.
+    /// The variables of the nodes of its body that no lambda inside it holds, of the names builtin
+    /// operations there read, of its parameter, and of the references to other components made
+    /// there.
     vars: Vec<SetVar>,
     /// The lambdas written directly inside its body.
     children: Vec<LamId>,
@@ -444,8 +450,10 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         lam
     }
 
-    /// The annotated type of the name `name` read by a builtin operation. `CAP_NAME` is the capture
-    /// of the innermost lambda, which only a closure object holds, so that lambda's set is Dynamic.
+    /// The annotated type of the name `name` read by a builtin operation, recorded in the innermost
+    /// lambda's term: a name read only by a builtin is still part of what the lambda captures.
+    /// `CAP_NAME` is the capture of the innermost lambda, which only a closure object holds, so
+    /// that lambda's set is Dynamic.
     fn operand(&mut self, name: &FullName) -> AType {
         if name.is_local() && name.name == CAP_NAME {
             let frame = *self
@@ -459,7 +467,9 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 .make_dynamic(own, DynamicKind::ReadsOwnCapture);
             return ty;
         }
-        self.reference(name)
+        let ty = self.reference(name);
+        self.record(&ty);
+        ty
     }
 
     /// The annotated type of a reference to the name `name`.
@@ -546,8 +556,15 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
 
 /// New variables for the classes of `scheme`, holding the members recorded for them.
 fn instantiate(scheme: &Scheme, solver: &mut Solver) -> Vec<SetVar> {
-    let vars: Vec<SetVar> = scheme.classes.iter().map(|_| solver.fresh()).collect();
+    let vars: Vec<SetVar> = scheme
+        .shared
+        .iter()
+        .map(|shared| shared.unwrap_or_else(|| solver.fresh()))
+        .collect();
     for (class, members) in scheme.classes.iter().enumerate() {
+        if scheme.shared[class].is_some() {
+            continue;
+        }
         for member in members {
             let member = match member {
                 SchemeMember::Lam { lam, args } => Member::Lam {
@@ -662,6 +679,11 @@ fn generalize(
         }
         classes[class_of[&v] as usize] = scheme_members;
     }
+    let (classes, merged) = merge_equal_classes(classes, params.len());
+    for c in class_of.values_mut() {
+        *c = merged[*c as usize];
+    }
+    let shared = shared_classes(&classes, params.len(), &class_of);
     let slot_classes = types
         .iter()
         .map(|ty| {
@@ -691,9 +713,141 @@ fn generalize(
         sites: deduped_sites,
         scheme: Scheme {
             classes,
+            shared,
             slot_classes,
         },
     }
+}
+
+/// `classes`, with each set of classes that unfold to the same tree made one, and the class each
+/// class became. The first `param_count` classes are parameters, which a copy gives values of its
+/// own, so each stays a class of its own and keeps its place.
+///
+/// A symbol referring twice to one with internal classes gets two copies of them, equal but for
+/// their variables; merging them keeps a chain of such symbols from doubling its classes at each
+/// level.
+fn merge_equal_classes(
+    classes: Vec<Vec<SchemeMember>>,
+    param_count: usize,
+) -> (Vec<Vec<SchemeMember>>, Vec<u32>) {
+    // Refine a partition until no block splits: the parameters each start in a block of their own,
+    // the other classes in one, and a class moves apart from its block when its members, read
+    // through the blocks of the classes they name, differ.
+    let n = classes.len();
+    let mut block: Vec<usize> = (0..n).map(|c| c.min(param_count)).collect();
+    let mut block_count = param_count + usize::from(n > param_count);
+    loop {
+        let mut block_of_signature: Map<(usize, Vec<(Option<LamId>, Vec<usize>)>), usize> =
+            Map::default();
+        let mut reasons: Vec<Rc<DynamicReason>> = vec![];
+        let mut next_block = vec![0; n];
+        for (c, members) in classes.iter().enumerate() {
+            let mut signature: Vec<(Option<LamId>, Vec<usize>)> = members
+                .iter()
+                .map(|m| match m {
+                    SchemeMember::Lam { lam, args } => (
+                        Some(*lam),
+                        args.iter().map(|a| block[*a as usize]).collect(),
+                    ),
+                    SchemeMember::Dynamic(reason) => {
+                        let i = match reasons.iter().position(|r| r == reason) {
+                            Some(i) => i,
+                            None => {
+                                reasons.push(reason.clone());
+                                reasons.len() - 1
+                            }
+                        };
+                        (None, vec![i])
+                    }
+                })
+                .collect();
+            signature.sort();
+            signature.dedup();
+            let count = block_of_signature.len();
+            next_block[c] = *block_of_signature
+                .entry((block[c], signature))
+                .or_insert(count);
+        }
+        let next_count = block_of_signature.len();
+        block = next_block;
+        if next_count == block_count {
+            break;
+        }
+        block_count = next_count;
+    }
+
+    // Number the blocks by their first class, so that the parameters keep their places.
+    let mut class_of_block: Map<usize, u32> = Map::default();
+    let mut merged: Vec<u32> = vec![0; n];
+    let mut kept: Vec<usize> = vec![];
+    for c in 0..n {
+        merged[c] = *class_of_block.entry(block[c]).or_insert_with(|| {
+            kept.push(c);
+            (kept.len() - 1) as u32
+        });
+    }
+    assert!(
+        (0..param_count).all(|p| merged[p] == p as u32),
+        "a parameter of a scheme merged with another class"
+    );
+    let classes = kept
+        .iter()
+        .map(|c| {
+            let mut members: Vec<SchemeMember> = vec![];
+            for m in &classes[*c] {
+                let m = match m {
+                    SchemeMember::Lam { lam, args } => SchemeMember::Lam {
+                        lam: *lam,
+                        args: args.iter().map(|a| merged[*a as usize]).collect(),
+                    },
+                    SchemeMember::Dynamic(reason) => SchemeMember::Dynamic(reason.clone()),
+                };
+                if !members.contains(&m) {
+                    members.push(m);
+                }
+            }
+            members
+        })
+        .collect();
+    (classes, merged)
+}
+
+/// For each class of a scheme whose first `param_count` classes are its parameters, the variable
+/// of `class_of` the class stands for when the class depends on no parameter: neither it nor any
+/// class its members name, transitively, is a parameter.
+fn shared_classes(
+    classes: &[Vec<SchemeMember>],
+    param_count: usize,
+    class_of: &Map<SetVar, u32>,
+) -> Vec<Option<SetVar>> {
+    // A class depends on a parameter when a member names a class that does, so the dependence
+    // spreads backwards along the edges from a class to the classes its members name.
+    let mut named_by: Vec<Vec<usize>> = vec![vec![]; classes.len()];
+    for (class, members) in classes.iter().enumerate() {
+        for member in members {
+            if let SchemeMember::Lam { args, .. } = member {
+                for a in args {
+                    named_by[*a as usize].push(class);
+                }
+            }
+        }
+    }
+    let mut depends = vec![false; classes.len()];
+    let mut stack: Vec<usize> = (0..param_count).collect();
+    while let Some(c) = stack.pop() {
+        if depends[c] {
+            continue;
+        }
+        depends[c] = true;
+        stack.extend(named_by[c].iter().copied());
+    }
+    let mut var_of: Vec<Option<SetVar>> = vec![None; classes.len()];
+    for (v, c) in class_of {
+        var_of[*c as usize] = Some(*v);
+    }
+    (0..classes.len())
+        .map(|c| if depends[c] { None } else { var_of[c] })
+        .collect()
 }
 
 /// The parameters of the component the lambda `lam` depends on, in order: the ones its term
