@@ -448,8 +448,8 @@ type Seg#ls7d21 m = box struct { op : #LsCap@main#ls_lam0, data : Array m };
 | 成分のコピー (一般化した変数に与えた `SetId` の組で区別した数) | 1238 |
 | 具体的な集合 | 4099 |
 | `Dynamic` を含む集合 | 2 |
-| `lambda_set::run` の時間 (ダンプの書き出しを含む) | 2.9 s |
-| 参考: 今の `closure_specialization` の時間 | 3.1 s |
+| `lambda_set::run` の時間 (ダンプの書き出しを含む) | 0.37 s |
+| 参考: 今の `closure_specialization` の時間 (2 回の合計) | 1.48 s |
 
 ## 付録: 名前で見分ける箇所
 
