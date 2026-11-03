@@ -48,24 +48,24 @@ mod integration_tests {
     }
 
     /// The nesting depth of the expression that is written to the type-check cache and read back.
-    /// Reading an entry recurses to the depth of the expression it holds, and `-O none` compiles a
+    /// Reading a body back recurses to the depth of the expression, and `-O none` compiles a
     /// chain this deep in a few seconds, which is what lets it reach so far past `DEPTH`.
     const CACHE_DEPTH: usize = 2000;
 
-    /// When each entry of the type-check cache under `dir` was last written.
+    /// When each file of the type-check cache under `dir` was last written.
     ///
-    /// A run that reads an entry returns what it holds and writes nothing, so an entry whose file
-    /// is untouched by a second run is one that second run read.
+    /// A run that finds every body it checks recorded in the cache writes nothing, so files left
+    /// untouched by a second run say that run checked no body again.
     fn cache_entry_times(dir: &Path) -> Map<PathBuf, SystemTime> {
         fs::read_dir(dir.join(TYPED_MODULES_PATH))
             .expect("the type-check cache directory should exist after a compilation")
             .map(|entry| {
-                let entry = entry.expect("a cache entry should be readable");
+                let entry = entry.expect("a cache file should be readable");
                 let written = entry
                     .metadata()
-                    .expect("a cache entry should have metadata")
+                    .expect("a cache file should have metadata")
                     .modified()
-                    .expect("a cache entry should carry a modification time");
+                    .expect("a cache file should carry a modification time");
                 (entry.path(), written)
             })
             .collect()
@@ -74,13 +74,14 @@ mod integration_tests {
     /// Verifies that a `CACHE_DEPTH`-deep expression stored in the type-check cache is read back
     /// and gives the answer the run that stored it gave.
     ///
-    /// The entry holds the typed expression as a tree, and reading it walks that tree to its full
-    /// depth, so an expression this deep exercises a recursion no single build performs: the first
-    /// compilation writes the entry, and only the second one reads it.
+    /// The cache holds the typed expression as a tree, and reading it back walks that tree to its
+    /// full depth, so an expression this deep exercises a recursion no single build performs: the
+    /// first compilation writes the expression, and only the second one reads it back.
     ///
-    /// An entry the second run fails to read costs it nothing but the check it could have skipped,
-    /// so the value alone would say the same whether the entry was read or ignored. What tells the
-    /// two apart is that a run which reads an entry leaves its file alone.
+    /// A body the second run fails to read back costs it nothing but the check it could have
+    /// skipped, so the value alone would say the same whether the body was read or checked again.
+    /// What tells the two apart is that a run which reads every body back writes no cache file and
+    /// warns of no file it failed to read.
     #[test]
     fn test_deeply_nested_expression_survives_the_type_check_cache() {
         let mut source = String::from("module Main;\n\ndeep : I64;\ndeep = (\n    let x0 = 1;\n");
@@ -101,7 +102,7 @@ mod integration_tests {
 
         // The compiler keeps its cache under the directory it runs in, so running twice there is
         // what makes the second run read what the first one wrote.
-        let run = |pass: &str| {
+        let run = |pass: &str| -> String {
             let output = fix_command_at_opt_level("run", "none")
                 .arg("--file")
                 .arg(&source_path)
@@ -123,6 +124,7 @@ mod integration_tests {
                 pass,
                 CACHE_DEPTH,
             );
+            String::from_utf8_lossy(&output.stderr).to_string()
         };
 
         run("stores the expression");
@@ -132,12 +134,18 @@ mod integration_tests {
             "the run that stores a {}-deep expression left the type-check cache empty",
             CACHE_DEPTH,
         );
-        run("reads the expression back");
+        let stderr = run("reads the expression back");
         assert_eq!(
             cache_entry_times(temp_dir.path()),
             stored,
-            "the second run rewrote cache entries a {}-deep expression should have let it read",
+            "the second run rewrote cache files a {}-deep expression should have let it read",
             CACHE_DEPTH,
+        );
+        assert!(
+            !stderr.contains("Failed to read cache file"),
+            "the second run failed to read back a {}-deep expression:\n{}",
+            CACHE_DEPTH,
+            stderr,
         );
     }
 }
