@@ -32,8 +32,8 @@ mod integration_tests {
 
     /// Build the case project with `--emit-rc-ir Main` and return the dumped RC IR of the `Main`
     /// module. The build works at the `max` optimization level: the borrow versions and the routing
-    /// these tests assert on exist only for uncurried funptr functions, which the higher
-    /// optimization levels produce — at `none` the same code stays as closures with no funptr
+    /// these tests assert on exist only for uncurried functions, which the higher
+    /// optimization levels produce — at `none` the same code stays as closures with no uncurried
     /// version to borrow.
     fn emit_main_rc_ir(project_dir: &Path) -> String {
         emit_rc_ir(project_dir, "Main", "rc_ir.Main.post.txt")
@@ -327,11 +327,11 @@ mod integration_tests {
         block
     }
 
-    /// The body block of `main` itself. The main entry is `Main::main#<hash>#funptr1`, of three
+    /// The body block of `main` itself. The main entry is `Main::main#<hash>#func1`, of three
     /// `#`-segments; the lambdas lifted out of it carry a segment more.
     fn main_block(dump: &str) -> Vec<&str> {
         func_block(dump, "fn Main::main", |n| {
-            n.split('#').count() == 3 && n.ends_with("#funptr1")
+            n.split('#').count() == 3 && n.ends_with("#func1")
         })
     }
 

@@ -1473,7 +1473,7 @@ pub fn lambda_function_type<'c, 'm>(
         .collect::<Vec<_>>();
 
     // The pointer to the CAP (a dynamic object which contains captured values), if the lambda is closure.
-    if ty.is_closure() {
+    if ty.is_arrow() {
         arg_tys.push(gc.context.ptr_type(AddressSpace::from(0)).into());
     }
 
@@ -1620,7 +1620,7 @@ pub fn ty_to_object_ty(
         is_unbox: true,
         ty: ty.clone(),
     };
-    if ty.is_closure() {
+    if ty.is_arrow() {
         assert!(capture.is_empty());
         object_ty.is_unbox = true;
         object_ty
@@ -1629,7 +1629,7 @@ pub fn ty_to_object_ty(
         object_ty
             .field_types
             .push(ObjectFieldType::SubObject(make_dynamic_object_ty(), false));
-    } else if ty.is_funptr() {
+    } else if ty.is_func() {
         assert!(capture.is_empty());
         object_ty.is_unbox = true;
         object_ty
@@ -1738,7 +1738,7 @@ pub fn ty_to_object_ty(
                 ));
             }
             TyConVariant::Arrow => {
-                unreachable!() // Covered by `if ty.is_closure()` above.
+                unreachable!() // Covered by `if ty.is_arrow()` above.
             }
             TyConVariant::Opaque => {
                 unreachable!() // Opaque types are resolved before code generation.
@@ -2249,7 +2249,7 @@ pub fn create_obj<'c, 'm>(
     assert!(ty.is_ground());
     assert!(ty.is_dynamic() || capture.is_empty());
     assert!(array_capacity.is_some() == ty.is_array_storage());
-    assert!(!ty.is_funptr()); // Funptr type is not supported, Currently, there is no need to create an object for funptr.
+    assert!(!ty.is_func()); // A func type is not supported: no object of one is ever created.
 
     let context = gc.context;
     let object_type = ty.get_object_type(capture, gc.type_env());
@@ -2268,7 +2268,7 @@ pub fn create_obj<'c, 'm>(
         )
     } else {
         if object_type.is_unbox {
-            // When the object is unboxed (not a funptr),
+            // When the object is unboxed (not a func),
             (
                 Object::new(
                     struct_type.get_poison().as_basic_value_enum(),
@@ -2651,8 +2651,8 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
             .unwrap()
             .as_type();
     }
-    let is_primitive = !ty.is_closure()
-        && ty.toplevel_tycon_info(gc.type_env()).variant == TyConVariant::Primitive;
+    let is_primitive =
+        !ty.is_arrow() && ty.toplevel_tycon_info(gc.type_env()).variant == TyConVariant::Primitive;
     if is_primitive {
         // Primitive case
         if obj_type.field_types.len() == 0 {
@@ -2684,7 +2684,7 @@ fn ty_to_debug_struct_ty_body<'c, 'm>(ty: Arc<TypeNode>, gc: &mut Generator<'c, 
         let size_in_bits = gc.target_data.get_bit_size(&struct_type);
         let align_in_bits = gc.target_data.get_abi_alignment(&struct_type) * 8;
 
-        let mut subelement_names = if ty.is_closure() {
+        let mut subelement_names = if ty.is_arrow() {
             vec![]
         } else {
             ty.toplevel_tycon_info(gc.type_env())

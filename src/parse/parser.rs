@@ -26,7 +26,7 @@ use crate::ast::{
     },
     typedecl::{Field, Struct, TypeAlias, TypeDeclValue, TypeDefn, Union},
     types::{
-        kind_arrow, kind_star, make_tyvar, tycon, type_from_tyvar, type_fun_with_arrow_src,
+        kind_arrow, kind_star, make_tyvar, tycon, type_arrow_with_source, type_from_tyvar,
         type_tyapp, type_tycon, type_tyvar_star, AssocType, Kind, Scheme, TyCon, TyVar, TypeNode,
     },
 };
@@ -3082,7 +3082,7 @@ fn parse_type_fun(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
         let arrow_span = Span::from_pair(&ctx.source, &pair);
         let pair = pairs.next().unwrap();
         let dst_ty = parse_type(pair, ctx);
-        type_fun_with_arrow_src(src_ty, dst_ty, Some(arrow_span))
+        type_arrow_with_source(src_ty, dst_ty, Some(arrow_span))
     } else {
         src_ty
     }

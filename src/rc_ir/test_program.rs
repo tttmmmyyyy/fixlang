@@ -5,7 +5,7 @@
 //! its body mentions.
 
 use crate::ast::name::FullName;
-use crate::ast::types::type_funptr;
+use crate::ast::types::type_func;
 use crate::fixstd::builtin::make_i64_ty;
 use crate::misc::Set;
 use crate::rc_ir::ast::{
@@ -59,7 +59,7 @@ fn body_mentioning(mentions: &[FullName]) -> RcExprNode {
 pub fn func(name: FullName, mentions: &[FullName]) -> RcFunc {
     RcFunc {
         name: FuncRef { name },
-        fn_ty: type_funptr(vec![make_i64_ty()], make_i64_ty()),
+        fn_ty: type_func(vec![make_i64_ty()], make_i64_ty()),
         params: vec![var(FullName::local("v0"))],
         capture: None,
         ret_ty: make_i64_ty(),

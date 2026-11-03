@@ -18,9 +18,9 @@ use crate::{
         type_env::TypeEnv,
         typedecl::describe_field_names,
         types::{
-            is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar,
-            type_fun, type_tyapp, type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme,
-            TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
+            is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar, type_arrow,
+            type_from_tyvar, type_tyapp, type_tycon, AssocType, Kind, OpaqueTyConResolution,
+            Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
         },
     },
     constants::{
@@ -1386,10 +1386,10 @@ impl TypeCheckContext {
                 // can pick the candidate that takes it.
                 if ei.app_order == AppSourceCodeOrderType::XDotF {
                     let arg = self.unify_type_of_expr(&arg, arg_ty.clone())?;
-                    let fun = self.unify_type_of_expr(fun, type_fun(arg_ty.clone(), ty))?;
+                    let fun = self.unify_type_of_expr(fun, type_arrow(arg_ty.clone(), ty))?;
                     Ok(ei.set_app_args(vec![arg]).set_app_func(fun))
                 } else {
-                    let fun = self.unify_type_of_expr(fun, type_fun(arg_ty.clone(), ty))?;
+                    let fun = self.unify_type_of_expr(fun, type_arrow(arg_ty.clone(), ty))?;
                     let arg = self.unify_type_of_expr(&arg, arg_ty.clone())?;
                     Ok(ei.set_app_args(vec![arg]).set_app_func(fun))
                 }
@@ -1406,7 +1406,7 @@ impl TypeCheckContext {
                 self.add_tyvar_source(body_tv.name.clone(), body.source.clone());
                 let body_ty = type_from_tyvar(body_tv);
 
-                let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());
+                let fun_ty = type_arrow(arg_ty.clone(), body_ty.clone());
                 // In `error_tolerant` mode, swallowing the mismatch
                 // lets us continue typing the body against `body_ty`
                 // (a fresh tyvar), so the body still gets a

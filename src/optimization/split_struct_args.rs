@@ -35,7 +35,7 @@ use crate::{
         program::{Program, Symbol},
         traverse::{ExprVisitor, StartVisitResult, VisitState},
         type_env::TypeEnv,
-        types::{type_fun, TyCon, TyConInfo, TyConVariant, TypeNode},
+        types::{type_arrow, TyCon, TyConInfo, TyConVariant, TypeNode},
     },
     constants::SPLIT_ARG_SUFFIX,
     misc::{map_on_compiler_threads, Map, Set},
@@ -553,7 +553,7 @@ fn lambda_over(params: &[Arc<Var>], doms: &[Arc<TypeNode>], body: Arc<ExprNode>)
 fn fun_ty(doms: &[Arc<TypeNode>], codom: Arc<TypeNode>) -> Arc<TypeNode> {
     let mut ty = codom;
     for dom in doms.iter().rev() {
-        ty = type_fun(dom.clone(), ty);
+        ty = type_arrow(dom.clone(), ty);
     }
     ty
 }

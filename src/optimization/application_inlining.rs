@@ -137,7 +137,7 @@ impl ExprVisitor for AppInliner {
     /// `let_elimination` relies on these placements, so a change to one of them goes there too.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Get the argument of the application. An application carries one argument until uncurrying
-        // rewrites the call onto a function pointer, and a call it has rewritten names the function
+        // rewrites the call onto an uncurried function, and a call it has rewritten names the function
         // outright, so there is nothing to move an argument into.
         let args = expr.get_app_args();
         if args.len() != 1 {
@@ -151,7 +151,7 @@ impl ExprVisitor for AppInliner {
             Expr::Lam(params, body) => {
                 // The expression is of the form `(|x| {expr})({a})`.
                 // Replace it with `let x = {a} in {expr}`. A lambda of many parameters is built by
-                // uncurrying alone, as the body of a `#funptr` symbol, and every call uncurrying
+                // uncurrying alone, as the body of a `#func` symbol, and every call uncurrying
                 // rewrites onto one names it outright, so it does not reach an application of one
                 // argument.
                 assert_eq!(

@@ -30,7 +30,7 @@ use std::sync::Arc;
 /// returns. `stage` names the pass just run, so a failure points at the culprit.
 ///
 /// `symbol_names` is every symbol name in the whole program. A use naming one refers to a global
-/// function or value (a direct call's callee, a funptr atom, or a global operand) — one this
+/// function or value (a direct call's callee, a func atom, or a global operand) — one this
 /// compilation unit may not define, since separated compilation splits the program across units — and
 /// code generation materializes it, so it is always in scope. Local names are globally-unique fresh
 /// names, so admitting the symbol names never masks a dangling local.
@@ -50,15 +50,15 @@ pub fn validate(prog: &RcProgram, symbol_names: &Set<FullName>, type_env: &TypeE
 
     for func in prog.funcs.values() {
         // A capture parameter is present exactly for the closure ABI: it is the trailing capture-
-        // pointer parameter a closure projects its captures from, and the funptr ABI has none. A clone
+        // pointer parameter a closure projects its captures from, and the func ABI has none. A clone
         // that copies the arrow type but sets the wrong capture would mis-lower the ABI.
-        if func.capture.is_some() != func.fn_ty.is_closure() {
+        if func.capture.is_some() != func.fn_ty.is_arrow() {
             panic!(
                 "[RC IR validate] {}: `{}` capture-present={} disagrees with closure-ABI={}",
                 stage,
                 func.name.name.to_string(),
                 func.capture.is_some(),
-                func.fn_ty.is_closure(),
+                func.fn_ty.is_arrow(),
             );
         }
         let mut v = Validator::new(
@@ -539,7 +539,7 @@ mod tests {
     use crate::ast::type_env::TypeEnv;
     use crate::ast::typedecl::Field;
     use crate::ast::types::{
-        kind_star, tycon, type_fun, type_funptr, type_tyapp, type_tycon, TyCon, TyConInfo,
+        kind_star, tycon, type_arrow, type_func, type_tyapp, type_tycon, TyCon, TyConInfo,
         TyConVariant, TypeNode,
     };
     use crate::fixstd::builtin::{
@@ -734,7 +734,7 @@ mod tests {
         let ret_p = |name: &str| {
             func(
                 name,
-                type_funptr(vec![make_i64_ty()], make_i64_ty()),
+                type_func(vec![make_i64_ty()], make_i64_ty()),
                 vec![var("p")],
                 None,
                 node(RcExpr::Ret(var("p"))),
@@ -764,7 +764,7 @@ mod tests {
         // A closure-typed function with no capture parameter: the closure ABI has a capture pointer.
         validate_prog(vec![func(
             "f",
-            type_fun(make_i64_ty(), make_i64_ty()),
+            type_arrow(make_i64_ty(), make_i64_ty()),
             vec![var("p")],
             None,
             node(RcExpr::Ret(var("p"))),
@@ -813,15 +813,15 @@ mod tests {
         check(&body, &["s"]);
     }
 
-    /// A funptr-ABI function carrying a capture parameter is caught, the other direction of the
+    /// A func-ABI function carrying a capture parameter is caught, the other direction of the
     /// agreement between a function's arrow type and its parameter list.
     #[test]
     #[should_panic(expected = "capture-present=true disagrees with closure-ABI=false")]
-    fn rejects_capture_present_for_funptr_abi() {
-        // A funptr-typed function with a capture parameter: the funptr ABI has no capture pointer.
+    fn rejects_capture_present_for_func_abi() {
+        // A func-typed function with a capture parameter: the func ABI has no capture pointer.
         validate_prog(vec![func(
             "f",
-            type_funptr(vec![make_i64_ty()], make_i64_ty()),
+            type_func(vec![make_i64_ty()], make_i64_ty()),
             vec![var("p")],
             Some(var("cap")),
             node(RcExpr::Ret(var("p"))),
@@ -866,7 +866,7 @@ mod tests {
         ));
         func(
             "f",
-            type_fun(make_i64_ty(), make_i64_ty()),
+            type_arrow(make_i64_ty(), make_i64_ty()),
             vec![var("p")],
             Some(capture),
             body,
@@ -887,7 +887,7 @@ mod tests {
         ));
         func(
             "g",
-            type_funptr(vec![stored.ty.clone()], make_i64_ty()),
+            type_func(vec![stored.ty.clone()], make_i64_ty()),
             vec![stored],
             None,
             body,
@@ -926,16 +926,16 @@ mod tests {
     #[should_panic(expected = "is used as a value")]
     fn rejects_a_borrowing_function_named_as_a_value() {
         // `g` returns `f` itself rather than calling it.
-        let body = node(RcExpr::Ret(var_of("f", type_funptr(vec![], make_i64_ty()))));
+        let body = node(RcExpr::Ret(var_of("f", type_func(vec![], make_i64_ty()))));
         let mut target = func(
             "f",
-            type_funptr(vec![], make_i64_ty()),
+            type_func(vec![], make_i64_ty()),
             vec![],
             None,
             body.clone(),
         );
         target.borrowed_units.insert((FullName::local("p"), vec![]));
-        let caller = func("g", type_funptr(vec![], make_i64_ty()), vec![], None, body);
+        let caller = func("g", type_func(vec![], make_i64_ty()), vec![], None, body);
         validate_prog(vec![caller, target]);
     }
 

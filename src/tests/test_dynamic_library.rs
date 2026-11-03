@@ -130,7 +130,7 @@ const EXPORTED_VALUE_OUTPUT: &str = "285";
 /// A library exporting a value rather than a function, compiled as one unit, opened from the driver
 /// and asked for that value.
 ///
-/// A value is not of funptr type, so it becomes a global whose initializer runs on the first read,
+/// A value is not of func type, so it becomes a global whose initializer runs on the first read,
 /// and the export is the library's only reachability root. Everything the iteration in that
 /// initializer compiles into is reached through the global alone, so a walk that started only from
 /// the roots naming a function would drop it and leave the library holding a call to nothing.
