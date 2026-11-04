@@ -355,6 +355,37 @@ mod value_tests {
         "#;
         test_source(&source, Configuration::develop_mode());
     }
+
+    /// The code after the match reads the matched `Option` again, so the match is not the only
+    /// consumer of the value the inner match builds. Moving the outer arms into the inner arms
+    /// would leave that read naming a value nothing binds any more, so the rewrite declines and the
+    /// values stay what the source computes.
+    #[test]
+    pub fn test_a_matched_value_read_after_the_match() {
+        let source = r#"
+            module Main;
+
+            f : I64 -> I64;
+            f = |n| (
+                let o = if n % 2 == 0 { Option::some(n) } else { Option::none() };
+                let r = match o {
+                    some(v) => v * 2,
+                    none() => -1
+                };
+                r + o.map_or(100, |x| x + 1)
+            );
+
+            main : IO ();
+            main = (
+                assert_eq(
+                    |_|"a matched value read after the match",
+                    Iterator::range(0, 6).map(f).to_array, [1, 99, 7, 99, 13, 99]
+                );;
+                pure()
+            );
+        "#;
+        test_source(&source, Configuration::develop_mode());
+    }
 }
 
 /// A program shaped to drive case-of-case, bounded in how long it may take to compile.
