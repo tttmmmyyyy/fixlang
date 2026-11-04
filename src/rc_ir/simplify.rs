@@ -308,7 +308,11 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
         new_arms.push(arm.with_body(body));
     }
     let rewritten = node_of(
-        RcExpr::Let(m.clone(), RcRhs::Match(inner_scrut.clone(), new_arms), k2.clone()),
+        RcExpr::Let(
+            m.clone(),
+            RcRhs::Match(inner_scrut.clone(), new_arms),
+            k2.clone(),
+        ),
         &node.source,
     );
     // Renaming a binder and substituting a variable both leave the term's shape alone, so placing
