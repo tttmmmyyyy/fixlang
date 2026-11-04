@@ -198,30 +198,40 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
         return None;
     };
     let (variant, operand) = union_construction(rhs)?;
-    let (m, arms, k2) = sole_match_on(x, k)?;
+    let (m, arms, k2) = match_on(x, k)?;
     // Pick the arm for the known tag. A catch-all arm binds the whole union, so the construction
     // stays to build it; skip when only a catch-all matches.
     let arm = arms.iter().find(|arm| arm.tag == Some(variant))?;
+    if !consumed_only_by_its_match(x, k) {
+        return None;
+    }
     let body = substitute_expr(&arm.body, &single_subst(&arm.payload.name, &operand.name));
     Some(replace_tail(&body, &mut |arm_result| {
         substitute_expr(k2, &single_subst(&m.name, &arm_result.name))
     }))
 }
 
-/// The match `k` starts with, `let m = match x { arms }; k2`, where that match is the only consumer
-/// of `x` in `k`: a rewrite that drops what built `x` drops the match with it, and leaves nothing
-/// else reading `x`. Returns `m`, `arms` and `k2`.
-fn sole_match_on<'a>(
+/// The match on `x` that `k` starts with, `let m = match x { arms }; k2`, as `m`, `arms` and `k2`.
+fn match_on<'a>(
     x: &RcVar,
     k: &'a RcExprNode,
 ) -> Option<(&'a RcVar, &'a [MatchArm], &'a RcExprNode)> {
     let RcExpr::Let(m, RcRhs::Match(scrut, arms), k2) = k.expr.as_ref() else {
         return None;
     };
-    if scrut.name != x.name || count_value_uses(&x.name, k) != 1 {
+    if scrut.name != x.name {
         return None;
     }
     Some((m, arms, k2))
+}
+
+/// Whether the match `k` starts with is the only consumer of `x` in `k`, so that a rewrite dropping
+/// what built `x` drops that match with it and leaves nothing else reading `x`.
+///
+/// This walks the whole of `k`, which is the rest of the function, so a rewrite asks it last: asked
+/// first at every match on a match, it would make a pass over a function quadratic in its length.
+fn consumed_only_by_its_match(x: &RcVar, k: &RcExprNode) -> bool {
+    count_value_uses(&x.name, k) == 1
 }
 
 /// case-of-known-constructor on a struct: `let x = make_struct(a, b, ..); destructure x { .i -> fi };
@@ -274,7 +284,7 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     let RcExpr::Let(s, RcRhs::Match(inner_scrut, inner_arms), k) = node.expr.as_ref() else {
         return None;
     };
-    let (m, outer_arms, k2) = sole_match_on(s, k)?;
+    let (m, outer_arms, k2) = match_on(s, k)?;
     // The arm answering each variant, with the size of its body, so that a tail costs one lookup.
     let mut outer_arm_of_variant: Map<usize, (&MatchArm, u64)> = Map::default();
     for arm in outer_arms {
@@ -298,6 +308,9 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     // Equality declines too: `simplify_to_fixpoint` counts a pass that leaves as many nodes as it
     // found as broken, and stops the fixpoint there.
     if new_arms_size >= replaced_size {
+        return None;
+    }
+    if !consumed_only_by_its_match(s, k) {
         return None;
     }
     let mut new_arms = Vec::with_capacity(inner_arms.len());
