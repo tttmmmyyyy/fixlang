@@ -143,8 +143,14 @@ fn module_file_name(module: &Name, module_hash: &str) -> String {
 
 /// Where the record lies in a file of `len` bytes that ends in `footer`, or `None` when the footer
 /// is not one a file of type-checked modules ends in.
-fn record_range(footer: &[u8], len: u64) -> Option<Range<u64>> {
-    if footer.len() as u64 != FOOTER_LEN || &footer[16..] != FILE_MAGIC {
+fn record_range(footer: &[u8; FOOTER_LEN as usize], len: u64) -> Option<Range<u64>> {
+    assert!(
+        len >= FOOTER_LEN,
+        "a footer of {} bytes in a file of {} bytes",
+        FOOTER_LEN,
+        len
+    );
+    if &footer[16..] != FILE_MAGIC {
         return None;
     }
     let offset = u64::from_le_bytes(footer[0..8].try_into().unwrap());
@@ -227,7 +233,7 @@ fn decode_module_file(mut bytes: Vec<u8>) -> Result<(ModuleRecord, Vec<u8>), Str
     if len < FOOTER_LEN {
         return Err(NOT_A_MODULE_FILE.to_string());
     }
-    let footer = &bytes[(len - FOOTER_LEN) as usize..];
+    let footer = bytes[(len - FOOTER_LEN) as usize..].try_into().unwrap();
     let range = record_range(footer, len).ok_or_else(|| NOT_A_MODULE_FILE.to_string())?;
     let record = decode_record(
         &bytes[range.start as usize..range.end as usize],
@@ -278,7 +284,8 @@ impl NewEntry {
     fn of(identity: EntityIdentity, checked: &CheckedBody) -> Self {
         assert!(
             checked.passed(),
-            "a cache entry for a body that did not pass"
+            "a cache entry for {:?}, a body that did not pass",
+            identity
         );
         NewEntry {
             bytes: postcard::to_allocvec(&(&identity, &checked.te)).unwrap(),
