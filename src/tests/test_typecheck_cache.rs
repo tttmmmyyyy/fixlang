@@ -542,6 +542,7 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
             stderr
         );
         assert_eq!(run_out(dir), "3");
+        let after_recovery = cache_files(dir);
         let (built, stderr) = try_build(dir, "main.fix", &[]);
         assert!(built, "stderr: {}", stderr);
         assert!(
@@ -549,6 +550,11 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
             "the build after the one checking the damaged body again found it damaged still.\n\
              stderr: {}",
             stderr
+        );
+        assert_eq!(
+            cache_files(dir),
+            after_recovery,
+            "the build after the one checking the damaged body again checked a body again"
         );
 
         // The footer ends the file.
