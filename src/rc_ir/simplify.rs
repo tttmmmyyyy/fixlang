@@ -6,14 +6,14 @@
 //! - **case-of-known-constructor**: a `match` on a value known to be a specific constructor collapses
 //!   to that constructor's arm, and a `destructure` of a just-built struct binds each field directly
 //!   to the value that built it. The construction and the match/destructure both vanish.
-//! - **case-of-case**: a `match` whose scrutinee is itself a `match` (in tail position) moves each
-//!   outer arm into the inner arm that builds its constructor, so the construction and the outer match
-//!   cancel together. The walk over an inner arm follows into a `match` that arm ends in, so it
-//!   reaches the constructions the arms of that one build as well. It fires all-or-nothing — only
-//!   when a specific outer arm matches every construction the walk reaches — and only when the result
-//!   is smaller than what it replaces, since an outer arm two inner arms reach is placed in both. The
-//!   walk that finds those constructions measures that size first, so the rewrite is decided before
-//!   an outer arm is copied anywhere.
+//! - **case-of-case**: a `match` whose scrutinee is itself a `match` moves each outer arm into the
+//!   inner arm that builds its constructor, so the construction and the outer match cancel together.
+//!   The walk over an inner arm follows into a `match` that arm ends in, so it reaches the
+//!   constructions the arms of that one build as well. It fires all-or-nothing — only when a specific
+//!   outer arm matches every construction the walk reaches — and only when the result is smaller than
+//!   what it replaces, since an outer arm two inner arms reach is placed in both. The walk that finds
+//!   those constructions measures that size first, so the rewrite is decided before an outer arm is
+//!   copied anywhere.
 //!
 //! Composed, they cancel the `Option`/`LoopState`/tuple union a loop builds and immediately matches
 //! each iteration, exposing the scalar loop state underneath — which is what lets the back end form a
@@ -157,9 +157,7 @@ pub(crate) fn node_count(node: &RcExprNode) -> u64 {
         let cont = match node.expr.as_ref() {
             RcExpr::Ret(_) => return 1,
             RcExpr::Let(_, RcRhs::Match(_, arms), k) => {
-                return 1
-                    + arms.iter().map(|arm| node_count(&arm.body)).sum::<u64>()
-                    + node_count(k);
+                return 1 + arms_size(arms) + node_count(k);
             }
             RcExpr::Let(_, _, k)
             | RcExpr::Destructure(_, _, _, k)
@@ -169,6 +167,11 @@ pub(crate) fn node_count(node: &RcExprNode) -> u64 {
         };
         1 + node_count(cont)
     })
+}
+
+/// The number of expression nodes in the bodies of `arms`.
+fn arms_size(arms: &[MatchArm]) -> u64 {
+    arms.iter().map(|arm| node_count(&arm.body)).sum()
 }
 
 /// The variant number and payload operand of the union construction `rhs` builds.
@@ -195,20 +198,40 @@ fn case_of_known_union(node: &RcExprNode) -> Option<RcExprNode> {
         return None;
     };
     let (variant, operand) = union_construction(rhs)?;
-    // The continuation must be exactly a match on `x`, and `x` must be used nowhere else.
-    let RcExpr::Let(m, RcRhs::Match(scrut, arms), k2) = k.expr.as_ref() else {
-        return None;
-    };
-    if scrut.name != x.name || count_value_uses(&x.name, k) != 1 {
-        return None;
-    }
+    let (m, arms, k2) = match_on(x, k)?;
     // Pick the arm for the known tag. A catch-all arm binds the whole union, so the construction
     // stays to build it; skip when only a catch-all matches.
     let arm = arms.iter().find(|arm| arm.tag == Some(variant))?;
+    if !consumed_only_by_its_match(x, k) {
+        return None;
+    }
     let body = substitute_expr(&arm.body, &single_subst(&arm.payload.name, &operand.name));
     Some(replace_tail(&body, &mut |arm_result| {
         substitute_expr(k2, &single_subst(&m.name, &arm_result.name))
     }))
+}
+
+/// The match on `x` that `k` starts with, `let m = match x { arms }; k2`, as `m`, `arms` and `k2`.
+fn match_on<'a>(
+    x: &RcVar,
+    k: &'a RcExprNode,
+) -> Option<(&'a RcVar, &'a [MatchArm], &'a RcExprNode)> {
+    let RcExpr::Let(m, RcRhs::Match(scrut, arms), k2) = k.expr.as_ref() else {
+        return None;
+    };
+    if scrut.name != x.name {
+        return None;
+    }
+    Some((m, arms, k2))
+}
+
+/// Whether the match `k` starts with is the only consumer of `x` in `k`, so that a rewrite dropping
+/// what built `x` drops that match with it and leaves nothing else reading `x`.
+///
+/// This walks the whole of `k`, which is the rest of the function, so a rewrite asks it last: asked
+/// first at every match on a match, it would make a pass over a function quadratic in its length.
+fn consumed_only_by_its_match(x: &RcVar, k: &RcExprNode) -> bool {
+    count_value_uses(&x.name, k) == 1
 }
 
 /// case-of-known-constructor on a struct: `let x = make_struct(a, b, ..); destructure x { .i -> fi };
@@ -241,13 +264,14 @@ fn destructure_of_struct(node: &RcExprNode) -> Option<RcExprNode> {
     Some(substitute_expr(k2, &subst))
 }
 
-/// case-of-case (tail form): `let s = match iScrut { iArms }; let m = match s { oArms }; ret m`, where
-/// `s` is consumed only by the outer match, moves each outer arm into the inner arm whose result it
+/// case-of-case: `let s = match iScrut { iArms }; let m = match s { oArms }; k2`, where `s` is
+/// consumed only by the outer match, moves each outer arm into the inner arm whose result it
 /// matches. An inner arm ends in a union it builds and immediately returns — or in a `match` whose own
 /// arms do, which `replace_tail_union` follows into — so the outer arm for that constructor is the one
 /// that arm reaches; putting that arm in place of the construction cancels the two against each other,
 /// with the outer arm's payload binder becoming the construction's operand. The inner match then
-/// produces what the outer match did, so it binds the outer match's variable.
+/// produces what the outer match did, so it binds the outer match's variable, and `k2` follows it
+/// once, as it followed the outer match.
 ///
 /// It fires all-or-nothing — every tail the walk reaches must build a union a specific outer arm
 /// matches — and only when the result is smaller than what it replaces, a size
@@ -260,13 +284,7 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
     let RcExpr::Let(s, RcRhs::Match(inner_scrut, inner_arms), k) = node.expr.as_ref() else {
         return None;
     };
-    // The continuation must be exactly a tail match on `s`: `let m = match s {..}; ret m`.
-    let RcExpr::Let(m, RcRhs::Match(outer_scrut, outer_arms), k2) = k.expr.as_ref() else {
-        return None;
-    };
-    if outer_scrut.name != s.name || !is_ret_of(k2, &m.name) || count_value_uses(&s.name, k) != 1 {
-        return None;
-    }
+    let (m, outer_arms, k2) = match_on(s, k)?;
     // The arm answering each variant, with the size of its body, so that a tail costs one lookup.
     let mut outer_arm_of_variant: Map<usize, (&MatchArm, u64)> = Map::default();
     for arm in outer_arms {
@@ -277,16 +295,22 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
         }
     }
     // Measure before building. Copying an outer arm into every tail is what this rewrite spends, so
-    // the copies below are made only for a rewrite that is kept.
-    let mut rewritten_size = 2; // the binding of `m` to the inner match, and the `ret m` after it
+    // the copies below are made only for a rewrite that is kept. One binding of a match and `k2`
+    // stand on both sides, so the rewrite is measured on the arms alone: the new inner arms against
+    // the inner arms, the outer match and its arms they replace.
+    let replaced_size = 1 + arms_size(inner_arms) + arms_size(outer_arms);
+    let mut new_arms_size = 0;
     for arm in inner_arms {
-        rewritten_size += size_after_replacing_tails(&arm.body, &mut |variant| {
+        new_arms_size += size_after_replacing_tails(&arm.body, &mut |variant| {
             outer_arm_of_variant.get(&variant).map(|(_, size)| *size)
         })?;
     }
     // Equality declines too: `simplify_to_fixpoint` counts a pass that leaves as many nodes as it
     // found as broken, and stops the fixpoint there.
-    if rewritten_size >= node_count(node) {
+    if new_arms_size >= replaced_size {
+        return None;
+    }
+    if !consumed_only_by_its_match(s, k) {
         return None;
     }
     let mut new_arms = Vec::with_capacity(inner_arms.len());
@@ -306,15 +330,21 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
         });
         new_arms.push(arm.with_body(body));
     }
-    let rewritten = tail_match(m.clone(), inner_scrut, new_arms, &node.source);
     // Renaming a binder and substituting a variable both leave the term's shape alone, so placing
-    // the outer arms leaves exactly the nodes `rewritten_size` counted.
+    // the outer arms leaves exactly the nodes `new_arms_size` counted.
     assert_eq!(
-        node_count(&rewritten),
-        rewritten_size,
-        "the rewrite left a term of a size other than the one measured before building it"
+        arms_size(&new_arms),
+        new_arms_size,
+        "the rewrite left arms of a size other than the one measured before building them"
     );
-    Some(rewritten)
+    Some(node_of(
+        RcExpr::Let(
+            m.clone(),
+            RcRhs::Match(inner_scrut.clone(), new_arms),
+            k2.clone(),
+        ),
+        &node.source,
+    ))
 }
 
 /// The number of nodes `node` holds once the union construction at each of its tails is replaced by
@@ -341,8 +371,7 @@ fn size_after_replacing_tails(
         }
         RcExpr::Let(_, RcRhs::Match(_, arms), _) => {
             // A match anywhere but the tail stands where it stood, arms and all.
-            let arms_size: u64 = arms.iter().map(|arm| node_count(&arm.body)).sum();
-            Some(1 + arms_size + size_after_replacing_tails(continuation_of(node), f)?)
+            Some(1 + arms_size(arms) + size_after_replacing_tails(continuation_of(node), f)?)
         }
         _ => Some(1 + size_after_replacing_tails(continuation_of(node), f)?),
     })
@@ -417,7 +446,7 @@ fn replace_tail_union_of_match(
 }
 
 /// `let x = match scrut { arms }; ret x` — the shape a `match` takes where it stands in tail
-/// position, which is what this rewrite leaves in place of one.
+/// position.
 fn tail_match(x: RcVar, scrut: &RcVar, arms: Vec<MatchArm>, source: &Option<Span>) -> RcExprNode {
     let ret = node_of(RcExpr::Ret(x.clone()), source);
     node_of(
