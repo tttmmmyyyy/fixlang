@@ -201,6 +201,21 @@ mod integration_tests {
         );
     }
 
+    /// `step` computes with the result of its `match` over an `Option`, so more code follows the
+    /// match. The outer arms move into the branches that build the
+    /// `Option`, the code after the match stays after it, and the function builds no union. The
+    /// built program still computes the same values over 0..10.
+    #[test]
+    fn test_a_match_followed_by_more_code() {
+        assert_union_cancelled(
+            "match_then_more",
+            &["Main::step"],
+            "`Main::step`",
+            &["destructure ", "eval "],
+            "[196, 2, 326, 4, 488, 6, 682, 8, 908, 10]",
+        );
+    }
+
     /// `step`'s branches end in a match of their own, and the four `Option`s it decides between are
     /// built at the ends of that one. The walk that moves an arm of the outer match follows such a
     /// tail, so every construction takes the arm answering it and the function builds no union. The
