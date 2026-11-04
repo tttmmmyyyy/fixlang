@@ -202,9 +202,10 @@ mod integration_tests {
     }
 
     /// `step` computes with the result of its `match` over an `Option`, so more code follows the
-    /// match. The outer arms move into the branches that build the
-    /// `Option`, the code after the match stays after it, and the function builds no union. The
-    /// built program still computes the same values over 0..10.
+    /// match. The outer arms move into the branches that build the `Option`, the code after the
+    /// match stays after it, and the function builds no union. One branch reaches its `Option`
+    /// through a destructure and the other through an eval, and both nodes are checked to still
+    /// stand in the dumped body. The built program still computes the same values over 0..10.
     #[test]
     fn test_a_match_followed_by_more_code() {
         assert_union_cancelled(
@@ -356,10 +357,10 @@ mod value_tests {
         test_source(&source, Configuration::develop_mode());
     }
 
-    /// The code after the match reads the matched `Option` again, so the match is not the only
-    /// consumer of the value the inner match builds. Moving the outer arms into the inner arms
-    /// would leave that read naming a value nothing binds any more, so the rewrite declines and the
-    /// values stay what the source computes.
+    /// The code after the match reads the matched `Option` again, so the value the inner match
+    /// builds has a second consumer besides the outer match. Moving the outer arms into the inner
+    /// arms would leave that read naming a value nothing binds any more, so the rewrite declines
+    /// and the values stay what the source computes.
     #[test]
     pub fn test_a_matched_value_read_after_the_match() {
         let source = r#"
