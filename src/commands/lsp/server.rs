@@ -11,7 +11,7 @@ use super::util::{get_current_dir, path_to_uri, span_to_location, span_to_range,
 use super::workspace_symbol;
 use crate::ast::import::ImportStatement;
 use crate::ast::program::{ModuleInfo, Program};
-use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig};
+use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig, TypeCheckStore};
 use crate::constants::PROJECT_FILE_PATH;
 use crate::dependency::lockfile::LockFileType;
 use crate::elaboration::elaborate_via_config;
@@ -1208,7 +1208,7 @@ pub fn run_diagnostics(
     typecheck_cache: SharedTypeCheckCache,
     live_overrides: Arc<Map<PathBuf, String>>,
 ) -> Result<DiagnosticsResult, Errors> {
-    // Every call elaborates the whole project, and the shared `TypeCheckCache` is what keeps that
+    // Every call elaborates the whole project, and the shared `MemoryCache` is what keeps that
     // cheap. It keys results by `(name, scheme, module_dependency_hash)`, and the dependency hash
     // folds in the source hash of every transitive dependency, so an edited file invalidates the
     // globals of its own module and of the modules that import it, transitively; every other
@@ -1254,7 +1254,7 @@ pub fn run_diagnostics(
         live_source_overrides: live_overrides,
         ..Default::default()
     })?;
-    config.type_check_cache = typecheck_cache.clone();
+    config.type_check_store = TypeCheckStore::InMemory(typecheck_cache.clone());
 
     // Set up the configuration by the project file.
     proj_file.set_config(&mut config)?;

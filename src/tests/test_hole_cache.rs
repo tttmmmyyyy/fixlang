@@ -1,20 +1,18 @@
 //! Cache integrity tests for the hole feature.
 //!
-//! `resolve_namespace_and_check_type_sub` skips `cache.save_cache(...)`
-//! whenever `check_type` produced any tolerated error (holes,
-//! cannot-infer, unsatisfied predicates, disjoint equalities).
-//! Without this, the cache would memoise a typed expression for a
-//! value that should be reporting an error — so the next `fix check`
-//! would see the cache hit, return early, and never re-emit the
-//! diagnostic.
+//! `Program::check_body` reports the tolerated errors of a check (holes, cannot-infer,
+//! unsatisfied predicates, disjoint equalities) as diagnostics, and a body whose check produced
+//! any is kept out of the type-check cache. Without this, the cache would memoise a typed
+//! expression for a value that should be reporting an error — so the next `fix check` would skip
+//! the value and never re-emit the diagnostic.
 //!
-//! These tests exercise that contract end-to-end via the `fix`
-//! binary: run `fix check`, confirm ERR_HOLE fires, then poke at the
-//! on-disk cache directory to confirm no entry was written for the
-//! offending value.
+//! These tests exercise that contract end-to-end via the `fix` binary: run `fix check`, confirm
+//! ERR_HOLE fires, then look into the on-disk cache files to confirm the offending value is not
+//! recorded there.
 
 #[cfg(test)]
 mod integration_tests {
+    use crate::constants::TYPED_MODULES_PATH;
     use crate::tests::test_util::{copy_dir_recursive, fix_command};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -50,10 +48,10 @@ mod integration_tests {
             .expect("Failed to execute fix check")
     }
 
-    /// List the names of cache files under `<project>/.fixlang/cache/typecheck/`.
-    /// Returns an empty Vec if the directory doesn't exist.
+    /// The names of the files under `TYPED_MODULES_PATH` in the project. Empty if the directory
+    /// doesn't exist.
     fn list_cache_files(project_dir: &Path) -> Vec<String> {
-        let cache_dir = project_dir.join(".fixlang/cache/typecheck");
+        let cache_dir = project_dir.join(TYPED_MODULES_PATH);
         if !cache_dir.exists() {
             return vec![];
         }
@@ -63,22 +61,24 @@ mod integration_tests {
             .collect()
     }
 
-    /// Reports whether the cache directory holds an entry for a value whose file
-    /// name begins with the given prefix.
+    /// Reports whether a cache file records a body of the global value `value_name`.
     ///
-    /// # Arguments
-    /// * `file_name_prefix` — the head of a cache file name, which holds the
-    ///   value's full name with each non-alphanumeric character replaced by `_`:
-    ///   `Main::hole_val` is written `Main__hole_val`.
-    fn has_cache_entry_for(project_dir: &Path, file_name_prefix: &str) -> bool {
-        list_cache_files(project_dir)
-            .iter()
-            .any(|file_name| file_name.starts_with(file_name_prefix))
+    /// A file records each body under its `EntityIdentity`, the value's full name and its type on
+    /// two lines, and holds the identity as the bytes it is spelled with.
+    fn has_cache_entry_for(project_dir: &Path, value_name: &str) -> bool {
+        let identity_head = format!("{}\n", value_name);
+        list_cache_files(project_dir).iter().any(|file_name| {
+            let bytes = fs::read(project_dir.join(TYPED_MODULES_PATH).join(file_name))
+                .expect("Failed to read a cache file");
+            bytes
+                .windows(identity_head.len())
+                .any(|window| window == identity_head.as_bytes())
+        })
     }
 
-    /// A hole-bearing value must not have a typecheck cache file
-    /// written for it, even though `fix check` runs to completion and
-    /// emits ERR_HOLE.
+    /// A hole-bearing value must not be recorded in the type-check
+    /// cache, even though `fix check` runs to completion and emits
+    /// ERR_HOLE.
     #[test]
     fn hole_value_is_not_cached() {
         let (_temp_dir, project_dir) = setup_test_env("with_hole");
@@ -98,12 +98,12 @@ mod integration_tests {
             stderr,
         );
 
-        // The hole-bearing value must not have a cache file. (Other
-        // values in the project — e.g. `Main::main` — may legitimately
-        // be cached, so we only check `Main__hole_val_*`.)
+        // The hole-bearing value must not be recorded. (Other values in
+        // the project — e.g. `Main::main` — may legitimately be cached,
+        // so we only check `Main::hole_val`.)
         assert!(
-            !has_cache_entry_for(&project_dir, "Main__hole_val_"),
-            "Cache file unexpectedly created for hole-bearing value.\nCache contents: {:?}",
+            !has_cache_entry_for(&project_dir, "Main::hole_val"),
+            "Hole-bearing value unexpectedly recorded in the cache.\nCache contents: {:?}",
             list_cache_files(&project_dir),
         );
     }
@@ -139,8 +139,8 @@ mod integration_tests {
         );
     }
 
-    /// Once the user fills in the hole, `fix check` succeeds and a
-    /// cache file appears for the now-clean value: the cache is
+    /// Once the user fills in the hole, `fix check` succeeds and the
+    /// cache records the now-clean value: the cache is
     /// withheld for as long as the value reports an error, and written
     /// again once it type-checks cleanly.
     #[test]
@@ -152,7 +152,7 @@ mod integration_tests {
         assert!(!first.status.success());
 
         // Edit the source to fill the hole. After this the value
-        // should type-check cleanly and the cache should be written.
+        // should type-check cleanly and be recorded in the cache.
         let main_path = project_dir.join("main.fix");
         let new_source = fs::read_to_string(&main_path)
             .expect("Failed to read main.fix")
@@ -166,8 +166,8 @@ mod integration_tests {
             String::from_utf8_lossy(&after_edit.stderr),
         );
         assert!(
-            has_cache_entry_for(&project_dir, "Main__hole_val_"),
-            "Cache file should be created once the hole is filled.\nCache contents: {:?}",
+            has_cache_entry_for(&project_dir, "Main::hole_val"),
+            "The value should be recorded once the hole is filled.\nCache contents: {:?}",
             list_cache_files(&project_dir),
         );
     }
