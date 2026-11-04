@@ -592,6 +592,7 @@ impl Program {
 
 #[cfg(test)]
 mod tests {
+    use super::decode_body;
     use crate::ast::program::TypedExpr;
     use crate::elaboration::typecheckcache::EntityIdentity;
     use crate::fixstd::builtin::{expr_int_lit, make_u128_ty};
@@ -603,10 +604,7 @@ mod tests {
         let identity: EntityIdentity = "Main::wide\nU128".to_string();
         let expr = TypedExpr::from_expr(expr_int_lit(u128::MAX, make_u128_ty(), None));
         let bytes = postcard::to_allocvec(&(&identity, &expr)).unwrap();
-        let ((read_identity, read), rest): ((EntityIdentity, TypedExpr), _) =
-            postcard::take_from_bytes(&bytes).unwrap();
-        assert!(rest.is_empty(), "bytes follow the body");
-        assert_eq!(read_identity, identity);
+        let read = decode_body(&bytes, &identity).unwrap();
         assert_eq!(
             read.expr.get_builtin().op.name(),
             format!("int({})", u128::MAX)
