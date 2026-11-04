@@ -213,14 +213,14 @@ fn read_record(path: &Path) -> Result<Option<(ModuleRecord, u64)>, String> {
         let Some(range) = record_range(&footer, len) else {
             return Ok(None);
         };
-        let mut record = vec![0u8; (range.end - range.start) as usize];
+        let mut record_bytes = vec![0u8; (range.end - range.start) as usize];
         file.seek(SeekFrom::Start(range.start))?;
-        file.read_exact(&mut record)?;
-        Ok(Some((record, range.start)))
+        file.read_exact(&mut record_bytes)?;
+        Ok(Some((record_bytes, range.start)))
     };
     match read(&mut file) {
-        Ok(Some((record, bodies_end))) => {
-            Ok(Some((decode_record(&record, bodies_end)?, bodies_end)))
+        Ok(Some((record_bytes, bodies_end))) => {
+            Ok(Some((decode_record(&record_bytes, bodies_end)?, bodies_end)))
         }
         Ok(None) => Err(NOT_A_MODULE_FILE.to_string()),
         Err(e) => Err(e.to_string()),
@@ -317,8 +317,8 @@ fn add_to_module_file(
     };
     for entry in new {
         if let Some(held) = record.get(&entry.identity) {
-            let held = &bytes[held.body.start as usize..held.body.end as usize];
-            if decode_body(held, &entry.identity).is_ok() {
+            let held_bytes = &bytes[held.body.start as usize..held.body.end as usize];
+            if decode_body(held_bytes, &entry.identity).is_ok() {
                 continue;
             }
         }
