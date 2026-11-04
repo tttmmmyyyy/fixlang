@@ -11,7 +11,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::constants::{CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX};
+    use crate::constants::{CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX, UNCURRIED_FUNC_SUFFIX};
     use crate::misc::{Map, Set};
     use crate::tests::test_util::{fix_command_at_opt_level, read_rc_ir_dump, setup_case_projects};
     use std::path::{Path, PathBuf};
@@ -105,10 +105,10 @@ mod integration_tests {
     /// records: raising the allowance the budget grants leaves this count where it is.
     const DEEP_RELAY_COPIES: usize = 7;
 
-    /// The segment `uncurry` appends to the name of a function it gives a function-pointer version,
-    /// which is what a call in the RC IR names. A capture list is named after the lambda that
-    /// receives it and carries no such segment, so this is what tells a call from a type.
-    const FUNPTR_SEGMENT: &str = "#funptr";
+    /// The segment `uncurry` appends to the name of a global to name each of its uncurried
+    /// functions, which is what a call in the RC IR names. A capture list is named after the lambda
+    /// that receives it and carries no such segment, so this is what tells a call from a type.
+    const FUNC_SEGMENT: &str = UNCURRIED_FUNC_SUFFIX;
 
     /// What `inlined_body` prints: the first element of the array at or above 5 sits at index 3.
     const INLINED_BODY_OUTPUT: &str = "3";
@@ -285,7 +285,7 @@ mod integration_tests {
     /// Asserts that the copy whose header is `header` holds the body of the lambda it is specialized
     /// on, which is what a body calling no lambda through a function pointer says.
     fn assert_holds_the_lambdas_body(header: &str, body: &str) {
-        let called_lambdas = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]);
+        let called_lambdas = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNC_SEGMENT]);
         assert!(
             called_lambdas.is_empty(),
             "the copy `{}` should hold the body of the lambda it is specialized on, and it \
@@ -693,7 +693,7 @@ mod integration_tests {
                 functions_named_with(&dump, "Main::")
             );
             for (header, body) in copies {
-                let called_lambdas = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNPTR_SEGMENT]);
+                let called_lambdas = names_in(body, &[CLOSURE_LAM_SUFFIX, FUNC_SEGMENT]);
                 assert!(
                     !called_lambdas.is_empty(),
                     "the copy `{}` should go on calling the lambda it is specialized on, since \

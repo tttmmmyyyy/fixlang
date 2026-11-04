@@ -16,7 +16,7 @@ use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionT
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
 use crate::error::Errors;
 use crate::fixstd::builtin::{
-    get_tuple_n, is_funptr_tycon, make_arrow_name_abs, make_funptr_tycon, make_unit_ty,
+    func_tycon_arity, get_tuple_n, make_arrow_name_abs, make_func_tycon, make_unit_ty,
     BuiltinTypeName, ARRAY_STORAGE_TYPE, ARRAY_TYPE, ARROW_TYPE, BOOL_TYPE, DESTRUCTOR_TYPE,
     DYNAMIC_OBJECT_TYPE, F32_TYPE, F64_TYPE, I128_TYPE, I16_TYPE, I32_TYPE, I64_TYPE, I8_TYPE,
     IO_TYPE, PTR_TYPE, PUNCHED_ARRAY_TYPE, STRING_TYPE, U128_TYPE, U16_TYPE, U32_TYPE, U64_TYPE,
@@ -189,7 +189,7 @@ pub enum TyConVariant {
     /// A built-in type laid out as a single machine scalar, such as `Std::I64` or `Std::Ptr`.
     /// `Std::IOState` is one too, and carries nothing.
     Primitive,
-    /// The function type constructor `->`, whose values are closures.
+    /// The arrow type constructor `->`, whose values are closures.
     Arrow,
     /// `Std::Array`, whose one field is the type its elements share.
     Array,
@@ -358,7 +358,7 @@ impl TyCon {
         self.name.name += &format!("{}{}", PUNCHED_TYPE_SYMBOL, punched_at);
     }
 
-    /// Whether this is the type constructor `->` that heads a function type.
+    /// Whether this is the type constructor `->` that heads an arrow type.
     pub fn is_arrow(&self) -> bool {
         ARROW_TYPE.is(&self.name)
     }
@@ -872,12 +872,12 @@ impl TypeNode {
         Arc::new(ret)
     }
 
-    /// The argument types of a closure type or a function pointer type. Panics for any other type.
+    /// The argument types of an arrow type or a func type. Panics for any other type.
     ///
     /// # Examples
-    /// `a -> b` gives `[a]`, and `#FunPtr2 a b c` gives `[a, b]`.
+    /// `a -> b` gives `[a]`, and `#Func2 a b c` gives `[a, b]`.
     pub fn get_lambda_srcs(self: &Arc<TypeNode>) -> Vec<Arc<TypeNode>> {
-        if self.is_funptr() || self.is_closure() {
+        if self.is_func() || self.is_arrow() {
             let mut type_args = self.collect_type_arguments();
             type_args.pop(); // Discard the destination type.
             return type_args;
@@ -888,12 +888,12 @@ impl TypeNode {
         );
     }
 
-    /// The result type of a closure type or a function pointer type. Panics for any other type.
+    /// The result type of an arrow type or a func type. Panics for any other type.
     ///
     /// # Examples
-    /// `a -> b` gives `b`, and `#FunPtr2 a b c` gives `c`.
+    /// `a -> b` gives `b`, and `#Func2 a b c` gives `c`.
     pub fn get_lambda_dst(&self) -> Arc<TypeNode> {
-        if self.is_funptr() || self.is_closure() {
+        if self.is_func() || self.is_arrow() {
             let mut type_args = self.collect_type_arguments();
             type_args.pop().unwrap()
         } else {
@@ -1210,7 +1210,7 @@ impl TypeNode {
         ret
     }
 
-    /// This function type split into its argument types and the result type they lead to.
+    /// This arrow type split into its argument types and the result type they lead to.
     ///
     /// # Arguments
     /// * `vars_limit` — how many argument types to take at most. The split stops before an arrow
@@ -1230,7 +1230,7 @@ impl TypeNode {
             vars: &mut Vec<Arc<TypeNode>>,
             vars_limit: usize,
         ) -> Arc<TypeNode> {
-            if ty.is_closure() || ty.is_funptr() {
+            if ty.is_arrow() || ty.is_func() {
                 let mut vs = ty.get_lambda_srcs();
                 if vars.len() + vs.len() > vars_limit {
                     return ty.clone();
@@ -1387,16 +1387,16 @@ impl TypeNode {
         self.toplevel_tycon_satisfies(|tc| name.is(&tc.name))
     }
 
-    /// Whether this type is a function type `a -> b`, a value of which pairs the code to run with
-    /// the values it captured.
-    pub fn is_closure(&self) -> bool {
+    /// Whether this type is an arrow type `a -> b`, whose value is a closure: the code to run
+    /// paired with the values it captured.
+    pub fn is_arrow(&self) -> bool {
         self.toplevel_tycon_satisfies(TyCon::is_arrow)
     }
 
-    /// Whether this type is one of the `Std::#FunPtr{n}` constructors, a pointer to code of `n`
+    /// Whether this type is one of the `Std::#Func{n}` constructors, a pointer to code of `n`
     /// arguments that carries no captured value.
-    pub fn is_funptr(&self) -> bool {
-        self.toplevel_tycon_satisfies(|tc| is_funptr_tycon(tc).is_some())
+    pub fn is_func(&self) -> bool {
+        self.toplevel_tycon_satisfies(|tc| func_tycon_arity(tc).is_some())
     }
 
     /// Whether this type is `Std::Array`.
@@ -1449,7 +1449,7 @@ impl TypeNode {
     }
 
     /// Whether the top-level type constructor of this type is a struct.
-    /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
+    /// Panics for an arrow type, a type variable, or a type constructor absent from `type_env`.
     pub fn is_struct(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1460,7 +1460,7 @@ impl TypeNode {
 
     /// Whether the top-level type constructor of this type is a union, so that a value of it
     /// carries one of the declared fields and a tag saying which.
-    /// Panics for a closure type, a type variable, or a type constructor absent from `type_env`.
+    /// Panics for an arrow type, a type variable, or a type constructor absent from `type_env`.
     pub fn is_union(&self, type_env: &TypeEnv) -> bool {
         let ti = self.toplevel_tycon_info(type_env);
         match ti.variant {
@@ -1483,10 +1483,10 @@ impl TypeNode {
     }
 
     /// The declaration of this type's outermost type constructor: its variant, boxedness, type
-    /// parameters and fields. Panics for a closure type, a type variable, or a type constructor
+    /// parameters and fields. Panics for an arrow type, a type variable, or a type constructor
     /// absent from `type_env`.
     pub fn toplevel_tycon_info<'a>(&self, type_env: &'a TypeEnv) -> &'a TyConInfo {
-        assert!(!self.is_closure());
+        assert!(!self.is_arrow());
         let tycon = self
             .toplevel_tycon()
             .unwrap_or_else(|| panic!("the type `{:?}` is headed by no type constructor", self));
@@ -1496,7 +1496,7 @@ impl TypeNode {
     /// Whether a value of this type is held in place, with its fields laid out where the value
     /// sits. A closure is unboxed: it is a function pointer beside the object its captures live in.
     pub fn is_unbox(&self, type_env: &TypeEnv) -> bool {
-        self.is_closure() || self.toplevel_tycon_info(type_env).is_unbox
+        self.is_arrow() || self.toplevel_tycon_info(type_env).is_unbox
     }
 
     /// Whether a value of this type is a pointer to a heap block that holds its fields, so that the
@@ -1515,7 +1515,7 @@ impl TypeNode {
         if self.is_box(type_env) {
             return false;
         }
-        if self.is_closure() {
+        if self.is_arrow() {
             return false;
         }
         // `Array` is unboxed but holds its elements in a boxed storage, so it is never fully
@@ -1524,7 +1524,7 @@ impl TypeNode {
         if self.is_array() {
             return false;
         }
-        if self.is_funptr() {
+        if self.is_func() {
             return true;
         }
         self.unpunched_field_types(type_env)
@@ -1968,7 +1968,7 @@ impl TypeNode {
                         // In this case we use special notation when the `Arrow` type is fully applied.
                         let args = self.collect_type_arguments();
                         if args.len() == 2 {
-                            if args[0].is_closure() {
+                            if args[0].is_arrow() {
                                 return format!(
                                     "({}) -> {}",
                                     args[0].to_string(),
@@ -2142,17 +2142,17 @@ pub fn type_from_tyvar(tyvar: Arc<TyVar>) -> Arc<TypeNode> {
     Arc::new(ty)
 }
 
-/// The function type `src -> dst`.
-pub fn type_fun(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
-    type_fun_with_arrow_src(src, dst, None)
+/// The arrow type `src -> dst`.
+pub fn type_arrow(src: Arc<TypeNode>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
+    type_arrow_with_arrow_src(src, dst, None)
 }
 
-/// The function type `src -> dst`, with the `->` itself written at `arrow_src`.
+/// The arrow type `src -> dst`, with the `->` itself written at `arrow_src`.
 ///
 /// # Arguments
 /// * `arrow_src` — where the `->` itself was written, which a report drawn on the arrow points
 ///   at.
-pub fn type_fun_with_arrow_src(
+pub fn type_arrow_with_arrow_src(
     src: Arc<TypeNode>,
     dst: Arc<TypeNode>,
     arrow_src: Option<Span>,
@@ -2166,10 +2166,10 @@ pub fn type_fun_with_arrow_src(
     type_tyapp(partial, dst)
 }
 
-/// The function pointer type taking `srcs` to `dst`, i.e. `Std::#FunPtr{n}` applied to them,
+/// The func type taking `srcs` to `dst`, i.e. `Std::#Func{n}` applied to them,
 /// where `n` is the number of arguments.
-pub fn type_funptr(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
-    let mut ty = TypeNode::new_arc(Type::TyCon(Arc::new(make_funptr_tycon(srcs.len() as u32))));
+pub fn type_func(srcs: Vec<Arc<TypeNode>>, dst: Arc<TypeNode>) -> Arc<TypeNode> {
+    let mut ty = TypeNode::new_arc(Type::TyCon(Arc::new(make_func_tycon(srcs.len() as u32))));
     for src in srcs {
         ty = type_tyapp(ty, src);
     }

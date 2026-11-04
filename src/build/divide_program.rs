@@ -253,8 +253,9 @@ fn global_types_including_synthesized(
         // A closure function is reached by an indirect call through the capture the body it was
         // lifted from builds, so its name is mentioned only in that body's own unit and it is
         // declared where code generation reaches it. Naming it here would have the unit defining it
-        // declare an accessor instead, since only a funptr global is the function itself.
-        if func.fn_ty.is_funptr() {
+        // declare an accessor instead, since only a func is a global whose value is the function
+        // itself.
+        if !func.takes_capture() {
             types.insert(fref.name.clone(), func.fn_ty.clone());
         }
     }
@@ -273,7 +274,7 @@ fn copyable_funcs(program: &RcProgram) -> Map<FullName, RcFunc> {
         // generation reads that function out of the module building it, so a unit that took a copy
         // of a body building one takes a copy of the function too, whatever its size.
         .filter(|(_, func)| {
-            !func.fn_ty.is_funptr() || node_count(&func.body) <= IMPORTED_FUNCTION_NODE_LIMIT
+            func.takes_capture() || node_count(&func.body) <= IMPORTED_FUNCTION_NODE_LIMIT
         })
         .map(|(fref, func)| (fref.name.clone(), func.clone()))
         .collect()
@@ -653,7 +654,7 @@ fn give_the_main_unit_the_root_values(
         if defines(&unit_programs[main_unit_index], name) {
             continue;
         }
-        // A root value of funptr type is a function rather than a global, so it has no accessor to
+        // A root value of func type is a function rather than a global, so it has no accessor to
         // copy and the main unit reaches it by declaring it.
         let Some(global) = all_globals.get(name) else {
             continue;

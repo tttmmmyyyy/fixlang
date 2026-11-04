@@ -31,7 +31,7 @@ use crate::{
         name::FullName,
         program::{Program, Symbol},
         traverse::{ExprVisitor, StartVisitResult, VisitState},
-        types::{type_fun, TyCon, TyConInfo},
+        types::{type_arrow, TyCon, TyConInfo},
     },
     constants::{FIX_CAP_PARAM_PREFIX, FIX_CAP_PREFIX, FIX_DEFUNCT_SUFFIX},
     misc::{Map, Set},
@@ -251,7 +251,7 @@ impl FixDefunctionalizer {
 
         // The recursive value `G(cap)`, of type `a -> b`.
         let g_ref =
-            expr_var(func_name.clone(), None).set_type(type_fun(cap.ty.clone(), ab_ty.clone()));
+            expr_var(func_name.clone(), None).set_type(type_arrow(cap.ty.clone(), ab_ty.clone()));
         let self_replacement = expr_app_typed(
             g_ref.clone(),
             vec![expr_var(cap_param_name.clone(), None).set_type(cap.ty.clone())],

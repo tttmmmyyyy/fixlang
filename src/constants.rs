@@ -114,7 +114,9 @@ pub const UNION_IS_SYMBOL: &str = "is_";
 pub const UNION_MOD_SYMBOL: &str = "mod_";
 
 // Names used by compiler.
-pub const FUNPTR_NAME: &str = "#FunPtr";
+/// The name of the func type constructors, followed by the number of arguments: `#Func2` is the
+/// func type of two arguments.
+pub const FUNC_NAME: &str = "#Func";
 pub const DYNAMIC_OBJECT_NAME: &str = "#DynamicObject";
 // The internal boxed type holding an array's refcount and raw element buffer. Like `#DynamicObject`,
 // its `#` prefix makes it un-nameable in source, so it cannot leak out of `Array`'s interface.
@@ -153,6 +155,8 @@ pub const SPLIT_ARG_SUFFIX: &str = "#split_arg";
 /// The suffix, followed by a counter, of the global function the argument of an application of
 /// `Std::fix` is lifted to.
 pub const FIX_DEFUNCT_SUFFIX: &str = "#fix_defunct";
+/// The suffix, followed by the number of arguments it takes, of an uncurried function of a global.
+pub const UNCURRIED_FUNC_SUFFIX: &str = "#func";
 /// The prefix of the type constructor naming a capture struct that `defunctionalize_fix` builds. The
 /// struct carries the values that the argument of an application of `Std::fix` captures to the
 /// global function that argument is lifted to.
@@ -380,8 +384,8 @@ pub const DW_ATE_UNSIGNED: u32 = 7;
 #[allow(unused)]
 pub const DW_ATE_UNSINGED_CHAR: u32 = 8;
 
-// Max number of arguments of function pointer lambda.
-pub const FUNPTR_ARGS_MAX: u32 = 100;
+/// The largest number of arguments of a func type `#Func{n}`, and so of an uncurried function.
+pub const FUNC_ARGS_MAX: u32 = 100;
 // The max size of tuples which are defined in any program.
 // Any bigger tuples are defined on demand.
 pub const TUPLE_SIZE_BASE: u32 = 3;

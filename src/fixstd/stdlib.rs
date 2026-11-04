@@ -6,7 +6,7 @@ use crate::{
         program::Program,
         qual_pred::QualPred,
         traits::{TraitId, TraitImpl},
-        types::{type_fun, type_tycon, Scheme, TyCon, TypeNode},
+        types::{type_arrow, type_tycon, Scheme, TyCon, TypeNode},
     },
     configuration::Configuration,
     constants::{
@@ -83,7 +83,7 @@ fn cast_delegation(
     );
     trait_method.set_absolute();
     let body = expr_var(trait_method, None);
-    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(from.clone(), return_ty));
+    let scm = Scheme::generalize(&[], vec![], vec![], type_arrow(from.clone(), return_ty));
     (body, scm)
 }
 

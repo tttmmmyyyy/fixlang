@@ -692,7 +692,7 @@ pub(crate) fn unit_step(ty: &Arc<TypeNode>, type_env: &TypeEnv) -> UnitStep {
     if ty.is_fully_unboxed(type_env) {
         return UnitStep::NoUnit;
     }
-    if ty.is_closure() {
+    if ty.is_arrow() {
         return UnitStep::Capture {
             capture_idx: CLOSURE_CAPTURE_IDX as usize,
             field_count: CLOSURE_FIELD_COUNT,
@@ -952,7 +952,7 @@ mod tests {
     use crate::ast::type_env::TypeEnv;
     use crate::ast::typedecl::Field;
     use crate::ast::types::{
-        kind_arrow, kind_star, make_tyvar, tycon, type_fun, type_tyapp, type_tycon,
+        kind_arrow, kind_star, make_tyvar, tycon, type_arrow, type_tyapp, type_tycon,
         type_tyvar_star, TyCon, TyConInfo, TyConVariant, TypeNode,
     };
     use crate::constants::{CLOSURE_CAPTURE_IDX, CLOSURE_FIELD_COUNT, CLOSURE_FUNPTR_IDX};
@@ -1054,7 +1054,7 @@ mod tests {
                     true,
                     vec![
                         ("c", test_ty("Choice")),
-                        ("f", type_fun(make_i64_ty(), make_i64_ty())),
+                        ("f", type_arrow(make_i64_ty(), make_i64_ty())),
                     ],
                 ),
             ),
@@ -1096,7 +1096,7 @@ mod tests {
             make_i64_ty(),                                      // holds no reference
             array_of_i64(),                                     // an array
             make_dynamic_object_ty(),                           // a boxed value
-            type_fun(make_i64_ty(), make_i64_ty()),             // a closure
+            type_arrow(make_i64_ty(), make_i64_ty()),           // a closure
             type_tyapp(make_punched_array_ty(), make_i64_ty()), // a punched array
             test_ty("Pair"),                                    // an unboxed struct
             test_ty("Choice"),                                  // an unboxed union
@@ -1158,7 +1158,7 @@ mod tests {
     #[test]
     fn a_closures_step_is_the_capture_its_layout_holds() {
         let type_env = type_env();
-        let closure_ty = type_fun(make_i64_ty(), make_i64_ty());
+        let closure_ty = type_arrow(make_i64_ty(), make_i64_ty());
         match unit_step(&closure_ty, &type_env) {
             UnitStep::Capture {
                 capture_idx,

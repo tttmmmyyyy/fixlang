@@ -253,7 +253,7 @@ pub fn specializable_callee(
         name: callee.name.clone(),
     };
     let g = prog.funcs.get(&cref)?;
-    if g.capture.is_some() || !gate.contains(&cref) {
+    if g.takes_capture() || !gate.contains(&cref) {
         return None;
     }
     Some(cref)
