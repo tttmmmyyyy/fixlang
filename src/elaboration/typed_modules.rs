@@ -192,12 +192,12 @@ fn decode_body(bytes: &[u8], identity: &EntityIdentity) -> Result<TypedExpr, Str
 /// The message for a file that is not one of type-checked modules.
 const NOT_A_MODULE_FILE: &str = "it is not a file of type-checked modules";
 
-/// The record of the file at `path`, and where its bodies end. A file that does not exist answers
-/// `None`; one that cannot be read, or is not a file of type-checked modules, answers the reason.
+/// The record of the file at `path`. A file that does not exist answers `None`; one that cannot be
+/// read, or is not a file of type-checked modules, answers the reason.
 ///
 /// Only the footer and the record are read, so that a build reads of a module's bodies only those
 /// it asks for later.
-fn read_record(path: &Path) -> Result<Option<(ModuleRecord, u64)>, String> {
+fn read_record(path: &Path) -> Result<Option<ModuleRecord>, String> {
     let mut file = match File::open(path) {
         Ok(file) => file,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -220,9 +220,7 @@ fn read_record(path: &Path) -> Result<Option<(ModuleRecord, u64)>, String> {
         Ok(Some((record_bytes, range.start)))
     };
     match read(&mut file) {
-        Ok(Some((record_bytes, bodies_end))) => {
-            Ok(Some((decode_record(&record_bytes, bodies_end)?, bodies_end)))
-        }
+        Ok(Some((record_bytes, bodies_end))) => Ok(Some(decode_record(&record_bytes, bodies_end)?)),
         Ok(None) => Err(NOT_A_MODULE_FILE.to_string()),
         Err(e) => Err(e.to_string()),
     }
@@ -297,6 +295,20 @@ impl NewEntry {
     }
 }
 
+/// The file of a module checked under one `module_dependency_hash`.
+struct ModuleFile {
+    module: Name,
+    /// The `module_dependency_hash` of `module`.
+    module_hash: String,
+}
+
+impl ModuleFile {
+    /// The path of the file, under `TYPED_MODULES_PATH`.
+    fn path(&self) -> PathBuf {
+        Path::new(TYPED_MODULES_PATH).join(module_file_name(&self.module, &self.module_hash))
+    }
+}
+
 /// Adds `new` to the file of `module` checked under `module_hash`, in `dir`, and removes the files of
 /// `module` checked under any other hash.
 ///
@@ -358,11 +370,14 @@ fn add_to_module_file(
     Ok(())
 }
 
-/// Adds the bodies of `new_entries` to the files of their modules, each checked under the hash
-/// `module_hashes` gives. A file that cannot be written is reported as a warning.
-fn add_to_module_files(
-    new_entries: Map<Name, Vec<NewEntry>>,
-    module_hashes: &Map<Name, Arc<String>>,
+/// Adds each list of bodies of `new_entries` to the file it is paired with. A file that cannot be
+/// written is reported as a warning.
+///
+/// The bodies a file already holds are decoded to see whether they are intact, and the spans in
+/// them share `source_files`.
+fn add_to_module_files<'a>(
+    new_entries: impl IntoIterator<Item = (&'a ModuleFile, Vec<NewEntry>)>,
+    source_files: &mut Map<PathBuf, SourceFile>,
 ) {
     let dir = match create_dir_guarding_project_links(
         Path::new(TYPED_MODULES_PATH),
@@ -376,12 +391,14 @@ fn add_to_module_files(
             return;
         }
     };
-    for (module, entries) in new_entries {
-        let module_hash = module_hashes[&module].as_str();
-        if let Err(e) = add_to_module_file(&dir, &module, module_hash, entries) {
+    for (file, entries) in new_entries {
+        let added = SourceFile::with_shared_source_files(source_files, || {
+            add_to_module_file(&dir, &file.module, &file.module_hash, entries)
+        });
+        if let Err(e) = added {
             warn_msg(&format!(
                 "Failed to write cache file \"{}\": {}.",
-                dir.join(module_file_name(&module, module_hash))
+                dir.join(module_file_name(&file.module, &file.module_hash))
                     .to_string_lossy(),
                 e
             ));
@@ -401,12 +418,8 @@ fn warn_unreadable_file(path: &Path, why: &str) {
 /// A body whose typed expression lies in its module's file, and which `Program::global_values`
 /// holds as it was parsed.
 struct StoredBody {
-    /// The module the body is defined in.
-    module: Name,
-    /// The `module_dependency_hash` of `module`, which the file is named after.
-    module_hash: Arc<String>,
-    /// The file.
-    path: Arc<PathBuf>,
+    /// The file of the module the body is defined in.
+    file: Arc<ModuleFile>,
     /// The entity the body belongs to, which the file writes in front of the body.
     identity: EntityIdentity,
     /// Where the body lies in the file.
@@ -467,19 +480,20 @@ impl Program {
         }
 
         // Skip the bodies the files record.
-        let mut module_hashes: Map<Name, Arc<String>> = Map::default();
-        let mut to_check: Vec<(BodyLocation, Name, EntityIdentity)> = vec![];
+        let mut to_check: Vec<(BodyLocation, Arc<ModuleFile>, EntityIdentity)> = vec![];
         for (module, locs) in bodies_by_module {
-            let module_hash = Arc::new(self.module_dependency_hash(&module, config)?);
-            let path = Arc::new(
-                Path::new(TYPED_MODULES_PATH).join(module_file_name(&module, &module_hash)),
-            );
+            let module_hash = self.module_dependency_hash(&module, config)?;
+            let file = Arc::new(ModuleFile {
+                module,
+                module_hash,
+            });
+            let path = file.path();
             let record =
                 SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
                     read_record(&path)
                 });
             let record = match record {
-                Ok(Some((record, _bodies_end))) => record,
+                Ok(Some(record)) => record,
                 Ok(None) => ModuleRecord::default(),
                 Err(why) => {
                     warn_unreadable_file(&path, &why);
@@ -494,33 +508,31 @@ impl Program {
                         self.typed_modules.stored.insert(
                             loc,
                             StoredBody {
-                                module: module.clone(),
-                                module_hash: module_hash.clone(),
-                                path: path.clone(),
+                                file: file.clone(),
                                 identity,
                                 range: entry.body.clone(),
                                 warning_facts: entry.warning_facts.clone(),
                             },
                         );
                     }
-                    None => to_check.push((loc, module.clone(), identity)),
+                    None => to_check.push((loc, file.clone(), identity)),
                 }
             }
-            module_hashes.insert(module, module_hash);
         }
 
         // Check the rest, and keep what passes with no diagnostic for the files.
-        let mut new_entries: Map<Name, Vec<NewEntry>> = Map::default();
+        let mut new_entries: Map<Name, (Arc<ModuleFile>, Vec<NewEntry>)> = Map::default();
         let locs = to_check.iter().map(|(loc, _, _)| loc.clone()).collect();
         let results = self.check_bodies(locs, tc);
-        for ((loc, module, identity), (checked_loc, checked)) in to_check.into_iter().zip(results) {
+        for ((loc, file, identity), (checked_loc, checked)) in to_check.into_iter().zip(results) {
             assert!(loc == checked_loc, "`check_bodies` answered out of order");
             match checked {
                 Ok(checked) => {
                     if checked.passed() {
                         new_entries
-                            .entry(module)
-                            .or_default()
+                            .entry(file.module.clone())
+                            .or_insert_with(|| (file.clone(), vec![]))
+                            .1
                             .push(NewEntry::of(identity, &checked));
                     }
                     errors.append(self.install_checked_body(&loc, checked));
@@ -529,7 +541,12 @@ impl Program {
             }
         }
         if !new_entries.is_empty() {
-            add_to_module_files(new_entries, &module_hashes);
+            add_to_module_files(
+                new_entries
+                    .values_mut()
+                    .map(|(file, entries)| (&**file, std::mem::take(entries))),
+                &mut self.typed_modules.source_files,
+            );
         }
 
         // The concrete types of opaque types are known only once the values are checked, and a
@@ -559,13 +576,13 @@ impl Program {
         }
         let read =
             SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
-                read_body(&stored.path, &stored.range, &stored.identity)
+                read_body(&stored.file.path(), &stored.range, &stored.identity)
             });
         let te = match read {
             Ok(Some(te)) => te,
             failed => {
                 if let Err(why) = failed {
-                    warn_unreadable_file(&stored.path, &why);
+                    warn_unreadable_file(&stored.file.path(), &why);
                 }
                 // The opaque types of the body are already known from the record.
                 let checked = self.check_body(loc, &self.create_name_resolution_env(), tc)?;
@@ -574,13 +591,11 @@ impl Program {
                 }
                 if checked.passed() {
                     let stored = &self.typed_modules.stored[loc];
-                    let module_hashes =
-                        Map::from_iter([(stored.module.clone(), stored.module_hash.clone())]);
-                    let new_entries = Map::from_iter([(
-                        stored.module.clone(),
-                        vec![NewEntry::of(stored.identity.clone(), &checked)],
-                    )]);
-                    add_to_module_files(new_entries, &module_hashes);
+                    let entry = NewEntry::of(stored.identity.clone(), &checked);
+                    add_to_module_files(
+                        [(&*stored.file, vec![entry])],
+                        &mut self.typed_modules.source_files,
+                    );
                 }
                 checked.te
             }
