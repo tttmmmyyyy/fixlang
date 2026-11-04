@@ -14,7 +14,8 @@
 // A build reads the record of every module and type-checks only the bodies the record lacks. It
 // reads a typed expression back only when instantiation asks for it. When the check passes bodies
 // the record lacked, the file is written anew: the bodies it holds are copied as they are, at the
-// same offsets, and the new bodies follow them.
+// same offsets, and the new bodies follow them. A body that instantiation finds the file failing to
+// hold is checked again and written the same way, after the bodies the file holds.
 //
 // The record is valid because a body is determined by its `EntityIdentity` together with what the
 // module's `module_dependency_hash` covers. The set of bodies a module has can still differ between
@@ -246,10 +247,10 @@ fn decode_module_file(mut bytes: Vec<u8>) -> Result<(ModuleRecord, Vec<u8>), Str
 /// The typed expression of the body `identity` lying at `range` in the file at `path`. A file that
 /// no longer exists answers `None`; one whose bytes there are not the body answers the reason.
 ///
-/// The bodies a file holds stay at their offsets when the file is written anew, so `range` read
-/// from an earlier record of the file still finds the body. The identity written in front of the
-/// body is compared with `identity` all the same, so a file replaced by something else is never
-/// taken for it.
+/// A body the file holds intact stays at its offset when the file is written anew, so `range` read
+/// from an earlier record of the file still finds it. The identity written in front of the body is
+/// compared with `identity` all the same, so a file replaced by something else is never taken for
+/// it.
 fn read_body(
     path: &Path,
     range: &Range<u64>,
