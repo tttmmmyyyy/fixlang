@@ -1,11 +1,24 @@
 module Main;
 
-// A `match` over an `Option` that the branches of an `if` build, whose result `step` goes on to
-// compute with. The outer arms move into the branches, and the computation after the match stays
-// after it, so no `Option` is built.
+bounds : (I64, I64);
+bounds = (3, 4);
+
+names : Array String;
+names = ["first", "second"];
+
+// A `match` over an `Option` whose result `step` goes on to compute with. One branch reaches the
+// `Option` it builds through a destructure of `bounds`, the other through an eval of `names`. The
+// outer arms move into the branches, and the computation after the match stays after it, so no
+// `Option` is built.
 step : I64 -> I64;
 step = |n| (
-    let r = match (if n % 3 == 0 { Option::some(n + 1) } else { Option::none() }) {
+    let r = match (if n % 2 == 0 {
+        let (lo, hi) = bounds;
+        Option::some(lo + hi + n)
+    } else {
+        eval names;
+        Option::none()
+    }) {
         some(v) => v * 2,
         none() => -1
     };
