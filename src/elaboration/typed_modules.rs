@@ -14,8 +14,9 @@
 // A build reads the record of every module and type-checks only the bodies the record lacks. It
 // reads a typed expression back only when instantiation asks for it. When the check passes bodies
 // the record lacked, the file is written anew: the bodies it holds are copied as they are, at the
-// same offsets, and the new bodies follow them. A body that instantiation finds the file failing to
-// hold is checked again and written the same way, after the bodies the file holds.
+// same offsets, and the new bodies follow them. When instantiation finds a body that the file
+// fails to hold, it checks the body again and writes it the same way, after the bodies the file
+// holds.
 //
 // The record is valid because a body is determined by its `EntityIdentity` together with what the
 // module's `module_dependency_hash` covers. The set of bodies a module has can still differ between
@@ -162,7 +163,8 @@ fn record_range(footer: &[u8; FOOTER_LEN as usize], len: u64) -> Option<Range<u6
     Some(offset..offset + record_len)
 }
 
-/// The record serialized as `bytes`, in a file whose bodies end at `bodies_end`.
+/// The record serialized as `bytes`. A record that points past `bodies_end`, where the bodies of
+/// its file end, answers the reason.
 fn decode_record(bytes: &[u8], bodies_end: u64) -> Result<ModuleRecord, String> {
     let entries: Vec<(EntityIdentity, EntityEntry)> =
         postcard::from_bytes(bytes).map_err(|e| e.to_string())?;
@@ -175,8 +177,8 @@ fn decode_record(bytes: &[u8], bodies_end: u64) -> Result<ModuleRecord, String> 
     Ok(entries.into_iter().collect())
 }
 
-/// The typed expression `bytes` hold, which a module's file writes after the identity of its
-/// body; the reason when the bytes are not the body of `identity`.
+/// The typed expression of a body as a module's file writes it: the identity of the body, then
+/// its typed expression. Bytes that are not the body of `identity` answer the reason.
 fn decode_body(bytes: &[u8], identity: &EntityIdentity) -> Result<TypedExpr, String> {
     let ((found, expr), rest): ((EntityIdentity, TypedExpr), _) =
         postcard::take_from_bytes(bytes).map_err(|e| e.to_string())?;
@@ -195,8 +197,8 @@ const NOT_A_MODULE_FILE: &str = "it is not a file of type-checked modules";
 /// The record of the file at `path`. A file that does not exist answers `None`; one that cannot be
 /// read, or is not a file of type-checked modules, answers the reason.
 ///
-/// Only the footer and the record are read, so that a build reads of a module's bodies only those
-/// it asks for later.
+/// It reads only the footer and the record, so that a build reads only the bodies it asks for
+/// later.
 fn read_record(path: &Path) -> Result<Option<ModuleRecord>, String> {
     let mut file = match File::open(path) {
         Ok(file) => file,
@@ -279,7 +281,7 @@ struct NewEntry {
 }
 
 impl NewEntry {
-    /// The entry of the body `identity` that `checked` passed.
+    /// The entry of the body of `identity`, from the check `checked` that the body passed.
     fn of(identity: EntityIdentity, checked: &CheckedBody) -> Self {
         assert!(
             checked.passed(),
@@ -297,6 +299,7 @@ impl NewEntry {
 
 /// The file of a module checked under one `module_dependency_hash`.
 struct ModuleFile {
+    /// The module whose bodies the file holds.
     module: Name,
     /// The `module_dependency_hash` of `module`.
     module_hash: String,
@@ -313,8 +316,8 @@ impl ModuleFile {
 /// `module` checked under any other hash.
 ///
 /// The file is read again here, so that the bodies another build added to it since this build read
-/// it are kept. A body the file already holds is kept as it is, unless its bytes are not the body,
-/// which `new` then replaces.
+/// it are kept. A body the file already holds is kept as it is when its bytes decode to it, and is
+/// replaced by the one in `new` otherwise.
 fn add_to_module_file(
     dir: &Path,
     module: &Name,
@@ -373,8 +376,8 @@ fn add_to_module_file(
 /// Adds each list of bodies of `new_entries` to the file it is paired with. A file that cannot be
 /// written is reported as a warning.
 ///
-/// The bodies a file already holds are decoded to see whether they are intact, and the spans in
-/// them share `source_files`.
+/// The bodies a file already holds are decoded to see whether they are intact. The source files
+/// their spans point into are taken from `source_files`, which gains the paths it lacks.
 fn add_to_module_files<'a>(
     new_entries: impl IntoIterator<Item = (&'a ModuleFile, Vec<NewEntry>)>,
     source_files: &mut Map<PathBuf, SourceFile>,
