@@ -36,8 +36,6 @@ pub struct Lambda {
     /// The nodes of the lambda expression among the `NodeType`s of its symbol: its own node, then
     /// the nodes of its body.
     pub nodes: Range<usize>,
-    /// Whether the lambda is the body of its symbol.
-    pub is_body: bool,
     /// The names the lambda captures, in the order `ExprNode::lambda_cap_names` lists them, each
     /// with its annotated type where the lambda is written.
     pub captures: Vec<(FullName, AType)>,
@@ -52,11 +50,16 @@ impl Lambda {
         format!("{}@lam{}", self.symbol.to_string(), self.index)
     }
 
+    /// Whether the lambda is the body of its symbol: the first node of the body is its own.
+    pub fn is_body(&self) -> bool {
+        self.nodes.start == 0
+    }
+
     /// Whether the rewrite lifts the lambda to a global function where its set is represented by
     /// closures. The lambda that is the body of its symbol is a global function already, and one
     /// whose body reads its capture whole (`CAP_NAME`) needs the closure object holding it.
     pub fn is_lifted_from_closures(&self) -> bool {
-        !self.is_body && !self.expr.get_lam_body().has_free_var(&FullName::local(CAP_NAME))
+        !self.is_body() && !self.expr.get_lam_body().has_free_var(&FullName::local(CAP_NAME))
     }
 }
 
@@ -569,7 +572,6 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
             params: vec![],
             expr: expr.clone(),
             nodes: node..node,
-            is_body: node == 0,
             captures: vec![],
             held_in_place: vec![],
         });
@@ -775,7 +777,7 @@ fn generalize(
     for term in &terms {
         if let Some(lam) = term.lam {
             let lambda = &mut analysis.lambdas[lam as usize];
-            if lambda.is_body {
+            if lambda.is_body() {
                 lambda.params = body_params.clone();
             }
         }
@@ -877,30 +879,26 @@ fn generalize(
     // share none of them with a variable they unify.
     let mut vars: Vec<SetVar> = vec![];
     let mut seen: Set<SetVar> = Set::default();
-    let mut root = |solver: &mut Solver, v: &mut SetVar| {
-        *v = solver.find(*v);
-        if seen.insert(*v) {
-            vars.push(*v);
+    let mut root = |solver: &mut Solver, vs: &mut [SetVar]| {
+        for v in vs {
+            *v = solver.find(*v);
+            if seen.insert(*v) {
+                vars.push(*v);
+            }
         }
     };
     let mut types = types;
     for ty in &mut types {
-        for v in &mut ty.slots {
-            root(solver, v);
-        }
+        root(solver, &mut ty.slots);
     }
     for nodes in &mut node_types {
         for node in nodes {
-            for v in &mut node.ty.slots {
-                root(solver, v);
-            }
+            root(solver, &mut node.ty.slots);
             for name in &mut node.names {
                 if let NameRef::Global { site, ty } = name {
-                    for v in &mut ty.slots {
-                        root(solver, v);
-                    }
-                    for v in site.iter_mut().flat_map(|site| site.args.iter_mut()) {
-                        root(solver, v);
+                    root(solver, &mut ty.slots);
+                    if let Some(site) = site {
+                        root(solver, &mut site.args);
                     }
                 }
             }
@@ -910,13 +908,9 @@ fn generalize(
         if let Some(lam) = term.lam {
             let lambda = &mut analysis.lambdas[lam as usize];
             for (_, ty) in &mut lambda.captures {
-                for v in &mut ty.slots {
-                    root(solver, v);
-                }
+                root(solver, &mut ty.slots);
             }
-            for v in &mut lambda.held_in_place {
-                root(solver, v);
-            }
+            root(solver, &mut lambda.held_in_place);
         }
     }
     let var_index = vars.iter().enumerate().map(|(i, v)| (*v, i)).collect();

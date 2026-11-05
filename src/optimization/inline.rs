@@ -835,7 +835,7 @@ impl<'c> ExprVisitor for Inliner<'c> {
             return EndVisitResult::unchanged(expr);
         }
         let func_expr = self.symbols.get(func_name).unwrap().expr.as_ref().unwrap();
-        EndVisitResult::changed(with_spine_head(expr, func_expr.clone()))
+        EndVisitResult::changed(expr.set_app_spine_head(func_expr.clone()))
     }
 
     /// Replaces each global name a builtin operation reads with the expression of the symbol it
@@ -861,16 +861,4 @@ impl<'c> ExprVisitor for Inliner<'c> {
         }
         EndVisitResult::changed(substitute_free_names(expr, bodies))
     }
-}
-
-/// The application `expr` with the function at the head of its application spine replaced by
-/// `head`.
-fn with_spine_head(expr: &Arc<ExprNode>, head: Arc<ExprNode>) -> Arc<ExprNode> {
-    let func = expr.get_app_func();
-    let func = if func.is_app() {
-        with_spine_head(&func, head)
-    } else {
-        head
-    };
-    expr.set_app_func(func)
 }

@@ -20,10 +20,11 @@ use crate::{
         name::FullName,
         pattern::{Pattern, PatternNode},
         program::{Program, Symbol},
-        types::{type_arrow, type_tyapp, type_tycon, TyCon, TyConInfo, Type, TypeNode},
+        types::{
+            apply_type_args, type_arrow, type_tyapp, type_tycon, TyCon, TyConInfo, Type, TypeNode,
+        },
     },
-    constants::{LS_CAP_NAME, LS_CAP_PREFIX, LS_COPY_SUFFIX, LS_LAM_SUFFIX, LS_OPERAND_PREFIX, LS_UNREAD_NAME},
-    hash::md5_hex,
+    constants::{LS_CAP_NAME, LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_OPERAND_PREFIX, LS_UNREAD_NAME},
     misc::{Map, Set},
     optimization::{
         capture_struct::CaptureStruct, move_bodies::move_bodies_into_callers,
@@ -55,11 +56,12 @@ impl Rewritten {
         if let Some(entry) = self.entry {
             prg.entry_io_value = Some(entry);
         }
-        let exports = prg
-            .export_statements
-            .iter_mut()
-            .filter(|stmt| stmt.value_expr.is_some());
-        for (stmt, value) in exports.zip(self.exports) {
+        assert_eq!(
+            prg.export_statements.len(),
+            self.exports.len(),
+            "the rewrite gives other than one value to each export statement"
+        );
+        for (stmt, value) in prg.export_statements.iter_mut().zip(self.exports) {
             stmt.value_expr = Some(value);
         }
         move_bodies_into_callers(&mut prg.symbols, &self.lifted_callees, num_threads);
@@ -201,16 +203,14 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         }
         for ((component, key), copy) in &copy_of_key {
             if copy_counts[component] > 1 {
-                let text: Vec<&str> = key.iter().map(|r| repr.hash_text(*r)).collect();
-                copies[*copy].suffix =
-                    Some(format!("{}{}", LS_COPY_SUFFIX, md5_hex(&text.join(","))));
+                copies[*copy].suffix = Some(repr.copy_suffix(key));
             }
         }
 
         let mut body_lambda = Map::default();
         let mut lambda_at = Map::default();
         for (lam, lambda) in analysis.lambdas.iter().enumerate() {
-            if lambda.is_body {
+            if lambda.is_body() {
                 body_lambda.insert(lambda.symbol.clone(), lam as LamId);
             }
             lambda_at.insert((lambda.symbol.clone(), lambda.nodes.start), lam as LamId);
@@ -312,7 +312,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
     fn callee_name(&self, c: u32) -> FullName {
         let class = &self.repr.classes[c as usize];
         let lambda = &self.analysis.lambdas[class.lam as usize];
-        if lambda.is_body {
+        if lambda.is_body() {
             self.copy_name(&lambda.symbol, self.body_copy_of_class(c))
         } else {
             self.lifted_name(c)
@@ -409,7 +409,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         pos: &mut usize,
         keep_function: bool,
     ) -> Arc<TypeNode> {
-        let tc = ty.toplevel_tycon().unwrap();
+        let tc = ty.head_tycon();
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
         if args.len() < self.layout.arity(&tc) {
@@ -442,7 +442,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         if Arc::ptr_eq(&head, &tc) && new_args.iter().zip(args).all(|(n, o)| Arc::ptr_eq(n, o)) {
             return ty.clone();
         }
-        apply_type(type_tycon(&head), new_args)
+        apply_type_args(&head, &new_args)
     }
 
     /// The type constructor standing for `tc` where its own slots are represented by `own`: `tc`
@@ -470,8 +470,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         if let Some(suffix) = self.type_copies.get(&key) {
             return suffix.clone();
         }
-        let text: Vec<&str> = own.iter().map(|r| self.repr.hash_text(*r)).collect();
-        let suffix = format!("{}{}", LS_COPY_SUFFIX, md5_hex(&text.join(",")));
+        let suffix = self.repr.copy_suffix(own);
         self.type_copies.insert(key, suffix.clone());
         self.declare_group_copy(group, own, &suffix);
         suffix
@@ -554,11 +553,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 if args.is_empty() {
                     return ty.clone();
                 }
-                let new_args = args
-                    .iter()
-                    .map(|a| self.rewrite_declared(a, group, own, cursor))
-                    .collect();
-                apply_type(spine[0].clone(), new_args)
+                args.iter().fold(spine[0].clone(), |applied, a| {
+                    type_tyapp(applied, self.rewrite_declared(a, group, own, cursor))
+                })
             }
             Type::TyCon(tc) => {
                 if args.len() < self.layout.arity(tc) {
@@ -582,11 +579,11 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     *cursor += count;
                     self.tycon_copy(tc, &tc_own)
                 };
-                let new_args = args
+                let new_args: Vec<Arc<TypeNode>> = args
                     .iter()
                     .map(|a| self.rewrite_declared(a, group, own, cursor))
                     .collect();
-                apply_type(type_tycon(&head), new_args)
+                apply_type_args(&head, &new_args)
             }
             _ => panic!(
                 "the declared type `{}` has an unexpected head",
@@ -695,11 +692,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             "the first copy is not that of the entry"
         );
         let prg = self.prg;
-        let roots: Vec<&Arc<ExprNode>> = prg
-            .entry_io_value
-            .iter()
-            .chain(prg.export_statements.iter().filter_map(|s| s.value_expr.as_ref()))
-            .collect();
+        let roots = prg.root_value_exprs();
         let mut rewritten: Vec<Arc<ExprNode>> = roots
             .iter()
             .enumerate()
@@ -778,7 +771,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 let symbol = walk.symbol.as_ref().expect("a root holds no lambda");
                 let lam = self.lambda_at[&(symbol.clone(), index)];
                 let lambda = &self.analysis.lambdas[lam as usize];
-                assert_eq!(lambda.is_body, as_body);
+                assert_eq!(lambda.is_body(), as_body);
                 if !as_body {
                     let own = self.repr.of(self.set_of(walk.instance, node.ty.slots[0]));
                     let value = match own {
@@ -856,7 +849,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     })
                     .collect();
                 e.set_make_struct_fields(fields)
-                    .set_make_struct_tycon(ty.toplevel_tycon().unwrap())
+                    .set_make_struct_tycon(ty.head_tycon())
                     .set_type(ty)
             }
             Expr::FFICall(_, _, _, _, args, _) => {
@@ -890,11 +883,11 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     .map(|(name, src, sub)| (name.clone(), src.clone(), self.walk_pattern(walk, sub)))
                     .collect();
                 pat.set_struct_field_to_pat(fields)
-                    .set_struct_tycon(ty.toplevel_tycon().unwrap())
+                    .set_struct_tycon(ty.head_tycon())
             }
             Pattern::Union(variant, variant_src, sub) => {
                 let sub = self.walk_pattern(walk, sub);
-                let union = ty.toplevel_tycon().unwrap();
+                let union = ty.head_tycon();
                 let mut node = pat.as_ref().clone();
                 node.pattern = Pattern::Union(
                     FullName::new(&union.name.to_namespace(), &variant.name),
@@ -977,7 +970,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let lambda = &self.analysis.lambdas[self.repr.classes[c as usize].lam as usize];
         let arg_ty = arg.type_.clone().unwrap();
         let callee_name = self.callee_name(c);
-        if lambda.is_body {
+        if lambda.is_body() {
             // The symbol's copy captures nothing, so the call leaves the capture struct unread.
             let callee = expr_var(callee_name, None).set_type(type_arrow(arg_ty, ty.clone()));
             let call = e.set_app_func(callee).set_app_args(vec![arg]).set_type(ty);
@@ -1001,9 +994,4 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let partial = expr_app_typed(callee, vec![func]);
         e.set_app_func(partial).set_app_args(vec![arg]).set_type(ty)
     }
-}
-
-/// `head` applied to `args` in order.
-fn apply_type(head: Arc<TypeNode>, args: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
-    args.into_iter().fold(head, type_tyapp)
 }

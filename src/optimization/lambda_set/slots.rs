@@ -427,9 +427,11 @@ impl<'e> SlotLayout<'e> {
     /// contains. `solver` gives the new variables of a place the slots of `ty` leave untracked.
     pub fn held_in_place(&self, ty: &AType, solver: &mut Solver, out: &mut Vec<SetVar>) {
         let tc = ty.ty.head_tycon();
-        if ty.ty.flatten_type_application().len() - 1 < self.arity(&tc) {
-            return;
-        }
+        assert!(
+            ty.ty.flatten_type_application().len() - 1 >= self.arity(&tc),
+            "the type `{}` of a held value leaves its type constructor short of arguments",
+            ty.ty.to_string()
+        );
         if tc.is_arrow() {
             out.push(ty.slots[0]);
             return;

@@ -6,7 +6,7 @@ use super::{
     solver::LamId,
     specialize::Specialization,
 };
-use crate::{graph::Graph, hash::md5_hex, misc::Map};
+use crate::{constants::LS_COPY_SUFFIX, graph::Graph, hash::md5_hex, misc::{Map, Set}};
 
 /// How the values of a concrete set are represented.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -67,13 +67,22 @@ impl Representation {
         })
     }
 
-    /// The number of classes whose lambda is `lam`.
+    /// The number of classes whose lambda is `lam`, a lambda that has any.
     pub fn class_count(&self, lam: LamId) -> usize {
-        self.class_counts.get(&lam).copied().unwrap_or(0)
+        *self.class_counts.get(&lam).unwrap_or_else(|| {
+            panic!("no class holds an element of the lambda {}", lam)
+        })
+    }
+
+    /// The suffix of a copy made for the representations `reprs`: `LS_COPY_SUFFIX` followed by
+    /// the hash of their texts.
+    pub fn copy_suffix(&self, reprs: &[Repr]) -> String {
+        let text: Vec<&str> = reprs.iter().map(|r| self.hash_text(*r)).collect();
+        format!("{}{}", LS_COPY_SUFFIX, md5_hex(&text.join(",")))
     }
 
     /// The text a `Repr` is written as in the hashes that name copies.
-    pub fn hash_text(&self, repr: Repr) -> &str {
+    fn hash_text(&self, repr: Repr) -> &str {
         match repr {
             Repr::Closure => "c",
             Repr::Single(c) => &self.classes[c as usize].hash,
@@ -276,12 +285,13 @@ fn name_classes(analysis: &Analysis, classes: &mut [LamClass]) {
         }
     }
     for component in graph.components_dependencies_first() {
+        let members: Set<usize> = component.iter().copied().collect();
         let texts: Vec<(usize, String)> = component
             .iter()
             .map(|c| {
                 let mut text = String::new();
-                let mut written: Vec<usize> = vec![];
-                write_class(analysis, classes, &component, *c, &mut written, &mut text);
+                let mut written: Map<usize, usize> = Map::default();
+                write_class(analysis, classes, &members, *c, &mut written, &mut text);
                 (*c, text)
             })
             .collect();
@@ -289,23 +299,30 @@ fn name_classes(analysis: &Analysis, classes: &mut [LamClass]) {
             classes[c].hash = md5_hex(&text);
         }
     }
+    let distinct: Set<&str> = classes.iter().map(|class| class.hash.as_str()).collect();
+    assert_eq!(
+        distinct.len(),
+        classes.len(),
+        "two classes are written as the same text"
+    );
 }
 
 /// Appends to `text` the text of the class `c`, a member of the strongly connected component
-/// `component` of the classes, `written` holding the members written so far in this text.
+/// `component` of the classes, `written` holding the members written so far in this text, each
+/// with the number of members written before it.
 fn write_class(
     analysis: &Analysis,
     classes: &[LamClass],
-    component: &[usize],
+    component: &Set<usize>,
     c: usize,
-    written: &mut Vec<usize>,
+    written: &mut Map<usize, usize>,
     text: &mut String,
 ) {
-    if let Some(n) = written.iter().position(|w| *w == c) {
+    if let Some(n) = written.get(&c) {
         text.push_str(&format!("^{}", n));
         return;
     }
-    written.push(c);
+    written.insert(c, written.len());
     text.push_str(&analysis.lambdas[classes[c].lam as usize].to_string());
     text.push('(');
     for (i, arg) in classes[c].args.iter().enumerate() {
