@@ -769,7 +769,7 @@ main = println $ (double(21), 3).to_string;
 
     /// A program of `count` functions, every one used from `main`, so that type checking it takes
     /// long enough for another process to act while it runs.
-    fn many_functions(count: usize) -> String {
+    fn source_with_many_functions(count: usize) -> String {
         let mut source = "module Main;\n\n".to_string();
         for i in 0..count {
             source += &format!("f{} : I64 -> I64;\nf{} = |x| x * {} + 1;\n\n", i, i, i);
@@ -790,7 +790,7 @@ main = println $ (double(21), 3).to_string;
     fn two_builds_at_once_read_back_every_body() {
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
-        fs::write(dir.join("main.fix"), many_functions(300)).expect("Failed to write main.fix");
+        fs::write(dir.join("main.fix"), source_with_many_functions(300)).expect("Failed to write main.fix");
 
         let builds: Vec<_> = ["out1", "out2"]
             .iter()
@@ -821,7 +821,7 @@ main = println $ (double(21), 3).to_string;
     fn a_build_removes_the_temporary_file_a_killed_build_left() {
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
-        fs::write(dir.join("main.fix"), many_functions(300)).expect("Failed to write main.fix");
+        fs::write(dir.join("main.fix"), source_with_many_functions(300)).expect("Failed to write main.fix");
         let cache_dir = dir.join(TYPED_MODULES_PATH);
         let temporary_files = || -> Vec<String> {
             fs::read_dir(&cache_dir)

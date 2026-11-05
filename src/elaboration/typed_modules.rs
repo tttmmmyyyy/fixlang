@@ -509,7 +509,7 @@ fn create_typed_modules_dir() -> Option<PathBuf> {
 }
 
 /// Whether a file can be created in `dir`. When it cannot, that is reported as a warning.
-fn accepts_new_files(dir: &Path) -> bool {
+fn probe_file_creation(dir: &Path) -> bool {
     match create_temporary_file_in(dir) {
         Ok(probe) => {
             let _ = fs::remove_file(&probe.path);
@@ -844,7 +844,7 @@ impl Program {
         let dir = if to_check.is_empty() {
             None
         } else {
-            create_typed_modules_dir().filter(|dir| accepts_new_files(dir))
+            create_typed_modules_dir().filter(|dir| probe_file_creation(dir))
         };
         let mut outcomes: Vec<Option<CheckOutcome>> = to_check.iter().map(|_| None).collect();
         let mut unchecked_of_module: Map<Name, usize> = Map::default();
