@@ -76,7 +76,6 @@ mod integration_tests {
     use std::fs::{self, File};
     use std::path::Path;
     use std::process::{Command, Stdio};
-    use std::thread;
     use std::time::{Duration, SystemTime};
     use tempfile::TempDir;
 
@@ -785,7 +784,7 @@ main = println $ (double(21), 3).to_string;
 
     /// Two builds of one project at once each write the files of the modules, laying the bodies out
     /// in the order they happen to be checked, and the one renamed into place last wins. Each build
-    /// still reads every body it needs from the file it finds, without reporting the file as
+    /// still reads every body it needs from the file it opened, without reporting the file as
     /// unreadable.
     #[test]
     fn two_builds_at_once_read_back_every_body() {
@@ -817,55 +816,11 @@ main = println $ (double(21), 3).to_string;
         }
     }
 
-    /// A build killed while it writes the file of a module leaves the temporary file it was writing,
-    /// and the next build to write a file there removes it.
+    /// A build that writes the file of a module removes the temporary files there that have gone
+    /// unmodified for a day, which builds that were killed left, and keeps the more recent ones,
+    /// which a build still running may be writing.
     #[test]
-    fn a_build_removes_the_temporary_file_a_killed_build_left() {
-        let temp = TempDir::new().expect("Failed to create temp directory");
-        let dir = temp.path();
-        fs::write(dir.join("main.fix"), source_with_many_functions(300))
-            .expect("Failed to write main.fix");
-        let cache_dir = dir.join(TYPED_MODULES_PATH);
-        let temporary_files = || -> Vec<String> {
-            fs::read_dir(&cache_dir)
-                .map(|entries| {
-                    entries
-                        .flatten()
-                        .map(|entry| entry.file_name().to_string_lossy().to_string())
-                        .filter(|name| name.ends_with(".tmp"))
-                        .collect()
-                })
-                .unwrap_or_default()
-        };
-
-        let mut killed = fix_command()
-            .args(["build", "--file", "main.fix", "-o", "out"])
-            .current_dir(dir)
-            .stderr(Stdio::null())
-            .spawn()
-            .expect("Failed to execute fix");
-        while temporary_files().is_empty() {
-            assert!(
-                killed.try_wait().expect("Failed to wait for fix").is_none(),
-                "the build ended before it began writing a file"
-            );
-            thread::sleep(Duration::from_millis(1));
-        }
-        killed.kill().expect("Failed to kill fix");
-        killed.wait().expect("Failed to wait for fix");
-        assert!(
-            !temporary_files().is_empty(),
-            "the killed build left no temporary file"
-        );
-
-        build(dir, "main.fix", &[]);
-        assert_eq!(temporary_files(), Vec::<String>::new());
-    }
-
-    /// A build that writes the file of a module removes the temporary files there that no process
-    /// holds a lock on, and keeps the one a running process holds locked.
-    #[test]
-    fn a_build_keeps_the_temporary_file_a_running_build_holds() {
+    fn a_build_removes_the_temporary_files_left_a_day_ago() {
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
         fs::write(
@@ -875,21 +830,23 @@ main = println $ (double(21), 3).to_string;
         .expect("Failed to write main.fix");
         let cache_dir = dir.join(TYPED_MODULES_PATH);
         fs::create_dir_all(&cache_dir).expect("Failed to create the type-check cache directory");
-        let held_path = cache_dir.join(".0123456789abcdef.tmp");
-        let held = File::create(&held_path).expect("Failed to create a temporary file");
-        held.try_lock().expect("Failed to lock the temporary file");
-        let abandoned_path = cache_dir.join(".fedcba9876543210.tmp");
-        fs::write(&abandoned_path, "").expect("Failed to create a temporary file");
+        let recent_path = cache_dir.join(".0123456789abcdef.tmp");
+        fs::write(&recent_path, "").expect("Failed to create a temporary file");
+        let left_path = cache_dir.join(".fedcba9876543210.tmp");
+        File::create(&left_path)
+            .and_then(|file| {
+                file.set_modified(SystemTime::now() - Duration::from_secs(25 * 60 * 60))
+            })
+            .expect("Failed to create a temporary file a day old");
 
         build(dir, "main.fix", &[]);
         assert!(
-            !abandoned_path.exists(),
-            "the build removed no temporary file"
+            !left_path.exists(),
+            "the build kept the temporary file left a day ago"
         );
         assert!(
-            held_path.exists(),
-            "the build removed the temporary file a running process holds"
+            recent_path.exists(),
+            "the build removed a temporary file a build still running may be writing"
         );
-        drop(held);
     }
 }

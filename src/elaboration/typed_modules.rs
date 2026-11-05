@@ -12,8 +12,8 @@
 // concrete types of its opaque types, and its `WarningFact`s. The footer says where the record lies.
 //
 // A build reads the record of every module and type-checks only the bodies the record lacks. It
-// reads a typed expression back only when instantiation asks for it. When the check passes bodies
-// the record lacked, the file is written anew: the bodies it holds are copied as they are, at the
+// reads a typed expression back only when instantiation asks for it, from the file it found the
+// body in, which it keeps open (`OpenedModuleFile`). When the check passes bodies the record lacked, the file is written anew: the bodies it holds are copied as they are, at the
 // same offsets, and each new body follows them as soon as it passes, so that it leaves memory then
 // (`ModuleFileWriter`). When instantiation finds a body that the file fails to hold, it checks the
 // body again and writes it the same way, after the bodies the file holds.
@@ -198,19 +198,20 @@ fn decode_body(bytes: &[u8], identity: &EntityIdentity) -> Result<TypedExpr, Str
 /// The message for a file that is not one of type-checked modules.
 const NOT_A_MODULE_FILE: &str = "it is not a file of type-checked modules";
 
-/// The record of the file at `path`. A file that does not exist answers `None`; one that cannot be
-/// read, or is not a file of type-checked modules, answers the reason.
+/// The record of the file at `path`, and the file, open, to read the bodies from. A file that does
+/// not exist answers `None`; one that cannot be read, or is not a file of type-checked modules,
+/// answers the reason.
 ///
 /// It reads only the footer and the record, so that a build reads only the bodies it asks for
 /// later.
-fn read_record(path: &Path) -> Result<Option<ModuleRecord>, String> {
+fn open_record(path: &Path) -> Result<Option<(ModuleRecord, File)>, String> {
     let mut file = match File::open(path) {
         Ok(file) => file,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e.to_string()),
     };
     match read_record_of(&mut file) {
-        Ok(Ok((record, _bodies_end))) => Ok(Some(record)),
+        Ok(Ok((record, _bodies_end))) => Ok(Some((record, file))),
         Ok(Err(why)) => Err(why),
         Err(e) => Err(e.to_string()),
     }
@@ -244,28 +245,18 @@ fn read_record_of(file: &mut File) -> io::Result<Result<(ModuleRecord, u64), Str
     })
 }
 
-/// The typed expression of the body `identity` lying at `range` in the file at `path`. A file that
-/// no longer exists answers `None`; one whose bytes there are not the body answers the reason.
-///
-/// A body the file holds intact stays at its offset when this build writes the file anew, so `range`
-/// read from an earlier record of the file still finds it. A file another build wrote at the same
-/// time and put in place may hold the body at another offset. The identity written in front of the
-/// body is compared with `identity`, so bytes of another body are never taken for it.
+/// The typed expression of the body `identity` lying at `range` in `file`. Bytes there that are not
+/// the body answer the reason.
 fn read_body(
-    path: &Path,
+    mut file: &File,
     range: &Range<u64>,
     identity: &EntityIdentity,
-) -> Result<Option<TypedExpr>, String> {
-    let mut file = match File::open(path) {
-        Ok(file) => file,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e.to_string()),
-    };
+) -> Result<TypedExpr, String> {
     let mut bytes = vec![0u8; (range.end - range.start) as usize];
     file.seek(SeekFrom::Start(range.start))
         .and_then(|_| file.read_exact(&mut bytes))
         .map_err(|e| e.to_string())?;
-    decode_body(&bytes, identity).map(Some)
+    decode_body(&bytes, identity)
 }
 
 /// A body passed by this build's type check, to be added to its module's file.
@@ -320,6 +311,16 @@ impl ModuleFile {
     fn path_in(&self, dir: &Path) -> PathBuf {
         dir.join(self.name())
     }
+}
+
+/// A module's file as this build opened it. Each body the build found in the file is read through
+/// this handle, so a file another build puts in place meanwhile leaves the body where this build
+/// found it.
+struct OpenedModuleFile {
+    /// The module file.
+    file: Arc<ModuleFile>,
+    /// The file, open for reading.
+    handle: File,
 }
 
 /// The new version of a module's file, written while the bodies of the module are checked. It begins
@@ -428,8 +429,8 @@ impl ModuleFileWriter {
 
     /// Puts the record and the footer after the bodies, replaces the module's file with the new
     /// version, removes the files of the module checked under any other hash, and answers the
-    /// record the file holds now.
-    fn finish(mut self) -> io::Result<ModuleRecord> {
+    /// new version: its record, and the file, open.
+    fn finish(mut self) -> io::Result<(ModuleRecord, OpenedModuleFile)> {
         let mut entries: Vec<(EntityIdentity, EntityEntry)> =
             take(&mut self.record).into_iter().collect();
         entries.sort_by(|(lhs, _), (rhs, _)| lhs.cmp(rhs));
@@ -443,7 +444,6 @@ impl ModuleFileWriter {
         tmp.seek(SeekFrom::Start(bodies_end))?;
         tmp.write_all(&tail)?;
 
-        // The file stays open, and so locked, until it is in place.
         let tmp = self.tmp.take().unwrap();
         let file_name = self.file.name();
         // The name holds no path separator, and a rename replaces a symbolic link at the path
@@ -452,19 +452,19 @@ impl ModuleFileWriter {
             let _ = fs::remove_file(&tmp.path);
             return Err(e);
         }
-        drop(tmp);
 
         self.remove_stale_files(&file_name);
-        Ok(entries.into_iter().collect())
+        let opened = OpenedModuleFile {
+            file: self.file.clone(),
+            handle: tmp.file,
+        };
+        Ok((entries.into_iter().collect(), opened))
     }
 
     /// Removes the files of the module checked under any other hash than the file named
     /// `file_name`, and the temporary files left in the directory by builds that were killed. The
     /// file named `file_name` is in place already, so a file this fails to remove costs only disk
     /// space, and the next write tries again.
-    ///
-    /// A temporary file another build created a moment ago may not be locked yet; removing it makes
-    /// that build fail to put its file in place, which it reports, and its bodies are checked again.
     fn remove_stale_files(&self, file_name: &str) {
         remove_abandoned_temporary_files(&self.dir);
         let Ok(dir_entries) = fs::read_dir(&self.dir) else {
@@ -608,7 +608,8 @@ impl ModuleWriting {
             }
         };
         match writer.finish() {
-            Ok(mut record) => {
+            Ok((mut record, opened)) => {
+                let opened = Arc::new(opened);
                 let stored = self
                     .written
                     .into_iter()
@@ -619,6 +620,7 @@ impl ModuleWriting {
                         (
                             i,
                             StoredOutcome {
+                                file: opened.clone(),
                                 entry,
                                 import_required,
                             },
@@ -662,6 +664,8 @@ enum CheckedOnThread {
 
 /// A body this build checked that passed and that the file of its module now records.
 struct StoredOutcome {
+    /// The file of the module, as this build wrote it.
+    file: Arc<OpenedModuleFile>,
     /// What the file records of the body.
     entry: EntityEntry,
     /// The names the body referred to that the module it is defined in has to import.
@@ -680,8 +684,8 @@ enum CheckOutcome {
 /// A body whose typed expression lies in its module's file, and which `Program::global_values`
 /// holds as it was parsed.
 struct StoredBody {
-    /// The file of the module the body is defined in.
-    file: Arc<ModuleFile>,
+    /// The file of the module the body is defined in, as this build opened it.
+    file: Arc<OpenedModuleFile>,
     /// The entity the body belongs to, which the file writes in front of the body.
     identity: EntityIdentity,
     /// Where the body lies in the file.
@@ -703,31 +707,6 @@ pub struct TypedModules {
 }
 
 impl TypedModules {
-    /// Updates the ranges of the stored bodies of the file that holds the body at `loc` from the
-    /// record the file holds now, and answers whether the range of the body at `loc` changed.
-    fn relocate_stored_bodies(&mut self, loc: &BodyLocation) -> bool {
-        let file = self.stored[loc].file.clone();
-        let path = file.path();
-        let Ok(Some(record)) =
-            SourceFile::with_shared_source_files(&mut self.source_files, || read_record(&path))
-        else {
-            return false;
-        };
-        let mut moved = false;
-        for (body_loc, body) in self.stored.iter_mut() {
-            if !Arc::ptr_eq(&body.file, &file) {
-                continue;
-            }
-            if let Some(entry) = record.get(&body.identity) {
-                if entry.body != body.range {
-                    body.range = entry.body.clone();
-                    moved |= body_loc == loc;
-                }
-            }
-        }
-        moved
-    }
-
     /// The facts a warning after type checking may be derived from about the body at `loc`, when
     /// its typed expression lies in its module's file.
     pub fn stored_warning_facts(&self, loc: &BodyLocation) -> Option<&[WarningFact]> {
@@ -776,23 +755,31 @@ impl Program {
                 module_hash,
             });
             let path = file.path();
-            let record =
+            let opened =
                 SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
-                    read_record(&path)
+                    open_record(&path)
                 });
-            let record = match record {
-                Ok(Some(record)) => record,
-                Ok(None) => ModuleRecord::default(),
+            let (record, opened) = match opened {
+                Ok(Some((record, handle))) => (
+                    record,
+                    Some(Arc::new(OpenedModuleFile {
+                        file: file.clone(),
+                        handle,
+                    })),
+                ),
+                Ok(None) => (ModuleRecord::default(), None),
                 Err(why) => {
                     warn_unreadable_file(&path, &why);
-                    ModuleRecord::default()
+                    (ModuleRecord::default(), None)
                 }
             };
             for loc in locs {
                 let identity = self.entity_identity_at(&loc);
-                match record.get(&identity) {
-                    Some(entry) => self.store_body(loc, file.clone(), identity, entry.clone()),
-                    None => to_check.push((loc, file.clone(), identity)),
+                match (record.get(&identity), &opened) {
+                    (Some(entry), Some(opened)) => {
+                        self.store_body(loc, opened.clone(), identity, entry.clone())
+                    }
+                    _ => to_check.push((loc, file.clone(), identity)),
                 }
             }
         }
@@ -801,9 +788,10 @@ impl Program {
         let mut source_files = take(&mut self.typed_modules.source_files);
         let outcomes = self.check_and_write_bodies(&to_check, tc, &mut source_files);
         self.typed_modules.source_files = source_files;
-        for ((loc, file, identity), outcome) in to_check.into_iter().zip(outcomes) {
+        for ((loc, _file, identity), outcome) in to_check.into_iter().zip(outcomes) {
             match outcome {
                 CheckOutcome::Stored(StoredOutcome {
+                    file,
                     entry,
                     import_required,
                 }) => {
@@ -929,7 +917,7 @@ impl Program {
     fn store_body(
         &mut self,
         loc: BodyLocation,
-        file: Arc<ModuleFile>,
+        file: Arc<OpenedModuleFile>,
         identity: EntityIdentity,
         entry: EntityEntry,
     ) {
@@ -945,34 +933,12 @@ impl Program {
         );
     }
 
-    /// The typed expression of the stored body at `loc`, read from the file of its module as
-    /// `read_body` reads it.
-    ///
-    /// Another build may have put a file of its own in place of the one this build read the range
-    /// from, holding the same bodies in another order. So when the bytes at the range are not the
-    /// body, the ranges of the bodies of the file are updated from the record it holds now, and the
-    /// body is read once more.
-    fn read_stored_body(&mut self, loc: &BodyLocation) -> Result<Option<TypedExpr>, String> {
-        let read = |typed_modules: &mut TypedModules| {
-            let stored = &typed_modules.stored[loc];
-            SourceFile::with_shared_source_files(&mut typed_modules.source_files, || {
-                read_body(&stored.file.path(), &stored.range, &stored.identity)
-            })
-        };
-        match read(&mut self.typed_modules) {
-            Err(_) if self.typed_modules.relocate_stored_bodies(loc) => {
-                read(&mut self.typed_modules)
-            }
-            first_read => first_read,
-        }
-    }
-
     /// The typed expression of the body at `loc`: read from the file of its module when the
     /// program was checked through `check_bodies_through_typed_modules` and the file recorded the
     /// body, and the one `Program::global_values` holds otherwise.
     ///
-    /// A body the file no longer holds is type-checked again, and written back to the file, so that
-    /// the next build reads it.
+    /// A body whose bytes in the file are not the body is type-checked again, and written back to the
+    /// file, so that the next build reads it.
     pub fn typed_body(
         &mut self,
         loc: &BodyLocation,
@@ -985,13 +951,14 @@ impl Program {
         if let Some(te) = self.typed_modules.read_back.get(loc) {
             return Ok(te.clone());
         }
-        let path = stored.file.path();
-        let te = match self.read_stored_body(loc) {
-            Ok(Some(te)) => te,
-            failed => {
-                if let Err(why) = failed {
-                    warn_unreadable_file(&path, &why);
-                }
+        let read =
+            SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
+                read_body(&stored.file.handle, &stored.range, &stored.identity)
+            });
+        let te = match read {
+            Ok(te) => te,
+            Err(why) => {
+                warn_unreadable_file(&stored.file.file.path(), &why);
                 // The opaque types of the body are already known from the record.
                 let checked = self.check_body(loc, &self.create_name_resolution_env(), tc)?;
                 if checked.diagnostics.has_error() {
@@ -1002,14 +969,14 @@ impl Program {
                         let stored = &self.typed_modules.stored[loc];
                         let entry = NewEntry::of(stored.identity.clone(), &checked);
                         let source_files = &mut self.typed_modules.source_files;
-                        let written = ModuleFileWriter::create(&dir, stored.file.clone()).and_then(
-                            |mut writer| {
+                        let file = &stored.file.file;
+                        let written =
+                            ModuleFileWriter::create(&dir, file.clone()).and_then(|mut writer| {
                                 writer.add(entry, source_files)?;
                                 writer.finish()
-                            },
-                        );
+                            });
                         if let Err(e) = written {
-                            warn_unwritable_file(&dir, &stored.file, &e);
+                            warn_unwritable_file(&dir, file, &e);
                         }
                     }
                 }

@@ -522,6 +522,7 @@ dependencies = [
  "git-version",
  "git2",
  "inkwell",
+ "libc",
  "libloading",
  "lsp-types",
  "md5",
