@@ -1,6 +1,9 @@
 // The concrete lambda sets of a specialized program, each kept once however it is reached.
 
-use super::solver::LamId;
+use super::{
+    partition::{canonical_classes, Child, ElemKey, NodeElems},
+    solver::LamId,
+};
 use crate::{graph::Graph, misc::Map};
 
 /// A concrete lambda set, as its index into `SetStore`.
@@ -47,8 +50,9 @@ pub struct SetStore {
     id_of: Map<Vec<Elem>, SetId>,
     /// Whether each set lies on a cycle: it reaches itself through the elements of the sets it holds.
     on_cycle: Vec<bool>,
-    /// The set lying on a cycle that each `CycleKey` names.
-    id_of_cycle: Map<CycleKey, SetId>,
+    /// The sets lying on a cycle, by the classes of the sets each reaches (`CycleClasses`) and the
+    /// class of the set itself among them.
+    id_of_cycle: Map<CycleClasses, Map<usize, SetId>>,
 }
 
 /// A set read while a cyclic system is interned: a set of the system or one the store holds.
@@ -60,32 +64,11 @@ enum Node {
     Known(SetId),
 }
 
-/// What an element of a node refers to while a cyclic system is interned.
-#[derive(Clone, Copy)]
-enum Child {
-    /// Another node, by its position.
-    Node(usize),
-    /// A set the store holds that lies on no cycle, which is equal to no node but itself.
-    Fixed(SetId),
-}
-
-/// A child as the partition refinement compares it.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum ChildKey {
-    /// A node, by the class of the partition it is in.
-    Block(usize),
-    /// A set the store holds that lies on no cycle.
-    Fixed(SetId),
-}
-
-/// An element as the partition refinement compares it: its lambda, `None` for `Elem::Dynamic`, and
-/// its children.
-type ElemKey = (Option<LamId>, Vec<ChildKey>);
-
-/// The tree a set lying on a cycle unfolds to, written so that two sets unfolding to the same tree
-/// are written alike: the classes of the sets the set reaches, each by its sorted elements, and the
-/// class of the set itself, as `canonical_classes` numbers them.
-type CycleKey = (Vec<Vec<ElemKey>>, usize);
+/// The sets a set lying on a cycle reaches, written so that two sets reaching the same trees are
+/// written alike: the classes `canonical_classes` numbers them into, each by its sorted elements,
+/// whose label is the lambda, `None` for `Elem::Dynamic`. The set itself is one of the classes, so
+/// the classes and the class of the set are the tree it unfolds to.
+type CycleClasses = Vec<Vec<ElemKey<Option<LamId>>>>;
 
 impl SetStore {
     /// A store holding no set.
@@ -177,9 +160,9 @@ impl SetStore {
     /// A set of the component is equal to a set of the store only if both lie on a cycle. The sets
     /// of the component reach one another, so they reach the same sets of the store: the nodes are
     /// those sets and the sets of the component. `canonical_classes` partitions the nodes into the
-    /// classes of equal sets, and numbers the classes by the trees the sets unfold to, so a class
-    /// and the classes it reaches are a `CycleKey`. A class whose key names a set of the store
-    /// resolves its sets of the component to that one; each other class becomes a new set.
+    /// classes of equal sets, and numbers the classes by the trees the sets unfold to, so the
+    /// classes and one of them name the tree of a set (`CycleClasses`). A class naming a set of the
+    /// store resolves its sets of the component to that one; each other class becomes a new set.
     fn intern_cycle(
         &mut self,
         component: &[usize],
@@ -191,7 +174,7 @@ impl SetStore {
             nodes.iter().enumerate().map(|(p, n)| (*n, p)).collect();
         // The elements of each node, in the order of `nodes`, which grows as the walk meets the sets
         // of the store the nodes reach.
-        let mut elems: Vec<Vec<(Option<LamId>, Vec<Child>)>> = vec![];
+        let mut elems: Vec<NodeElems<Option<LamId>>> = vec![];
         while elems.len() < nodes.len() {
             let node_elems = match nodes[elems.len()] {
                 Node::Local(i) => system[i]
@@ -234,7 +217,8 @@ impl SetStore {
             elems.push(node_elems);
         }
 
-        let (class, class_elems) = canonical_classes(&elems);
+        let (class, class_elems) = canonical_classes(vec![0; elems.len()], &elems);
+        let held = self.id_of_cycle.get(&class_elems);
         let mut class_set: Vec<Option<SetId>> = vec![None; class_elems.len()];
         for (p, node) in nodes.iter().enumerate() {
             if let Node::Known(id) = node {
@@ -251,8 +235,7 @@ impl SetStore {
             if class_set[c].is_some() {
                 continue;
             }
-            let key = (class_elems.clone(), c);
-            class_set[c] = Some(match self.id_of_cycle.get(&key) {
+            class_set[c] = Some(match held.and_then(|held| held.get(&c)) {
                 Some(id) => *id,
                 None => {
                     new_classes.push((c, p));
@@ -260,6 +243,7 @@ impl SetStore {
                 }
             });
         }
+        let mut made: Vec<(usize, SetId)> = vec![];
         for (c, p) in new_classes {
             let new_elems = elems[p]
                 .iter()
@@ -279,7 +263,13 @@ impl SetStore {
                 .collect();
             let id = self.insert(new_elems, true);
             assert_eq!(Some(id), class_set[c]);
-            self.id_of_cycle.insert((class_elems.clone(), c), id);
+            made.push((c, id));
+        }
+        if !made.is_empty() {
+            self.id_of_cycle
+                .entry(class_elems)
+                .or_default()
+                .extend(made);
         }
         for (p, i) in component.iter().enumerate() {
             resolved[*i] = class_set[class[p]];
@@ -298,62 +288,6 @@ impl SetStore {
             nodes.len() - 1
         });
         Child::Node(p)
-    }
-}
-
-/// The classes of equal sets among nodes whose elements are `elems`, each node by its position, and
-/// the elements of each class, sorted and written with the classes of the children.
-///
-/// The partition is refined until no class splits. Each round numbers the classes in the order of
-/// their signatures, which read only the lambdas and the classes of the round before, so the number
-/// a class gets says which tree its sets unfold to: nodes reaching equal sets of trees get the same
-/// numbers, however they are positioned.
-fn canonical_classes(
-    elems: &[Vec<(Option<LamId>, Vec<Child>)>],
-) -> (Vec<usize>, Vec<Vec<ElemKey>>) {
-    let mut class = vec![0usize; elems.len()];
-    let mut class_count = 1;
-    loop {
-        let signatures: Vec<(usize, Vec<ElemKey>)> = elems
-            .iter()
-            .enumerate()
-            .map(|(p, node_elems)| {
-                let mut keys: Vec<ElemKey> = node_elems
-                    .iter()
-                    .map(|(lam, children)| {
-                        let children = children
-                            .iter()
-                            .map(|ch| match ch {
-                                Child::Node(q) => ChildKey::Block(class[*q]),
-                                Child::Fixed(id) => ChildKey::Fixed(*id),
-                            })
-                            .collect();
-                        (*lam, children)
-                    })
-                    .collect();
-                keys.sort();
-                keys.dedup();
-                (class[p], keys)
-            })
-            .collect();
-        let mut distinct = signatures.clone();
-        distinct.sort();
-        distinct.dedup();
-        if distinct.len() == class_count {
-            // No class split, so the classes keep their numbers: each signature carries the class it
-            // refines first, and the classes sort in that order.
-            assert!(distinct
-                .iter()
-                .enumerate()
-                .all(|(c, (refined, _))| *refined == c));
-            let class_elems = distinct.into_iter().map(|(_, keys)| keys).collect();
-            return (class, class_elems);
-        }
-        class_count = distinct.len();
-        class = signatures
-            .iter()
-            .map(|sig| distinct.binary_search(sig).unwrap())
-            .collect();
     }
 }
 

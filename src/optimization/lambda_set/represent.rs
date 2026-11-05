@@ -3,6 +3,7 @@
 use super::{
     concrete::{Elem, SetId},
     infer::Analysis,
+    partition::{canonical_classes, Child, NodeElems},
     solver::LamId,
     specialize::Specialization,
 };
@@ -174,43 +175,26 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
         }
     }
 
-    // The classes: the coarsest partition of the sets represented by capture structs in which two
-    // sets of one class name the same lambda and give its parameters sets of the same class, or
-    // sets both represented by closures. Refine a partition by those until no class splits; the
-    // closures make one block of their own, numbered 0.
-    let mut block: Vec<usize> = (0..set_count)
+    // The classes: the coarsest partition of the sets in which two sets represented by capture
+    // structs are in one class when they name the same lambda and give its parameters sets of the
+    // same class. A set represented by closures holds no element the partition reads, so those sets
+    // make one class of their own.
+    let elems: Vec<NodeElems<LamId>> = (0..set_count)
         .map(|id| match single[id] {
-            Some((lam, _)) if is_capture_struct[id] => 1 + lam as usize,
-            _ => 0,
+            Some((lam, args)) if is_capture_struct[id] => {
+                vec![(lam, args.iter().map(|a| Child::Node(*a as usize)).collect())]
+            }
+            _ => vec![],
         })
         .collect();
-    let mut block_count = usize::MAX;
-    loop {
-        let mut block_of_signature: Map<(usize, Vec<usize>), usize> = Map::default();
-        block_of_signature.insert((0, vec![]), 0);
-        let mut next = vec![0; set_count];
-        for id in 0..set_count {
-            if block[id] == 0 {
-                continue;
-            }
-            let (_, args) = single[id].unwrap();
-            let signature = (block[id], args.iter().map(|a| block[*a as usize]).collect());
-            let count = block_of_signature.len();
-            next[id] = *block_of_signature.entry(signature).or_insert(count);
-        }
-        block = next;
-        if block_of_signature.len() == block_count {
-            break;
-        }
-        block_count = block_of_signature.len();
-    }
+    let (block, _) = canonical_classes(vec![0; set_count], &elems);
 
     // Number the classes in the order of the sets: the first set of a class stands for it.
     let mut class_of_block: Map<usize, u32> = Map::default();
     let mut first_set: Vec<usize> = vec![];
     let mut of_set: Vec<Repr> = vec![Repr::Closure; set_count];
     for id in 0..set_count {
-        if block[id] == 0 {
+        if !is_capture_struct[id] {
             continue;
         }
         let class = *class_of_block.entry(block[id]).or_insert_with(|| {

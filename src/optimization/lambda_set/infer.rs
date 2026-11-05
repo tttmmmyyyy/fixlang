@@ -2,6 +2,7 @@
 
 use super::{
     flow::BuiltinFlow,
+    partition::{canonical_classes, Child, NodeElems},
     slots::{AType, SlotLayout},
     solver::{DynamicKind, DynamicReason, LamId, Member, Owner, SetVar, Solver},
 };
@@ -930,6 +931,15 @@ fn generalize(
     }
 }
 
+/// A member of a scheme's class as `merge_equal_classes` compares it.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum MemberLabel {
+    /// A `SchemeMember::Lam` naming the lambda.
+    Lam(LamId),
+    /// A `SchemeMember::Dynamic`, by the position of its reason among the reasons met.
+    Dynamic(usize),
+}
+
 /// `classes`, with each set of classes that unfold to the same tree made one, and the class each
 /// class became. The first `param_count` classes are parameters, which a copy gives values of its
 /// own, so each stays a class of its own and keeps its place.
@@ -941,24 +951,20 @@ fn merge_equal_classes(
     classes: Vec<Vec<SchemeMember>>,
     param_count: usize,
 ) -> (Vec<Vec<SchemeMember>>, Vec<u32>) {
-    // Refine a partition until no block splits: the parameters each start in a block of their own,
-    // the other classes in one, and a class moves apart from its block when its members, read
-    // through the blocks of the classes they name, differ.
+    // The parameters each start in a class of their own and the other classes in one, and a
+    // Dynamic member is labelled by its reason, so that two classes are one only when their members
+    // name the same reasons.
     let n = classes.len();
-    let mut block: Vec<usize> = (0..n).map(|c| c.min(param_count)).collect();
-    let mut block_count = param_count + usize::from(n > param_count);
-    loop {
-        let mut block_of_signature: Map<(usize, Vec<(Option<LamId>, Vec<usize>)>), usize> =
-            Map::default();
-        let mut reasons: Vec<Rc<DynamicReason>> = vec![];
-        let mut next_block = vec![0; n];
-        for (c, members) in classes.iter().enumerate() {
-            let mut signature: Vec<(Option<LamId>, Vec<usize>)> = members
+    let mut reasons: Vec<Rc<DynamicReason>> = vec![];
+    let elems: Vec<NodeElems<MemberLabel>> = classes
+        .iter()
+        .map(|members| {
+            members
                 .iter()
                 .map(|m| match m {
                     SchemeMember::Lam { lam, args } => (
-                        Some(*lam),
-                        args.iter().map(|a| block[*a as usize]).collect(),
+                        MemberLabel::Lam(*lam),
+                        args.iter().map(|a| Child::Node(*a as usize)).collect(),
                     ),
                     SchemeMember::Dynamic(reason) => {
                         let i = match reasons.iter().position(|r| r == reason) {
@@ -968,24 +974,14 @@ fn merge_equal_classes(
                                 reasons.len() - 1
                             }
                         };
-                        (None, vec![i])
+                        (MemberLabel::Dynamic(i), vec![])
                     }
                 })
-                .collect();
-            signature.sort();
-            signature.dedup();
-            let count = block_of_signature.len();
-            next_block[c] = *block_of_signature
-                .entry((block[c], signature))
-                .or_insert(count);
-        }
-        let next_count = block_of_signature.len();
-        block = next_block;
-        if next_count == block_count {
-            break;
-        }
-        block_count = next_count;
-    }
+                .collect()
+        })
+        .collect();
+    let initial = (0..n).map(|c| c.min(param_count)).collect();
+    let (block, _) = canonical_classes(initial, &elems);
 
     // Number the blocks by their first class, so that the parameters keep their places.
     let mut class_of_block: Map<usize, u32> = Map::default();

@@ -16,6 +16,7 @@ mod concrete;
 mod dump;
 mod flow;
 mod infer;
+mod partition;
 mod represent;
 mod rewrite;
 mod slots;
