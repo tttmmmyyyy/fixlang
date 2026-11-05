@@ -903,6 +903,102 @@ main : IO () = println(show(P { x : 1 }));
         ]);
     }
 
+    /// Swapping the fields of an imported struct, which moves where each field lies in a value,
+    /// leaving the bodies constructing and reading it as they are.
+    #[test]
+    fn the_order_of_the_fields_of_an_imported_struct() {
+        let main = r#"module Main;
+
+import Lib;
+
+main : IO () = (
+    let p = P { a : 1, b : 2_U8 };
+    println(p.@a.to_string + " " + p.@b.to_string)
+);
+"#;
+        let lib = |fields: &str| format!("module Lib;\n\ntype P = struct {{ {} }};\n", fields);
+        assert_every_version_builds_as_from_nothing(vec![
+            Version::of(
+                &main_and_lib(main, lib("a : I64, b : U8")),
+                Outcome::Prints("1 2"),
+            ),
+            Version::of(
+                &main_and_lib(main, lib("b : U8, a : I64")),
+                Outcome::Prints("1 2"),
+            ),
+        ]);
+    }
+
+    /// Swapping the variants of an imported union, which moves the tag each variant is told by,
+    /// leaving the bodies constructing and matching it as they are.
+    #[test]
+    fn the_order_of_the_variants_of_an_imported_union() {
+        let main = r#"module Main;
+
+import Lib;
+
+describe : U -> String;
+describe = |u| match u {
+    a(x) => "a" + x.to_string,
+    b(x) => "b" + x.to_string,
+};
+
+main : IO () = println(describe(U::a(1)) + " " + describe(U::b(2)));
+"#;
+        let lib = |variants: &str| format!("module Lib;\n\ntype U = union {{ {} }};\n", variants);
+        assert_every_version_builds_as_from_nothing(vec![
+            Version::of(
+                &main_and_lib(main, lib("a : I64, b : I64")),
+                Outcome::Prints("a1 b2"),
+            ),
+            Version::of(
+                &main_and_lib(main, lib("b : I64, a : I64")),
+                Outcome::Prints("a1 b2"),
+            ),
+        ]);
+    }
+
+    /// Adding a constraint to an imported trait implementation, which a type the importing module
+    /// uses it at does not satisfy.
+    #[test]
+    fn the_constraints_of_an_imported_trait_implementation() {
+        let main = r#"module Main;
+
+import Lib;
+
+type Q = struct { x : I64 };
+
+impl Q : ToString {
+    to_string = |q| q.@x.to_string;
+}
+
+main : IO () = println(Holder { v : Q { x : 1 } }.to_string);
+"#;
+        let lib = |constraints: &str| {
+            format!(
+                r#"module Lib;
+
+type Holder a = struct {{ v : a }};
+
+impl [{}] Holder a : ToString {{
+    to_string = |h| h.@v.to_string;
+}}
+"#,
+                constraints
+            )
+        };
+        assert_every_version_builds_as_from_nothing(vec![
+            Version::of(
+                &main_and_lib(main, lib("a : ToString")),
+                Outcome::Prints("1"),
+            ),
+            Version::of(
+                &main_and_lib(main, lib("a : ToString, a : Eq")),
+                Outcome::Rejects("`Main::Q : Std::Eq`"),
+            ),
+        ]);
+    }
+
     /// Editing a module imported through another module: the importing module and the module in
     /// between are unedited, and the importing module's body reads a type alias of the module at
     /// the end.
@@ -961,18 +1057,36 @@ main : IO () = println((parsed + "1".from_string.as_ok).to_string);
 
     // The files the project consists of.
 
-    /// Renaming the file of an imported module, leaving its content as it is. The debug
-    /// information of the program names the file each expression lies in.
+    /// Renaming the file of an imported module, leaving its content as it is. A body of the module
+    /// uses a deprecated value, and the warning on the use names the file the use is written in.
     #[test]
     fn the_file_of_a_module_renamed() {
         let main = "module Main;\n\nimport Lib;\n\nmain : IO () = println(answer.to_string);\n";
-        let lib = "module Lib;\n\nanswer : I64 = 1;\n";
+        let lib = r#"module Lib;
+
+old : I64 = 1;
+DEPRECATED[old, "use `answer` instead"];
+
+answer : I64 = old;
+"#;
         let files = |lib_path: &'static str| {
             vec![("main.fix", main.to_string()), (lib_path, lib.to_string())]
         };
         assert_every_version_builds_as_from_nothing(vec![
-            Version::of(&files("lib.fix"), Outcome::Prints("1")),
-            Version::of(&files("library.fix"), Outcome::Prints("1")),
+            Version::of(
+                &files("lib.fix"),
+                Outcome::WarnsAndPrints {
+                    report: "6:16-6:19 in \"lib.fix\"",
+                    stdout: "1",
+                },
+            ),
+            Version::of(
+                &files("library.fix"),
+                Outcome::WarnsAndPrints {
+                    report: "6:16-6:19 in \"library.fix\"",
+                    stdout: "1",
+                },
+            ),
         ]);
     }
 
