@@ -78,7 +78,7 @@ impl<'p> Check<'p> {
         match &*e.expr {
             Expr::Var(v) => {
                 if v.name.is_local() {
-                    let (_, bound) = scope
+                    let (_, bound_ty) = scope
                         .iter()
                         .rev()
                         .find(|(name, _)| *name == v.name)
@@ -89,7 +89,7 @@ impl<'p> Check<'p> {
                                 v.name.to_string()
                             )
                         });
-                    self.same(bound, ty(e), at, e, "a local's type and its reference's");
+                    self.same(bound_ty, ty(e), at, e, "a local's type and its reference's");
                 } else {
                     let symbol = self.prg.symbols.get(&v.name).unwrap_or_else(|| {
                         panic!(

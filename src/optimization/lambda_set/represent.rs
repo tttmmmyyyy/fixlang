@@ -309,21 +309,21 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     // them share the capture struct when their elements are equal with every set represented by
     // closures counted equal to every other, as a closure has one type whatever it holds. The
     // classes are numbered in the order of the sets: the first set of a class stands for it.
-    let single: Vec<bool> = (0..set_count)
+    let is_capture_struct: Vec<bool> = (0..set_count)
         .map(|id| unboxable[id] && block_elems[block[id]].len() == 1)
         .collect();
-    let single_elems: Vec<NodeElems<LamId>> = (0..set_count)
-        .map(|id| match single[id] {
+    let capture_struct_elems: Vec<NodeElems<LamId>> = (0..set_count)
+        .map(|id| match is_capture_struct[id] {
             true => elems[id].clone(),
             false => vec![],
         })
         .collect();
-    let (struct_block, struct_block_elems) = canonical_classes(vec![0; set_count], &single_elems);
+    let (struct_block, struct_block_elems) = canonical_classes(vec![0; set_count], &capture_struct_elems);
     let mut class_of_block: Map<usize, u32> = Map::default();
     let mut first_set: Vec<usize> = vec![];
     let mut of_set: Vec<Repr> = vec![Repr::Closure; set_count];
     for id in 0..set_count {
-        if !single[id] {
+        if !is_capture_struct[id] {
             continue;
         }
         assert_eq!(
