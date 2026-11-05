@@ -116,9 +116,9 @@ fn is_temporary_file_name(name: &str) -> bool {
 
 /// The names of the temporary files this process holds open (`TemporaryFile`).
 ///
-/// A lock a process takes on a file of its own is taken by none of its own later attempts on some
-/// file systems (NFS emulates the lock by one held per process), so the files of this process are
-/// told apart by name.
+/// On some file systems, a process that tries to lock a file it has locked itself succeeds (NFS
+/// emulates the lock with one held per process), so the files of this process are told apart by
+/// name.
 static HELD_TEMPORARY_FILES: LazyLock<Mutex<Set<OsString>>> =
     LazyLock::new(|| Mutex::new(Set::default()));
 
@@ -132,6 +132,7 @@ pub struct TemporaryFile {
 }
 
 impl Drop for TemporaryFile {
+    /// Removes the file from `HELD_TEMPORARY_FILES`, so that it may be taken for abandoned.
     fn drop(&mut self) {
         if let Some(name) = self.path.file_name() {
             HELD_TEMPORARY_FILES.lock().unwrap().remove(name);

@@ -248,10 +248,9 @@ fn read_record_of(file: &mut File) -> io::Result<Result<(ModuleRecord, u64), Str
 /// no longer exists answers `None`; one whose bytes there are not the body answers the reason.
 ///
 /// A body the file holds intact stays at its offset when this build writes the file anew, so `range`
-/// read from an earlier record of the file still finds it. A file another build began on its own
-/// and put in place may hold the body elsewhere, which `Program::read_stored_body` handles. The
-/// identity written in front of the body is compared with `identity`, so bytes of another body are
-/// never taken for it.
+/// read from an earlier record of the file still finds it. A file another build wrote at the same
+/// time and put in place may hold the body at another offset. The identity written in front of the
+/// body is compared with `identity`, so bytes of another body are never taken for it.
 fn read_body(
     path: &Path,
     range: &Range<u64>,
@@ -460,13 +459,12 @@ impl ModuleFileWriter {
     }
 
     /// Removes the files of the module checked under any other hash than the file named
-    /// `file_name`, and the temporary files builds that were killed left in the directory. The file
-    /// is in place already, so a file left behind costs only room on the disk, and the next write
-    /// tries again.
+    /// `file_name`, and the temporary files left in the directory by builds that were killed. The
+    /// file named `file_name` is in place already, so a file this fails to remove costs only disk
+    /// space, and the next write tries again.
     ///
-    /// A temporary file another build created a moment ago may be unlocked still
-    /// (`remove_abandoned_temporary_files`); removing it makes that build fail to put its file in
-    /// place, which it reports, and its bodies are checked again.
+    /// A temporary file another build created a moment ago may not be locked yet; removing it makes
+    /// that build fail to put its file in place, which it reports, and its bodies are checked again.
     fn remove_stale_files(&self, file_name: &str) {
         remove_abandoned_temporary_files(&self.dir);
         let Ok(dir_entries) = fs::read_dir(&self.dir) else {
@@ -705,7 +703,7 @@ pub struct TypedModules {
 }
 
 impl TypedModules {
-    /// Takes the ranges of the stored bodies of the file the body at `loc` lies in anew, from the
+    /// Updates the ranges of the stored bodies of the file that holds the body at `loc` from the
     /// record the file holds now, and answers whether the range of the body at `loc` changed.
     fn relocate_stored_bodies(&mut self, loc: &BodyLocation) -> bool {
         let file = self.stored[loc].file.clone();
@@ -903,8 +901,8 @@ impl Program {
                 }
             },
         );
-        // The modules finish in the order their bodies happen to be checked, so the failures are
-        // reported in the order of the modules.
+        // The modules finish in whatever order their bodies are checked, so the failures are sorted
+        // to be reported in the order of the modules.
         failures.sort_by(|(lhs, _), (rhs, _)| lhs.module.cmp(&rhs.module));
         for (file, e) in &failures {
             let dir = dir
@@ -952,8 +950,8 @@ impl Program {
     ///
     /// Another build may have put a file of its own in place of the one this build read the range
     /// from, holding the same bodies in another order. So when the bytes at the range are not the
-    /// body, the ranges of the bodies of the file are taken anew from the record it holds now
-    /// (`relocate_stored_bodies`), and the body is read once more.
+    /// body, the ranges of the bodies of the file are updated from the record it holds now, and the
+    /// body is read once more.
     fn read_stored_body(&mut self, loc: &BodyLocation) -> Result<Option<TypedExpr>, String> {
         let read = |typed_modules: &mut TypedModules| {
             let stored = &typed_modules.stored[loc];

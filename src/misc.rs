@@ -153,8 +153,8 @@ where
 /// The results reach `consume` in the order they become ready, and `consume` runs while the threads
 /// go on with the remaining items. A thread whose result would make more than `num_threads` results
 /// wait for `consume` waits until `consume` takes one. So what a result holds is freed as soon as
-/// `consume` is done with it, and the results held at once, `consume`'s aside, are at most twice
-/// `num_threads`.
+/// `consume` is done with it, and at most twice `num_threads` results are held at once besides the
+/// one in `consume`.
 pub fn consume_on_compiler_threads<T, R>(
     items: Vec<T>,
     num_threads: usize,
@@ -671,8 +671,8 @@ mod tests {
         assert_eq!(consumed, (0..16u64).map(|i| i * 10).collect::<Vec<_>>());
     }
 
-    /// While `consume` takes its time over a result, the threads stop once the results waiting for
-    /// it, the one in `consume` aside, are twice `num_threads`.
+    /// While `consume` takes its time over a result, the threads stop once twice `num_threads`
+    /// results wait for it besides the one in `consume`.
     #[test]
     fn test_consume_on_compiler_threads_holds_at_most_twice_num_threads_results() {
         const NUM_THREADS: usize = 2;
