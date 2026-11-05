@@ -728,9 +728,9 @@ impl TypedModules {
     fn relocate_stored_bodies(&mut self, loc: &BodyLocation) -> bool {
         let file = self.stored[loc].file.clone();
         let path = file.path();
-        let Ok(Some(record)) = SourceFile::with_shared_source_files(&mut self.source_files, || {
-            read_record(&path)
-        }) else {
+        let Ok(Some(record)) =
+            SourceFile::with_shared_source_files(&mut self.source_files, || read_record(&path))
+        else {
             return false;
         };
         let mut moved = false;

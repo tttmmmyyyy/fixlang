@@ -775,7 +775,10 @@ main = println $ (double(21), 3).to_string;
             source += &format!("f{} : I64 -> I64;\nf{} = |x| x * {} + 1;\n\n", i, i, i);
         }
         let sum: Vec<String> = (0..count).map(|i| format!("f{}(1)", i)).collect();
-        source += &format!("main : IO ();\nmain = println $ ({}).to_string;\n", sum.join(" + "));
+        source += &format!(
+            "main : IO ();\nmain = println $ ({}).to_string;\n",
+            sum.join(" + ")
+        );
         source
     }
 
@@ -847,7 +850,10 @@ main = println $ (double(21), 3).to_string;
         }
         killed.kill().expect("Failed to kill fix");
         killed.wait().expect("Failed to wait for fix");
-        assert!(!temporary_files().is_empty(), "the killed build left no temporary file");
+        assert!(
+            !temporary_files().is_empty(),
+            "the killed build left no temporary file"
+        );
 
         build(dir, "main.fix", &[]);
         assert_eq!(temporary_files(), Vec::<String>::new());
