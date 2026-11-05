@@ -16,14 +16,23 @@ use std::sync::Arc;
 /// written.
 pub fn validate_types(prg: &Program) {
     let type_env = prg.type_env();
-    let check = Check { prg, type_env: &type_env };
+    let check = Check {
+        prg,
+        type_env: &type_env,
+    };
     let mut names: Vec<_> = prg.symbols.keys().collect();
     names.sort();
     for name in names {
         let symbol = &prg.symbols[name];
         let expr = symbol.expr.as_ref().unwrap();
         let at = name.to_string();
-        check.same(&symbol.ty, ty(expr), &at, expr, "the symbol's type and its body's");
+        check.same(
+            &symbol.ty,
+            ty(expr),
+            &at,
+            expr,
+            "the symbol's type and its body's",
+        );
         check.expr(expr, &at);
     }
     for root in prg.root_value_exprs() {
@@ -64,9 +73,19 @@ impl<'p> Check<'p> {
             Expr::Var(v) => {
                 if !v.name.is_local() {
                     let symbol = self.prg.symbols.get(&v.name).unwrap_or_else(|| {
-                        panic!("in `{}`, the global `{}` is no symbol", at, v.name.to_string())
+                        panic!(
+                            "in `{}`, the global `{}` is no symbol",
+                            at,
+                            v.name.to_string()
+                        )
                     });
-                    self.same(&symbol.ty, ty(e), at, e, "a global's type and its reference's");
+                    self.same(
+                        &symbol.ty,
+                        ty(e),
+                        at,
+                        e,
+                        "a global's type and its reference's",
+                    );
                 }
             }
             Expr::Builtin(_) => {}
@@ -79,11 +98,23 @@ impl<'p> Check<'p> {
                     .iter()
                     .rev()
                     .fold(ty(e).clone(), |acc, arg| type_arrow(ty(arg).clone(), acc));
-                self.same(ty(func), &expected, at, e, "a function's type and its application's");
+                self.same(
+                    ty(func),
+                    &expected,
+                    at,
+                    e,
+                    "a function's type and its application's",
+                );
             }
             Expr::Lam(_, body) => {
                 self.expr(body, at);
-                self.same(&ty(e).get_lambda_dst(), ty(body), at, e, "a lambda's result and body");
+                self.same(
+                    &ty(e).get_lambda_dst(),
+                    ty(body),
+                    at,
+                    e,
+                    "a lambda's result and body",
+                );
             }
             Expr::Let(pat, bound, val) => {
                 self.expr(bound, at);
@@ -95,8 +126,20 @@ impl<'p> Check<'p> {
                 self.expr(cond, at);
                 self.expr(then_expr, at);
                 self.expr(else_expr, at);
-                self.same(ty(e), ty(then_expr), at, e, "an if's type and its then arm's");
-                self.same(ty(e), ty(else_expr), at, e, "an if's type and its else arm's");
+                self.same(
+                    ty(e),
+                    ty(then_expr),
+                    at,
+                    e,
+                    "an if's type and its then arm's",
+                );
+                self.same(
+                    ty(e),
+                    ty(else_expr),
+                    at,
+                    e,
+                    "an if's type and its else arm's",
+                );
             }
             Expr::Match(cond, arms) => {
                 self.expr(cond, at);
@@ -108,14 +151,32 @@ impl<'p> Check<'p> {
             }
             Expr::TyAnno(expr, anno) => {
                 self.expr(expr, at);
-                self.same(ty(e), ty(expr), at, e, "an annotated expression's type and its value's");
-                self.same(ty(e), anno, at, e, "an annotated expression's type and its annotation");
+                self.same(
+                    ty(e),
+                    ty(expr),
+                    at,
+                    e,
+                    "an annotated expression's type and its value's",
+                );
+                self.same(
+                    ty(e),
+                    anno,
+                    at,
+                    e,
+                    "an annotated expression's type and its annotation",
+                );
             }
             Expr::ArrayLit(elems) => {
                 let elem_ty = ty(e).collect_type_arguments()[0].clone();
                 for elem in elems {
                     self.expr(elem, at);
-                    self.same(&elem_ty, ty(elem), at, e, "an array literal's element types");
+                    self.same(
+                        &elem_ty,
+                        ty(elem),
+                        at,
+                        e,
+                        "an array literal's element types",
+                    );
                 }
             }
             Expr::MakeStruct(tc, fields) => {
@@ -130,7 +191,13 @@ impl<'p> Check<'p> {
                 for (name, _, value) in fields {
                     self.expr(value, at);
                     let i = ty(e).field_index(self.type_env, name).unwrap();
-                    self.same(&field_tys[i], ty(value), at, e, "a field's type and its value's");
+                    self.same(
+                        &field_tys[i],
+                        ty(value),
+                        at,
+                        e,
+                        "a field's type and its value's",
+                    );
                 }
             }
             Expr::FFICall(_, _, _, _, args, _) => {
@@ -149,11 +216,23 @@ impl<'p> Check<'p> {
     /// Checks the pattern `pat`, which takes apart a value of type `matched` at the node `e` of `at`.
     fn pattern(&self, pat: &Arc<PatternNode>, matched: &Arc<TypeNode>, at: &str, e: &ExprNode) {
         let pat_ty = pat.info.type_.as_ref().unwrap();
-        self.same(pat_ty, matched, at, e, "a pattern's type and the value's it takes apart");
+        self.same(
+            pat_ty,
+            matched,
+            at,
+            e,
+            "a pattern's type and the value's it takes apart",
+        );
         match &pat.pattern {
             Pattern::Var(_, anno) => {
                 if let Some(anno) = anno {
-                    self.same(anno, pat_ty, at, e, "a variable pattern's annotation and type");
+                    self.same(
+                        anno,
+                        pat_ty,
+                        at,
+                        e,
+                        "a variable pattern's annotation and type",
+                    );
                 }
             }
             Pattern::Struct(tc, fields, _) => {

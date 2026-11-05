@@ -6,8 +6,8 @@
 #[cfg(test)]
 mod tests {
     use crate::{
-        constants::LS_CAP_PREFIX,
         configuration::{Configuration, FixOptimizationLevel, ValgrindTool},
+        constants::LS_CAP_PREFIX,
         tests::test_util::{
             build_run_and_read_rc_ir, build_within_and_run, rc_ir_function_bodies, test_source,
         },

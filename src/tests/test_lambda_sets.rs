@@ -430,15 +430,12 @@ mod dump_tests {
     /// same fold calls the lambda through a closure, which is what says the assertion can see one.
     #[test]
     fn test_a_function_given_a_lambda_calls_it_by_name() {
-        let dump = build_run_and_read_rc_ir(FOLD_SOURCE, "max", FOLD_OUTPUT, "a fold given a lambda");
+        let dump =
+            build_run_and_read_rc_ir(FOLD_SOURCE, "max", FOLD_OUTPUT, "a fold given a lambda");
         assert_calls_by_name(&dump, "Std::Iterator::fold");
 
-        let dump = build_run_and_read_rc_ir(
-            FOLD_SOURCE,
-            "basic",
-            FOLD_OUTPUT,
-            "a fold given a lambda",
-        );
+        let dump =
+            build_run_and_read_rc_ir(FOLD_SOURCE, "basic", FOLD_OUTPUT, "a fold given a lambda");
         assert!(
             rc_ir_function_bodies(&dump, "Std::Iterator::fold")
                 .iter()
@@ -565,7 +562,8 @@ mod dump_tests {
     /// through the index primitive itself.
     #[test]
     fn test_a_loop_body_goes_into_the_loop_made_for_it() {
-        let dump = build_run_and_read_rc_ir(LOOP_SOURCE, "max", LOOP_OUTPUT, "a loop reading an array");
+        let dump =
+            build_run_and_read_rc_ir(LOOP_SOURCE, "max", LOOP_OUTPUT, "a loop reading an array");
         assert_calls_by_name(&dump, "Std::loop");
         assert!(
             rc_ir_function_bodies(&dump, "Std::loop")
@@ -759,7 +757,9 @@ mod dump_tests {
         let standing: Vec<&str> = dump
             .lines()
             .filter(|line| line.starts_with("fn Main::main") && line.contains(LS_LAM_SUFFIX))
-            .filter(|line| line.ends_with(") -> Std::I64:") && parameters(line).contains("Std::I64"))
+            .filter(|line| {
+                line.ends_with(") -> Std::I64:") && parameters(line).contains("Std::I64")
+            })
             .collect();
         assert!(
             standing.is_empty(),

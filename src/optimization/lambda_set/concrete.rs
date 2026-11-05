@@ -308,7 +308,9 @@ impl SetStore {
 /// their signatures, which read only the lambdas and the classes of the round before, so the number
 /// a class gets says which tree its sets unfold to: nodes reaching equal sets of trees get the same
 /// numbers, however they are positioned.
-fn canonical_classes(elems: &[Vec<(Option<LamId>, Vec<Child>)>]) -> (Vec<usize>, Vec<Vec<ElemKey>>) {
+fn canonical_classes(
+    elems: &[Vec<(Option<LamId>, Vec<Child>)>],
+) -> (Vec<usize>, Vec<Vec<ElemKey>>) {
     let mut class = vec![0usize; elems.len()];
     let mut class_count = 1;
     loop {
@@ -340,7 +342,10 @@ fn canonical_classes(elems: &[Vec<(Option<LamId>, Vec<Child>)>]) -> (Vec<usize>,
         if distinct.len() == class_count {
             // No class split, so the classes keep their numbers: each signature carries the class it
             // refines first, and the classes sort in that order.
-            assert!(distinct.iter().enumerate().all(|(c, (refined, _))| *refined == c));
+            assert!(distinct
+                .iter()
+                .enumerate()
+                .all(|(c, (refined, _))| *refined == c));
             let class_elems = distinct.into_iter().map(|(_, keys)| keys).collect();
             return (class, class_elems);
         }

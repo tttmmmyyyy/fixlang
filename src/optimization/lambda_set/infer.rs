@@ -59,7 +59,11 @@ impl Lambda {
     /// closures. The lambda that is the body of its symbol is a global function already, and one
     /// whose body reads its capture whole (`CAP_NAME`) needs the closure object holding it.
     pub fn is_lifted_from_closures(&self) -> bool {
-        !self.is_body() && !self.expr.get_lam_body().has_free_var(&FullName::local(CAP_NAME))
+        !self.is_body()
+            && !self
+                .expr
+                .get_lam_body()
+                .has_free_var(&FullName::local(CAP_NAME))
     }
 }
 
@@ -623,13 +627,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         if component == self.component {
             let i = self.symbols.iter().position(|s| s == name).unwrap();
             let ty = self.types[i].clone();
-            return (
-                ty.clone(),
-                NameRef::Global {
-                    site: None,
-                    ty,
-                },
-            );
+            return (ty.clone(), NameRef::Global { site: None, ty });
         }
         let callee = &self.analysis.components[component];
         let position = callee.symbols.iter().position(|s| s == name).unwrap();

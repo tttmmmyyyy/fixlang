@@ -6,7 +6,12 @@ use super::{
     solver::LamId,
     specialize::Specialization,
 };
-use crate::{constants::LS_COPY_SUFFIX, graph::Graph, hash::md5_hex, misc::{Map, Set}};
+use crate::{
+    constants::LS_COPY_SUFFIX,
+    graph::Graph,
+    hash::md5_hex,
+    misc::{Map, Set},
+};
 
 /// How the values of a concrete set are represented.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -63,15 +68,19 @@ impl Representation {
     pub fn class_of(&self, lam: LamId, args: &[SetId]) -> u32 {
         let key = (lam, args.iter().map(|a| self.of(*a)).collect());
         *self.class_of_args.get(&key).unwrap_or_else(|| {
-            panic!("no class holds the element of the lambda {} given the sets {:?}", lam, args)
+            panic!(
+                "no class holds the element of the lambda {} given the sets {:?}",
+                lam, args
+            )
         })
     }
 
     /// The number of classes whose lambda is `lam`, a lambda that has any.
     pub fn class_count(&self, lam: LamId) -> usize {
-        *self.class_counts.get(&lam).unwrap_or_else(|| {
-            panic!("no class holds an element of the lambda {}", lam)
-        })
+        *self
+            .class_counts
+            .get(&lam)
+            .unwrap_or_else(|| panic!("no class holds an element of the lambda {}", lam))
     }
 
     /// The suffix of a copy made for the representations `reprs`: `LS_COPY_SUFFIX` followed by
@@ -185,10 +194,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
                 continue;
             }
             let (_, args) = single[id].unwrap();
-            let signature = (
-                block[id],
-                args.iter().map(|a| block[*a as usize]).collect(),
-            );
+            let signature = (block[id], args.iter().map(|a| block[*a as usize]).collect());
             let count = block_of_signature.len();
             next[id] = *block_of_signature.entry(signature).or_insert(count);
         }
@@ -222,15 +228,17 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
                      lam: LamId,
                      args: &[SetId]| {
         let reprs: Vec<Repr> = args.iter().map(|a| of_set[*a as usize]).collect();
-        class_of_args.entry((lam, reprs.clone())).or_insert_with(|| {
-            classes.push(LamClass {
-                lam,
-                args: reprs,
-                instance: builder_of(lam, args),
-                hash: String::new(),
+        class_of_args
+            .entry((lam, reprs.clone()))
+            .or_insert_with(|| {
+                classes.push(LamClass {
+                    lam,
+                    args: reprs,
+                    instance: builder_of(lam, args),
+                    hash: String::new(),
+                });
+                (classes.len() - 1) as u32
             });
-            (classes.len() - 1) as u32
-        });
     };
     for id in &first_set {
         let (lam, args) = single[*id].unwrap();

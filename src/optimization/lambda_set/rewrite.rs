@@ -658,7 +658,10 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let (params, body) = lambda.expr.destructure_lam();
         let body = self.walk_expr(&mut walk, &body, false);
         assert_eq!(walk.cursor, lambda.nodes.end);
-        let param_ty = self.rewrite_type(instance, &self.layout.type_arg(&nodes[lambda.nodes.start].ty, 0));
+        let param_ty = self.rewrite_type(
+            instance,
+            &self.layout.type_arg(&nodes[lambda.nodes.start].ty, 0),
+        );
         let lam = expr_abs_typed(params[0].clone(), param_ty, body)
             .set_source(lambda.expr.source.clone());
         let cap = self.capture_struct(c);
@@ -768,7 +771,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             }
             Expr::App(func, args) => {
                 let func_node = &walk.nodes[walk.cursor];
-                let own = self.repr.of(self.set_of(walk.instance, func_node.ty.slots[0]));
+                let own = self
+                    .repr
+                    .of(self.set_of(walk.instance, func_node.ty.slots[0]));
                 let func = self.walk_expr(walk, func, false);
                 let arg = self.walk_expr(walk, &args[0], false);
                 match own {
@@ -835,13 +840,13 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                         (pat, val)
                     })
                     .collect();
-                e.set_match_cond(cond)
-                    .set_match_pat_vals(arms)
-                    .set_type(ty)
+                e.set_match_cond(cond).set_match_pat_vals(arms).set_type(ty)
             }
             Expr::TyAnno(expr, _) => {
                 let expr = self.walk_expr(walk, expr, false);
-                e.set_tyanno_expr(expr).set_tyanno_ty(ty.clone()).set_type(ty)
+                e.set_tyanno_expr(expr)
+                    .set_tyanno_ty(ty.clone())
+                    .set_type(ty)
             }
             Expr::ArrayLit(elems) => {
                 let elems = elems
@@ -854,7 +859,11 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 let fields = fields
                     .iter()
                     .map(|(name, src, value)| {
-                        (name.clone(), src.clone(), self.walk_expr(walk, value, false))
+                        (
+                            name.clone(),
+                            src.clone(),
+                            self.walk_expr(walk, value, false),
+                        )
                     })
                     .collect();
                 e.set_make_struct_fields(fields)
@@ -889,7 +898,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             Pattern::Struct(_, fields, _) => {
                 let fields = fields
                     .iter()
-                    .map(|(name, src, sub)| (name.clone(), src.clone(), self.walk_pattern(walk, sub)))
+                    .map(|(name, src, sub)| {
+                        (name.clone(), src.clone(), self.walk_pattern(walk, sub))
+                    })
                     .collect();
                 pat.set_struct_field_to_pat(fields)
                     .set_struct_tycon(ty.head_tycon())
@@ -914,7 +925,10 @@ impl<'a, 'e> Rewriter<'a, 'e> {
     /// reference is represented by its capture struct, that struct.
     fn global_value(&mut self, walk: &Walk, name: &FullName, name_ref: &NameRef) -> Arc<ExprNode> {
         let NameRef::Global { site, ty } = name_ref else {
-            panic!("the global `{}` is referred to as a local", name.to_string());
+            panic!(
+                "the global `{}` is referred to as a local",
+                name.to_string()
+            );
         };
         let target = match site {
             None => walk.instance,
@@ -998,8 +1012,8 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 .push(callee_name.clone());
         }
         let cap_ty = func.type_.clone().unwrap();
-        let callee =
-            expr_var(callee_name, None).set_type(type_arrow(cap_ty, type_arrow(arg_ty, ty.clone())));
+        let callee = expr_var(callee_name, None)
+            .set_type(type_arrow(cap_ty, type_arrow(arg_ty, ty.clone())));
         let partial = expr_app_typed(callee, vec![func]);
         e.set_app_func(partial).set_app_args(vec![arg]).set_type(ty)
     }
