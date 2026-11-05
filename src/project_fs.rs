@@ -2,13 +2,15 @@
 //! holds, such as a symbolic link committed to a repository, cannot lead fix to write or remove
 //! anything outside the project.
 
-use crate::{constants::DOT_FIXLANG, error::Errors};
+use crate::{constants::DOT_FIXLANG, error::Errors, misc::Set};
 use rand::random;
 use std::{
     env,
+    ffi::OsString,
     fs::{self, File},
     io::{self, ErrorKind},
     path::{Component, Path, PathBuf},
+    sync::{LazyLock, Mutex},
 };
 
 /// The error reporting that an operation, named by `verb`, failed on `path` with `e`.
@@ -112,34 +114,63 @@ fn is_temporary_file_name(name: &str) -> bool {
         .is_some_and(|digits| digits.len() == 16 && digits.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
-/// Creates a temporary file in `dir`, named by `temporary_file_name`, and answers it with its path.
+/// The names of the temporary files this process holds open (`TemporaryFile`).
+///
+/// A lock a process takes on a file of its own is taken by none of its own later attempts on some
+/// file systems (NFS emulates the lock by one held per process), so the files of this process are
+/// told apart by name.
+static HELD_TEMPORARY_FILES: LazyLock<Mutex<Set<OsString>>> =
+    LazyLock::new(|| Mutex::new(Set::default()));
+
+/// A temporary file `create_temporary_file_in` created, open and locked for as long as it lives.
+/// Dropping it closes the file and leaves it where it is.
+pub struct TemporaryFile {
+    /// The open file.
+    pub file: File,
+    /// Where the file lies.
+    pub path: PathBuf,
+}
+
+impl Drop for TemporaryFile {
+    fn drop(&mut self) {
+        if let Some(name) = self.path.file_name() {
+            HELD_TEMPORARY_FILES.lock().unwrap().remove(name);
+        }
+    }
+}
+
+/// Creates a temporary file in `dir`, named by `temporary_file_name`.
 ///
 /// The file is locked for as long as it is open. The kernel releases the lock when the file is
 /// closed or the process ends, so a temporary file no process holds a lock on was left by a process
 /// that was killed while it wrote it (`remove_abandoned_temporary_files`). On a file system that
 /// offers no such lock, the file is created unlocked, and is never taken for abandoned.
-pub fn create_temporary_file_in(dir: &Path) -> io::Result<(File, PathBuf)> {
-    let path = dir.join(temporary_file_name());
+pub fn create_temporary_file_in(dir: &Path) -> io::Result<TemporaryFile> {
+    let name = temporary_file_name();
+    let path = dir.join(&name);
     let file = File::options()
         .read(true)
         .write(true)
         .create_new(true)
         .open(&path)?;
     let _ = file.try_lock();
-    Ok((file, path))
+    HELD_TEMPORARY_FILES.lock().unwrap().insert(name.into());
+    Ok(TemporaryFile { file, path })
 }
 
-/// Removes the temporary files in `dir` (`create_temporary_file_in`) that no process holds a lock
-/// on.
+/// Removes the temporary files in `dir` (`create_temporary_file_in`) that no process holds open.
 ///
-/// A file created a moment ago may be unlocked still, between its creation and its lock; removing
-/// it makes the process writing it fail to put it in place, which that process reports.
+/// A file another process created a moment ago may be unlocked still, between its creation and its
+/// lock; removing it makes that process fail to put it in place, which that process reports.
 pub fn remove_abandoned_temporary_files(dir: &Path) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
-        if !is_temporary_file_name(&entry.file_name().to_string_lossy()) {
+        let name = entry.file_name();
+        if !is_temporary_file_name(&name.to_string_lossy())
+            || HELD_TEMPORARY_FILES.lock().unwrap().contains(&name)
+        {
             continue;
         }
         let path = entry.path();
@@ -162,13 +193,14 @@ pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) ->
         .parent()
         .unwrap_or_else(|| panic!("\"{}\" names no file to replace.", path.to_string_lossy()));
     // The file stays open, and so locked, until it is in place.
-    let (_tmp, tmp_path) = create_temporary_file_in(dir)?;
-    write(&tmp_path)
-        .and_then(|()| fs::rename(&tmp_path, path))
+    let tmp = create_temporary_file_in(dir)?;
+    let tmp_path = &tmp.path;
+    write(tmp_path)
+        .and_then(|()| fs::rename(tmp_path, path))
         .inspect_err(|_| {
             // The temporary path carries a random number drawn by this call, so removing it touches
             // nothing else.
-            let _ = fs::remove_file(&tmp_path);
+            let _ = fs::remove_file(tmp_path);
         })
 }
 

@@ -37,7 +37,7 @@ use crate::misc::{consume_on_compiler_threads, map_on_compiler_threads, warn_msg
 use crate::parse::sourcefile::{SourceFile, Span};
 use crate::project_fs::{
     create_dir_guarding_project_links, create_temporary_file_in, remove_abandoned_temporary_files,
-    DOT_FIXLANG_LINK_HINT,
+    TemporaryFile, DOT_FIXLANG_LINK_HINT,
 };
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
@@ -335,8 +335,8 @@ struct ModuleFileWriter {
     dir: PathBuf,
     /// The module file the new version replaces.
     file: Arc<ModuleFile>,
-    /// The temporary file the new version is written to, and its path, until `finish` renames it.
-    tmp: Option<(File, PathBuf)>,
+    /// The temporary file the new version is written to, until `finish` renames it.
+    tmp: Option<TemporaryFile>,
     /// The bodies the new version holds so far.
     record: ModuleRecord,
     /// Where the bodies written so far end, which is where the next body goes.
@@ -349,11 +349,11 @@ impl ModuleFileWriter {
     /// not one of type-checked modules is begun anew, and one that cannot be read answers the error.
     fn create(dir: &Path, file: Arc<ModuleFile>) -> io::Result<Self> {
         let path = file.path_in(dir);
-        let (tmp, tmp_path) = create_temporary_file_in(dir)?;
+        let tmp = create_temporary_file_in(dir)?;
         let mut writer = ModuleFileWriter {
             dir: dir.to_path_buf(),
             file,
-            tmp: Some((tmp, tmp_path)),
+            tmp: Some(tmp),
             record: ModuleRecord::default(),
             bodies_end: 0,
         };
@@ -384,7 +384,7 @@ impl ModuleFileWriter {
             .tmp
             .as_mut()
             .expect("a module file written after it was finished")
-            .0
+            .file
     }
 
     /// Adds `entry` after the bodies written so far. A body the file held is kept as it is when its
@@ -444,15 +444,16 @@ impl ModuleFileWriter {
         tmp.seek(SeekFrom::Start(bodies_end))?;
         tmp.write_all(&tail)?;
 
-        let (tmp, tmp_path) = self.tmp.take().unwrap();
-        drop(tmp);
+        // The file stays open, and so locked, until it is in place.
+        let tmp = self.tmp.take().unwrap();
         let file_name = self.file.name();
         // The name holds no path separator, and a rename replaces a symbolic link at the path
         // instead of writing through it, so the file is written in `dir`.
-        if let Err(e) = fs::rename(&tmp_path, self.dir.join(&file_name)) {
-            let _ = fs::remove_file(&tmp_path);
+        if let Err(e) = fs::rename(&tmp.path, self.dir.join(&file_name)) {
+            let _ = fs::remove_file(&tmp.path);
             return Err(e);
         }
+        drop(tmp);
 
         self.remove_stale_files(&file_name);
         Ok(entries.into_iter().collect())
@@ -463,9 +464,9 @@ impl ModuleFileWriter {
     /// is in place already, so a file left behind costs only room on the disk, and the next write
     /// tries again.
     ///
-    /// A temporary file is a running build's as long as that build holds its lock. One created a
-    /// moment ago may be unlocked still; removing it makes that build fail to put its file in place,
-    /// which it reports, and its bodies are checked again.
+    /// A temporary file another build created a moment ago may be unlocked still
+    /// (`remove_abandoned_temporary_files`); removing it makes that build fail to put its file in
+    /// place, which it reports, and its bodies are checked again.
     fn remove_stale_files(&self, file_name: &str) {
         remove_abandoned_temporary_files(&self.dir);
         let Ok(dir_entries) = fs::read_dir(&self.dir) else {
@@ -486,9 +487,8 @@ impl ModuleFileWriter {
 impl Drop for ModuleFileWriter {
     /// Removes the temporary file of a new version that was not finished.
     fn drop(&mut self) {
-        if let Some((tmp, tmp_path)) = self.tmp.take() {
-            drop(tmp);
-            let _ = fs::remove_file(tmp_path);
+        if let Some(tmp) = self.tmp.take() {
+            let _ = fs::remove_file(&tmp.path);
         }
     }
 }
@@ -511,8 +511,8 @@ fn create_typed_modules_dir() -> Option<PathBuf> {
 /// Whether a file can be created in `dir`. When it cannot, that is reported as a warning.
 fn accepts_new_files(dir: &Path) -> bool {
     match create_temporary_file_in(dir) {
-        Ok((_probe, probe_path)) => {
-            let _ = fs::remove_file(&probe_path);
+        Ok(probe) => {
+            let _ = fs::remove_file(&probe.path);
             true
         }
         Err(e) => {
