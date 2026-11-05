@@ -33,12 +33,13 @@ use crate::constants::TYPED_MODULES_PATH;
 use crate::elaboration::typecheck::TypeCheckContext;
 use crate::elaboration::typecheckcache::EntityIdentity;
 use crate::error::Errors;
-use crate::misc::{warn_msg, Map};
+use crate::misc::{consume_on_compiler_threads, warn_msg, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
 use crate::project_fs::{create_dir_guarding_project_links, replace_file, DOT_FIXLANG_LINK_HINT};
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{self, Read, Seek, SeekFrom};
+use std::mem::take;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -312,19 +313,14 @@ impl ModuleFile {
     }
 }
 
-/// Adds `new` to the file of `module` checked under `module_hash`, in `dir`, and removes the files of
-/// `module` checked under any other hash.
+/// Adds `new` to `file` in `dir`, removes the files of its module checked under any other hash, and
+/// answers the record the file holds now.
 ///
 /// The file is read again here, so that the bodies another build added to it since this build read
 /// it are kept. A body the file already holds is kept as it is when its bytes decode to it, and is
 /// replaced by the one in `new` otherwise.
-fn add_to_module_file(
-    dir: &Path,
-    module: &Name,
-    module_hash: &str,
-    new: Vec<NewEntry>,
-) -> io::Result<()> {
-    let file_name = module_file_name(module, module_hash);
+fn add_to_module_file(dir: &Path, file: &ModuleFile, new: &[NewEntry]) -> io::Result<ModuleRecord> {
+    let file_name = module_file_name(&file.module, &file.module_hash);
     let path = dir.join(&file_name);
     let (mut record, mut bytes) = match fs::read(&path) {
         Ok(bytes) => decode_module_file(bytes).unwrap_or_default(),
@@ -341,11 +337,11 @@ fn add_to_module_file(
         let start = bytes.len() as u64;
         bytes.extend_from_slice(&entry.bytes);
         record.insert(
-            entry.identity,
+            entry.identity.clone(),
             EntityEntry {
                 body: start..bytes.len() as u64,
-                opaque_types: entry.opaque_types,
-                warning_facts: entry.warning_facts,
+                opaque_types: entry.opaque_types.clone(),
+                warning_facts: entry.warning_facts.clone(),
             },
         );
     }
@@ -362,7 +358,7 @@ fn add_to_module_file(
     replace_file(&path, |tmp_path| fs::write(tmp_path, &bytes))?;
 
     // The temporary files `replace_file` writes begin with a dot, which no prefix does.
-    let prefix = module_file_prefix(module);
+    let prefix = module_file_prefix(&file.module);
     for dir_entry in fs::read_dir(dir)? {
         let entry_name = dir_entry?.file_name();
         let entry_name = entry_name.to_string_lossy();
@@ -370,41 +366,48 @@ fn add_to_module_file(
             let _ = fs::remove_file(dir.join(entry_name.as_ref()));
         }
     }
-    Ok(())
+    Ok(entries.into_iter().collect())
 }
 
-/// Adds each list of bodies of `new_entries` to the file it is paired with. A file that cannot be
-/// written is reported as a warning.
-///
-/// The bodies a file already holds are decoded to see whether they are intact. The source files
-/// their spans point into are taken from `source_files`, which gains the paths it lacks.
-fn add_to_module_files<'a>(
-    new_entries: impl IntoIterator<Item = (&'a ModuleFile, Vec<NewEntry>)>,
-    source_files: &mut Map<PathBuf, SourceFile>,
-) {
-    let dir = match create_dir_guarding_project_links(
-        Path::new(TYPED_MODULES_PATH),
-        DOT_FIXLANG_LINK_HINT,
-    ) {
-        Ok(dir) => dir,
+/// The directory the files of type-checked modules are written in, `TYPED_MODULES_PATH`, created
+/// when it is missing. A directory that cannot be created is reported as a warning, and answers
+/// `None`.
+fn typed_modules_dir() -> Option<PathBuf> {
+    match create_dir_guarding_project_links(Path::new(TYPED_MODULES_PATH), DOT_FIXLANG_LINK_HINT) {
+        Ok(dir) => Some(dir),
         Err(errs) => {
             for err in errs.errors() {
                 warn_msg(&err.msg);
             }
-            return;
+            None
         }
-    };
-    for (file, entries) in new_entries {
-        let added = SourceFile::with_shared_source_files(source_files, || {
-            add_to_module_file(&dir, &file.module, &file.module_hash, entries)
-        });
-        if let Err(e) = added {
+    }
+}
+
+/// Adds `new` to `file` in `dir` (`add_to_module_file`), and answers the record the file holds now.
+/// A file that cannot be written is reported as a warning, and answers `None`.
+///
+/// The bodies the file already holds are decoded to see whether they are intact. The source files
+/// their spans point into are taken from `source_files`, which gains the paths it lacks.
+fn write_module_file(
+    dir: &Path,
+    file: &ModuleFile,
+    new: &[NewEntry],
+    source_files: &mut Map<PathBuf, SourceFile>,
+) -> Option<ModuleRecord> {
+    let written = SourceFile::with_shared_source_files(source_files, || {
+        add_to_module_file(dir, file, new)
+    });
+    match written {
+        Ok(record) => Some(record),
+        Err(e) => {
             warn_msg(&format!(
                 "Failed to write cache file \"{}\": {}.",
                 dir.join(module_file_name(&file.module, &file.module_hash))
                     .to_string_lossy(),
                 e
             ));
+            None
         }
     }
 }
@@ -416,6 +419,91 @@ fn warn_unreadable_file(path: &Path, why: &str) {
         path.to_string_lossy(),
         why
     ));
+}
+
+/// What became of a body `check_bodies_through_typed_modules` checked.
+enum CheckOutcome {
+    /// The body passed, and waits in `entry` for the file of its module to be written.
+    Passed {
+        entry: NewEntry,
+        /// The names the body referred to that the module it is defined in has to import.
+        import_required: Map<Name, Vec<FullName>>,
+    },
+    /// The body passed, and the file of its module holds it at `range`.
+    Stored {
+        range: Range<u64>,
+        /// The concrete type each opaque type constructor of the body stands for.
+        opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>,
+        /// The facts about the body a warning after type checking may be derived from.
+        warning_facts: Vec<WarningFact>,
+        /// The names the body referred to that the module it is defined in has to import.
+        import_required: Map<Name, Vec<FullName>>,
+    },
+    /// The body is held in memory: what `Program::check_body` answered for a body that did not
+    /// pass, or for one that passed and whose module's file could not be written.
+    InMemory(Result<CheckedBody, Errors>),
+}
+
+/// Writes the bodies of `outcomes` that wait for `file` (`CheckOutcome::Passed`) to it, and turns
+/// each into `CheckOutcome::Stored`, or into `CheckOutcome::InMemory` when the file cannot be
+/// written.
+///
+/// `dir` is the directory of the files, created on the first write (`typed_modules_dir`). The
+/// source files are those `write_module_file` takes.
+fn write_passed_bodies(
+    file: &ModuleFile,
+    outcomes: &mut [Option<CheckOutcome>],
+    dir: &mut Option<Option<PathBuf>>,
+    source_files: &mut Map<PathBuf, SourceFile>,
+) {
+    let mut passed = vec![];
+    let mut entries = vec![];
+    for outcome in outcomes.iter_mut() {
+        if let Some(CheckOutcome::Passed { .. }) = outcome {
+            let Some(CheckOutcome::Passed {
+                entry,
+                import_required,
+            }) = outcome.take()
+            else {
+                unreachable!()
+            };
+            passed.push((outcome, import_required));
+            entries.push(entry);
+        }
+    }
+    if entries.is_empty() {
+        return;
+    }
+    let record = dir
+        .get_or_insert_with(typed_modules_dir)
+        .as_ref()
+        .and_then(|dir| write_module_file(dir, file, &entries, source_files));
+    for ((outcome, import_required), entry) in passed.into_iter().zip(entries) {
+        let range = record
+            .as_ref()
+            .map(|record| record[&entry.identity].body.clone());
+        *outcome = Some(match range {
+            Some(range) => CheckOutcome::Stored {
+                range,
+                opaque_types: entry.opaque_types,
+                warning_facts: entry.warning_facts,
+                import_required,
+            },
+            None => {
+                let te = SourceFile::with_shared_source_files(source_files, || {
+                    decode_body(&entry.bytes, &entry.identity)
+                })
+                .expect("the bytes of a body this build serialized do not decode");
+                CheckOutcome::InMemory(Ok(CheckedBody {
+                    te,
+                    opaque_types: entry.opaque_types,
+                    import_required,
+                    diagnostics: Errors::empty(),
+                    error_tolerant: false,
+                }))
+            }
+        });
+    }
 }
 
 /// A body whose typed expression lies in its module's file, and which `Program::global_values`
@@ -434,7 +522,7 @@ struct StoredBody {
 /// The bodies of a program whose typed expressions lie in the files of their modules.
 #[derive(Default)]
 pub struct TypedModules {
-    /// The bodies the files recorded when the program was checked, which the check skipped.
+    /// The bodies whose typed expressions lie in the files, by where each lies in the program.
     stored: Map<BodyLocation, StoredBody>,
     /// The typed expressions read back so far, so that a value instantiated at several types is
     /// read once.
@@ -457,8 +545,9 @@ impl Program {
     /// Resolves namespaces in, and type-checks, the bodies of `modules` that the files of
     /// `TYPED_MODULES_PATH` do not record, and adds those that pass to the files.
     ///
-    /// A body the file of its module records is left as it was parsed, and its typed expression is
-    /// read back when instantiation asks for it (`typed_body`).
+    /// A body the file of its module holds, whether recorded before or added here, is left as it
+    /// was parsed, and its typed expression is read back when instantiation asks for it
+    /// (`typed_body`). The typed expressions of the other bodies are put in place of their bodies.
     pub fn check_bodies_through_typed_modules(
         &mut self,
         tc: &TypeCheckContext,
@@ -482,9 +571,12 @@ impl Program {
             bodies_by_module.entry(module).or_default().push(loc);
         }
 
-        // Skip the bodies the files record.
+        // Skip the bodies the files record. The bodies left to check lie in `to_check` module by
+        // module, those of one module at the indices `to_check_of_module` gives.
         let mut to_check: Vec<(BodyLocation, Arc<ModuleFile>, EntityIdentity)> = vec![];
+        let mut to_check_of_module: Map<Name, Range<usize>> = Map::default();
         for (module, locs) in bodies_by_module {
+            let first = to_check.len();
             let module_hash = self.module_dependency_hash(&module, config)?;
             let file = Arc::new(ModuleFile {
                 module,
@@ -521,35 +613,72 @@ impl Program {
                     None => to_check.push((loc, file.clone(), identity)),
                 }
             }
+            to_check_of_module.insert(file.module.clone(), first..to_check.len());
         }
 
-        // Check the rest, and keep what passes with no diagnostic for the files.
-        let mut new_entries: Map<Name, (Arc<ModuleFile>, Vec<NewEntry>)> = Map::default();
-        let locs = to_check.iter().map(|(loc, _, _)| loc.clone()).collect();
-        let results = self.check_bodies(locs, tc);
-        for ((loc, file, identity), (checked_loc, checked)) in to_check.into_iter().zip(results) {
-            assert!(loc == checked_loc, "`check_bodies` answered out of order");
-            match checked {
-                Ok(checked) => {
-                    if checked.passed() {
-                        new_entries
-                            .entry(file.module.clone())
-                            .or_insert_with(|| (file.clone(), vec![]))
-                            .1
-                            .push(NewEntry::of(identity, &checked));
-                    }
-                    errors.append(self.install_checked_body(&loc, checked));
+        // Check the rest on the compiler threads. The file of a module is written as soon as the
+        // last of its bodies is checked, and the bodies it took are dropped from memory then.
+        let mut outcomes: Vec<Option<CheckOutcome>> = to_check.iter().map(|_| None).collect();
+        let mut unchecked_of_module: Map<Name, usize> = to_check_of_module
+            .iter()
+            .map(|(module, range)| (module.clone(), range.len()))
+            .collect();
+        let mut source_files = take(&mut self.typed_modules.source_files);
+        let mut dir: Option<Option<PathBuf>> = None;
+        let nrenv = self.create_name_resolution_env();
+        let program = &*self;
+        consume_on_compiler_threads(
+            (0..to_check.len()).collect(),
+            tc.num_worker_threads,
+            |i| {
+                let (loc, _file, identity) = &to_check[i];
+                let outcome = match program.check_body(loc, &nrenv, tc) {
+                    Ok(checked) if checked.passed() => CheckOutcome::Passed {
+                        entry: NewEntry::of(identity.clone(), &checked),
+                        import_required: checked.import_required,
+                    },
+                    checked => CheckOutcome::InMemory(checked),
+                };
+                (i, outcome)
+            },
+            |(i, outcome)| {
+                outcomes[i] = Some(outcome);
+                let file = &to_check[i].1;
+                let unchecked = unchecked_of_module.get_mut(&file.module).unwrap();
+                *unchecked -= 1;
+                if *unchecked == 0 {
+                    let range = to_check_of_module[&file.module].clone();
+                    write_passed_bodies(file, &mut outcomes[range], &mut dir, &mut source_files);
                 }
-                Err(e) => errors.append(e),
+            },
+        );
+        self.typed_modules.source_files = source_files;
+        for ((loc, file, identity), outcome) in to_check.into_iter().zip(outcomes) {
+            match outcome.expect("a body left unchecked") {
+                CheckOutcome::Passed { .. } => unreachable!("a body left unwritten"),
+                CheckOutcome::Stored {
+                    range,
+                    opaque_types,
+                    warning_facts,
+                    import_required,
+                } => {
+                    self.add_opaque_types(opaque_types);
+                    self.merge_import_required(import_required);
+                    self.typed_modules.stored.insert(
+                        loc,
+                        StoredBody {
+                            file,
+                            identity,
+                            range,
+                            warning_facts,
+                        },
+                    );
+                }
+                CheckOutcome::InMemory(Ok(checked)) => {
+                    errors.append(self.install_checked_body(&loc, checked))
+                }
+                CheckOutcome::InMemory(Err(e)) => errors.append(e),
             }
-        }
-        if !new_entries.is_empty() {
-            add_to_module_files(
-                new_entries
-                    .values_mut()
-                    .map(|(file, entries)| (&**file, std::mem::take(entries))),
-                &mut self.typed_modules.source_files,
-            );
         }
 
         // The concrete types of opaque types are known only once the values are checked, and a
@@ -593,12 +722,16 @@ impl Program {
                     return Err(checked.diagnostics);
                 }
                 if checked.passed() {
-                    let stored = &self.typed_modules.stored[loc];
-                    let entry = NewEntry::of(stored.identity.clone(), &checked);
-                    add_to_module_files(
-                        [(&*stored.file, vec![entry])],
-                        &mut self.typed_modules.source_files,
-                    );
+                    if let Some(dir) = typed_modules_dir() {
+                        let stored = &self.typed_modules.stored[loc];
+                        let entry = NewEntry::of(stored.identity.clone(), &checked);
+                        write_module_file(
+                            &dir,
+                            &stored.file,
+                            &[entry],
+                            &mut self.typed_modules.source_files,
+                        );
+                    }
                 }
                 checked.te
             }

@@ -15,7 +15,7 @@ use std::{
     mem,
     panic::resume_unwind,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{mpsc, Mutex},
     thread::{self, JoinHandle},
 };
 
@@ -164,6 +164,60 @@ where
         results[idx] = Some(result);
     }
     results.into_iter().map(Option::unwrap).collect()
+}
+
+/// Runs `f` on each of `items` on up to `num_threads` compiler threads, or on the calling thread
+/// alone when `num_threads` is 1 or less, and hands each result to `consume` on the calling thread
+/// as soon as it is ready.
+///
+/// The results reach `consume` in the order they become ready, and `consume` runs while the threads
+/// go on with the remaining items. So what a result holds is freed as soon as `consume` is done with
+/// it, and a caller that writes the results out holds only those not yet written.
+pub fn consume_on_compiler_threads<T, R>(
+    items: Vec<T>,
+    num_threads: usize,
+    f: impl Fn(T) -> R + Sync,
+    mut consume: impl FnMut(R),
+) where
+    T: Send,
+    R: Send,
+{
+    if num_threads <= 1 || items.len() <= 1 {
+        for item in items {
+            consume(f(item));
+        }
+        return;
+    }
+    let thread_count = num_threads.min(items.len());
+    let queue = Mutex::new(items.into_iter());
+    let (queue, f) = (&queue, &f);
+    thread::scope(|scope| {
+        let (sender, receiver) = mpsc::channel();
+        let threads = (0..thread_count)
+            .map(|_| {
+                let sender = sender.clone();
+                compiler_thread_builder()
+                    .spawn_scoped(scope, move || loop {
+                        let next = queue.lock().unwrap().next();
+                        let Some(item) = next else {
+                            break;
+                        };
+                        // The receiver is gone only when `consume` panicked, which the scope
+                        // carries on once every thread has stopped.
+                        if sender.send(f(item)).is_err() {
+                            break;
+                        }
+                    })
+                    .expect("failed to spawn a compiler thread")
+            })
+            .collect::<Vec<_>>();
+        // The loop ends once every thread has dropped its sender, the ones that panicked included.
+        drop(sender);
+        for result in receiver {
+            consume(result);
+        }
+        values_or_first_panic(threads.into_iter().map(|thread| thread.join()));
+    });
 }
 
 /// The name a source is saved under in the temporary directory: `file_name` with `hash` — a digest
