@@ -546,10 +546,8 @@ fn warn_unreadable_file(path: &Path, why: &str) {
 
 /// The writing of one module's file while the bodies of the module are checked.
 struct ModuleWriting {
-    /// The new version of the file, until writing it fails.
-    writer: Option<ModuleFileWriter>,
-    /// Why writing the file failed, once it has.
-    failure: Option<io::Error>,
+    /// The new version of the file, or why writing it failed once it has.
+    writer: Result<ModuleFileWriter, io::Error>,
     /// The bodies written to `writer`, each with its index among the bodies checked, its identity,
     /// and the names it referred to that the module it is defined in has to import.
     written: Vec<(usize, EntityIdentity, Map<Name, Vec<FullName>>)>,
@@ -572,13 +570,8 @@ struct WrittenModule {
 impl ModuleWriting {
     /// Begins writing the file of `file` in `dir`.
     fn begin(dir: &Path, file: Arc<ModuleFile>) -> Self {
-        let (writer, failure) = match ModuleFileWriter::create(dir, file) {
-            Ok(writer) => (Some(writer), None),
-            Err(e) => (None, Some(e)),
-        };
         ModuleWriting {
-            writer,
-            failure,
+            writer: ModuleFileWriter::create(dir, file),
             written: vec![],
             unwritten: vec![],
         }
@@ -587,7 +580,7 @@ impl ModuleWriting {
     /// Writes `body`, the body at index `i` among the bodies checked, to the file. When a write
     /// fails, the bodies written before it, `body` with them, are left unwritten.
     fn add(&mut self, i: usize, body: PassedBody, source_files: &mut Map<PathBuf, SourceFile>) {
-        let Some(writer) = &mut self.writer else {
+        let Ok(writer) = &mut self.writer else {
             self.unwritten.push(i);
             return;
         };
@@ -595,8 +588,7 @@ impl ModuleWriting {
         match writer.add(body.entry, source_files) {
             Ok(()) => self.written.push((i, identity, body.import_required)),
             Err(e) => {
-                self.writer = None;
-                self.failure = Some(e);
+                self.writer = Err(e);
                 self.unwritten
                     .extend(self.written.drain(..).map(|(i, _, _)| i));
                 self.unwritten.push(i);
@@ -607,12 +599,15 @@ impl ModuleWriting {
     /// Finishes the file. When that fails, the bodies written to it are left unwritten.
     fn finish(self) -> WrittenModule {
         let mut unwritten = self.unwritten;
-        let Some(writer) = self.writer else {
-            return WrittenModule {
-                stored: vec![],
-                unwritten,
-                failure: self.failure,
-            };
+        let writer = match self.writer {
+            Ok(writer) => writer,
+            Err(e) => {
+                return WrittenModule {
+                    stored: vec![],
+                    unwritten,
+                    failure: Some(e),
+                }
+            }
         };
         match writer.finish() {
             Ok(mut record) => {

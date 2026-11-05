@@ -158,7 +158,9 @@ pub fn remove_abandoned_temporary_files(dir: &Path) {
 /// The new file is named apart from `path`, so that a name of `path` as long as the file system
 /// allows still leaves room for it.
 pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) -> io::Result<()> {
-    let dir = path.parent().unwrap_or(Path::new(""));
+    let dir = path
+        .parent()
+        .unwrap_or_else(|| panic!("\"{}\" names no file to replace.", path.to_string_lossy()));
     // The file stays open, and so locked, until it is in place.
     let (_tmp, tmp_path) = create_temporary_file_in(dir)?;
     write(&tmp_path)
