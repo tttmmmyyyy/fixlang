@@ -1,6 +1,6 @@
 // Rewriting a program by its lambda sets: the copies of the symbols and the type constructors the
-// sets ask for, the lambdas lifted to global functions, and each value of a set of one lambda
-// represented by that lambda's capture struct. A lambda of a set represented by closures is lifted
+// sets ask for, the lambdas lifted to global functions, and each value of a set whose elements
+// make one class represented by that class's capture struct. A lambda of a set represented by closures is lifted
 // too, and its closure is the lifted function applied to the capture struct.
 
 use super::{

@@ -411,9 +411,12 @@ fn test_a_lambda_capturing_a_function_chosen_from_two_sets_then_one_computes_bot
 
 /// A lambda capturing `g`, a function `k` chooses from its two function parameters, computes both
 /// results when `k` is called once with one function for both and once, through `w2`, with two
-/// functions of one class: `g`'s set holds one lambda in the first copy, and in the second two
-/// elements that make the same code. Reaching the second copy through `w2` puts its sets before the
-/// first's, so the lambda's class is first met where `g`'s set holds two elements.
+/// functions that `wrap_a` builds over two different sets of two lambdas: `g`'s set holds one
+/// lambda in the first copy, and in the second two elements whose captured sets are represented by
+/// closures and differ in what they hold. The second set is represented by closures, and its
+/// elements share the global function and the capture struct of the first set's class, as a
+/// closure has one type whatever its set holds. Reaching the second copy through `w2` puts its sets
+/// before the first's, so the lambda's class is first met where `g`'s set holds two elements.
 #[test]
 fn test_a_lambda_capturing_a_function_chosen_from_two_alike_sets_computes_both() {
     let source = r#"

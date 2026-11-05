@@ -19,8 +19,8 @@ use crate::{
 pub enum Repr {
     /// As closures, the form a function value has without this pass.
     Closure,
-    /// As the capture struct of the one lambda of the set, whose values are called by calling that
-    /// lambda directly. Holds the class of the set's element, as its index into
+    /// As the capture struct of the one class the set's elements make, whose values are called by
+    /// calling the class's lambda directly. Holds that class, as its index into
     /// `Representation::classes`.
     Single(u32),
 }
@@ -193,7 +193,7 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
         if !unboxable[id] {
             continue;
         }
-        for (lam, args) in store.lambdas(id as SetId) {
+        for (lam, args) in store.lam_elems(id as SetId) {
             let lambda = &analysis.lambdas[lam as usize];
             assert!(
                 lambda.is_body() || lambda.is_lifted_from_closures(),
@@ -261,7 +261,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
                 return vec![];
             }
             store
-                .lambdas(id as SetId)
+                .lam_elems(id as SetId)
                 .map(|(lam, args)| {
                     let children = builders
                         .of(lam, args)
@@ -336,7 +336,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
         class
     };
     for (class, id) in first_set.iter().enumerate() {
-        for (lam, args) in store.lambdas(*id as SetId) {
+        for (lam, args) in store.lam_elems(*id as SetId) {
             assert_eq!(
                 add_class(lam, args),
                 class as u32,
@@ -348,7 +348,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     for id in 0..set_count {
         match of_set[id] {
             Repr::Single(class) => {
-                for (lam, args) in store.lambdas(id as SetId) {
+                for (lam, args) in store.lam_elems(id as SetId) {
                     assert_eq!(
                         add_class(lam, args),
                         class,
@@ -358,7 +358,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
                 }
             }
             Repr::Closure => {
-                for (lam, args) in store.lambdas(id as SetId) {
+                for (lam, args) in store.lam_elems(id as SetId) {
                     if analysis.lambdas[lam as usize].is_lifted_from_closures() {
                         add_class(lam, args);
                     }

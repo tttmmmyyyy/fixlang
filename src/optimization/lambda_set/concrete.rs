@@ -88,7 +88,7 @@ impl SetStore {
 
     /// The elements of the set `id` that name a lambda, each as the lambda and the sets it gives
     /// the lambda's parameters, in the order of `elems`.
-    pub fn lambdas(&self, id: SetId) -> impl Iterator<Item = (LamId, &[SetId])> {
+    pub fn lam_elems(&self, id: SetId) -> impl Iterator<Item = (LamId, &[SetId])> {
         self.elems(id).iter().filter_map(|elem| match elem {
             Elem::Lam(lam, args) => Some((*lam, args.as_slice())),
             Elem::Dynamic => None,
