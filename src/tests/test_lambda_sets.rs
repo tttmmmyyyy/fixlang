@@ -118,6 +118,193 @@ fn test_a_function_in_a_struct_field_survives_the_state_of_a_loop() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// Two recursions handing the next round a lambda wrapping the function they were given, one on its
+/// own and one around a cycle of two functions: the set of the function they take holds itself.
+#[test]
+fn test_recursions_wrapping_their_function_on_each_round_compute_the_wrapped_chain() {
+    let source = r#"
+    module Main;
+
+    grow : I64 -> (I64 -> I64) -> I64;
+    grow = |n, op| (
+        if n == 0 { op(0) };
+        grow(n - 1, |x| op(x) + n)
+    );
+
+    tick : I64 -> (I64 -> I64) -> I64;
+    tick = |n, op| (
+        if n == 0 { op(3) };
+        tock(n - 1, |x| op(x) + 1)
+    );
+    tock : I64 -> (I64 -> I64) -> I64;
+    tock = |n, op| (
+        if n == 0 { op(4) };
+        tick(n - 1, op)
+    );
+
+    main : IO ();
+    main = (
+        assert_eq(|_|"unexpected result", grow(4, |x| x) + tick(4, |x| x * 100), 312);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// A function taking four functions, whose recursive calls each wrap a different one of them and
+/// pass the rest through, so that the four sets grow independently.
+#[test]
+fn test_a_recursion_wrapping_one_of_four_functions_on_each_call_computes_them_all() {
+    let source = r#"
+    module Main;
+
+    g : (I64 -> I64) -> (I64 -> I64) -> (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
+    g = |p0, p1, p2, p3, n| (
+        if n <= 0 { (p0(0) + p1(0) + p2(0) + p3(0)) % 1000 };
+        ( g(|x| (p0(x) + 1) % 97, p1, p2, p3, n - 1)
+        + g(p0, |x| (p1(x) + 2) % 97, p2, p3, n - 1)
+        + g(p0, p1, |x| (p2(x) + 3) % 97, p3, n - 1)
+        + g(p0, p1, p2, |x| (p3(x) + 4) % 97, n - 1) ) % 1000
+    );
+
+    main : IO ();
+    main = (
+        let k = 3;
+        let answer = g(|x| (x * k + 0) % 97, |x| (x * k + 1) % 97, |x| (x * k + 2) % 97,
+            |x| (x * k + 3) % 97, 2);
+        assert_eq(|_|"unexpected result", answer, 176);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// A function handing the next round the function it was given wrapped in one of four lambdas, so
+/// that the set holds the wrappers in every order.
+#[test]
+fn test_a_recursion_wrapping_its_function_four_ways_computes_every_order() {
+    let source = r#"
+    module Main;
+
+    g : (I64 -> I64) -> I64 -> I64;
+    g = |op, n| (
+        if n <= 0 { op(0) % 97 };
+        ( g(|x| (op(x) + 1) % 97, n - 1)
+        + g(|x| (op(x) + 2) % 97, n - 1)
+        + g(|x| (op(x) + 3) % 97, n - 1)
+        + g(|x| (op(x) + 4) % 97, n - 1) ) % 1000
+    );
+
+    main : IO ();
+    main = (
+        let k = 3;
+        assert_eq(|_|"unexpected result", g(|x| (x * k) % 97, 3), 480);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Two functions calling each other, each round swapping which of its two functions goes in which
+/// parameter while wrapping one of them, and calling the other twice through a third function.
+#[test]
+fn test_two_functions_swapping_places_around_a_cycle_compute_both() {
+    let source = r#"
+    module Main;
+
+    apply_twice : (I64 -> I64) -> I64 -> I64;
+    apply_twice = |op, n| (
+        if n <= 0 { 0 };
+        op(op(n)) + apply_twice(op, n - 1)
+    );
+
+    ping : (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
+    ping = |p, q, n| (
+        if n <= 0 { p(1) + q(2) };
+        (apply_twice(p, n) + pong(q, |x| (p(x) + 1) % 97, n - 1)) % 99991
+    );
+
+    pong : (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
+    pong = |p, q, n| (
+        if n <= 0 { p(3) + q(4) };
+        (apply_twice(q, n) + ping(|x| (q(x) + 2) % 97, p, n - 1)) % 99991
+    );
+
+    main : IO ();
+    main = (
+        let k = 11;
+        assert_eq(|_|"unexpected result", ping(|x| (x * k) % 97, |x| (x + k) % 97, 5), 938);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// A lambda given to `fold` capturing four functions whose sets grow independently, each round of
+/// the recursion around it wrapping a different one.
+#[test]
+fn test_a_lambda_capturing_four_growing_functions_calls_them_all() {
+    let source = r#"
+    module Main;
+
+    terminal : (I64 -> I64) -> I64 -> I64;
+    terminal = |op, n| ( if n <= 0 { 0 }; op(n) + terminal(op, n - 1) );
+
+    relay : (I64 -> I64) -> (I64 -> I64) -> (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
+    relay = |p0, p1, p2, p3, n| (
+        if n <= 0 { 0 };
+        Iterator::range(0, n).fold(0, |i, acc| (
+            acc + terminal(p0, i) + terminal(p1, i) + terminal(p2, i) + terminal(p3, i)
+        )) % 1000
+        + ( relay(|x| (p0(x) + 1) % 97, p1, p2, p3, n - 1)
+          + relay(p0, |x| (p1(x) + 2) % 97, p2, p3, n - 1)
+          + relay(p0, p1, |x| (p2(x) + 3) % 97, p3, n - 1)
+          + relay(p0, p1, p2, |x| (p3(x) + 4) % 97, n - 1) ) % 1000
+    );
+
+    main : IO ();
+    main = (
+        let k = 3;
+        let answer = relay(|x| (x*k+0)%97, |x| (x*k+1)%97, |x| (x*k+2)%97, |x| (x*k+3)%97, 2);
+        assert_eq(|_|"unexpected result", answer, 18);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// A cycle of three functions, one turn of which wraps the function it carries one level deeper and
+/// hands it to `fold` as well.
+#[test]
+fn test_a_cycle_of_three_wrapping_its_function_on_each_turn_computes_the_chain() {
+    let source = r#"
+    module Main;
+
+    terminal : (I64 -> I64) -> I64 -> I64;
+    terminal = |op, n| ( if n <= 0 { 0 }; op(n) + terminal(op, n - 1) );
+
+    a : (I64 -> I64) -> I64 -> I64;
+    a = |op, n| (
+        if n <= 0 { op(1) };
+        let wrapped = |x| (op(x) + 1) % 97;
+        Iterator::range(0, n).fold(0, |i, acc| acc + terminal(wrapped, i)) % 1000
+            + b(wrapped, n - 1)
+    );
+    b : (I64 -> I64) -> I64 -> I64;
+    b = |op, n| c(op, n) + terminal(op, n);
+    c : (I64 -> I64) -> I64 -> I64;
+    c = |op, n| a(op, n) + terminal(op, n);
+
+    main : IO ();
+    main = (
+        let k = 3;
+        assert_eq(|_|"unexpected result", a(|x| (x * k) % 97, 6), 569);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
 /// What the rewrite by the lambda sets makes of a program, read off the `--emit-rc-ir` dump: a
 /// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
 /// takes as an argument. The program cannot observe either one — the answer is the same with

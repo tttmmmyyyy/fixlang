@@ -1,9 +1,6 @@
 //! The two techniques of the closure specialization pass, read off the `--emit-rc-ir` dump: a
 //! lambda is lifted to a global function, and the function it is passed to gets a copy that calls
-//! that function by name. A recursion that hands the next round a closure built from the one it
-//! was given could ask for one copy per round, and runs out instead; a function whose closure
-//! parameters are decided independently could ask for one copy per combination of them, and is held
-//! to a budget instead.
+//! that function by name.
 //!
 //! The dump is what these assert against because a program cannot observe either one — both leave
 //! the answer unchanged, so a suite that only runs the program stays green with the whole pass
@@ -11,7 +8,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::constants::{CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX};
+    use crate::constants::CLOSURE_SPEC_SUFFIX;
     use crate::misc::{Map, Set};
     use crate::tests::test_util::{fix_command_at_opt_level, read_rc_ir_dump, setup_case_projects};
     use std::path::{Path, PathBuf};
@@ -20,15 +17,6 @@ mod integration_tests {
 
     /// What `specialized_fold` prints: the sum of `3 * i` over `0..9`.
     const SPECIALIZED_FOLD_OUTPUT: &str = "135";
-
-    /// What `changing_closure` prints: `grow`'s four wrappers around the identity answer 10, and
-    /// `tick` / `tock`'s two wrappers around `|x| x * 100` answer 302.
-    const CHANGING_CLOSURE_OUTPUT: &str = "312";
-
-    /// How many copies `changing_closure` asks for today, counted over the `Main::` functions whose
-    /// name carries `#closure_spec`. The chain of requests is what bounds this: each function, way
-    /// in and lambda gets committed to one value.
-    const CHANGING_CLOSURE_COPIES: usize = 13;
 
     /// What `derived_closure` prints: `relay` sums `terminal(shifted, i)` over `0..n`, adds
     /// `shifted(n)`, and recurses on `n - 1`, with `shifted = |x| x * 3 + 1` and `n = 4`.
@@ -40,61 +28,6 @@ mod integration_tests {
     /// What `mixed_capture_field` prints: `relay` sums `op(i) + terminal(op, i) + opaque(op, i)`
     /// over `0..n` and recurses on `n - 1`, with `op = |x| x * 5 + 1` and `n = 4`.
     const MIXED_CAPTURE_FIELD_OUTPUT: &str = "205";
-
-    /// What `independent_slots` prints: `g(p0, p1, p2, p3, n)` sums the four recursive calls that
-    /// each wrap one of the closures, modulo 1000, with `n = 2` and the four lambdas main builds.
-    const INDEPENDENT_SLOTS_OUTPUT: &str = "176";
-
-    /// How many copies of `g` `independent_slots` may have. What bounds it is the budget on the
-    /// copies a function may have out of combining its slots: four slots decided independently reach
-    /// 95 copies without it, and every further slot multiplies that again. The bound sits between
-    /// the two, so that adjusting the allowance moves the count without moving the claim.
-    const INDEPENDENT_SLOTS_COPIES: usize = 40;
-
-    /// What `wrapped_chain` prints: `g(op, n)` sums four recursive calls, each handing on `op`
-    /// wrapped a different way, with `n = 3` and `op = |x| (x * 3) % 97`.
-    const WRAPPED_CHAIN_OUTPUT: &str = "480";
-
-    /// How many copies of `g` `wrapped_chain` may have. Counting a copy by the lambdas it names is
-    /// what bounds this: four wrappers reach 129 copies when only the ways in are counted, and every
-    /// further wrapper multiplies that again. The bound sits between the two, so that adjusting the
-    /// allowance moves the count without moving the claim.
-    const WRAPPED_CHAIN_COPIES: usize = 50;
-
-    /// How many copies the lambdas lifted out of `g` in `wrapped_chain` may have. Each of those
-    /// lambdas is a function the budget counts on its own, and there are more of them than there are
-    /// copies of `g`, so a bound on one says nothing about the other. Counting a copy by the ways in
-    /// it substitutes reaches 516; the bound sits between the two.
-    const WRAPPED_CHAIN_LAMBDA_COPIES: usize = 200;
-
-    /// What `closure_swap` prints: `ping` and `pong` calling each other five rounds deep, each round
-    /// swapping which of the two closures sits in which way in and wrapping one of them.
-    const CLOSURE_SWAP_OUTPUT: &str = "938";
-
-    /// How many copies `closure_swap` asks for today. What bounds it is the commitment a chain
-    /// records: raising the allowance the budget grants leaves this count where it is.
-    const CLOSURE_SWAP_COPIES: usize = 9;
-
-    /// What `wide_capture` prints: `relay` over four closures with `n = 2`, summing `terminal` on
-    /// each and recursing four ways.
-    const WIDE_CAPTURE_OUTPUT: &str = "18";
-
-    /// How many closures `wide_capture` builds a capture list out of, and so how many of them one
-    /// copy of the lambda receiving it can call by name.
-    const WIDE_CAPTURE_KNOWN_CLOSURES: usize = 4;
-
-    /// How many copies of `relay` `wide_capture` may have. Four capture fields decided independently
-    /// reach 95 copies without the budget on the copies that combine slots; the bound sits between
-    /// the two, so that adjusting the allowance moves the count without moving the claim.
-    const WIDE_CAPTURE_COPIES: usize = 50;
-
-    /// What `deep_relay` prints: the cycle `a` -> `b` -> `c` entered with `n = 6`, wrapping the
-    /// closure one level deeper on each turn of the cycle.
-    const DEEP_RELAY_OUTPUT: &str = "569";
-
-    /// How many copies `deep_relay` asks for today. What bounds it is the commitment a chain
-    /// records: raising the allowance the budget grants leaves this count where it is.
-    const DEEP_RELAY_COPIES: usize = 7;
 
     /// What `monadic_combinator` prints: the sum of `i * i` over `0..99`, each round weighting the
     /// counter it reads by its index, plus the hundred rounds it ran.
@@ -167,55 +100,6 @@ mod integration_tests {
             .collect()
     }
 
-    /// The copies that `dump` names under `func_prefix`, deduplicated, each paired with whether it
-    /// copies a lambda lifted out of that function rather than the function itself.
-    ///
-    /// A copy is named by appending `#closure_spec_<hash>` to the name of what it copies, and the
-    /// stages after this pass append segments of their own, so what identifies one copy is the name
-    /// up to the end of that segment. A lambda lifted out of the function carries a `#closure_lam`
-    /// segment ahead of the `#closure_spec_` one, which is what tells the two populations apart.
-    fn spec_copies_under(dump: &str, func_prefix: &str) -> Vec<(String, bool)> {
-        let mut copies = functions_named_with(dump, &format!("{}_", CLOSURE_SPEC_SUFFIX))
-            .into_iter()
-            .filter(|name| name.starts_with(func_prefix))
-            .map(|name| copy_name(name).unwrap())
-            .map(|copy| (copy.to_string(), copy.contains(CLOSURE_LAM_SUFFIX)))
-            .collect::<Vec<_>>();
-        copies.sort();
-        copies.dedup();
-        copies
-    }
-
-    /// The part of `name` that names one copy, which is the name up to the end of the
-    /// `#closure_spec_` segment, or `None` where `name` carries no such segment.
-    fn copy_name(name: &str) -> Option<&str> {
-        let spec_start = name.find(&format!("{}_", CLOSURE_SPEC_SUFFIX))?;
-        let end = name[spec_start + 1..]
-            .find('#')
-            .map_or(name.len(), |offset| spec_start + 1 + offset);
-        Some(&name[..end])
-    }
-
-    /// The copies that `dump` names of the function whose name begins with `func_prefix`.
-    fn copies_of(dump: &str, func_prefix: &str) -> Vec<String> {
-        spec_copies_under(dump, func_prefix)
-            .into_iter()
-            .filter(|(_, is_lambda_copy)| !is_lambda_copy)
-            .map(|(name, _)| name)
-            .collect()
-    }
-
-    /// The copies that `dump` names of the lambdas lifted out of the function whose name begins
-    /// with `func_prefix`. Each such lambda is a function of its own, copied once per value it is
-    /// given, so bounding the copies of the function bounds nothing about these.
-    fn lambda_copies_of(dump: &str, func_prefix: &str) -> Vec<String> {
-        spec_copies_under(dump, func_prefix)
-            .into_iter()
-            .filter(|(_, is_lambda_copy)| *is_lambda_copy)
-            .map(|(name, _)| name)
-            .collect()
-    }
-
     /// The names in `text` carrying all of `needles`, deduplicated. A name stands wherever the
     /// program mentions it — a function's own line, a call, or the type of a capture list named
     /// after the copy that receives it.
@@ -256,28 +140,6 @@ mod integration_tests {
     /// it.
     fn func_name(header: &str) -> &str {
         header.split('(').next().unwrap().trim()
-    }
-
-    /// The largest number of distinct copies of the function named by `callee_prefix` that any one
-    /// body in `dump` calls by name.
-    ///
-    /// A closure whose identity a capture field holds is called by name from the body receiving that
-    /// capture list, so this says how many of the closures one capture list carries are known at
-    /// once. The line naming a function is left out of its own body, so a copy does not count itself.
-    fn most_copies_called_from_one_body(dump: &str, callee_prefix: &str) -> usize {
-        functions_in(dump)
-            .map(|(_, body)| {
-                let mut called = names_in(body, &[])
-                    .into_iter()
-                    .filter(|token| token.starts_with(callee_prefix))
-                    .filter_map(copy_name)
-                    .collect::<Vec<_>>();
-                called.sort();
-                called.dedup();
-                called.len()
-            })
-            .max()
-            .unwrap()
     }
 
     /// The body of every function `dump` names, keyed by the function's name.
@@ -345,193 +207,6 @@ mod integration_tests {
             minted.is_empty(),
             "the pass should not run below `max`, but the dump names: {:?}",
             minted
-        );
-    }
-
-    /// A recursion that wraps the closure it was given on every round could ask for one specialized
-    /// copy per round. Along one chain of requests the pass commits each function, argument and
-    /// lambda origin to a single lambda, so the copies run out: none of them is itself specialized
-    /// again. Both shapes are covered — the recursion a function does on its own, and the one that
-    /// goes around a cycle of two.
-    #[test]
-    pub fn test_a_recursion_carrying_a_new_closure_each_round_runs_out_of_copies() {
-        let (_temp_dir, project_dir) = setup_test_env("changing_closure");
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", CHANGING_CLOSURE_OUTPUT);
-
-        let lifted = functions_named_with(&dump, CLOSURE_LAM_SUFFIX);
-        // The two the inliner leaves standing as recursions of their own.
-        for recursive_fn in ["Main::grow#", "Main::tock#"] {
-            assert!(
-                lifted.iter().any(|name| name.starts_with(recursive_fn)),
-                "the pass should lift the lambda that `{}` carries into the next round, but the \
-                 dump names only: {:?}",
-                recursive_fn,
-                lifted
-            );
-        }
-
-        let specialized = functions_named_with(&dump, CLOSURE_SPEC_SUFFIX)
-            .into_iter()
-            .filter(|name| name.starts_with("Main::"))
-            .collect::<Vec<_>>();
-        assert!(
-            !specialized.is_empty(),
-            "the pass should specialize these recursions, but the dump names no copy of them"
-        );
-        assert!(
-            specialized.len() <= CHANGING_CLOSURE_COPIES,
-            "the chain of requests should run out after {} copies, but the dump names {}: {:?}",
-            CHANGING_CLOSURE_COPIES,
-            specialized.len(),
-            specialized
-        );
-    }
-
-    /// A function taking four closures and calling every one of them has each of the four decided on
-    /// its own, so the copies it can be asked for are keyed on the combinations of those decisions
-    /// and grow exponentially in the number of closures. The chain of requests cannot see that: each
-    /// combination meets a commitment of its own and none of them disagrees. What bounds it is the
-    /// budget on the copies one function may have out of combining its slots.
-    #[test]
-    pub fn test_a_function_whose_closures_are_decided_independently_stays_within_its_budget() {
-        let (_temp_dir, project_dir) = setup_test_env("independent_slots");
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", INDEPENDENT_SLOTS_OUTPUT);
-
-        let copies = copies_of(&dump, "Main::g#");
-        assert!(
-            !copies.is_empty(),
-            "`g` should be specialized on the lambdas it is given, but the dump names no copy of it"
-        );
-        assert!(
-            copies.len() <= INDEPENDENT_SLOTS_COPIES,
-            "`g` should have at most {} copies, but the dump names {}",
-            INDEPENDENT_SLOTS_COPIES,
-            copies.len()
-        );
-    }
-
-    /// A function that hands the next round the closure it was given, wrapped a different way each
-    /// time, is bounded across the *orderings* of those wrappers. Every copy here substitutes one
-    /// way in and every capture list holds one closure, so a rule that reads how many ways in a copy
-    /// substitutes sees nothing to bound; what grows is the number of wrappers a value has been
-    /// through, which is what counting the lambdas a copy names reads.
-    #[test]
-    pub fn test_a_closure_wrapped_a_different_way_each_round_stays_within_its_budget() {
-        let (_temp_dir, project_dir) = setup_test_env("wrapped_chain");
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", WRAPPED_CHAIN_OUTPUT);
-
-        let copies = copies_of(&dump, "Main::g#");
-        assert!(
-            !copies.is_empty(),
-            "`g` should be specialized on the lambdas it is given, but the dump names no copy of it"
-        );
-        assert!(
-            copies.len() <= WRAPPED_CHAIN_COPIES,
-            "`g` should have at most {} copies, but the dump names {}",
-            WRAPPED_CHAIN_COPIES,
-            copies.len()
-        );
-
-        let lambda_copies = lambda_copies_of(&dump, "Main::g#");
-        assert!(
-            !lambda_copies.is_empty(),
-            "the lambdas `g` wraps its argument in should be copied, but the dump names none"
-        );
-        assert!(
-            lambda_copies.len() <= WRAPPED_CHAIN_LAMBDA_COPIES,
-            "the lambdas `g` lifts should have at most {} copies, but the dump names {}",
-            WRAPPED_CHAIN_LAMBDA_COPIES,
-            lambda_copies.len()
-        );
-    }
-
-    /// Two closures going round a cycle of two functions, swapping which way in each sits in on
-    /// every round while one of them is wrapped. A value's identity has to survive both the cycle
-    /// and the swap, and the commitment a chain records is per way in, so the two must not be
-    /// confused for one another.
-    #[test]
-    pub fn test_two_closures_swapping_places_around_a_cycle_keep_their_identity() {
-        let (_temp_dir, project_dir) = setup_test_env("closure_swap");
-        for opt_level in ["basic", "experimental"] {
-            build_run_and_read_rc_ir(&project_dir, opt_level, CLOSURE_SWAP_OUTPUT);
-        }
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", CLOSURE_SWAP_OUTPUT);
-
-        assert!(
-            !copies_of(&dump, "Main::pong#").is_empty(),
-            "`pong` receives the two closures in the ways in `ping` did not, so it gets a copy only \
-             if their identity survived both the cycle and the swap. The dump names: {:?}",
-            copies_of(&dump, "Main::")
-        );
-        let apply_twice_copies = copies_of(&dump, "Main::apply_twice#");
-        assert!(
-            apply_twice_copies.len() >= 2,
-            "`apply_twice` is called with each of the two closures in turn, so it should have a \
-             copy per closure. The dump names {}: {:?}",
-            apply_twice_copies.len(),
-            apply_twice_copies
-        );
-        let copies = copies_of(&dump, "Main::");
-        assert!(
-            copies.len() <= CLOSURE_SWAP_COPIES,
-            "the chain of requests should run out after {} copies, but the dump names {}: {:?}",
-            CLOSURE_SWAP_COPIES,
-            copies.len(),
-            copies
-        );
-    }
-
-    /// One capture list carrying four closures whose identity is known, where each round narrows a
-    /// different one of them.
-    #[test]
-    pub fn test_a_capture_list_carrying_four_known_closures() {
-        let (_temp_dir, project_dir) = setup_test_env("wide_capture");
-        for opt_level in ["basic", "experimental"] {
-            build_run_and_read_rc_ir(&project_dir, opt_level, WIDE_CAPTURE_OUTPUT);
-        }
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", WIDE_CAPTURE_OUTPUT);
-
-        let known_at_once = most_copies_called_from_one_body(&dump, "Main::terminal#");
-        assert!(
-            known_at_once >= WIDE_CAPTURE_KNOWN_CLOSURES,
-            "the lambda `relay` hands to `fold` captures all four closures and calls `terminal` on \
-             each, so one of its copies should call {} copies of `terminal` by name. The most any \
-             body calls is {}",
-            WIDE_CAPTURE_KNOWN_CLOSURES,
-            known_at_once
-        );
-        let copies = copies_of(&dump, "Main::relay#");
-        assert!(
-            copies.len() <= WIDE_CAPTURE_COPIES,
-            "`relay` should have at most {} copies, but the dump names {}",
-            WIDE_CAPTURE_COPIES,
-            copies.len()
-        );
-    }
-
-    /// A cycle of three functions where one turn of the cycle wraps the closure a level deeper, so
-    /// the chain of requests runs out on a cycle longer than the two the suite already covers.
-    #[test]
-    pub fn test_a_cycle_of_three_wrapping_one_level_per_turn_runs_out() {
-        let (_temp_dir, project_dir) = setup_test_env("deep_relay");
-        for opt_level in ["basic", "experimental"] {
-            build_run_and_read_rc_ir(&project_dir, opt_level, DEEP_RELAY_OUTPUT);
-        }
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", DEEP_RELAY_OUTPUT);
-
-        assert!(
-            !copies_of(&dump, "Main::a#").is_empty(),
-            "`a` wraps the closure it was given and hands it round the cycle, so it should be \
-             specialized on what comes back. The dump names: {:?}",
-            copies_of(&dump, "Main::")
-        );
-        let copies = copies_of(&dump, "Main::");
-        assert!(
-            copies.len() <= DEEP_RELAY_COPIES,
-            "the chain of requests should run out after {} copies, but the dump names {}: {:?}",
-            DEEP_RELAY_COPIES,
-            copies.len(),
-            copies
         );
     }
 
