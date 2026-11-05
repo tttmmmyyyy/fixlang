@@ -41,8 +41,11 @@ pub struct Lambda {
     /// with its annotated type where the lambda is written.
     pub captures: Vec<(FullName, AType)>,
     /// The own slots of the functions the captured values hold in place
-    /// (`SlotLayout::held_in_place`).
+    /// (`SlotLayout::collect_held_in_place`).
     pub held_in_place: Vec<SetVar>,
+    /// Whether the body reads the lambda's capture whole (`CAP_NAME`), which only the closure object
+    /// holding the lambda has.
+    pub reads_own_capture: bool,
 }
 
 impl Lambda {
@@ -60,11 +63,7 @@ impl Lambda {
     /// closures. The lambda that is the body of its symbol is a global function already, and one
     /// whose body reads its capture whole (`CAP_NAME`) needs the closure object holding it.
     pub fn is_lifted_from_closures(&self) -> bool {
-        !self.is_body()
-            && !self
-                .expr
-                .get_lam_body()
-                .has_free_var(&FullName::local(CAP_NAME))
+        !self.is_body() && !self.reads_own_capture
     }
 }
 
@@ -88,7 +87,7 @@ pub struct Component {
     /// What a reference to a symbol of the component gets.
     pub scheme: Scheme,
     /// The parameters the bodies of the symbols depend on, in increasing order, as indices into
-    /// `params`: those the terms of the bodies reach (`lambda_params`). Two copies that give these
+    /// `params`: those the terms of the bodies reach (`term_params`). Two copies that give these
     /// the same sets have the same bodies.
     pub body_params: Vec<usize>,
     /// For each symbol, in the order of `symbols`, the nodes of its body. The component of the
@@ -579,6 +578,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
             nodes: node..node,
             captures: vec![],
             held_in_place: vec![],
+            reads_own_capture: false,
         });
         self.lam_counter += 1;
         lam
@@ -590,11 +590,12 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
     /// that lambda's set is Dynamic.
     fn operand(&mut self, name: &FullName) -> (AType, NameRef) {
         if name.is_local() && name.name == CAP_NAME {
-            let ty = self
-                .frames
-                .last()
-                .and_then(|frame| self.terms[*frame].ty.clone())
+            let term = &self.terms[*self.frames.last().unwrap()];
+            let (lam, ty) = term
+                .lam
+                .zip(term.ty.clone())
                 .expect("a builtin operation reads the capture of no lambda");
+            self.analysis.lambdas[lam as usize].reads_own_capture = true;
             let own = ty.slots[0];
             self.analysis
                 .solver
@@ -765,7 +766,7 @@ fn generalize(
         .collect();
     let mut body_params: Vec<usize> = vec![];
     for (i, term) in terms.iter().enumerate() {
-        let depends_on = lambda_params(solver, &terms, &term_of_lam, i, &param_index);
+        let depends_on = term_params(solver, &terms, &term_of_lam, i, &param_index);
         match term.lam {
             Some(lam) => analysis.lambdas[lam as usize].params = depends_on,
             None => body_params.extend(depends_on),
@@ -1061,7 +1062,7 @@ fn shared_classes(
 /// term is that of a lambda, or of a body, together with the terms of the lambdas inside it; it
 /// reaches a variable it holds, and whatever the members of a variable it reaches name. A
 /// parameter's members are not followed: a copy of the component gives the parameter its value.
-fn lambda_params(
+fn term_params(
     solver: &mut Solver,
     terms: &[Term],
     term_of_lam: &Map<LamId, usize>,

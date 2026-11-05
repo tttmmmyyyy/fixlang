@@ -16,7 +16,7 @@ pub struct Instance {
     /// The set given to each parameter, in the order of `Component::params`.
     pub args: Vec<SetId>,
     /// The set of each variable of the component in this copy, in the order of `Component::vars`.
-    pub sets: Vec<SetId>,
+    pub var_sets: Vec<SetId>,
 }
 
 /// The copies a program needs, found from its entry and the values it exports.
@@ -25,7 +25,8 @@ pub struct Specialization {
     pub store: SetStore,
     /// The copies, in the order they were first asked for: the copy of the root first.
     pub instances: Vec<Instance>,
-    /// The index into `instances` of each copy, by its component and the sets of its parameters.
+    /// The index into `instances` of each copy, by its component and the sets of its parameters:
+    /// the copy whose `component` and `args` these are.
     pub instance_of: Map<(usize, Vec<SetId>), usize>,
 }
 
@@ -84,7 +85,7 @@ pub fn specialize(analysis: &mut Analysis) -> Specialization {
             Ref::Known(id) => *id,
             Ref::Local(i) => ids[*i],
         };
-        copies.instances[k].sets = var_refs.iter().map(resolve).collect();
+        copies.instances[k].var_sets = var_refs.iter().map(resolve).collect();
         for (callee, refs) in site_refs {
             copies.request(callee, refs.iter().map(resolve).collect());
         }
@@ -118,7 +119,7 @@ impl Copies {
         self.instances.push(Instance {
             component: key.0,
             args: key.1,
-            sets: vec![],
+            var_sets: vec![],
         });
         self.queue.push_back(id);
     }

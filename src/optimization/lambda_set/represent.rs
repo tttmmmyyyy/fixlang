@@ -32,7 +32,7 @@ pub struct LamClass {
     pub lam: LamId,
     /// How each set the element gives the parameters of the lambda is represented, in the order of
     /// `Lambda::params`.
-    pub args: Vec<Repr>,
+    pub arg_reprs: Vec<Repr>,
     /// The copy of the lambda's component that builds the values of one of the elements, as an
     /// index into `Specialization::instances`. Every element of the class gives the lambda's body
     /// the same types, so the sets of this copy are the ones the lambda's body is rewritten with.
@@ -52,9 +52,10 @@ pub struct Representation {
     /// struct come first.
     pub classes: Vec<LamClass>,
     /// The class of the elements naming each lambda and giving its parameters sets of each
-    /// representation, by the lambda and the representations in the order of `Lambda::params`.
-    class_of_args: Map<(LamId, Vec<Repr>), u32>,
-    /// The number of classes of each lambda that has any.
+    /// representation, by the lambda and the representations in the order of `Lambda::params`: the
+    /// position in `classes` of the class holding `lam` and `arg_reprs`.
+    class_of_arg_reprs: Map<(LamId, Vec<Repr>), u32>,
+    /// The number of classes of each lambda that has any: how many of `classes` hold the lambda.
     class_counts: Map<LamId, usize>,
 }
 
@@ -68,7 +69,7 @@ impl Representation {
     /// order of `Lambda::params`.
     pub fn class_of(&self, lam: LamId, args: &[SetId]) -> u32 {
         let key = (lam, args.iter().map(|a| self.of(*a)).collect());
-        *self.class_of_args.get(&key).unwrap_or_else(|| {
+        *self.class_of_arg_reprs.get(&key).unwrap_or_else(|| {
             panic!(
                 "no class holds the element of the lambda {} given the sets {:?}",
                 lam, args
@@ -160,7 +161,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
         let instance = &spec.instances[builder_of(*lam, args)];
         let component = &analysis.components[instance.component];
         for v in &analysis.lambdas[*lam as usize].held_in_place {
-            let held = instance.sets[component.var_index[v]] as usize;
+            let held = instance.var_sets[component.var_index[v]] as usize;
             if single[held].is_some() {
                 holds.connect_idx(id, held);
             }
@@ -206,18 +207,18 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     // The classes of the sets represented by a capture struct come first, numbered as `of_set`
     // names them, then the classes the elements of the sets of closures add.
     let mut classes: Vec<LamClass> = vec![];
-    let mut class_of_args: Map<(LamId, Vec<Repr>), u32> = Map::default();
+    let mut class_of_arg_reprs: Map<(LamId, Vec<Repr>), u32> = Map::default();
     let add_class = |classes: &mut Vec<LamClass>,
-                     class_of_args: &mut Map<(LamId, Vec<Repr>), u32>,
+                     class_of_arg_reprs: &mut Map<(LamId, Vec<Repr>), u32>,
                      lam: LamId,
                      args: &[SetId]| {
         let reprs: Vec<Repr> = args.iter().map(|a| of_set[*a as usize]).collect();
-        class_of_args
+        class_of_arg_reprs
             .entry((lam, reprs.clone()))
             .or_insert_with(|| {
                 classes.push(LamClass {
                     lam,
-                    args: reprs,
+                    arg_reprs: reprs,
                     instance: builder_of(lam, args),
                     hash: String::new(),
                 });
@@ -226,7 +227,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     };
     for id in &first_set {
         let (lam, args) = single[*id].unwrap();
-        add_class(&mut classes, &mut class_of_args, lam, args);
+        add_class(&mut classes, &mut class_of_arg_reprs, lam, args);
     }
     assert_eq!(
         classes.len(),
@@ -241,7 +242,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
         for elem in store.elems(id as SetId) {
             if let Elem::Lam(lam, args) = elem {
                 if analysis.lambdas[*lam as usize].is_lifted_from_closures() {
-                    add_class(&mut classes, &mut class_of_args, *lam, args);
+                    add_class(&mut classes, &mut class_of_arg_reprs, *lam, args);
                 }
             }
         }
@@ -255,7 +256,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     Representation {
         of_set,
         classes,
-        class_of_args,
+        class_of_arg_reprs,
         class_counts,
     }
 }
@@ -270,7 +271,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
 fn name_classes(analysis: &Analysis, classes: &mut [LamClass]) {
     let mut graph = Graph::new((0..classes.len()).collect::<Vec<usize>>());
     for (c, class) in classes.iter().enumerate() {
-        for arg in &class.args {
+        for arg in &class.arg_reprs {
             if let Repr::Single(a) = arg {
                 graph.connect_idx(c, *a as usize);
             }
@@ -317,7 +318,7 @@ fn write_class(
     written.insert(c, written.len());
     text.push_str(&analysis.lambdas[classes[c].lam as usize].to_string());
     text.push('(');
-    for (i, arg) in classes[c].args.iter().enumerate() {
+    for (i, arg) in classes[c].arg_reprs.iter().enumerate() {
         if i > 0 {
             text.push(',');
         }

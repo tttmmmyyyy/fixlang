@@ -130,7 +130,7 @@ struct Rewriter<'a, 'e> {
     /// The copy each copy of a component is made into, as an index into `copies`.
     copy_of_instance: Vec<usize>,
     /// The copy of each component made for the representations of its body parameters.
-    copy_of_key: Map<(usize, Vec<Repr>), usize>,
+    copy_of_body_reprs: Map<(usize, Vec<Repr>), usize>,
     /// The lambda each symbol whose body is a lambda has as its body.
     body_lambda: Map<FullName, LamId>,
     /// The lambda written at each node, by its symbol and the node's position.
@@ -141,7 +141,7 @@ struct Rewriter<'a, 'e> {
     punched_of: Map<TyCon, Vec<(TyCon, usize)>>,
     /// The suffix of the copies of each group of type constructors made for the representations of
     /// its own slots.
-    type_copies: Map<(usize, Vec<Repr>), String>,
+    type_copy_suffixes: Map<(usize, Vec<Repr>), String>,
     /// The type constructors made so far.
     new_tycons: Map<TyCon, TyConInfo>,
     /// The capture structs made so far, by their classes.
@@ -184,7 +184,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         repr: &'a Representation,
     ) -> Self {
         let mut copies: Vec<SymbolCopy> = vec![];
-        let mut copy_of_key: Map<(usize, Vec<Repr>), usize> = Map::default();
+        let mut copy_of_body_reprs: Map<(usize, Vec<Repr>), usize> = Map::default();
         let mut copy_of_instance = vec![];
         for (k, instance) in spec.instances.iter().enumerate() {
             let component = &analysis.components[instance.component];
@@ -193,7 +193,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 .iter()
                 .map(|p| repr.of(instance.args[*p]))
                 .collect();
-            let copy = *copy_of_key
+            let copy = *copy_of_body_reprs
                 .entry((instance.component, body_reprs))
                 .or_insert_with(|| {
                     copies.push(SymbolCopy {
@@ -206,10 +206,10 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             copy_of_instance.push(copy);
         }
         let mut copy_counts: Map<usize, usize> = Map::default();
-        for (component, _) in copy_of_key.keys() {
+        for (component, _) in copy_of_body_reprs.keys() {
             *copy_counts.entry(*component).or_insert(0) += 1;
         }
-        for ((component, body_reprs), copy) in &copy_of_key {
+        for ((component, body_reprs), copy) in &copy_of_body_reprs {
             if copy_counts[component] > 1 {
                 copies[*copy].suffix = Some(repr.copy_suffix(body_reprs));
             }
@@ -254,12 +254,12 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             repr,
             copies,
             copy_of_instance,
-            copy_of_key,
+            copy_of_body_reprs,
             body_lambda,
             lambda_at,
             punched_at,
             punched_of,
-            type_copies: Map::default(),
+            type_copy_suffixes: Map::default(),
             new_tycons: Map::default(),
             capture_structs: Map::default(),
             named_capture_structs: Set::default(),
@@ -274,7 +274,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
     fn set_of(&self, instance: usize, v: SetVar) -> SetId {
         let instance = &self.spec.instances[instance];
         let component = &self.analysis.components[instance.component];
-        instance.sets[component.var_index[&v]]
+        instance.var_sets[component.var_index[&v]]
     }
 
     /// The sets the copy `instance` gives the slots of `ty`.
@@ -298,7 +298,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let class = &self.repr.classes[c as usize];
         let lambda = &self.analysis.lambdas[class.lam as usize];
         let component = self.analysis.component_of[&lambda.symbol];
-        self.copy_of_key[&(component, class.args.clone())]
+        self.copy_of_body_reprs[&(component, class.arg_reprs.clone())]
     }
 
     /// The name of the global function a value of the class `c` is called through, where the
@@ -429,11 +429,11 @@ impl<'a, 'e> Rewriter<'a, 'e> {
     /// slots, declaring the copies the first time it is asked for.
     fn type_copy_suffix(&mut self, group: usize, own: &[Repr]) -> String {
         let key = (group, own.to_vec());
-        if let Some(suffix) = self.type_copies.get(&key) {
+        if let Some(suffix) = self.type_copy_suffixes.get(&key) {
             return suffix.clone();
         }
         let suffix = self.repr.copy_suffix(own);
-        self.type_copies.insert(key, suffix.clone());
+        self.type_copy_suffixes.insert(key, suffix.clone());
         self.declare_group_copy(group, own, &suffix);
         suffix
     }
@@ -447,21 +447,26 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         // each field is where the previous field stopped, as `SlotLayout::field_offset` gives it.
         let mut next_offset = 0;
         for member in &members {
+            // An unwrapped newtype is a group of its own and owns no slot, so no representation
+            // of the group's own slots asks for a copy of it.
+            assert!(
+                !type_env.is_unwrapped_newtype(member),
+                "a copy of the unwrapped newtype `{}` is asked for",
+                member.to_string()
+            );
             let info = type_env.tycon_info(member);
             let mut fields = info.fields.clone();
-            if !type_env.is_unwrapped_newtype(member) {
-                for (i, field) in fields.iter_mut().enumerate() {
-                    let mut cursor = self.layout.field_offset(member, i);
-                    assert_eq!(
-                        cursor,
-                        next_offset,
-                        "the field {} of `{}` is read out of step with its own slots",
-                        i,
-                        member.to_string()
-                    );
-                    field.ty = self.rewrite_declared(&field.ty, group, own, &mut cursor);
-                    next_offset = cursor;
-                }
+            for (i, field) in fields.iter_mut().enumerate() {
+                let mut cursor = self.layout.field_offset(member, i);
+                assert_eq!(
+                    cursor,
+                    next_offset,
+                    "the field {} of `{}` is read out of step with its own slots",
+                    i,
+                    member.to_string()
+                );
+                field.ty = self.rewrite_declared(&field.ty, group, own, &mut cursor);
+                next_offset = cursor;
             }
             let mut name = member.name.clone();
             name.name += suffix;
