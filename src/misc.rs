@@ -567,9 +567,9 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
 mod tests {
     use super::{
         char_pos_to_utf16_pos, consume_on_compiler_threads, join_compiler_threads,
-        map_on_compiler_threads,
-        spawn_compiler_thread, split_at_name_boundaries, split_string_by_unquoted_spaces,
-        upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos, Set,
+        map_on_compiler_threads, spawn_compiler_thread, split_at_name_boundaries,
+        split_string_by_unquoted_spaces, upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos,
+        Set,
     };
     use crate::error::any_to_string;
     use std::panic::{catch_unwind, AssertUnwindSafe};

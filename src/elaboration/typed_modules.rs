@@ -383,7 +383,11 @@ impl ModuleFileWriter {
 
     /// The temporary file the new version is written to.
     fn tmp_file(&mut self) -> &mut File {
-        &mut self.tmp.as_mut().expect("a module file written after it was finished").0
+        &mut self
+            .tmp
+            .as_mut()
+            .expect("a module file written after it was finished")
+            .0
     }
 
     /// Adds `entry` after the bodies written so far. A body the file held is kept as it is when its
@@ -554,12 +558,7 @@ impl ModuleWriting {
     /// Writes `body`, the body at index `i` among the bodies checked, to the file. A write that
     /// fails is reported as a warning, and the bodies written before it, `body` with them, are left
     /// unwritten.
-    fn add(
-        &mut self,
-        i: usize,
-        body: PassedBody,
-        source_files: &mut Map<PathBuf, SourceFile>,
-    ) {
+    fn add(&mut self, i: usize, body: PassedBody, source_files: &mut Map<PathBuf, SourceFile>) {
         let Some(writer) = &mut self.writer else {
             self.unwritten.push(i);
             return;
@@ -570,7 +569,8 @@ impl ModuleWriting {
             Err(e) => {
                 warn_unwritable_file(&self.dir, &self.file, &e);
                 self.writer = None;
-                self.unwritten.extend(self.written.drain(..).map(|(i, _, _)| i));
+                self.unwritten
+                    .extend(self.written.drain(..).map(|(i, _, _)| i));
                 self.unwritten.push(i);
             }
         }
@@ -846,9 +846,10 @@ impl Program {
             },
         );
 
-        let checked_again = map_on_compiler_threads(unwritten.clone(), tc.num_worker_threads, |i| {
-            self.check_body(&to_check[i].0, &nrenv, tc)
-        });
+        let checked_again =
+            map_on_compiler_threads(unwritten.clone(), tc.num_worker_threads, |i| {
+                self.check_body(&to_check[i].0, &nrenv, tc)
+            });
         for (i, checked) in unwritten.into_iter().zip(checked_again) {
             outcomes[i] = Some(CheckOutcome::InMemory(checked));
         }
@@ -917,11 +918,12 @@ impl Program {
                         let stored = &self.typed_modules.stored[loc];
                         let entry = NewEntry::of(stored.identity.clone(), &checked);
                         let source_files = &mut self.typed_modules.source_files;
-                        let written = ModuleFileWriter::create(&dir, stored.file.clone())
-                            .and_then(|mut writer| {
+                        let written = ModuleFileWriter::create(&dir, stored.file.clone()).and_then(
+                            |mut writer| {
                                 writer.add(entry, source_files)?;
                                 writer.finish()
-                            });
+                            },
+                        );
                         if let Err(e) = written {
                             warn_unwritable_file(&dir, &stored.file, &e);
                         }
