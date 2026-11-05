@@ -225,11 +225,10 @@ run targets on the compiler threads, at most k in flight:   // モジュール�
     checked = typed_body(entity)        // body_ast -> 不透明型で包む -> check_scheme_equivalent -> 型検査
     keep  checked.opaque_types, checked.diagnostics, checked.warning_facts
     if checked.diagnostics is empty:
-        hand checked.typed to the writer of its module's file
+        hand the encoded checked.typed to the writer of its module's file
     free  checked.typed
-
-for each module whose file gained entities:
-    write the new file (old bodies + new bodies, record, index); replace_file
+    if entity is the last target of its module:
+        write the new file (old bodies + new bodies, record, index); replace_file
 
 opaque types  = from the records + from the checked
 validate_opaque_types_are_acyclic(opaque types)
@@ -237,7 +236,7 @@ warnings      = derive from the warning facts of the records + of the checked
 report all diagnostics and warnings; stop on an error
 ```
 
-今は全部の型検査を `map_on_compiler_threads` に一度に渡していて、1 本の重さが大きくばらついても、空いたスレッドが次を取る。モジュールごとや k 個ごとに完了を待つと、並列度が落ちる。そこで、対象の本体を全モジュールにわたって一つの作業の列に入れ、同時に処理中の本体を k 個までに抑える。
+今は全部の型検査を `map_on_compiler_threads` に一度に渡していて、1 本の重さが大きくばらついても、空いたスレッドが次を取る。モジュールごとや k 個ごとに完了を待つと、並列度が落ちる。そこで、対象の本体を全モジュールにわたって一つの作業の列に入れ、同時に処理中の本体を k 個までに抑える。k はコンパイラのスレッドの数で、各スレッドは型検査を終えた本体を呼び出し側のスレッドへ渡してから次を取る。書く前のモジュールの型付きの本体は、エンコードしたバイト列で持つ。
 
 このフェーズが終わると、すべての値の不透明型の具体型が決まっている。型検査のエラーを全部報告してからインスタンス化に進む順序も、今と同じである。
 
@@ -251,7 +250,14 @@ typed-modules に書く型付きの本体は、今のキャッシュが書く `T
 
 ### トレイトの実装の本体
 
-トレイトの実装の本体は、`GlobalValue` の `TraitMemberImpl` と、`TraitEnv` の `TraitImpl::members` の両方から参照されている。`create_typechecker` は `TraitEnv` を複製して型検査器に持たせる。そのため、`GlobalValue` の側の本体を捨てても、本体は残る。`TraitImpl::members` の本体を使うのは実装の名前を調べる処理だけなので、`members` は名前だけを持つ形にし、本体は `GlobalValue` の側にだけ置く。
+トレイトの実装の本体は、`GlobalValue` の `TraitMemberImpl` と、`TraitEnv` の `TraitImpl::members` の両方から、同じ `Arc` で参照されている。`create_typechecker` は `TraitEnv` を複製して型検査器に持たせる。そのため、`GlobalValue` の側の本体を捨てても、本体は残る。`members` は名前だけを持つ形にし、本体は `GlobalValue` の側にだけ置く。
+
+`TraitImpl::members` の本体を読む処理は、名前を調べるもののほかに、`validate_trait_impl` の 2 つの検査がある。
+
+- トレイトが宣言していないメンバを実装したときの報告は、本体の `source` を位置に使う。
+- 型シグネチャを書かないメンバについて、本体の型注釈の型変数が実装の型に現れることを確かめる（`collect_annotation_tyvars`）。
+
+`members` を名前だけにするときは、この 2 つが読むものを、本体の AST を捨てる前に取り出しておくか、検査を本体の AST を読み戻す場所へ移す。
 
 ### 2 回目以降のビルド
 
@@ -278,7 +284,6 @@ typed-modules に書く型付きの本体は、今のキャッシュが書く `T
 ### 段階 2: 本体を k 個までずつ型検査し、書いて捨てる
 
 - 全本体を型検査するフェーズを、上の擬似コードの形にする。型付きの本体は、型検査したそばから typed-modules に渡して捨てる。
-- `TraitImpl::members` を名前だけにする。
 
 改善するもの: 1 回目のビルドのメモリのうち、型検査のぶん（依存 26 個で約 320 MiB）。
 
@@ -287,6 +292,7 @@ typed-modules に書く型付きの本体は、今のキャッシュが書く `T
 - ソースファイルを 1 つ構文解析するたびに、本体の AST を位置ごと parsed-modules に書いて捨てる。
 - 不透明型で本体を包む処理を、型検査の入口へ移す。
 - `body_ast` を作る。
+- `TraitImpl::members` を名前だけにする。`GlobalValue` の側の本体を捨てるこの段階で、はじめてメモリが減る。
 
 改善するもの: 構文解析のぶんのメモリ（依存 26 個で約 100 MiB）。
 
