@@ -290,12 +290,12 @@ impl<'a, 'e> Rewriter<'a, 'e> {
 
     /// The copy of the component of the class `c`'s lambda that the class stands for, where the
     /// lambda is the body of its symbol: the copy made for the representations the class gives
-    /// the body parameters.
+    /// the body parameters, which are the sets at the lambda's interface.
     fn body_copy_of_class(&self, c: u32) -> usize {
         let class = &self.repr.classes[c as usize];
         let lambda = &self.analysis.lambdas[class.lam as usize];
         let component = self.analysis.component_of[&lambda.symbol];
-        self.copy_of_body_reprs[&(component, class.arg_reprs.clone())]
+        self.copy_of_body_reprs[&(component, class.interface_reprs.clone())]
     }
 
     /// The name of the global function a value of the class `c` is called through, where the
@@ -726,16 +726,20 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 assert_eq!(lambda.is_body(), as_body);
                 if !as_body {
                     let own = self.repr.of(self.set_of(walk.instance, node.ty.slots[0]));
+                    let instance = &self.spec.instances[walk.instance];
+                    let args: Vec<SetId> =
+                        lambda.params.iter().map(|p| instance.args[*p]).collect();
                     let value = match own {
                         Repr::Single(c) => {
-                            assert_eq!(self.repr.classes[c as usize].lam, lam);
+                            assert_eq!(
+                                self.repr.class_of(lam, &args),
+                                c,
+                                "a lambda is built in a class other than its set's"
+                            );
                             self.ask_lift(c);
                             Some(self.capture_struct_value(c))
                         }
                         Repr::Closure if lambda.is_lifted_from_closures() => {
-                            let instance = &self.spec.instances[walk.instance];
-                            let args: Vec<SetId> =
-                                lambda.params.iter().map(|p| instance.args[*p]).collect();
                             let c = self.repr.class_of(lam, &args);
                             self.ask_lift(c);
                             Some(self.closure_value(c, ty.clone()))

@@ -3,6 +3,7 @@
 
 use crate::ast::{
     expr::{Expr, ExprNode},
+    name::FullName,
     pattern::{Pattern, PatternNode},
     program::Program,
     type_env::TypeEnv,
@@ -12,8 +13,8 @@ use std::sync::Arc;
 
 /// Panics, naming the symbol and the node, where two types given to meeting places of
 /// `prg` disagree: a symbol and its body, a function and the argument it is applied to, a global
-/// and a reference to it, a value and the pattern taking it apart, the arms of a choice, a struct
-/// and its fields. The types of builtin operations and of calls of C functions are trusted as
+/// and a reference to it, a local and a reference to it, a value and the pattern taking it apart,
+/// the arms of a choice, a struct and its fields. The types of builtin operations and of calls of C functions are trusted as
 /// written.
 pub fn validate_types(prg: &Program) {
     let type_env = prg.type_env();
@@ -34,10 +35,10 @@ pub fn validate_types(prg: &Program) {
             expr,
             "the symbol's type and its body's",
         );
-        check.expr(expr, &at);
+        check.expr(expr, &at, &mut vec![]);
     }
     for root in prg.root_value_exprs() {
-        check.expr(root, "a root of the program");
+        check.expr(root, "a root of the program", &mut vec![]);
     }
 }
 
@@ -48,6 +49,9 @@ struct Check<'p> {
     /// The type environment of `prg`.
     type_env: &'p TypeEnv,
 }
+
+/// The locals in scope at a node, each with the type its binder gives it, the innermost last.
+type Scope = Vec<(FullName, Arc<TypeNode>)>;
 
 /// The type of the node `e`.
 fn ty(e: &ExprNode) -> &Arc<TypeNode> {
@@ -68,11 +72,25 @@ impl<'p> Check<'p> {
         );
     }
 
-    /// Checks the node `e` of `at` and the nodes under it.
-    fn expr(&self, e: &Arc<ExprNode>, at: &str) {
+    /// Checks the node `e` of `at` and the nodes under it, `scope` holding the locals in scope at
+    /// `e`.
+    fn expr(&self, e: &Arc<ExprNode>, at: &str, scope: &mut Scope) {
         match &*e.expr {
             Expr::Var(v) => {
-                if !v.name.is_local() {
+                if v.name.is_local() {
+                    let (_, bound) = scope
+                        .iter()
+                        .rev()
+                        .find(|(name, _)| *name == v.name)
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "in `{}`, the local `{}` is read where nothing binds it",
+                                at,
+                                v.name.to_string()
+                            )
+                        });
+                    self.same(bound, ty(e), at, e, "a local's type and its reference's");
+                } else {
                     let symbol = self.prg.symbols.get(&v.name).unwrap_or_else(|| {
                         panic!(
                             "in `{}`, the global `{}` is no symbol",
@@ -91,9 +109,9 @@ impl<'p> Check<'p> {
             }
             Expr::Builtin(_) => {}
             Expr::App(func, args) => {
-                self.expr(func, at);
+                self.expr(func, at, scope);
                 for arg in args {
-                    self.expr(arg, at);
+                    self.expr(arg, at, scope);
                 }
                 let expected = args
                     .iter()
@@ -107,8 +125,13 @@ impl<'p> Check<'p> {
                     "a function's type and its application's",
                 );
             }
-            Expr::Lam(_, body) => {
-                self.expr(body, at);
+            Expr::Lam(params, body) => {
+                let depth = scope.len();
+                for (param, param_ty) in params.iter().zip(ty(e).get_lambda_srcs()) {
+                    scope.push((param.name.clone(), param_ty));
+                }
+                self.expr(body, at, scope);
+                scope.truncate(depth);
                 self.same(
                     &ty(e).get_lambda_dst(),
                     ty(body),
@@ -118,15 +141,17 @@ impl<'p> Check<'p> {
                 );
             }
             Expr::Let(pat, bound, val) => {
-                self.expr(bound, at);
-                self.pattern(pat, ty(bound), at, e);
-                self.expr(val, at);
+                self.expr(bound, at, scope);
+                let depth = scope.len();
+                self.pattern(pat, ty(bound), at, e, scope);
+                self.expr(val, at, scope);
+                scope.truncate(depth);
                 self.same(ty(e), ty(val), at, e, "a let's type and its value's");
             }
             Expr::If(cond, then_expr, else_expr) => {
-                self.expr(cond, at);
-                self.expr(then_expr, at);
-                self.expr(else_expr, at);
+                self.expr(cond, at, scope);
+                self.expr(then_expr, at, scope);
+                self.expr(else_expr, at, scope);
                 self.same(
                     ty(e),
                     ty(then_expr),
@@ -143,15 +168,17 @@ impl<'p> Check<'p> {
                 );
             }
             Expr::Match(cond, arms) => {
-                self.expr(cond, at);
+                self.expr(cond, at, scope);
                 for (pat, val) in arms {
-                    self.pattern(pat, ty(cond), at, e);
-                    self.expr(val, at);
+                    let depth = scope.len();
+                    self.pattern(pat, ty(cond), at, e, scope);
+                    self.expr(val, at, scope);
+                    scope.truncate(depth);
                     self.same(ty(e), ty(val), at, e, "a match's type and an arm's");
                 }
             }
             Expr::TyAnno(expr, anno) => {
-                self.expr(expr, at);
+                self.expr(expr, at, scope);
                 self.same(
                     ty(e),
                     ty(expr),
@@ -170,7 +197,7 @@ impl<'p> Check<'p> {
             Expr::ArrayLit(elems) => {
                 let elem_ty = ty(e).collect_type_arguments()[0].clone();
                 for elem in elems {
-                    self.expr(elem, at);
+                    self.expr(elem, at, scope);
                     self.same(
                         &elem_ty,
                         ty(elem),
@@ -190,7 +217,7 @@ impl<'p> Check<'p> {
                 );
                 let field_tys = ty(e).field_types(self.type_env);
                 for (name, _, value) in fields {
-                    self.expr(value, at);
+                    self.expr(value, at, scope);
                     let i = ty(e).field_index(self.type_env, name).unwrap();
                     self.same(
                         &field_tys[i],
@@ -203,19 +230,27 @@ impl<'p> Check<'p> {
             }
             Expr::FFICall(_, _, _, _, args, _) => {
                 for arg in args {
-                    self.expr(arg, at);
+                    self.expr(arg, at, scope);
                 }
             }
             Expr::Eval(side, main) => {
-                self.expr(side, at);
-                self.expr(main, at);
+                self.expr(side, at, scope);
+                self.expr(main, at, scope);
                 self.same(ty(e), ty(main), at, e, "an eval's type and its value's");
             }
         }
     }
 
-    /// Checks the pattern `pat`, which takes apart a value of type `matched` at the node `e` of `at`.
-    fn pattern(&self, pat: &Arc<PatternNode>, matched: &Arc<TypeNode>, at: &str, e: &ExprNode) {
+    /// Checks the pattern `pat`, which takes apart a value of type `matched` at the node `e` of `at`,
+    /// and adds the locals it binds to `scope`.
+    fn pattern(
+        &self,
+        pat: &Arc<PatternNode>,
+        matched: &Arc<TypeNode>,
+        at: &str,
+        e: &ExprNode,
+        scope: &mut Scope,
+    ) {
         let pat_ty = pat.info.type_.as_ref().unwrap();
         self.same(
             pat_ty,
@@ -225,7 +260,8 @@ impl<'p> Check<'p> {
             "a pattern's type and the value's it takes apart",
         );
         match &pat.pattern {
-            Pattern::Var(_, anno) => {
+            Pattern::Var(var, anno) => {
+                scope.push((var.name.clone(), pat_ty.clone()));
                 if let Some(anno) = anno {
                     self.same(
                         anno,
@@ -247,7 +283,7 @@ impl<'p> Check<'p> {
                 let field_tys = pat_ty.field_types(self.type_env);
                 for (name, _, sub) in fields {
                     let i = pat_ty.field_index(self.type_env, name).unwrap();
-                    self.pattern(sub, &field_tys[i], at, e);
+                    self.pattern(sub, &field_tys[i], at, e, scope);
                 }
             }
             Pattern::Union(variant, _, sub) => {
@@ -260,7 +296,7 @@ impl<'p> Check<'p> {
                     pat_ty.to_string()
                 );
                 let i = pat_ty.field_index(self.type_env, &variant.name).unwrap();
-                self.pattern(sub, &pat_ty.field_types(self.type_env)[i], at, e);
+                self.pattern(sub, &pat_ty.field_types(self.type_env)[i], at, e, scope);
             }
         }
     }
