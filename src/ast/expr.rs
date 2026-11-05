@@ -83,7 +83,6 @@ impl ExprNode {
     }
 
     /// This node with `aux_src` replaced by `src`.
-    #[allow(dead_code)]
     pub fn set_aux_src(&self, src: Option<Span>) -> Arc<Self> {
         let mut ret = self.clone_all();
         ret.aux_src = src;
@@ -111,17 +110,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    /// This node with its expression replaced by `expr`, leaving the free variables to be calculated
-    /// again.
-    #[allow(dead_code)]
-    pub fn set_expr(&self, expr: Arc<Expr>) -> Arc<Self> {
-        let mut ret = self.clone_except_fvs();
-        ret.expr = expr;
-        Arc::new(ret)
-    }
-
     // Check if the expression is a function application.
-    #[allow(dead_code)]
     pub fn is_app(&self) -> bool {
         matches!(self.expr.as_ref(), Expr::App(_, _))
     }
@@ -234,7 +223,6 @@ impl ExprNode {
         self.set_app_func(func)
     }
 
-    #[allow(dead_code)]
     pub fn get_app_func(&self) -> Arc<ExprNode> {
         match &*self.expr {
             Expr::App(func, _) => func.clone(),
@@ -244,7 +232,6 @@ impl ExprNode {
         }
     }
 
-    #[allow(dead_code)]
     pub fn get_app_args(&self) -> Vec<Arc<ExprNode>> {
         match &*self.expr {
             Expr::App(_, args) => args.clone(),
@@ -313,7 +300,6 @@ impl ExprNode {
         arity
     }
 
-    #[allow(dead_code)]
     pub fn set_lam_params(&self, params: Vec<Arc<Var>>) -> Arc<Self> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
@@ -512,7 +498,6 @@ impl ExprNode {
     }
 
     // Set the value of let expression, and update the type of the let expression to the type of the value.
-    #[allow(dead_code)]
     pub fn set_let_value_typed(&self, value: Arc<ExprNode>) -> Arc<Self> {
         let value_ty = value.type_.as_ref().unwrap().clone();
         self.set_let_value(value).set_type(value_ty)
@@ -557,7 +542,6 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    #[allow(dead_code)]
     pub fn set_if_then_else(&self, then: Arc<ExprNode>, else_: Arc<ExprNode>) -> Arc<ExprNode> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
@@ -571,7 +555,6 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    #[allow(dead_code)]
     pub fn set_if_then_else_typed(
         &self,
         then: Arc<ExprNode>,
@@ -630,7 +613,6 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    #[allow(dead_code)]
     pub fn set_match_pat_vals_typed(
         &self,
         pat_vals: Vec<(Arc<PatternNode>, Arc<ExprNode>)>,
@@ -667,16 +649,6 @@ impl ExprNode {
             }
         }
         Arc::new(ret)
-    }
-
-    #[allow(dead_code)]
-    pub fn get_tyanno_ty(&self) -> Arc<TypeNode> {
-        match &*self.expr {
-            Expr::TyAnno(_, ty) => ty.clone(),
-            _ => {
-                panic!()
-            }
-        }
     }
 
     pub fn set_tyanno_ty(&self, ty: Arc<TypeNode>) -> Arc<Self> {
