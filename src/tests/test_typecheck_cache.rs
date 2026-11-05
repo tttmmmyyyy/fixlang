@@ -73,9 +73,9 @@ fn test_the_module_dependency_hash_covers_the_c_numeric_types() {
 mod integration_tests {
     use crate::constants::{DOT_FIXLANG, TYPED_MODULES_PATH};
     use crate::tests::test_util::{fix_command, run_fix};
-    use std::fs::{self, File};
+    use std::fs::{self, File, Permissions};
     use std::os::unix::fs::PermissionsExt;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::process::{Command, Stdio};
     use std::thread;
     use std::time::{Duration, SystemTime};
@@ -498,15 +498,9 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         );
     }
 
-    /// A file of the type-check cache whose bytes were damaged costs one build the check it could
-    /// have skipped, and nothing else: that build writes what it checked back to the file, and the
-    /// build after it checks nothing again and leaves the file as it is. Damaging the record makes
-    /// the build check the module again; damaging a body the record points to makes instantiation
-    /// check that body again.
-    #[test]
-    fn a_build_recovers_from_a_damaged_cache_file() {
-        let temp = TempDir::new().expect("Failed to create temp directory");
-        let dir = temp.path();
+    /// Builds in `dir` a program printing 3, and answers the path of the cache file of its module
+    /// `Main`.
+    fn build_three_and_find_the_cache_file_of_main(dir: &Path) -> PathBuf {
         fs::write(
             dir.join("main.fix"),
             "module Main;\n\nmain : IO ();\nmain = println $ (1 + 2).to_string;\n",
@@ -518,7 +512,19 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
             .map(|(name, _)| name)
             .find(|name| name.starts_with("Main_"))
             .expect("the build wrote no cache file of `Main`");
-        let main_file = dir.join(TYPED_MODULES_PATH).join(main_file);
+        dir.join(TYPED_MODULES_PATH).join(main_file)
+    }
+
+    /// A file of the type-check cache whose bytes were damaged costs one build the check it could
+    /// have skipped, and nothing else: that build writes what it checked back to the file, and the
+    /// build after it checks nothing again and leaves the file as it is. Damaging the record makes
+    /// the build check the module again; damaging a body the record points to makes instantiation
+    /// check that body again.
+    #[test]
+    fn a_build_recovers_from_a_damaged_cache_file() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        let main_file = build_three_and_find_the_cache_file_of_main(dir);
         let written = fs::read(&main_file).expect("Failed to read the cache file of `Main`");
 
         // The body comes first in the file, and its first bytes are the identity written in front
@@ -711,12 +717,8 @@ main = (
 
     /// A build that cannot write the file of a module still builds the program from the bodies it
     /// checked, and reports the file it could not write.
-    #[cfg(unix)]
     #[test]
     fn a_build_that_cannot_write_the_cache_builds_the_program() {
-        use std::fs::Permissions;
-        use std::os::unix::fs::PermissionsExt;
-
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
         fs::write(
@@ -982,18 +984,7 @@ main = println $ (double(21), 3).to_string;
     fn a_build_recovers_from_a_cache_file_shorter_than_its_footer() {
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
-        fs::write(
-            dir.join("main.fix"),
-            "module Main;\n\nmain : IO ();\nmain = println $ (1 + 2).to_string;\n",
-        )
-        .expect("Failed to write main.fix");
-        build(dir, "main.fix", &[]);
-        let main_file = cache_files(dir)
-            .into_iter()
-            .map(|(name, _)| name)
-            .find(|name| name.starts_with("Main_"))
-            .expect("the build wrote no cache file of `Main`");
-        let main_file = dir.join(TYPED_MODULES_PATH).join(main_file);
+        let main_file = build_three_and_find_the_cache_file_of_main(dir);
         let written = fs::read(&main_file).expect("Failed to read the cache file of `Main`");
 
         for len in [0, 3] {
@@ -1021,25 +1012,9 @@ main = println $ (double(21), 3).to_string;
     fn a_build_replaces_a_cache_file_it_cannot_read() {
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
-        fs::write(
-            dir.join("main.fix"),
-            "module Main;\n\nmain : IO ();\nmain = println $ (1 + 2).to_string;\n",
-        )
-        .expect("Failed to write main.fix");
-        build(dir, "main.fix", &[]);
-        let main_file = cache_files(dir)
-            .into_iter()
-            .map(|(name, _)| name)
-            .find(|name| name.starts_with("Main_"))
-            .expect("the build wrote no cache file of `Main`");
-        let main_file = dir.join(TYPED_MODULES_PATH).join(main_file);
-        fs::set_permissions(&main_file, fs::Permissions::from_mode(0o000))
+        let main_file = build_three_and_find_the_cache_file_of_main(dir);
+        fs::set_permissions(&main_file, Permissions::from_mode(0o000))
             .expect("Failed to make the cache file of `Main` unreadable");
-        if File::open(&main_file).is_ok() {
-            // A process that reads files whatever their permissions, such as one run by root,
-            // cannot be shown an unreadable file.
-            return;
-        }
 
         let stderr = build(dir, "main.fix", &[]);
         assert_eq!(
