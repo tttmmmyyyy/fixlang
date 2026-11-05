@@ -360,8 +360,9 @@ struct ModuleFileWriter {
 
 impl ModuleFileWriter {
     /// Begins a new version of `file` in `dir`, with the bodies the file holds now, so that the
-    /// bodies another build added to it since this build read its record are kept. A file that is
-    /// not one of type-checked modules is begun anew, and one that cannot be read answers the error.
+    /// bodies another build added to it since this build read its record are kept. A file that
+    /// cannot be read, or is not one of type-checked modules, is begun anew, since `finish` replaces
+    /// it all the same.
     fn create(dir: &Path, file: Arc<ModuleFile>) -> io::Result<Self> {
         let path = file.path_in(dir);
         let tmp = create_temporary_file_in(dir)?;
@@ -374,7 +375,7 @@ impl ModuleFileWriter {
             record: ModuleRecord::default(),
             bodies_end: 0,
         };
-        let Some(held) = map_file(&path)? else {
+        let Ok(Some(held)) = map_file(&path) else {
             return Ok(writer);
         };
         let Ok((record, bodies_end)) = decode_module_file(&held) else {

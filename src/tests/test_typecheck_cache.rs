@@ -74,6 +74,7 @@ mod integration_tests {
     use crate::constants::{DOT_FIXLANG, TYPED_MODULES_PATH};
     use crate::tests::test_util::{fix_command, run_fix};
     use std::fs::{self, File};
+    use std::os::unix::fs::PermissionsExt;
     use std::path::Path;
     use std::process::{Command, Stdio};
     use std::thread;
@@ -1012,5 +1013,49 @@ main = println $ (double(21), 3).to_string;
                 "the build checking `Main` again wrote another file than the first build"
             );
         }
+    }
+
+    /// A module file the build cannot read is reported once, and the build writes the module's
+    /// file anew in its place, so the build after it reads every body again and reports nothing.
+    #[test]
+    fn a_build_replaces_a_cache_file_it_cannot_read() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("main.fix"),
+            "module Main;\n\nmain : IO ();\nmain = println $ (1 + 2).to_string;\n",
+        )
+        .expect("Failed to write main.fix");
+        build(dir, "main.fix", &[]);
+        let main_file = cache_files(dir)
+            .into_iter()
+            .map(|(name, _)| name)
+            .find(|name| name.starts_with("Main_"))
+            .expect("the build wrote no cache file of `Main`");
+        let main_file = dir.join(TYPED_MODULES_PATH).join(main_file);
+        fs::set_permissions(&main_file, fs::Permissions::from_mode(0o000))
+            .expect("Failed to make the cache file of `Main` unreadable");
+        if File::open(&main_file).is_ok() {
+            // A process that reads files whatever their permissions, such as one run by root,
+            // cannot be shown an unreadable file.
+            return;
+        }
+
+        let stderr = build(dir, "main.fix", &[]);
+        assert_eq!(
+            stderr.matches("Failed to read cache file").count(),
+            1,
+            "stderr: {}",
+            stderr
+        );
+        assert!(
+            !stderr.contains("Failed to write cache file"),
+            "stderr: {}",
+            stderr
+        );
+        assert_eq!(run_out(dir), "3");
+        let stderr = build(dir, "main.fix", &[]);
+        assert!(!stderr.contains("cache file"), "stderr: {}", stderr);
+        assert_eq!(run_out(dir), "3");
     }
 }
