@@ -330,6 +330,123 @@ fn test_a_lambda_capturing_an_optional_function_of_its_own_set_computes_the_chai
     test_source(source, Configuration::develop_mode());
 }
 
+/// A function building, by one call, the lambda that a recursion of it carries in an `Option`: the
+/// lambda's captured `g` holds a set reaching itself in the recursion's copy, and one lambda in the
+/// direct call's, while both give the lambda's parameter a set of closures.
+#[test]
+fn test_a_lambda_built_both_in_a_cycle_and_out_of_one_captures_each_its_own_way() {
+    let source = r#"
+    module Main;
+
+    mkm : I64 -> Option (I64 -> I64) -> (I64 -> I64);
+    mkm = |d, o| if d < -1000000 { mkm(d + 1, o) } else { (
+        let g = |y| match o { some(f) => f(y) + 1, none(_) => y };
+        |x| g(x) * 2 + g(x + 1)
+    ) };
+
+    go : I64 -> Option (I64 -> I64) -> I64 -> I64;
+    go = |n, o, x| if n == 0 { mkm(n, o)(x) } else { go(n - 1, some(mkm(n, o)), x) };
+
+    main : IO ();
+    main = (
+        let k = *get_args.map(|args| args.@size);
+        let a = go(k, none(), 1);
+        let b = mkm(k, some(if k > 2 { |x| x + 1 } else { |x| x * 3 }))(5);
+        assert_eq(|_|"unexpected result", (a, b), (18, 51));;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// The source of the tests of a lambda capturing `g`, a function `mk2` chooses from two of its
+/// parameters: `MK2_CALLS` is replaced by the two calls of `mk2`. One call gives both parameters
+/// one set of closures, so that `g`'s set holds one lambda, and the other gives them two, so that
+/// it holds two, while both represent the parameters alike.
+const CHOSEN_FROM_TWO_SOURCE: &str = r#"
+    module Main;
+
+    wrap : I64 -> (I64 -> I64) -> (I64 -> I64);
+    wrap = |d, f| if d < -1000000 { wrap(d + 1, f) } else { |x| f(x) + d };
+
+    mk2 : (I64 -> I64) -> (I64 -> I64) -> (I64 -> I64) -> I64 -> (I64 -> I64);
+    mk2 = |r, p, q, d| if d < -1000000 { mk2(r, p, q, d + 1) } else { (
+        let g = if r(d) > 3 { wrap(d, p) } else { wrap(d, q) };
+        |x| g(x) * 2 + g(x + 1)
+    ) };
+
+    main : IO ();
+    main = (
+        let k = *get_args.map(|args| args.@size);
+        let s1 = if k > 2 { |x| x + 1 } else { |x| x * 3 };
+        let s2 = if k > 3 { |x| x + 5 } else { |x| x * 7 };
+        MK2_CALLS
+        assert_eq(|_|"unexpected result", (a, b), (15, 24));;
+        pure()
+    );
+    "#;
+
+/// The lambda `mk2` returns, built first where `g`'s set holds one lambda.
+#[test]
+fn test_a_lambda_capturing_a_function_chosen_from_one_set_then_two_computes_both() {
+    let source = CHOSEN_FROM_TWO_SOURCE.replace(
+        "MK2_CALLS",
+        "let a = mk2(|x| x + k, s1, s1, k)(1); let b = mk2(s2, s1, s2, k)(2);",
+    );
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// The lambda `mk2` returns, built first where `g`'s set holds two lambdas.
+#[test]
+fn test_a_lambda_capturing_a_function_chosen_from_two_sets_then_one_computes_both() {
+    let source = CHOSEN_FROM_TWO_SOURCE.replace(
+        "MK2_CALLS",
+        "let b = mk2(s2, s1, s2, k)(2); let a = mk2(|x| x + k, s1, s1, k)(1);",
+    );
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// A lambda capturing `g`, a function `k` chooses from its two parameters, where `k` is called once
+/// with one function for both and once, through `w2`, with two functions of one class: `g`'s set
+/// holds one lambda in the first copy, and in the second two elements that make the same code.
+/// Reaching the second copy through `w2` puts its sets before the first's, so the lambda's class is
+/// first met where `g`'s set holds two elements.
+#[test]
+fn test_a_lambda_capturing_a_function_chosen_from_two_alike_sets_computes_both() {
+    let source = r#"
+    module Main;
+
+    mk : I64 -> (I64 -> I64) -> I64 -> I64;
+    mk = |d, f| if d > 100 { mk(d - 1, f) } else { |x| f(x) + 1 };
+
+    wrap_a : I64 -> (I64 -> I64) -> I64 -> I64;
+    wrap_a = |d, h| if d > 100 { wrap_a(d - 1, h) } else { |x| h(x) * 2 };
+
+    k : I64 -> (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
+    k = |d, f1, f2| if d > 100 { k(d - 1, f1, f2) } else {
+        let g = if d == 1 { mk(d, f1) } else { mk(d, f2) };
+        |y| g(y) + d
+    };
+
+    w2 : I64 -> (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
+    w2 = |d, a, b| if d > 100 { w2(d - 1, a, b) } else { k(d, a, b) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let h1 = if n > 1 { |x| x + n } else { |x| x * n };
+        let h2 = if n > 2 { |x| x + 10 * n } else { |x| x - n };
+        let a1 = wrap_a(n, h1);
+        let a2 = wrap_a(n, h2);
+        let r2 = w2(n, a1, a2)(5);
+        let r1 = k(n, a1, a1)(5);
+        assert_eq(|_|"unexpected result", (r1, r2), (12, 12));;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
 /// What the rewrite by the lambda sets makes of a program, read off the `--emit-rc-ir` dump: a
 /// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
 /// takes as an argument. The program cannot observe either one — the answer is the same with
