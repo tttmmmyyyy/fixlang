@@ -349,7 +349,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         self.lam_counter = 0;
     }
 
-    /// Records the variables of `ty`, met inside the innermost lambda, as part of its term.
+    /// Records the variables of `ty`, met inside the innermost lambda or body, as part of its term.
     fn record(&mut self, ty: &AType) {
         self.record_vars(&ty.slots);
     }
@@ -599,8 +599,9 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         lam
     }
 
-    /// The annotated type of the name `name` read by a builtin operation, recorded in the innermost
-    /// lambda's term: a name read only by a builtin is still part of what the lambda captures.
+    /// The annotated type of the name `name` read by a builtin operation, recorded in the term of
+    /// the innermost lambda or body: a name read only by a builtin is still part of what the lambda
+    /// captures.
     /// `CAP_NAME` is the capture of the innermost lambda, which only a closure object holds, so
     /// that lambda's set is Dynamic.
     fn operand(&mut self, name: &FullName) -> (AType, NameRef) {

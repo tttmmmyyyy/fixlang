@@ -414,7 +414,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             return tc.clone();
         }
         let layout_tc = self.layout.layout_tycon(tc);
-        let group = self.layout.group_of(&layout_tc);
+        let group = self.layout.group_of(tc);
         let suffix = self.type_copy_suffix(group, own);
         let mut name = layout_tc.name.clone();
         name.name += &suffix;
