@@ -426,7 +426,7 @@ impl<'e> SlotLayout<'e> {
     /// is laid out where it is held, so these are the slots whose capture structs a value of `ty`
     /// contains. `solver` gives the new variables of a place the slots of `ty` leave untracked.
     pub fn held_in_place(&self, ty: &AType, solver: &mut Solver, out: &mut Vec<SetVar>) {
-        let tc = head_tycon(&ty.ty);
+        let tc = ty.ty.head_tycon();
         if ty.ty.flatten_type_application().len() - 1 < self.arity(&tc) {
             return;
         }
