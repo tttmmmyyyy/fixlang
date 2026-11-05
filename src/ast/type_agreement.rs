@@ -127,7 +127,15 @@ impl<'p> Check<'p> {
             }
             Expr::Lam(params, body) => {
                 let depth = scope.len();
-                for (param, param_ty) in params.iter().zip(ty(e).get_lambda_srcs()) {
+                let param_tys = ty(e).get_lambda_srcs();
+                assert_eq!(
+                    params.len(),
+                    param_tys.len(),
+                    "in `{}`, a lambda's parameters and its type's differ in number, at `{}`",
+                    at,
+                    e.expr.stringify().to_string()
+                );
+                for (param, param_ty) in params.iter().zip(param_tys) {
                     scope.push((param.name.clone(), param_ty));
                 }
                 self.expr(body, at, scope);
