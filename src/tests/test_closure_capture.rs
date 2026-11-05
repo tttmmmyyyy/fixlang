@@ -82,7 +82,7 @@ mod tests {
     /// A lambda with no free variable stores nothing.
     ///
     /// The lifting that precedes the closure hands such a lambda a capture struct of no field, and
-    /// that list is a value occupying no storage, so the closure built from it stores nothing. Left
+    /// that struct is a value occupying no storage, so the closure built from it stores nothing. Left
     /// stored, it is one heap allocation per closure built.
     ///
     /// The dump is what this asserts against because the program cannot observe it: the answer is

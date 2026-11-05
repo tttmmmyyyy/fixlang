@@ -811,9 +811,9 @@ impl<'c> ExprVisitor for Inliner<'c> {
         }
     }
 
-    /// Replaces the global a call supplying every parameter it takes names, at the head of the
-    /// call's application spine, with the expression of that global, where it may be inlined at a
-    /// call site and the round's budget covers a copy of it.
+    /// Where a call names a global at the root of its application spine and supplies every
+    /// parameter the global takes, replaces the global with its expression, if it may be inlined at
+    /// a call site and the round's budget covers a copy of it.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Judge whether to inline the function at the call site.
         let (func, args) = expr.destructure_app();

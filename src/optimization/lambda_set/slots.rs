@@ -133,7 +133,8 @@ impl<'e> SlotLayout<'e> {
         &self.group_members[group]
     }
 
-    /// The own slot of its group that the first own slot of the field `field_idx` of `member` is.
+    /// The position, among the own slots of the group of `member`, of the first own slot of the
+    /// field `field_idx` of `member`.
     pub(super) fn field_offset(&self, member: &TyCon, field_idx: usize) -> usize {
         let group = self.group_of(member);
         self.group_slots(group).field_offsets[member][field_idx]

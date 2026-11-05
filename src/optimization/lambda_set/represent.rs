@@ -272,7 +272,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
 /// class names its lambda (`Lambda::to_string`), then writes each argument in parentheses: `c` for
 /// a set of closures, and for another class its text. A class met again on the way, which a class
 /// reaching itself meets, is written `^n`, `n` counting the classes written so far in that text;
-/// a class outside the strongly connected component being written is written by its hash. The
+/// a class outside the strongly connected component being written is written `#` and its hash. The
 /// text reads only the lambdas and the arguments, so it is the same however the sets were
 /// numbered.
 fn name_classes(analysis: &Analysis, classes: &mut [LamClass]) {

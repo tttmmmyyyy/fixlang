@@ -75,8 +75,9 @@ impl Rewritten {
 /// is lifted to a global function taking its capture struct, once for each class of its elements
 /// (`Representation::classes`); the lambda that is the body of its symbol is the symbol's copy
 /// instead. Where the lambda's set is represented by its capture struct, the struct is the value;
-/// where it is represented by closures, the lifted function applied to the struct is. A type constructor whose own slots hold a set represented by a capture
-/// struct is copied for each way its own slots are represented.
+/// where it is represented by closures, the lifted function applied to the struct is. A type
+/// constructor whose own slots hold a set represented by a capture struct is copied for each way
+/// its own slots are represented.
 pub fn rewrite(
     prg: &Program,
     layout: &SlotLayout,
@@ -115,10 +116,15 @@ struct SymbolCopy {
 
 /// The state of a rewrite of one program.
 struct Rewriter<'a, 'e> {
+    /// The program before the rewrite.
     prg: &'a Program,
+    /// The slots of the types of `prg`.
     layout: &'a SlotLayout<'e>,
+    /// The lambda sets inferred for `prg`.
     analysis: &'a Analysis,
+    /// The copies `analysis` asks for.
     spec: &'a Specialization,
+    /// How the values of each set of `spec` are represented.
     repr: &'a Representation,
     /// The copies of the symbols of the components.
     copies: Vec<SymbolCopy>,
@@ -168,6 +174,9 @@ struct Walk<'n> {
 }
 
 impl<'a, 'e> Rewriter<'a, 'e> {
+    /// A rewriter that has decided the copy of each component and made nothing yet. Copies of one
+    /// component that represent the sets of `Component::body_params` alike share one copy of the
+    /// symbols.
     fn new(
         prg: &'a Program,
         layout: &'a SlotLayout<'e>,
@@ -481,8 +490,8 @@ impl<'a, 'e> Rewriter<'a, 'e> {
     fn declare_group_copy(&mut self, group: usize, own: &[Repr], suffix: &str) {
         let type_env = self.layout.type_env();
         let members = self.layout.group_members(group).to_vec();
-        // The fields of the group read the own slots one after another, which is what `SlotLayout`
-        // gives each field's first own slot as.
+        // The fields of the group read the own slots one after another, so the first own slot of
+        // each field is where the previous field stopped, as `SlotLayout::field_offset` gives it.
         let mut next_offset = 0;
         for member in &members {
             let info = type_env.tycon_info(member);

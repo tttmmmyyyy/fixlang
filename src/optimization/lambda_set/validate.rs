@@ -12,7 +12,8 @@ use std::sync::Arc;
 /// Panics, naming the symbol and the node, where two types the rewrite gives meeting places of
 /// `prg` disagree: a symbol and its body, a function and the argument it is applied to, a global
 /// and a reference to it, a value and the pattern taking it apart, the arms of a choice, a struct
-/// and its fields. A builtin operation and a call of a C function are taken at their word.
+/// and its fields. The types of builtin operations and of calls of C functions are trusted as
+/// written.
 pub fn validate_types(prg: &Program) {
     let type_env = prg.type_env();
     let check = Check { prg, type_env: &type_env };
@@ -32,7 +33,9 @@ pub fn validate_types(prg: &Program) {
 
 /// What `validate_types` reads the program with.
 struct Check<'p> {
+    /// The program checked.
     prg: &'p Program,
+    /// The type environment of `prg`.
     type_env: &'p TypeEnv,
 }
 

@@ -66,8 +66,8 @@ impl CaptureStruct {
         }
     }
 
-    // The name of the type constructor `new` gives the capture struct built with `prefix` for
-    // `owner`.
+    /// The name of the type constructor `new` gives the capture struct built with `prefix` for
+    /// `owner`.
     pub fn tycon_name(prefix: &str, owner: &FullName) -> FullName {
         FullName::new(&owner.namespace, &format!("{}@{}", prefix, owner.name))
     }
