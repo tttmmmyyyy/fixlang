@@ -5,7 +5,7 @@ use crate::ast::{
     pattern::{Pattern, PatternNode},
     program::Program,
     type_env::TypeEnv,
-    types::{type_fun, TypeNode},
+    types::{type_arrow, TypeNode},
 };
 use std::sync::Arc;
 
@@ -75,7 +75,7 @@ impl<'p> Check<'p> {
                 let expected = args
                     .iter()
                     .rev()
-                    .fold(ty(e).clone(), |acc, arg| type_fun(ty(arg).clone(), acc));
+                    .fold(ty(e).clone(), |acc, arg| type_arrow(ty(arg).clone(), acc));
                 self.same(ty(func), &expected, at, e, "a function's type and its application's");
             }
             Expr::Lam(_, body) => {

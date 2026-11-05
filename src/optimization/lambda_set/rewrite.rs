@@ -19,7 +19,7 @@ use crate::{
         name::FullName,
         pattern::{Pattern, PatternNode},
         program::{Program, Symbol},
-        types::{type_fun, type_tyapp, type_tycon, TyCon, TyConInfo, Type, TypeNode},
+        types::{type_arrow, type_tyapp, type_tycon, TyCon, TyConInfo, Type, TypeNode},
     },
     constants::{LS_CAP_NAME, LS_CAP_PREFIX, LS_COPY_SUFFIX, LS_LAM_SUFFIX, LS_OPERAND_PREFIX, LS_UNREAD_NAME},
     hash::md5_hex,
@@ -424,7 +424,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             if Arc::ptr_eq(&param, &args[0]) && Arc::ptr_eq(&ret, &args[1]) {
                 return ty.clone();
             }
-            return type_fun(param, ret);
+            return type_arrow(param, ret);
         }
         let count = self.layout.own_slot_count(&tc);
         let own: Vec<Repr> = sets[*pos..*pos + count]
@@ -569,7 +569,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     let ret = self.rewrite_declared(&args[1], group, own, cursor);
                     return match repr {
                         Repr::Single(c) => type_tycon(&self.capture_tycon(c)),
-                        Repr::Closure => type_fun(param, ret),
+                        Repr::Closure => type_arrow(param, ret),
                     };
                 }
                 let head = if self.layout.group_of(tc) == group {
@@ -956,7 +956,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let callee_name = self.callee_name(c);
         if lambda.is_body {
             // The symbol's copy captures nothing, so the call leaves the capture struct unread.
-            let callee = expr_var(callee_name, None).set_type(type_fun(arg_ty, ty.clone()));
+            let callee = expr_var(callee_name, None).set_type(type_arrow(arg_ty, ty.clone()));
             let call = e.set_app_func(callee).set_app_args(vec![arg]).set_type(ty);
             if func.is_var() {
                 return call;
@@ -974,7 +974,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         }
         let cap_ty = func.type_.clone().unwrap();
         let callee =
-            expr_var(callee_name, None).set_type(type_fun(cap_ty, type_fun(arg_ty, ty.clone())));
+            expr_var(callee_name, None).set_type(type_arrow(cap_ty, type_arrow(arg_ty, ty.clone())));
         let partial = expr_app_typed(callee, vec![func]);
         e.set_app_func(partial).set_app_args(vec![arg]).set_type(ty)
     }
