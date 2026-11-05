@@ -177,8 +177,8 @@ impl Builders {
     }
 }
 
-/// Whether a capture struct can stand for the values of each set of `spec`: the set holds lambdas
-/// alone, and its layout does not hold itself, as `represent` describes.
+/// Whether a capture struct can stand for the values of each set of `spec`: the set is not empty
+/// and holds lambdas alone, and its layout does not hold itself, as `represent` describes.
 fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builders) -> Vec<bool> {
     let store = &spec.store;
     let set_count = store.len();
@@ -388,6 +388,11 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
 /// outside the strongly connected component being written is written `#` and its hash. The text
 /// reads only the lambdas and the representations, so it is the same however the sets were
 /// numbered.
+///
+/// # Examples
+/// Two classes reaching each other, `A` of the lambda `f@lam1` representing its interface as
+/// `[Closure, Single(B)]` and `B` of `g@lam0` representing it as `[Single(A)]`, are written
+/// `f@lam1(c,g@lam0(^0))` and `g@lam0(f@lam1(c,^0))`.
 fn name_classes(analysis: &Analysis, classes: &mut [LamClass]) {
     let mut graph = Graph::new((0..classes.len()).collect::<Vec<usize>>());
     for (c, class) in classes.iter().enumerate() {

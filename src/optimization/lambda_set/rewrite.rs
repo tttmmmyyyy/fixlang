@@ -1,7 +1,9 @@
 // Rewriting a program by its lambda sets: the copies of the symbols and the type constructors the
 // sets ask for, the lambdas lifted to global functions, and each value of a set whose elements
 // make one class represented by that class's capture struct. A lambda of a set represented by
-// closures is lifted too, and its closure is the lifted function applied to the capture struct.
+// closures is lifted too, and its closure is the lifted function applied to the capture struct,
+// except for the lambda that is the body of its symbol and one whose body reads its capture whole
+// (`Lambda::is_lifted_from_closures`).
 
 use super::{
     concrete::SetId,
@@ -39,7 +41,8 @@ pub struct Rewritten {
     entry: Option<Arc<ExprNode>>,
     /// The rewritten value of each export statement, in order.
     exports: Vec<Arc<ExprNode>>,
-    /// For each symbol, the lifted lambdas it calls, whose bodies go where it calls them.
+    /// For each symbol, the lifted lambdas it calls, whose bodies `move_bodies_into_callers` may
+    /// put where it calls them.
     lifted_callees: Map<FullName, Vec<FullName>>,
 }
 

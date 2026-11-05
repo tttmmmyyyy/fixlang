@@ -23,6 +23,7 @@ mod rewrite;
 mod slots;
 mod solver;
 mod specialize;
+
 use crate::{
     ast::{program::Program, type_agreement::validate_types},
     constants::DOT_FIXLANG,
