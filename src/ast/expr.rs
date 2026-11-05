@@ -264,25 +264,17 @@ impl ExprNode {
         }
     }
 
-    /// The function a chain of applications calls and the arguments it is given, so `f(x, y, z)`,
-    /// which nests as `f(x)(y)(z)`, answers `(f, [x, y, z])`.
-    ///
-    /// Panics on an expression that is not an application, and on an application carrying more than
-    /// one argument, which the optimization passes write and the source language does not.
-    pub fn destructure_app(&self) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
+    /// The function at the root of the application spine and the arguments along it, in the order
+    /// they are applied, so `f(x, y)(z)` answers `(f, [x, y, z])`. An expression that is not an
+    /// application answers itself and no arguments.
+    pub fn destructure_app(self: &Arc<Self>) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
         match &*self.expr {
             Expr::App(func, args) => {
-                assert_eq!(args.len(), 1);
-                let arg = args[0].clone();
-                if func.is_app() {
-                    let (func, mut args) = func.destructure_app();
-                    args.push(arg);
-                    return (func, args);
-                } else {
-                    return (func.clone(), vec![arg]);
-                }
+                let (func, mut spine_args) = func.destructure_app();
+                spine_args.extend(args.iter().cloned());
+                (func, spine_args)
             }
-            _ => panic!("Call destructure_app for an expression which is not application!"),
+            _ => (self.clone(), vec![]),
         }
     }
 
@@ -1533,7 +1525,7 @@ impl Expr {
             Expr::Builtin(b) => Text::from_string(b.op.name()),
             Expr::App(_, _) => {
                 // Stringify the funciton.
-                let (fun, args) = collect_app(&Arc::new(self.clone()).into_expr_node(None));
+                let (fun, args) = Arc::new(self.clone()).into_expr_node(None).destructure_app();
                 let brace_fun = match *(fun.expr) {
                     Expr::Var(_) => false,
                     Expr::Builtin(_) => false,
@@ -1862,14 +1854,3 @@ pub fn expr_ffi_call(
     .into_expr_node(src)
 }
 
-// Convert f(y, z) to (f, [y, z]).
-pub fn collect_app(expr: &Arc<ExprNode>) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
-    match &*expr.expr {
-        Expr::App(fun, arg) => {
-            let (fun, mut args) = collect_app(fun);
-            args.append(&mut arg.clone());
-            (fun, args)
-        }
-        _ => (expr.clone(), vec![]),
-    }
-}
