@@ -4,7 +4,7 @@ use super::{
     concrete::{Elem, SetId},
     infer::Analysis,
     partition::{canonical_classes, Child, NodeElems},
-    solver::{LamId, SetVar},
+    solver::LamId,
     specialize::Specialization,
 };
 use crate::{
@@ -104,35 +104,6 @@ impl Representation {
     }
 }
 
-/// The variables of the sets at the interface of each lambda that is not the body of its symbol,
-/// by the lambda: those of its parameter and result types, then those of the types of the values it
-/// captures, in the order `Lambda::captures` lists them. These are the sets the copy building a
-/// value of the lambda and the global function the lambda is lifted to both read. The lambda's
-/// own set is left out, and the lambda that is the body of its symbol gets an empty list.
-fn interface_vars(analysis: &Analysis) -> Vec<Vec<SetVar>> {
-    analysis
-        .lambdas
-        .iter()
-        .map(|lambda| {
-            if lambda.is_body() {
-                return vec![];
-            }
-            let component = &analysis.components[analysis.component_of[&lambda.symbol]];
-            let pos = component
-                .symbols
-                .iter()
-                .position(|s| *s == lambda.symbol)
-                .unwrap();
-            let own_type = &component.node_types[pos][lambda.nodes.start].ty;
-            own_type.slots[1..]
-                .iter()
-                .chain(lambda.captures.iter().flat_map(|(_, ty)| ty.slots.iter()))
-                .copied()
-                .collect()
-        })
-        .collect()
-}
-
 /// The copy of a lambda's component that builds the values of an element naming the lambda, and
 /// the sets at the element's interface.
 struct Builder {
@@ -140,9 +111,9 @@ struct Builder {
     /// component, in the order of the copies, that gives the lambda's parameters the element's
     /// sets.
     instance: usize,
-    /// The sets at the element's interface: those the copy gives the variables `interface_vars`
-    /// lists. For the lambda that is the body of its symbol, they are the sets the element gives
-    /// the lambda's parameters, as those are the parameters its body depends on.
+    /// The sets at the element's interface: those the copy gives the variables of
+    /// `Lambda::interface`. For the lambda that is the body of its symbol, they are the sets the
+    /// element gives the lambda's parameters, as those are the parameters its body depends on.
     interface: Vec<SetId>,
 }
 
@@ -153,7 +124,6 @@ struct Builders(Map<(LamId, Vec<SetId>), Builder>);
 impl Builders {
     /// The builders of the elements the copies of `spec` build.
     fn new(analysis: &Analysis, spec: &Specialization) -> Self {
-        let vars = interface_vars(analysis);
         let mut lambdas_of_component: Vec<Vec<LamId>> = vec![vec![]; analysis.components.len()];
         for (lam, lambda) in analysis.lambdas.iter().enumerate() {
             lambdas_of_component[analysis.component_of[&lambda.symbol]].push(lam as LamId);
@@ -167,7 +137,8 @@ impl Builders {
                 let interface: Vec<SetId> = if lambda.is_body() {
                     args.clone()
                 } else {
-                    vars[*lam as usize]
+                    lambda
+                        .interface
                         .iter()
                         .map(|v| instance.var_sets[component.var_index[v]])
                         .collect()

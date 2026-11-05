@@ -43,6 +43,11 @@ pub struct Lambda {
     /// The own slots of the functions the captured values hold in place
     /// (`SlotLayout::collect_held_in_place`).
     pub held_in_place: Vec<SetVar>,
+    /// The variables of the sets at the lambda's interface: those of its parameter and result
+    /// types, then those of the types of the values it captures, in the order of `captures`. The
+    /// copy building a value of the lambda and the global function the lambda is lifted to both
+    /// read these sets.
+    pub interface: Vec<SetVar>,
     /// Whether the body reads the lambda's capture whole (`CAP_NAME`), which only the closure object
     /// holding the lambda has.
     pub reads_own_capture: bool,
@@ -469,9 +474,15 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                         &mut held_in_place,
                     );
                 }
+                let interface = lam_ty.slots[1..]
+                    .iter()
+                    .chain(captures.iter().flat_map(|(_, ty)| ty.slots.iter()))
+                    .copied()
+                    .collect();
                 let lambda = &mut self.analysis.lambdas[lam as usize];
                 lambda.captures = captures;
                 lambda.held_in_place = held_in_place;
+                lambda.interface = interface;
                 let term = self.new_term(Some(lam), Some(lam_ty.clone()));
                 self.frames.push(term);
                 let param = self.layout.type_arg(&lam_ty, 0);
@@ -581,6 +592,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
             nodes: node..node,
             captures: vec![],
             held_in_place: vec![],
+            interface: vec![],
             reads_own_capture: false,
         });
         self.lam_counter += 1;
@@ -914,6 +926,7 @@ fn generalize(
                 collect_roots(solver, &mut ty.slots);
             }
             collect_roots(solver, &mut lambda.held_in_place);
+            collect_roots(solver, &mut lambda.interface);
         }
     }
     let var_index = vars.iter().enumerate().map(|(i, v)| (*v, i)).collect();
