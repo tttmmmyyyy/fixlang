@@ -47,37 +47,45 @@ pub struct SetStore {
     id_of: Map<Vec<Elem>, SetId>,
     /// Whether each set lies on a cycle: it reaches itself through the elements of the sets it holds.
     on_cycle: Vec<bool>,
-    /// The sets lying on a cycle, in increasing order: the ids whose `on_cycle` is true, kept apart
-    /// so that interning a cycle reads them without a scan of the store.
-    cyclic: Vec<SetId>,
+    /// The set lying on a cycle that each `CycleKey` names.
+    id_of_cycle: Map<CycleKey, SetId>,
 }
 
-/// A set compared while a cyclic system is interned: a set of the system or one the store holds.
+/// A set read while a cyclic system is interned: a set of the system or one the store holds.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-enum Candidate {
+enum Node {
     /// The set of an equation of the system, by its position.
     Local(usize),
     /// A set the store holds that lies on a cycle.
     Known(SetId),
 }
 
-/// What an element of a candidate refers to while a cyclic system is interned.
+/// What an element of a node refers to while a cyclic system is interned.
 #[derive(Clone, Copy)]
 enum Child {
-    /// Another candidate, by its position.
-    Candidate(usize),
-    /// A set the store holds that lies on no cycle, which is equal to no candidate but itself.
+    /// Another node, by its position.
+    Node(usize),
+    /// A set the store holds that lies on no cycle, which is equal to no node but itself.
     Fixed(SetId),
 }
 
 /// A child as the partition refinement compares it.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum ChildKey {
-    /// A candidate, by the class of the partition it is in.
+    /// A node, by the class of the partition it is in.
     Block(usize),
     /// A set the store holds that lies on no cycle.
     Fixed(SetId),
 }
+
+/// An element as the partition refinement compares it: its lambda, `None` for `Elem::Dynamic`, and
+/// its children.
+type ElemKey = (Option<LamId>, Vec<ChildKey>);
+
+/// The tree a set lying on a cycle unfolds to, written so that two sets unfolding to the same tree
+/// are written alike: the classes of the sets the set reaches, each by its sorted elements, and the
+/// class of the set itself, as `canonical_classes` numbers them.
+type CycleKey = (Vec<Vec<ElemKey>>, usize);
 
 impl SetStore {
     /// A store holding no set.
@@ -86,7 +94,7 @@ impl SetStore {
             sets: vec![],
             id_of: Map::default(),
             on_cycle: vec![],
-            cyclic: vec![],
+            id_of_cycle: Map::default(),
         }
     }
 
@@ -160,167 +168,187 @@ impl SetStore {
         self.sets.push(elems.clone());
         self.id_of.insert(elems, id);
         self.on_cycle.push(on_cycle);
-        if on_cycle {
-            self.cyclic.push(id);
-        }
         id
     }
 
     /// Resolves the sets of `component`, a strongly connected component of `system` with a cycle,
     /// whose references out of it are resolved already.
     ///
-    /// A set of the component is equal to a set of the store only if both lie on a cycle, so the
-    /// sets of the component and the cyclic sets of the store are partitioned into the classes of
-    /// equal sets, by refining the partition by the elements until it is stable. A class holding a
-    /// set of the store resolves its sets of the component to that one; the store holds no two
-    /// equal sets, so there is at most one. Each other class becomes a new set.
+    /// A set of the component is equal to a set of the store only if both lie on a cycle. The sets
+    /// of the component reach one another, so they reach the same sets of the store: the nodes are
+    /// those sets and the sets of the component. `canonical_classes` partitions the nodes into the
+    /// classes of equal sets, and numbers the classes by the trees the sets unfold to, so a class
+    /// and the classes it reaches are a `CycleKey`. A class whose key names a set of the store
+    /// resolves its sets of the component to that one; each other class becomes a new set.
     fn intern_cycle(
         &mut self,
         component: &[usize],
         system: &[Vec<PendingElem>],
         resolved: &mut [Option<SetId>],
     ) {
-        let mut candidates: Vec<Candidate> = vec![];
-        let mut position: Map<Candidate, usize> = Map::default();
-        for i in component {
-            position.insert(Candidate::Local(*i), candidates.len());
-            candidates.push(Candidate::Local(*i));
-        }
-        for id in &self.cyclic {
-            position.insert(Candidate::Known(*id), candidates.len());
-            candidates.push(Candidate::Known(*id));
-        }
-        let known_child = |store: &SetStore, id: SetId| -> Child {
-            if store.on_cycle[id as usize] {
-                Child::Candidate(position[&Candidate::Known(id)])
-            } else {
-                Child::Fixed(id)
-            }
-        };
-        let elems: Vec<Vec<(Option<LamId>, Vec<Child>)>> = candidates
-            .iter()
-            .map(|c| match c {
-                Candidate::Local(i) => system[*i]
+        let mut nodes: Vec<Node> = component.iter().map(|i| Node::Local(*i)).collect();
+        let mut position: Map<Node, usize> =
+            nodes.iter().enumerate().map(|(p, n)| (*n, p)).collect();
+        // The elements of each node, in the order of `nodes`, which grows as the walk meets the sets
+        // of the store the nodes reach.
+        let mut elems: Vec<Vec<(Option<LamId>, Vec<Child>)>> = vec![];
+        while elems.len() < nodes.len() {
+            let node_elems = match nodes[elems.len()] {
+                Node::Local(i) => system[i]
                     .iter()
                     .map(|e| match e {
                         PendingElem::Dynamic => (None, vec![]),
-                        PendingElem::Lam(lam, args) => (
-                            Some(*lam),
-                            args.iter()
+                        PendingElem::Lam(lam, args) => {
+                            let children = args
+                                .iter()
                                 .map(|a| match a {
-                                    Ref::Known(id) => known_child(self, *id),
-                                    Ref::Local(j) => match position.get(&Candidate::Local(*j)) {
-                                        Some(p) => Child::Candidate(*p),
-                                        None => known_child(self, resolved[*j].unwrap()),
+                                    Ref::Local(j) => match position.get(&Node::Local(*j)) {
+                                        Some(q) => Child::Node(*q),
+                                        None => self.child(
+                                            resolved[*j].unwrap(),
+                                            &mut nodes,
+                                            &mut position,
+                                        ),
                                     },
+                                    Ref::Known(id) => self.child(*id, &mut nodes, &mut position),
                                 })
-                                .collect(),
-                        ),
+                                .collect();
+                            (Some(*lam), children)
+                        }
                     })
                     .collect(),
-                Candidate::Known(id) => self.sets[*id as usize]
+                Node::Known(id) => self.sets[id as usize]
                     .iter()
                     .map(|e| match e {
                         Elem::Dynamic => (None, vec![]),
-                        Elem::Lam(lam, args) => (
-                            Some(*lam),
-                            args.iter().map(|a| known_child(self, *a)).collect(),
-                        ),
+                        Elem::Lam(lam, args) => {
+                            let children = args
+                                .iter()
+                                .map(|a| self.child(*a, &mut nodes, &mut position))
+                                .collect();
+                            (Some(*lam), children)
+                        }
                     })
                     .collect(),
-            })
-            .collect();
-
-        // Refine the partition until no class splits.
-        let mut block = vec![0usize; candidates.len()];
-        let mut block_count = 1;
-        loop {
-            let mut block_of_signature: Map<(usize, Vec<(Option<LamId>, Vec<ChildKey>)>), usize> =
-                Map::default();
-            let mut next_block = vec![0usize; candidates.len()];
-            for (c, c_elems) in elems.iter().enumerate() {
-                let mut signature: Vec<(Option<LamId>, Vec<ChildKey>)> = c_elems
-                    .iter()
-                    .map(|(lam, children)| {
-                        (
-                            *lam,
-                            children
-                                .iter()
-                                .map(|ch| match ch {
-                                    Child::Candidate(p) => ChildKey::Block(block[*p]),
-                                    Child::Fixed(id) => ChildKey::Fixed(*id),
-                                })
-                                .collect(),
-                        )
-                    })
-                    .collect();
-                signature.sort();
-                signature.dedup();
-                let count = block_of_signature.len();
-                next_block[c] = *block_of_signature
-                    .entry((block[c], signature))
-                    .or_insert(count);
-            }
-            let stable = block_of_signature.len() == block_count;
-            block = next_block;
-            block_count = block_of_signature.len();
-            if stable {
-                break;
-            }
+            };
+            elems.push(node_elems);
         }
 
-        // The set of each class: the store's where the class holds one, a new one otherwise.
-        let mut block_set: Vec<Option<SetId>> = vec![None; block_count];
-        for (c, candidate) in candidates.iter().enumerate() {
-            if let Candidate::Known(id) = candidate {
+        let (class, table) = canonical_classes(&elems);
+        let mut class_set: Vec<Option<SetId>> = vec![None; table.len()];
+        for (p, node) in nodes.iter().enumerate() {
+            if let Node::Known(id) = node {
                 assert!(
-                    block_set[block[c]].is_none(),
+                    class_set[class[p]].is_none(),
                     "the store holds two equal sets"
                 );
-                block_set[block[c]] = Some(*id);
+                class_set[class[p]] = Some(*id);
             }
         }
-        let mut new_blocks: Vec<(usize, usize)> = vec![];
-        for (c, candidate) in candidates.iter().enumerate() {
-            if let Candidate::Local(_) = candidate {
-                if block_set[block[c]].is_none() {
-                    let id = (self.sets.len() + new_blocks.len()) as SetId;
-                    block_set[block[c]] = Some(id);
-                    new_blocks.push((block[c], c));
+        let mut new_classes: Vec<(usize, usize)> = vec![];
+        for p in 0..component.len() {
+            let c = class[p];
+            if class_set[c].is_some() {
+                continue;
+            }
+            let key = (table.clone(), c);
+            class_set[c] = Some(match self.id_of_cycle.get(&key) {
+                Some(id) => *id,
+                None => {
+                    new_classes.push((c, p));
+                    (self.sets.len() + new_classes.len() - 1) as SetId
                 }
-            }
+            });
         }
-        let new_sets: Vec<Vec<Elem>> = new_blocks
+        for (c, p) in new_classes {
+            let new_elems = elems[p]
+                .iter()
+                .map(|(lam, children)| match lam {
+                    None => Elem::Dynamic,
+                    Some(lam) => Elem::Lam(
+                        *lam,
+                        children
+                            .iter()
+                            .map(|ch| match ch {
+                                Child::Node(q) => class_set[class[*q]].unwrap(),
+                                Child::Fixed(id) => *id,
+                            })
+                            .collect(),
+                    ),
+                })
+                .collect();
+            let id = self.insert(new_elems, true);
+            assert_eq!(Some(id), class_set[c]);
+            self.id_of_cycle.insert((table.clone(), c), id);
+        }
+        for (p, i) in component.iter().enumerate() {
+            resolved[*i] = class_set[class[p]];
+        }
+    }
+
+    /// The child an element referring to the set `id` of the store has: the node of `id` where it
+    /// lies on a cycle, added to `nodes` the first time it is met, and `id` itself otherwise.
+    fn child(&self, id: SetId, nodes: &mut Vec<Node>, position: &mut Map<Node, usize>) -> Child {
+        if !self.on_cycle[id as usize] {
+            return Child::Fixed(id);
+        }
+        let node = Node::Known(id);
+        let p = *position.entry(node).or_insert_with(|| {
+            nodes.push(node);
+            nodes.len() - 1
+        });
+        Child::Node(p)
+    }
+}
+
+/// The classes of equal sets among nodes whose elements are `elems`, each node by its position, and
+/// the elements of each class, sorted and written with the classes of the children.
+///
+/// The partition is refined until no class splits. Each round numbers the classes in the order of
+/// their signatures, which read only the lambdas and the classes of the round before, so the number
+/// a class gets says which tree its sets unfold to: nodes reaching equal sets of trees get the same
+/// numbers, however they are positioned.
+fn canonical_classes(elems: &[Vec<(Option<LamId>, Vec<Child>)>]) -> (Vec<usize>, Vec<Vec<ElemKey>>) {
+    let mut class = vec![0usize; elems.len()];
+    let mut class_count = 1;
+    loop {
+        let signatures: Vec<(usize, Vec<ElemKey>)> = elems
             .iter()
-            .map(|(_, c)| {
-                elems[*c]
+            .enumerate()
+            .map(|(p, node_elems)| {
+                let mut keys: Vec<ElemKey> = node_elems
                     .iter()
-                    .map(|(lam, children)| match lam {
-                        None => Elem::Dynamic,
-                        Some(lam) => Elem::Lam(
-                            *lam,
-                            children
-                                .iter()
-                                .map(|ch| match ch {
-                                    Child::Candidate(p) => block_set[block[*p]].unwrap(),
-                                    Child::Fixed(id) => *id,
-                                })
-                                .collect(),
-                        ),
+                    .map(|(lam, children)| {
+                        let children = children
+                            .iter()
+                            .map(|ch| match ch {
+                                Child::Node(q) => ChildKey::Block(class[*q]),
+                                Child::Fixed(id) => ChildKey::Fixed(*id),
+                            })
+                            .collect();
+                        (*lam, children)
                     })
-                    .collect()
+                    .collect();
+                keys.sort();
+                keys.dedup();
+                (class[p], keys)
             })
             .collect();
-        for elems in new_sets {
-            let expected = self.sets.len() as SetId;
-            let id = self.insert(elems, true);
-            assert_eq!(id, expected);
+        let mut distinct = signatures.clone();
+        distinct.sort();
+        distinct.dedup();
+        if distinct.len() == class_count {
+            // No class split, so the classes keep their numbers: each signature carries the class it
+            // refines first, and the classes sort in that order.
+            assert!(distinct.iter().enumerate().all(|(c, (refined, _))| *refined == c));
+            let table = distinct.into_iter().map(|(_, keys)| keys).collect();
+            return (class, table);
         }
-        for (c, candidate) in candidates.iter().enumerate() {
-            if let Candidate::Local(i) = candidate {
-                resolved[*i] = block_set[block[c]];
-            }
-        }
+        class_count = distinct.len();
+        class = signatures
+            .iter()
+            .map(|sig| distinct.binary_search(sig).unwrap())
+            .collect();
     }
 }
 
@@ -362,5 +390,22 @@ mod tests {
 
         let other = store.intern(vec![vec![PendingElem::Lam(1, vec![Ref::Local(0)])]]);
         assert_ne!(other[0], s);
+    }
+
+    /// A cycle of the system equal to a set of the store that it reaches gets that set:
+    /// `x = {lam1[x], lam2[y]}` with `y = {lam1[y], lam2[y]}` held already unfolds to `y`'s tree.
+    #[test]
+    fn test_a_cycle_equal_to_a_set_it_reaches_gets_that_set() {
+        let mut store = SetStore::new();
+        let y = store.intern(vec![vec![
+            PendingElem::Lam(1, vec![Ref::Local(0)]),
+            PendingElem::Lam(2, vec![Ref::Local(0)]),
+        ]])[0];
+        let x = store.intern(vec![vec![
+            PendingElem::Lam(1, vec![Ref::Local(0)]),
+            PendingElem::Lam(2, vec![Ref::Known(y)]),
+        ]]);
+        assert_eq!(x, vec![y]);
+        assert_eq!(store.len(), 1);
     }
 }
