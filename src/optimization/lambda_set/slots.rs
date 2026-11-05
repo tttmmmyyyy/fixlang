@@ -12,7 +12,7 @@ use crate::{
     graph::Graph,
     misc::Map,
 };
-use std::{cell::RefCell, sync::Arc};
+use std::{cell::RefCell, ops::Range, sync::Arc};
 
 /// A Fix type with a lambda set variable at each of its slots.
 ///
@@ -79,7 +79,7 @@ enum OwnSource<'a> {
 pub struct SlotLayout<'e> {
     type_env: &'e TypeEnv,
     /// The group of each type constructor, by its layout constructor (`layout_tycon`).
-    group_of: Map<TyCon, usize>,
+    group_by_layout_tycon: Map<TyCon, usize>,
     /// The members of each group, in the order of their names.
     group_members: Vec<Vec<TyCon>>,
     /// The own slots of each group, worked out the first time they are asked for.
@@ -93,7 +93,7 @@ impl<'e> SlotLayout<'e> {
     pub fn new(type_env: &'e TypeEnv) -> Self {
         let mut layout = SlotLayout {
             type_env,
-            group_of: Map::default(),
+            group_by_layout_tycon: Map::default(),
             group_members: vec![],
             group_slots: RefCell::new(vec![]),
             slot_counts: RefCell::new(Map::default()),
@@ -125,7 +125,41 @@ impl<'e> SlotLayout<'e> {
 
     /// The group of the type constructor `tc`, given by its layout constructor (`layout_tycon`).
     pub(super) fn group_of(&self, tc: &TyCon) -> usize {
-        self.group_of[&self.layout_tycon(tc)]
+        self.group_by_layout_tycon[&self.layout_tycon(tc)]
+    }
+
+    /// Whether `tc` applied to `arg_count` arguments is applied to all it takes, which is when it
+    /// owns slots.
+    pub(super) fn is_applied_to_all(&self, tc: &TyCon, arg_count: usize) -> bool {
+        arg_count >= self.arity(tc)
+    }
+
+    /// Whether `tc`, occurring applied to all its arguments in a declared field type of a member of
+    /// `group`, is a member of `group` too: such an occurrence stands for the group's own slots as a
+    /// whole, and gives the group none of its own.
+    fn is_group_member(&self, tc: &TyCon, group: usize) -> bool {
+        !tc.is_arrow() && self.group_of(tc) == group
+    }
+
+    /// The own slots that `tc`, occurring applied to all its arguments in a declared field type of
+    /// a member of `group`, stands for, as positions among the `own_count` own slots of the group:
+    /// all of them where `tc` is a member of the group, and otherwise the next ones from `cursor`
+    /// on, which it advances past them. The occurrences are met in the order `push_own_slots`
+    /// lists the own slots in.
+    pub(super) fn declared_own_range(
+        &self,
+        tc: &TyCon,
+        group: usize,
+        own_count: usize,
+        cursor: &mut usize,
+    ) -> Range<usize> {
+        if self.is_group_member(tc, group) {
+            return 0..own_count;
+        }
+        let count = self.own_slot_count(tc);
+        let range = *cursor..*cursor + count;
+        *cursor += count;
+        range
     }
 
     /// The members of the group `group`, in the order of their names.
@@ -176,7 +210,7 @@ impl<'e> SlotLayout<'e> {
         {
             let members: Vec<TyCon> = component.into_iter().map(|i| tycons[i].clone()).collect();
             for tc in &members {
-                self.group_of.insert(tc.clone(), group);
+                self.group_by_layout_tycon.insert(tc.clone(), group);
             }
             self.group_members.push(members);
         }
@@ -194,7 +228,7 @@ impl<'e> SlotLayout<'e> {
         match &spine[0].ty {
             Type::TyVar(_) => {}
             Type::TyCon(tc) => {
-                if args.len() < self.arity(tc) {
+                if !self.is_applied_to_all(tc, args.len()) {
                     return;
                 }
                 if !tc.is_arrow() {
@@ -252,7 +286,7 @@ impl<'e> SlotLayout<'e> {
         match &spine[0].ty {
             Type::TyVar(_) => {}
             Type::TyCon(tc) => {
-                if args.len() < self.arity(tc) {
+                if !self.is_applied_to_all(tc, args.len()) {
                     return;
                 }
                 assert!(
@@ -262,12 +296,8 @@ impl<'e> SlotLayout<'e> {
                 );
                 if tc.is_arrow() {
                     own.push(None);
-                } else {
-                    let layout_tc = self.layout_tycon(tc);
-                    let tc_group = self.group_of[&layout_tc];
-                    if tc_group != group {
-                        own.extend(self.group_slots(tc_group).own_slots.iter().cloned());
-                    }
+                } else if !self.is_group_member(tc, group) {
+                    own.extend(self.group_slots(self.group_of(tc)).own_slots.iter().cloned());
                 }
             }
             _ => panic!("the type `{}` has an unexpected head", ty.to_string()),
@@ -282,8 +312,7 @@ impl<'e> SlotLayout<'e> {
         if tc.is_arrow() {
             return 1;
         }
-        let group = self.group_of[&self.layout_tycon(tc)];
-        self.group_slots(group).own_slots.len()
+        self.group_slots(self.group_of(tc)).own_slots.len()
     }
 
     /// The number of slots of `ty`.
@@ -294,7 +323,7 @@ impl<'e> SlotLayout<'e> {
         let tc = ty.head_tycon();
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
-        let count = if args.len() < self.arity(&tc) {
+        let count = if !self.is_applied_to_all(&tc, args.len()) {
             0
         } else {
             self.assert_not_unwrapped_newtype(&tc, ty);
@@ -330,15 +359,14 @@ impl<'e> SlotLayout<'e> {
         let tc = ty.head_tycon();
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
-        if args.len() < self.arity(&tc) {
+        if !self.is_applied_to_all(&tc, args.len()) {
             return;
         }
         self.assert_not_unwrapped_newtype(&tc, ty);
         if tc.is_arrow() {
             out.push(solver.fresh());
         } else {
-            let group = self.group_of[&self.layout_tycon(&tc)];
-            for called_by in &self.group_slots(group).own_slots {
+            for called_by in &self.group_slots(self.group_of(&tc)).own_slots {
                 let v = solver.fresh();
                 if let Some(called_by) = called_by {
                     solver.make_dynamic(v, DynamicKind::CalledByRuntime(called_by.clone()));
@@ -370,49 +398,52 @@ impl<'e> SlotLayout<'e> {
     /// `ty` written with the text `show` gives each of its slots: a function as `a -[s]-> b`, and a
     /// type constructor owning slots as `T<s, t>`.
     pub fn annotate(&self, ty: &AType, show: &mut dyn FnMut(SetVar) -> String) -> String {
-        let mut pos = 0;
-        let text = self.annotate_at(&ty.ty, &ty.slots, &mut pos, show);
-        assert_eq!(pos, ty.slots.len());
-        text
+        self.fold_slots(&ty.ty, &ty.slots, &mut Annotate { show })
     }
 
-    /// `annotate` for the part `ty` of a type whose slots are `slots`, the first of them at `pos`.
-    fn annotate_at(
+    /// `ty`, whose slots are `slots`, folded by `fold`: each part of `ty` is handed to `fold` with
+    /// its own slots, after its arguments are folded. The slots are handed out in the order `AType`
+    /// lists them, and `slots` holds as many as `ty` has.
+    pub(super) fn fold_slots<T: Copy, F: SlotFold<T>>(
         &self,
         ty: &Arc<TypeNode>,
-        slots: &[SetVar],
+        slots: &[T],
+        fold: &mut F,
+    ) -> F::Out {
+        let mut pos = 0;
+        let folded = self.fold_slots_from(ty, slots, &mut pos, fold);
+        assert_eq!(
+            pos,
+            slots.len(),
+            "the type `{}` is folded with a number of slots it does not have",
+            ty.to_string()
+        );
+        folded
+    }
+
+    /// `fold_slots` for the part `ty` of a type whose slots are `slots`, the first slot of `ty` at
+    /// `pos`.
+    fn fold_slots_from<T: Copy, F: SlotFold<T>>(
+        &self,
+        ty: &Arc<TypeNode>,
+        slots: &[T],
         pos: &mut usize,
-        show: &mut dyn FnMut(SetVar) -> String,
-    ) -> String {
+        fold: &mut F,
+    ) -> F::Out {
         let tc = ty.head_tycon();
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
-        if args.len() < self.arity(&tc) {
-            return ty.to_string();
+        if !self.is_applied_to_all(&tc, args.len()) {
+            return fold.short(ty);
         }
-        if tc.is_arrow() {
-            let own = show(slots[*pos]);
-            *pos += 1;
-            let param = self.annotate_at(&args[0], slots, pos, show);
-            let ret = self.annotate_at(&args[1], slots, pos, show);
-            return format!("({} -[{}]-> {})", param, own, ret);
-        }
-        let own_count = self.own_slot_count(&tc);
-        let own: Vec<String> = (0..own_count).map(|i| show(slots[*pos + i])).collect();
-        *pos += own_count;
-        let mut text = tc.to_string();
-        if !own.is_empty() {
-            text += &format!("<{}>", own.join(", "));
-        }
-        for arg in args {
-            let arg = self.annotate_at(arg, slots, pos, show);
-            if arg.contains(' ') && !arg.starts_with('(') {
-                text += &format!(" ({})", arg);
-            } else {
-                text += &format!(" {}", arg);
-            }
-        }
-        text
+        let count = self.own_slot_count(&tc);
+        let own = &slots[*pos..*pos + count];
+        *pos += count;
+        let folded = args
+            .iter()
+            .map(|a| self.fold_slots_from(a, slots, pos, fold))
+            .collect();
+        fold.applied(ty, &tc, own, args, folded)
     }
 
     /// The own slots of `ty`: the slots its outermost type constructor owns.
@@ -426,10 +457,10 @@ impl<'e> SlotLayout<'e> {
     /// of unboxed structs and unions alone. A function whose set is represented by a capture struct
     /// is laid out where it is held, so these are the slots whose capture structs a value of `ty`
     /// contains. `solver` gives the new variables of a place the slots of `ty` leave untracked.
-    pub fn held_in_place(&self, ty: &AType, solver: &mut Solver, out: &mut Vec<SetVar>) {
+    pub fn collect_held_in_place(&self, ty: &AType, solver: &mut Solver, out: &mut Vec<SetVar>) {
         let tc = ty.ty.head_tycon();
         assert!(
-            ty.ty.flatten_type_application().len() - 1 >= self.arity(&tc),
+            self.is_applied_to_all(&tc, ty.ty.flatten_type_application().len() - 1),
             "the type `{}` of a held value leaves its type constructor short of arguments",
             ty.ty.to_string()
         );
@@ -444,7 +475,7 @@ impl<'e> SlotLayout<'e> {
         }
         for i in 0..info.fields.len() {
             let field = self.field(ty, i, solver);
-            self.held_in_place(&field, solver, out);
+            self.collect_held_in_place(&field, solver, out);
         }
     }
 
@@ -454,7 +485,7 @@ impl<'e> SlotLayout<'e> {
     pub fn field(&self, ty: &AType, field_idx: usize, solver: &mut Solver) -> AType {
         let tc = ty.ty.head_tycon();
         let layout_tc = self.layout_tycon(&tc);
-        let group = self.group_of[&layout_tc];
+        let group = self.group_of(&tc);
         let group_slots = self.group_slots(group);
         let info = self.type_env.tycon_info(&layout_tc);
         let own_count = group_slots.own_slots.len();
@@ -536,20 +567,13 @@ impl<'e> SlotLayout<'e> {
                 self.walk_untracked_application(&head_tc, head_args, solver, out);
             }
             Type::TyCon(tc) => {
-                if args.len() < self.arity(tc) {
+                if !self.is_applied_to_all(tc, args.len()) {
                     return;
                 }
                 match source {
                     OwnSource::Declared { group, own, cursor } => {
-                        let own_count = self.own_slot_count(tc);
-                        let in_group =
-                            !tc.is_arrow() && self.group_of[&self.layout_tycon(tc)] == *group;
-                        if in_group {
-                            out.extend(own.iter().copied());
-                        } else {
-                            out.extend(own[*cursor..*cursor + own_count].iter().copied());
-                            *cursor += own_count;
-                        }
+                        let range = self.declared_own_range(tc, *group, own.len(), cursor);
+                        out.extend(own[range].iter().copied());
                     }
                     OwnSource::Untracked(reason) => {
                         push_untracked(self.own_slot_count(tc), reason, solver, out);
@@ -576,7 +600,7 @@ impl<'e> SlotLayout<'e> {
         solver: &mut Solver,
         out: &mut Vec<SetVar>,
     ) {
-        if args.len() < self.arity(tc) {
+        if !self.is_applied_to_all(tc, args.len()) {
             return;
         }
         if self.type_env.is_unwrapped_newtype(tc) {
@@ -601,6 +625,67 @@ impl<'e> SlotLayout<'e> {
                 Binding::Untracked(ty) => push_untracked(self.slot_count(&ty), tc, solver, out),
             }
         }
+    }
+}
+
+/// What `SlotLayout::fold_slots` makes of each part of a type, from the slots of the part.
+pub(super) trait SlotFold<T> {
+    /// What a part folds to.
+    type Out;
+
+    /// The part `ty`, a type constructor applied to fewer arguments than it takes, which owns no
+    /// slot.
+    fn short(&mut self, ty: &Arc<TypeNode>) -> Self::Out;
+
+    /// The part `ty`, the type constructor `tc` applied to all its arguments `args`, whose own
+    /// slots are `own` and whose arguments fold to `folded`.
+    fn applied(
+        &mut self,
+        ty: &Arc<TypeNode>,
+        tc: &Arc<TyCon>,
+        own: &[T],
+        args: &[Arc<TypeNode>],
+        folded: Vec<Self::Out>,
+    ) -> Self::Out;
+}
+
+/// The fold writing a type as `SlotLayout::annotate` does.
+struct Annotate<'s> {
+    /// The text of each slot.
+    show: &'s mut dyn FnMut(SetVar) -> String,
+}
+
+impl SlotFold<SetVar> for Annotate<'_> {
+    type Out = String;
+
+    fn short(&mut self, ty: &Arc<TypeNode>) -> String {
+        ty.to_string()
+    }
+
+    fn applied(
+        &mut self,
+        _ty: &Arc<TypeNode>,
+        tc: &Arc<TyCon>,
+        own: &[SetVar],
+        _args: &[Arc<TypeNode>],
+        folded: Vec<String>,
+    ) -> String {
+        let own: Vec<String> = own.iter().map(|v| (self.show)(*v)).collect();
+        if tc.is_arrow() {
+            return format!("({} -[{}]-> {})", folded[0], own[0], folded[1]);
+        }
+        let mut text = tc.to_string();
+        if !own.is_empty() {
+            text += &format!("<{}>", own.join(", "));
+        }
+        for arg in folded {
+            if arg.contains(' ') && !arg.starts_with('(') {
+                text += &format!(" ({})", arg);
+            } else {
+                text += &format!(" {}", arg);
+            }
+        }
+        text
     }
 }
 

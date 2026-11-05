@@ -7,7 +7,7 @@ use super::{
     concrete::SetId,
     infer::{Analysis, NameRef, NodeType},
     represent::{Repr, Representation},
-    slots::{AType, SlotLayout},
+    slots::{AType, SlotFold, SlotLayout},
     solver::{LamId, SetVar},
     specialize::Specialization,
 };
@@ -403,55 +403,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         sets: &[SetId],
         keep_function: bool,
     ) -> Arc<TypeNode> {
-        let mut pos = 0;
-        let rewritten = self.rewrite_slots(ty, sets, &mut pos, keep_function);
-        assert_eq!(pos, sets.len());
-        rewritten
-    }
-
-    /// The part `ty` of a type at the sets `sets` of the type's slots, the first slot of `ty` at
-    /// `pos`. The slots are read in the order `AType` lists them.
-    fn rewrite_slots(
-        &mut self,
-        ty: &Arc<TypeNode>,
-        sets: &[SetId],
-        pos: &mut usize,
-        keep_function: bool,
-    ) -> Arc<TypeNode> {
-        let tc = ty.head_tycon();
-        let spine = ty.flatten_type_application();
-        let args = &spine[1..];
-        if args.len() < self.layout.arity(&tc) {
-            return ty.clone();
-        }
-        if tc.is_arrow() {
-            let own = self.repr.of(sets[*pos]);
-            *pos += 1;
-            let param = self.rewrite_slots(&args[0], sets, pos, false);
-            let ret = self.rewrite_slots(&args[1], sets, pos, false);
-            if let (Repr::Single(c), false) = (own, keep_function) {
-                return type_tycon(&self.capture_tycon(c));
-            }
-            if Arc::ptr_eq(&param, &args[0]) && Arc::ptr_eq(&ret, &args[1]) {
-                return ty.clone();
-            }
-            return type_arrow(param, ret);
-        }
-        let count = self.layout.own_slot_count(&tc);
-        let own: Vec<Repr> = sets[*pos..*pos + count]
-            .iter()
-            .map(|s| self.repr.of(*s))
-            .collect();
-        *pos += count;
-        let head = self.tycon_copy(&tc, &own);
-        let new_args: Vec<Arc<TypeNode>> = args
-            .iter()
-            .map(|a| self.rewrite_slots(a, sets, pos, false))
-            .collect();
-        if Arc::ptr_eq(&head, &tc) && new_args.iter().zip(args).all(|(n, o)| Arc::ptr_eq(n, o)) {
-            return ty.clone();
-        }
-        apply_type_args(&head, &new_args)
+        let layout = self.layout;
+        let root = keep_function.then(|| ty.clone());
+        layout.fold_slots(ty, sets, &mut TypeRewrite { rw: self, root })
     }
 
     /// The type constructor standing for `tc` where its own slots are represented by `own`: `tc`
@@ -567,31 +521,22 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 })
             }
             Type::TyCon(tc) => {
-                if args.len() < self.layout.arity(tc) {
+                if !self.layout.is_applied_to_all(tc, args.len()) {
                     return ty.clone();
                 }
-                if tc.is_arrow() {
-                    let repr = own[*cursor];
-                    *cursor += 1;
-                    let param = self.rewrite_declared(&args[0], group, own, cursor);
-                    let ret = self.rewrite_declared(&args[1], group, own, cursor);
-                    return match repr {
-                        Repr::Single(c) => type_tycon(&self.capture_tycon(c)),
-                        Repr::Closure => type_arrow(param, ret),
-                    };
-                }
-                let head = if self.layout.group_of(tc) == group {
-                    self.tycon_copy(tc, own)
-                } else {
-                    let count = self.layout.own_slot_count(tc);
-                    let tc_own = own[*cursor..*cursor + count].to_vec();
-                    *cursor += count;
-                    self.tycon_copy(tc, &tc_own)
-                };
+                let range = self.layout.declared_own_range(tc, group, own.len(), cursor);
+                let tc_own = own[range].to_vec();
                 let new_args: Vec<Arc<TypeNode>> = args
                     .iter()
                     .map(|a| self.rewrite_declared(a, group, own, cursor))
                     .collect();
+                if tc.is_arrow() {
+                    return match tc_own[0] {
+                        Repr::Single(c) => type_tycon(&self.capture_tycon(c)),
+                        Repr::Closure => type_arrow(new_args[0].clone(), new_args[1].clone()),
+                    };
+                }
+                let head = self.tycon_copy(tc, &tc_own);
                 apply_type_args(&head, &new_args)
             }
             _ => panic!(
@@ -1016,5 +961,48 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             .set_type(type_arrow(cap_ty, type_arrow(arg_ty, ty.clone())));
         let partial = expr_app_typed(callee, vec![func]);
         e.set_app_func(partial).set_app_args(vec![arg]).set_type(ty)
+    }
+}
+
+/// The fold rewriting a type at the sets of its slots (`Rewriter::rewrite_type_at`).
+struct TypeRewrite<'w, 'a, 'e> {
+    /// The rewrite the types are made in.
+    rw: &'w mut Rewriter<'a, 'e>,
+    /// The type being rewritten, where it stays a function whatever its own set is represented by.
+    root: Option<Arc<TypeNode>>,
+}
+
+impl SlotFold<SetId> for TypeRewrite<'_, '_, '_> {
+    type Out = Arc<TypeNode>;
+
+    fn short(&mut self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
+        ty.clone()
+    }
+
+    fn applied(
+        &mut self,
+        ty: &Arc<TypeNode>,
+        tc: &Arc<TyCon>,
+        own: &[SetId],
+        args: &[Arc<TypeNode>],
+        folded: Vec<Arc<TypeNode>>,
+    ) -> Arc<TypeNode> {
+        let own: Vec<Repr> = own.iter().map(|s| self.rw.repr.of(*s)).collect();
+        let unchanged = folded.iter().zip(args).all(|(n, o)| Arc::ptr_eq(n, o));
+        if tc.is_arrow() {
+            let keeps_function = self.root.as_ref().is_some_and(|root| Arc::ptr_eq(root, ty));
+            if let (Repr::Single(c), false) = (own[0], keeps_function) {
+                return type_tycon(&self.rw.capture_tycon(c));
+            }
+            if unchanged {
+                return ty.clone();
+            }
+            return type_arrow(folded[0].clone(), folded[1].clone());
+        }
+        let head = self.rw.tycon_copy(tc, &own);
+        if Arc::ptr_eq(&head, tc) && unchanged {
+            return ty.clone();
+        }
+        apply_type_args(&head, &folded)
     }
 }

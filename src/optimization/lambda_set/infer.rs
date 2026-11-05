@@ -465,7 +465,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 let mut held_in_place = vec![];
                 for (_, ty) in &captures {
                     self.layout
-                        .held_in_place(ty, &mut self.analysis.solver, &mut held_in_place);
+                        .collect_held_in_place(ty, &mut self.analysis.solver, &mut held_in_place);
                 }
                 let lambda = &mut self.analysis.lambdas[lam as usize];
                 lambda.captures = captures;
