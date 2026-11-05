@@ -965,7 +965,7 @@ impl Program {
             Err(_) if self.typed_modules.relocate_stored_bodies(loc) => {
                 read(&mut self.typed_modules)
             }
-            read => read,
+            first_read => first_read,
         }
     }
 

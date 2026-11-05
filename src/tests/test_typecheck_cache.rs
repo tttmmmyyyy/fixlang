@@ -774,10 +774,10 @@ main = println $ (double(21), 3).to_string;
         for i in 0..count {
             source += &format!("f{} : I64 -> I64;\nf{} = |x| x * {} + 1;\n\n", i, i, i);
         }
-        let sum: Vec<String> = (0..count).map(|i| format!("f{}(1)", i)).collect();
+        let terms: Vec<String> = (0..count).map(|i| format!("f{}(1)", i)).collect();
         source += &format!(
             "main : IO ();\nmain = println $ ({}).to_string;\n",
-            sum.join(" + ")
+            terms.join(" + ")
         );
         source
     }
