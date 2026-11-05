@@ -527,6 +527,7 @@ legendre で `--langarena --no-save` を、main の二値 (adb053e) と段階 2 
 - 増えた主なもの: random_state +104.7%、iter_flatten +23.3%、Compress::BWTEncode +15.4%、Maze::BFS +13.2%、cp_dsegtree +9.5%、CLBG::Spectralnorm +8.8%、Maze::AStar +8.1%、Compress::ArithDecode +7.6%、Etc::GameOfLife +5.3%、Brainfuck::Array +4.5%、Compress::BWTDecode +3.8%、Graph::DFS +3.1%、Compress::LZWDecode +2.9%、Calculator::Interpreter +2.9%、cp_convolution_i64 +2.8%。
 - `inline` の規則 (引数を全部渡す呼び出しでだけ展開する) を元に戻した二値でも測った。増えた 25 本の値はほとんど変わらず、増えたのは lambda set の書き換えから来ている。規則の変更そのものは、Compress::HuffEncode を -4.0%、Compress::ArithEncode を -2.0% 減らし、Json::ParseMapping を 11 ポイント悪くした (-23.1% が -12.1% になった)。
 - random_state、iter_flatten、Maze::BFS、Compress::BWTEncode、CLBG::Spectralnorm、cp_dsegtree は、`--cu-size inf` でも差が残るので、コンパイル単位の分け方の揺れではない。原因は「段階 4 で行うこと」に書いた。
+- 表し方の決め方 (「表し方の決め方」の三つの手順) を入れた二値 (202fecc) でも測った。段階 2 の二値 (8f0f536) との差が 0.1% を超えたのは 121 本のうち 3 本で、Graph::BFS -0.29%、Maze::BFS -1.22%、cp_lcp_array +0.56% である。main との比較で 0.1% 以上減ったものは 27 本、増えたものは 25 本で、数は変わらない。
 
 ## 付録: 名前で見分ける箇所
 
