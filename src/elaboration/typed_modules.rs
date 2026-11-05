@@ -36,8 +36,8 @@ use crate::error::Errors;
 use crate::misc::{consume_on_compiler_threads, map_on_compiler_threads, warn_msg, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
 use crate::project_fs::{
-    create_dir_guarding_project_links, is_temporary_file_name, temporary_path_beside,
-    temporary_path_in, DOT_FIXLANG_LINK_HINT,
+    create_dir_guarding_project_links, create_temporary_file_in, remove_abandoned_temporary_files,
+    DOT_FIXLANG_LINK_HINT,
 };
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
@@ -247,10 +247,11 @@ fn read_record_of(file: &mut File) -> io::Result<Result<(ModuleRecord, u64), Str
 /// The typed expression of the body `identity` lying at `range` in the file at `path`. A file that
 /// no longer exists answers `None`; one whose bytes there are not the body answers the reason.
 ///
-/// A body the file holds intact stays at its offset when the file is written anew, so `range` read
-/// from an earlier record of the file still finds it. The identity written in front of the body is
-/// compared with `identity` all the same, so a file replaced by something else is never taken for
-/// it.
+/// A body the file holds intact stays at its offset when this build writes the file anew, so `range`
+/// read from an earlier record of the file still finds it. A file another build began on its own
+/// and put in place may hold the body elsewhere, which `Program::read_stored_body` handles. The
+/// identity written in front of the body is compared with `identity`, so bytes of another body are
+/// never taken for it.
 fn read_body(
     path: &Path,
     range: &Range<u64>,
@@ -348,15 +349,7 @@ impl ModuleFileWriter {
     /// not one of type-checked modules is begun anew, and one that cannot be read answers the error.
     fn create(dir: &Path, file: Arc<ModuleFile>) -> io::Result<Self> {
         let path = file.path_in(dir);
-        let tmp_path = temporary_path_beside(&path);
-        let tmp = File::options()
-            .read(true)
-            .write(true)
-            .create_new(true)
-            .open(&tmp_path)?;
-        // The lock tells the temporary file of a running build from one a build left when it was
-        // killed (`remove_stale_files`); the kernel releases it when the process ends.
-        tmp.try_lock().map_err(io::Error::from)?;
+        let (tmp, tmp_path) = create_temporary_file_in(dir)?;
         let mut writer = ModuleFileWriter {
             dir: dir.to_path_buf(),
             file,
@@ -474,6 +467,7 @@ impl ModuleFileWriter {
     /// moment ago may be unlocked still; removing it makes that build fail to put its file in place,
     /// which it reports, and its bodies are checked again.
     fn remove_stale_files(&self, file_name: &str) {
+        remove_abandoned_temporary_files(&self.dir);
         let Ok(dir_entries) = fs::read_dir(&self.dir) else {
             return;
         };
@@ -482,14 +476,8 @@ impl ModuleFileWriter {
         for dir_entry in dir_entries.flatten() {
             let entry_name = dir_entry.file_name();
             let entry_name = entry_name.to_string_lossy();
-            let path = self.dir.join(entry_name.as_ref());
             if entry_name.starts_with(&prefix) && entry_name != file_name {
-                let _ = fs::remove_file(&path);
-            } else if is_temporary_file_name(&entry_name) {
-                let abandoned = File::open(&path).is_ok_and(|tmp| tmp.try_lock().is_ok());
-                if abandoned {
-                    let _ = fs::remove_file(&path);
-                }
+                let _ = fs::remove_file(self.dir.join(entry_name.as_ref()));
             }
         }
     }
@@ -522,10 +510,9 @@ fn create_typed_modules_dir() -> Option<PathBuf> {
 
 /// Whether a file can be created in `dir`. When it cannot, that is reported as a warning.
 fn accepts_new_files(dir: &Path) -> bool {
-    let probe = temporary_path_in(dir);
-    match File::options().write(true).create_new(true).open(&probe) {
-        Ok(_) => {
-            let _ = fs::remove_file(&probe);
+    match create_temporary_file_in(dir) {
+        Ok((_probe, probe_path)) => {
+            let _ = fs::remove_file(&probe_path);
             true
         }
         Err(e) => {
@@ -925,7 +912,10 @@ impl Program {
         // reported in the order of the modules.
         failures.sort_by(|(lhs, _), (rhs, _)| lhs.module.cmp(&rhs.module));
         for (file, e) in &failures {
-            warn_unwritable_file(dir.as_deref().unwrap(), file, e);
+            let dir = dir
+                .as_deref()
+                .expect("a module file failed to be written with no directory to write in");
+            warn_unwritable_file(dir, file, e);
         }
 
         let checked_again =

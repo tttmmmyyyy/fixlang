@@ -5,7 +5,8 @@
 use crate::{constants::DOT_FIXLANG, error::Errors};
 use rand::random;
 use std::{
-    env, fs,
+    env,
+    fs::{self, File},
     io::{self, ErrorKind},
     path::{Component, Path, PathBuf},
 };
@@ -105,21 +106,48 @@ fn temporary_file_name() -> String {
 }
 
 /// Whether `name` is one `temporary_file_name` gives.
-pub fn is_temporary_file_name(name: &str) -> bool {
+fn is_temporary_file_name(name: &str) -> bool {
     name.strip_prefix('.')
         .and_then(|name| name.strip_suffix(".tmp"))
         .is_some_and(|digits| digits.len() == 16 && digits.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
-/// A path in the directory of `path` for a temporary file that will be renamed onto `path`, named
-/// by `temporary_file_name`.
-pub fn temporary_path_beside(path: &Path) -> PathBuf {
-    path.with_file_name(temporary_file_name())
+/// Creates a temporary file in `dir`, named by `temporary_file_name`, and answers it with its path.
+///
+/// The file is locked for as long as it is open. The kernel releases the lock when the file is
+/// closed or the process ends, so a temporary file no process holds a lock on was left by a process
+/// that was killed while it wrote it (`remove_abandoned_temporary_files`). On a file system that
+/// offers no such lock, the file is created unlocked, and is never taken for abandoned.
+pub fn create_temporary_file_in(dir: &Path) -> io::Result<(File, PathBuf)> {
+    let path = dir.join(temporary_file_name());
+    let file = File::options()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(&path)?;
+    let _ = file.try_lock();
+    Ok((file, path))
 }
 
-/// A path in the directory `dir` for a temporary file, named by `temporary_file_name`.
-pub fn temporary_path_in(dir: &Path) -> PathBuf {
-    dir.join(temporary_file_name())
+/// Removes the temporary files in `dir` (`create_temporary_file_in`) that no process holds a lock
+/// on.
+///
+/// A file created a moment ago may be unlocked still, between its creation and its lock; removing
+/// it makes the process writing it fail to put it in place, which that process reports.
+pub fn remove_abandoned_temporary_files(dir: &Path) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if !is_temporary_file_name(&entry.file_name().to_string_lossy()) {
+            continue;
+        }
+        let path = entry.path();
+        let abandoned = File::open(&path).is_ok_and(|file| file.try_lock().is_ok());
+        if abandoned {
+            let _ = fs::remove_file(&path);
+        }
+    }
 }
 
 /// Writes the file at `path` by having `write` write a new file beside it, at the path it is handed,
@@ -130,7 +158,9 @@ pub fn temporary_path_in(dir: &Path) -> PathBuf {
 /// The new file is named apart from `path`, so that a name of `path` as long as the file system
 /// allows still leaves room for it.
 pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) -> io::Result<()> {
-    let tmp_path = temporary_path_beside(path);
+    let dir = path.parent().unwrap_or(Path::new(""));
+    // The file stays open, and so locked, until it is in place.
+    let (_tmp, tmp_path) = create_temporary_file_in(dir)?;
     write(&tmp_path)
         .and_then(|()| fs::rename(&tmp_path, path))
         .inspect_err(|_| {
