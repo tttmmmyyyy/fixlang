@@ -120,10 +120,9 @@ pub fn for_each_on_compiler_threads<T: Send>(
 /// `f` applied to each of `items`, in the order of `items`, computed on up to `num_threads`
 /// compiler threads, or on the calling thread alone when `num_threads` is 1 or less.
 ///
-/// Each thread takes the next item left as soon as it finishes one, so an item that costs far more
-/// than the rest holds up one thread and leaves the others working. The results come back in the
-/// order of `items` however the threads interleave, so a caller that puts them into a `Map` one by
-/// one builds the same map as a sequential loop does.
+/// The threads take the items as `consume_on_compiler_threads` has them take. The results come back
+/// in the order of `items` however the threads interleave, so a caller that puts them into a `Map`
+/// one by one builds the same map as a sequential loop does.
 pub fn map_on_compiler_threads<T, R>(
     items: Vec<T>,
     num_threads: usize,
@@ -133,42 +132,22 @@ where
     T: Send,
     R: Send,
 {
-    if num_threads <= 1 || items.len() <= 1 {
-        return items.into_iter().map(f).collect();
-    }
-    let item_count = items.len();
-    let queue = Mutex::new(items.into_iter().enumerate());
-    let (queue, f) = (&queue, &f);
-    let indexed_results = thread::scope(|scope| {
-        let threads = (0..num_threads.min(item_count))
-            .map(|_| {
-                compiler_thread_builder()
-                    .spawn_scoped(scope, move || {
-                        let mut results = vec![];
-                        loop {
-                            let next = queue.lock().unwrap().next();
-                            let Some((idx, item)) = next else {
-                                break;
-                            };
-                            results.push((idx, f(item)));
-                        }
-                        results
-                    })
-                    .expect("failed to spawn a compiler thread")
-            })
-            .collect::<Vec<_>>();
-        values_or_first_panic(threads.into_iter().map(|thread| thread.join()))
-    });
-    let mut results = (0..item_count).map(|_| None).collect::<Vec<Option<R>>>();
-    for (idx, result) in indexed_results.into_iter().flatten() {
-        results[idx] = Some(result);
-    }
+    let mut results = (0..items.len()).map(|_| None).collect::<Vec<Option<R>>>();
+    consume_on_compiler_threads(
+        items.into_iter().enumerate().collect(),
+        num_threads,
+        |(idx, item)| (idx, f(item)),
+        |(idx, result)| results[idx] = Some(result),
+    );
     results.into_iter().map(Option::unwrap).collect()
 }
 
 /// Runs `f` on each of `items` on up to `num_threads` compiler threads, or on the calling thread
 /// alone when `num_threads` is 1 or less, and hands each result to `consume` on the calling thread
 /// as soon as it is ready.
+///
+/// Each thread takes the next item left as soon as it finishes one, so an item that costs far more
+/// than the rest holds up one thread and leaves the others working.
 ///
 /// The results reach `consume` in the order they become ready, and `consume` runs while the threads
 /// go on with the remaining items. So what a result holds is freed as soon as `consume` is done with
