@@ -134,9 +134,11 @@ pub struct TemporaryFile {
 impl Drop for TemporaryFile {
     /// Removes the file from `HELD_TEMPORARY_FILES`, so that it may be taken for abandoned.
     fn drop(&mut self) {
-        if let Some(name) = self.path.file_name() {
-            HELD_TEMPORARY_FILES.lock().unwrap().remove(name);
-        }
+        let name = self
+            .path
+            .file_name()
+            .expect("a temporary file's path ends in its name");
+        HELD_TEMPORARY_FILES.lock().unwrap().remove(name);
     }
 }
 
@@ -149,13 +151,17 @@ impl Drop for TemporaryFile {
 pub fn create_temporary_file_in(dir: &Path) -> io::Result<TemporaryFile> {
     let name = temporary_file_name();
     let path = dir.join(&name);
+    // The set stays locked from the creation of the file on, so that a sweep of this process that
+    // finds the file waits until its name is in the set.
+    let mut held = HELD_TEMPORARY_FILES.lock().unwrap();
     let file = File::options()
         .read(true)
         .write(true)
         .create_new(true)
         .open(&path)?;
     let _ = file.try_lock();
-    HELD_TEMPORARY_FILES.lock().unwrap().insert(name.into());
+    held.insert(name.into());
+    drop(held);
     Ok(TemporaryFile { file, path })
 }
 
