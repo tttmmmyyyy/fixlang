@@ -36,6 +36,7 @@ use rewrite::rewrite;
 use slots::SlotLayout;
 use specialize::specialize;
 use std::{fs, path::PathBuf};
+use validate::validate_types;
 
 /// Infers the lambda sets of `prg` and the copies they ask for, and rewrites the program by them.
 /// The bodies of the lifted lambdas are moved into their callers on up to `num_threads` threads.
@@ -61,7 +62,7 @@ pub fn run(prg: &mut Program, dump_step: Option<String>, num_threads: usize, dev
     };
     rewritten.apply(prg, num_threads);
     if develop_mode {
-        validate::validate_types(prg);
+        validate_types(prg);
     }
 }
 
