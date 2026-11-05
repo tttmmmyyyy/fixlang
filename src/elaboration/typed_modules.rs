@@ -308,7 +308,12 @@ impl ModuleFile {
 
     /// The path of the file, under `TYPED_MODULES_PATH`.
     fn path(&self) -> PathBuf {
-        Path::new(TYPED_MODULES_PATH).join(self.name())
+        self.path_in(Path::new(TYPED_MODULES_PATH))
+    }
+
+    /// The path of the file in the directory `dir`.
+    fn path_in(&self, dir: &Path) -> PathBuf {
+        dir.join(self.name())
     }
 }
 
@@ -337,7 +342,7 @@ impl ModuleFileWriter {
     /// bodies another build added to it since this build read its record are kept. A file that is
     /// not one of type-checked modules is begun anew.
     fn create(dir: &Path, file: Arc<ModuleFile>) -> io::Result<Self> {
-        let path = dir.join(file.name());
+        let path = file.path_in(dir);
         let tmp_path = temporary_path_beside(&path);
         let tmp = File::options()
             .read(true)
@@ -424,10 +429,10 @@ impl ModuleFileWriter {
         let mut entries: Vec<(EntityIdentity, EntityEntry)> =
             take(&mut self.record).into_iter().collect();
         entries.sort_by(|(lhs, _), (rhs, _)| lhs.cmp(rhs));
-        let record = postcard::to_allocvec(&entries).unwrap();
-        let mut tail = record.clone();
+        let mut tail = postcard::to_allocvec(&entries).unwrap();
+        let record_len = tail.len() as u64;
         tail.extend_from_slice(&self.bodies_end.to_le_bytes());
-        tail.extend_from_slice(&(record.len() as u64).to_le_bytes());
+        tail.extend_from_slice(&record_len.to_le_bytes());
         tail.extend_from_slice(FILE_MAGIC);
         let bodies_end = self.bodies_end;
         let tmp = self.tmp_file();
@@ -485,7 +490,7 @@ fn typed_modules_dir() -> Option<PathBuf> {
 fn warn_unwritable_file(dir: &Path, file: &ModuleFile, e: &io::Error) {
     warn_msg(&format!(
         "Failed to write cache file \"{}\": {}.",
-        dir.join(file.name()).to_string_lossy(),
+        file.path_in(dir).to_string_lossy(),
         e
     ));
 }
