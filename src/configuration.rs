@@ -1001,10 +1001,10 @@ impl Configuration {
         self.runs_from(FixOptimizationLevel::Max)
     }
 
-    /// Move the capture list of the function given to an op applying it with an environment into
+    /// Move the capture struct of the function given to an op applying it with an environment into
     /// that environment, so that the function needs no closure object. Runs at `Max` and above,
-    /// where closure specialization runs: it is what makes every such function a global function
-    /// applied to its capture list, which is the shape this pass rewrites.
+    /// where the rewrite by the lambda sets runs: it is what makes every such function a global
+    /// function applied to its capture struct, which is the shape this pass rewrites.
     pub fn enable_decapture_scope_functions(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Max)
     }
