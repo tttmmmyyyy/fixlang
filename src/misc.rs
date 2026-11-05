@@ -120,9 +120,10 @@ pub fn for_each_on_compiler_threads<T: Send>(
 /// `f` applied to each of `items`, in the order of `items`, computed on up to `num_threads`
 /// compiler threads, or on the calling thread alone when `num_threads` is 1 or less.
 ///
-/// The threads take the items as `consume_on_compiler_threads` has them take. The results come back
-/// in the order of `items` however the threads interleave, so a caller that puts them into a `Map`
-/// one by one builds the same map as a sequential loop does.
+/// Each thread takes the next item left as soon as it finishes one, so an item that costs far more
+/// than the rest holds up one thread and leaves the others working. The results come back in the
+/// order of `items` however the threads interleave, so a caller that puts them into a `Map` one by
+/// one builds the same map as a sequential loop does.
 pub fn map_on_compiler_threads<T, R>(
     items: Vec<T>,
     num_threads: usize,

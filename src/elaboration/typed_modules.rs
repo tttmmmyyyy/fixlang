@@ -215,9 +215,9 @@ fn read_record(path: &Path) -> Result<Option<ModuleRecord>, String> {
     }
 }
 
-/// The record of the module file `file`, and the offset its bodies end at. A file that is not one
-/// of type-checked modules answers the reason inside, and one that cannot be read answers the error
-/// outside.
+/// The record of the module file `file`, and the offset its bodies end at. The inner `Err` holds
+/// the reason a file is not one of type-checked modules, and the outer one the error of a file that
+/// cannot be read.
 fn read_record_of(file: &mut File) -> io::Result<Result<(ModuleRecord, u64), String>> {
     let read = |file: &mut File| -> io::Result<Option<(Vec<u8>, u64)>> {
         let len = file.metadata()?.len();
@@ -305,7 +305,7 @@ struct ModuleFile {
 }
 
 impl ModuleFile {
-    /// The name of the file (`module_file_name`).
+    /// The name of the file, without its directory.
     fn name(&self) -> String {
         module_file_name(&self.module, &self.module_hash)
     }
@@ -477,6 +477,7 @@ impl ModuleFileWriter {
 }
 
 impl Drop for ModuleFileWriter {
+    /// Removes the temporary file of a new version that was not finished.
     fn drop(&mut self) {
         if let Some((tmp, tmp_path)) = self.tmp.take() {
             drop(tmp);
@@ -518,8 +519,7 @@ fn warn_unreadable_file(path: &Path, why: &str) {
     ));
 }
 
-/// The writing of one module's file while `check_bodies_through_typed_modules` checks the bodies of
-/// the module.
+/// The writing of one module's file while the bodies of the module are checked.
 struct ModuleWriting {
     /// The directory the files of type-checked modules are written in.
     dir: PathBuf,
@@ -622,7 +622,7 @@ struct PassedBody {
     import_required: Map<Name, Vec<FullName>>,
 }
 
-/// What a compiler thread answers for a body `check_bodies_through_typed_modules` checks.
+/// What a compiler thread answers for a body it type-checked.
 enum CheckedOnThread {
     /// The body passed, and the file of its module is to hold it.
     Passed(PassedBody),
@@ -631,8 +631,7 @@ enum CheckedOnThread {
     InMemory(Result<CheckedBody, Errors>),
 }
 
-/// A body `check_bodies_through_typed_modules` checked that passed and that the file of its module
-/// now records.
+/// A body this build checked that passed and that the file of its module now records.
 struct StoredOutcome {
     /// What the file records of the body.
     entry: EntityEntry,
@@ -640,7 +639,7 @@ struct StoredOutcome {
     import_required: Map<Name, Vec<FullName>>,
 }
 
-/// What became of a body `check_bodies_through_typed_modules` checked.
+/// What became of a body this build checked.
 enum CheckOutcome {
     /// The body passed, and the file of its module records it.
     Stored(StoredOutcome),
@@ -771,13 +770,15 @@ impl Program {
         errors.to_result()
     }
 
-    /// Type-checks the bodies `to_check` on the compiler threads, and writes each that passes to the
-    /// file of its module, and answers what became of each, in the order of `to_check`.
+    /// Type-checks the bodies `to_check` on the compiler threads, writes each that passes to the file
+    /// of its module, and answers what became of each, in the order of `to_check`.
     ///
     /// A body that passes is written as soon as it is checked, and leaves memory then; the file of
     /// a module is put in place once the last body of the module is checked. A body the file could
-    /// not take is checked again, to be held in memory. The source files are those
-    /// `ModuleFileWriter::add` takes.
+    /// not take is checked again, to be held in memory.
+    ///
+    /// The bodies a file already held are decoded to see whether they are intact, with the source
+    /// files their spans point into taken from `source_files`, which gains the paths it lacks.
     fn check_and_write_bodies(
         &self,
         to_check: &[(BodyLocation, Arc<ModuleFile>, EntityIdentity)],
