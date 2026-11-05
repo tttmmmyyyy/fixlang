@@ -206,7 +206,9 @@ const NOT_A_MODULE_FILE: &str = "it is not a file of type-checked modules";
 ///
 /// Only the pages of the footer and the record are read here, so that a build reads only the
 /// bodies it asks for later.
-fn map_record(file: &Arc<ModuleFile>) -> Result<Option<(ModuleRecord, MappedModuleFile)>, String> {
+fn map_module_file(
+    file: &Arc<ModuleFile>,
+) -> Result<Option<(ModuleRecord, MappedModuleFile)>, String> {
     let Some(bytes) = map_file(&file.path()).map_err(|e| e.to_string())? else {
         return Ok(None);
     };
@@ -221,14 +223,14 @@ fn map_record(file: &Arc<ModuleFile>) -> Result<Option<(ModuleRecord, MappedModu
 /// The file at `path` mapped into memory, or `None` when there is no file there.
 fn map_file(path: &Path) -> io::Result<Option<Mmap>> {
     match File::open(path) {
-        Ok(file) => map(&file).map(Some),
+        Ok(file) => map_into_memory(&file).map(Some),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e),
     }
 }
 
 /// `file` mapped into memory.
-fn map(file: &File) -> io::Result<Mmap> {
+fn map_into_memory(file: &File) -> io::Result<Mmap> {
     // SAFETY: the mapping is read for as long as the build runs, and a file of type-checked modules
     // is never written in place: a build writes a new version under another name and renames it
     // over the file, or removes the file, and either leaves the mapped bytes as they were. A read
@@ -455,7 +457,7 @@ impl ModuleFileWriter {
         let tmp = self.tmp_file();
         tmp.seek(SeekFrom::Start(bodies_end))?;
         tmp.write_all(&tail)?;
-        let bytes = map(tmp)?;
+        let bytes = map_into_memory(tmp)?;
 
         let tmp = self.tmp.take().unwrap();
         let file_name = self.file.name();
@@ -633,7 +635,7 @@ impl ModuleWriting {
                         (
                             i,
                             StoredOutcome {
-                                file: mapped.clone(),
+                                mapped: mapped.clone(),
                                 entry,
                                 import_required,
                             },
@@ -678,7 +680,7 @@ enum CheckedOnThread {
 /// A body this build checked that passed and that the file of its module now records.
 struct StoredOutcome {
     /// The file of the module, as this build wrote it.
-    file: Arc<MappedModuleFile>,
+    mapped: Arc<MappedModuleFile>,
     /// What the file records of the body.
     entry: EntityEntry,
     /// The names the body referred to that the module it is defined in has to import.
@@ -698,7 +700,7 @@ enum CheckOutcome {
 /// holds as it was parsed.
 struct StoredBody {
     /// The file of the module the body is defined in, as this build found it.
-    file: Arc<MappedModuleFile>,
+    mapped: Arc<MappedModuleFile>,
     /// The entity the body belongs to, which the file writes in front of the body.
     identity: EntityIdentity,
     /// Where the body lies in the file.
@@ -769,7 +771,7 @@ impl Program {
             });
             let found =
                 SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
-                    map_record(&file)
+                    map_module_file(&file)
                 });
             let found = match found {
                 Ok(found) => found.map(|(record, mapped)| (record, Arc::new(mapped))),
@@ -799,12 +801,12 @@ impl Program {
         for ((loc, _file, identity), outcome) in to_check.into_iter().zip(outcomes) {
             match outcome {
                 CheckOutcome::Stored(StoredOutcome {
-                    file,
+                    mapped,
                     entry,
                     import_required,
                 }) => {
                     self.merge_import_required(import_required);
-                    self.store_body(loc, file, identity, entry);
+                    self.store_body(loc, mapped, identity, entry);
                 }
                 CheckOutcome::InMemory(Ok(checked)) => {
                     errors.append(self.install_checked_body(&loc, checked))
@@ -920,12 +922,13 @@ impl Program {
             .collect()
     }
 
-    /// Takes the body at `loc`, of the entity `identity`, as the one `file` records as `entry`: its
-    /// typed expression is read back from the file when instantiation asks for it.
+    /// Takes the body at `loc`, of the entity `identity`, as the one the module file `mapped`
+    /// records as `entry`: its typed expression is read back from the file when instantiation asks
+    /// for it.
     fn store_body(
         &mut self,
         loc: BodyLocation,
-        file: Arc<MappedModuleFile>,
+        mapped: Arc<MappedModuleFile>,
         identity: EntityIdentity,
         entry: EntityEntry,
     ) {
@@ -933,7 +936,7 @@ impl Program {
         self.typed_modules.stored.insert(
             loc,
             StoredBody {
-                file,
+                mapped,
                 identity,
                 range: entry.body,
                 warning_facts: entry.warning_facts,
@@ -961,12 +964,12 @@ impl Program {
         }
         let read =
             SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
-                read_body(&stored.file.bytes, &stored.range, &stored.identity)
+                read_body(&stored.mapped.bytes, &stored.range, &stored.identity)
             });
         let te = match read {
             Ok(te) => te,
             Err(why) => {
-                warn_unreadable_file(&stored.file.file.path(), &why);
+                warn_unreadable_file(&stored.mapped.file.path(), &why);
                 // The opaque types of the body are already known from the record.
                 let checked = self.check_body(loc, &self.create_name_resolution_env(), tc)?;
                 if checked.diagnostics.has_error() {
@@ -977,7 +980,7 @@ impl Program {
                         let stored = &self.typed_modules.stored[loc];
                         let entry = NewEntry::of(stored.identity.clone(), &checked);
                         let source_files = &mut self.typed_modules.source_files;
-                        let file = &stored.file.file;
+                        let file = &stored.mapped.file;
                         let written =
                             ModuleFileWriter::create(&dir, file.clone()).and_then(|mut writer| {
                                 writer.add(entry, source_files)?;
