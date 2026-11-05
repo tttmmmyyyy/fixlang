@@ -43,7 +43,7 @@ use crate::project_fs::{
 use memmap2::Mmap;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
-use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::io::{self, Seek, SeekFrom, Write};
 use std::mem::take;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -200,18 +200,22 @@ fn decode_body(bytes: &[u8], identity: &EntityIdentity) -> Result<TypedExpr, Str
 /// The message for a file that is not one of type-checked modules.
 const NOT_A_MODULE_FILE: &str = "it is not a file of type-checked modules";
 
-/// The record of the file at `path`, and the file mapped into memory, to read the bodies from. A
-/// file that does not exist answers `None`; one that cannot be read, or is not a file of
+/// The record of the module file `file`, and the file mapped into memory, to read the bodies from.
+/// A file that does not exist answers `None`; one that cannot be read, or is not a file of
 /// type-checked modules, answers the reason.
 ///
 /// Only the pages of the footer and the record are read here, so that a build reads only the
 /// bodies it asks for later.
-fn map_record(path: &Path) -> Result<Option<(ModuleRecord, Mmap)>, String> {
-    let Some(bytes) = map_file(path).map_err(|e| e.to_string())? else {
+fn map_record(file: &Arc<ModuleFile>) -> Result<Option<(ModuleRecord, MappedModuleFile)>, String> {
+    let Some(bytes) = map_file(&file.path()).map_err(|e| e.to_string())? else {
         return Ok(None);
     };
     let (record, _bodies_end) = decode_module_file(&bytes)?;
-    Ok(Some((record, bytes)))
+    let mapped = MappedModuleFile {
+        file: file.clone(),
+        bytes,
+    };
+    Ok(Some((record, mapped)))
 }
 
 /// The file at `path` mapped into memory, or `None` when there is no file there.
@@ -340,6 +344,9 @@ struct ModuleFileWriter {
     file: Arc<ModuleFile>,
     /// The temporary file the new version is written to, until `finish` renames it.
     tmp: Option<TemporaryFile>,
+    /// The file the new version replaces, mapped into memory, when it held bodies; the bodies
+    /// `record` begins with lie in it as in the new version.
+    held: Option<Mmap>,
     /// The bodies the new version holds so far.
     record: ModuleRecord,
     /// Where the bodies written so far end, which is where the next body goes.
@@ -357,6 +364,7 @@ impl ModuleFileWriter {
             dir: dir.to_path_buf(),
             file,
             tmp: Some(tmp),
+            held: None,
             record: ModuleRecord::default(),
             bodies_end: 0,
         };
@@ -367,6 +375,7 @@ impl ModuleFileWriter {
             return Ok(writer);
         };
         writer.tmp_file().write_all(&held[..bodies_end as usize])?;
+        writer.held = Some(held);
         writer.record = record;
         writer.bodies_end = bodies_end;
         Ok(writer)
@@ -391,14 +400,9 @@ impl ModuleFileWriter {
         entry: NewEntry,
         source_files: &mut Map<PathBuf, SourceFile>,
     ) -> io::Result<()> {
-        if let Some(held) = self.record.get(&entry.identity) {
-            let mut held_bytes = vec![0u8; (held.body.end - held.body.start) as usize];
-            let start = held.body.start;
-            let tmp = self.tmp_file();
-            tmp.seek(SeekFrom::Start(start))?;
-            tmp.read_exact(&mut held_bytes)?;
+        if let (Some(held), Some(bytes)) = (self.record.get(&entry.identity), &self.held) {
             let intact = SourceFile::with_shared_source_files(source_files, || {
-                decode_body(&held_bytes, &entry.identity)
+                read_body(bytes, &held.body, &entry.identity)
             })
             .is_ok();
             if intact {
@@ -748,22 +752,14 @@ impl Program {
                 module,
                 module_hash,
             });
-            let path = file.path();
             let mapped =
                 SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
-                    map_record(&path)
+                    map_record(&file)
                 });
             let mapped = match mapped {
-                Ok(Some((record, bytes))) => Some((
-                    record,
-                    Arc::new(MappedModuleFile {
-                        file: file.clone(),
-                        bytes,
-                    }),
-                )),
-                Ok(None) => None,
+                Ok(mapped) => mapped.map(|(record, mapped)| (record, Arc::new(mapped))),
                 Err(why) => {
-                    warn_unreadable_file(&path, &why);
+                    warn_unreadable_file(&file.path(), &why);
                     None
                 }
             };

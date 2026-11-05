@@ -869,7 +869,7 @@ main = println $ (double(21), 3).to_string;
             assert!(output.status.success(), "stderr: {}", stderr);
             assert!(
                 !stderr.contains("Failed to read cache file"),
-                "a build did not find a body in the file the other build put in place.\nstderr: {}",
+                "a build did not find a body in the file it mapped.\nstderr: {}",
                 stderr
             );
         }
