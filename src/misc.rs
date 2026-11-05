@@ -671,6 +671,38 @@ mod tests {
         assert_eq!(consumed, (0..16u64).map(|i| i * 10).collect::<Vec<_>>());
     }
 
+    /// While `consume` takes its time over a result, the threads stop once the results waiting for
+    /// it, the one in `consume` aside, are twice `num_threads`.
+    #[test]
+    fn test_consume_on_compiler_threads_holds_at_most_twice_num_threads_results() {
+        const NUM_THREADS: usize = 2;
+        let produced = AtomicUsize::new(0);
+        let mut consumed = 0;
+        let mut most_waiting = 0;
+        consume_on_compiler_threads(
+            (0..64).collect(),
+            NUM_THREADS,
+            |i: usize| {
+                produced.fetch_add(1, Ordering::SeqCst);
+                i
+            },
+            |_| {
+                consumed += 1;
+                if consumed == 1 {
+                    // Long enough for threads that are not held back to finish every item.
+                    thread::sleep(Duration::from_millis(200));
+                }
+                most_waiting = most_waiting.max(produced.load(Ordering::SeqCst) - consumed);
+            },
+        );
+        assert_eq!(consumed, 64);
+        assert!(
+            most_waiting <= 2 * NUM_THREADS,
+            "{} results waited for consume at once",
+            most_waiting
+        );
+    }
+
     /// A result reaches `consume` while the threads still work on other items, so a caller that
     /// writes the results out holds only those not yet written.
     #[test]

@@ -858,4 +858,32 @@ main = println $ (double(21), 3).to_string;
         build(dir, "main.fix", &[]);
         assert_eq!(temporary_files(), Vec::<String>::new());
     }
+
+    /// A build that writes the file of a module removes the temporary files there that no process
+    /// holds a lock on, and keeps the one a running process holds locked.
+    #[test]
+    fn a_build_keeps_the_temporary_file_a_running_build_holds() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("main.fix"),
+            "module Main;\n\nmain : IO ();\nmain = println $ (1, 2, 3).to_string;\n",
+        )
+        .expect("Failed to write main.fix");
+        let cache_dir = dir.join(TYPED_MODULES_PATH);
+        fs::create_dir_all(&cache_dir).expect("Failed to create the type-check cache directory");
+        let held_path = cache_dir.join(".0123456789abcdef.tmp");
+        let held = fs::File::create(&held_path).expect("Failed to create a temporary file");
+        held.try_lock().expect("Failed to lock the temporary file");
+        let abandoned_path = cache_dir.join(".fedcba9876543210.tmp");
+        fs::write(&abandoned_path, "").expect("Failed to create a temporary file");
+
+        build(dir, "main.fix", &[]);
+        assert!(!abandoned_path.exists(), "the build removed no temporary file");
+        assert!(
+            held_path.exists(),
+            "the build removed the temporary file a running process holds"
+        );
+        drop(held);
+    }
 }
