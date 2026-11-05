@@ -498,7 +498,7 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         );
     }
 
-    /// Builds in `dir` a program printing 3, and answers the path of the cache file of its module
+    /// Builds a program in `dir` that prints 3, and returns the path of the cache file of its module
     /// `Main`.
     fn build_three_and_find_the_cache_file_of_main(dir: &Path) -> PathBuf {
         fs::write(
