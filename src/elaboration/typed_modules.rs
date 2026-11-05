@@ -13,8 +13,9 @@
 //
 // A build reads the record of every module and type-checks only the bodies the record lacks. It
 // reads a typed expression back only when instantiation asks for it, from the file it found the
-// body in, which it keeps open (`OpenedModuleFile`). When the check passes bodies the record lacked, the file is written anew: the bodies it holds are copied as they are, at the
-// same offsets, and each new body follows them as soon as it passes, so that it leaves memory then
+// body in, which it keeps mapped into memory (`MappedModuleFile`). When the check passes bodies the
+// record lacked, the file is written anew: the bodies it holds are copied as they are, at the same
+// offsets, and each new body follows them as soon as it passes, so that it leaves memory then
 // (`ModuleFileWriter`). When instantiation finds a body that the file fails to hold, it checks the
 // body again and writes it the same way, after the bodies the file holds.
 //
@@ -39,6 +40,7 @@ use crate::project_fs::{
     create_dir_guarding_project_links, create_temporary_file_in, remove_abandoned_temporary_files,
     TemporaryFile, DOT_FIXLANG_LINK_HINT,
 };
+use memmap2::Mmap;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -198,23 +200,33 @@ fn decode_body(bytes: &[u8], identity: &EntityIdentity) -> Result<TypedExpr, Str
 /// The message for a file that is not one of type-checked modules.
 const NOT_A_MODULE_FILE: &str = "it is not a file of type-checked modules";
 
-/// The record of the file at `path`, and the file, open, to read the bodies from. A file that does
-/// not exist answers `None`; one that cannot be read, or is not a file of type-checked modules,
-/// answers the reason.
+/// The record of the file at `path`, and the file mapped into memory, to read the bodies from. A
+/// file that does not exist answers `None`; one that cannot be read, or is not a file of
+/// type-checked modules, answers the reason.
 ///
 /// It reads only the footer and the record, so that a build reads only the bodies it asks for
 /// later.
-fn open_record(path: &Path) -> Result<Option<(ModuleRecord, File)>, String> {
+fn map_record(path: &Path) -> Result<Option<(ModuleRecord, Mmap)>, String> {
     let mut file = match File::open(path) {
         Ok(file) => file,
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e.to_string()),
     };
     match read_record_of(&mut file) {
-        Ok(Ok((record, _bodies_end))) => Ok(Some((record, file))),
+        Ok(Ok((record, _bodies_end))) => map(&file)
+            .map(|bytes| Some((record, bytes)))
+            .map_err(|e| e.to_string()),
         Ok(Err(why)) => Err(why),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// `file` mapped into memory.
+fn map(file: &File) -> io::Result<Mmap> {
+    // SAFETY: the mapping is read for as long as the build runs, and a file of type-checked modules
+    // is never written in place: a build writes a new version under another name and renames it
+    // over the file, or removes the file, and either leaves the mapped bytes as they were.
+    unsafe { Mmap::map(file) }
 }
 
 /// The record of the module file `file`, and the offset its bodies end at. The inner `Err` holds
@@ -245,18 +257,14 @@ fn read_record_of(file: &mut File) -> io::Result<Result<(ModuleRecord, u64), Str
     })
 }
 
-/// The typed expression of the body `identity` lying at `range` in `file`. Bytes there that are not
-/// the body answer the reason.
+/// The typed expression of the body `identity` lying at `range` in `file`, the bytes of a module's
+/// file whose record places the body there. Bytes there that are not the body answer the reason.
 fn read_body(
-    mut file: &File,
+    file: &[u8],
     range: &Range<u64>,
     identity: &EntityIdentity,
 ) -> Result<TypedExpr, String> {
-    let mut bytes = vec![0u8; (range.end - range.start) as usize];
-    file.seek(SeekFrom::Start(range.start))
-        .and_then(|_| file.read_exact(&mut bytes))
-        .map_err(|e| e.to_string())?;
-    decode_body(&bytes, identity)
+    decode_body(&file[range.start as usize..range.end as usize], identity)
 }
 
 /// A body passed by this build's type check, to be added to its module's file.
@@ -313,14 +321,14 @@ impl ModuleFile {
     }
 }
 
-/// A module's file as this build opened it. Each body the build found in the file is read through
-/// this handle, so a file another build puts in place meanwhile leaves the body where this build
-/// found it.
-struct OpenedModuleFile {
+/// A module's file as this build found it, mapped into memory. Each body the build found in the
+/// file is read from the mapping, so a file another build puts in place meanwhile, or removes,
+/// leaves the body where this build found it.
+struct MappedModuleFile {
     /// The module file.
     file: Arc<ModuleFile>,
-    /// The file, open for reading.
-    handle: File,
+    /// The bytes of the file.
+    bytes: Mmap,
 }
 
 /// The new version of a module's file, written while the bodies of the module are checked. It begins
@@ -429,8 +437,8 @@ impl ModuleFileWriter {
 
     /// Puts the record and the footer after the bodies, replaces the module's file with the new
     /// version, removes the files of the module checked under any other hash, and answers the
-    /// new version: its record, and the file, open.
-    fn finish(mut self) -> io::Result<(ModuleRecord, OpenedModuleFile)> {
+    /// new version: its record, and the file mapped into memory.
+    fn finish(mut self) -> io::Result<(ModuleRecord, MappedModuleFile)> {
         let mut entries: Vec<(EntityIdentity, EntityEntry)> =
             take(&mut self.record).into_iter().collect();
         entries.sort_by(|(lhs, _), (rhs, _)| lhs.cmp(rhs));
@@ -454,11 +462,11 @@ impl ModuleFileWriter {
         }
 
         self.remove_stale_files(&file_name);
-        let opened = OpenedModuleFile {
+        let mapped = MappedModuleFile {
             file: self.file.clone(),
-            handle: tmp.file,
+            bytes: map(&tmp.file)?,
         };
-        Ok((entries.into_iter().collect(), opened))
+        Ok((entries.into_iter().collect(), mapped))
     }
 
     /// Removes the files of the module checked under any other hash than the file named
@@ -608,8 +616,8 @@ impl ModuleWriting {
             }
         };
         match writer.finish() {
-            Ok((mut record, opened)) => {
-                let opened = Arc::new(opened);
+            Ok((mut record, mapped)) => {
+                let mapped = Arc::new(mapped);
                 let stored = self
                     .written
                     .into_iter()
@@ -620,7 +628,7 @@ impl ModuleWriting {
                         (
                             i,
                             StoredOutcome {
-                                file: opened.clone(),
+                                file: mapped.clone(),
                                 entry,
                                 import_required,
                             },
@@ -665,7 +673,7 @@ enum CheckedOnThread {
 /// A body this build checked that passed and that the file of its module now records.
 struct StoredOutcome {
     /// The file of the module, as this build wrote it.
-    file: Arc<OpenedModuleFile>,
+    file: Arc<MappedModuleFile>,
     /// What the file records of the body.
     entry: EntityEntry,
     /// The names the body referred to that the module it is defined in has to import.
@@ -684,8 +692,8 @@ enum CheckOutcome {
 /// A body whose typed expression lies in its module's file, and which `Program::global_values`
 /// holds as it was parsed.
 struct StoredBody {
-    /// The file of the module the body is defined in, as this build opened it.
-    file: Arc<OpenedModuleFile>,
+    /// The file of the module the body is defined in, as this build found it.
+    file: Arc<MappedModuleFile>,
     /// The entity the body belongs to, which the file writes in front of the body.
     identity: EntityIdentity,
     /// Where the body lies in the file.
@@ -755,16 +763,16 @@ impl Program {
                 module_hash,
             });
             let path = file.path();
-            let opened =
+            let mapped =
                 SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
-                    open_record(&path)
+                    map_record(&path)
                 });
-            let (record, opened) = match opened {
-                Ok(Some((record, handle))) => (
+            let (record, mapped) = match mapped {
+                Ok(Some((record, bytes))) => (
                     record,
-                    Some(Arc::new(OpenedModuleFile {
+                    Some(Arc::new(MappedModuleFile {
                         file: file.clone(),
-                        handle,
+                        bytes,
                     })),
                 ),
                 Ok(None) => (ModuleRecord::default(), None),
@@ -775,9 +783,9 @@ impl Program {
             };
             for loc in locs {
                 let identity = self.entity_identity_at(&loc);
-                match (record.get(&identity), &opened) {
-                    (Some(entry), Some(opened)) => {
-                        self.store_body(loc, opened.clone(), identity, entry.clone())
+                match (record.get(&identity), &mapped) {
+                    (Some(entry), Some(mapped)) => {
+                        self.store_body(loc, mapped.clone(), identity, entry.clone())
                     }
                     _ => to_check.push((loc, file.clone(), identity)),
                 }
@@ -917,7 +925,7 @@ impl Program {
     fn store_body(
         &mut self,
         loc: BodyLocation,
-        file: Arc<OpenedModuleFile>,
+        file: Arc<MappedModuleFile>,
         identity: EntityIdentity,
         entry: EntityEntry,
     ) {
@@ -953,7 +961,7 @@ impl Program {
         }
         let read =
             SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
-                read_body(&stored.file.handle, &stored.range, &stored.identity)
+                read_body(&stored.file.bytes, &stored.range, &stored.identity)
             });
         let te = match read {
             Ok(te) => te,

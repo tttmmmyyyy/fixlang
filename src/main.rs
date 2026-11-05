@@ -119,7 +119,6 @@ fn compilation_unit_size(value: &str) -> Result<usize, String> {
 
 /// Run the `fix` command, exiting with status 1 when it fails.
 fn main() {
-    raise_open_file_limit();
     // The compiler recurses over the user program's expression tree, whose nesting depth is
     // unbounded, so it runs on a thread with a stack sized for that recursion — the size its
     // type-checking and code-generation workers already use — instead of the smaller default
@@ -127,33 +126,6 @@ fn main() {
     // a panicked join only needs to become a non-zero exit here.
     if spawn_compiler_thread(run_cli).join().is_err() {
         process::exit(1);
-    }
-}
-
-/// Raises the number of files this process may hold open to the most the system allows. A build
-/// holds the file of each module of the program open while it runs (`OpenedModuleFile`), and the
-/// limit some systems start a process with, 256 on macOS, is below the number of modules of a
-/// large program.
-fn raise_open_file_limit() {
-    let mut limit = libc::rlimit {
-        rlim_cur: 0,
-        rlim_max: 0,
-    };
-    // SAFETY: `limit` is a valid `rlimit` for the call to write.
-    if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limit) } != 0 {
-        return;
-    }
-    // Versions of macOS refuse a limit above `OPEN_MAX` of `<sys/syslimits.h>`, 10240, whatever
-    // the hard limit says.
-    #[cfg(target_os = "macos")]
-    let most = limit.rlim_max.min(10240);
-    #[cfg(not(target_os = "macos"))]
-    let most = limit.rlim_max;
-    if limit.rlim_cur < most {
-        limit.rlim_cur = most;
-        // SAFETY: `limit` is a valid `rlimit` for the call to read. A limit the system refuses
-        // leaves the one the process started with.
-        unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &limit) };
     }
 }
 

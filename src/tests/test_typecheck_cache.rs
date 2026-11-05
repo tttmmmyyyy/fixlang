@@ -767,9 +767,10 @@ main = println $ (double(21), 3).to_string;
         assert_eq!(run_out(dir), "(1, 2, 3)");
     }
 
-    /// A build holds the file of each module open while it runs, and raises the limit on the files
-    /// it may hold open, so a program of more modules than the limit it starts with builds, and
-    /// reads every body back from the files it wrote and from those an earlier build wrote.
+    /// A build reads the bodies of each module from its file mapped into memory, and closes the
+    /// file, so a program of more modules than the limit on the files a process may hold open
+    /// builds, and reads every body back from the files it wrote and from those an earlier build
+    /// wrote.
     #[test]
     fn a_program_of_more_modules_than_the_open_file_limit_reads_back_every_body() {
         const MODULES: usize = 100;
@@ -806,8 +807,7 @@ main = println $ (double(21), 3).to_string;
 
         let fix = fix_command().get_program().to_os_string();
         for build in ["the first build", "the second build"] {
-            // The soft limit alone is lowered, below the number of modules, so that the build can
-            // raise it again.
+            // The soft limit is lowered below the number of modules.
             let output = Command::new("sh")
                 .args(["-c", "ulimit -Sn 64 && exec \"$0\" build -o out"])
                 .arg(&fix)
@@ -818,7 +818,7 @@ main = println $ (double(21), 3).to_string;
             assert!(output.status.success(), "{} failed:\n{}", build, stderr);
             assert!(
                 !stderr.contains("cache file"),
-                "{} did not keep the files of the modules open.\nstderr: {}",
+                "{} could not read or write the files of the modules.\nstderr: {}",
                 build,
                 stderr
             );

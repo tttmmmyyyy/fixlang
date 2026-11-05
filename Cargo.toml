@@ -42,7 +42,7 @@ stacker = "0.1"
 typetag = "0.2"
 dyn-clone = "1.0"
 pubgrub = "0.4.0"
-libc = "0.2"
+memmap2 = "0.9"
 
 [lib]
 name = "fixlang"
