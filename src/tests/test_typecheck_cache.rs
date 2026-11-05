@@ -73,10 +73,11 @@ fn test_the_module_dependency_hash_covers_the_c_numeric_types() {
 mod integration_tests {
     use crate::constants::{DOT_FIXLANG, TYPED_MODULES_PATH};
     use crate::tests::test_util::{fix_command, run_fix};
-    use std::fs;
+    use std::fs::{self, File};
     use std::path::Path;
-    use std::process::Command;
-    use std::time::SystemTime;
+    use std::process::{Command, Stdio};
+    use std::thread;
+    use std::time::{Duration, SystemTime};
     use tempfile::TempDir;
 
     /// The version hash of a cache entry comes from the sources of the module the value's name
@@ -798,7 +799,7 @@ main = println $ (double(21), 3).to_string;
                 fix_command()
                     .args(["build", "--file", "main.fix", "-o", out])
                     .current_dir(dir)
-                    .stderr(std::process::Stdio::piped())
+                    .stderr(Stdio::piped())
                     .spawn()
                     .expect("Failed to execute fix")
             })
@@ -838,7 +839,7 @@ main = println $ (double(21), 3).to_string;
         let mut killed = fix_command()
             .args(["build", "--file", "main.fix", "-o", "out"])
             .current_dir(dir)
-            .stderr(std::process::Stdio::null())
+            .stderr(Stdio::null())
             .spawn()
             .expect("Failed to execute fix");
         while temporary_files().is_empty() {
@@ -846,7 +847,7 @@ main = println $ (double(21), 3).to_string;
                 killed.try_wait().expect("Failed to wait for fix").is_none(),
                 "the build ended before it began writing a file"
             );
-            std::thread::sleep(std::time::Duration::from_millis(1));
+            thread::sleep(Duration::from_millis(1));
         }
         killed.kill().expect("Failed to kill fix");
         killed.wait().expect("Failed to wait for fix");
@@ -873,7 +874,7 @@ main = println $ (double(21), 3).to_string;
         let cache_dir = dir.join(TYPED_MODULES_PATH);
         fs::create_dir_all(&cache_dir).expect("Failed to create the type-check cache directory");
         let held_path = cache_dir.join(".0123456789abcdef.tmp");
-        let held = fs::File::create(&held_path).expect("Failed to create a temporary file");
+        let held = File::create(&held_path).expect("Failed to create a temporary file");
         held.try_lock().expect("Failed to lock the temporary file");
         let abandoned_path = cache_dir.join(".fedcba9876543210.tmp");
         fs::write(&abandoned_path, "").expect("Failed to create a temporary file");
