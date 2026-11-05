@@ -6,9 +6,10 @@ and the mutating ones behind `mutate_elements` and `mutate_boxed` — are builti
 `BuiltinOp::env_operand`. Such an op applies one of its operands, a function, to a tuple whose first
 field is another of its operands, the environment.
 
-The rewrite by the lambda sets lifts every lambda to a global function taking its capture struct as
-the first argument, so the function such an op is given is that global function applied to a
-capture struct: a closure holding the capture struct, built on the heap on every call. This pass
+The rewrite by the lambda sets lifts a lambda whose set is represented by closures to a global
+function taking its capture struct as the first argument, and the function such an op is given has
+such a set, so it is that global function applied to a capture struct: a closure holding the capture
+struct, built on the heap on every call. This pass
 moves the capture struct into the environment instead, so that the function the op is given
 captures nothing.
 
