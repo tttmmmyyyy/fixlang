@@ -16,4 +16,5 @@ pub mod traits;
 pub mod traverse;
 pub mod type_env;
 pub mod typedecl;
+pub mod type_agreement;
 pub mod types;

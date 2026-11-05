@@ -1,4 +1,5 @@
-// A check that the types of a rewritten program agree with one another where its expressions meet.
+// A check that the types of a program agree with one another where its expressions meet, for a pass
+// rewriting the types of a program to run on what it wrote.
 
 use crate::ast::{
     expr::{Expr, ExprNode},
@@ -9,7 +10,7 @@ use crate::ast::{
 };
 use std::sync::Arc;
 
-/// Panics, naming the symbol and the node, where two types the rewrite gives meeting places of
+/// Panics, naming the symbol and the node, where two types given to meeting places of
 /// `prg` disagree: a symbol and its body, a function and the argument it is applied to, a global
 /// and a reference to it, a value and the pattern taking it apart, the arms of a choice, a struct
 /// and its fields. The types of builtin operations and of calls of C functions are trusted as

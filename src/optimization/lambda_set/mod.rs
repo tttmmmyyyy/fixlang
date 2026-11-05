@@ -22,10 +22,8 @@ mod rewrite;
 mod slots;
 mod solver;
 mod specialize;
-mod validate;
-
 use crate::{
-    ast::program::Program,
+    ast::{program::Program, type_agreement::validate_types},
     constants::DOT_FIXLANG,
     error::panic_if_err,
     project_fs::{write_file_guarding_project_links, DOT_FIXLANG_LINK_HINT},
@@ -37,7 +35,6 @@ use rewrite::rewrite;
 use slots::SlotLayout;
 use specialize::specialize;
 use std::{fs, path::PathBuf};
-use validate::validate_types;
 
 /// Infers the lambda sets of `prg` and the copies they ask for, and rewrites the program by them.
 /// The bodies of the lifted lambdas are moved into their callers on up to `num_threads` threads.
