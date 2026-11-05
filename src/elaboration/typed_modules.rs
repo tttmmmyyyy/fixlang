@@ -256,14 +256,14 @@ fn decode_module_file(bytes: &[u8]) -> Result<(ModuleRecord, u64), String> {
     Ok((record, range.start))
 }
 
-/// The typed expression of the body `identity` lying at `range` in `file`, the bytes of a module's
+/// The typed expression of the body `identity` lying at `range` in `bytes`, the bytes of a module's
 /// file whose record places the body there. Bytes there that are not the body answer the reason.
 fn read_body(
-    file: &[u8],
+    bytes: &[u8],
     range: &Range<u64>,
     identity: &EntityIdentity,
 ) -> Result<TypedExpr, String> {
-    decode_body(&file[range.start as usize..range.end as usize], identity)
+    decode_body(&bytes[range.start as usize..range.end as usize], identity)
 }
 
 /// A body passed by this build's type check, to be added to its module's file.
@@ -767,12 +767,12 @@ impl Program {
                 module,
                 module_hash,
             });
-            let mapped =
+            let found =
                 SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
                     map_record(&file)
                 });
-            let mapped = match mapped {
-                Ok(mapped) => mapped.map(|(record, mapped)| (record, Arc::new(mapped))),
+            let found = match found {
+                Ok(found) => found.map(|(record, mapped)| (record, Arc::new(mapped))),
                 Err(why) => {
                     warn_unreadable_file(&file.path(), &why);
                     None
@@ -780,7 +780,7 @@ impl Program {
             };
             for loc in locs {
                 let identity = self.entity_identity_at(&loc);
-                let recorded = mapped.as_ref().and_then(|(record, mapped)| {
+                let recorded = found.as_ref().and_then(|(record, mapped)| {
                     record
                         .get(&identity)
                         .map(|entry| (mapped.clone(), entry.clone()))

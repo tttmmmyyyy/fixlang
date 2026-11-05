@@ -779,7 +779,7 @@ main = println $ (double(21), 3).to_string;
         let dir = temp.path();
         let mut files = vec![];
         let mut main = "module Main;\n\n".to_string();
-        let mut sum = vec![];
+        let mut terms = vec![];
         for i in 0..MODULES {
             let file = format!("m{}.fix", i);
             fs::write(
@@ -789,11 +789,11 @@ main = println $ (double(21), 3).to_string;
             .expect("Failed to write a module");
             files.push(format!("\"{}\"", file));
             main += &format!("import M{};\n", i);
-            sum.push(format!("M{}::value", i));
+            terms.push(format!("M{}::value", i));
         }
         main += &format!(
             "\nmain : IO () = println(({}).to_string);\n",
-            sum.join(" + ")
+            terms.join(" + ")
         );
         fs::write(dir.join("main.fix"), main).expect("Failed to write main.fix");
         files.push("\"main.fix\"".to_string());
