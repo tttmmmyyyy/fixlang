@@ -791,7 +791,8 @@ main = println $ (double(21), 3).to_string;
     fn two_builds_at_once_read_back_every_body() {
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
-        fs::write(dir.join("main.fix"), source_with_many_functions(300)).expect("Failed to write main.fix");
+        fs::write(dir.join("main.fix"), source_with_many_functions(300))
+            .expect("Failed to write main.fix");
 
         let builds: Vec<_> = ["out1", "out2"]
             .iter()
@@ -822,7 +823,8 @@ main = println $ (double(21), 3).to_string;
     fn a_build_removes_the_temporary_file_a_killed_build_left() {
         let temp = TempDir::new().expect("Failed to create temp directory");
         let dir = temp.path();
-        fs::write(dir.join("main.fix"), source_with_many_functions(300)).expect("Failed to write main.fix");
+        fs::write(dir.join("main.fix"), source_with_many_functions(300))
+            .expect("Failed to write main.fix");
         let cache_dir = dir.join(TYPED_MODULES_PATH);
         let temporary_files = || -> Vec<String> {
             fs::read_dir(&cache_dir)
@@ -880,7 +882,10 @@ main = println $ (double(21), 3).to_string;
         fs::write(&abandoned_path, "").expect("Failed to create a temporary file");
 
         build(dir, "main.fix", &[]);
-        assert!(!abandoned_path.exists(), "the build removed no temporary file");
+        assert!(
+            !abandoned_path.exists(),
+            "the build removed no temporary file"
+        );
         assert!(
             held_path.exists(),
             "the build removed the temporary file a running process holds"
