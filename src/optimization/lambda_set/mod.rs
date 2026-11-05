@@ -74,23 +74,13 @@ mod tests {
         specialize::{specialize, Specialization},
     };
     use crate::{
-        ast::program::Program,
-        configuration::{Configuration, FixOptimizationLevel, SubCommand},
-        elaboration::elaborate_via_config,
-        error::panic_if_err,
-        misc::save_temporary_source,
-        optimization::unwrap_newtype,
+        ast::program::Program, elaboration::elaborate_at_max, optimization::unwrap_newtype,
     };
 
     /// `source` elaborated into the form the inference reads: monomorphic, curried, and with its
     /// newtypes unwrapped.
     fn program_of(source: &str) -> Program {
-        let mut config = panic_if_err(Configuration::release_mode(SubCommand::Build));
-        config.set_fix_opt_level(FixOptimizationLevel::Max);
-        config.num_worker_thread = 0;
-        let saved = panic_if_err(save_temporary_source(source, "lambda_set"));
-        config.add_user_source_file(saved.file_path);
-        let mut prg = panic_if_err(elaborate_via_config(&config));
+        let (mut prg, _) = elaborate_at_max(source, "lambda_set", 0);
         unwrap_newtype::run(&mut prg, 0);
         prg
     }
@@ -314,7 +304,11 @@ main = (
                 Some("compose_all".to_string())
             ]
         );
-        let holds_itself = inf.spec.store.lam_elems(s).any(|(_, args)| args.contains(&s));
+        let holds_itself = inf
+            .spec
+            .store
+            .lam_elems(s)
+            .any(|(_, args)| args.contains(&s));
         assert!(holds_itself);
     }
 

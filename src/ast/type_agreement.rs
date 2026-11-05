@@ -313,13 +313,7 @@ impl<'p> Check<'p> {
 #[cfg(test)]
 mod tests {
     use super::validate_types;
-    use crate::{
-        configuration::{Configuration, FixOptimizationLevel, SubCommand},
-        elaboration::elaborate_via_config,
-        error::panic_if_err,
-        fixstd::builtin::make_i64_ty,
-        misc::save_temporary_source,
-    };
+    use crate::{elaboration::elaborate_at_max, fixstd::builtin::make_i64_ty};
 
     /// A read of a local whose type differs from the one its `let` binding gives it is reported.
     /// The read is the argument of a call of a C function, whose argument types are trusted as
@@ -336,18 +330,15 @@ to_abs = |x| FFI_CALL[I32 abs(I32), x];
 main : IO ();
 main = eval to_abs(-3_I32); pure();
 "#;
-        let mut config = panic_if_err(Configuration::release_mode(SubCommand::Build));
-        config.set_fix_opt_level(FixOptimizationLevel::Max);
-        config.num_worker_thread = 0;
-        let saved = panic_if_err(save_temporary_source(source, "type_agreement"));
-        config.add_user_source_file(saved.file_path);
-        let mut prg = panic_if_err(elaborate_via_config(&config));
+        let (mut prg, _) = elaborate_at_max(source, "type_agreement", 0);
         validate_types(&prg);
 
         let name = prg
             .symbols
             .keys()
-            .find(|s| s.namespace.to_string() == "Main" && s.name.starts_with("to_abs"))
+            .find(|s| {
+                s.namespace.to_string() == "Main" && s.name.split('#').next() == Some("to_abs")
+            })
             .unwrap()
             .clone();
         let symbol = prg.symbols.get_mut(&name).unwrap();
