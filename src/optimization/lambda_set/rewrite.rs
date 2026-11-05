@@ -180,13 +180,13 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let mut copy_of_instance = vec![];
         for (k, instance) in spec.instances.iter().enumerate() {
             let component = &analysis.components[instance.component];
-            let key: Vec<Repr> = component
+            let body_reprs: Vec<Repr> = component
                 .body_params
                 .iter()
                 .map(|p| repr.of(instance.args[*p]))
                 .collect();
             let copy = *copy_of_key
-                .entry((instance.component, key))
+                .entry((instance.component, body_reprs))
                 .or_insert_with(|| {
                     copies.push(SymbolCopy {
                         component: instance.component,
@@ -201,9 +201,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         for (component, _) in copy_of_key.keys() {
             *copy_counts.entry(*component).or_insert(0) += 1;
         }
-        for ((component, key), copy) in &copy_of_key {
+        for ((component, body_reprs), copy) in &copy_of_key {
             if copy_counts[component] > 1 {
-                copies[*copy].suffix = Some(repr.copy_suffix(key));
+                copies[*copy].suffix = Some(repr.copy_suffix(body_reprs));
             }
         }
 
@@ -736,11 +736,11 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 let mut builtin = b.as_ref().clone();
                 let mut bindings: Vec<(FullName, Arc<ExprNode>)> = vec![];
                 let operands = builtin.op.free_vars_mut();
-                for (i, (operand, name)) in operands.into_iter().zip(&node.names).enumerate() {
-                    if let NameRef::Local = name {
+                for (i, (operand, name_ref)) in operands.into_iter().zip(&node.names).enumerate() {
+                    if let NameRef::Local = name_ref {
                         continue;
                     }
-                    let value = self.global_value(walk, operand, name);
+                    let value = self.global_value(walk, operand, name_ref);
                     if value.is_var() {
                         *operand = value.get_var().name.clone();
                     } else {

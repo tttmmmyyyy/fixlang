@@ -234,8 +234,8 @@ impl SetStore {
             elems.push(node_elems);
         }
 
-        let (class, table) = canonical_classes(&elems);
-        let mut class_set: Vec<Option<SetId>> = vec![None; table.len()];
+        let (class, class_elems) = canonical_classes(&elems);
+        let mut class_set: Vec<Option<SetId>> = vec![None; class_elems.len()];
         for (p, node) in nodes.iter().enumerate() {
             if let Node::Known(id) = node {
                 assert!(
@@ -251,7 +251,7 @@ impl SetStore {
             if class_set[c].is_some() {
                 continue;
             }
-            let key = (table.clone(), c);
+            let key = (class_elems.clone(), c);
             class_set[c] = Some(match self.id_of_cycle.get(&key) {
                 Some(id) => *id,
                 None => {
@@ -279,7 +279,7 @@ impl SetStore {
                 .collect();
             let id = self.insert(new_elems, true);
             assert_eq!(Some(id), class_set[c]);
-            self.id_of_cycle.insert((table.clone(), c), id);
+            self.id_of_cycle.insert((class_elems.clone(), c), id);
         }
         for (p, i) in component.iter().enumerate() {
             resolved[*i] = class_set[class[p]];
@@ -341,8 +341,8 @@ fn canonical_classes(elems: &[Vec<(Option<LamId>, Vec<Child>)>]) -> (Vec<usize>,
             // No class split, so the classes keep their numbers: each signature carries the class it
             // refines first, and the classes sort in that order.
             assert!(distinct.iter().enumerate().all(|(c, (refined, _))| *refined == c));
-            let table = distinct.into_iter().map(|(_, keys)| keys).collect();
-            return (class, table);
+            let class_elems = distinct.into_iter().map(|(_, keys)| keys).collect();
+            return (class, class_elems);
         }
         class_count = distinct.len();
         class = signatures

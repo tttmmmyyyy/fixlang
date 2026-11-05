@@ -388,16 +388,16 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         let mut names = vec![];
         let result = match &*e.expr {
             Expr::Var(v) => {
-                let (ty, name) = self.reference(&v.name);
-                names.push(name);
+                let (ty, name_ref) = self.reference(&v.name);
+                names.push(name_ref);
                 ty
             }
             Expr::Builtin(b) => {
                 let mut operands: Vec<AType> = vec![];
                 for name in b.op.free_vars() {
-                    let (ty, name) = self.operand(&name);
+                    let (ty, name_ref) = self.operand(&name);
                     operands.push(ty);
-                    names.push(name);
+                    names.push(name_ref);
                 }
                 let result = self.layout.fresh(&ty, &mut self.analysis.solver);
                 let mut flow = BuiltinFlow::new(
@@ -596,9 +596,9 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 .make_dynamic(own, DynamicKind::ReadsOwnCapture);
             return (ty, NameRef::Local);
         }
-        let (ty, name) = self.reference(name);
+        let (ty, name_ref) = self.reference(name);
         self.record(&ty);
-        (ty, name)
+        (ty, name_ref)
     }
 
     /// The annotated type of the local name `name` where it is read.
@@ -879,7 +879,7 @@ fn generalize(
     // share none of them with a variable they unify.
     let mut vars: Vec<SetVar> = vec![];
     let mut seen: Set<SetVar> = Set::default();
-    let mut root = |solver: &mut Solver, vs: &mut [SetVar]| {
+    let mut collect_roots = |solver: &mut Solver, vs: &mut [SetVar]| {
         for v in vs {
             *v = solver.find(*v);
             if seen.insert(*v) {
@@ -889,16 +889,16 @@ fn generalize(
     };
     let mut types = types;
     for ty in &mut types {
-        root(solver, &mut ty.slots);
+        collect_roots(solver, &mut ty.slots);
     }
     for nodes in &mut node_types {
         for node in nodes {
-            root(solver, &mut node.ty.slots);
+            collect_roots(solver, &mut node.ty.slots);
             for name in &mut node.names {
                 if let NameRef::Global { site, ty } = name {
-                    root(solver, &mut ty.slots);
+                    collect_roots(solver, &mut ty.slots);
                     if let Some(site) = site {
-                        root(solver, &mut site.args);
+                        collect_roots(solver, &mut site.args);
                     }
                 }
             }
@@ -908,9 +908,9 @@ fn generalize(
         if let Some(lam) = term.lam {
             let lambda = &mut analysis.lambdas[lam as usize];
             for (_, ty) in &mut lambda.captures {
-                root(solver, &mut ty.slots);
+                collect_roots(solver, &mut ty.slots);
             }
-            root(solver, &mut lambda.held_in_place);
+            collect_roots(solver, &mut lambda.held_in_place);
         }
     }
     let var_index = vars.iter().enumerate().map(|(i, v)| (*v, i)).collect();
