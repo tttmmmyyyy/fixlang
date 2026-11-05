@@ -441,6 +441,7 @@ impl ModuleFileWriter {
         let tmp = self.tmp_file();
         tmp.seek(SeekFrom::Start(bodies_end))?;
         tmp.write_all(&tail)?;
+        let bytes = map(tmp)?;
 
         let tmp = self.tmp.take().unwrap();
         let file_name = self.file.name();
@@ -454,7 +455,7 @@ impl ModuleFileWriter {
         self.remove_stale_files(&file_name);
         let mapped = MappedModuleFile {
             file: self.file.clone(),
-            bytes: map(&tmp.file)?,
+            bytes,
         };
         Ok((entries.into_iter().collect(), mapped))
     }
