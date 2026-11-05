@@ -887,7 +887,17 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let sets = self.sets_of(walk.instance, ty);
         if let Some(lam) = self.body_lambda.get(name) {
             if let Repr::Single(c) = self.repr.of(sets[0]) {
-                assert_eq!(self.repr.classes[c as usize].lam, *lam);
+                let args: Vec<SetId> = self.analysis.lambdas[*lam as usize]
+                    .params
+                    .iter()
+                    .map(|p| self.spec.instances[target].args[*p])
+                    .collect();
+                assert_eq!(
+                    self.repr.class_of(*lam, &args),
+                    c,
+                    "a reference to `{}` builds a value of a class other than its set's",
+                    name.to_string()
+                );
                 assert_eq!(self.body_copy_of_class(c), copy);
                 return self.capture_struct_value(c);
             }
