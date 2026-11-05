@@ -706,4 +706,63 @@ main = (
             "the build after the edit removed a file of another module"
         );
     }
+
+    /// A build that cannot write the file of a module still builds the program from the bodies it
+    /// checked, and reports the file it could not write.
+    #[cfg(unix)]
+    #[test]
+    fn a_build_that_cannot_write_the_cache_builds_the_program() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("main.fix"),
+            r#"module Main;
+
+double : I64 -> I64;
+double = |x| x * 2;
+
+main : IO ();
+main = println $ (double(21), 3).to_string;
+"#,
+        )
+        .expect("Failed to write main.fix");
+        let cache_dir = dir.join(TYPED_MODULES_PATH);
+        fs::create_dir_all(&cache_dir).expect("Failed to create the type-check cache directory");
+        fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o555))
+            .expect("Failed to make the type-check cache directory read-only");
+
+        let (built, stderr) = try_build(dir, "main.fix", &[]);
+        fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o755))
+            .expect("Failed to make the type-check cache directory writable");
+        assert!(built, "stderr: {}", stderr);
+        assert!(
+            stderr.contains("Failed to write cache file"),
+            "stderr: {}",
+            stderr
+        );
+        assert_eq!(run_out(dir), "(42, 3)");
+    }
+
+    /// A build reads back the bodies it wrote to the files of their modules, as it reads those an
+    /// earlier build wrote, and finds every one of them where it wrote it.
+    #[test]
+    fn a_build_reads_back_every_body_it_wrote() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("main.fix"),
+            "module Main;\n\nmain : IO ();\nmain = println $ (1, 2, 3).to_string;\n",
+        )
+        .expect("Failed to write main.fix");
+
+        let stderr = build(dir, "main.fix", &[]);
+        assert!(
+            !stderr.contains("Failed to read cache file"),
+            "the build did not find a body where it wrote it.\nstderr: {}",
+            stderr
+        );
+        assert_eq!(run_out(dir), "(1, 2, 3)");
+    }
 }

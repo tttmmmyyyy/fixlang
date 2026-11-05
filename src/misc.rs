@@ -586,16 +586,17 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        char_pos_to_utf16_pos, join_compiler_threads, map_on_compiler_threads,
+        char_pos_to_utf16_pos, consume_on_compiler_threads, join_compiler_threads,
+        map_on_compiler_threads,
         spawn_compiler_thread, split_at_name_boundaries, split_string_by_unquoted_spaces,
         upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos, Set,
     };
     use crate::error::any_to_string;
     use std::panic::{catch_unwind, AssertUnwindSafe};
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::thread::{self, JoinHandle};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     /// Every thread has finished by the time a worker's panic is carried on, so unwinding never
     /// tears down state that a thread still running is working on.
@@ -665,6 +666,81 @@ mod tests {
                 }
                 i
             })
+        }))
+        .expect_err("the panic of f is carried on");
+        assert_eq!(any_to_string(&*payload), MESSAGE);
+    }
+
+    /// Every item's result reaches `consume` once, and `consume` runs on the calling thread.
+    #[test]
+    fn test_consume_on_compiler_threads_consumes_each_result_once_on_the_calling_thread() {
+        let caller = thread::current().id();
+        let mut consumed = vec![];
+        consume_on_compiler_threads(
+            (0..16u64).collect(),
+            4,
+            |i| i * 10,
+            |result| {
+                assert_eq!(thread::current().id(), caller);
+                consumed.push(result);
+            },
+        );
+        consumed.sort();
+        assert_eq!(consumed, (0..16u64).map(|i| i * 10).collect::<Vec<_>>());
+    }
+
+    /// A result reaches `consume` while the threads still work on other items, so a caller that
+    /// writes the results out holds only those not yet written.
+    #[test]
+    fn test_consume_on_compiler_threads_consumes_a_result_before_every_item_is_done() {
+        let consumed_any = AtomicBool::new(false);
+        let mut saw_consumed = vec![];
+        consume_on_compiler_threads(
+            vec![0, 1],
+            2,
+            |i| {
+                if i == 0 {
+                    return (i, true);
+                }
+                // Item 1 waits for a result to have been consumed, giving up after a while so that
+                // an implementation consuming nothing before every item is done fails instead of
+                // hanging.
+                let deadline = Instant::now() + Duration::from_secs(10);
+                while !consumed_any.load(Ordering::SeqCst) && Instant::now() < deadline {
+                    thread::sleep(Duration::from_millis(1));
+                }
+                (i, consumed_any.load(Ordering::SeqCst))
+            },
+            |(i, saw)| {
+                consumed_any.store(true, Ordering::SeqCst);
+                saw_consumed.push((i, saw));
+            },
+        );
+        saw_consumed.sort();
+        assert_eq!(
+            saw_consumed,
+            vec![(0, true), (1, true)],
+            "item 1 finished before any result was consumed"
+        );
+    }
+
+    /// A panic of `f` on one item is carried on with its own payload, so the renderer the compiler
+    /// reports through still finds the message in it.
+    #[test]
+    fn test_consume_on_compiler_threads_carries_the_panic_of_f_with_its_payload() {
+        const MESSAGE: &str = "f panics on purpose";
+        let payload = catch_unwind(AssertUnwindSafe(|| {
+            consume_on_compiler_threads(
+                (0..8).collect(),
+                4,
+                |i| {
+                    if i == 5 {
+                        panic!("{}", MESSAGE);
+                    }
+                    i
+                },
+                |_| {},
+            )
         }))
         .expect_err("the panic of f is carried on");
         assert_eq!(any_to_string(&*payload), MESSAGE);
