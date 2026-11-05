@@ -51,6 +51,13 @@ impl Lambda {
     pub fn to_string(&self) -> String {
         format!("{}@lam{}", self.symbol.to_string(), self.index)
     }
+
+    /// Whether the rewrite lifts the lambda to a global function where its set is represented by
+    /// closures. The lambda that is the body of its symbol is a global function already, and one
+    /// whose body reads its capture whole (`CAP_NAME`) needs the closure object holding it.
+    pub fn is_lifted_from_closures(&self) -> bool {
+        !self.is_body && !self.expr.get_lam_body().has_free_var(&FullName::local(CAP_NAME))
+    }
 }
 
 /// A strongly connected component of the call graph, and what inference found in it.

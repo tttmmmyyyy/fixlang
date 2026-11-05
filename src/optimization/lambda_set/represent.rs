@@ -14,22 +14,22 @@ pub enum Repr {
     /// As closures, the form a function value has without this pass.
     Closure,
     /// As the capture struct of the one lambda of the set, whose values are called by calling that
-    /// lambda directly. Holds the class of the sets represented alike, as its index into
+    /// lambda directly. Holds the class of the set's element, as its index into
     /// `Representation::classes`.
     Single(u32),
 }
 
-/// The sets whose values are represented by the capture struct of one lambda, and represented
-/// alike: their elements name one lambda, and give its parameters sets represented alike.
-pub struct SingleClass {
+/// The elements naming one lambda that the rewrite makes one global function of: they give the
+/// lambda's parameters sets represented alike, so the lambda's body has one type in all of them.
+pub struct LamClass {
     /// The lambda.
     pub lam: LamId,
     /// How each set the element gives the parameters of the lambda is represented, in the order of
     /// `Lambda::params`.
     pub args: Vec<Repr>,
-    /// The copy of the lambda's component that builds the values of one of the sets, as an index
-    /// into `Specialization::instances`. Every set of the class gives the lambda's body the same
-    /// types, so the sets of this copy are the ones the lambda's body is rewritten with.
+    /// The copy of the lambda's component that builds the values of one of the elements, as an
+    /// index into `Specialization::instances`. Every element of the class gives the lambda's body
+    /// the same types, so the sets of this copy are the ones the lambda's body is rewritten with.
     pub instance: usize,
     /// The hash of the text the class is written as, which is the same in every compilation of the
     /// program, and different for two classes.
@@ -40,8 +40,14 @@ pub struct SingleClass {
 pub struct Representation {
     /// How each set is represented, by its id.
     of_set: Vec<Repr>,
-    /// The classes of the sets represented by a capture struct.
-    pub classes: Vec<SingleClass>,
+    /// The classes of the elements the rewrite makes global functions of: the element of each set
+    /// represented by a capture struct, and each element of a set of closures naming a lambda that
+    /// `Lambda::is_lifted_from_closures` holds of. The classes of the sets represented by a capture
+    /// struct come first.
+    pub classes: Vec<LamClass>,
+    /// The class of the elements naming each lambda and giving its parameters sets of each
+    /// representation, by the lambda and the representations in the order of `Lambda::params`.
+    class_of_args: Map<(LamId, Vec<Repr>), u32>,
     /// The number of classes of each lambda that has any.
     class_counts: Map<LamId, usize>,
 }
@@ -50,6 +56,15 @@ impl Representation {
     /// How the values of `set` are represented.
     pub fn of(&self, set: SetId) -> Repr {
         self.of_set[set as usize]
+    }
+
+    /// The class of the element naming `lam` and giving its parameters the sets `args`, in the
+    /// order of `Lambda::params`.
+    pub fn class_of(&self, lam: LamId, args: &[SetId]) -> u32 {
+        let key = (lam, args.iter().map(|a| self.of(*a)).collect());
+        *self.class_of_args.get(&key).unwrap_or_else(|| {
+            panic!("no class holds the element of the lambda {} given the sets {:?}", lam, args)
+        })
     }
 
     /// The number of classes whose lambda is `lam`.
@@ -73,6 +88,12 @@ impl Representation {
 /// values it captures, the capture struct of a set that holds in place this one again. Such a set
 /// would have no size, as an unboxed type reaching itself has none, so its values stay closures,
 /// which hold their captures behind a pointer. Every other set is represented by closures.
+///
+/// The elements of the sets represented by closures that name a lambda fall into classes too,
+/// where `Lambda::is_lifted_from_closures` holds of the lambda: the rewrite lifts such a lambda to a
+/// global function, and the closure is that function applied to the capture struct. An element
+/// giving the lambda's parameters sets represented as those of a class of a set represented by a
+/// capture struct is in that class, so the two share the global function.
 pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     let store = &spec.store;
     let set_count = store.len();
@@ -183,18 +204,47 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
         });
         of_set[id] = Repr::Single(class);
     }
-    let mut classes: Vec<SingleClass> = first_set
-        .iter()
-        .map(|id| {
-            let (lam, args) = single[*id].unwrap();
-            SingleClass {
+    // The classes of the sets represented by a capture struct come first, numbered as `of_set`
+    // names them, then the classes the elements of the sets of closures add.
+    let mut classes: Vec<LamClass> = vec![];
+    let mut class_of_args: Map<(LamId, Vec<Repr>), u32> = Map::default();
+    let add_class = |classes: &mut Vec<LamClass>,
+                     class_of_args: &mut Map<(LamId, Vec<Repr>), u32>,
+                     lam: LamId,
+                     args: &[SetId]| {
+        let reprs: Vec<Repr> = args.iter().map(|a| of_set[*a as usize]).collect();
+        class_of_args.entry((lam, reprs.clone())).or_insert_with(|| {
+            classes.push(LamClass {
                 lam,
-                args: args.iter().map(|a| of_set[*a as usize]).collect(),
+                args: reprs,
                 instance: builder_of(lam, args),
                 hash: String::new(),
+            });
+            (classes.len() - 1) as u32
+        });
+    };
+    for id in &first_set {
+        let (lam, args) = single[*id].unwrap();
+        add_class(&mut classes, &mut class_of_args, lam, args);
+    }
+    assert_eq!(
+        classes.len(),
+        first_set.len(),
+        "two classes of the sets represented by a capture struct give their lambda's parameters \
+         sets represented alike"
+    );
+    for id in 0..set_count {
+        if of_set[id] != Repr::Closure {
+            continue;
+        }
+        for elem in store.elems(id as SetId) {
+            if let Elem::Lam(lam, args) = elem {
+                if analysis.lambdas[*lam as usize].is_lifted_from_closures() {
+                    add_class(&mut classes, &mut class_of_args, *lam, args);
+                }
             }
-        })
-        .collect();
+        }
+    }
     name_classes(analysis, &mut classes);
 
     let mut class_counts: Map<LamId, usize> = Map::default();
@@ -204,6 +254,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     Representation {
         of_set,
         classes,
+        class_of_args,
         class_counts,
     }
 }
@@ -215,7 +266,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
 /// a class outside the strongly connected component being written is written by its hash. The
 /// text reads only the lambdas and the arguments, so it is the same however the sets were
 /// numbered.
-fn name_classes(analysis: &Analysis, classes: &mut [SingleClass]) {
+fn name_classes(analysis: &Analysis, classes: &mut [LamClass]) {
     let mut graph = Graph::new((0..classes.len()).collect::<Vec<usize>>());
     for (c, class) in classes.iter().enumerate() {
         for arg in &class.args {
@@ -244,7 +295,7 @@ fn name_classes(analysis: &Analysis, classes: &mut [SingleClass]) {
 /// `component` of the classes, `written` holding the members written so far in this text.
 fn write_class(
     analysis: &Analysis,
-    classes: &[SingleClass],
+    classes: &[LamClass],
     component: &[usize],
     c: usize,
     written: &mut Vec<usize>,

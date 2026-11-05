@@ -1,6 +1,7 @@
 // Rewriting a program by its lambda sets: the copies of the symbols and the type constructors the
 // sets ask for, the lambdas lifted to global functions, and each value of a set of one lambda
-// represented by that lambda's capture struct.
+// represented by that lambda's capture struct. A lambda of a set represented by closures is lifted
+// too, and its closure is the lifted function applied to the capture struct.
 
 use super::{
     concrete::SetId,
@@ -69,9 +70,10 @@ impl Rewritten {
 ///
 /// A copy of each component is made for each way its copies represent the sets of
 /// `Component::body_params`; a component with one such way keeps the names of its symbols. A lambda
-/// whose set is represented by its capture struct is lifted to a global function taking that
-/// struct, once for each class of such sets; the lambda that is the body of its symbol is the
-/// symbol's copy instead. A type constructor whose own slots hold a set represented by a capture
+/// is lifted to a global function taking its capture struct, once for each class of its elements
+/// (`Representation::classes`); the lambda that is the body of its symbol is the symbol's copy
+/// instead. Where the lambda's set is represented by its capture struct, the struct is the value;
+/// where it is represented by closures, the lifted function applied to the struct is. A type constructor whose own slots hold a set represented by a capture
 /// struct is copied for each way its own slots are represented.
 pub fn rewrite(
     prg: &Program,
@@ -779,13 +781,25 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 assert_eq!(lambda.is_body, as_body);
                 if !as_body {
                     let own = self.repr.of(self.set_of(walk.instance, node.ty.slots[0]));
-                    if let Repr::Single(c) = own {
-                        assert_eq!(self.repr.classes[c as usize].lam, lam);
-                        self.ask_lift(c);
+                    let value = match own {
+                        Repr::Single(c) => {
+                            assert_eq!(self.repr.classes[c as usize].lam, lam);
+                            self.ask_lift(c);
+                            Some(self.capture_struct_value(walk.instance, c))
+                        }
+                        Repr::Closure if lambda.is_lifted_from_closures() => {
+                            let instance = &self.spec.instances[walk.instance];
+                            let args: Vec<SetId> =
+                                lambda.params.iter().map(|p| instance.args[*p]).collect();
+                            let c = self.repr.class_of(lam, &args);
+                            self.ask_lift(c);
+                            Some(self.closure_value(walk.instance, c, ty.clone()))
+                        }
+                        Repr::Closure => None,
+                    };
+                    if let Some(value) = value {
                         walk.cursor = lambda.nodes.end;
-                        return self
-                            .capture_struct_value(walk.instance, c)
-                            .set_source(e.source.clone());
+                        return value.set_source(e.source.clone());
                     }
                 }
                 let body = self.walk_expr(walk, body, false);
@@ -938,6 +952,15 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             .collect();
         let tycon = self.capture_tycon(c);
         expr_make_struct(tycon.clone(), fields).set_type(type_tycon(&tycon))
+    }
+
+    /// The closure of type `ty` that a lambda of the class `c` builds in the copy `instance`: the
+    /// lifted function applied to the capture struct.
+    fn closure_value(&mut self, instance: usize, c: u32, ty: Arc<TypeNode>) -> Arc<ExprNode> {
+        let cap = self.capture_struct_value(instance, c);
+        let cap_ty = cap.type_.clone().unwrap();
+        let callee = expr_var(self.lifted_name(c), None).set_type(type_arrow(cap_ty, ty));
+        expr_app_typed(callee, vec![cap])
     }
 
     /// The application `e` of `func`, a value of the class `c`, to `arg`, of type `ty`: a direct call
