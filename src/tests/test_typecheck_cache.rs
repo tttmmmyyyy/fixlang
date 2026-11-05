@@ -767,6 +767,65 @@ main = println $ (double(21), 3).to_string;
         assert_eq!(run_out(dir), "(1, 2, 3)");
     }
 
+    /// A build holds the file of each module open while it runs, and raises the limit on the files
+    /// it may hold open, so a program of more modules than the limit it starts with builds, and
+    /// reads every body back from the files it wrote and from those an earlier build wrote.
+    #[test]
+    fn a_program_of_more_modules_than_the_open_file_limit_reads_back_every_body() {
+        const MODULES: usize = 100;
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        let mut files = vec![];
+        let mut main = "module Main;\n\n".to_string();
+        let mut sum = vec![];
+        for i in 0..MODULES {
+            let file = format!("m{}.fix", i);
+            fs::write(
+                dir.join(&file),
+                format!("module M{};\n\nvalue : I64 = {};\n", i, i),
+            )
+            .expect("Failed to write a module");
+            files.push(format!("\"{}\"", file));
+            main += &format!("import M{};\n", i);
+            sum.push(format!("M{}::value", i));
+        }
+        main += &format!(
+            "\nmain : IO () = println(({}).to_string);\n",
+            sum.join(" + ")
+        );
+        fs::write(dir.join("main.fix"), main).expect("Failed to write main.fix");
+        files.push("\"main.fix\"".to_string());
+        fs::write(
+            dir.join("fixproj.toml"),
+            format!(
+                "[general]\nname = \"many\"\nversion = \"0.1.0\"\n[build]\nfiles = [{}]\n",
+                files.join(", ")
+            ),
+        )
+        .expect("Failed to write fixproj.toml");
+
+        let fix = fix_command().get_program().to_os_string();
+        for build in ["the first build", "the second build"] {
+            // The soft limit alone is lowered, below the number of modules, so that the build can
+            // raise it again.
+            let output = Command::new("sh")
+                .args(["-c", "ulimit -Sn 64 && exec \"$0\" build -o out"])
+                .arg(&fix)
+                .current_dir(dir)
+                .output()
+                .expect("Failed to run fix build");
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(output.status.success(), "{} failed:\n{}", build, stderr);
+            assert!(
+                !stderr.contains("cache file"),
+                "{} did not keep the files of the modules open.\nstderr: {}",
+                build,
+                stderr
+            );
+        }
+        assert_eq!(run_out(dir), (0..MODULES).sum::<usize>().to_string());
+    }
+
     /// A program of `count` functions, every one used from `main`, so that type checking it takes
     /// long enough for another process to act while it runs.
     fn source_with_many_functions(count: usize) -> String {
