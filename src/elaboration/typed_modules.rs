@@ -836,8 +836,8 @@ impl Program {
                 if *unchecked == 0 {
                     if let Some(writing) = writing_of_module.remove(&file.module) {
                         let (stored, left) = writing.finish();
-                        for (i, stored) in stored {
-                            outcomes[i] = Some(CheckOutcome::Stored(stored));
+                        for (stored_i, outcome) in stored {
+                            outcomes[stored_i] = Some(CheckOutcome::Stored(outcome));
                         }
                         unwritten.extend(left);
                     }

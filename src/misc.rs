@@ -673,7 +673,7 @@ mod tests {
     #[test]
     fn test_consume_on_compiler_threads_consumes_a_result_before_every_item_is_done() {
         let consumed_any = AtomicBool::new(false);
-        let mut saw_consumed = vec![];
+        let mut consumed = vec![];
         consume_on_compiler_threads(
             vec![0, 1],
             2,
@@ -692,12 +692,12 @@ mod tests {
             },
             |(i, saw)| {
                 consumed_any.store(true, Ordering::SeqCst);
-                saw_consumed.push((i, saw));
+                consumed.push((i, saw));
             },
         );
-        saw_consumed.sort();
+        consumed.sort();
         assert_eq!(
-            saw_consumed,
+            consumed,
             vec![(0, true), (1, true)],
             "item 1 finished before any result was consumed"
         );
