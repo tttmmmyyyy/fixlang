@@ -515,11 +515,11 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         dir.join(TYPED_MODULES_PATH).join(main_file)
     }
 
-    /// A file of the type-check cache whose bytes were damaged costs one build the check it could
-    /// have skipped, and nothing else: that build writes what it checked back to the file, and the
-    /// build after it checks nothing again and leaves the file as it is. Damaging the record makes
-    /// the build check the module again; damaging a body the record points to makes instantiation
-    /// check that body again.
+    /// A file of the type-check cache whose record, or the identity in front of a body, was damaged
+    /// costs one build the check it could have skipped, and nothing else: that build writes what it
+    /// checked back to the file, and the build after it checks nothing again and leaves the file as
+    /// it is. Damaging the record makes the build check the module again; damaging the identity of
+    /// a body the record points to makes instantiation check that body again.
     #[test]
     fn a_build_recovers_from_a_damaged_cache_file() {
         let temp = TempDir::new().expect("Failed to create temp directory");
