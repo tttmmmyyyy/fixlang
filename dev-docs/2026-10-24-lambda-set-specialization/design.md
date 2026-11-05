@@ -426,7 +426,8 @@ type Seg#ls7d21 m = box struct { op : #LsCap@main#ls_lam0, data : Array m };
 - 汎用のパス (`pull_let`、`unique_local_names`、名前の付け替え、`find_usage_of_name`、`collapse_constructions`) に、複数の引数を持つ `App` と `Lam` を扱わせる。lambda set のパスにも、func type と複数の引数を扱わせる。
 - `split_struct_args` から `closure_specialization` までのパスを止めた形を測り、要らないものを消す。`split_struct_args` は無くす見込みである。
 - 段階 2 の終わりで落ちているテストを通す。どちらの族も、全部の引数を渡す呼び出しが、段階 2 では内側のラムダの連鎖への呼び出しになるために起きる。`uncurry` を前へ移すと、その連鎖ができなくなる。
-  - `test_action_chosen_by_a_branch` の 6 本と、`test_a_round_of_a_specialized_combinator_builds_no_closure`。グローバル関数の先頭の連鎖 `|s| |f| let io = f(s); |st| ...` を分けてリフトすると、`loop_m` の `io` が周の終わりで作られて次の周の頭で使われ、作る場所と使う場所のあいだに再帰呼び出しが挟まる。今の位置の `uncurry` は eta 展開で `let io = f(s)` を `|st|` の内側へ移すので、main では `io` を作る式と使う式が同じ式に入る。
+  - `test_a_round_of_a_specialized_combinator_builds_no_closure`。グローバル関数の先頭の連鎖 `|s| |f| let io = f(s); |st| ...` を分けてリフトすると、`loop_m` の `io` が周の終わりで作られて次の周の頭で使われ、作る場所と使う場所のあいだに再帰呼び出しが挟まる。今の位置の `uncurry` は eta 展開で `let io = f(s)` を `|st|` の内側へ移すので、main では `io` を作る式と使う式が同じ式に入る。
+  - `test_benefit_routing_by_last_use` と `test_llvm_arg_overrides_an_option_every_build_hands_llvm`。`main = (pure();; ...)` の本体は `let` の後ろにラムダが続く形で、そのラムダがリフトされ、`main` の処理がリフトした関数に入る。前者は `main` の本体で呼び出しの振り分けを読むので落ちる (振り分けはリフトした関数の中で正しく行われている)。後者は、ループの形が変わって、LLVM の選択肢がオブジェクトコードを変えなくなる。`uncurry` が先に eta 展開すれば、`main` の本体はラムダになり、リフトされない。後者は段階 4 で通るかを確かめ、通らなければ別の原因を調べる。
   - `test_evaluation_order` の 2 本。3 引数の関数を呼ぶと、3 番目の引数が先に評価される。リフトした関数を `inline` が展開した後、`let_elimination` の規則 2-c が、2 番目の引数を含む式を後ろへ動かす。評価順は未規定で、寿命は延びない。
 
 ## 各段階の終え方
