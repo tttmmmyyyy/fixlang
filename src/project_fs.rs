@@ -93,6 +93,13 @@ pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
     .map_err(failed)
 }
 
+/// A path in the directory of `path` for a temporary file that will be renamed onto `path`. Its
+/// name begins with a dot and carries a random number drawn by this call, so that it names no file
+/// a project or another call has, and is no longer than the names the file system allows.
+pub fn temporary_path_beside(path: &Path) -> PathBuf {
+    path.with_file_name(format!(".{:016x}.tmp", random::<u64>()))
+}
+
 /// Writes the file at `path` by having `write` write a new file beside it, at the path it is handed,
 /// and renaming that onto `path`, so that `path` holds either what it held before or the whole of
 /// what `write` wrote. A symbolic link at `path` is replaced by the new file, and what it pointed to
@@ -101,7 +108,7 @@ pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
 /// The new file is named apart from `path`, so that a name of `path` as long as the file system
 /// allows still leaves room for it.
 pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) -> io::Result<()> {
-    let tmp_path = path.with_file_name(format!(".{:016x}.tmp", random::<u64>()));
+    let tmp_path = temporary_path_beside(path);
     write(&tmp_path)
         .and_then(|()| fs::rename(&tmp_path, path))
         .inspect_err(|_| {

@@ -225,10 +225,10 @@ run targets on the compiler threads, at most k in flight:   // モジュール�
     checked = typed_body(entity)        // body_ast -> 不透明型で包む -> check_scheme_equivalent -> 型検査
     keep  checked.opaque_types, checked.diagnostics, checked.warning_facts
     if checked.diagnostics is empty:
-        hand the encoded checked.typed to the writer of its module's file
+        append checked.typed to the new file of its module   // old bodies first, copied when it begins
     free  checked.typed
     if entity is the last target of its module:
-        write the new file (old bodies + new bodies, record, index); replace_file
+        finish the new file (record, index); replace the file with it
 
 opaque types  = from the records + from the checked
 validate_opaque_types_are_acyclic(opaque types)
@@ -236,7 +236,7 @@ warnings      = derive from the warning facts of the records + of the checked
 report all diagnostics and warnings; stop on an error
 ```
 
-今は全部の型検査を `map_on_compiler_threads` に一度に渡していて、1 本の重さが大きくばらついても、空いたスレッドが次を取る。モジュールごとや k 個ごとに完了を待つと、並列度が落ちる。そこで、対象の本体を全モジュールにわたって一つの作業の列に入れ、同時に処理中の本体を k 個までに抑える。k はコンパイラのスレッドの数で、各スレッドは型検査を終えた本体を呼び出し側のスレッドへ渡してから次を取る。書く前のモジュールの型付きの本体は、エンコードしたバイト列で持つ。
+今は全部の型検査を `map_on_compiler_threads` に一度に渡していて、1 本の重さが大きくばらついても、空いたスレッドが次を取る。モジュールごとや k 個ごとに完了を待つと、並列度が落ちる。そこで、対象の本体を全モジュールにわたって一つの作業の列に入れ、同時に処理中の本体を k 個までに抑える。k はコンパイラのスレッドの数で、各スレッドは型検査を終えた本体を呼び出し側のスレッドへ渡してから次を取る。呼び出し側のスレッドは、渡された本体をすぐにモジュールの新しいファイルへ書き足すので、モジュールの最後の本体を待つ間も、書いた本体はメモリに残らない。
 
 このフェーズが終わると、すべての値の不透明型の具体型が決まっている。型検査のエラーを全部報告してからインスタンス化に進む順序も、今と同じである。
 
