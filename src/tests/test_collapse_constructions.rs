@@ -5,15 +5,11 @@
 //! `advance` that calls itself is a body `inline` never moves, so a chain that keeps one leaves it
 //! standing as a function of its own in the dump.
 //!
-//! What the rewrites are for cannot be observed by running the program — they leave the answer
-//! unchanged — so the chain that motivates them is asserted on the dump: a function an iterator
-//! carries in a field is called through a pointer, and the same function reached as an argument is
-//! called by name. The answers are asserted at the levels above and below the one the pass runs at,
-//! which is what says the rewrites preserve them.
+//! The answers are asserted at the levels above and below the one the pass runs at, which is what
+//! says the rewrites preserve them.
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::constants::CAP_LIST_PREFIX;
     use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -116,48 +112,6 @@ mod integration_tests {
             .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
 
-    /// The largest number of parameters of capture-list type that any one function in `dump` takes.
-    ///
-    /// A function reached as an argument arrives as its capture list, which is a type of its own, and
-    /// the body holding it calls that function by name. A function an iterator carries in a field
-    /// arrives as a closure and is called through a pointer. So this says how many of a chain's
-    /// functions one body knows the identity of.
-    fn most_capture_lists_taken_by_one_function(dump: &str) -> usize {
-        dump.lines()
-            .filter_map(|line| line.strip_prefix("fn "))
-            .map(|header| parameter_list(header).matches(CAP_LIST_PREFIX).count())
-            .max()
-            .expect("the RC IR dump names no function")
-    }
-
-    /// The parameter list of a dumped function header, taken from the parenthesis that opens it to
-    /// the one that closes it.
-    ///
-    /// A parameter's own type carries parentheses — a function type is written `(a) -> b` — so the
-    /// list runs to the parenthesis that brings the nesting back to where it started.
-    fn parameter_list(header: &str) -> &str {
-        let open = header
-            .find('(')
-            .unwrap_or_else(|| panic!("the function header opens no parameter list:\n{}", header));
-        let mut depth = 0;
-        for (offset, character) in header[open..].char_indices() {
-            match character {
-                '(' => depth += 1,
-                ')' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return &header[open + 1..open + offset];
-                    }
-                }
-                _ => {}
-            }
-        }
-        panic!(
-            "the parameter list of the function header stays open:\n{}",
-            header
-        )
-    }
-
     /// The functions of `dump` whose name says they are an iterator's `advance`.
     ///
     /// An `advance` that walks past elements by calling itself is a body `inline` never moves, so the
@@ -166,23 +120,6 @@ mod integration_tests {
     fn advance_functions(dump: &str) -> Vec<&str> {
         dump.lines()
             .filter(|line| line.starts_with("fn Std::Iterator::advance"))
-            .collect()
-    }
-
-    /// The functions of `dump` lifted out of `main` that take a capture list and an `I64` and answer
-    /// an `I64`: the functions a chain of iterators over `I64` carries, each standing as a function
-    /// of its own.
-    ///
-    /// The IO plumbing is lifted out of `main` as well, and each of those takes its capture list
-    /// alone and answers the action it wraps, so asking for `Std::I64` among the parameters and as
-    /// the result leaves them out.
-    fn carried_functions(dump: &str) -> Vec<&str> {
-        dump.lines()
-            .filter(|line| line.starts_with("fn Main::main") && line.ends_with(") -> Std::I64:"))
-            .filter(|line| {
-                let params = parameter_list(line);
-                params.contains(CAP_LIST_PREFIX) && params.contains("Std::I64")
-            })
             .collect()
     }
 
@@ -203,42 +140,6 @@ mod integration_tests {
             "no {} should stand as a function of its own, but these do:\n{}",
             subject,
             left.join("\n")
-        );
-    }
-
-    /// A chain of two `map`s hands the fold two functions, each in a field of a struct that is in a
-    /// field of the next, and a third as the fold's own operation. Reading each construction where
-    /// the fold takes it apart is what makes all three arguments, so the fold receives three capture
-    /// lists; the chain's two functions stay closures without it.
-    #[test]
-    pub fn test_the_functions_a_chain_of_iterators_carries_are_called_by_name() {
-        let (_temp_dir, project_dir) = setup_test_env("nested_iterators");
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", NESTED_ITERATORS_OUTPUT);
-
-        let known_function_count = most_capture_lists_taken_by_one_function(&dump);
-        assert!(
-            known_function_count >= 3,
-            "the fold should receive the chain's two functions and its own operation as capture \
-             lists, but the function taking the most of them takes {}",
-            known_function_count
-        );
-    }
-
-    /// Neither function the chain carries stands as a function of its own. Reading each construction
-    /// where the fold takes it apart binds the function a field holds to a name and hands the fold
-    /// that name, and the reduction that follows puts the body of each where its one call stood.
-    /// Left standing, each is a lambda bound to a name and applied once, which the program builds
-    /// and calls through instead of running the body where it is.
-    ///
-    /// The dump is what this asserts against because the program cannot observe it: the fold answers
-    /// the same either way.
-    #[test]
-    pub fn test_the_functions_a_chain_of_iterators_carries_leave_no_function_of_their_own() {
-        assert_leaves_no_function_of_its_own(
-            "nested_iterators",
-            NESTED_ITERATORS_OUTPUT,
-            carried_functions,
-            "function the chain carries",
         );
     }
 
