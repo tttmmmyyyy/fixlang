@@ -1,13 +1,16 @@
 // Shared machinery for passing what a lambda captures as a value: the unboxed struct that carries
 // the captured variables to the global function the lambda is lifted to.
 
-use crate::ast::{
-    expr::{expr_make_struct, expr_var, var_var, ExprNode},
-    name::FullName,
-    pattern::PatternNode,
-    traverse::VisitState,
-    typedecl::Field,
-    types::{kind_star, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode},
+use crate::{
+    ast::{
+        expr::{expr_abs_typed, expr_let_typed, expr_make_struct, expr_var, var_var, ExprNode},
+        name::FullName,
+        pattern::PatternNode,
+        traverse::VisitState,
+        typedecl::Field,
+        types::{kind_star, type_tycon, TyCon, TyConInfo, TyConVariant, TypeNode},
+    },
+    optimization::uncurry::internalize_let_to_var_at_head,
 };
 use std::sync::Arc;
 
@@ -87,6 +90,24 @@ impl CaptureStruct {
     // The captured names paired with their types, in the order the struct holds them.
     pub fn fields(&self) -> &[(FullName, Arc<TypeNode>)] {
         &self.fields
+    }
+
+    /// The global function a lambda is lifted to: it takes the capture struct as `param`, takes it
+    /// apart into the captured names, and is then `body`, the lambda.
+    ///
+    /// # Examples
+    /// For a struct capturing `n`, `body` `|x| x + n` gives `|param| |x| let Cap { n } = param; x + n`.
+    pub fn lifted_function(&self, param: &FullName, body: Arc<ExprNode>) -> Arc<ExprNode> {
+        let unpacked = expr_let_typed(
+            self.pattern(),
+            expr_var(param.clone(), None).set_type(self.ty.clone()),
+            body,
+        );
+        internalize_let_to_var_at_head(&expr_abs_typed(
+            var_var(param.clone()),
+            self.ty.clone(),
+            unpacked,
+        ))
     }
 
     // Pattern destructuring the capture struct back into its original captured names.

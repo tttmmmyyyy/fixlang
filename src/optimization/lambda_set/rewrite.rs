@@ -14,7 +14,7 @@ use super::{
 use crate::{
     ast::{
         expr::{
-            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_local,
+            expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_local,
             Expr, ExprNode,
         },
         name::FullName,
@@ -28,7 +28,6 @@ use crate::{
     misc::{Map, Set},
     optimization::{
         capture_struct::CaptureStruct, move_bodies::move_bodies_into_callers,
-        uncurry::internalize_let_to_var_at_head,
     },
 };
 use std::{collections::VecDeque, sync::Arc};
@@ -609,17 +608,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         );
         let lam = expr_abs_typed(params[0].clone(), param_ty, body)
             .set_source(lambda.expr.source.clone());
-        let cap = self.capture_struct(c);
-        let unpacked = expr_let_typed(
-            cap.pattern(),
-            expr_var(FullName::local(LS_CAP_NAME), None).set_type(cap.ty.clone()),
-            lam,
-        );
-        let func = internalize_let_to_var_at_head(&expr_abs_typed(
-            var_local(LS_CAP_NAME),
-            cap.ty.clone(),
-            unpacked,
-        ));
+        let func = self
+            .capture_struct(c)
+            .lifted_function(&FullName::local(LS_CAP_NAME), lam);
         self.insert_symbol(Symbol {
             name: name.clone(),
             generic_name: name,
@@ -737,7 +728,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                         Repr::Single(c) => {
                             assert_eq!(self.repr.classes[c as usize].lam, lam);
                             self.ask_lift(c);
-                            Some(self.capture_struct_value(walk.instance, c))
+                            Some(self.capture_struct_value(c))
                         }
                         Repr::Closure if lambda.is_lifted_from_closures() => {
                             let instance = &self.spec.instances[walk.instance];
@@ -745,7 +736,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                                 lambda.params.iter().map(|p| instance.args[*p]).collect();
                             let c = self.repr.class_of(lam, &args);
                             self.ask_lift(c);
-                            Some(self.closure_value(walk.instance, c, ty.clone()))
+                            Some(self.closure_value(c, ty.clone()))
                         }
                         Repr::Closure => None,
                     };
@@ -892,33 +883,22 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             if let Repr::Single(c) = self.repr.of(sets[0]) {
                 assert_eq!(self.repr.classes[c as usize].lam, *lam);
                 assert_eq!(self.body_copy_of_class(c), copy);
-                return self.capture_struct_value(walk.instance, c);
+                return self.capture_struct_value(c);
             }
         }
         let ty = self.rewrite_type_at(&ty.ty, &sets, false);
         expr_var(self.copy_name(name, copy), None).set_type(ty)
     }
 
-    /// The construction of a capture struct of the class `c` out of the names its lambda captures,
-    /// at their types in the copy `instance`.
-    fn capture_struct_value(&mut self, instance: usize, c: u32) -> Arc<ExprNode> {
-        let lambda = &self.analysis.lambdas[self.repr.classes[c as usize].lam as usize];
-        let fields = lambda
-            .captures
-            .iter()
-            .map(|(name, ty)| {
-                let value = expr_var(name.clone(), None).set_type(self.rewrite_type(instance, ty));
-                (name.name.clone(), value)
-            })
-            .collect();
-        let tycon = self.capture_tycon(c);
-        expr_make_struct(tycon.clone(), fields).set_type(type_tycon(&tycon))
+    /// The construction of a capture struct of the class `c` out of the names its lambda captures.
+    fn capture_struct_value(&mut self, c: u32) -> Arc<ExprNode> {
+        self.capture_struct(c).struct_expr()
     }
 
-    /// The closure of type `ty` that a lambda of the class `c` builds in the copy `instance`: the
-    /// lifted function applied to the capture struct.
-    fn closure_value(&mut self, instance: usize, c: u32, ty: Arc<TypeNode>) -> Arc<ExprNode> {
-        let cap = self.capture_struct_value(instance, c);
+    /// The closure of type `ty` that a lambda of the class `c` builds: the lifted function applied to
+    /// the capture struct.
+    fn closure_value(&mut self, c: u32, ty: Arc<TypeNode>) -> Arc<ExprNode> {
+        let cap = self.capture_struct_value(c);
         let cap_ty = cap.type_.clone().unwrap();
         let callee = expr_var(self.lifted_name(c), None).set_type(type_arrow(cap_ty, ty));
         expr_app_typed(callee, vec![cap])

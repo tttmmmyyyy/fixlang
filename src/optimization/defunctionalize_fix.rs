@@ -27,7 +27,7 @@
 
 use crate::{
     ast::{
-        expr::{expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_var, Expr, ExprNode},
+        expr::{expr_app_typed, expr_var, Expr, ExprNode},
         name::FullName,
         program::{Program, Symbol},
         traverse::{ExprVisitor, StartVisitResult, VisitState},
@@ -40,7 +40,7 @@ use crate::{
         let_elimination,
         minted_names::{insert_minted_symbol, names_of_globals, MintedNames},
         rename::substitute_free_name,
-        uncurry::{internalize_let_to_var_at_head, is_std_fix},
+        uncurry::is_std_fix,
         unique_local_names,
     },
     tool::stopwatch::StopWatch,
@@ -262,16 +262,7 @@ impl FixDefunctionalizer {
         let body = substitute_free_name(&f_body, &self_name, &self_replacement);
 
         // `G = |cap| let FixCap { .. } = cap; body`.
-        let g_body = expr_let_typed(
-            cap.pattern(),
-            expr_var(cap_param_name.clone(), None).set_type(cap.ty.clone()),
-            body,
-        );
-        let g_expr = internalize_let_to_var_at_head(&expr_abs_typed(
-            var_var(cap_param_name),
-            cap.ty.clone(),
-            g_body,
-        ));
+        let g_expr = cap.lifted_function(&cap_param_name, body);
 
         let cap_expr = cap.struct_expr();
         self.lifted.push(LiftedFix {
