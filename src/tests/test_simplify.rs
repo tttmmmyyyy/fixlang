@@ -79,6 +79,11 @@ mod integration_tests {
         bodies
     }
 
+    /// The header needles of the fold that `to_array` runs over `range(0, 10).map(f)`, the one
+    /// function of a case whose answer is an `Array I64`. The call `map` makes to `f` is inlined
+    /// into it, so `f`'s body stands there.
+    const MAPPED_FOLD: &[&str] = &["Std::Iterator::fold", ") -> Std::Array Std::I64:"];
+
     /// Build the case project and assert that every `fn` of its RC IR dump whose header matches
     /// `needles` — which `what` names in a failure message — holds each node of `held_nodes`,
     /// builds no union, and that the executable the build leaves prints `expected`. The dump shows
@@ -186,63 +191,67 @@ mod integration_tests {
 
     /// One branch of `step` reaches the `Option` it builds through a destructure, the other through
     /// an eval. The walk that finds the constructions passes both, so every construction takes the
-    /// arm answering it and the function builds no union. Both nodes are checked to still stand in
-    /// the dumped body, so a lowering that stopped placing them there fails the test rather than
-    /// leaving it passing over a shape it no longer exercises. The built program still computes the
-    /// same values over 0..10.
+    /// arm answering it and the fold `step`'s body stands in builds no union. Both nodes are checked
+    /// to still stand in the dumped body, so a lowering that stopped placing them there fails the
+    /// test rather than leaving it passing over a shape it no longer exercises. The built program
+    /// still computes the same values over 0..10.
     #[test]
     fn test_a_destructure_and_an_eval_before_the_tail_construction() {
         assert_union_cancelled(
             "before_tail",
-            &["Main::step"],
-            "`Main::step`",
-            &["destructure ", "eval "],
+            MAPPED_FOLD,
+            "the fold `step`'s body stands in",
+            &["destructure Main::bounds", "eval Main::names"],
             "[14, -1, 18, -1, 22, -1, 26, -1, 30, -1]",
         );
     }
 
     /// `step` computes with the result of its `match` over an `Option`, so more code follows the
     /// match. The outer arms move into the branches that build the `Option`, the code after the
-    /// match stays after it, and the function builds no union. One branch reaches its `Option`
-    /// through a destructure and the other through an eval, and both nodes are checked to still
-    /// stand in the dumped body. The built program still computes the same values over 0..10.
+    /// match stays after it, and the fold `step`'s body stands in builds no union. One branch
+    /// reaches its `Option` through a destructure and the other through an eval, and both nodes are
+    /// checked to still stand in the dumped body. The built program still computes the same values
+    /// over 0..10.
     #[test]
     fn test_a_match_followed_by_more_code() {
         assert_union_cancelled(
             "match_then_more",
-            &["Main::step"],
-            "`Main::step`",
-            &["destructure ", "eval "],
+            MAPPED_FOLD,
+            "the fold `step`'s body stands in",
+            &["destructure Main::bounds", "eval Main::names"],
             "[196, 2, 326, 4, 488, 6, 682, 8, 908, 10]",
         );
     }
 
     /// `step`'s branches end in a match of their own, and the four `Option`s it decides between are
     /// built at the ends of that one. The walk that moves an arm of the outer match follows such a
-    /// tail, so every construction takes the arm answering it and the function builds no union. The
+    /// tail, so every construction takes the arm answering it and the fold `step`'s body stands in
+    /// builds no union. The remainders `step` takes are checked to stand in the dumped body. The
     /// built program still computes the same values over 0..10.
     #[test]
     fn test_a_match_in_tail_position() {
         assert_union_cancelled(
             "tail_match",
-            &["Main::step"],
-            "`Main::step`",
-            &[],
+            MAPPED_FOLD,
+            "the fold `step`'s body stands in",
+            &["int_rem("],
             "[0, 16, -1, 20, -1, -1, 120, 28, -1, 32]",
         );
     }
 
     /// `shift_and_triple`'s inner arms build one constructor, so moving the outer `some` arm into
     /// them places a copy in each. The copy is smaller than the construction and the match it
-    /// replaces, so the simplifier takes the move and the function builds no union. The built
-    /// program still computes it over 0..10, so the removal leaves the values intact.
+    /// replaces, so the simplifier takes the move and the fold `shift_and_triple`'s body stands in
+    /// builds no union. The remainder `shift_and_triple` takes is checked to stand in the dumped
+    /// body. The built program still computes it over 0..10, so the removal leaves the values
+    /// intact.
     #[test]
     fn test_one_variant_union_removed() {
         assert_union_cancelled(
             "one_variant",
-            &["Main::shift_and_triple"],
-            "`Main::shift_and_triple`",
-            &[],
+            MAPPED_FOLD,
+            "the fold `shift_and_triple`'s body stands in",
+            &["int_rem("],
             "[0, 12, 15, 18, 21, 15, 27, 30, 33, 36]",
         );
     }
