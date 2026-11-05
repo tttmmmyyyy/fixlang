@@ -712,6 +712,7 @@ main = (
     #[cfg(unix)]
     #[test]
     fn a_build_that_cannot_write_the_cache_builds_the_program() {
+        use std::fs::Permissions;
         use std::os::unix::fs::PermissionsExt;
 
         let temp = TempDir::new().expect("Failed to create temp directory");
@@ -730,11 +731,11 @@ main = println $ (double(21), 3).to_string;
         .expect("Failed to write main.fix");
         let cache_dir = dir.join(TYPED_MODULES_PATH);
         fs::create_dir_all(&cache_dir).expect("Failed to create the type-check cache directory");
-        fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o555))
+        fs::set_permissions(&cache_dir, Permissions::from_mode(0o555))
             .expect("Failed to make the type-check cache directory read-only");
 
         let (built, stderr) = try_build(dir, "main.fix", &[]);
-        fs::set_permissions(&cache_dir, fs::Permissions::from_mode(0o755))
+        fs::set_permissions(&cache_dir, Permissions::from_mode(0o755))
             .expect("Failed to make the type-check cache directory writable");
         assert!(built, "stderr: {}", stderr);
         assert!(
