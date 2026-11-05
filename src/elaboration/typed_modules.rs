@@ -229,7 +229,8 @@ fn map_file(path: &Path) -> io::Result<Option<Mmap>> {
     }
 }
 
-/// `file` mapped into memory.
+/// `file` mapped into memory. `file` must be a file of type-checked modules, or a temporary file
+/// that becomes one, since the mapping stays sound only while nothing writes the file in place.
 fn map_into_memory(file: &File) -> io::Result<Mmap> {
     // SAFETY: the mapping is read for as long as the build runs, and a file of type-checked modules
     // is never written in place: a build writes a new version under another name and renames it
@@ -322,11 +323,11 @@ impl ModuleFile {
     }
 }
 
-/// A module's file as this build found it, mapped into memory. Each body the build found in the
-/// file is read from the mapping, so a file another build puts in place meanwhile, or removes,
-/// leaves the body where this build found it.
+/// A module's file mapped into memory, as this build found it or wrote it. Each body the build
+/// takes from the file is read from the mapping, so a file another build puts in place meanwhile,
+/// or removes, leaves the body where it was.
 struct MappedModuleFile {
-    /// The module file.
+    /// The module and hash the file is named after.
     file: Arc<ModuleFile>,
     /// The bytes of the file.
     bytes: Mmap,
@@ -699,7 +700,7 @@ enum CheckOutcome {
 /// A body whose typed expression lies in its module's file, and which `Program::global_values`
 /// holds as it was parsed.
 struct StoredBody {
-    /// The file of the module the body is defined in, as this build found it.
+    /// The file of the module the body is defined in, which the body is read back from.
     mapped: Arc<MappedModuleFile>,
     /// The entity the body belongs to, which the file writes in front of the body.
     identity: EntityIdentity,
@@ -948,8 +949,8 @@ impl Program {
     /// program was checked through `check_bodies_through_typed_modules` and the file recorded the
     /// body, and the one `Program::global_values` holds otherwise.
     ///
-    /// A body whose bytes in the file are not the body is type-checked again, and written back to the
-    /// file, so that the next build reads it.
+    /// A body the file fails to hold intact is type-checked again, and written back to the file, so
+    /// that the next build reads it.
     pub fn typed_body(
         &mut self,
         loc: &BodyLocation,

@@ -768,10 +768,9 @@ main = println $ (double(21), 3).to_string;
         assert_eq!(run_out(dir), "(1, 2, 3)");
     }
 
-    /// A build reads the bodies of each module from its file mapped into memory, and closes the
-    /// file, so a program of more modules than the limit on the files a process may hold open
-    /// builds, and reads every body back from the files it wrote and from those an earlier build
-    /// wrote.
+    /// Verifies that a program with more modules than a process may hold files open builds, and
+    /// reads every body back, both from the files the build wrote and from those an earlier build
+    /// wrote: a build closes each file once it has mapped it into memory.
     #[test]
     fn a_program_of_more_modules_than_the_open_file_limit_reads_back_every_body() {
         const MODULES: usize = 100;
@@ -877,8 +876,8 @@ main = println $ (double(21), 3).to_string;
     }
 
     /// A build that writes the file of a module removes the temporary files there that have gone
-    /// unmodified for a day, which builds that were killed left, and keeps the more recent ones,
-    /// which a build still running may be writing.
+    /// unmodified for a day, and keeps the more recent ones, which a build still running may be
+    /// writing.
     #[test]
     fn a_build_removes_the_temporary_files_left_a_day_ago() {
         let temp = TempDir::new().expect("Failed to create temp directory");
@@ -914,7 +913,7 @@ main = println $ (double(21), 3).to_string;
     /// so a file another process removes while the build runs still hands the build every body it
     /// recorded: the build reports no file as unreadable and checks none of those bodies again.
     ///
-    /// The file of `Main` is edited, so the build checks `Main` and writes its file; the file of
+    /// `main.fix` is edited, so the build checks `Main` and writes its file; the file of
     /// `Std` is removed once that writing has begun, which is after the build read the record of
     /// every module and before instantiation reads a body of `Std`.
     #[test]
