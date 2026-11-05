@@ -107,6 +107,10 @@ mod integration_tests {
     const PROGRAM: &str = "out";
 
     /// Runs `fix build` with `build_args` in `dir`, on whatever caches `dir` holds.
+    ///
+    /// The build runs with `ZERO_AR_DATE` set. The macOS linker otherwise writes the modification
+    /// time of each object file it links into the program, so that a build reusing cached object
+    /// files and a build from nothing write different bytes.
     fn build(dir: &Path, build_args: &[&str]) -> Build {
         let program = dir.join(PROGRAM);
         if program.exists() {
@@ -116,6 +120,7 @@ mod integration_tests {
             .arg("build")
             .args(["-o", PROGRAM])
             .args(build_args)
+            .env("ZERO_AR_DATE", "1")
             .current_dir(dir)
             .output()
             .expect("Failed to run fix build");
