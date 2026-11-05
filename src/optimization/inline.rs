@@ -5,7 +5,9 @@
 //!
 //! What a copy of a global costs, and where it may be put, is what `InlineCost` holds:
 //! `may_be_inlined_at_non_call_site` answers for the places a global is named, and
-//! `may_be_inlined_at_call_site` for the places it is called. A round of substitution leaves a
+//! `may_be_inlined_at_call_site` for the calls supplying every parameter it takes. A call supplying
+//! fewer builds a closure of the global, and a copy of the body there builds the same closure as a
+//! lambda, which takes away no call. A round of substitution leaves a
 //! lambda applied where it stands, so a symbol the round rewrote is run to the fixpoint of
 //! `let_elimination` and `application_inlining` (`inline_local`), which reduces that shape.
 //!
@@ -242,6 +244,7 @@ impl<'r> InlineRound<'r> {
         Inliner {
             costs: self.costs,
             symbols: self.symbols,
+            global_lambda_to_arity: self.global_lambda_to_arity,
             budget: 0,
             refused_for_budget: false,
         }
@@ -735,6 +738,8 @@ struct Inliner<'c> {
     costs: &'c InlineCosts,
     /// The symbols of the program, holding the bodies to put at the names.
     symbols: &'c Map<FullName, Symbol>,
+    /// How many parameters each global lambda takes, which says whether a call supplies them all.
+    global_lambda_to_arity: &'c Map<FullName, usize>,
     /// How many nodes the symbol being traversed may still gain this round. `substitute_into` sets
     /// it to `MAX_NODES_SUBSTITUTED_PER_ROUND` before each symbol, every substitution spends the
     /// nodes of the body it copies, and a body larger than what is left is refused.
@@ -806,17 +811,22 @@ impl<'c> ExprVisitor for Inliner<'c> {
         }
     }
 
-    /// Replaces the function a call names with the expression of that global, where it may be
-    /// inlined at a call site and the round's budget covers a copy of it.
+    /// Replaces the global a call supplying every parameter it takes names, at the head of the
+    /// call's application spine, with the expression of that global, where it may be inlined at a
+    /// call site and the round's budget covers a copy of it.
     fn end_visit_app(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
         // Judge whether to inline the function at the call site.
-        let func = expr.get_app_func();
+        let (func, args) = expr.destructure_app();
         if !func.is_var() {
             return EndVisitResult::unchanged(expr);
         }
         let func_name = &func.get_var().name;
         if func_name.is_local() {
             return EndVisitResult::unchanged(expr);
+        }
+        match self.global_lambda_to_arity.get(func_name) {
+            Some(arity) if args.len() >= *arity => {}
+            _ => return EndVisitResult::unchanged(expr),
         }
         if !self.costs.get(func_name).may_be_inlined_at_call_site() {
             return EndVisitResult::unchanged(expr);
@@ -825,8 +835,7 @@ impl<'c> ExprVisitor for Inliner<'c> {
             return EndVisitResult::unchanged(expr);
         }
         let func_expr = self.symbols.get(func_name).unwrap().expr.as_ref().unwrap();
-        let expr = expr.set_app_func(func_expr.clone());
-        EndVisitResult::changed(expr)
+        EndVisitResult::changed(with_spine_head(expr, func_expr.clone()))
     }
 
     /// Replaces each global name a builtin operation reads with the expression of the symbol it
@@ -852,4 +861,16 @@ impl<'c> ExprVisitor for Inliner<'c> {
         }
         EndVisitResult::changed(substitute_free_names(expr, bodies))
     }
+}
+
+/// The application `expr` with the function at the head of its application spine replaced by
+/// `head`.
+fn with_spine_head(expr: &Arc<ExprNode>, head: Arc<ExprNode>) -> Arc<ExprNode> {
+    let func = expr.get_app_func();
+    let func = if func.is_app() {
+        with_spine_head(&func, head)
+    } else {
+        head
+    };
+    expr.set_app_func(func)
 }
