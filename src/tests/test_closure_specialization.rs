@@ -10,9 +10,8 @@
 mod integration_tests {
     use crate::constants::CLOSURE_SPEC_SUFFIX;
     use crate::misc::{Map, Set};
-    use crate::tests::test_util::{fix_command_at_opt_level, read_rc_ir_dump, setup_case_projects};
-    use std::path::{Path, PathBuf};
-    use std::process::Command;
+    use crate::tests::test_util::{build_project_run_and_read_rc_ir, setup_case_projects};
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     /// What `specialized_fold` prints: the sum of `3 * i` over `0..9`.
@@ -37,53 +36,6 @@ mod integration_tests {
     /// do not share a build directory, and returns the directory of the named case.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
         setup_case_projects("src/tests/test_closure_specialization/cases", case)
-    }
-
-    /// Builds the case at `opt_level`, runs it, and returns the RC IR of every module.
-    ///
-    /// Running the program is what keeps the dump honest: the names asserted on come off a build
-    /// that is known to answer correctly.
-    ///
-    /// # Arguments
-    /// * `opt_level` - the level the case is built at, which decides which specializations exist.
-    /// * `expected_output` - what the case prints on stdout.
-    fn build_run_and_read_rc_ir(
-        project_dir: &Path,
-        opt_level: &str,
-        expected_output: &str,
-    ) -> String {
-        let build = fix_command_at_opt_level("build", opt_level)
-            .args(["--emit-rc-ir", "all"])
-            .current_dir(project_dir)
-            .output()
-            .expect("Failed to execute fix build");
-        assert!(
-            build.status.success(),
-            "the build should succeed at -O {}.\nstdout: {}\nstderr: {}",
-            opt_level,
-            String::from_utf8_lossy(&build.stdout),
-            String::from_utf8_lossy(&build.stderr),
-        );
-
-        let run = Command::new(project_dir.join("a.out"))
-            .current_dir(project_dir)
-            .output()
-            .expect("Failed to execute the built program");
-        assert!(
-            run.status.success(),
-            "the built program should run cleanly at -O {}, but exited with {}.\nstderr: {}",
-            opt_level,
-            run.status,
-            String::from_utf8_lossy(&run.stderr),
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&run.stdout).trim(),
-            expected_output,
-            "the program should answer the same at -O {}",
-            opt_level
-        );
-
-        read_rc_ir_dump(project_dir)
     }
 
     /// The names of the functions in `dump` whose name contains `name_part`.
@@ -180,7 +132,7 @@ mod integration_tests {
     pub fn test_a_closure_survives_the_boundaries_the_pass_declines_to_follow() {
         let (_temp_dir, project_dir) = setup_test_env("opaque_boundary");
         for opt_level in ["basic", "max", "experimental"] {
-            build_run_and_read_rc_ir(&project_dir, opt_level, OPAQUE_BOUNDARY_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, OPAQUE_BOUNDARY_OUTPUT);
         }
     }
 
@@ -191,7 +143,7 @@ mod integration_tests {
     pub fn test_a_narrowed_capture_field_serves_a_reader_that_needs_a_closure() {
         let (_temp_dir, project_dir) = setup_test_env("mixed_capture_field");
         for opt_level in ["basic", "max", "experimental"] {
-            build_run_and_read_rc_ir(&project_dir, opt_level, MIXED_CAPTURE_FIELD_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, MIXED_CAPTURE_FIELD_OUTPUT);
         }
     }
 
@@ -200,7 +152,7 @@ mod integration_tests {
     #[test]
     pub fn test_the_pass_leaves_a_lower_optimization_level_alone() {
         let (_temp_dir, project_dir) = setup_test_env("specialized_fold");
-        let dump = build_run_and_read_rc_ir(&project_dir, "basic", SPECIALIZED_FOLD_OUTPUT);
+        let dump = build_project_run_and_read_rc_ir(&project_dir, "basic", SPECIALIZED_FOLD_OUTPUT);
 
         let minted = functions_named_with(&dump, "#closure_");
         assert!(
@@ -218,7 +170,7 @@ mod integration_tests {
     #[test]
     pub fn test_a_capture_field_follows_the_value_it_holds() {
         let (_temp_dir, project_dir) = setup_test_env("derived_closure");
-        build_run_and_read_rc_ir(&project_dir, "max", DERIVED_CLOSURE_OUTPUT);
+        build_project_run_and_read_rc_ir(&project_dir, "max", DERIVED_CLOSURE_OUTPUT);
     }
 
     /// A round of a combinator that answers in a monad builds no closure. The body of the callback
@@ -232,7 +184,7 @@ mod integration_tests {
     #[test]
     pub fn test_a_round_of_a_specialized_combinator_builds_no_closure() {
         let (_temp_dir, project_dir) = setup_test_env("monadic_combinator");
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", MONADIC_COMBINATOR_OUTPUT);
+        let dump = build_project_run_and_read_rc_ir(&project_dir, "max", MONADIC_COMBINATOR_OUTPUT);
 
         let bodies = function_bodies(&dump);
         let copies = spec_copy_bodies(&dump, "Main::range_fold_m#")

@@ -10,10 +10,8 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
-    use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::process::Command;
+    use crate::tests::test_util::{build_project_run_and_read_rc_ir, setup_case_projects};
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     /// What `nested_iterators` prints: the sum of `3 * i + 1` over `0..9`.
@@ -58,58 +56,7 @@ mod integration_tests {
     /// Copies the cases into a temporary directory and gives back that directory together with the
     /// path of `case` inside it, so that cases run in parallel without sharing build output.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
-        let mut cases_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        cases_dir.push("src/tests/test_collapse_constructions/cases");
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        copy_dir_recursive(&cases_dir, &temp_dir.path().to_path_buf())
-            .expect("Failed to copy test cases");
-        let project_dir = temp_dir.path().join(case);
-        (temp_dir, project_dir)
-    }
-
-    /// Builds the case at `opt_level`, runs it, and returns the RC IR of every module.
-    ///
-    /// Running the program is what keeps the dump honest: the names asserted on come off a build
-    /// that is known to answer correctly.
-    fn build_run_and_read_rc_ir(
-        project_dir: &Path,
-        opt_level: &str,
-        expected_output: &str,
-    ) -> String {
-        let build = fix_command_at_opt_level("build", opt_level)
-            .args(["--emit-rc-ir", "all"])
-            .current_dir(project_dir)
-            .output()
-            .expect("Failed to execute fix build");
-        assert!(
-            build.status.success(),
-            "the build should succeed at -O {}.\nstdout: {}\nstderr: {}",
-            opt_level,
-            String::from_utf8_lossy(&build.stdout),
-            String::from_utf8_lossy(&build.stderr),
-        );
-
-        let run = Command::new(project_dir.join("a.out"))
-            .current_dir(project_dir)
-            .output()
-            .expect("Failed to execute the built program");
-        assert!(
-            run.status.success(),
-            "the built program should run cleanly at -O {}, but exited with {}.\nstderr: {}",
-            opt_level,
-            run.status,
-            String::from_utf8_lossy(&run.stderr),
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&run.stdout).trim(),
-            expected_output,
-            "the program should answer the same at -O {}",
-            opt_level
-        );
-
-        let dump_path = project_dir.join(".fixlang/rc_ir.post.txt");
-        fs::read_to_string(&dump_path)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
+        setup_case_projects("src/tests/test_collapse_constructions/cases", case)
     }
 
     /// The functions of `dump` whose name says they are an iterator's `advance`.
@@ -132,7 +79,7 @@ mod integration_tests {
         subject: &str,
     ) {
         let (_temp_dir, project_dir) = setup_test_env(case);
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", expected_output);
+        let dump = build_project_run_and_read_rc_ir(&project_dir, "max", expected_output);
 
         let left = standing(&dump);
         assert!(
@@ -185,7 +132,7 @@ mod integration_tests {
     pub fn test_a_chain_of_two_iterators_of_one_type_answers_the_same() {
         let (_temp_dir, project_dir) = setup_test_env("nested_iterators");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, NESTED_ITERATORS_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, NESTED_ITERATORS_OUTPUT);
         }
     }
 
@@ -197,7 +144,7 @@ mod integration_tests {
     pub fn test_a_construction_read_where_it_is_built_answers_the_same() {
         let (_temp_dir, project_dir) = setup_test_env("read_constructions");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, READ_CONSTRUCTIONS_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, READ_CONSTRUCTIONS_OUTPUT);
         }
     }
 
@@ -210,7 +157,7 @@ mod integration_tests {
     pub fn test_a_struct_argument_taken_apart_out_of_declaration_order_answers_the_same() {
         let (_temp_dir, project_dir) = setup_test_env("split_field_order");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, SPLIT_FIELD_ORDER_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, SPLIT_FIELD_ORDER_OUTPUT);
         }
     }
 
@@ -221,7 +168,7 @@ mod integration_tests {
     pub fn test_a_value_named_like_a_field_before_the_pattern_stays_itself() {
         let (_temp_dir, project_dir) = setup_test_env("shadowed_field_name");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, SHADOWED_FIELD_NAME_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, SHADOWED_FIELD_NAME_OUTPUT);
         }
     }
 
@@ -232,7 +179,7 @@ mod integration_tests {
     pub fn test_an_argument_naming_a_field_reads_the_value_it_was_written_against() {
         let (_temp_dir, project_dir) = setup_test_env("field_in_another_argument");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, FIELD_IN_ANOTHER_ARGUMENT_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, FIELD_IN_ANOTHER_ARGUMENT_OUTPUT);
         }
     }
 
@@ -243,7 +190,7 @@ mod integration_tests {
     pub fn test_a_field_named_by_an_earlier_run_keeps_its_value() {
         let (_temp_dir, project_dir) = setup_test_env("dyn_flatten_chain");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, DYN_FLATTEN_CHAIN_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, DYN_FLATTEN_CHAIN_OUTPUT);
         }
     }
 
@@ -254,7 +201,7 @@ mod integration_tests {
     pub fn test_a_field_name_from_an_earlier_run_is_read_as_it_was_bound() {
         let (_temp_dir, project_dir) = setup_test_env("field_name_reused_by_later_run");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(
+            build_project_run_and_read_rc_ir(
                 &project_dir,
                 opt_level,
                 FIELD_NAME_REUSED_BY_LATER_RUN_OUTPUT,
