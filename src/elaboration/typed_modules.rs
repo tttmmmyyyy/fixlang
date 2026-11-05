@@ -488,7 +488,7 @@ impl Drop for ModuleFileWriter {
 /// The directory the files of type-checked modules are written in, `TYPED_MODULES_PATH`, created
 /// when it is missing. A directory that cannot be created is reported as a warning, and answers
 /// `None`.
-fn typed_modules_dir() -> Option<PathBuf> {
+fn create_typed_modules_dir() -> Option<PathBuf> {
     match create_dir_guarding_project_links(Path::new(TYPED_MODULES_PATH), DOT_FIXLANG_LINK_HINT) {
         Ok(dir) => Some(dir),
         Err(errs) => {
@@ -623,7 +623,7 @@ struct PassedBody {
 }
 
 /// What a compiler thread answers for a body `check_bodies_through_typed_modules` checks.
-enum Checked {
+enum CheckedOnThread {
     /// The body passed, and the file of its module is to hold it.
     Passed(PassedBody),
     /// The body is to be held in memory: what `Program::check_body` answered for a body that did
@@ -787,7 +787,7 @@ impl Program {
         let dir = if to_check.is_empty() {
             None
         } else {
-            typed_modules_dir()
+            create_typed_modules_dir()
         };
         let mut outcomes: Vec<Option<CheckOutcome>> = to_check.iter().map(|_| None).collect();
         let mut unchecked_of_module: Map<Name, usize> = Map::default();
@@ -804,19 +804,19 @@ impl Program {
                 let (loc, _file, identity) = &to_check[i];
                 let checked = match self.check_body(loc, &nrenv, tc) {
                     Ok(checked) if checked.passed() && dir.is_some() => {
-                        Checked::Passed(PassedBody {
+                        CheckedOnThread::Passed(PassedBody {
                             entry: NewEntry::of(identity.clone(), &checked),
                             import_required: checked.import_required,
                         })
                     }
-                    checked => Checked::InMemory(checked),
+                    checked => CheckedOnThread::InMemory(checked),
                 };
                 (i, checked)
             },
             |(i, checked)| {
                 let file = &to_check[i].1;
                 match checked {
-                    Checked::Passed(body) => {
+                    CheckedOnThread::Passed(body) => {
                         let dir = dir
                             .as_deref()
                             .expect("a body passed to be written with no directory to write in");
@@ -825,7 +825,7 @@ impl Program {
                             .or_insert_with(|| ModuleWriting::begin(dir, file.clone()))
                             .add(i, body, source_files);
                     }
-                    Checked::InMemory(checked) => {
+                    CheckedOnThread::InMemory(checked) => {
                         outcomes[i] = Some(CheckOutcome::InMemory(checked))
                     }
                 }
@@ -912,7 +912,7 @@ impl Program {
                     return Err(checked.diagnostics);
                 }
                 if checked.passed() {
-                    if let Some(dir) = typed_modules_dir() {
+                    if let Some(dir) = create_typed_modules_dir() {
                         let stored = &self.typed_modules.stored[loc];
                         let entry = NewEntry::of(stored.identity.clone(), &checked);
                         let source_files = &mut self.typed_modules.source_files;
