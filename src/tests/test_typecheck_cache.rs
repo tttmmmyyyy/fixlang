@@ -76,6 +76,7 @@ mod integration_tests {
     use std::fs::{self, File};
     use std::path::Path;
     use std::process::{Command, Stdio};
+    use std::thread;
     use std::time::{Duration, SystemTime};
     use tempfile::TempDir;
 
@@ -907,5 +908,110 @@ main = println $ (double(21), 3).to_string;
             recent_path.exists(),
             "the build removed a temporary file a build still running may be writing"
         );
+    }
+
+    /// A build reads each body the file of its module records from that file as the build found it,
+    /// so a file another process removes while the build runs still hands the build every body it
+    /// recorded: the build reports no file as unreadable and checks none of those bodies again.
+    ///
+    /// The file of `Main` is edited, so the build checks `Main` and writes its file; the file of
+    /// `Std` is removed once that writing has begun, which is after the build read the record of
+    /// every module and before instantiation reads a body of `Std`.
+    #[test]
+    fn a_build_reads_every_body_from_the_file_it_found_after_the_file_is_removed() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        let cache_dir = dir.join(TYPED_MODULES_PATH);
+        let names_in_cache = || -> Vec<String> {
+            fs::read_dir(&cache_dir)
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .map(|entry| entry.file_name().to_string_lossy().to_string())
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        fs::write(dir.join("main.fix"), source_with_many_functions(300))
+            .expect("Failed to write main.fix");
+        build(dir, "main.fix", &[]);
+        let std_file = names_in_cache()
+            .into_iter()
+            .find(|name| name.starts_with("Std_"))
+            .expect("the build wrote no cache file of `Std`");
+
+        fs::write(dir.join("main.fix"), source_with_many_functions(301))
+            .expect("Failed to write main.fix");
+        let mut running = fix_command()
+            .args(["build", "--file", "main.fix", "-o", "out"])
+            .current_dir(dir)
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Failed to execute fix");
+        while !names_in_cache().iter().any(|name| name.ends_with(".tmp")) {
+            assert!(
+                running
+                    .try_wait()
+                    .expect("Failed to wait for fix")
+                    .is_none(),
+                "the build ended before it began writing a file"
+            );
+            thread::sleep(Duration::from_millis(1));
+        }
+        fs::remove_file(cache_dir.join(&std_file)).expect("Failed to remove the file of `Std`");
+        let output = running.wait_with_output().expect("Failed to wait for fix");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "stderr: {}", stderr);
+        assert!(
+            !stderr.contains("Failed to read cache file"),
+            "the build did not find a body in the file it found.\nstderr: {}",
+            stderr
+        );
+        assert!(
+            !names_in_cache().iter().any(|name| name.starts_with("Std_")),
+            "the build checked a body of `Std` again"
+        );
+        let expected: i64 = (0..301).map(|i: i64| i + 1).sum();
+        assert_eq!(run_out(dir), expected.to_string());
+    }
+
+    /// A file of a module shorter than its footer is a file the build cannot read the record of;
+    /// the build reports it, checks the module again and writes the file anew, as for any damaged
+    /// file.
+    #[test]
+    fn a_build_recovers_from_a_cache_file_shorter_than_its_footer() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("main.fix"),
+            "module Main;\n\nmain : IO ();\nmain = println $ (1 + 2).to_string;\n",
+        )
+        .expect("Failed to write main.fix");
+        build(dir, "main.fix", &[]);
+        let main_file = cache_files(dir)
+            .into_iter()
+            .map(|(name, _)| name)
+            .find(|name| name.starts_with("Main_"))
+            .expect("the build wrote no cache file of `Main`");
+        let main_file = dir.join(TYPED_MODULES_PATH).join(main_file);
+        let written = fs::read(&main_file).expect("Failed to read the cache file of `Main`");
+
+        for len in [0, 3] {
+            fs::write(&main_file, &written[..len]).expect("Failed to truncate the cache file");
+            let (built, stderr) = try_build(dir, "main.fix", &[]);
+            assert!(built, "a file of {} bytes: stderr: {}", len, stderr);
+            assert!(
+                stderr.contains("Failed to read cache file"),
+                "a file of {} bytes: stderr: {}",
+                len,
+                stderr
+            );
+            assert_eq!(run_out(dir), "3");
+            assert_eq!(
+                fs::read(&main_file).expect("Failed to read the cache file of `Main`"),
+                written,
+                "the build checking `Main` again wrote another file than the first build"
+            );
+        }
     }
 }
