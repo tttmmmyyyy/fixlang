@@ -347,6 +347,8 @@ struct ModuleFileWriter {
     /// The file the new version replaces, mapped into memory, when it held bodies; the bodies
     /// `record` begins with lie in it as in the new version.
     held: Option<Mmap>,
+    /// Where the bodies taken from `held` end.
+    held_end: u64,
     /// The bodies the new version holds so far.
     record: ModuleRecord,
     /// Where the bodies written so far end, which is where the next body goes.
@@ -365,6 +367,7 @@ impl ModuleFileWriter {
             file,
             tmp: Some(tmp),
             held: None,
+            held_end: 0,
             record: ModuleRecord::default(),
             bodies_end: 0,
         };
@@ -376,6 +379,7 @@ impl ModuleFileWriter {
         };
         writer.tmp_file().write_all(&held[..bodies_end as usize])?;
         writer.held = Some(held);
+        writer.held_end = bodies_end;
         writer.record = record;
         writer.bodies_end = bodies_end;
         Ok(writer)
@@ -400,9 +404,19 @@ impl ModuleFileWriter {
         entry: NewEntry,
         source_files: &mut Map<PathBuf, SourceFile>,
     ) -> io::Result<()> {
-        if let (Some(held), Some(bytes)) = (self.record.get(&entry.identity), &self.held) {
+        if let Some(recorded) = self.record.get(&entry.identity) {
+            assert!(
+                recorded.body.end <= self.held_end,
+                "the body of {:?} added twice to the file of `{}`",
+                entry.identity,
+                self.file.module
+            );
+            let held = self
+                .held
+                .as_ref()
+                .expect("a module file records a body it took from no file");
             let intact = SourceFile::with_shared_source_files(source_files, || {
-                read_body(bytes, &held.body, &entry.identity)
+                read_body(held, &recorded.body, &entry.identity)
             })
             .is_ok();
             if intact {

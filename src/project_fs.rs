@@ -147,6 +147,8 @@ pub fn remove_abandoned_temporary_files(dir: &Path) {
         if !is_temporary_file_name(&entry.file_name().to_string_lossy()) {
             continue;
         }
+        // A modification time later than now, which the clock of another host can give on a
+        // network file system, counts as recent.
         let abandoned = entry
             .metadata()
             .and_then(|metadata| metadata.modified())
