@@ -36,8 +36,8 @@ pub struct LamClass {
     pub interface_reprs: Vec<Repr>,
     /// The copy of the lambda's component that builds the values of one of the elements, as an
     /// index into `Specialization::instances`. The lambda's body is rewritten with the sets of this
-    /// copy; another element of the class represents the sets at the interface alike, which is
-    /// all the body shares with the copies building and calling the class's values.
+    /// copy. The body shares only the sets at the interface with the copies that build and call the
+    /// class's values, and every element of the class represents those alike.
     pub instance: usize,
     /// The hash of the text the class is written as, which is the same in every compilation of the
     /// program, and different for two classes.
@@ -53,8 +53,8 @@ pub struct Representation {
     /// `Lambda::is_lifted_from_closures` holds of. The classes of the sets represented by a capture
     /// struct come first.
     pub classes: Vec<LamClass>,
-    /// The class of each element of `classes`, by the lambda it names and the sets it gives the
-    /// lambda's parameters (`Lambda::params`).
+    /// The position in `classes` of the class holding each element, by the lambda the element names
+    /// and the sets it gives the lambda's parameters (`Lambda::params`).
     class_of_elem: Map<(LamId, Vec<SetId>), u32>,
     /// The number of classes of each lambda that has any: how many of `classes` hold the lambda.
     class_counts: Map<LamId, usize>,
@@ -108,7 +108,7 @@ impl Representation {
 /// by the lambda: those of its parameter and result types, then those of the types of the values it
 /// captures, in the order `Lambda::captures` lists them. These are the sets the copy building a
 /// value of the lambda and the global function the lambda is lifted to both read. The lambda's
-/// own set is left out.
+/// own set is left out, and the lambda that is the body of its symbol gets an empty list.
 fn interface_vars(analysis: &Analysis) -> Vec<Vec<SetVar>> {
     analysis
         .lambdas
@@ -141,8 +141,8 @@ struct Builder {
     /// sets.
     instance: usize,
     /// The sets at the element's interface: those the copy gives the variables `interface_vars`
-    /// lists. The lambda that is the body of its symbol depends on the parameters its body does,
-    /// so the sets of those are its interface.
+    /// lists. For the lambda that is the body of its symbol, they are the sets the element gives
+    /// the lambda's parameters, as those are the parameters its body depends on.
     interface: Vec<SetId>,
 }
 
@@ -207,7 +207,7 @@ impl Builders {
 }
 
 /// Whether a capture struct can stand for the values of each set of `spec`: the set holds lambdas
-/// alone, and its layout does not hold itself (step 1 of `represent`).
+/// alone, and its layout does not hold itself, as `represent` describes.
 fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builders) -> Vec<bool> {
     let store = &spec.store;
     let set_count = store.len();
@@ -254,16 +254,16 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
 ///
 /// The representation is decided in three steps.
 ///
-/// 1. A set whose values no capture struct can stand for is represented by closures: a set holding
-///    `Elem::Dynamic`, and a set whose layout holds itself, where the capture structs of its
-///    elements hold in place, through the unboxed fields of the values they capture, a set that
-///    holds in place this one again. Such a layout would have no size, as an unboxed type reaching
-///    itself has none.
+/// 1. A set whose values no capture struct can stand for is represented by closures: an empty set,
+///    a set holding `Elem::Dynamic`, and a set whose layout holds itself, where the capture structs
+///    of its elements hold in place, through the unboxed fields of the values they capture, a set
+///    that holds in place this one again. Such a layout would have no size, as an unboxed type
+///    reaching itself has none.
 /// 2. The other sets and their elements are partitioned by the code they make: two elements are
 ///    equal when they name the same lambda and the sets at its interface (`Builder::interface`) are
 ///    equal, and two sets are equal when their elements are, counted up to that equality. The sets
-///    of the first step are all equal to one another and to no other set, as a closure is the same
-///    whatever it holds.
+///    no capture struct can stand for are all equal to one another and to no other set, as a
+///    closure is the same whatever it holds.
 /// 3. A set whose elements make one class of the partition is represented by the capture struct of
 ///    that class. Every other set is represented by closures. A capture struct's type reads a set
 ///    of closures as a closure whatever the set holds, so two sets share a capture struct when their
@@ -279,10 +279,10 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     let set_count = store.len();
     let builders = Builders::new(analysis, spec);
 
-    // Step 1: the sets a capture struct can stand for.
+    // The sets a capture struct can stand for.
     let unboxable = unboxable_sets(analysis, spec, &builders);
 
-    // Step 2: the partition of the sets by the code their values make. The sets of closures hold no
+    // The partition of the sets by the code their values make. The sets of closures hold no
     // element the partition reads, so they make one class of their own.
     let elems: Vec<NodeElems<LamId>> = (0..set_count)
         .map(|id| {
@@ -305,7 +305,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
         .collect();
     let (block, block_elems) = canonical_classes(vec![0; set_count], &elems);
 
-    // Step 3: the sets whose elements make one class are represented by a capture struct. Two of
+    // The sets whose elements make one class are represented by a capture struct. Two of
     // them share the capture struct when their elements are equal with every set represented by
     // closures counted equal to every other, as a closure has one type whatever it holds. The
     // classes are numbered in the order of the sets: the first set of a class stands for it.

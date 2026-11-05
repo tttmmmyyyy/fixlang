@@ -330,9 +330,10 @@ fn test_a_lambda_capturing_an_optional_function_of_its_own_set_computes_the_chai
     test_source(source, Configuration::develop_mode());
 }
 
-/// A function building, by one call, the lambda that a recursion of it carries in an `Option`: the
-/// lambda's captured `g` holds a set reaching itself in the recursion's copy, and one lambda in the
-/// direct call's, while both give the lambda's parameter a set of closures.
+/// The lambda `mkm` returns is built both in a recursion that carries it in an `Option` and in a
+/// direct call, and each computes its result. The set of the captured `g` reaches itself in the
+/// recursion's copy and holds one lambda in the direct call's, while both copies give the lambda's
+/// parameter a set of closures.
 #[test]
 fn test_a_lambda_built_both_in_a_cycle_and_out_of_one_captures_each_its_own_way() {
     let source = r#"
@@ -386,7 +387,8 @@ const CHOSEN_FROM_TWO_SOURCE: &str = r#"
     );
     "#;
 
-/// The lambda `mk2` returns, built first where `g`'s set holds one lambda.
+/// The lambda `mk2` returns computes both results when it is first built where `g`'s set holds one
+/// lambda.
 #[test]
 fn test_a_lambda_capturing_a_function_chosen_from_one_set_then_two_computes_both() {
     let source = CHOSEN_FROM_TWO_SOURCE.replace(
@@ -396,7 +398,8 @@ fn test_a_lambda_capturing_a_function_chosen_from_one_set_then_two_computes_both
     test_source(&source, Configuration::develop_mode());
 }
 
-/// The lambda `mk2` returns, built first where `g`'s set holds two lambdas.
+/// The lambda `mk2` returns computes both results when it is first built where `g`'s set holds two
+/// lambdas.
 #[test]
 fn test_a_lambda_capturing_a_function_chosen_from_two_sets_then_one_computes_both() {
     let source = CHOSEN_FROM_TWO_SOURCE.replace(
@@ -406,11 +409,11 @@ fn test_a_lambda_capturing_a_function_chosen_from_two_sets_then_one_computes_bot
     test_source(&source, Configuration::develop_mode());
 }
 
-/// A lambda capturing `g`, a function `k` chooses from its two parameters, where `k` is called once
-/// with one function for both and once, through `w2`, with two functions of one class: `g`'s set
-/// holds one lambda in the first copy, and in the second two elements that make the same code.
-/// Reaching the second copy through `w2` puts its sets before the first's, so the lambda's class is
-/// first met where `g`'s set holds two elements.
+/// A lambda capturing `g`, a function `k` chooses from its two function parameters, computes both
+/// results when `k` is called once with one function for both and once, through `w2`, with two
+/// functions of one class: `g`'s set holds one lambda in the first copy, and in the second two
+/// elements that make the same code. Reaching the second copy through `w2` puts its sets before the
+/// first's, so the lambda's class is first met where `g`'s set holds two elements.
 #[test]
 fn test_a_lambda_capturing_a_function_chosen_from_two_alike_sets_computes_both() {
     let source = r#"

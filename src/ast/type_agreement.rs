@@ -14,8 +14,8 @@ use std::sync::Arc;
 /// Panics, naming the symbol and the node, where two types given to meeting places of
 /// `prg` disagree: a symbol and its body, a function and the argument it is applied to, a global
 /// and a reference to it, a local and a reference to it, a value and the pattern taking it apart,
-/// the arms of a choice, a struct and its fields. The types of builtin operations and of calls of C functions are trusted as
-/// written.
+/// the arms of a choice, a struct and its fields. The types of builtin operations and of calls of C
+/// functions are trusted as written.
 pub fn validate_types(prg: &Program) {
     let type_env = prg.type_env();
     let check = Check {
@@ -321,9 +321,9 @@ mod tests {
         misc::save_temporary_source,
     };
 
-    /// A read of a local typed otherwise than the `let` binding it is reported. The read is the
-    /// argument of a call of a C function, whose argument types are trusted as written, so no other
-    /// meeting place sees it.
+    /// A read of a local whose type differs from the one its `let` binding gives it is reported.
+    /// The read is the argument of a call of a C function, whose argument types are trusted as
+    /// written, so this is the only meeting place that sees it.
     #[test]
     #[should_panic(expected = "a local's type and its reference's")]
     fn test_a_local_read_at_a_type_other_than_its_binders_is_reported() {
