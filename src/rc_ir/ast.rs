@@ -38,7 +38,7 @@ pub struct RcVar {
 }
 
 /// A reference to a top-level RC IR function: a lifted lambda body, a global function, or an
-/// uncurried function-pointer version.
+/// uncurried function.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize)]
 pub struct FuncRef {
     /// The name the function is defined under. It is the whole of the reference: a function is
@@ -63,24 +63,24 @@ pub struct RcProgram {
 }
 
 /// A top-level function. One shape uniformly represents lifted lambda bodies, global functions, and
-/// uncurried funptr versions.
+/// uncurried functions.
 #[derive(Clone, Serialize)]
 pub struct RcFunc {
     /// The name this function is defined and called under, unique across the program: lowering mints
     /// a fresh one for each lambda it lifts, and a pass that copies a function appends a segment of
     /// its own.
     pub name: FuncRef,
-    /// The lambda's arrow type (funptr or closure). It determines the LLVM function signature and
-    /// distinguishes the funptr and closure ABIs.
+    /// The type of the function: an arrow type for the body of a closure, and a func type for a
+    /// func. It determines the LLVM function signature and distinguishes the closure and func ABIs.
     #[serde(serialize_with = "serialize_type_identity")]
     pub fn_ty: Arc<TypeNode>,
-    /// The parameters. A closure-ABI function takes its single arrow argument; a funptr-ABI
+    /// The parameters. A closure-ABI function takes its single arrow argument; a func-ABI
     /// function takes the uncurried arguments (at least one).
     pub params: Vec<RcVar>,
     /// `Some` for the closure ABI: the trailing capture-pointer parameter, from which the body
-    /// projects the captured values. `None` for the funptr ABI, which has no captures.
+    /// projects the captured values. `None` for the func ABI, which has no captures.
     pub capture: Option<RcVar>,
-    /// The type of the value the body returns. For a funptr-ABI function it is the result after all
+    /// The type of the value the body returns. For a func-ABI function it is the result after all
     /// of its parameters.
     #[serde(serialize_with = "serialize_type_identity")]
     pub ret_ty: Arc<TypeNode>,
@@ -106,6 +106,15 @@ pub struct RcFunc {
     /// Whether the back end is asked to inline every call of this function. Code generation writes
     /// it out as the `alwaysinline` attribute; a version cloned from a function carries it.
     pub inline_into_callers: bool,
+}
+
+impl RcFunc {
+    /// Whether this function takes the capture of a closure: it is the body of a closure, reached
+    /// by an indirect call through the closure value, and takes the pointer to the captured values
+    /// after its argument. A function that takes none is called by its name.
+    pub fn takes_capture(&self) -> bool {
+        self.capture.is_some()
+    }
 }
 
 /// A variable together with a path into its value. Where the path is truncated to a reference-
@@ -226,8 +235,8 @@ impl MatchArm {
 pub enum RcRhs {
     /// Move / rename `y := x`, consuming `x`.
     Var(RcVar),
-    /// A closure call or a direct funptr call, with the callee as the first variable. Code
-    /// generation dispatches on the callee type.
+    /// A closure call or a direct call of an uncurried function, with the callee as the first
+    /// variable. Code generation dispatches on the callee type.
     App(RcVar, Vec<RcVar>),
     /// A closure value: a top-level function together with its captured variables. It lowers to an
     /// unboxed `{funptr, capture-object pointer}` pair; only the capture object is boxed (a null

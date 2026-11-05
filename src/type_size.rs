@@ -57,7 +57,7 @@ pub fn no_size_reason(
     // A function type at a root is one the program has a value of, so that function is compiled and
     // the types it takes and returns are laid out with it. A function type reached as a field is
     // not: a value of it may never be built, and its own layout is two pointers either way.
-    if ty.is_closure() || ty.is_funptr() {
+    if ty.is_arrow() || ty.is_func() {
         return ty
             .get_lambda_srcs()
             .into_iter()
@@ -86,7 +86,7 @@ fn no_size_reachable(
     // A function value is a pair of pointers whatever it takes and returns, so how deeply the
     // function type itself nests says nothing about a layout: a function of five hundred arguments
     // nests five hundred deep and is still two pointers.
-    if !ty.is_closure() && !ty.is_funptr() && ty.depth() > MAX_TYPE_DEPTH {
+    if !ty.is_arrow() && !ty.is_func() && ty.depth() > MAX_TYPE_DEPTH {
         return Some(depth_message(root, asked_for));
     }
     if let Some(msg) = no_size_in_place(root, ty, type_env, &mut vec![], &mut Set::default(), walk)
@@ -130,7 +130,7 @@ fn no_size_in_place(
         return None;
     }
     // Two pointers, settled, whatever the function takes and returns.
-    if ty.is_closure() || ty.is_funptr() {
+    if ty.is_arrow() || ty.is_func() {
         return None;
     }
     if ty.depth() > MAX_TYPE_DEPTH {

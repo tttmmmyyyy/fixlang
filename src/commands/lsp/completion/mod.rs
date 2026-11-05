@@ -24,7 +24,9 @@ use crate::ast::expr::{hole_full_name, Expr, ExprNode};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::program::{EndNode, Program};
 use crate::ast::types::TypeNode;
-use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig, SubCommand};
+use crate::configuration::{
+    BuildConfigType, Configuration, DiagnosticsConfig, SubCommand, TypeCheckStore,
+};
 use crate::constants::chars_allowed_in_identifiers;
 use crate::dependency::lockfile::LockFileType;
 use crate::elaboration::elaborate_via_config;
@@ -389,7 +391,7 @@ pub(super) fn extract_receiver_type_and_program_for_dot_completion(
 ///
 /// `typecheck_cache` is the diagnostics thread's in-memory cache,
 /// shared in so unchanged modules' globals hit cached entries instead
-/// of paying disk I/O via the default `FileCache`. Only the cursor's
+/// of being checked again. Only the cursor's
 /// file's dependency hash changes per request (the live override only
 /// touches that one path), so every other module is a cache hit.
 ///
@@ -420,7 +422,7 @@ fn run_completion_elaborate(
         error_tolerant: true,
     };
     let mut config = Configuration::diagnostics_mode(diag_config)?;
-    config.type_check_cache = typecheck_cache;
+    config.type_check_store = TypeCheckStore::InMemory(typecheck_cache);
     proj_file.set_config(&mut config)?;
     proj_file
         .open_or_auto_update_lock_file(LockFileType::Lsp)?

@@ -203,8 +203,8 @@ mod tests {
     /// pins the order the arguments arrive in.
     ///
     /// The time bound catches the doubling at `Basic` and above, where uncurrying eta-expands a
-    /// global into a function pointer per arity. At `None` uncurrying is off and the bound is slack,
-    /// while building and running a function of this many parameters is a check of its own.
+    /// global into an uncurried function per arity. At `None` uncurrying is off and the bound is
+    /// slack, while building and running a function of this many parameters is a check of its own.
     #[test]
     fn test_many_parameter_function_compiles_in_reasonable_time() {
         let params = joined_over_parameters(", ", |i| format!("x{}", i));

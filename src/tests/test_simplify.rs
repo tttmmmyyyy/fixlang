@@ -201,6 +201,22 @@ mod integration_tests {
         );
     }
 
+    /// `step` computes with the result of its `match` over an `Option`, so more code follows the
+    /// match. The outer arms move into the branches that build the `Option`, the code after the
+    /// match stays after it, and the function builds no union. One branch reaches its `Option`
+    /// through a destructure and the other through an eval, and both nodes are checked to still
+    /// stand in the dumped body. The built program still computes the same values over 0..10.
+    #[test]
+    fn test_a_match_followed_by_more_code() {
+        assert_union_cancelled(
+            "match_then_more",
+            &["Main::step"],
+            "`Main::step`",
+            &["destructure ", "eval "],
+            "[196, 2, 326, 4, 488, 6, 682, 8, 908, 10]",
+        );
+    }
+
     /// `step`'s branches end in a match of their own, and the four `Option`s it decides between are
     /// built at the ends of that one. The walk that moves an arm of the outer match follows such a
     /// tail, so every construction takes the arm answering it and the function builds no union. The
@@ -334,6 +350,37 @@ mod value_tests {
                 assert_eq(
                     |_|"a catch-all arm of the outer match",
                     Iterator::range(0, 6).map(f).to_array, [0, -8, -8, -8, -8, 15]
+                );;
+                pure()
+            );
+        "#;
+        test_source(&source, Configuration::develop_mode());
+    }
+
+    /// The code after the match reads the matched `Option` again, so the value the inner match
+    /// builds has a second consumer besides the outer match. Moving the outer arms into the inner
+    /// arms would leave that read naming a value nothing binds any more, so the rewrite declines
+    /// and the values stay what the source computes.
+    #[test]
+    pub fn test_a_matched_value_read_after_the_match() {
+        let source = r#"
+            module Main;
+
+            f : I64 -> I64;
+            f = |n| (
+                let o = if n % 2 == 0 { Option::some(n) } else { Option::none() };
+                let r = match o {
+                    some(v) => v * 2,
+                    none() => -1
+                };
+                r + o.map_or(100, |x| x + 1)
+            );
+
+            main : IO ();
+            main = (
+                assert_eq(
+                    |_|"a matched value read after the match",
+                    Iterator::range(0, 6).map(f).to_array, [1, 99, 7, 99, 13, 99]
                 );;
                 pure()
             );

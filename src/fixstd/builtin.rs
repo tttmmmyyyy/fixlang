@@ -12,7 +12,7 @@ use crate::ast::{
     type_env::TypeEnv,
     typedecl::{Field, Struct, TypeDeclValue, TypeDefn},
     types::{
-        apply_type_args, kind_arrow, kind_star, make_tyvar, tycon, type_from_tyvar, type_fun,
+        apply_type_args, kind_arrow, kind_star, make_tyvar, tycon, type_arrow, type_from_tyvar,
         type_tyapp, type_tycon, type_tyvar, type_tyvar_star, Kind, Scheme, TyCon, TyConInfo,
         TyConVariant, TypeNode,
     },
@@ -23,7 +23,7 @@ use crate::constants::{
     BOXED_TRAIT_NAME, BOXED_TYPE_DATA_IDX, CAP_NAME, CLOSURE_CAPTURE_IDX, CLOSURE_FUNPTR_IDX,
     CONST_NAME, DESTRUCTOR_NAME, DESTRUCTOR_OBJECT_DTOR_FIELD_IDX,
     DESTRUCTOR_OBJECT_VALUE_FIELD_IDX, DYNAMIC_OBJECT_NAME, F32_NAME, F64_NAME, FFI_NAME,
-    FUNCTOR_NAME, FUNPTR_ARGS_MAX, FUNPTR_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
+    FUNCTOR_NAME, FUNC_ARGS_MAX, FUNC_NAME, I128_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME,
     IDENTITY_NAME, IOSTATE_NAME, IO_NAME, IS_UNIQUE_VALUE_FIELD, LAZY_NAME, PTR_NAME,
     PUNCHED_ARRAY_ARRAY_IDX, PUNCHED_ARRAY_HOLE_IDX, PUNCHED_ARRAY_NAME, STD_NAME, STORAGE_BUF_IDX,
     STRING_NAME, STRUCT_GETTER_SYMBOL, STRUCT_PLUG_IN_FORCE_UNIQUE_SYMBOL, STRUCT_PLUG_IN_SYMBOL,
@@ -293,10 +293,10 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
 
-    // Function Pointers
-    for arity in 1..=FUNPTR_ARGS_MAX {
+    // The func types `#Func{n}`.
+    for arity in 1..=FUNC_ARGS_MAX {
         ret.insert(
-            make_funptr_tycon(arity),
+            make_func_tycon(arity),
             TyConInfo {
                 punched_from: None,
                 kind: make_kind_fun(arity),
@@ -371,7 +371,7 @@ impl BuiltinTypeName {
     }
 }
 
-/// `Std::Arrow`, the type constructor `->` of function types.
+/// `Std::Arrow`, the type constructor `->` of arrow types.
 pub const ARROW_TYPE: BuiltinTypeName = BuiltinTypeName {
     namespace: &[STD_NAME],
     name: ARROW_NAME,
@@ -509,14 +509,14 @@ pub const U128_TYPE: BuiltinTypeName = BuiltinTypeName {
     name: U128_NAME,
 };
 
-/// The name `::Std::Arrow` of the type constructor of function types, written as an absolute name.
+/// The name `::Std::Arrow` of the type constructor of arrow types, written as an absolute name.
 pub fn make_arrow_name_abs() -> FullName {
     let mut name = ARROW_TYPE.to_fullname();
     name.set_absolute();
     name
 }
 
-/// The type constructor of function types: `a -> b` is this constructor applied to `a` and `b`.
+/// The type constructor of arrow types: `a -> b` is this constructor applied to `a` and `b`.
 pub fn make_arrow_tycon() -> TyCon {
     TyCon::new(make_arrow_name_abs())
 }
@@ -545,24 +545,32 @@ pub fn make_functor_name() -> FullName {
     FullName::from_strs(&[STD_NAME], FUNCTOR_NAME)
 }
 
-pub fn make_funptr_name(arity: u32) -> Name {
-    format!("{}{}", FUNPTR_NAME, arity)
+/// The name of the func type constructor taking `arity` arguments.
+///
+/// # Examples
+/// `make_func_tycon_name(2)` is `#Func2`.
+pub fn make_func_tycon_name(arity: u32) -> Name {
+    format!("{}{}", FUNC_NAME, arity)
 }
 
-pub fn make_funptr_tycon(arity: u32) -> TyCon {
-    TyCon::new(FullName::from_strs(&[STD_NAME], &make_funptr_name(arity)))
+/// The func type constructor `Std::#Func{arity}`.
+pub fn make_func_tycon(arity: u32) -> TyCon {
+    TyCon::new(FullName::from_strs(
+        &[STD_NAME],
+        &make_func_tycon_name(arity),
+    ))
 }
 
 pub fn make_array_tycon() -> TyCon {
     TyCon::new(ARRAY_TYPE.to_fullname())
 }
 
-// If given tycon is function pointer, returns its arity
-pub fn is_funptr_tycon(tc: &TyCon) -> Option<u32> {
+/// The number of arguments of `tc`, when it is a func type constructor `Std::#Func{n}`.
+pub fn func_tycon_arity(tc: &TyCon) -> Option<u32> {
     if !tc.name.namespace.is(&[STD_NAME]) {
         return None;
     }
-    let number = tc.name.name.strip_prefix(FUNPTR_NAME)?;
+    let number = tc.name.name.strip_prefix(FUNC_NAME)?;
     Some(number.parse::<u32>().unwrap())
 }
 
@@ -975,7 +983,7 @@ pub fn make_io_ty() -> Arc<TypeNode> {
 /// The type of the function an `IO` action wraps: `Std::IOState -> (Std::IOState, res_ty)`. The
 /// `IOState` threaded through it stands for the state of the computer.
 pub fn make_io_runner_ty(res_ty: Arc<TypeNode>) -> Arc<TypeNode> {
-    type_fun(
+    type_arrow(
         make_iostate_ty(),
         make_tuple_ty(vec![make_iostate_ty(), res_ty]),
     )
@@ -1440,12 +1448,12 @@ pub fn fix() -> (Arc<ExprNode>, Arc<Scheme>) {
         expr_abs(vec![var_local("x")], fix_body("b", "f", "x"), None),
         None,
     );
-    let fixed_ty = type_fun(type_tyvar_star("a"), type_tyvar_star("b"));
+    let fixed_ty = type_arrow(type_tyvar_star("a"), type_tyvar_star("b"));
     let scm = Scheme::generalize(
         &[],
         vec![],
         vec![],
-        type_fun(type_fun(fixed_ty.clone(), fixed_ty.clone()), fixed_ty),
+        type_arrow(type_arrow(fixed_ty.clone(), fixed_ty.clone()), fixed_ty),
     );
     (expr, scm)
 }
@@ -1546,7 +1554,7 @@ pub fn cast_between_integral_function(
         Default::default(),
         vec![],
         vec![],
-        type_fun(from.clone(), to_alias.unwrap_or(to.clone())),
+        type_arrow(from.clone(), to_alias.unwrap_or(to.clone())),
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
@@ -1647,7 +1655,7 @@ pub fn cast_between_float_function(
         Default::default(),
         vec![],
         vec![],
-        type_fun(from.clone(), to_alias.unwrap_or(to.clone())),
+        type_arrow(from.clone(), to_alias.unwrap_or(to.clone())),
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
@@ -1752,7 +1760,7 @@ pub fn cast_int_to_float_function(
         Default::default(),
         vec![],
         vec![],
-        type_fun(from.clone(), to.clone()),
+        type_arrow(from.clone(), to.clone()),
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
@@ -2001,7 +2009,7 @@ pub fn cast_float_to_int_function(
         Default::default(),
         vec![],
         vec![],
-        type_fun(from.clone(), to.clone()),
+        type_arrow(from.clone(), to.clone()),
     );
     let expr = expr_abs(
         vec![var_local(FROM_NAME)],
@@ -2196,7 +2204,7 @@ pub fn shift_function(ty: Arc<TypeNode>, is_left: bool) -> (Arc<ExprNode>, Arc<S
         Default::default(),
         vec![],
         vec![],
-        type_fun(ty.clone(), type_fun(ty.clone(), ty.clone())),
+        type_arrow(ty.clone(), type_arrow(ty.clone(), ty.clone())),
     );
     let expr = expr_abs(
         vec![var_local(AMOUNT_NAME)],
@@ -2326,7 +2334,7 @@ pub fn bitwise_operation_function(
         Default::default(),
         vec![],
         vec![],
-        type_fun(ty.clone(), type_fun(ty.clone(), ty.clone())),
+        type_arrow(ty.clone(), type_arrow(ty.clone(), ty.clone())),
     );
     let expr = expr_abs(
         vec![var_local(LHS_NAME)],
@@ -2497,7 +2505,7 @@ pub fn unary_bit_function(
         Default::default(),
         vec![],
         vec![],
-        type_fun(ty.clone(), ty.clone()),
+        type_arrow(ty.clone(), ty.clone()),
     );
     let expr = expr_abs(
         vec![var_local(OPERAND_NAME)],
@@ -2590,7 +2598,7 @@ pub fn number_to_bytes_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Scheme
         Default::default(),
         vec![],
         vec![],
-        type_fun(ty, bytes_ty.clone()),
+        type_arrow(ty, bytes_ty.clone()),
     );
     let expr = expr_abs(
         vec![var_local(NUMBER_NAME)],
@@ -2722,7 +2730,7 @@ pub fn bit_cast_function(from: Arc<TypeNode>, to: Arc<TypeNode>) -> (Arc<ExprNod
         Default::default(),
         vec![],
         vec![],
-        type_fun(from, to.clone()),
+        type_arrow(from, to.clone()),
     );
     let expr = expr_abs(
         vec![var_local(OPERAND_NAME)],
@@ -2750,7 +2758,7 @@ pub fn number_from_bytes_function(ty: Arc<TypeNode>) -> (Arc<ExprNode>, Arc<Sche
         Default::default(),
         vec![],
         vec![],
-        type_fun(bytes_ty, ty.clone()),
+        type_arrow(bytes_ty, ty.clone()),
     );
     let expr = expr_abs(
         vec![var_local(BYTES_NAME)],
@@ -2850,7 +2858,7 @@ pub fn add_offset_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         Default::default(),
         vec![],
         vec![],
-        type_fun(make_i64_ty(), type_fun(make_ptr_ty(), make_ptr_ty())),
+        type_arrow(make_i64_ty(), type_arrow(make_ptr_ty(), make_ptr_ty())),
     );
     let expr = expr_abs(
         vec![var_local(OFFSET_NAME)],
@@ -2943,7 +2951,7 @@ pub fn offset_from_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         Default::default(),
         vec![],
         vec![],
-        type_fun(make_ptr_ty(), type_fun(make_ptr_ty(), make_i64_ty())),
+        type_arrow(make_ptr_ty(), type_arrow(make_ptr_ty(), make_i64_ty())),
     );
     let expr = expr_abs(
         vec![var_local(ORIGIN_NAME)],
@@ -3055,7 +3063,7 @@ pub fn array_unsafe_empty() -> (Arc<ExprNode>, Arc<Scheme>) {
         ),
         None,
     );
-    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(make_i64_ty(), array_ty));
+    let scm = Scheme::generalize(&[], vec![], vec![], type_arrow(make_i64_ty(), array_ty));
     (expr, scm)
 }
 
@@ -3185,7 +3193,7 @@ pub fn array_unsafe_get_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(make_i64_ty(), type_fun(array_ty, elem_tyvar.clone())),
+        type_arrow(make_i64_ty(), type_arrow(array_ty, elem_tyvar.clone())),
     );
     (expr, scm)
 }
@@ -3345,7 +3353,7 @@ pub fn array_truncate_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
+        type_arrow(make_i64_ty(), type_arrow(array_ty.clone(), array_ty)),
     );
     (expr, scm)
 }
@@ -3522,9 +3530,9 @@ pub fn array_append_value_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(
+        type_arrow(
             elem_tyvar.clone(),
-            type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
+            type_arrow(make_i64_ty(), type_arrow(array_ty.clone(), array_ty)),
         ),
     );
     (expr, scm)
@@ -3856,7 +3864,7 @@ pub fn array_set_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
+        type_arrow(make_i64_ty(), type_arrow(array_ty.clone(), array_ty)),
     );
     (expr, scm)
 }
@@ -4045,7 +4053,7 @@ pub fn array_append_capacity_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(array_ty.clone(), type_fun(array_ty.clone(), array_ty)),
+        type_arrow(array_ty.clone(), type_arrow(array_ty.clone(), array_ty)),
     );
     (expr, scm)
 }
@@ -4231,11 +4239,11 @@ pub fn array_copy_capacity_bounds_unchecked() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(
+        type_arrow(
             array_ty.clone(),
-            type_fun(
+            type_arrow(
                 make_i64_ty(),
-                type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
+                type_arrow(make_i64_ty(), type_arrow(array_ty.clone(), array_ty)),
             ),
         ),
     );
@@ -4390,7 +4398,7 @@ pub fn grow_size_array() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
+        type_arrow(make_i64_ty(), type_arrow(array_ty.clone(), array_ty)),
     );
     (expr, scm)
 }
@@ -4694,9 +4702,9 @@ fn set_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(
+        type_arrow(
             make_i64_ty(),
-            type_fun(elem_ty, type_fun(array_ty.clone(), array_ty)),
+            type_arrow(elem_ty, type_arrow(array_ty.clone(), array_ty)),
         ),
     );
     (expr, scm)
@@ -4877,9 +4885,9 @@ fn swap_array_common(bounds_checked: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(
+        type_arrow(
             make_i64_ty(),
-            type_fun(make_i64_ty(), type_fun(array_ty.clone(), array_ty)),
+            type_arrow(make_i64_ty(), type_arrow(array_ty.clone(), array_ty)),
         ),
     );
     (expr, scm)
@@ -5108,7 +5116,7 @@ pub fn array_punch(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(make_i64_ty(), type_fun(array_ty, res_ty)),
+        type_arrow(make_i64_ty(), type_arrow(array_ty, res_ty)),
     );
     (expr, scm)
 }
@@ -5261,7 +5269,7 @@ pub fn punched_array_plug(force_unique: bool) -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(elem_tyvar, type_fun(punched_ty, array_ty)),
+        type_arrow(elem_tyvar, type_arrow(punched_ty, array_ty)),
     );
     (expr, scm)
 }
@@ -5333,7 +5341,7 @@ pub fn array_check_range() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(make_i64_ty(), type_fun(make_i64_ty(), make_i64_ty())),
+        type_arrow(make_i64_ty(), type_arrow(make_i64_ty(), make_i64_ty())),
     );
     (expr, scm)
 }
@@ -5393,7 +5401,12 @@ pub fn array_check_size() -> (Arc<ExprNode>, Arc<Scheme>) {
             None,
         ),
     );
-    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(make_i64_ty(), make_i64_ty()));
+    let scm = Scheme::generalize(
+        &[],
+        vec![],
+        vec![],
+        type_arrow(make_i64_ty(), make_i64_ty()),
+    );
     (expr, scm)
 }
 
@@ -5461,7 +5474,7 @@ pub fn array_get_size() -> (Arc<ExprNode>, Arc<Scheme>) {
         None,
     );
     let array_ty = type_tyapp(make_array_ty(), type_tyvar_star("a"));
-    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(array_ty, make_i64_ty()));
+    let scm = Scheme::generalize(&[], vec![], vec![], type_arrow(array_ty, make_i64_ty()));
     (expr, scm)
 }
 
@@ -5529,7 +5542,7 @@ pub fn array_get_capacity() -> (Arc<ExprNode>, Arc<Scheme>) {
         None,
     );
     let array_ty = type_tyapp(make_array_ty(), type_tyvar_star("a"));
-    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(array_ty, make_i64_ty()));
+    let scm = Scheme::generalize(&[], vec![], vec![], type_arrow(array_ty, make_i64_ty()));
     (expr, scm)
 }
 
@@ -5715,7 +5728,7 @@ pub fn struct_get(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Ar
         )
     };
     let expr = expr_abs(vec![var_local(VAR_NAME)], body, None);
-    let ty = type_fun(str_ty, field.ty.clone());
+    let ty = type_arrow(str_ty, field.ty.clone());
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -6365,7 +6378,7 @@ pub fn struct_punch(
     let str_ty = definition.applied_type();
     let punched_ty = str_ty.to_punched_struct(field_idx as usize);
     let dst_ty = make_tuple_ty(vec![field.ty.clone(), punched_ty]);
-    let ty = type_fun(str_ty, dst_ty.clone());
+    let ty = type_arrow(str_ty, dst_ty.clone());
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
 
     const VAR_NAME: &str = "struct_value";
@@ -6626,7 +6639,7 @@ pub fn struct_plug_in(
 
     let str_ty = definition.applied_type();
     let punched_ty = str_ty.to_punched_struct(field_idx as usize);
-    let ty = type_fun(punched_ty, type_fun(field.ty.clone(), str_ty.clone()));
+    let ty = type_arrow(punched_ty, type_arrow(field.ty.clone(), str_ty.clone()));
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
 
     const PUNCHED_STRUCT_NAME: &str = "punched_struct_obj";
@@ -6657,9 +6670,9 @@ pub fn struct_plug_in(
 pub fn struct_mod(definition: &TypeDefn, field_name: &str) -> (Arc<ExprNode>, Arc<Scheme>) {
     let (_, field) = definition.get_field_by_name(field_name).unwrap();
     let str_ty = definition.applied_type();
-    let ty = type_fun(
-        type_fun(field.ty.clone(), field.ty.clone()),
-        type_fun(str_ty.clone(), str_ty.clone()),
+    let ty = type_arrow(
+        type_arrow(field.ty.clone(), field.ty.clone()),
+        type_arrow(str_ty.clone(), str_ty.clone()),
     );
     let struct_name = &definition.name;
 
@@ -6757,15 +6770,15 @@ pub fn struct_act(
         .collect();
     let new_name = generate_new_names(&used_tyvar_names, 1)[0].name.clone();
     let functor_ty = type_tyvar(&new_name, &kind_arrow(kind_star(), kind_star()));
-    let src_ty = type_fun(
+    let src_ty = type_arrow(
         field_ty.clone(),
         type_tyapp(functor_ty.clone(), field_ty.clone()),
     );
-    let dst_ty = type_fun(
+    let dst_ty = type_arrow(
         str_ty.clone(),
         type_tyapp(functor_ty.clone(), str_ty.clone()),
     );
-    let ty = type_fun(src_ty, dst_ty.clone());
+    let ty = type_arrow(src_ty, dst_ty.clone());
     let scm = Scheme::generalize(
         &[],
         vec![Predicate::make(
@@ -6987,9 +7000,9 @@ pub fn struct_act_tuple2(
         str_ty.clone(),
     );
 
-    let ty = type_fun(
-        type_fun(field_ty.clone(), tuple2_u_f_ty.clone()),
-        type_fun(str_ty.clone(), tuple2_u_s_ty.clone()),
+    let ty = type_arrow(
+        type_arrow(field_ty.clone(), tuple2_u_f_ty.clone()),
+        type_arrow(str_ty.clone(), tuple2_u_s_ty.clone()),
     );
 
     // The implementation as AST:
@@ -7114,9 +7127,9 @@ pub fn struct_act_identity(
     let identity_tycon = tycon(FullName::from_strs(&[STD_NAME], IDENTITY_NAME));
     let identity_f_ty = type_tyapp(type_tycon(&identity_tycon), field_ty.clone());
     let identity_s_ty = type_tyapp(type_tycon(&identity_tycon), str_ty.clone());
-    let ty = type_fun(
-        type_fun(field_ty.clone(), identity_f_ty.clone()),
-        type_fun(str_ty.clone(), identity_s_ty.clone()),
+    let ty = type_arrow(
+        type_arrow(field_ty.clone(), identity_f_ty.clone()),
+        type_arrow(str_ty.clone(), identity_s_ty.clone()),
     );
 
     // The implementation as AST:
@@ -7253,9 +7266,9 @@ pub fn struct_act_const(
     // Const r S
     let const_r_s_ty = type_tyapp(const_r_ty, str_ty.clone());
 
-    let ty = type_fun(
-        type_fun(field_ty.clone(), const_r_f_ty.clone()),
-        type_fun(str_ty.clone(), const_r_s_ty.clone()),
+    let ty = type_arrow(
+        type_arrow(field_ty.clone(), const_r_f_ty.clone()),
+        type_arrow(str_ty.clone(), const_r_s_ty.clone()),
     );
 
     // The implementation as AST:
@@ -7568,7 +7581,7 @@ pub fn struct_set(
         ),
         None,
     );
-    let ty = type_fun(field.ty.clone(), type_fun(str_ty.clone(), str_ty.clone()));
+    let ty = type_arrow(field.ty.clone(), type_arrow(str_ty.clone(), str_ty.clone()));
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -7726,7 +7739,7 @@ pub fn union_new(
     );
     let union_ty = union.applied_type();
     let field_ty = union.fields()[field_idx].ty.clone();
-    let ty = type_fun(field_ty, union_ty);
+    let ty = type_arrow(field_ty, union_ty);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -7750,7 +7763,7 @@ pub fn union_as(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
     );
     let union_ty = union.applied_type();
     let field_ty = union.fields()[field_idx].ty.clone();
-    let ty = type_fun(union_ty, field_ty);
+    let ty = type_arrow(union_ty, field_ty);
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -7926,7 +7939,7 @@ pub fn union_is(field_name: &Name, union: &TypeDefn) -> (Arc<ExprNode>, Arc<Sche
         None,
     );
     let union_ty = union.applied_type();
-    let ty = type_fun(union_ty, make_bool_ty());
+    let ty = type_arrow(union_ty, make_bool_ty());
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
 }
@@ -8172,9 +8185,9 @@ pub fn union_mod_function(
         ),
         None,
     );
-    let ty = type_fun(
-        type_fun(field_ty.clone(), field_ty),
-        type_fun(union_ty.clone(), union_ty),
+    let ty = type_arrow(
+        type_arrow(field_ty.clone(), field_ty),
+        type_arrow(union_ty.clone(), union_ty),
     );
     let scm = Scheme::generalize(&[], vec![], vec![], ty);
     (expr, scm)
@@ -8275,7 +8288,7 @@ pub fn undefined_internal_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(
+        type_arrow(
             type_tyapp(make_array_ty(), make_u8_ty()),
             type_tyvar_star(A_NAME),
         ),
@@ -8417,9 +8430,9 @@ pub fn with_retained_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(
-            type_fun(type_tyvar_star(A_NAME), type_tyvar_star(B_NAME)),
-            type_fun(type_tyvar_star(A_NAME), type_tyvar_star(B_NAME)),
+        type_arrow(
+            type_arrow(type_tyvar_star(A_NAME), type_tyvar_star(B_NAME)),
+            type_arrow(type_tyvar_star(A_NAME), type_tyvar_star(B_NAME)),
         ),
     );
     (expr, scm)
@@ -8724,7 +8737,7 @@ pub fn is_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![Predicate::make(make_boxed_trait(), obj_type.clone())],
         vec![],
-        type_fun(obj_type.clone(), ret_type.clone()),
+        type_arrow(obj_type.clone(), ret_type.clone()),
     );
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
@@ -8908,7 +8921,7 @@ pub fn array_is_storage_unique_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     let elem_ty = type_tyvar_star("a");
     let array_ty = type_tyapp(make_array_ty(), elem_ty);
     let ret_type = make_tuple_ty(vec![make_bool_ty(), array_ty.clone()]);
-    let scm = Scheme::generalize(&[], vec![], vec![], type_fun(array_ty, ret_type.clone()));
+    let scm = Scheme::generalize(&[], vec![], vec![], type_arrow(array_ty, ret_type.clone()));
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
         expr_builtin(
@@ -9005,9 +9018,9 @@ pub fn boxed_to_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![Predicate::make(make_boxed_trait(), obj_type.clone())],
         vec![],
-        type_fun(
+        type_arrow(
             obj_type.clone(),
-            type_fun(ios_type.clone(), ret_type.clone()),
+            type_arrow(ios_type.clone(), ret_type.clone()),
         ),
     );
     let expr = expr_abs_many(
@@ -9095,9 +9108,9 @@ pub fn boxed_from_retained_ptr_ios() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![Predicate::make(make_boxed_trait(), obj_type.clone())],
         vec![],
-        type_fun(
+        type_arrow(
             ptr_type.clone(),
-            type_fun(ios_type.clone(), ret_type.clone()),
+            type_arrow(ios_type.clone(), ret_type.clone()),
         ),
     );
     let expr = expr_abs_many(
@@ -9209,7 +9222,7 @@ pub fn get_release_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![Predicate::make(make_boxed_trait(), target_type.clone())],
         vec![],
-        type_fun(arg_type.clone(), ret_type.clone()),
+        type_arrow(arg_type.clone(), ret_type.clone()),
     );
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
@@ -9275,7 +9288,7 @@ pub fn get_retain_function_of_boxed_value() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![Predicate::make(make_boxed_trait(), target_type.clone())],
         vec![],
-        type_fun(arg_type.clone(), ret_type.clone()),
+        type_arrow(arg_type.clone(), ret_type.clone()),
     );
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],
@@ -9496,7 +9509,7 @@ fn get_lent_ptr_function(
     preds: Vec<Predicate>,
 ) -> (Arc<ExprNode>, Arc<Scheme>) {
     const X_NAME: &str = "x";
-    let scm = Scheme::generalize(&[], preds, vec![], type_fun(x_ty, make_ptr_ty()));
+    let scm = Scheme::generalize(&[], preds, vec![], type_arrow(x_ty, make_ptr_ty()));
     let expr = expr_abs(
         vec![var_local(X_NAME)],
         expr_builtin(
@@ -9610,9 +9623,9 @@ fn borrow_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprN
         &[],
         preds,
         vec![],
-        type_fun(
-            type_fun(make_ptr_ty(), b_ty.clone()),
-            type_fun(x_ty, b_ty.clone()),
+        type_arrow(
+            type_arrow(make_ptr_ty(), b_ty.clone()),
+            type_arrow(x_ty, b_ty.clone()),
         ),
     );
     let expr = expr_abs_many(
@@ -9810,9 +9823,9 @@ fn mutate_ptr_function(x_ty: Arc<TypeNode>, preds: Vec<Predicate>) -> (Arc<ExprN
         &[],
         preds,
         vec![],
-        type_fun(
-            type_fun(make_ptr_ty(), make_io_runner_ty(b_ty)),
-            type_fun(x_ty, make_io_runner_ty(xb_ty.clone())),
+        type_arrow(
+            type_arrow(make_ptr_ty(), make_io_runner_ty(b_ty)),
+            type_arrow(x_ty, make_io_runner_ty(xb_ty.clone())),
         ),
     );
     let ret_ty = make_tuple_ty(vec![make_iostate_ty(), xb_ty]);
@@ -9988,10 +10001,10 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(
+        type_arrow(
             type_tyvar(TYPE_NAME, &kind_star()),
-            type_fun(
-                type_fun(a_ty.clone(), make_io_runner_ty(a_ty.clone())),
+            type_arrow(
+                type_arrow(a_ty.clone(), make_io_runner_ty(a_ty.clone())),
                 make_io_runner_ty(make_destructor_ty(a_ty.clone())),
             ),
         ),
@@ -10025,8 +10038,7 @@ pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<
     // The other value run here is the runner an `IO` holds, which `run_ios_runner` applies to an
     // `IOState`.
     assert!(
-        (io.ty.is_closure() || io.ty.is_funptr())
-            && io.ty.get_lambda_srcs() == vec![make_iostate_ty()],
+        (io.ty.is_arrow() || io.ty.is_func()) && io.ty.get_lambda_srcs() == vec![make_iostate_ty()],
         "a value run here is an `IO` or the runner one holds, and `{}` is neither",
         io.ty.to_string()
     );
@@ -10037,7 +10049,7 @@ pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<
 pub fn run_io<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
     let res_ty = io.ty.collect_type_arguments().into_iter().next().unwrap();
     let runner = io.extract_field(gc, 0);
-    let runner_ty = type_fun(
+    let runner_ty = type_arrow(
         make_iostate_ty(),
         make_tuple_ty(vec![make_iostate_ty(), res_ty.clone()]),
     );
@@ -10135,7 +10147,7 @@ pub fn mark_threaded_function() -> (Arc<ExprNode>, Arc<Scheme>) {
         &[],
         vec![],
         vec![],
-        type_fun(obj_type.clone(), obj_type.clone()),
+        type_arrow(obj_type.clone(), obj_type.clone()),
     );
     let expr = expr_abs(
         vec![var_local(VAR_NAME)],

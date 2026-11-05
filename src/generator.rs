@@ -128,13 +128,13 @@ impl<'c> ValueAccessor<'c> {
     }
 
     /// The object this accessor names: a local's object as it stands, or the value a global's
-    /// getter returns. A global of funptr type is the function itself, so its address is taken
+    /// getter returns. A global of func type is the function itself, so its address is taken
     /// without a call.
     pub fn get<'m>(&self, gc: &mut Generator<'c, 'm>) -> Object<'c> {
         match self {
             ValueAccessor::Local(obj) => obj.clone(),
             ValueAccessor::Global(fun, ty) => {
-                let val = if ty.is_funptr() {
+                let val = if ty.is_func() {
                     fun.as_global_value().as_basic_value_enum()
                 } else {
                     let call = gc
@@ -171,7 +171,7 @@ impl<'c> ValueAccessor<'c> {
 #[derive(Clone)]
 pub struct Object<'c> {
     /// The object's value, held as the list of parts it splits into, in `type_parts` order. A boxed
-    /// object is the single heap pointer, a funcptr the single function pointer, an unboxed scalar
+    /// object is the single heap pointer, a func the single function pointer, an unboxed scalar
     /// the value itself; an unbox struct is its fields spread out here rather than kept as one
     /// aggregate, so a loop-carried field (an `Array`'s `@size`) stays visible to LLVM instead of
     /// hiding inside an aggregate phi. A struct too wide to split is one part holding the whole
@@ -185,7 +185,7 @@ pub struct Object<'c> {
 
 impl<'c> Object<'c> {
     /// Construct an object from its assembled value: the heap pointer of a boxed object, the
-    /// function pointer of a funptr, or the embedded value of an unboxed one. The value is split
+    /// function pointer of a func, or the embedded value of an unboxed one. The value is split
     /// into parts on the way in.
     pub fn new<'m>(
         value: BasicValueEnum<'c>,
@@ -193,7 +193,7 @@ impl<'c> Object<'c> {
         gc: &mut Generator<'c, 'm>,
     ) -> Self {
         assert!(ty.is_ground());
-        if gc.config.develop_mode && ty.is_unbox(gc.type_env()) && !ty.is_funptr() {
+        if gc.config.develop_mode && ty.is_unbox(gc.type_env()) && !ty.is_func() {
             let embed_ty = ty.get_embedded_type(gc);
             assert_eq!(embed_ty, value.get_type());
         }
@@ -235,12 +235,12 @@ impl<'c> Object<'c> {
         self.parts.iter().map(|v| (*v).into()).collect()
     }
 
-    /// Reassemble the object's value from its parts. Free for a boxed object, a funcptr, an unboxed
+    /// Reassemble the object's value from its parts. Free for a boxed object, a func, an unboxed
     /// scalar, or a struct too wide to split (the single part is returned as is); a split unbox
     /// struct is rebuilt with one `insertvalue` per field, which SROA folds away wherever the
     /// aggregate is not truly needed.
     pub fn value<'m>(&self, gc: &mut Generator<'c, 'm>) -> BasicValueEnum<'c> {
-        if self.ty.is_box(gc.type_env()) || self.ty.is_funptr() {
+        if self.ty.is_box(gc.type_env()) || self.ty.is_func() {
             return self.parts[0];
         }
         let embedded = self.ty.get_embedded_type(gc);
@@ -285,10 +285,10 @@ impl<'c> Object<'c> {
         self.ty.is_box(type_env)
     }
 
-    /// Whether this object is a function pointer, carried as the bare pointer: it captures nothing,
+    /// Whether this object is a func, carried as the bare function pointer: it captures nothing,
     /// so it has no struct to extract fields from and nothing to reference-count.
-    pub fn is_funptr(&self) -> bool {
-        self.ty.is_funptr()
+    pub fn is_func(&self) -> bool {
+        self.ty.is_func()
     }
 
     /// Whether this object is a `#DynamicObject`, the boxed object a closure keeps its captured
@@ -320,7 +320,7 @@ impl<'c> Object<'c> {
     /// The LLVM struct this object is laid out as: the struct held inline for an unboxed object, the
     /// struct pointed to for a boxed one.
     pub fn struct_ty<'m>(&self, gc: &mut Generator<'c, 'm>) -> StructType<'c> {
-        assert!(!self.is_funptr());
+        assert!(!self.is_func());
         self.ty.get_struct_type(gc)
     }
 
@@ -340,7 +340,7 @@ impl<'c> Object<'c> {
     /// the heap block of a boxed one.
     ///
     /// The field is addressed by the layout the object's type alone gives, which asks for a struct:
-    /// a funptr is carried as its bare function pointer, and a `#DynamicObject`'s captured values
+    /// a func is carried as its bare function pointer, and a `#DynamicObject`'s captured values
     /// lie beyond the fields its type names, so a capture is read by `extract_field_as` under the
     /// struct type the capture types build.
     pub fn extract_field<'m>(
@@ -348,7 +348,7 @@ impl<'c> Object<'c> {
         gc: &mut Generator<'c, 'm>,
         field_idx: u32,
     ) -> BasicValueEnum<'c> {
-        assert!(!self.is_funptr());
+        assert!(!self.is_func());
         if self.is_unbox(&gc.type_env) {
             if self.is_carried_whole(gc) {
                 return gc
@@ -399,7 +399,7 @@ impl<'c> Object<'c> {
         field_idx: u32,
         field_ty: Arc<TypeNode>,
     ) -> Object<'c> {
-        assert!(!self.is_funptr());
+        assert!(!self.is_func());
         if self.is_unbox(&gc.type_env) {
             if self.is_carried_whole(gc) {
                 let field_val = self.extract_field(gc, field_idx);
@@ -419,7 +419,7 @@ impl<'c> Object<'c> {
     /// stored into the heap block of a boxed one.
     ///
     /// The field is addressed by the layout the object's type alone gives, which asks for a struct:
-    /// a funptr is carried as its bare function pointer, and a `#DynamicObject`'s captured values
+    /// a func is carried as its bare function pointer, and a `#DynamicObject`'s captured values
     /// lie beyond the fields its type names, so a capture is written by `insert_field_as` under the
     /// struct type the capture types build.
     pub fn insert_field<'m, V>(
@@ -431,7 +431,7 @@ impl<'c> Object<'c> {
     where
         V: BasicValue<'c>,
     {
-        assert!(!self.is_funptr());
+        assert!(!self.is_func());
         if self.is_unbox(&gc.type_env) {
             if self.is_carried_whole(gc) {
                 self.parts[0] = gc
@@ -472,7 +472,7 @@ impl<'c> Object<'c> {
         field_idx: u32,
         field: &Object<'c>,
     ) -> Object<'c> {
-        assert!(!self.is_funptr());
+        assert!(!self.is_func());
         if self.is_unbox(&gc.type_env) {
             if self.is_carried_whole(gc) {
                 let val = field.value(gc);
@@ -1275,7 +1275,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Register `function` as what this module reads the global `name`, of Fix type `ty`, through:
-    /// the lambda itself for a funptr global, and the accessor function for any other. A name
+    /// the lambda itself for a func global, and the accessor function for any other. A name
     /// registered twice aborts the compiler, since the second registration would decide which of
     /// two definitions every later read reaches.
     pub fn add_global_object(
@@ -1749,14 +1749,14 @@ impl<'c, 'm> Generator<'c, 'm> {
         self.get_control_block_field_ptr(obj_ptr, ControlBlockField::RefcntState)
     }
 
-    /// The code pointer to call a lambda through: the funcptr field of a closure, or the value
-    /// itself when the lambda is a bare function pointer.
+    /// The code pointer to call a lambda through: the function pointer field of a closure, or the
+    /// value itself when the lambda is a func.
     fn get_lambda_func_ptr(&mut self, obj: Object<'c>) -> PointerValue<'c> {
         // Get the pointer value.
-        if obj.ty.is_closure() {
+        if obj.ty.is_arrow() {
             obj.extract_field(self, CLOSURE_FUNPTR_IDX)
                 .into_pointer_value()
-        } else if obj.ty.is_funptr() {
+        } else if obj.ty.is_func() {
             obj.value(self).into_pointer_value()
         } else {
             panic!()
@@ -1795,7 +1795,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         let ret_ty = fun.ty.get_lambda_dst();
 
         // Validate arguments.
-        assert!(fun.ty.is_closure() || fun.ty.is_funptr());
+        assert!(fun.ty.is_arrow() || fun.ty.is_func());
         assert_eq!(args.len(), src_tys.len());
         for i in 0..args.len() {
             assert_eq!(args[i].ty, src_tys[i])
@@ -1843,7 +1843,7 @@ impl<'c, 'm> Generator<'c, 'm> {
                 call_args.push((*part).into());
             }
         }
-        if fun.ty.is_closure() {
+        if fun.ty.is_arrow() {
             call_args.push(fun.extract_field(self, CLOSURE_CAPTURE_IDX).into());
         }
 
@@ -2011,7 +2011,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// fields: it holds more scalars than `Configuration::max_split_scalars`.
     ///
     /// A value of one scalar is carried as that scalar however low the limit is set: there is no
-    /// aggregate to keep together, and a funptr is carried as its bare function pointer rather than
+    /// aggregate to keep together, and a func is carried as its bare function pointer rather than
     /// as the one-field struct it is laid out as.
     pub fn is_carried_whole(&self, ty: BasicTypeEnum<'c>) -> bool {
         let limit = self.config.max_split_scalars.max(1);
@@ -2597,8 +2597,8 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.build_if_nonnull(&obj, "traverser_work", |gc| {
                 gc.build_traverser_work_nonnull_boxed(&obj, work, state);
             });
-        } else if obj.is_funptr() {
-            // Nothing to do for function pointers.
+        } else if obj.is_func() {
+            // Nothing to do for a func.
         } else {
             // Unboxed case (includes a lambda object).
             match create_traverser(&obj.ty, &vec![], self, Some(work), state) {
@@ -3036,13 +3036,13 @@ impl<'c, 'm> Generator<'c, 'm> {
     }
 
     /// Add the LLVM function a Fix lambda of type `fn_ty` compiles into, under `name`, and return it.
-    /// A funptr function is one of the program's globals, so it is external where another
+    /// An uncurried function is one of the program's globals, so it is external where another
     /// compilation unit reaches it by name; a closure function is internal to the unit that lifted
     /// it, so LLVM resolves a collision between two such names by renaming one of them.
     ///
-    /// A funptr function is also registered as the value of `name`, because the bodies that call it
-    /// read it by name. Registering here is what leaves no way to declare one and reach it through a
-    /// name that resolves to nothing.
+    /// An uncurried function is also registered as the value of `name`, because the bodies that
+    /// call it read it by name. Registering here is what leaves no way to declare one and reach it
+    /// through a name that resolves to nothing.
     ///
     /// The linkage decided here is also what decides the RC IR's reachability roots: a function
     /// another unit may call has to be one dead-code elimination keeps. `divide_among_units` takes a
@@ -3054,7 +3054,7 @@ impl<'c, 'm> Generator<'c, 'm> {
         name: &FullName,
     ) -> FunctionValue<'c> {
         let llvm_fn_ty = lambda_function_type(fn_ty, self);
-        let linkage = if fn_ty.is_funptr() && self.published_to_the_linker(name) {
+        let linkage = if fn_ty.is_func() && self.published_to_the_linker(name) {
             Linkage::External
         } else {
             Linkage::Internal
@@ -3063,14 +3063,14 @@ impl<'c, 'm> Generator<'c, 'm> {
             self.module
                 .add_function(&object_file_symbol_name(name), llvm_fn_ty, Some(linkage));
         func.set_call_conventions(self.lambda_calling_convention());
-        if fn_ty.is_funptr() {
+        if fn_ty.is_func() {
             self.add_global_object(name.clone(), func, fn_ty.clone());
         }
         func
     }
 
     /// Declare the function the program's global `name` is obtained through, register it as that
-    /// global's value, and return it. A global of funptr type is the lambda's own function; any
+    /// global's value, and return it. A global of func type is the lambda's own function; any
     /// other global is reached through an accessor function taking no argument and returning its
     /// value.
     ///
@@ -3082,7 +3082,7 @@ impl<'c, 'm> Generator<'c, 'm> {
     /// the LLVM verifier nor the linker looks at it.
     pub fn declare_program_global(&mut self, name: &FullName) -> Option<FunctionValue<'c>> {
         let ty = self.global_types.get(name).cloned()?;
-        if ty.is_funptr() {
+        if ty.is_func() {
             return Some(self.declare_lambda_function(&ty, name));
         }
         let acc_fn_name = global_accessor_name(name);
@@ -3612,9 +3612,9 @@ pub(crate) fn object_file_symbol_name(name: &FullName) -> String {
     )
 }
 
-/// The name of the LLVM function through which the global `name`, of a type other than funptr, is
-/// obtained. It is the name every module — the one defining the global and the ones calling into
-/// it — declares and looks the accessor up under.
+/// The name of the LLVM function through which the global `name`, of a type other than a func
+/// type, is obtained. It is the name every module — the one defining the global and the ones
+/// calling into it — declares and looks the accessor up under.
 pub(crate) fn global_accessor_name(name: &FullName) -> String {
     format!("Get#{}", object_file_symbol_name(name))
 }

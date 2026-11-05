@@ -717,7 +717,7 @@ impl<'a> Walk<'a> {
             } => {
                 // A callee taking a capture is never routed anywhere (see `specializable_callee`),
                 // so passing it an input-dependent leaf is no reason to clone this body.
-                if depends && self.prog.funcs[cref].capture.is_none() {
+                if depends && !self.prog.funcs[cref].takes_capture() {
                     dependent_calls.push(cref.clone());
                 }
                 None

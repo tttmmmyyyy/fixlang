@@ -59,7 +59,7 @@ use crate::ast::program::{
 };
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::types::{
-    apply_type_args, is_opaque_tyvar, kind_arrow, make_tyvar, tycon, type_from_tyvar, type_fun,
+    apply_type_args, is_opaque_tyvar, kind_arrow, make_tyvar, tycon, type_arrow, type_from_tyvar,
     type_tyapp, type_tycon, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant,
     TyVar, Type, TypeNode,
 };
@@ -946,7 +946,7 @@ fn build_wrap_scheme(
     let codomain_ty = new_scm.ty.clone();
 
     // Wrap type: domain -> codomain.
-    let wrap_ty = type_fun(domain_ty, codomain_ty);
+    let wrap_ty = type_arrow(domain_ty, codomain_ty);
 
     Scheme::new_arc(wrap_gen_vars, vec![], wrap_preds, wrap_eqs, wrap_ty)
 }
