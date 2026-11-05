@@ -151,7 +151,7 @@ pub const LS_COPY_SUFFIX: &str = "#ls";
 /// function lambda set specialization lifts a lambda to.
 pub const LS_LAM_SUFFIX: &str = "#ls_lam";
 /// The prefix of the type constructor of the capture struct that lambda set specialization
-/// represents a value of a set of one lambda by.
+/// represents a value of a set by, where the set's elements make one class.
 pub const LS_CAP_PREFIX: &str = "#LsCap";
 /// The name of the parameter through which a lambda lifted by lambda set specialization receives
 /// its capture struct.
