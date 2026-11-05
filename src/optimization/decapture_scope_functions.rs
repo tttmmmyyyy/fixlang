@@ -9,9 +9,8 @@ field is another of its operands, the environment.
 The rewrite by the lambda sets lifts a lambda whose set is represented by closures to a global
 function taking its capture struct as the first argument, and the function such an op is given has
 such a set, so it is that global function applied to a capture struct: a closure holding the capture
-struct, built on the heap on every call. This pass
-moves the capture struct into the environment instead, so that the function the op is given
-captures nothing.
+struct, built on the heap on every call. This pass moves the capture struct into the environment
+instead, so that the function the op is given captures nothing.
 
 ```
 let h = F(cap);
