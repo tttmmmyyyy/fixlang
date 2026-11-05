@@ -963,7 +963,7 @@ main = println $ (double(21), 3).to_string;
         assert!(output.status.success(), "stderr: {}", stderr);
         assert!(
             !stderr.contains("Failed to read cache file"),
-            "the build did not find a body in the file it found.\nstderr: {}",
+            "the build did not find a body in the file it mapped.\nstderr: {}",
             stderr
         );
         assert!(
