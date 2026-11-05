@@ -1594,7 +1594,7 @@ fn primitive_field_types(name: &FullName) -> &'static [ObjectFieldType] {
             (make_f64_ty(), vec![ObjectFieldType::F64]),
         ]
         .into_iter()
-        .map(|(ty, fields)| (ty.toplevel_tycon().unwrap().name.clone(), fields))
+        .map(|(ty, fields)| (ty.head_tycon().name.clone(), fields))
         .collect()
     });
     fields_by_name
@@ -1636,7 +1636,7 @@ pub fn ty_to_object_ty(
             .field_types
             .push(ObjectFieldType::LambdaFunction(ty.clone()));
     } else {
-        let tc = ty.toplevel_tycon().unwrap();
+        let tc = ty.head_tycon();
         // A value of an unwrapped newtype is a value of its one field, so no value is laid out at
         // one. Reaching here with one means a type escaped the rewrite, and its values would
         // silently be laid out as the struct they were to stop being: an unboxed struct of one

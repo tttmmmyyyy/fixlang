@@ -1006,7 +1006,7 @@ impl TypeNode {
     /// This struct type punched at field `punched_at`: a type of the same memory layout, whose
     /// declaration marks that field as a hole the value has moved out of.
     pub fn to_punched_struct(self: &Arc<TypeNode>, punched_at: usize) -> Arc<TypeNode> {
-        let mut tycon = self.toplevel_tycon().unwrap().as_ref().clone();
+        let mut tycon = self.head_tycon().as_ref().clone();
         tycon.into_punched_type_name(punched_at);
         self.set_toplevel_tycon(Arc::new(tycon))
     }
@@ -1357,6 +1357,18 @@ impl TypeNode {
         }
     }
 
+    /// The type constructor at the head of this type, as `Array` heads `Array I64`. Panics, naming
+    /// this type, where a type variable or an associated type application heads it.
+    #[track_caller]
+    pub fn head_tycon(&self) -> Arc<TyCon> {
+        self.toplevel_tycon().unwrap_or_else(|| {
+            panic!(
+                "the type `{}` is headed by no type constructor",
+                Arc::new(self.clone()).to_string()
+            )
+        })
+    }
+
     /// This type with `tycon` at its head, keeping the arguments applied to it: `Array I64` with
     /// `Option` given here becomes `Option I64`. Panics for a type headed by a type variable or by
     /// an associated type application.
@@ -1414,7 +1426,7 @@ impl TypeNode {
     /// Panics where this type has no top-level type constructor, and where that constructor is not
     /// one of the numeric types of `Std`: `TyCon::is_signed_integer` answers for those alone.
     pub fn is_signed_integer(&self) -> bool {
-        self.toplevel_tycon().unwrap().is_signed_integer()
+        self.head_tycon().is_signed_integer()
     }
 
     /// Whether this type is `Std::PunchedArray`, an array with one element moved out of it.
@@ -1487,10 +1499,7 @@ impl TypeNode {
     /// absent from `type_env`.
     pub fn toplevel_tycon_info<'a>(&self, type_env: &'a TypeEnv) -> &'a TyConInfo {
         assert!(!self.is_closure());
-        let tycon = self
-            .toplevel_tycon()
-            .unwrap_or_else(|| panic!("the type `{:?}` is headed by no type constructor", self));
-        type_env.tycon_info(&tycon)
+        type_env.tycon_info(&self.head_tycon())
     }
 
     /// Whether a value of this type is held in place, with its fields laid out where the value

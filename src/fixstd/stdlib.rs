@@ -98,7 +98,7 @@ fn register_deprecated_cast(
     to_name: &str,
     return_ty: Arc<TypeNode>,
 ) {
-    let from_namespace = from.toplevel_tycon().unwrap().name.to_namespace();
+    let from_namespace = from.head_tycon().name.to_namespace();
     let target = FullName::new(&from_namespace, &format!("to_{}", to_name));
     errors.eat_err(fix_module.add_global_value(
         target.clone(),
@@ -289,9 +289,9 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     .map(|name| make_numeric_ty(name).0);
     // Fix → Fix: integer/float to integer/float.
     for from in &deprecated_cast_types {
-        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
+        let from_name = from.head_tycon().name.name.clone();
         for to in &deprecated_cast_types {
-            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
+            let to_name = to.head_tycon().name.name.clone();
             register_deprecated_cast(
                 &mut fix_module,
                 &mut errors,
@@ -305,7 +305,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     // Fix → C alias: integer/float to any C numeric type.
     let c_types = config.c_numeric_types.get_c_types();
     for from in &deprecated_cast_types {
-        let from_name = from.toplevel_tycon().unwrap().name.name.clone();
+        let from_name = from.head_tycon().name.name.clone();
         for (to_name_c, sign, size) in &c_types {
             let Some(to_type_c) = c_alias_ty(to_name_c, sign, *size) else {
                 continue;
@@ -323,7 +323,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     // Conversions between a number and its bytes, which the `ToBytes` and `FromBytes`
     // implementations of the numeric types call.
     for ty in integral_types.iter().chain(float_types) {
-        let ty_name = ty.toplevel_tycon().unwrap().name.name.clone();
+        let ty_name = ty.head_tycon().name.name.clone();
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "_to_bytes"),
             number_to_bytes_function(ty.clone()),
@@ -344,7 +344,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
         (make_f64_ty(), make_u64_ty()),
         (make_f32_ty(), make_u32_ty()),
     ] {
-        let ty_name = float_ty.toplevel_tycon().unwrap().name.name.clone();
+        let ty_name = float_ty.head_tycon().name.name.clone();
         errors.eat_err(fix_module.add_global_value(
             FullName::from_strs(&[STD_NAME, &ty_name], "to_bits"),
             bit_cast_function(float_ty.clone(), bits_ty.clone()),
@@ -362,7 +362,7 @@ pub fn make_std_mod(config: &Configuration) -> Result<Program, Errors> {
     }
     // Bit operations
     for int_ty in integral_types {
-        let ty_name = int_ty.toplevel_tycon().unwrap().name.name.clone();
+        let ty_name = int_ty.head_tycon().name.name.clone();
         for operation in UnaryBitOperation::ALL {
             errors.eat_err(fix_module.add_global_value(
                 FullName::from_strs(&[STD_NAME, &ty_name], operation.function_name()),
@@ -955,7 +955,7 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
     // rounded.
     let mut to_type_names: Vec<(String, bool)> = vec![];
     for (to, to_is_int) in &numeric_types {
-        to_type_names.push((to.toplevel_tycon().unwrap().name.name.clone(), *to_is_int));
+        to_type_names.push((to.head_tycon().name.name.clone(), *to_is_int));
     }
     for (to_name_c, sign, _) in &c_types {
         to_type_names.push((to_name_c.to_string(), *sign != "F"));
@@ -1031,7 +1031,7 @@ pub fn make_numeric_cast_traits_mod(config: &Configuration) -> Result<Program, E
     // Fix → Fix: every (int|float) → (int|float) combination.
     for (from, from_is_int) in &numeric_types {
         for (to, to_is_int) in &numeric_types {
-            let to_name = to.toplevel_tycon().unwrap().name.name.clone();
+            let to_name = to.head_tycon().name.name.clone();
             let body = cast_body(from, *from_is_int, to.clone(), *to_is_int, None);
             prog.trait_env
                 .add_instance(make_impl(from, &to_name, body))?;
