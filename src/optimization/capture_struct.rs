@@ -14,35 +14,35 @@ use crate::{
 };
 use std::sync::Arc;
 
-// The unboxed struct that carries a lambda's captured variables to the global function the lambda
-// is lifted to.
-//
-// The type constructor lives in the namespace of `owner`, and its name is `prefix@owner`, so that a
-// value of it says which function it was built for. Two lambdas capturing the same names at the same
-// types are distinct here, which is what lets a reader of the type answer "what do I call this
-// with".
+/// The unboxed struct that carries a lambda's captured variables to the global function the lambda
+/// is lifted to.
+///
+/// The type constructor lives in the namespace of `owner`, and its name is `prefix@owner`, so that a
+/// value of it says which function it was built for. Two lambdas capturing the same names at the same
+/// types are distinct here, which is what lets a reader of the type answer "what do I call this
+/// with".
 #[derive(Clone)]
 pub struct CaptureStruct {
-    // The type constructor a value of this struct is built and destructured with.
+    /// The type constructor a value of this struct is built and destructured with.
     pub tycon: Arc<TyCon>,
-    // The definition of `tycon`, which the caller registers into the program's type environment.
+    /// The definition of `tycon`, which the caller registers into the program's type environment.
     pub tycon_info: TyConInfo,
-    // The type of a capture struct value, i.e. `tycon` applied to no arguments.
+    /// The type of a capture struct value, i.e. `tycon` applied to no arguments.
     pub ty: Arc<TypeNode>,
-    // Captured names paired with their types, in the caller's order.
+    /// Captured names paired with their types, in the caller's order.
     fields: Vec<(FullName, Arc<TypeNode>)>,
 }
 
 impl CaptureStruct {
-    // Build the capture struct carrying `fields`. It only describes the type; the caller registers
-    // `tycon_info` into the program's type environment.
-    //
-    // # Arguments
-    // * `prefix` - the head of the type constructor's name, which says which pass built the capture
-    //   struct.
-    // * `owner` - the global name of the function this capture struct is built for. Together with
-    //   `prefix`, it tells one capture struct from another.
-    // * `fields` - the captured names paired with their types, in the order the struct holds them.
+    /// Build the capture struct carrying `fields`. It only describes the type; the caller registers
+    /// `tycon_info` into the program's type environment.
+    ///
+    /// # Arguments
+    /// * `prefix` - the head of the type constructor's name, which says which pass built the capture
+    ///   struct.
+    /// * `owner` - the global name of the function this capture struct is built for. Together with
+    ///   `prefix`, it tells one capture struct from another.
+    /// * `fields` - the captured names paired with their types, in the order the struct holds them.
     pub fn new(prefix: &str, owner: &FullName, fields: &[(FullName, Arc<TypeNode>)]) -> Self {
         let tycon = Arc::new(TyCon {
             name: Self::tycon_name(prefix, owner),
@@ -75,7 +75,7 @@ impl CaptureStruct {
         FullName::new(&owner.namespace, &format!("{}@{}", prefix, owner.name))
     }
 
-    // Expression building the capture struct from the captured variables currently in scope.
+    /// Expression building the capture struct from the captured variables currently in scope.
     pub fn struct_expr(&self) -> Arc<ExprNode> {
         expr_make_struct(
             self.tycon.clone(),
@@ -87,7 +87,7 @@ impl CaptureStruct {
         .set_type(self.ty.clone())
     }
 
-    // The captured names paired with their types, in the order the struct holds them.
+    /// The captured names paired with their types, in the order the struct holds them.
     pub fn fields(&self) -> &[(FullName, Arc<TypeNode>)] {
         &self.fields
     }
@@ -110,7 +110,7 @@ impl CaptureStruct {
         ))
     }
 
-    // Pattern destructuring the capture struct back into its original captured names.
+    /// Pattern destructuring the capture struct back into its original captured names.
     pub fn pattern(&self) -> Arc<PatternNode> {
         let field_pats = self
             .fields
@@ -126,8 +126,8 @@ impl CaptureStruct {
     }
 }
 
-// The local variables `lam` captures, each paired with the type `state` gives it where `lam` is
-// written, in the order `ExprNode::lambda_cap_names` lists them.
+/// The local variables `lam` captures, each paired with the type `state` gives it where `lam` is
+/// written, in the order `ExprNode::lambda_cap_names` lists them.
 pub fn captured_fields(lam: &Arc<ExprNode>, state: &VisitState) -> Vec<(FullName, Arc<TypeNode>)> {
     lam.lambda_cap_names()
         .into_iter()
