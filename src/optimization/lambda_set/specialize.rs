@@ -15,6 +15,8 @@ pub struct Instance {
     pub component: usize,
     /// The set given to each parameter, in the order of `Component::params`.
     pub args: Vec<SetId>,
+    /// The set of each variable of the component in this copy, in the order of `Component::vars`.
+    pub sets: Vec<SetId>,
 }
 
 /// The copies a program needs, found from its entry and the values it exports.
@@ -23,12 +25,16 @@ pub struct Specialization {
     pub store: SetStore,
     /// The copies, in the order they were first asked for: the copy of the root first.
     pub instances: Vec<Instance>,
+    /// The index into `instances` of each copy, by its component and the sets of its parameters.
+    pub instance_of: Map<(usize, Vec<SetId>), usize>,
 }
 
 /// The copies `analysis` asks for, starting from the component of the entry: each copy asks for a
 /// copy of every component it refers to, given by the sets its reference gives the parameters
 /// there. The copies of a component are as many as the distinct ways it is asked for. The
 /// components refer to one another without a cycle, so the walk ends.
+///
+/// Each copy is given the set of every variable of its component, which is what types its nodes.
 pub fn specialize(analysis: &mut Analysis) -> Specialization {
     let mut store = SetStore::new();
     let mut copies = Copies {
@@ -60,22 +66,33 @@ pub fn specialize(analysis: &mut Analysis) -> Specialization {
                 (site.component, refs)
             })
             .collect();
+        let var_refs: Vec<Ref> = analysis.components[component]
+            .vars
+            .iter()
+            .map(|v| {
+                assert_eq!(
+                    equations.solver.find(*v),
+                    *v,
+                    "a variable of a component is not the root it was recorded as"
+                );
+                equations.reference(*v)
+            })
+            .collect();
         let system = equations.finish();
         let ids = store.intern(system);
+        let resolve = |r: &Ref| match r {
+            Ref::Known(id) => *id,
+            Ref::Local(i) => ids[*i],
+        };
+        copies.instances[k].sets = var_refs.iter().map(resolve).collect();
         for (callee, refs) in site_refs {
-            let callee_args: Vec<SetId> = refs
-                .iter()
-                .map(|r| match r {
-                    Ref::Known(id) => *id,
-                    Ref::Local(i) => ids[*i],
-                })
-                .collect();
-            copies.request(callee, callee_args);
+            copies.request(callee, refs.iter().map(resolve).collect());
         }
     }
     Specialization {
         store,
         instances: copies.instances,
+        instance_of: copies.instance_of,
     }
 }
 
@@ -101,6 +118,7 @@ impl Copies {
         self.instances.push(Instance {
             component: key.0,
             args: key.1,
+            sets: vec![],
         });
         self.queue.push_back(id);
     }

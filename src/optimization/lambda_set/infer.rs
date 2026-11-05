@@ -16,7 +16,7 @@ use crate::{
     misc::{Map, Set},
     optimization::call_graph::call_graph_of,
 };
-use std::{collections::VecDeque, mem, rc::Rc, sync::Arc};
+use std::{collections::VecDeque, mem, ops::Range, rc::Rc, sync::Arc};
 
 /// A lambda of the program: an `Expr::Lam` in the body of a symbol.
 pub struct Lambda {
@@ -27,7 +27,23 @@ pub struct Lambda {
     /// The parameters of the component the lambda depends on, as indices into
     /// `Component::params`: those its body, its parameter and the values it captures are typed
     /// with. A `Member::Lam` naming the lambda carries one variable for each, in this order.
+    ///
+    /// The lambda that is the body of its symbol depends on `Component::body_params`, so that the
+    /// sets a member naming it carries are the ones a copy of the component is made for.
     pub params: Vec<usize>,
+    /// The lambda expression.
+    pub expr: Arc<ExprNode>,
+    /// The nodes of the lambda expression among the `NodeType`s of its symbol: its own node, then
+    /// the nodes of its body.
+    pub nodes: Range<usize>,
+    /// Whether the lambda is the body of its symbol.
+    pub is_body: bool,
+    /// The names the lambda captures, in the order `ExprNode::lambda_cap_names` lists them, each
+    /// with its annotated type where the lambda is written.
+    pub captures: Vec<(FullName, AType)>,
+    /// The own slots of the functions the captured values hold in place
+    /// (`SlotLayout::held_in_place`).
+    pub held_in_place: Vec<SetVar>,
 }
 
 impl Lambda {
@@ -46,7 +62,8 @@ pub struct Component {
     /// The symbols of the component, in the order of their names. The component of the program's
     /// entry and the values it exports holds none.
     pub symbols: Vec<FullName>,
-    /// The annotated type of each symbol, in the order of `symbols`.
+    /// The annotated type of each symbol, in the order of `symbols`, each slot a root of the
+    /// solver.
     pub types: Vec<AType>,
     /// The parameters: the distinct variables of `types`, in the order they first occur there. A
     /// copy of the component is given by a lambda set for each.
@@ -55,9 +72,46 @@ pub struct Component {
     pub sites: Vec<Site>,
     /// What a reference to a symbol of the component gets.
     pub scheme: Scheme,
+    /// The parameters the bodies of the symbols depend on, in increasing order, as indices into
+    /// `params`: those the terms of the bodies reach (`lambda_params`). Two copies that give these
+    /// the same sets have the same bodies.
+    pub body_params: Vec<usize>,
+    /// For each symbol, in the order of `symbols`, the nodes of its body. The component of the
+    /// entry has the nodes of each of its roots instead, the entry first.
+    pub node_types: Vec<Vec<NodeType>>,
+    /// Every variable the nodes, the lambdas and the references of the component name, each a root
+    /// of the solver, and each once. A copy of the component gives each of them a set.
+    pub vars: Vec<SetVar>,
+    /// The position of each variable of `vars` there.
+    pub var_index: Map<SetVar, usize>,
+}
+
+/// What inference records of a node of an expression or of a pattern.
+///
+/// The nodes of an expression are listed in preorder: a node, then the nodes under it, in the
+/// order `Expr` holds them. The pattern of a `Let`, and of each arm of a `Match`, comes after the
+/// expression it takes apart and before the expression it binds names in, its nodes in preorder.
+pub struct NodeType {
+    /// The annotated type of the node, each slot a root of the solver.
+    pub ty: AType,
+    /// The names the node refers to: for a variable its name, and for a builtin operation each
+    /// operand, in the order `BuiltinOp::free_vars` lists them. Every other node refers to none.
+    pub names: Vec<NameRef>,
+}
+
+/// What a name a node refers to stands for.
+#[derive(Clone)]
+pub enum NameRef {
+    /// A local name.
+    Local,
+    /// A symbol: one of the component the node is in where `site` is `None`, whose copy the copy
+    /// the node is in refers to, and one of another component otherwise, at the copy the
+    /// reference gives. `ty` is the annotated type the reference has.
+    Global { site: Option<Site>, ty: AType },
 }
 
 /// A reference from a component to a symbol of another one, which needs a copy of that one.
+#[derive(Clone)]
 pub struct Site {
     /// The component referred to.
     pub component: usize,
@@ -182,23 +236,30 @@ fn infer_component(
         types: &types,
         env: Map::default(),
         frames: vec![],
-        lambdas: vec![],
+        terms: vec![],
         vars_holding_current: vec![],
         sites: vec![],
         lam_counter: 0,
+        nodes: vec![],
     };
+    let mut node_types = vec![];
     for (i, s) in symbols.iter().enumerate() {
         inferencer.enter_symbol(Some(s.clone()));
+        let term = inferencer.new_term(None, None);
+        inferencer.frames.push(term);
         let body = inferencer.infer(prg.symbols[s].expr.as_ref().unwrap());
+        inferencer.frames.pop();
         inferencer.analysis.solver.unify(&types[i], &body);
+        node_types.push(inferencer.take_nodes());
     }
     inferencer.enter_symbol(None);
     for (expr, kind) in &roots {
         let ty = inferencer.infer(expr);
         inferencer.analysis.solver.make_all_dynamic(&ty, kind);
+        node_types.push(inferencer.take_nodes());
     }
     let Inferencer {
-        lambdas,
+        terms,
         vars_holding_current,
         sites,
         ..
@@ -207,24 +268,26 @@ fn infer_component(
         analysis,
         symbols,
         types,
-        lambdas,
+        terms,
         vars_holding_current,
         sites,
+        node_types,
     )
 }
 
-/// What a lambda under inference records about its term, which decides the parameters it depends on.
-struct LamTerm {
-    /// The lambda, as its index into `Analysis::lambdas`.
-    lam: LamId,
-    /// The annotated type of the lambda expression.
-    ty: AType,
-    /// The variables of the nodes of its body that no lambda inside it holds, of the names builtin
-    /// operations there read, of its parameter, and of the references to other components made
-    /// there.
+/// What inference records about the term of a lambda, or of the body of a symbol, which decides the
+/// parameters the lambda or the body depends on.
+struct Term {
+    /// The lambda, as its index into `Analysis::lambdas`; `None` for the body of a symbol.
+    lam: Option<LamId>,
+    /// The annotated type of the lambda expression; `None` for the body of a symbol.
+    ty: Option<AType>,
+    /// The variables of the nodes there that no lambda inside holds, of the names builtin
+    /// operations there read, of the lambda's parameter, and of the references to other components
+    /// made there.
     vars: Vec<SetVar>,
-    /// The lambdas written directly inside its body.
-    children: Vec<LamId>,
+    /// The terms of the lambdas written directly inside, as indices into the component's terms.
+    children: Vec<usize>,
 }
 
 /// The walk inferring the bodies of one component.
@@ -244,17 +307,20 @@ struct Inferencer<'a, 'p, 'e> {
     types: &'a [AType],
     /// The annotated types of the local names in scope, the innermost binding of a name last.
     env: Map<FullName, Vec<AType>>,
-    /// The lambdas enclosing the node under inference, the innermost last, as indices into
-    /// `lambdas`.
+    /// The terms enclosing the node under inference, the innermost last, as indices into `terms`:
+    /// the body of the symbol, then the lambdas around the node.
     frames: Vec<usize>,
-    /// The lambdas of the component.
-    lambdas: Vec<LamTerm>,
+    /// The terms of the lambdas and of the bodies of the component.
+    terms: Vec<Term>,
     /// The variables a `Member::Lam` with `Owner::Current` was added to.
     vars_holding_current: Vec<SetVar>,
     /// The references made in the bodies to symbols of other components.
     sites: Vec<Site>,
     /// How many lambdas of the current symbol's body have been met.
     lam_counter: u32,
+    /// The nodes of the expression under inference met so far, in the order `NodeType` lists them.
+    /// A node is pushed as `None` when it is met and filled in once its type is known.
+    nodes: Vec<Option<NodeType>>,
 }
 
 impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
@@ -269,24 +335,60 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         self.record_vars(&ty.slots);
     }
 
-    /// Records `vars`, met inside the innermost lambda, as part of its term.
+    /// Records `vars`, met inside the innermost lambda or body, as part of its term.
     fn record_vars(&mut self, vars: &[SetVar]) {
         if let Some(frame) = self.frames.last() {
-            self.lambdas[*frame].vars.extend(vars.iter().copied());
+            self.terms[*frame].vars.extend(vars.iter().copied());
         }
+    }
+
+    /// A new term, of the lambda `lam` of the annotated type `ty`, or of a body where `None`. A
+    /// lambda's term is a child of the innermost term enclosing it.
+    fn new_term(&mut self, lam: Option<LamId>, ty: Option<AType>) -> usize {
+        let term = self.terms.len();
+        if lam.is_some() {
+            let parent = *self
+                .frames
+                .last()
+                .expect("a lambda is written in the body of a symbol");
+            self.terms[parent].children.push(term);
+        }
+        self.terms.push(Term {
+            lam,
+            ty,
+            vars: vec![],
+            children: vec![],
+        });
+        term
+    }
+
+    /// The nodes recorded since the last call, every one of them filled in.
+    fn take_nodes(&mut self) -> Vec<NodeType> {
+        mem::take(&mut self.nodes)
+            .into_iter()
+            .map(|n| n.expect("a node is filled in once its type is inferred"))
+            .collect()
     }
 
     /// The annotated type of `e`, after recording what `e` makes equal and what it puts where.
     fn infer(&mut self, e: &Arc<ExprNode>) -> AType {
         let ty = e.type_.clone().unwrap();
+        let index = self.nodes.len();
+        self.nodes.push(None);
+        let mut names = vec![];
         let result = match &*e.expr {
-            Expr::Var(v) => self.reference(&v.name),
+            Expr::Var(v) => {
+                let (ty, name) = self.reference(&v.name);
+                names.push(name);
+                ty
+            }
             Expr::Builtin(b) => {
-                let operands: Vec<AType> =
-                    b.op.free_vars()
-                        .iter()
-                        .map(|name| self.operand(name))
-                        .collect();
+                let mut operands: Vec<AType> = vec![];
+                for name in b.op.free_vars() {
+                    let (ty, name) = self.operand(&name);
+                    operands.push(ty);
+                    names.push(name);
+                }
                 let result = self.layout.fresh(&ty, &mut self.analysis.solver);
                 let mut flow = BuiltinFlow::new(
                     self.layout,
@@ -327,7 +429,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                     "a lambda at this stage takes one parameter"
                 );
                 let lam_ty = self.layout.fresh(&ty, &mut self.analysis.solver);
-                let lam = self.new_lambda();
+                let lam = self.new_lambda(e, index);
                 let own = lam_ty.slots[0];
                 self.analysis.solver.add(
                     own,
@@ -337,23 +439,31 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                     },
                 );
                 self.vars_holding_current.push(own);
-                if let Some(parent) = self.frames.last() {
-                    self.lambdas[*parent].children.push(lam);
+                let captures: Vec<(FullName, AType)> = e
+                    .lambda_cap_names()
+                    .into_iter()
+                    .map(|name| {
+                        let ty = self.local(&name);
+                        (name, ty)
+                    })
+                    .collect();
+                let mut held_in_place = vec![];
+                for (_, ty) in &captures {
+                    self.layout
+                        .held_in_place(ty, &mut self.analysis.solver, &mut held_in_place);
                 }
-                let frame = self.lambdas.len();
-                self.lambdas.push(LamTerm {
-                    lam,
-                    ty: lam_ty.clone(),
-                    vars: vec![],
-                    children: vec![],
-                });
-                self.frames.push(frame);
+                let lambda = &mut self.analysis.lambdas[lam as usize];
+                lambda.captures = captures;
+                lambda.held_in_place = held_in_place;
+                let term = self.new_term(Some(lam), Some(lam_ty.clone()));
+                self.frames.push(term);
                 let param = self.layout.type_arg(&lam_ty, 0);
                 self.record(&param);
                 self.bind(&params[0].name, param);
                 let body = self.infer(body);
                 self.unbind(&params[0].name);
                 self.frames.pop();
+                self.analysis.lambdas[lam as usize].nodes.end = self.nodes.len();
                 let ret = self.layout.type_arg(&lam_ty, 1);
                 self.analysis.solver.unify(&ret, &body);
                 lam_ty
@@ -430,11 +540,16 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
             }
         };
         self.record(&result);
+        self.nodes[index] = Some(NodeType {
+            ty: result.clone(),
+            names,
+        });
         result
     }
 
-    /// A new lambda of the current symbol.
-    fn new_lambda(&mut self) -> LamId {
+    /// A new lambda of the current symbol: the lambda expression `expr`, whose node is the one at
+    /// `node` among the nodes of the symbol's body.
+    fn new_lambda(&mut self, expr: &Arc<ExprNode>, node: usize) -> LamId {
         let lam = self.analysis.lambdas.len() as LamId;
         self.analysis.lambdas.push(Lambda {
             symbol: self
@@ -445,6 +560,11 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 .clone(),
             index: self.lam_counter,
             params: vec![],
+            expr: expr.clone(),
+            nodes: node..node,
+            is_body: node == 0,
+            captures: vec![],
+            held_in_place: vec![],
         });
         self.lam_counter += 1;
         lam
@@ -454,33 +574,37 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
     /// lambda's term: a name read only by a builtin is still part of what the lambda captures.
     /// `CAP_NAME` is the capture of the innermost lambda, which only a closure object holds, so
     /// that lambda's set is Dynamic.
-    fn operand(&mut self, name: &FullName) -> AType {
+    fn operand(&mut self, name: &FullName) -> (AType, NameRef) {
         if name.is_local() && name.name == CAP_NAME {
-            let frame = *self
+            let ty = self
                 .frames
                 .last()
+                .and_then(|frame| self.terms[*frame].ty.clone())
                 .expect("a builtin operation reads the capture of no lambda");
-            let ty = self.lambdas[frame].ty.clone();
             let own = ty.slots[0];
             self.analysis
                 .solver
                 .make_dynamic(own, DynamicKind::ReadsOwnCapture);
-            return ty;
+            return (ty, NameRef::Local);
         }
-        let ty = self.reference(name);
+        let (ty, name) = self.reference(name);
         self.record(&ty);
-        ty
+        (ty, name)
     }
 
-    /// The annotated type of a reference to the name `name`.
-    fn reference(&mut self, name: &FullName) -> AType {
+    /// The annotated type of the local name `name` where it is read.
+    fn local(&self, name: &FullName) -> AType {
+        self.env
+            .get(name)
+            .and_then(|tys| tys.last())
+            .unwrap_or_else(|| panic!("the local name `{}` is unbound", name.to_string()))
+            .clone()
+    }
+
+    /// The annotated type of a reference to the name `name`, and what the name stands for.
+    fn reference(&mut self, name: &FullName) -> (AType, NameRef) {
         if name.is_local() {
-            return self
-                .env
-                .get(name)
-                .and_then(|tys| tys.last())
-                .unwrap_or_else(|| panic!("the local name `{}` is unbound", name.to_string()))
-                .clone();
+            return (self.local(name), NameRef::Local);
         }
         let component = *self
             .analysis
@@ -489,7 +613,14 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
             .unwrap_or_else(|| panic!("the global name `{}` is no symbol", name.to_string()));
         if component == self.component {
             let i = self.symbols.iter().position(|s| s == name).unwrap();
-            return self.types[i].clone();
+            let ty = self.types[i].clone();
+            return (
+                ty.clone(),
+                NameRef::Global {
+                    site: None,
+                    ty,
+                },
+            );
         }
         let callee = &self.analysis.components[component];
         let position = callee.symbols.iter().position(|s| s == name).unwrap();
@@ -501,11 +632,19 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
             .collect();
         let args = vars[..callee.params.len()].to_vec();
         self.record_vars(&args);
-        self.sites.push(Site { component, args });
-        AType {
+        let site = Site { component, args };
+        self.sites.push(site.clone());
+        let ty = AType {
             ty: self.prg.symbols[name].ty.clone(),
             slots,
-        }
+        };
+        (
+            ty.clone(),
+            NameRef::Global {
+                site: Some(site),
+                ty,
+            },
+        )
     }
 
     /// Brings the local name `name` into scope, at the annotated type `ty`.
@@ -528,6 +667,10 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
 
     /// `bind_pattern`, appending the names to `names`.
     fn bind_pattern_into(&mut self, pat: &Arc<PatternNode>, ty: &AType, names: &mut Vec<FullName>) {
+        self.nodes.push(Some(NodeType {
+            ty: ty.clone(),
+            names: vec![],
+        }));
         match &pat.pattern {
             Pattern::Var(v, _) => {
                 self.bind(&v.name, ty.clone());
@@ -579,16 +722,18 @@ fn instantiate(scheme: &Scheme, solver: &mut Solver) -> Vec<SetVar> {
     vars
 }
 
-/// The component inferred from the annotated `types` of its `symbols`, its `lambdas`, the
-/// variables `vars_holding_current` its lambdas were added to, and its references `sites`: the
-/// parameters are found, each lambda is given the ones it depends on, and the scheme is built.
+/// The component inferred from the annotated `types` of its `symbols`, the `terms` of its lambdas
+/// and bodies, the variables `vars_holding_current` its lambdas were added to, its references
+/// `sites`, and the nodes of its bodies: the parameters are found, each lambda is given the ones
+/// it depends on, and the scheme is built.
 fn generalize(
     analysis: &mut Analysis,
     symbols: Vec<FullName>,
     types: Vec<AType>,
-    lambdas: Vec<LamTerm>,
+    terms: Vec<Term>,
     vars_holding_current: Vec<SetVar>,
     sites: Vec<Site>,
+    mut node_types: Vec<Vec<NodeType>>,
 ) -> Component {
     let solver = &mut analysis.solver;
     let mut params: Vec<SetVar> = vec![];
@@ -603,15 +748,30 @@ fn generalize(
         }
     }
 
-    // The parameters each lambda depends on.
-    let term_index: Map<LamId, usize> = lambdas
+    // The parameters each lambda and each body depends on. The lambda that is a body depends on
+    // what the bodies do.
+    let term_of_lam: Map<LamId, usize> = terms
         .iter()
         .enumerate()
-        .map(|(i, t)| (t.lam, i))
+        .filter_map(|(i, t)| t.lam.map(|lam| (lam, i)))
         .collect();
-    for term in &lambdas {
-        let depends_on = lambda_params(solver, &lambdas, &term_index, term.lam, &param_index);
-        analysis.lambdas[term.lam as usize].params = depends_on;
+    let mut body_params: Vec<usize> = vec![];
+    for (i, term) in terms.iter().enumerate() {
+        let depends_on = lambda_params(solver, &terms, &term_of_lam, i, &param_index);
+        match term.lam {
+            Some(lam) => analysis.lambdas[lam as usize].params = depends_on,
+            None => body_params.extend(depends_on),
+        }
+    }
+    body_params.sort();
+    body_params.dedup();
+    for term in &terms {
+        if let Some(lam) = term.lam {
+            let lambda = &mut analysis.lambdas[lam as usize];
+            if lambda.is_body {
+                lambda.params = body_params.clone();
+            }
+        }
     }
     for v in vars_holding_current {
         let members = mem::take(solver.members_mut(v));
@@ -706,6 +866,54 @@ fn generalize(
         }
     }
 
+    // Every variable the component names, as the root it is now: the components inferred later
+    // share none of them with a variable they unify.
+    let mut vars: Vec<SetVar> = vec![];
+    let mut seen: Set<SetVar> = Set::default();
+    let mut root = |solver: &mut Solver, v: &mut SetVar| {
+        *v = solver.find(*v);
+        if seen.insert(*v) {
+            vars.push(*v);
+        }
+    };
+    let mut types = types;
+    for ty in &mut types {
+        for v in &mut ty.slots {
+            root(solver, v);
+        }
+    }
+    for nodes in &mut node_types {
+        for node in nodes {
+            for v in &mut node.ty.slots {
+                root(solver, v);
+            }
+            for name in &mut node.names {
+                if let NameRef::Global { site, ty } = name {
+                    for v in &mut ty.slots {
+                        root(solver, v);
+                    }
+                    for v in site.iter_mut().flat_map(|site| site.args.iter_mut()) {
+                        root(solver, v);
+                    }
+                }
+            }
+        }
+    }
+    for term in &terms {
+        if let Some(lam) = term.lam {
+            let lambda = &mut analysis.lambdas[lam as usize];
+            for (_, ty) in &mut lambda.captures {
+                for v in &mut ty.slots {
+                    root(solver, v);
+                }
+            }
+            for v in &mut lambda.held_in_place {
+                root(solver, v);
+            }
+        }
+    }
+    let var_index = vars.iter().enumerate().map(|(i, v)| (*v, i)).collect();
+
     Component {
         symbols,
         types,
@@ -716,6 +924,10 @@ fn generalize(
             shared,
             slot_classes,
         },
+        body_params,
+        node_types,
+        vars,
+        var_index,
     }
 }
 
@@ -850,23 +1062,23 @@ fn shared_classes(
         .collect()
 }
 
-/// The parameters of the component the lambda `lam` depends on, in order: the ones its term
-/// reaches. The term is that of the lambda and of the lambdas inside it; it reaches a variable it
-/// holds, and whatever the members of a variable it reaches name. A parameter's members are not
-/// followed: a copy of the component gives the parameter its value.
+/// The parameters of the component the term `start` depends on, in order: the ones it reaches. The
+/// term is that of a lambda, or of a body, together with the terms of the lambdas inside it; it
+/// reaches a variable it holds, and whatever the members of a variable it reaches name. A
+/// parameter's members are not followed: a copy of the component gives the parameter its value.
 fn lambda_params(
     solver: &mut Solver,
-    terms: &[LamTerm],
-    term_index: &Map<LamId, usize>,
-    lam: LamId,
+    terms: &[Term],
+    term_of_lam: &Map<LamId, usize>,
+    start: usize,
     param_index: &Map<SetVar, usize>,
 ) -> Vec<usize> {
     let mut found: Vec<usize> = vec![];
     let mut seen_vars: Set<SetVar> = Set::default();
-    let mut seen_lams: Set<LamId> = Set::default();
-    let mut lam_stack: Vec<LamId> = vec![lam];
+    let mut seen_terms: Set<usize> = Set::default();
+    let mut term_stack: Vec<usize> = vec![start];
     let mut var_stack: Vec<SetVar> = vec![];
-    seen_lams.insert(lam);
+    seen_terms.insert(start);
     loop {
         if let Some(v) = var_stack.pop() {
             let root = solver.find(v);
@@ -887,8 +1099,9 @@ fn lambda_params(
                         lam: other,
                         owner: Owner::Current,
                     } => {
-                        if seen_lams.insert(other) {
-                            lam_stack.push(other);
+                        let other = term_of_lam[&other];
+                        if seen_terms.insert(other) {
+                            term_stack.push(other);
                         }
                     }
                     Member::Dynamic(_) => {}
@@ -896,14 +1109,14 @@ fn lambda_params(
             }
             continue;
         }
-        let Some(l) = lam_stack.pop() else {
+        let Some(t) = term_stack.pop() else {
             break;
         };
-        let term = &terms[term_index[&l]];
+        let term = &terms[t];
         var_stack.extend(term.vars.iter().copied());
         for child in &term.children {
-            if seen_lams.insert(*child) {
-                lam_stack.push(*child);
+            if seen_terms.insert(*child) {
+                term_stack.push(*child);
             }
         }
     }

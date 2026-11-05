@@ -95,6 +95,11 @@ impl SetStore {
         &self.sets[id as usize]
     }
 
+    /// The number of sets the store holds: the sets are those numbered below it.
+    pub fn len(&self) -> usize {
+        self.sets.len()
+    }
+
     /// The sets the equations of `system` define, held in the store. An equation lists the
     /// elements of its set, which may refer to sets of the store and to the sets of any equation
     /// of the system, its own included.

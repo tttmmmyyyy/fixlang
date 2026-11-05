@@ -6,7 +6,9 @@
 // the variable of the place it is built at. A component of the call graph is inferred together and
 // generalized over the variables of its symbols' types, so that a function taking a function is
 // inferred once and copied for each lambda set it is given. Specialization then walks from the
-// program's entry, and gives each copy the concrete lambda sets of its parameters.
+// program's entry, and gives each copy the concrete lambda sets of its parameters. The program is
+// then rewritten: each copy becomes copies of the symbols, and a value whose set holds one lambda
+// becomes that lambda's capture struct, called by calling the lambda directly.
 //
 // The design is laid out in `dev-docs/2026-10-24-lambda-set-specialization/design.md`.
 
@@ -14,9 +16,12 @@ mod concrete;
 mod dump;
 mod flow;
 mod infer;
+mod represent;
+mod rewrite;
 mod slots;
 mod solver;
 mod specialize;
+mod validate;
 
 use crate::{
     ast::program::Program,
@@ -26,25 +31,37 @@ use crate::{
 };
 pub use flow::BuiltinFlow;
 use infer::infer;
+use represent::represent;
+use rewrite::rewrite;
 use slots::SlotLayout;
 use specialize::specialize;
 use std::{fs, path::PathBuf};
 
-/// Infers the lambda sets of `prg` and the copies they ask for, leaving the program as it is. With
-/// `dump_step`, writes them to a file under `.fixlang` named after it; a failure to write it ends
-/// the process with the error printed.
-pub fn run(prg: &Program, dump_step: Option<String>) {
-    let layout = SlotLayout::new(&prg.type_env);
-    let mut analysis = infer(prg, &layout);
-    let spec = specialize(&mut analysis);
-    if let Some(step) = dump_step {
-        let text = dump::render(&mut analysis, &spec, &layout);
-        let path = PathBuf::from(format!("{}/{}.lambda_sets.txt", DOT_FIXLANG, step));
-        panic_if_err(write_file_guarding_project_links(
-            &path,
-            DOT_FIXLANG_LINK_HINT,
-            |tmp_path| fs::write(tmp_path, &text),
-        ));
+/// Infers the lambda sets of `prg` and the copies they ask for, and rewrites the program by them.
+/// The bodies of the lifted lambdas are moved into their callers on up to `num_threads` threads.
+/// With `dump_step`, writes the sets and the copies to a file under `.fixlang` named after it; a
+/// failure to write it ends the process with the error printed. With `develop_mode`, checks that
+/// the types of the rewritten program agree where its expressions meet.
+pub fn run(prg: &mut Program, dump_step: Option<String>, num_threads: usize, develop_mode: bool) {
+    let rewritten = {
+        let layout = SlotLayout::new(&prg.type_env);
+        let mut analysis = infer(prg, &layout);
+        let spec = specialize(&mut analysis);
+        if let Some(step) = dump_step {
+            let text = dump::render(&mut analysis, &spec, &layout);
+            let path = PathBuf::from(format!("{}/{}.lambda_sets.txt", DOT_FIXLANG, step));
+            panic_if_err(write_file_guarding_project_links(
+                &path,
+                DOT_FIXLANG_LINK_HINT,
+                |tmp_path| fs::write(tmp_path, &text),
+            ));
+        }
+        let repr = represent(&analysis, &spec);
+        rewrite(prg, &layout, &analysis, &spec, &repr)
+    };
+    rewritten.apply(prg, num_threads);
+    if develop_mode {
+        validate::validate_types(prg);
     }
 }
 

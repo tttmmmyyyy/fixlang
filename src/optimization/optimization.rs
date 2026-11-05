@@ -97,15 +97,24 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| inline_local::run(prg, config.num_worker_thread),
     );
 
-    // Infer the lambda sets of the program and the copies they ask for, ahead of the passes that
-    // specialize closures, and leave the program as it is. With `emit_symbols`, write them to a
-    // dump named after the step the program is at.
-    if config.enable_closure_specialization() && (config.develop_mode || config.emit_symbols) {
+    // Specialize the program by its lambda sets, ahead of the passes that specialize closures,
+    // which go on to work on the values this leaves closures. With `emit_symbols`, write the sets
+    // to a dump named after the step the program is at.
+    if config.enable_closure_specialization() {
         let _sw = StopWatch::new("lambda_set::run", config.verbose);
         let dump_step = config
             .emit_symbols
             .then(|| format!("{}", prg.optimization_step));
-        lambda_set::run(prg, dump_step);
+        lambda_set::run(
+            prg,
+            dump_step,
+            config.num_worker_thread,
+            config.develop_mode,
+        );
+        if config.emit_symbols {
+            prg.emit_symbols(&format!("{}.lambda_set", prg.optimization_step));
+            prg.optimization_step += 1;
+        }
     }
 
     // Give a function that takes a struct a twin taking one argument per field of it, so that a

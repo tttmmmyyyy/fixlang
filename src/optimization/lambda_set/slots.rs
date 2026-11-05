@@ -6,7 +6,7 @@ use crate::{
     ast::{
         name::Name,
         type_env::TypeEnv,
-        types::{type_tyapp, TyCon, Type, TypeNode},
+        types::{type_tyapp, TyCon, TyConVariant, Type, TypeNode},
     },
     fixstd::builtin::DESTRUCTOR_TYPE,
     graph::Graph,
@@ -105,7 +105,7 @@ impl<'e> SlotLayout<'e> {
     /// The type constructor whose declaration decides the slots of `tc`: the struct a punched struct
     /// is punched from, and `tc` itself otherwise. A punched struct is laid out as the struct, and a
     /// value moves between the two with its lambda sets unchanged.
-    fn layout_tycon(&self, tc: &TyCon) -> TyCon {
+    pub(super) fn layout_tycon(&self, tc: &TyCon) -> TyCon {
         let mut tc = tc.clone();
         while let Some(from) = &self.type_env.tycon_info(&tc).punched_from {
             tc = from.clone();
@@ -114,8 +114,29 @@ impl<'e> SlotLayout<'e> {
     }
 
     /// The number of arguments `tc` takes.
-    fn arity(&self, tc: &TyCon) -> usize {
+    pub(super) fn arity(&self, tc: &TyCon) -> usize {
         self.type_env.tycon_info(tc).tyvars.len()
+    }
+
+    /// The type environment whose types the slots are of.
+    pub(super) fn type_env(&self) -> &'e TypeEnv {
+        self.type_env
+    }
+
+    /// The group of the type constructor `tc`, given by its layout constructor (`layout_tycon`).
+    pub(super) fn group_of(&self, tc: &TyCon) -> usize {
+        self.group_of[&self.layout_tycon(tc)]
+    }
+
+    /// The members of the group `group`, in the order of their names.
+    pub(super) fn group_members(&self, group: usize) -> &[TyCon] {
+        &self.group_members[group]
+    }
+
+    /// The own slot of its group that the first own slot of the field `field_idx` of `member` is.
+    pub(super) fn field_offset(&self, member: &TyCon, field_idx: usize) -> usize {
+        let group = self.group_of(member);
+        self.group_slots(group).field_offsets[member][field_idx]
     }
 
     /// Splits the type constructors into groups: the strongly connected components of the graph
@@ -256,7 +277,7 @@ impl<'e> SlotLayout<'e> {
     }
 
     /// The number of own slots of the type constructor `tc` applied to all its arguments.
-    fn own_slot_count(&self, tc: &TyCon) -> usize {
+    pub(super) fn own_slot_count(&self, tc: &TyCon) -> usize {
         if tc.is_arrow() {
             return 1;
         }
@@ -397,6 +418,31 @@ impl<'e> SlotLayout<'e> {
     pub fn own_slots<'a>(&self, ty: &'a AType) -> &'a [SetVar] {
         let tc = head_tycon(&ty.ty);
         &ty.slots[..self.own_slot_count(&tc)]
+    }
+
+    /// Appends to `out` the own slot of each function a value of `ty` holds in place: the value
+    /// itself where it is a function, and otherwise each function reached from it through fields
+    /// of unboxed structs and unions alone. A function whose set is represented by a capture struct
+    /// is laid out where it is held, so these are the slots whose capture structs a value of `ty`
+    /// contains. `solver` gives the new variables of a place the slots of `ty` leave untracked.
+    pub fn held_in_place(&self, ty: &AType, solver: &mut Solver, out: &mut Vec<SetVar>) {
+        let tc = head_tycon(&ty.ty);
+        if ty.ty.flatten_type_application().len() - 1 < self.arity(&tc) {
+            return;
+        }
+        if tc.is_arrow() {
+            out.push(ty.slots[0]);
+            return;
+        }
+        let info = self.type_env.tycon_info(&self.layout_tycon(&tc));
+        let is_struct_or_union = matches!(info.variant, TyConVariant::Struct | TyConVariant::Union);
+        if !is_struct_or_union || !info.is_unbox {
+            return;
+        }
+        for i in 0..info.fields.len() {
+            let field = self.field(ty, i, solver);
+            self.held_in_place(&field, solver, out);
+        }
     }
 
     /// The field `field_idx` of the struct, the variant `field_idx` of the union, or (with

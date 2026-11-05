@@ -42,7 +42,7 @@ impl CaptureStruct {
     // * `fields` - the captured names paired with their types, in the order the struct holds them.
     pub fn new(prefix: &str, owner: &FullName, fields: &[(FullName, Arc<TypeNode>)]) -> Self {
         let tycon = Arc::new(TyCon {
-            name: FullName::new(&owner.namespace, &format!("{}@{}", prefix, owner.name)),
+            name: Self::tycon_name(prefix, owner),
         });
         let tycon_info = TyConInfo {
             punched_from: None,
@@ -64,6 +64,12 @@ impl CaptureStruct {
             ty,
             fields: fields.to_vec(),
         }
+    }
+
+    // The name of the type constructor `new` gives the capture struct built with `prefix` for
+    // `owner`.
+    pub fn tycon_name(prefix: &str, owner: &FullName) -> FullName {
+        FullName::new(&owner.namespace, &format!("{}@{}", prefix, owner.name))
     }
 
     // Expression building the capture struct from the captured variables currently in scope.
