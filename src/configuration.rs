@@ -6,7 +6,7 @@ use crate::constants::{
     OPTIMIZATION_LEVEL_NONE, TEST_FUNCTION_NAME, TEST_MODULE_NAME,
 };
 use crate::doc_test::ExampleBuild;
-use crate::elaboration::typecheckcache::{FileCache, TypeCheckCache};
+use crate::elaboration::typecheckcache::SharedTypeCheckCache;
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
 use crate::ffi::CNumericTypes;
@@ -334,6 +334,18 @@ impl SubCommand {
     }
 }
 
+/// Where the results of type-checking the global values are kept.
+#[derive(Clone)]
+pub enum TypeCheckStore {
+    /// One file for each module under `TYPED_MODULES_PATH`, which outlives the process
+    /// (`elaboration::typed_modules`). A build reads back from it only the typed expressions
+    /// instantiation asks for.
+    TypedModules,
+    /// A cache the caller holds, which lasts as long as the process holding it. The language server
+    /// keeps one across the requests it answers.
+    InMemory(SharedTypeCheckCache),
+}
+
 /// What the `diagnostics` subcommand reports on, and how far the compiler goes to report it.
 #[derive(Clone, Default)]
 pub struct DiagnosticsConfig {
@@ -564,9 +576,9 @@ pub struct Configuration {
     /// The commands `fixproj.toml` asks to be run before the build, those of the root project and
     /// of every dependency.
     pub preliminary_commands: Vec<PreliminaryCommand>,
-    /// Where the type checker reads and writes the result of checking each symbol, so that a
-    /// symbol whose sources are unchanged is served rather than checked again.
-    pub type_check_cache: Arc<dyn TypeCheckCache + Send + Sync>,
+    /// Where the results of type-checking the global values are kept, so that a value whose sources
+    /// are unchanged is served rather than checked again.
+    pub type_check_store: TypeCheckStore,
     /// How many threads the compiler itself runs its work over.
     pub num_worker_thread: usize,
     /// The arguments the built program is given in `run` mode.
@@ -695,7 +707,7 @@ impl Configuration {
             disable_cpu_features_regex: vec![],
             llvm_args: vec![],
             preliminary_commands: vec![],
-            type_check_cache: Arc::new(FileCache::new()),
+            type_check_store: TypeCheckStore::TypedModules,
             num_worker_thread: 0,
             llvm_passes_override: None,
             run_program_args: vec![],
@@ -1159,7 +1171,7 @@ impl Configuration {
             // what one of them holds, so `build_object_files_cache_hash` covers `cu_size`.
             cu_size: _,
             num_worker_thread: _,
-            type_check_cache: _,
+            type_check_store: _,
 
             // The macros the runtime is compiled with. The runtime is C the compiler carries, so
             // it has object files and a key of its own.

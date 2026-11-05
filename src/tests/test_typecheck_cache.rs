@@ -71,11 +71,12 @@ fn test_the_module_dependency_hash_covers_the_c_numeric_types() {
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::constants::{DOT_FIXLANG, TYPE_CHECK_CACHE_PATH};
-    use crate::tests::test_util::fix_command;
+    use crate::constants::{DOT_FIXLANG, TYPED_MODULES_PATH};
+    use crate::tests::test_util::run_fix;
     use std::fs;
     use std::path::Path;
     use std::process::Command;
+    use std::time::SystemTime;
     use tempfile::TempDir;
 
     /// The version hash of a cache entry comes from the sources of the module the value's name
@@ -103,11 +104,7 @@ mod integration_tests {
             )
         };
         let run = || {
-            let output = fix_command()
-                .args(["run", "--file", "main.fix"])
-                .current_dir(temp.path())
-                .output()
-                .expect("Failed to execute fix run");
+            let output = run_fix(temp.path(), &["run", "--file", "main.fix"]);
             String::from_utf8_lossy(&output.stdout).trim().to_string()
         };
 
@@ -162,19 +159,9 @@ main = println("s");
     /// `extra_args` to `fix build` as well, and returns what the compiler wrote to stderr. The
     /// program is written to `out` in that directory.
     fn build(dir: &Path, file: &str, extra_args: &[&str]) -> String {
-        let build_output = fix_command()
-            .args(["build", "--file", file, "-o", "out"])
-            .args(extra_args)
-            .current_dir(dir)
-            .output()
-            .expect("failed to run fix build");
-        assert!(
-            build_output.status.success(),
-            "fix build failed in {}:\n{}",
-            dir.display(),
-            String::from_utf8_lossy(&build_output.stderr)
-        );
-        String::from_utf8_lossy(&build_output.stderr).to_string()
+        let (built, stderr) = try_build(dir, file, extra_args);
+        assert!(built, "fix build failed in {}:\n{}", dir.display(), stderr);
+        stderr
     }
 
     /// A deprecation warning is collected after type checking, out of the typed expression and the
@@ -275,11 +262,7 @@ main = println((1, 2, 3, 4, 5, 6, 7).to_string + no_such_value);
 
     /// Runs `fix check` in `dir` and returns everything it told the user.
     fn check(dir: &Path) -> String {
-        let output = fix_command()
-            .arg("check")
-            .current_dir(dir)
-            .output()
-            .expect("failed to run fix check");
+        let output = run_fix(dir, &["check"]);
         String::from_utf8_lossy(&output.stdout).to_string()
             + &String::from_utf8_lossy(&output.stderr)
     }
@@ -340,7 +323,7 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         )
         .expect("Failed to write main.fix");
         let cache_entries = || {
-            let mut names = fs::read_dir(dir.join(TYPE_CHECK_CACHE_PATH))
+            let mut names = fs::read_dir(dir.join(TYPED_MODULES_PATH))
                 .expect("Failed to read the type-check cache directory")
                 .map(|entry| entry.expect("Failed to read a cache entry").file_name())
                 .collect::<Vec<_>>();
@@ -389,6 +372,338 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
             String::from_utf8_lossy(&program_output.stdout).trim(),
             "3",
             "the program built from \"b/main.fix\" computes what its own source says"
+        );
+    }
+
+    /// The files of the type-check cache under `dir`, by name, with when each was last written.
+    fn cache_files(dir: &Path) -> Vec<(String, SystemTime)> {
+        let mut files: Vec<_> = fs::read_dir(dir.join(TYPED_MODULES_PATH))
+            .expect("Failed to read the type-check cache directory")
+            .map(|entry| {
+                let entry = entry.expect("Failed to read a cache file");
+                let written = entry
+                    .metadata()
+                    .and_then(|metadata| metadata.modified())
+                    .expect("Failed to read when a cache file was written");
+                (entry.file_name().to_string_lossy().to_string(), written)
+            })
+            .collect();
+        files.sort();
+        files
+    }
+
+    /// Runs `fix build` on the Fix source `file`, named as the working directory `dir` reaches it,
+    /// passing `extra_args` as well, and answers with whether it succeeded and what it wrote to
+    /// stderr. The program is written to `out` in that directory.
+    fn try_build(dir: &Path, file: &str, extra_args: &[&str]) -> (bool, String) {
+        let output = run_fix(
+            dir,
+            &[&["build", "--file", file, "-o", "out"], extra_args].concat(),
+        );
+        (
+            output.status.success(),
+            String::from_utf8_lossy(&output.stderr).to_string(),
+        )
+    }
+
+    /// What the program `out` in `dir` prints.
+    fn run_out(dir: &Path) -> String {
+        let output = Command::new(dir.join("out"))
+            .output()
+            .expect("failed to run the built program");
+        String::from_utf8_lossy(&output.stdout).trim().to_string()
+    }
+
+    /// The cache records the uses a body makes, and whether a use of a deprecated value is an error
+    /// is decided by the settings of each build. A build denying deprecated uses after one that
+    /// allowed them reads the body from the cache, and still stops at the use.
+    #[test]
+    fn a_build_denying_deprecated_uses_after_one_allowing_them_fails() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(dir.join("main.fix"), DEPRECATED_USE).expect("Failed to write main.fix");
+
+        let (allowed_built, allowed_stderr) = try_build(dir, "main.fix", &["--allow-deprecated"]);
+        assert!(allowed_built, "stderr: {}", allowed_stderr);
+        assert!(
+            !allowed_stderr.contains("is deprecated"),
+            "a build allowing deprecated uses reported one.\nstderr: {}",
+            allowed_stderr
+        );
+
+        let (denied_built, denied_stderr) = try_build(dir, "main.fix", &["--deny-deprecated"]);
+        assert!(
+            !denied_built,
+            "a build denying deprecated uses succeeded on a program using one"
+        );
+        assert!(
+            denied_stderr.contains("`Main::old_val` is deprecated"),
+            "stderr: {}",
+            denied_stderr
+        );
+    }
+
+    /// `Std` carries the implementations of a tuple for each size the program uses, so two programs
+    /// that give `Std` the same hash can need different bodies of it. A build
+    /// using a larger tuple adds the bodies it checks to the file, and a build going back to the
+    /// smaller tuple finds every body it needs there, and writes nothing.
+    #[test]
+    fn a_build_using_fewer_tuple_sizes_finds_every_body_in_the_cache() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        let write_main = |tuple: &str| {
+            fs::write(
+                dir.join("main.fix"),
+                format!(
+                    "module Main;\n\nmain : IO ();\nmain = println $ {}.to_string;\n",
+                    tuple
+                ),
+            )
+            .expect("Failed to write main.fix");
+        };
+        let small = "(1, 2)";
+        let large = "(1, 2, 3, 4, 5, 6, 7, 8, 9)";
+
+        write_main(small);
+        build(dir, "main.fix", &[]);
+        write_main(large);
+        build(dir, "main.fix", &[]);
+        assert_eq!(run_out(dir), large);
+        let after_large = cache_files(dir);
+
+        write_main(large);
+        build(dir, "main.fix", &[]);
+        assert_eq!(
+            cache_files(dir),
+            after_large,
+            "a build of an unedited program wrote the type-check cache"
+        );
+
+        write_main(small);
+        build(dir, "main.fix", &[]);
+        assert_eq!(run_out(dir), small);
+        let std_files = |files: &[(String, SystemTime)]| -> Vec<(String, SystemTime)> {
+            files
+                .iter()
+                .filter(|(name, _)| name.starts_with("Std_"))
+                .cloned()
+                .collect()
+        };
+        assert_eq!(
+            std_files(&cache_files(dir)),
+            std_files(&after_large),
+            "the build going back to the smaller tuple checked bodies of `Std` again"
+        );
+    }
+
+    /// A file of the type-check cache whose bytes were damaged costs one build the check it could
+    /// have skipped, and nothing else: that build writes what it checked back to the file, and the
+    /// build after it checks nothing again and leaves the file as it is. Damaging the record makes
+    /// the build check the module again; damaging a body the record points to makes instantiation
+    /// check that body again.
+    #[test]
+    fn a_build_recovers_from_a_damaged_cache_file() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("main.fix"),
+            "module Main;\n\nmain : IO ();\nmain = println $ (1 + 2).to_string;\n",
+        )
+        .expect("Failed to write main.fix");
+        build(dir, "main.fix", &[]);
+        let main_file = cache_files(dir)
+            .into_iter()
+            .map(|(name, _)| name)
+            .find(|name| name.starts_with("Main_"))
+            .expect("the build wrote no cache file of `Main`");
+        let main_file = dir.join(TYPED_MODULES_PATH).join(main_file);
+        let written = fs::read(&main_file).expect("Failed to read the cache file of `Main`");
+
+        // The body comes first in the file, and its first bytes are the identity written in front
+        // of it.
+        let mut damaged_body = written.clone();
+        for byte in damaged_body.iter_mut().take(8) {
+            *byte = 0xff;
+        }
+        fs::write(&main_file, &damaged_body).expect("Failed to damage the cache file");
+        let (built, stderr) = try_build(dir, "main.fix", &[]);
+        assert!(built, "stderr: {}", stderr);
+        assert!(
+            stderr.contains("Failed to read cache file"),
+            "stderr: {}",
+            stderr
+        );
+        assert_eq!(run_out(dir), "3");
+        let after_recovery = cache_files(dir);
+        let (built, stderr) = try_build(dir, "main.fix", &[]);
+        assert!(built, "stderr: {}", stderr);
+        assert!(
+            !stderr.contains("Failed to read cache file"),
+            "the build after the one checking the damaged body again found it damaged still.\n\
+             stderr: {}",
+            stderr
+        );
+        assert_eq!(
+            cache_files(dir),
+            after_recovery,
+            "the build after the one checking the damaged body again checked a body again"
+        );
+
+        // The footer ends the file.
+        let mut damaged_footer = written.clone();
+        let len = damaged_footer.len();
+        damaged_footer[len - 1] ^= 0xff;
+        fs::write(&main_file, &damaged_footer).expect("Failed to damage the cache file");
+        let (built, stderr) = try_build(dir, "main.fix", &[]);
+        assert!(built, "stderr: {}", stderr);
+        assert!(
+            stderr.contains("Failed to read cache file"),
+            "stderr: {}",
+            stderr
+        );
+        assert_eq!(run_out(dir), "3");
+        assert_eq!(
+            fs::read(&main_file).expect("Failed to read the cache file of `Main`"),
+            written,
+            "the build checking `Main` again wrote another file than the first build"
+        );
+    }
+
+    /// Editing a module gives it a hash of its own, and a build writing the file of the new hash
+    /// removes the file of the old one, so the cache holds one file for each module.
+    #[test]
+    fn a_build_after_an_edit_removes_the_file_of_the_old_hash() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        let main_files = || {
+            cache_files(dir)
+                .into_iter()
+                .filter(|(name, _)| name.starts_with("Main_"))
+                .count()
+        };
+        for answer in ["1", "2"] {
+            fs::write(
+                dir.join("main.fix"),
+                format!(
+                    "module Main;\n\nmain : IO ();\nmain = println(\"{}\");\n",
+                    answer
+                ),
+            )
+            .expect("Failed to write main.fix");
+            build(dir, "main.fix", &[]);
+            assert_eq!(run_out(dir), answer);
+            assert_eq!(
+                main_files(),
+                1,
+                "the cache holds more than one file of `Main`"
+            );
+        }
+    }
+
+    /// The cache records the concrete type each opaque type of a body stands for. A build that
+    /// reads such a body from the cache gets the types from the record, and builds the program the
+    /// first build did.
+    #[test]
+    fn a_build_reading_a_body_with_an_opaque_type_from_the_cache_builds_the_program() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("main.fix"),
+            r#"module Main;
+
+evens : [?it : Iterator, Item ?it = I64] I64 -> ?it;
+evens = |n| Iterator::range(0, n).filter(|i| i % 2 == 0);
+
+main : IO ();
+main = println $ evens(10).fold(0, |i, s| s + i).to_string;
+"#,
+        )
+        .expect("Failed to write main.fix");
+
+        build(dir, "main.fix", &[]);
+        assert_eq!(run_out(dir), "20");
+        let after_first = cache_files(dir);
+
+        build(dir, "main.fix", &[]);
+        assert_eq!(
+            cache_files(dir),
+            after_first,
+            "the second build checked a body again instead of reading it from the cache"
+        );
+        assert_eq!(run_out(dir), "20");
+    }
+
+    /// The warning on a struct pattern that leaves out fields without `_` is derived from what the
+    /// cache records of the body, so a build reading the body from the cache reports it as the
+    /// build that checked the body did.
+    #[test]
+    fn a_warm_cache_keeps_the_missing_pattern_field_warning() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("main.fix"),
+            r#"module Main;
+
+type S = struct { x : I64, y : I64 };
+
+main : IO ();
+main = (
+    let S { x } = S { x : 1, y : 2 };
+    println(x.to_string)
+);
+"#,
+        )
+        .expect("Failed to write main.fix");
+
+        for build_name in ["the build checking the body", "the build reading the cache"] {
+            let stderr = build(dir, "main.fix", &[]);
+            assert!(
+                stderr.contains("This pattern leaves out the"),
+                "{} reported no missing field.\nstderr: {}",
+                build_name,
+                stderr
+            );
+        }
+    }
+
+    /// A build writing the file of one module removes the files of that module's other hashes, and
+    /// keeps the files of every other module, whatever their names begin with.
+    #[test]
+    fn a_build_after_an_edit_keeps_the_files_of_the_other_modules() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("sub.fix"),
+            "module Main.Sub;\n\nvalue : I64;\nvalue = 1;\n",
+        )
+        .expect("Failed to write sub.fix");
+        let write_main = |answer: &str| {
+            fs::write(
+                dir.join("main.fix"),
+                format!(
+                    "module Main;\nimport Main.Sub;\n\nmain : IO ();\nmain = println $ (Main.Sub::value + {}).to_string;\n",
+                    answer
+                ),
+            )
+            .expect("Failed to write main.fix");
+        };
+        let both_files = ["--file", "sub.fix"];
+
+        // The second build finds every body in the cache, so the cache then holds the bodies of
+        // both modules, and the build after the edit writes the file of `Main` alone.
+        write_main("1");
+        build(dir, "main.fix", &both_files);
+        build(dir, "main.fix", &both_files);
+        write_main("2");
+        build(dir, "main.fix", &both_files);
+        assert_eq!(run_out(dir), "3");
+        let after_edit = cache_files(dir);
+
+        build(dir, "main.fix", &both_files);
+        assert_eq!(
+            cache_files(dir),
+            after_edit,
+            "the build after the edit removed a file of another module"
         );
     }
 }

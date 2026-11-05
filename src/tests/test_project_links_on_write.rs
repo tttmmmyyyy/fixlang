@@ -2,7 +2,7 @@
 /// subcommands that build nothing write outside the project.
 #[cfg(all(test, unix))]
 mod integration_tests {
-    use crate::constants::TYPE_CHECK_CACHE_PATH;
+    use crate::constants::TYPED_MODULES_PATH;
     use crate::tests::test_lsp::lsp_client::LspClient;
     use crate::tests::test_util::{assert_failed_with, assert_succeeded, create_git_repo, run_fix};
     use std::os::unix::fs::symlink;
@@ -111,7 +111,7 @@ mod integration_tests {
             &run_fix(&proj, &["check"]),
             "`fix check` should write its cache.",
         );
-        let cache_dir = proj.join(TYPE_CHECK_CACHE_PATH);
+        let cache_dir = proj.join(TYPED_MODULES_PATH);
         let cache_files: Vec<PathBuf> = fs::read_dir(&cache_dir)
             .unwrap()
             .map(|entry| entry.unwrap().path())
@@ -131,17 +131,27 @@ mod integration_tests {
         }
     }
 
-    /// `fix check` saves the cache entry of a value whose name is longer than the longest file name
+    /// `fix check` saves the cache file of a module whose name is longer than the longest file name
     /// the file system allows.
     #[test]
-    fn check_saves_the_cache_of_a_value_with_a_long_name() {
+    fn check_saves_the_cache_of_a_module_with_a_long_name() {
         let (_root, proj) = setup_test_env();
-        let name = "a".repeat(300);
+        let module = format!("A{}", "a".repeat(300));
+        fs::write(
+            proj.join("fixproj.toml"),
+            "[general]\nname = \"proj\"\nversion = \"0.1.0\"\n\n[build]\nfiles = [\"main.fix\", \"long.fix\"]\n",
+        )
+        .unwrap();
+        fs::write(
+            proj.join("long.fix"),
+            format!("module {};\n\nvalue : I64;\nvalue = 1;\n", module),
+        )
+        .unwrap();
         fs::write(
             proj.join("main.fix"),
             format!(
-                "module Main;\n\n{n} : I64;\n{n} = 1;\n\nmain : IO ();\nmain = println({n}.to_string);\n",
-                n = name
+                "module Main;\nimport {m};\n\nmain : IO ();\nmain = println({m}::value.to_string);\n",
+                m = module
             ),
         )
         .unwrap();
@@ -149,13 +159,13 @@ mod integration_tests {
         assert_succeeded(&output, "`fix check` should check the program.");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(!stderr.contains("Failed to write"), "stderr: {}", stderr);
-        assert!(fs::read_dir(proj.join(TYPE_CHECK_CACHE_PATH))
+        assert!(fs::read_dir(proj.join(TYPED_MODULES_PATH))
             .unwrap()
             .any(|entry| entry
                 .unwrap()
                 .file_name()
                 .to_string_lossy()
-                .contains("aaaa")));
+                .starts_with("Aaaa")));
     }
 
     /// `fix docs` writes the documentation of a module whose name is close to the longest file name

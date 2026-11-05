@@ -173,7 +173,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| collapse_constructions::run(prg, config.num_worker_thread),
     );
 
-    let funptr_versions = run_pass(
+    let uncurried_funcs = run_pass(
         prg,
         config,
         config.enable_uncurry_optimization(),
@@ -202,19 +202,19 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| inline_local::run(prg, config.num_worker_thread),
     );
 
-    // Rewrite the calls onto the function pointer versions once more. A call of a version bound to a
-    // name outside a lambda reaches the place where the lambda applies its result only when the
-    // local functions are inlined above. So `g#funptr1(a)` and its application to `b` meet only
-    // here, and this rewrites them into `g#funptr2(a, b)`, which builds no closure.
+    // Rewrite the calls onto the uncurried functions once more. A call of one bound to a name
+    // outside a lambda reaches the place where the lambda applies its result only when the local
+    // functions are inlined above. So `g#func1(a)` and its application to `b` meet only here, and
+    // this rewrites them into `g#func2(a, b)`, which builds no closure.
     run_pass(
         prg,
         config,
         inline_local_after_uncurry,
-        "replace_calls_with_funptr_versions",
+        "replace_calls_with_funcs",
         |prg| {
-            uncurry::replace_calls_with_funptr_versions(
+            uncurry::replace_calls_with_funcs(
                 prg,
-                funptr_versions
+                uncurried_funcs
                     .as_ref()
                     .expect("the rewrite runs only where uncurrying ran"),
                 config.num_worker_thread,
@@ -222,9 +222,9 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         },
     );
 
-    // Drop the symbols nothing reaches, such as the function pointer versions no call uses. This
-    // runs after the rewrite above, because the rewrite can make a call of a version that had no
-    // call before.
+    // Drop the symbols nothing reaches, such as the uncurried functions no call uses. This runs
+    // after the rewrite above, because the rewrite can make a call of an uncurried function that
+    // had no call before.
     run_pass(
         prg,
         config,

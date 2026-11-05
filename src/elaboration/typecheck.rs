@@ -1,5 +1,4 @@
 use super::check_holes::collect_hole_errors;
-use super::typecheckcache::TypeCheckCache;
 use crate::ast::import;
 use crate::misc::{collect_results, grow_stack, insert_to_map_vec, shorten_for_report, Map, Set};
 use crate::{
@@ -18,9 +17,9 @@ use crate::{
         type_env::TypeEnv,
         typedecl::describe_field_names,
         types::{
-            is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar, type_from_tyvar,
-            type_fun, type_tyapp, type_tycon, AssocType, Kind, OpaqueTyConResolution, Scheme,
-            TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
+            is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar, type_arrow,
+            type_from_tyvar, type_tyapp, type_tycon, AssocType, Kind, OpaqueTyConResolution,
+            Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
         },
     },
     constants::{
@@ -579,9 +578,6 @@ pub struct TypeCheckContext {
     /// `Elem c2 = e` while checking
     /// `extend : [c1 : Collects, c2 : Collects, Elem c1 = e, Elem c2 = e] c1 -> c2 -> c2`.
     pub local_assumed_eqs: Vec<Equality>,
-    /// Where the type inferred for a global value is looked up and stored, so that a value whose
-    /// source is unchanged is not checked again.
-    pub cache: Arc<dyn TypeCheckCache + Sync + Send>,
     /// How many threads check the program's global values at once.
     pub num_worker_threads: usize,
     /// The type variable created for each generalized variable that stands for an opaque type,
@@ -619,7 +615,6 @@ impl TypeCheckContext {
         type_env: TypeEnv,
         kind_env: KindEnv,
         import_statements: Map<Name, Vec<ImportStatement>>,
-        cache: Arc<dyn TypeCheckCache + Sync + Send>,
         num_worker_threads: usize,
         error_tolerant: bool,
     ) -> Self {
@@ -642,7 +637,6 @@ impl TypeCheckContext {
             fixed_tyvars: vec![],
             local_assumed_eqs: vec![],
             import_required: vec![],
-            cache,
             num_worker_threads,
             opaque_instantiations: Map::default(),
             error_tolerant,
@@ -1386,10 +1380,10 @@ impl TypeCheckContext {
                 // can pick the candidate that takes it.
                 if ei.app_order == AppSourceCodeOrderType::XDotF {
                     let arg = self.unify_type_of_expr(&arg, arg_ty.clone())?;
-                    let fun = self.unify_type_of_expr(fun, type_fun(arg_ty.clone(), ty))?;
+                    let fun = self.unify_type_of_expr(fun, type_arrow(arg_ty.clone(), ty))?;
                     Ok(ei.set_app_args(vec![arg]).set_app_func(fun))
                 } else {
-                    let fun = self.unify_type_of_expr(fun, type_fun(arg_ty.clone(), ty))?;
+                    let fun = self.unify_type_of_expr(fun, type_arrow(arg_ty.clone(), ty))?;
                     let arg = self.unify_type_of_expr(&arg, arg_ty.clone())?;
                     Ok(ei.set_app_args(vec![arg]).set_app_func(fun))
                 }
@@ -1406,7 +1400,7 @@ impl TypeCheckContext {
                 self.add_tyvar_source(body_tv.name.clone(), body.source.clone());
                 let body_ty = type_from_tyvar(body_tv);
 
-                let fun_ty = type_fun(arg_ty.clone(), body_ty.clone());
+                let fun_ty = type_arrow(arg_ty.clone(), body_ty.clone());
                 // In `error_tolerant` mode, swallowing the mismatch
                 // lets us continue typing the body against `body_ty`
                 // (a fresh tyvar), so the body still gets a
@@ -2374,7 +2368,6 @@ impl TypeCheckContext {
             type_env: self.type_env.clone(),
             import_statements: self.import_statements.clone(),
             current_module: self.current_module.clone(),
-            cache: self.cache.clone(),
             num_worker_threads: self.num_worker_threads,
             error_tolerant: self.error_tolerant,
         };
@@ -3454,7 +3447,6 @@ mod tests {
     use crate::ast::traits::TraitEnv;
     use crate::ast::type_env::TypeEnv;
     use crate::ast::types::TyCon;
-    use crate::elaboration::typecheckcache::MemoryCache;
     use crate::fixstd::builtin::make_bool_ty;
     use crate::misc::Map;
     use std::sync::Arc;
@@ -3467,7 +3459,6 @@ mod tests {
             TypeEnv::default(),
             KindEnv::default(),
             Map::default(),
-            Arc::new(MemoryCache::new()),
             1,
             true,
         )

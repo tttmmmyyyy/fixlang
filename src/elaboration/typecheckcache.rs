@@ -1,59 +1,23 @@
-use crate::{
-    ast::name::FullName,
-    ast::program::TypedExpr,
-    ast::types::Scheme,
-    constants::TYPE_CHECK_CACHE_PATH,
-    misc::warn_msg,
-    project_fs::{create_dir_guarding_project_links, replace_file, DOT_FIXLANG_LINK_HINT},
-};
+use crate::{ast::name::FullName, ast::program::TypedExpr, ast::types::Scheme};
 use std::{
     collections::{BTreeMap, VecDeque},
-    fs::{self, File},
-    io::Read,
-    panic::RefUnwindSafe,
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex, MutexGuard, OnceLock},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 /// A type-check cache held by the threads that check a program together.
-pub type SharedTypeCheckCache = Arc<dyn TypeCheckCache + Send + Sync>;
-
-/// Keeps the expressions produced by type checking, so that a value asked for again under the same
-/// type and the same sources is taken back instead of checked afresh.
-///
-/// `RefUnwindSafe` is a supertrait so that `Arc<dyn TypeCheckCache + Send + Sync>` satisfies
-/// `UnwindSafe`, which a closure carrying one across a `catch_unwind` boundary requires.
-pub trait TypeCheckCache: RefUnwindSafe {
-    /// Stores `expr` as the result of checking the global value `name` against `type_`, under the
-    /// hash of the sources that value depends on.
-    fn save_cache(
-        &self,
-        expr: &TypedExpr,
-        name: &FullName,
-        type_: &Arc<Scheme>,
-        version_hash: &str,
-    );
-    /// Answers with the expression stored for the global value `name` checked against `type_`
-    /// under `version_hash`.
-    fn load_cache(
-        &self,
-        name: &FullName,
-        type_: &Arc<Scheme>,
-        version_hash: &str,
-    ) -> Option<TypedExpr>;
-}
+pub type SharedTypeCheckCache = Arc<MemoryCache>;
 
 /// The entity a cache entry belongs to: a global value, together with the type it was checked
 /// against. A cache that lets two entities meet in one entry hands one of them the typed
 /// expression of the other, and the read installs it without checking it.
-type EntityIdentity = String;
+pub type EntityIdentity = String;
 
 /// The hash of the sources the entity depends on, which tells the entries of one entity apart.
 type VersionHash = String;
 
 /// A name and a printed type each occupy one line, so joining the two with a newline gives a
 /// distinct string to every distinct pair.
-fn entity_identity(name: &FullName, type_: &Arc<Scheme>) -> EntityIdentity {
+pub fn entity_identity(name: &FullName, type_: &Arc<Scheme>) -> EntityIdentity {
     let name = name.to_string();
     let type_ = type_.to_string_normalize();
     assert!(
@@ -63,165 +27,6 @@ fn entity_identity(name: &FullName, type_: &Arc<Scheme>) -> EntityIdentity {
         type_
     );
     format!("{}\n{}", name, type_)
-}
-
-/// How many characters of a value's name the name of its cache file carries. Each is one byte, and
-/// with the digest the file name stays well within the 255 bytes file systems allow.
-const READABLE_NAME_LENGTH: usize = 100;
-
-/// A cache that gives every entry a file of its own, so the entries outlive the run that wrote
-/// them.
-pub struct FileCache {
-    /// The cache directory, created by the first entry saved, with symbolic links resolved. `None`
-    /// when it could not be created, which is then reported once, and no entry is saved.
-    dir: OnceLock<Option<PathBuf>>,
-}
-
-impl FileCache {
-    /// Creates a handle to the cache. Every handle reaches the same entries, which live under
-    /// `TYPE_CHECK_CACHE_PATH` relative to the working directory.
-    pub fn new() -> Self {
-        FileCache {
-            dir: OnceLock::new(),
-        }
-    }
-
-    /// The directory the entries are saved in, created when the first entry is saved. A directory
-    /// that cannot be created, or that a symbolic link in the project would place outside it, is
-    /// reported as a warning, and answers `None` to that call and every later one.
-    fn dir_to_save_in(&self) -> Option<&PathBuf> {
-        self.dir
-            .get_or_init(|| {
-                match create_dir_guarding_project_links(
-                    Path::new(TYPE_CHECK_CACHE_PATH),
-                    DOT_FIXLANG_LINK_HINT,
-                ) {
-                    Ok(dir) => Some(dir),
-                    Err(errs) => {
-                        for err in errs.errors() {
-                            warn_msg(&err.msg);
-                        }
-                        None
-                    }
-                }
-            })
-            .as_ref()
-    }
-
-    /// The name of the file that holds the cache entry for a value.
-    ///
-    /// The digest is what identifies the entry: it is taken over the entity and the version hash at
-    /// once, so two entries meet in one file only when both agree. The part in front of it names
-    /// the value for someone reading the cache directory, and is filename-safe because it keeps
-    /// only ASCII alphanumeric characters; several values can wear the same one. It is cut at
-    /// `READABLE_NAME_LENGTH` characters, so that the file name fits the file system's limit on
-    /// name length however long the value's name is.
-    ///
-    /// # Examples
-    ///
-    /// The entries of `Main::hole_val` are filed under names of the form `Main__hole_val_<digest>`.
-    fn cache_file_name(&self, name: &FullName, type_: &Arc<Scheme>, version_hash: &str) -> String {
-        let key = format!("{}\n{}", entity_identity(name, type_), version_hash);
-        let digest = format!("{:x}", md5::compute(key));
-
-        let readable_name: String = name
-            .to_string()
-            .chars()
-            .take(READABLE_NAME_LENGTH)
-            .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-            .collect();
-        format!("{}_{}", readable_name, digest)
-    }
-
-    /// The path of the file that holds the cache entry for a value.
-    fn cache_file_path(&self, name: &FullName, type_: &Arc<Scheme>, version_hash: &str) -> PathBuf {
-        let cache_file_name = self.cache_file_name(name, type_, version_hash);
-        PathBuf::from(TYPE_CHECK_CACHE_PATH).join(cache_file_name)
-    }
-}
-
-impl TypeCheckCache for FileCache {
-    /// Writes the expression into the entry's own file. A file that cannot be written, or that a
-    /// symbolic link in the project would place outside it, is reported as a warning and leaves the
-    /// entry absent.
-    fn save_cache(
-        &self,
-        expr: &TypedExpr,
-        name: &FullName,
-        type_: &Arc<Scheme>,
-        version_hash: &str,
-    ) {
-        let Some(dir) = self.dir_to_save_in() else {
-            return;
-        };
-        // The name holds no path separator, and `replace_file` replaces a symbolic link at the path
-        // instead of writing through it, so the entry is written in `dir`.
-        let cache_file_path = dir.join(self.cache_file_name(name, type_, version_hash));
-        let serialized = postcard::to_allocvec(expr).unwrap();
-        if let Err(e) = replace_file(&cache_file_path, |tmp_path| {
-            fs::write(tmp_path, &serialized)
-        }) {
-            warn_msg(&format!(
-                "Failed to write cache file \"{}\": {}.",
-                cache_file_path.to_string_lossy(),
-                e
-            ));
-        }
-    }
-
-    /// Reads the entry's own file and answers with the expression it holds. A file that cannot be
-    /// read or parsed is reported as a warning and answers as an absent entry does.
-    fn load_cache(
-        &self,
-        name: &FullName,
-        type_: &Arc<Scheme>,
-        version_hash: &str,
-    ) -> Option<TypedExpr> {
-        let cache_file_path = self.cache_file_path(name, type_, version_hash);
-        let cache_file_path_str = cache_file_path.to_string_lossy().to_string();
-        if !cache_file_path.exists() {
-            return None;
-        }
-        let mut cache_file = match File::open(&cache_file_path) {
-            Err(_) => {
-                return None;
-            }
-            Ok(file) => file,
-        };
-        let mut cache_bytes = vec![];
-        match cache_file.read_to_end(&mut cache_bytes) {
-            Ok(_) => {}
-            Err(why) => {
-                warn_msg(&format!(
-                    "Failed to read cache file \"{}\": {}.",
-                    cache_file_path_str, why
-                ));
-                return None;
-            }
-        }
-        // The format carries no end marker. A file that lost its tail fails to parse because the
-        // expression wants the bytes that went missing, but a file with bytes past the expression
-        // parses without them ever being looked at. An entry this cache wrote holds one expression
-        // and nothing else, so bytes left over say the file is not one.
-        let (expr, rest): (TypedExpr, _) = match postcard::take_from_bytes(&cache_bytes) {
-            Ok(res) => res,
-            Err(why) => {
-                warn_msg(&format!(
-                    "Failed to parse content of cache file \"{}\": {}.",
-                    cache_file_path_str, why
-                ));
-                return None;
-            }
-        };
-        if !rest.is_empty() {
-            warn_msg(&format!(
-                "Failed to parse content of cache file \"{}\": bytes follow the expression it holds.",
-                cache_file_path_str
-            ));
-            return None;
-        }
-        Some(expr)
-    }
 }
 
 /// How many versions of one entity `MemoryCache` keeps. Storing a further version drops the one
@@ -246,6 +51,40 @@ impl MemoryCache {
         }
     }
 
+    /// Stores `expr` as the result of checking the global value `name` against `type_`, under the
+    /// hash of the sources that value depends on. It goes in front of the entity's versions, and
+    /// the versions stored longest ago are dropped to stay within `CACHE_GENERATION`.
+    pub fn save(&self, expr: &TypedExpr, name: &FullName, type_: &Arc<Scheme>, version_hash: &str) {
+        let entity_id = entity_identity(name, type_);
+        let version_hash = version_hash.to_string();
+        let mut entries = self.lock_data();
+        let versions = entries.entry(entity_id).or_insert_with(|| VecDeque::new());
+        // If the cache is full, remove the oldest entry.
+        while versions.len() >= CACHE_GENERATION as usize {
+            versions.pop_back();
+        }
+        versions.push_front((version_hash, expr.clone()));
+    }
+
+    /// The expression stored for the global value `name` checked against `type_` under
+    /// `version_hash`.
+    pub fn load(
+        &self,
+        name: &FullName,
+        type_: &Arc<Scheme>,
+        version_hash: &str,
+    ) -> Option<TypedExpr> {
+        let entity_id = entity_identity(name, type_);
+        let entries = self.lock_data();
+        let versions = entries.get(&entity_id)?;
+        let expr = versions
+            .iter()
+            .find(|(hash, _)| hash == version_hash)?
+            .1
+            .clone();
+        Some(expr)
+    }
+
     /// The entries, locked.
     ///
     /// A thread that panics while it holds the lock poisons it, and the entries are whole when
@@ -259,117 +98,20 @@ impl MemoryCache {
     }
 }
 
-impl TypeCheckCache for MemoryCache {
-    /// Puts the expression at the front of the entity's versions, dropping the versions stored
-    /// longest ago to stay within `CACHE_GENERATION`.
-    fn save_cache(
-        &self,
-        expr: &TypedExpr,
-        name: &FullName,
-        type_: &Arc<Scheme>,
-        version_hash: &str,
-    ) {
-        let entity_id = entity_identity(name, type_);
-        let version_hash = version_hash.to_string();
-        let mut entries = self.lock_data();
-        let versions = entries.entry(entity_id).or_insert_with(|| VecDeque::new());
-        // If the cache is full, remove the oldest entry.
-        while versions.len() >= CACHE_GENERATION as usize {
-            versions.pop_back();
-        }
-        versions.push_front((version_hash, expr.clone()));
-    }
-
-    /// Searches the entity's versions for the one stored under `version_hash`.
-    fn load_cache(
-        &self,
-        name: &FullName,
-        type_: &Arc<Scheme>,
-        version_hash: &str,
-    ) -> Option<TypedExpr> {
-        let entity_id = entity_identity(name, type_);
-        let version_hash = version_hash.to_string();
-        let entries = self.lock_data();
-        let versions = entries.get(&entity_id)?;
-        let expr = versions
-            .iter()
-            .find(|(hash, _)| hash == &version_hash)?
-            .1
-            .clone();
-        Some(expr)
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{entity_identity, FileCache, MemoryCache, TypeCheckCache};
+    use super::{entity_identity, MemoryCache};
     use crate::{
-        ast::expr::expr_var,
-        ast::name::FullName,
-        ast::program::TypedExpr,
-        ast::types::{type_tyvar_star, Scheme},
-        fixstd::builtin::{expr_int_lit, make_bool_ty, make_i64_ty, make_u128_ty},
+        ast::expr::expr_var, ast::name::FullName, ast::program::TypedExpr, ast::types::Scheme,
+        fixstd::builtin::make_i64_ty,
     };
     use std::panic::{catch_unwind, AssertUnwindSafe};
-
-    /// An integer literal wider than 64 bits reads back from the format of a cache file with every
-    /// bit it was written with.
-    #[test]
-    fn an_integer_literal_wider_than_64_bits_reads_back_from_the_cache_format() {
-        let expr = TypedExpr::from_expr(expr_int_lit(u128::MAX, make_u128_ty(), None));
-        let bytes = postcard::to_allocvec(&expr).unwrap();
-        let (read, rest): (TypedExpr, _) = postcard::take_from_bytes(&bytes).unwrap();
-        assert!(rest.is_empty(), "bytes follow the expression");
-        assert_eq!(
-            read.expr.get_builtin().op.name(),
-            format!("int({})", u128::MAX)
-        );
-    }
-
-    /// A field accessor and a value the user writes are two entities whose names differ only in a
-    /// character a file name cannot carry. Their cache files must stay apart: a shared file hands
-    /// one entity the body of the other, and the read skips type checking, so nothing reports it.
-    #[test]
-    fn cache_files_of_names_differing_only_in_punctuation_stay_apart() {
-        let cache = FileCache::new();
-        let scheme = Scheme::from_type(type_tyvar_star("a"));
-        let accessor_name = FullName::from_strs(&["Main", "S"], "@b");
-        let value_name = FullName::from_strs(&["Main", "S"], "_b");
-
-        assert_ne!(
-            cache.cache_file_name(&accessor_name, &scheme, "0"),
-            cache.cache_file_name(&value_name, &scheme, "0"),
-        );
-    }
-
-    /// The key has three components — the name of the value, the type it is checked against, and
-    /// the hash of the sources it depends on — and each one alone tells two entries apart. The
-    /// implementations of one trait method defined in a single module share the name and the hash
-    /// and differ in the type; an edit to a source the value depends on changes the hash alone.
-    #[test]
-    fn cache_files_of_entries_differing_in_one_component_stay_apart() {
-        let cache = FileCache::new();
-        let name = FullName::from_strs(&["Std", "ToString"], "to_string");
-        let i64_scheme = Scheme::from_type(make_i64_ty());
-        let bool_scheme = Scheme::from_type(make_bool_ty());
-
-        assert_ne!(
-            cache.cache_file_name(&name, &i64_scheme, "0"),
-            cache.cache_file_name(&name, &bool_scheme, "0"),
-            "two entries of one name whose types differ share a file",
-        );
-        assert_ne!(
-            cache.cache_file_name(&name, &i64_scheme, "0"),
-            cache.cache_file_name(&name, &i64_scheme, "1"),
-            "an entry keeps its file when the sources it depends on change",
-        );
-    }
 
     /// The namespace a value is written under is part of the entity its entry belongs to. Two
     /// values of one module, each under a namespace of its own, agree on their remaining name, on
     /// their type, and on the sources they are checked from, so the namespace alone tells their
-    /// entries apart. Every cache reads the entity through `entity_identity`, so pinning it here
-    /// reaches the entries held in memory as well as those given a file.
+    /// entries apart. Both caches read the entity through `entity_identity`, so pinning it here
+    /// reaches the entries held in memory as well as those of the files of `TYPED_MODULES_PATH`.
     #[test]
     fn entities_of_names_differing_only_in_namespace_stay_apart() {
         let scheme = Scheme::from_type(make_i64_ty());
@@ -396,7 +138,7 @@ mod tests {
         let name = FullName::from_strs(&["Main"], "answer");
         let scheme = Scheme::from_type(make_i64_ty());
         let expr = TypedExpr::from_expr(expr_var(name.clone(), None));
-        cache.save_cache(&expr, &name, &scheme, "0");
+        cache.save(&expr, &name, &scheme, "0");
 
         let held = catch_unwind(AssertUnwindSafe(|| {
             let _entries = cache.lock_data();
@@ -405,12 +147,12 @@ mod tests {
         assert!(held.is_err(), "the panic is what poisons the lock");
 
         assert!(
-            cache.load_cache(&name, &scheme, "0").is_some(),
+            cache.load(&name, &scheme, "0").is_some(),
             "the entry stored before the panic is expected to answer",
         );
-        cache.save_cache(&expr, &name, &scheme, "1");
+        cache.save(&expr, &name, &scheme, "1");
         assert!(
-            cache.load_cache(&name, &scheme, "1").is_some(),
+            cache.load(&name, &scheme, "1").is_some(),
             "an entry stored after the panic is expected to answer",
         );
     }
