@@ -208,12 +208,17 @@ fn read_record(path: &Path) -> Result<Option<ModuleRecord>, String> {
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(e) => return Err(e.to_string()),
     };
-    read_record_of(&mut file).map(|(record, _bodies_end)| Some(record))
+    match read_record_of(&mut file) {
+        Ok(Ok((record, _bodies_end))) => Ok(Some(record)),
+        Ok(Err(why)) => Err(why),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
-/// The record of the module file `file`, and the offset its bodies end at. A file that cannot be
-/// read, or is not a file of type-checked modules, answers the reason.
-fn read_record_of(file: &mut File) -> Result<(ModuleRecord, u64), String> {
+/// The record of the module file `file`, and the offset its bodies end at. A file that is not one
+/// of type-checked modules answers the reason inside, and one that cannot be read answers the error
+/// outside.
+fn read_record_of(file: &mut File) -> io::Result<Result<(ModuleRecord, u64), String>> {
     let read = |file: &mut File| -> io::Result<Option<(Vec<u8>, u64)>> {
         let len = file.metadata()?.len();
         if len < FOOTER_LEN {
@@ -230,13 +235,12 @@ fn read_record_of(file: &mut File) -> Result<(ModuleRecord, u64), String> {
         file.read_exact(&mut record_bytes)?;
         Ok(Some((record_bytes, range.start)))
     };
-    match read(file) {
-        Ok(Some((record_bytes, bodies_end))) => {
-            Ok((decode_record(&record_bytes, bodies_end)?, bodies_end))
+    Ok(match read(file)? {
+        Some((record_bytes, bodies_end)) => {
+            decode_record(&record_bytes, bodies_end).map(|record| (record, bodies_end))
         }
-        Ok(None) => Err(NOT_A_MODULE_FILE.to_string()),
-        Err(e) => Err(e.to_string()),
-    }
+        None => Err(NOT_A_MODULE_FILE.to_string()),
+    })
 }
 
 /// The typed expression of the body `identity` lying at `range` in the file at `path`. A file that
@@ -340,7 +344,7 @@ struct ModuleFileWriter {
 impl ModuleFileWriter {
     /// Begins a new version of `file` in `dir`, with the bodies the file holds now, so that the
     /// bodies another build added to it since this build read its record are kept. A file that is
-    /// not one of type-checked modules is begun anew.
+    /// not one of type-checked modules is begun anew, and one that cannot be read answers the error.
     fn create(dir: &Path, file: Arc<ModuleFile>) -> io::Result<Self> {
         let path = file.path_in(dir);
         let tmp_path = temporary_path_beside(&path);
@@ -361,7 +365,7 @@ impl ModuleFileWriter {
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(writer),
             Err(e) => return Err(e),
         };
-        let Ok((record, bodies_end)) = read_record_of(&mut held) else {
+        let Ok((record, bodies_end)) = read_record_of(&mut held)? else {
             return Ok(writer);
         };
         held.seek(SeekFrom::Start(0))?;
@@ -449,16 +453,26 @@ impl ModuleFileWriter {
             return Err(e);
         }
 
+        self.remove_other_versions(&file_name);
+        Ok(entries.into_iter().collect())
+    }
+
+    /// Removes the files of the module checked under any other hash than the file named
+    /// `file_name`. The file is in place already, so a file left behind costs only room on the
+    /// disk, and the next write tries again.
+    fn remove_other_versions(&self, file_name: &str) {
+        let Ok(dir_entries) = fs::read_dir(&self.dir) else {
+            return;
+        };
         // The temporary files begin with a dot, which no prefix does.
         let prefix = module_file_prefix(&self.file.module);
-        for dir_entry in fs::read_dir(&self.dir)? {
-            let entry_name = dir_entry?.file_name();
+        for dir_entry in dir_entries.flatten() {
+            let entry_name = dir_entry.file_name();
             let entry_name = entry_name.to_string_lossy();
-            if entry_name.starts_with(&prefix) && entry_name != file_name.as_str() {
+            if entry_name.starts_with(&prefix) && entry_name != file_name {
                 let _ = fs::remove_file(self.dir.join(entry_name.as_ref()));
             }
         }
-        Ok(entries.into_iter().collect())
     }
 }
 
@@ -507,6 +521,10 @@ fn warn_unreadable_file(path: &Path, why: &str) {
 /// The writing of one module's file while `check_bodies_through_typed_modules` checks the bodies of
 /// the module.
 struct ModuleWriting {
+    /// The directory the files of type-checked modules are written in.
+    dir: PathBuf,
+    /// The module file written.
+    file: Arc<ModuleFile>,
     /// The new version of the file, until writing it fails.
     writer: Option<ModuleFileWriter>,
     /// The bodies written to `writer`, each with its index among the bodies checked, its identity,
@@ -520,11 +538,13 @@ struct ModuleWriting {
 impl ModuleWriting {
     /// Begins writing the file of `file` in `dir`. A file that cannot be begun is reported as a
     /// warning.
-    fn begin(dir: &Path, file: &Arc<ModuleFile>) -> Self {
+    fn begin(dir: &Path, file: Arc<ModuleFile>) -> Self {
         let writer = ModuleFileWriter::create(dir, file.clone())
-            .inspect_err(|e| warn_unwritable_file(dir, file, e))
+            .inspect_err(|e| warn_unwritable_file(dir, &file, e))
             .ok();
         ModuleWriting {
+            dir: dir.to_path_buf(),
+            file,
             writer,
             written: vec![],
             unwritten: vec![],
@@ -538,8 +558,6 @@ impl ModuleWriting {
         &mut self,
         i: usize,
         body: PassedBody,
-        dir: &Path,
-        file: &ModuleFile,
         source_files: &mut Map<PathBuf, SourceFile>,
     ) {
         let Some(writer) = &mut self.writer else {
@@ -550,7 +568,7 @@ impl ModuleWriting {
         match writer.add(body.entry, source_files) {
             Ok(()) => self.written.push((i, identity, body.import_required)),
             Err(e) => {
-                warn_unwritable_file(dir, file, &e);
+                warn_unwritable_file(&self.dir, &self.file, &e);
                 self.writer = None;
                 self.unwritten.extend(self.written.drain(..).map(|(i, _, _)| i));
                 self.unwritten.push(i);
@@ -558,43 +576,41 @@ impl ModuleWriting {
         }
     }
 
-    /// Finishes the file, and answers what became of each body that passed, by its index among the
-    /// bodies checked. A file that cannot be finished is reported as a warning, and the bodies
-    /// written to it are left unwritten.
-    fn finish(self, dir: &Path, file: &ModuleFile) -> Vec<(usize, CheckOutcome)> {
-        let mut outcomes: Vec<(usize, CheckOutcome)> = self
-            .unwritten
-            .into_iter()
-            .map(|i| (i, CheckOutcome::Unwritten))
-            .collect();
+    /// Finishes the file, and answers the bodies it holds, each with its index among the bodies
+    /// checked, and the indices of the bodies that passed and that it does not hold. A file that
+    /// cannot be finished is reported as a warning, and the bodies written to it are left
+    /// unwritten.
+    fn finish(self) -> (Vec<(usize, StoredOutcome)>, Vec<usize>) {
+        let mut unwritten = self.unwritten;
         let Some(writer) = self.writer else {
-            return outcomes;
+            return (vec![], unwritten);
         };
         match writer.finish() {
             Ok(mut record) => {
-                outcomes.extend(self.written.into_iter().map(|(i, identity, import_required)| {
-                    let entry = record
-                        .remove(&identity)
-                        .expect("the file written lacks a body written to it");
-                    (
-                        i,
-                        CheckOutcome::Stored {
-                            entry,
-                            import_required,
-                        },
-                    )
-                }))
+                let stored = self
+                    .written
+                    .into_iter()
+                    .map(|(i, identity, import_required)| {
+                        let entry = record
+                            .remove(&identity)
+                            .expect("the file written lacks a body written to it");
+                        (
+                            i,
+                            StoredOutcome {
+                                entry,
+                                import_required,
+                            },
+                        )
+                    })
+                    .collect();
+                (stored, unwritten)
             }
             Err(e) => {
-                warn_unwritable_file(dir, file, &e);
-                outcomes.extend(
-                    self.written
-                        .into_iter()
-                        .map(|(i, _, _)| (i, CheckOutcome::Unwritten)),
-                );
+                warn_unwritable_file(&self.dir, &self.file, &e);
+                unwritten.extend(self.written.into_iter().map(|(i, _, _)| i));
+                (vec![], unwritten)
             }
         }
-        outcomes
     }
 }
 
@@ -615,18 +631,21 @@ enum Checked {
     InMemory(Result<CheckedBody, Errors>),
 }
 
+/// A body `check_bodies_through_typed_modules` checked that passed and that the file of its module
+/// now records.
+struct StoredOutcome {
+    /// What the file records of the body.
+    entry: EntityEntry,
+    /// The names the body referred to that the module it is defined in has to import.
+    import_required: Map<Name, Vec<FullName>>,
+}
+
 /// What became of a body `check_bodies_through_typed_modules` checked.
 enum CheckOutcome {
-    /// The body passed, and the file of its module records it as `entry`.
-    Stored {
-        entry: EntityEntry,
-        /// The names the body referred to that the module it is defined in has to import.
-        import_required: Map<Name, Vec<FullName>>,
-    },
-    /// The body passed, and the file of its module could not be written: it is checked again, to
-    /// be held in memory.
-    Unwritten,
-    /// The body is held in memory: what `Program::check_body` answered.
+    /// The body passed, and the file of its module records it.
+    Stored(StoredOutcome),
+    /// The body is held in memory: what `Program::check_body` answered for a body that did not
+    /// pass, or for one that passed and that the file of its module could not take.
     InMemory(Result<CheckedBody, Errors>),
 }
 
@@ -725,9 +744,46 @@ impl Program {
             }
         }
 
-        // Check the rest on the compiler threads. A body that passes is written to the file of its
-        // module as soon as it is checked, and dropped from memory then; the file is put in place
-        // once the last body of its module is checked.
+        // Check the rest.
+        let mut source_files = take(&mut self.typed_modules.source_files);
+        let outcomes = self.check_and_write_bodies(&to_check, tc, &mut source_files);
+        self.typed_modules.source_files = source_files;
+        for ((loc, file, identity), outcome) in to_check.into_iter().zip(outcomes) {
+            match outcome {
+                CheckOutcome::Stored(StoredOutcome {
+                    entry,
+                    import_required,
+                }) => {
+                    self.merge_import_required(import_required);
+                    self.store_body(loc, file, identity, entry);
+                }
+                CheckOutcome::InMemory(Ok(checked)) => {
+                    errors.append(self.install_checked_body(&loc, checked))
+                }
+                CheckOutcome::InMemory(Err(e)) => errors.append(e),
+            }
+        }
+
+        // The concrete types of opaque types are known only once the values are checked, and a
+        // cycle among them has to be reported before instantiation puts each in the other's place.
+        errors.eat_err(self.validate_opaque_types_are_acyclic(tc));
+
+        errors.to_result()
+    }
+
+    /// Type-checks the bodies `to_check` on the compiler threads, and writes each that passes to the
+    /// file of its module, and answers what became of each, in the order of `to_check`.
+    ///
+    /// A body that passes is written as soon as it is checked, and leaves memory then; the file of
+    /// a module is put in place once the last body of the module is checked. A body the file could
+    /// not take is checked again, to be held in memory. The source files are those
+    /// `ModuleFileWriter::add` takes.
+    fn check_and_write_bodies(
+        &self,
+        to_check: &[(BodyLocation, Arc<ModuleFile>, EntityIdentity)],
+        tc: &TypeCheckContext,
+        source_files: &mut Map<PathBuf, SourceFile>,
+    ) -> Vec<CheckOutcome> {
         let dir = if to_check.is_empty() {
             None
         } else {
@@ -735,19 +791,18 @@ impl Program {
         };
         let mut outcomes: Vec<Option<CheckOutcome>> = to_check.iter().map(|_| None).collect();
         let mut unchecked_of_module: Map<Name, usize> = Map::default();
-        for (_loc, file, _identity) in &to_check {
+        for (_loc, file, _identity) in to_check {
             *unchecked_of_module.entry(file.module.clone()).or_default() += 1;
         }
         let mut writing_of_module: Map<Name, ModuleWriting> = Map::default();
-        let mut source_files = take(&mut self.typed_modules.source_files);
+        let mut unwritten: Vec<usize> = vec![];
         let nrenv = self.create_name_resolution_env();
-        let program = &*self;
         consume_on_compiler_threads(
             (0..to_check.len()).collect(),
             tc.num_worker_threads,
             |i| {
                 let (loc, _file, identity) = &to_check[i];
-                let checked = match program.check_body(loc, &nrenv, tc) {
+                let checked = match self.check_body(loc, &nrenv, tc) {
                     Ok(checked) if checked.passed() && dir.is_some() => {
                         Checked::Passed(PassedBody {
                             entry: NewEntry::of(identity.clone(), &checked),
@@ -762,64 +817,44 @@ impl Program {
                 let file = &to_check[i].1;
                 match checked {
                     Checked::Passed(body) => {
-                        let dir = dir.as_deref().unwrap();
+                        let dir = dir
+                            .as_deref()
+                            .expect("a body passed to be written with no directory to write in");
                         writing_of_module
                             .entry(file.module.clone())
-                            .or_insert_with(|| ModuleWriting::begin(dir, file))
-                            .add(i, body, dir, file, &mut source_files);
+                            .or_insert_with(|| ModuleWriting::begin(dir, file.clone()))
+                            .add(i, body, source_files);
                     }
                     Checked::InMemory(checked) => {
                         outcomes[i] = Some(CheckOutcome::InMemory(checked))
                     }
                 }
-                let unchecked = unchecked_of_module.get_mut(&file.module).unwrap();
+                let unchecked = unchecked_of_module
+                    .get_mut(&file.module)
+                    .expect("a body of a module whose bodies were not counted");
                 *unchecked -= 1;
                 if *unchecked == 0 {
                     if let Some(writing) = writing_of_module.remove(&file.module) {
-                        let dir = dir.as_deref().unwrap();
-                        for (i, outcome) in writing.finish(dir, file) {
-                            outcomes[i] = Some(outcome);
+                        let (stored, left) = writing.finish();
+                        for (i, stored) in stored {
+                            outcomes[i] = Some(CheckOutcome::Stored(stored));
                         }
+                        unwritten.extend(left);
                     }
                 }
             },
         );
-        self.typed_modules.source_files = source_files;
 
-        // A body the file of its module could not take is checked again, to be held in memory.
-        let unwritten: Vec<usize> = (0..to_check.len())
-            .filter(|&i| matches!(outcomes[i], Some(CheckOutcome::Unwritten)))
-            .collect();
-        let program = &*self;
         let checked_again = map_on_compiler_threads(unwritten.clone(), tc.num_worker_threads, |i| {
-            program.check_body(&to_check[i].0, &nrenv, tc)
+            self.check_body(&to_check[i].0, &nrenv, tc)
         });
         for (i, checked) in unwritten.into_iter().zip(checked_again) {
             outcomes[i] = Some(CheckOutcome::InMemory(checked));
         }
-
-        for ((loc, file, identity), outcome) in to_check.into_iter().zip(outcomes) {
-            match outcome.expect("a body left unchecked") {
-                CheckOutcome::Stored {
-                    entry,
-                    import_required,
-                } => {
-                    self.merge_import_required(import_required);
-                    self.store_body(loc, file, identity, entry);
-                }
-                CheckOutcome::Unwritten => unreachable!("a body left unwritten and unchecked"),
-                CheckOutcome::InMemory(Ok(checked)) => {
-                    errors.append(self.install_checked_body(&loc, checked))
-                }
-                CheckOutcome::InMemory(Err(e)) => errors.append(e),
-            }
-        }
-
-        // The concrete types of opaque types are known only once the values are checked, and a
-        // cycle among them has to be reported before instantiation puts each in the other's place.
-        errors.eat_err(self.validate_opaque_types_are_acyclic(tc));
-
-        errors.to_result()
+        outcomes
+            .into_iter()
+            .map(|outcome| outcome.expect("a body left unchecked"))
+            .collect()
     }
 
     /// Takes the body at `loc`, of the entity `identity`, as the one `file` records as `entry`: its
