@@ -93,11 +93,33 @@ pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
     .map_err(failed)
 }
 
-/// A path in the directory of `path` for a temporary file that will be renamed onto `path`. Its
-/// name begins with a dot and carries a random number drawn by this call, so that it names no file
-/// a project or another call has, and is no longer than the names the file system allows.
+/// The name of a new temporary file. It begins with a dot and carries a random number drawn by this
+/// call, so that it names no file a project or another call has, and is no longer than the names
+/// the file system allows.
+///
+/// # Examples
+///
+/// `.3f2a9c0d81b4e675.tmp`
+fn temporary_file_name() -> String {
+    format!(".{:016x}.tmp", random::<u64>())
+}
+
+/// Whether `name` is one `temporary_file_name` gives.
+pub fn is_temporary_file_name(name: &str) -> bool {
+    name.strip_prefix('.')
+        .and_then(|name| name.strip_suffix(".tmp"))
+        .is_some_and(|digits| digits.len() == 16 && digits.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+/// A path in the directory of `path` for a temporary file that will be renamed onto `path`, named
+/// by `temporary_file_name`.
 pub fn temporary_path_beside(path: &Path) -> PathBuf {
-    path.with_file_name(format!(".{:016x}.tmp", random::<u64>()))
+    path.with_file_name(temporary_file_name())
+}
+
+/// A path in the directory `dir` for a temporary file, named by `temporary_file_name`.
+pub fn temporary_path_in(dir: &Path) -> PathBuf {
+    dir.join(temporary_file_name())
 }
 
 /// Writes the file at `path` by having `write` write a new file beside it, at the path it is handed,

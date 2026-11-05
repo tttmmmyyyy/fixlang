@@ -72,7 +72,7 @@ fn test_the_module_dependency_hash_covers_the_c_numeric_types() {
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::{DOT_FIXLANG, TYPED_MODULES_PATH};
-    use crate::tests::test_util::run_fix;
+    use crate::tests::test_util::{fix_command, run_fix};
     use std::fs;
     use std::path::Path;
     use std::process::Command;
@@ -765,5 +765,91 @@ main = println $ (double(21), 3).to_string;
             stderr
         );
         assert_eq!(run_out(dir), "(1, 2, 3)");
+    }
+
+    /// A program of `count` functions, every one used from `main`, so that type checking it takes
+    /// long enough for another process to act while it runs.
+    fn many_functions(count: usize) -> String {
+        let mut source = "module Main;\n\n".to_string();
+        for i in 0..count {
+            source += &format!("f{} : I64 -> I64;\nf{} = |x| x * {} + 1;\n\n", i, i, i);
+        }
+        let sum: Vec<String> = (0..count).map(|i| format!("f{}(1)", i)).collect();
+        source += &format!("main : IO ();\nmain = println $ ({}).to_string;\n", sum.join(" + "));
+        source
+    }
+
+    /// Two builds of one project at once each write the files of the modules, laying the bodies out
+    /// in the order they happen to be checked, and the one renamed into place last wins. Each build
+    /// still reads every body it needs from the file it finds, without reporting the file as
+    /// unreadable.
+    #[test]
+    fn two_builds_at_once_read_back_every_body() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(dir.join("main.fix"), many_functions(300)).expect("Failed to write main.fix");
+
+        let builds: Vec<_> = ["out1", "out2"]
+            .iter()
+            .map(|out| {
+                fix_command()
+                    .args(["build", "--file", "main.fix", "-o", out])
+                    .current_dir(dir)
+                    .stderr(std::process::Stdio::piped())
+                    .spawn()
+                    .expect("Failed to execute fix")
+            })
+            .collect();
+        for build in builds {
+            let output = build.wait_with_output().expect("Failed to wait for fix");
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(output.status.success(), "stderr: {}", stderr);
+            assert!(
+                !stderr.contains("Failed to read cache file"),
+                "a build did not find a body in the file the other build put in place.\nstderr: {}",
+                stderr
+            );
+        }
+    }
+
+    /// A build killed while it writes the file of a module leaves the temporary file it was writing,
+    /// and the next build to write a file there removes it.
+    #[test]
+    fn a_build_removes_the_temporary_file_a_killed_build_left() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(dir.join("main.fix"), many_functions(300)).expect("Failed to write main.fix");
+        let cache_dir = dir.join(TYPED_MODULES_PATH);
+        let temporary_files = || -> Vec<String> {
+            fs::read_dir(&cache_dir)
+                .map(|entries| {
+                    entries
+                        .flatten()
+                        .map(|entry| entry.file_name().to_string_lossy().to_string())
+                        .filter(|name| name.ends_with(".tmp"))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+
+        let mut killed = fix_command()
+            .args(["build", "--file", "main.fix", "-o", "out"])
+            .current_dir(dir)
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("Failed to execute fix");
+        while temporary_files().is_empty() {
+            assert!(
+                killed.try_wait().expect("Failed to wait for fix").is_none(),
+                "the build ended before it began writing a file"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        killed.kill().expect("Failed to kill fix");
+        killed.wait().expect("Failed to wait for fix");
+        assert!(!temporary_files().is_empty(), "the killed build left no temporary file");
+
+        build(dir, "main.fix", &[]);
+        assert_eq!(temporary_files(), Vec::<String>::new());
     }
 }

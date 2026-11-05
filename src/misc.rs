@@ -151,8 +151,10 @@ where
 /// than the rest holds up one thread and leaves the others working.
 ///
 /// The results reach `consume` in the order they become ready, and `consume` runs while the threads
-/// go on with the remaining items. So what a result holds is freed as soon as `consume` is done with
-/// it, and a caller that writes the results out holds only those not yet written.
+/// go on with the remaining items. A thread whose result would make more than `num_threads` results
+/// wait for `consume` waits until `consume` takes one. So what a result holds is freed as soon as
+/// `consume` is done with it, and the results held at once, `consume`'s aside, are at most twice
+/// `num_threads`.
 pub fn consume_on_compiler_threads<T, R>(
     items: Vec<T>,
     num_threads: usize,
@@ -172,7 +174,7 @@ pub fn consume_on_compiler_threads<T, R>(
     let queue = Mutex::new(items.into_iter());
     let (queue, f) = (&queue, &f);
     thread::scope(|scope| {
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = mpsc::sync_channel(thread_count);
         let threads = (0..thread_count)
             .map(|_| {
                 let sender = sender.clone();

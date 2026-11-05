@@ -36,7 +36,8 @@ use crate::error::Errors;
 use crate::misc::{consume_on_compiler_threads, map_on_compiler_threads, warn_msg, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
 use crate::project_fs::{
-    create_dir_guarding_project_links, temporary_path_beside, DOT_FIXLANG_LINK_HINT,
+    create_dir_guarding_project_links, is_temporary_file_name, temporary_path_beside,
+    temporary_path_in, DOT_FIXLANG_LINK_HINT,
 };
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
@@ -353,6 +354,9 @@ impl ModuleFileWriter {
             .write(true)
             .create_new(true)
             .open(&tmp_path)?;
+        // The lock tells the temporary file of a running build from one a build left when it was
+        // killed (`remove_stale_files`); the kernel releases it when the process ends.
+        tmp.try_lock().map_err(io::Error::from)?;
         let mut writer = ModuleFileWriter {
             dir: dir.to_path_buf(),
             file,
@@ -457,14 +461,19 @@ impl ModuleFileWriter {
             return Err(e);
         }
 
-        self.remove_other_versions(&file_name);
+        self.remove_stale_files(&file_name);
         Ok(entries.into_iter().collect())
     }
 
     /// Removes the files of the module checked under any other hash than the file named
-    /// `file_name`. The file is in place already, so a file left behind costs only room on the
-    /// disk, and the next write tries again.
-    fn remove_other_versions(&self, file_name: &str) {
+    /// `file_name`, and the temporary files builds that were killed left in the directory. The file
+    /// is in place already, so a file left behind costs only room on the disk, and the next write
+    /// tries again.
+    ///
+    /// A temporary file is a running build's as long as that build holds its lock. One created a
+    /// moment ago may be unlocked still; removing it makes that build fail to put its file in place,
+    /// which it reports, and its bodies are checked again.
+    fn remove_stale_files(&self, file_name: &str) {
         let Ok(dir_entries) = fs::read_dir(&self.dir) else {
             return;
         };
@@ -473,8 +482,14 @@ impl ModuleFileWriter {
         for dir_entry in dir_entries.flatten() {
             let entry_name = dir_entry.file_name();
             let entry_name = entry_name.to_string_lossy();
+            let path = self.dir.join(entry_name.as_ref());
             if entry_name.starts_with(&prefix) && entry_name != file_name {
-                let _ = fs::remove_file(self.dir.join(entry_name.as_ref()));
+                let _ = fs::remove_file(&path);
+            } else if is_temporary_file_name(&entry_name) {
+                let abandoned = File::open(&path).is_ok_and(|tmp| tmp.try_lock().is_ok());
+                if abandoned {
+                    let _ = fs::remove_file(&path);
+                }
             }
         }
     }
@@ -505,6 +520,25 @@ fn create_typed_modules_dir() -> Option<PathBuf> {
     }
 }
 
+/// Whether a file can be created in `dir`. When it cannot, that is reported as a warning.
+fn accepts_new_files(dir: &Path) -> bool {
+    let probe = temporary_path_in(dir);
+    match File::options().write(true).create_new(true).open(&probe) {
+        Ok(_) => {
+            let _ = fs::remove_file(&probe);
+            true
+        }
+        Err(e) => {
+            warn_msg(&format!(
+                "Failed to write cache files in \"{}\": {}.",
+                dir.to_string_lossy(),
+                e
+            ));
+            false
+        }
+    }
+}
+
 /// Reports, as a warning, that the file of `file` in `dir` could not be written for `e`.
 fn warn_unwritable_file(dir: &Path, file: &ModuleFile, e: &io::Error) {
     warn_msg(&format!(
@@ -525,12 +559,10 @@ fn warn_unreadable_file(path: &Path, why: &str) {
 
 /// The writing of one module's file while the bodies of the module are checked.
 struct ModuleWriting {
-    /// The directory the files of type-checked modules are written in.
-    dir: PathBuf,
-    /// The module file written.
-    file: Arc<ModuleFile>,
     /// The new version of the file, until writing it fails.
     writer: Option<ModuleFileWriter>,
+    /// Why writing the file failed, once it has.
+    failure: Option<io::Error>,
     /// The bodies written to `writer`, each with its index among the bodies checked, its identity,
     /// and the names it referred to that the module it is defined in has to import.
     written: Vec<(usize, EntityIdentity, Map<Name, Vec<FullName>>)>,
@@ -539,25 +571,34 @@ struct ModuleWriting {
     unwritten: Vec<usize>,
 }
 
+/// What became of the bodies of a module `ModuleWriting` wrote.
+struct WrittenModule {
+    /// The bodies the file holds, each with its index among the bodies checked.
+    stored: Vec<(usize, StoredOutcome)>,
+    /// The bodies that passed and that the file does not hold, by their index among the bodies
+    /// checked.
+    unwritten: Vec<usize>,
+    /// Why writing the file failed, when it did.
+    failure: Option<io::Error>,
+}
+
 impl ModuleWriting {
-    /// Begins writing the file of `file` in `dir`. A file that cannot be begun is reported as a
-    /// warning.
+    /// Begins writing the file of `file` in `dir`.
     fn begin(dir: &Path, file: Arc<ModuleFile>) -> Self {
-        let writer = ModuleFileWriter::create(dir, file.clone())
-            .inspect_err(|e| warn_unwritable_file(dir, &file, e))
-            .ok();
+        let (writer, failure) = match ModuleFileWriter::create(dir, file) {
+            Ok(writer) => (Some(writer), None),
+            Err(e) => (None, Some(e)),
+        };
         ModuleWriting {
-            dir: dir.to_path_buf(),
-            file,
             writer,
+            failure,
             written: vec![],
             unwritten: vec![],
         }
     }
 
-    /// Writes `body`, the body at index `i` among the bodies checked, to the file. A write that
-    /// fails is reported as a warning, and the bodies written before it, `body` with them, are left
-    /// unwritten.
+    /// Writes `body`, the body at index `i` among the bodies checked, to the file. When a write
+    /// fails, the bodies written before it, `body` with them, are left unwritten.
     fn add(&mut self, i: usize, body: PassedBody, source_files: &mut Map<PathBuf, SourceFile>) {
         let Some(writer) = &mut self.writer else {
             self.unwritten.push(i);
@@ -567,8 +608,8 @@ impl ModuleWriting {
         match writer.add(body.entry, source_files) {
             Ok(()) => self.written.push((i, identity, body.import_required)),
             Err(e) => {
-                warn_unwritable_file(&self.dir, &self.file, &e);
                 self.writer = None;
+                self.failure = Some(e);
                 self.unwritten
                     .extend(self.written.drain(..).map(|(i, _, _)| i));
                 self.unwritten.push(i);
@@ -576,14 +617,15 @@ impl ModuleWriting {
         }
     }
 
-    /// Finishes the file, and answers the bodies it holds, each with its index among the bodies
-    /// checked, and the indices of the bodies that passed and that it does not hold. A file that
-    /// cannot be finished is reported as a warning, and the bodies written to it are left
-    /// unwritten.
-    fn finish(self) -> (Vec<(usize, StoredOutcome)>, Vec<usize>) {
+    /// Finishes the file. When that fails, the bodies written to it are left unwritten.
+    fn finish(self) -> WrittenModule {
         let mut unwritten = self.unwritten;
         let Some(writer) = self.writer else {
-            return (vec![], unwritten);
+            return WrittenModule {
+                stored: vec![],
+                unwritten,
+                failure: self.failure,
+            };
         };
         match writer.finish() {
             Ok(mut record) => {
@@ -603,12 +645,19 @@ impl ModuleWriting {
                         )
                     })
                     .collect();
-                (stored, unwritten)
+                WrittenModule {
+                    stored,
+                    unwritten,
+                    failure: None,
+                }
             }
             Err(e) => {
-                warn_unwritable_file(&self.dir, &self.file, &e);
                 unwritten.extend(self.written.into_iter().map(|(i, _, _)| i));
-                (vec![], unwritten)
+                WrittenModule {
+                    stored: vec![],
+                    unwritten,
+                    failure: Some(e),
+                }
             }
         }
     }
@@ -674,6 +723,31 @@ pub struct TypedModules {
 }
 
 impl TypedModules {
+    /// Takes the ranges of the stored bodies of the file the body at `loc` lies in anew, from the
+    /// record the file holds now, and answers whether the range of the body at `loc` changed.
+    fn relocate_stored_bodies(&mut self, loc: &BodyLocation) -> bool {
+        let file = self.stored[loc].file.clone();
+        let path = file.path();
+        let Ok(Some(record)) = SourceFile::with_shared_source_files(&mut self.source_files, || {
+            read_record(&path)
+        }) else {
+            return false;
+        };
+        let mut moved = false;
+        for (body_loc, body) in self.stored.iter_mut() {
+            if !Arc::ptr_eq(&body.file, &file) {
+                continue;
+            }
+            if let Some(entry) = record.get(&body.identity) {
+                if entry.body != body.range {
+                    body.range = entry.body.clone();
+                    moved |= body_loc == loc;
+                }
+            }
+        }
+        moved
+    }
+
     /// The facts a warning after type checking may be derived from about the body at `loc`, when
     /// its typed expression lies in its module's file.
     pub fn stored_warning_facts(&self, loc: &BodyLocation) -> Option<&[WarningFact]> {
@@ -788,7 +862,7 @@ impl Program {
         let dir = if to_check.is_empty() {
             None
         } else {
-            create_typed_modules_dir()
+            create_typed_modules_dir().filter(|dir| accepts_new_files(dir))
         };
         let mut outcomes: Vec<Option<CheckOutcome>> = to_check.iter().map(|_| None).collect();
         let mut unchecked_of_module: Map<Name, usize> = Map::default();
@@ -797,6 +871,7 @@ impl Program {
         }
         let mut writing_of_module: Map<Name, ModuleWriting> = Map::default();
         let mut unwritten: Vec<usize> = vec![];
+        let mut failures: Vec<(Arc<ModuleFile>, io::Error)> = vec![];
         let nrenv = self.create_name_resolution_env();
         consume_on_compiler_threads(
             (0..to_check.len()).collect(),
@@ -836,15 +911,22 @@ impl Program {
                 *unchecked -= 1;
                 if *unchecked == 0 {
                     if let Some(writing) = writing_of_module.remove(&file.module) {
-                        let (stored, left) = writing.finish();
-                        for (stored_i, outcome) in stored {
+                        let written = writing.finish();
+                        for (stored_i, outcome) in written.stored {
                             outcomes[stored_i] = Some(CheckOutcome::Stored(outcome));
                         }
-                        unwritten.extend(left);
+                        unwritten.extend(written.unwritten);
+                        failures.extend(written.failure.map(|e| (file.clone(), e)));
                     }
                 }
             },
         );
+        // The modules finish in the order their bodies happen to be checked, so the failures are
+        // reported in the order of the modules.
+        failures.sort_by(|(lhs, _), (rhs, _)| lhs.module.cmp(&rhs.module));
+        for (file, e) in &failures {
+            warn_unwritable_file(dir.as_deref().unwrap(), file, e);
+        }
 
         let checked_again =
             map_on_compiler_threads(unwritten.clone(), tc.num_worker_threads, |i| {
@@ -880,6 +962,28 @@ impl Program {
         );
     }
 
+    /// The typed expression of the stored body at `loc`, read from the file of its module as
+    /// `read_body` reads it.
+    ///
+    /// Another build may have put a file of its own in place of the one this build read the range
+    /// from, holding the same bodies in another order. So when the bytes at the range are not the
+    /// body, the ranges of the bodies of the file are taken anew from the record it holds now
+    /// (`relocate_stored_bodies`), and the body is read once more.
+    fn read_stored_body(&mut self, loc: &BodyLocation) -> Result<Option<TypedExpr>, String> {
+        let read = |typed_modules: &mut TypedModules| {
+            let stored = &typed_modules.stored[loc];
+            SourceFile::with_shared_source_files(&mut typed_modules.source_files, || {
+                read_body(&stored.file.path(), &stored.range, &stored.identity)
+            })
+        };
+        match read(&mut self.typed_modules) {
+            Err(_) if self.typed_modules.relocate_stored_bodies(loc) => {
+                read(&mut self.typed_modules)
+            }
+            read => read,
+        }
+    }
+
     /// The typed expression of the body at `loc`: read from the file of its module when the
     /// program was checked through `check_bodies_through_typed_modules` and the file recorded the
     /// body, and the one `Program::global_values` holds otherwise.
@@ -898,15 +1002,12 @@ impl Program {
         if let Some(te) = self.typed_modules.read_back.get(loc) {
             return Ok(te.clone());
         }
-        let read =
-            SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
-                read_body(&stored.file.path(), &stored.range, &stored.identity)
-            });
-        let te = match read {
+        let path = stored.file.path();
+        let te = match self.read_stored_body(loc) {
             Ok(Some(te)) => te,
             failed => {
                 if let Err(why) = failed {
-                    warn_unreadable_file(&stored.file.path(), &why);
+                    warn_unreadable_file(&path, &why);
                 }
                 // The opaque types of the body are already known from the record.
                 let checked = self.check_body(loc, &self.create_name_resolution_env(), tc)?;
