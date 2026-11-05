@@ -14,8 +14,7 @@ use super::{
 use crate::{
     ast::{
         expr::{
-            expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_local,
-            Expr, ExprNode,
+            expr_abs_typed, expr_app_typed, expr_let_typed, expr_var, var_local, Expr, ExprNode,
         },
         name::FullName,
         pattern::{Pattern, PatternNode},
@@ -26,9 +25,7 @@ use crate::{
     },
     constants::{LS_CAP_NAME, LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_OPERAND_PREFIX, LS_UNREAD_NAME},
     misc::{Map, Set},
-    optimization::{
-        capture_struct::CaptureStruct, move_bodies::move_bodies_into_callers,
-    },
+    optimization::{capture_struct::CaptureStruct, move_bodies::move_bodies_into_callers},
 };
 use std::{collections::VecDeque, sync::Arc};
 

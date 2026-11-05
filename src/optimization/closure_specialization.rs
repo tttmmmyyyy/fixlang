@@ -10,10 +10,7 @@ use super::{
 };
 use crate::{
     ast::{
-        expr::{
-            expr_app_typed, expr_let_typed, expr_make_struct, expr_var,
-            var_var, ExprNode,
-        },
+        expr::{expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_var, ExprNode},
         name::FullName,
         pattern::{Pattern, PatternNode},
         program::{Program, Symbol},

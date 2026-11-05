@@ -650,7 +650,6 @@ impl ExprVisitor for InlineCostCalculator {
     /// Counts the `match` as one unit of `complexity`, except where it only renames a local, which
     /// generates no code of its own.
     fn end_visit_match(&mut self, expr: &Arc<ExprNode>, _state: &mut VisitState) -> EndVisitResult {
-
         // A `match` of the form `match {local_var0} { {local_var1} -> (...) }` counts nothing.
         self.complexity += 1;
         let match_cond = expr.get_match_cond();
@@ -673,7 +672,6 @@ impl ExprVisitor for InlineCostCalculator {
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> EndVisitResult {
-
         // A type annotation counts nothing.
         EndVisitResult::unchanged(expr)
     }

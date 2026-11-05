@@ -297,7 +297,12 @@ impl<'e> SlotLayout<'e> {
                 if tc.is_arrow() {
                     own.push(None);
                 } else if !self.is_group_member(tc, group) {
-                    own.extend(self.group_slots(self.group_of(tc)).own_slots.iter().cloned());
+                    own.extend(
+                        self.group_slots(self.group_of(tc))
+                            .own_slots
+                            .iter()
+                            .cloned(),
+                    );
                 }
             }
             _ => panic!("the type `{}` has an unexpected head", ty.to_string()),
