@@ -359,6 +359,14 @@ A compiler memoizes almost everything expensive — a generated function keyed b
 
 Check it where the cache is read: on every hit, recompute the value from scratch under a fresh name (or into a scratch slot), diff it against the cached one, and count both the hits and the disagreements over a whole corpus. The count is what makes a silence worth something — "117,454 hits re-derived, one disagreement" is evidence where "no disagreements" alone is not. Prove it fires first by dropping one field from the key and watching the diff report the values that then collide.
 
+A class whose members share what one representative derives makes the same claim. The members are
+grouped by a summary of what they are — a function and how its arguments are represented — and the
+value derived for the first member, a type, a layout, a generated body, serves all of them. Derive
+the value for every member and diff it against the representative's. The corpus seldom holds two
+members that agree on the summary and differ beneath it, so build them: two calls whose arguments
+are the same value in one and merely alike in the other, or reach one member through an extra
+caller so that the order the members are met in changes which one is the representative.
+
 Both readings are useful. A disagreement names an input the key is missing. A clean sweep says the key covers everything this corpus reaches, and names its own gap: the value requested only once, since a hit is what the probe rides on.
 
 #### Put another thread's step inside the window, and read an oracle the race leaves alone
