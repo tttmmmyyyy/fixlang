@@ -428,6 +428,11 @@ type Seg#ls7d21 m = box struct { op : #LsCap@main#ls_lam0, data : Array m };
 - `uncurry` を書き直し、lambda set のパスの前へ移す。書き直した `uncurry` は、何度走っても同じ結果になる。uncurried function をシンボルの同一性で追い、まだ uncurried function を持たないシンボルにだけ作る。段階 2 と 3 では、`uncurry` を今の位置 (lambda set のパスより後ろ) に置いたままにする。
 - 汎用のパス (`pull_let`、`unique_local_names`、名前の付け替え、`find_usage_of_name`、`collapse_constructions`) に、複数の引数を持つ `App` と `Lam` を扱わせる。lambda set のパスにも、func type と複数の引数を扱わせる。
 - `split_struct_args` から `closure_specialization` までのパスを止めた形を測り、要らないものを消す。`split_struct_args` は無くす見込みである。
+- 段階 2 の計測で命令数が増えたケースを、段階 4 の形で測り直す (付録「段階 2 の LangArena の計測」)。原因の分かっているものは次のとおり。
+  - random_state (+105%)。State モナドの `fold_m` のループの本体が `bind` の続きのラムダになり、「処理してから調べる」形のループになる。最初の 1 回の処理がループの外に出て、乱数を作る関数の呼び出しが 2 か所になり、LLVM がそれを展開しない。main では `uncurry` が `fold_m(s, f, it)(state)` を一つの関数にまとめ、「調べてから処理する」形になる。`uncurry` を前へ移した後に確かめる。
+  - iter_flatten (+23%)。main では `_inner_until` が別の関数として残り、内側の配列を回すループが締まったループになる。段階 2 ではすべてが一つのループに展開され、要素ごとに `flatten` の外側の状態を調べ直す。LLVM が入れ子のループを取り戻せない形で、原因の段は特定していない。
+  - Maze::BFS (+13%) と Compress::BWTEncode (+15%)。RC IR の borrow の振り分け (`borrow.rs` の `routing_is_safe`) は、末尾の位置で own の値を一つでも渡す呼び出しを borrow 版へ送らないので、borrow 版のループは 1 周目だけ回って own 版へ移る。段階 2 で直接呼び出しが増え、剥がれた 1 周目と own 版の両方が内側のループの borrow 版を呼ぶので、LLVM がそれを展開しない。main にもある振り分けの弱点で、引数の位置ごとに判定する形に直す (lambda set とは別の変更にする)。
+  - CLBG::Spectralnorm (+8.8%、AVX-512 のない機械だけ) と cp_dsegtree (+9.5%)。Fix の IR は良くなっている。前者は依存を断つ `vxorps` が増えたもの (サイクルは変わらない)、後者は LLVM が `set` のループの範囲検査を一つ消せなくなったもの。
 - 段階 2 の終わりで落ちているテストを通す。どちらの族も、全部の引数を渡す呼び出しが、段階 2 では内側のラムダの連鎖への呼び出しになるために起きる。`uncurry` を前へ移すと、その連鎖ができなくなる。
   - `test_a_round_of_a_specialized_combinator_builds_no_closure`。グローバル関数の先頭の連鎖 `|s| |f| let io = f(s); |st| ...` を分けてリフトすると、`loop_m` の `io` が周の終わりで作られて次の周の頭で使われ、作る場所と使う場所のあいだに再帰呼び出しが挟まる。今の位置の `uncurry` は eta 展開で `let io = f(s)` を `|st|` の内側へ移すので、main では `io` を作る式と使う式が同じ式に入る。
   - `test_benefit_routing_by_last_use` と `test_llvm_arg_overrides_an_option_every_build_hands_llvm`。`main = (pure();; ...)` の本体は `let` の後ろにラムダが続く形で、そのラムダがリフトされ、`main` の処理がリフトした関数に入る。前者は `main` の本体で呼び出しの振り分けを読むので落ちる (振り分けはリフトした関数の中で正しく行われている)。後者は、ループの形が変わって、LLVM の選択肢がオブジェクトコードを変えなくなる。`uncurry` が先に eta 展開すれば、`main` の本体はラムダになり、リフトされない。後者は段階 4 で通るかを確かめ、通らなければ別の原因を調べる。
@@ -437,7 +442,7 @@ type Seg#ls7d21 m = box struct { op : #LsCap@main#ls_lam0, data : Array m };
 
 1. 全テスト (`cargo test --release --no-fail-fast`) を通す。
 2. speedtest のコーパスを memcheck に通し、メモリリークと二重解放がないことを見る。
-3. speedtest を `--langarena` で測り、命令数が main より増えていないことを、全ケースで確かめる。増えたケースは、`--cu-size inf` でコンパイル単位の分け方の影響を除いて読む。効くはずのケースとして、cp_dsegtree、cp_ldsegtree、cp_ldsegtree_fold_act、イテレータの連鎖、`Calculator::Interpreter`、モナドのスタック (`StateT` を `IO` に重ねたもの) を個別に見る。
+3. speedtest を `--langarena` で測り、全ケースの命令数を main と比べる。段階 4 の終わりでは、命令数が main より増えていないことを全ケースで確かめる。段階 2 と 3 では、増えたケースの原因を調べて記録し、後で直すものを「段階 4 で行うこと」に足す。増えたケースは、`--cu-size inf` でコンパイル単位の分け方の影響を除いて読む。効くはずのケースとして、cp_dsegtree、cp_ldsegtree、cp_ldsegtree_fold_act、イテレータの連鎖、`Calculator::Interpreter`、モナドのスタック (`StateT` を `IO` に重ねたもの) を個別に見る。
 4. `code-review` と `bug-hunt` を通し、main への PR を一つ出す。merge はユーザが行う。
 
 段階 1 (推論とダンプ) も、この手順で一つの PR にする。段階 1 の推論は、develop mode か `--emit-symbols` のときだけ走るので、利用者のビルドのバイナリもコンパイル時間も変えない。推論が書き換えに使われる段階 2 から、PR にコンパイル時間の増分も載せる。予算がなくなるので、段階 4 ではコピーの数とコンパイル時間を LangArena で測り、今のやり方と比べる。比べるコピーの数は、「シンボルのコピー」の節の区別 (クロージャで表す集合を一つのキーにまとめる) で数えたものである。
@@ -486,6 +491,15 @@ speedtest のコーパス 71 本、LangArena (1 プログラム)、minilib の `
 - 循環する集合のほとんどは、再帰するグローバル関数が自分を呼ぶ集合である。グローバル関数のラムダは何もキャプチャしないので、レイアウトは循環しない。
 - レイアウトが循環する一つのラムダの集合は、どこにもない。再帰の呼び出しが新しいラムダを渡して大きくなる集合は、ラムダのキャプチャに同じ集合の値を持つので、一つのラムダならレイアウトが循環する。それが 0 なので、この形の集合はこれらのプログラムに現れない。
 - 二つ以上のラムダの集合のうち循環するものは、段階 3 で unbox の union にするときに、レイアウトが循環しうる。段階 3 で、そのうちレイアウトが循環するものを数える。
+
+## 付録: 段階 2 の LangArena の計測
+
+legendre で `--langarena --no-save` を、main の二値 (adb053e) と段階 2 の二値 (8f0f536) で続けて測った。命令数 (`instructions:u`) の比較は 121 本で、0.1% 以上減ったものが 27 本、0.1% 以上増えたものが 25 本、残りの 69 本はその間である。`cp_lib_*` の 7 本は、どちらの二値でも数が取れていない。
+
+- 減った主なもの: Maze::Generator -21.5%、Sort::Quick -20.5%、Brainfuck::Recursion -15.1%、Json::ParseMapping -12.1%、Compress::HuffDecode -9.9%、cp_maxflow -9.0%、cp_bipartite -8.4%、cp_twosat -6.4%、Distance::NGram -4.5%、Sort::Merge -4.4%、cp_scc -4.0%、cp_suffix_array -3.8%、Base64::Decode -3.5%。
+- 増えた主なもの: random_state +104.7%、iter_flatten +23.3%、Compress::BWTEncode +15.4%、Maze::BFS +13.2%、cp_dsegtree +9.5%、CLBG::Spectralnorm +8.8%、Maze::AStar +8.1%、Compress::ArithDecode +7.6%、Etc::GameOfLife +5.3%、Brainfuck::Array +4.5%、Compress::BWTDecode +3.8%、Graph::DFS +3.1%、Compress::LZWDecode +2.9%、Calculator::Interpreter +2.9%、cp_convolution_i64 +2.8%。
+- `inline` の規則 (引数を全部渡す呼び出しでだけ展開する) を元に戻した二値でも測った。増えた 25 本の値はほとんど変わらず、増えたのは lambda set の書き換えから来ている。規則の変更そのものは、Compress::HuffEncode を -4.0%、Compress::ArithEncode を -2.0% 減らし、Json::ParseMapping を 11 ポイント悪くした (-23.1% が -12.1% になった)。
+- random_state、iter_flatten、Maze::BFS、Compress::BWTEncode、CLBG::Spectralnorm、cp_dsegtree は、`--cu-size inf` でも差が残るので、コンパイル単位の分け方の揺れではない。原因は「段階 4 で行うこと」に書いた。
 
 ## 付録: 名前で見分ける箇所
 
