@@ -1497,7 +1497,9 @@ impl Expr {
             Expr::Builtin(b) => Text::from_string(b.op.name()),
             Expr::App(_, _) => {
                 // Stringify the funciton.
-                let (fun, args) = Arc::new(self.clone()).into_expr_node(None).destructure_app();
+                let (fun, args) = Arc::new(self.clone())
+                    .into_expr_node(None)
+                    .destructure_app();
                 let brace_fun = match *(fun.expr) {
                     Expr::Var(_) => false,
                     Expr::Builtin(_) => false,
@@ -1825,4 +1827,3 @@ pub fn expr_ffi_call(
     ))
     .into_expr_node(src)
 }
-

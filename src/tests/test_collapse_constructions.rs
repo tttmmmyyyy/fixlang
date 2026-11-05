@@ -179,7 +179,11 @@ mod integration_tests {
     pub fn test_an_argument_naming_a_field_reads_the_value_it_was_written_against() {
         let (_temp_dir, project_dir) = setup_test_env("field_in_another_argument");
         for opt_level in OPT_LEVELS {
-            build_project_run_and_read_rc_ir(&project_dir, opt_level, FIELD_IN_ANOTHER_ARGUMENT_OUTPUT);
+            build_project_run_and_read_rc_ir(
+                &project_dir,
+                opt_level,
+                FIELD_IN_ANOTHER_ARGUMENT_OUTPUT,
+            );
         }
     }
 
