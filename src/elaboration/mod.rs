@@ -274,3 +274,25 @@ pub fn elaborate_via_config(config: &Configuration) -> Result<Program, Errors> {
     let program = elaborate(program, config)?;
     Ok(program)
 }
+
+/// `source` elaborated in the compiler's own process at `-O max`, with the optimization passes on
+/// `num_threads` worker threads, and the configuration it was elaborated with. The source is saved
+/// in the temporary directory under a name built from `file_name`.
+#[cfg(test)]
+pub fn elaborate_at_max(
+    source: &str,
+    file_name: &str,
+    num_threads: usize,
+) -> (Program, Configuration) {
+    use crate::{
+        configuration::FixOptimizationLevel, error::panic_if_err, misc::save_temporary_source,
+    };
+
+    let mut config = panic_if_err(Configuration::release_mode(SubCommand::Build));
+    config.set_fix_opt_level(FixOptimizationLevel::Max);
+    config.num_worker_thread = num_threads;
+    let saved = panic_if_err(save_temporary_source(source, file_name));
+    config.add_user_source_file(saved.file_path);
+    let prg = panic_if_err(elaborate_via_config(&config));
+    (prg, config)
+}

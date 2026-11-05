@@ -426,7 +426,7 @@ mod tests {
         assert!(
             built.iter().any(|line| line.contains("Std::Ptr, Std::IO::IOState)")),
             "the lambda given to `mutate_elements` should be built as a closure taking its capture \
-             list through the environment:\n{}",
+             struct through the environment:\n{}",
             dump
         );
         // What `main` passes as `write` is a known lambda, so no closure is built for it.

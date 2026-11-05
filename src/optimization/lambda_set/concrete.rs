@@ -86,6 +86,15 @@ impl SetStore {
         &self.sets[id as usize]
     }
 
+    /// The elements of the set `id` that name a lambda, each as the lambda and the sets it gives
+    /// the lambda's parameters, in the order of `elems`.
+    pub fn lam_elems(&self, id: SetId) -> impl Iterator<Item = (LamId, &[SetId])> {
+        self.elems(id).iter().filter_map(|elem| match elem {
+            Elem::Lam(lam, args) => Some((*lam, args.as_slice())),
+            Elem::Dynamic => None,
+        })
+    }
+
     /// The number of sets the store holds: the sets are those numbered below it.
     pub fn len(&self) -> usize {
         self.sets.len()

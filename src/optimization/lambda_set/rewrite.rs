@@ -1,7 +1,9 @@
 // Rewriting a program by its lambda sets: the copies of the symbols and the type constructors the
-// sets ask for, the lambdas lifted to global functions, and each value of a set of one lambda
-// represented by that lambda's capture struct. A lambda of a set represented by closures is lifted
-// too, and its closure is the lifted function applied to the capture struct.
+// sets ask for, the lambdas lifted to global functions, and each value of a set whose elements
+// make one class represented by that class's capture struct. A lambda of a set represented by
+// closures is lifted too, and its closure is the lifted function applied to the capture struct,
+// except for the lambda that is the body of its symbol and one whose body reads its capture whole
+// (`Lambda::is_lifted_from_closures`).
 
 use super::{
     concrete::SetId,
@@ -37,7 +39,8 @@ pub struct Rewritten {
     entry: Option<Arc<ExprNode>>,
     /// The rewritten value of each export statement, in order.
     exports: Vec<Arc<ExprNode>>,
-    /// For each symbol, the lifted lambdas it calls, whose bodies go where it calls them.
+    /// For each symbol, the lifted lambdas it calls, whose bodies `move_bodies_into_callers` may
+    /// put where it calls them.
     lifted_callees: Map<FullName, Vec<FullName>>,
 }
 
@@ -288,12 +291,12 @@ impl<'a, 'e> Rewriter<'a, 'e> {
 
     /// The copy of the component of the class `c`'s lambda that the class stands for, where the
     /// lambda is the body of its symbol: the copy made for the representations the class gives
-    /// the body parameters.
+    /// the body parameters, which are the sets at the lambda's interface.
     fn body_copy_of_class(&self, c: u32) -> usize {
         let class = &self.repr.classes[c as usize];
         let lambda = &self.analysis.lambdas[class.lam as usize];
         let component = self.analysis.component_of[&lambda.symbol];
-        self.copy_of_body_reprs[&(component, class.arg_reprs.clone())]
+        self.copy_of_body_reprs[&(component, class.interface_reprs.clone())]
     }
 
     /// The name of the global function a value of the class `c` is called through, where the
@@ -409,7 +412,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             return tc.clone();
         }
         let layout_tc = self.layout.layout_tycon(tc);
-        let group = self.layout.group_of(&layout_tc);
+        let group = self.layout.group_of(tc);
         let suffix = self.type_copy_suffix(group, own);
         let mut name = layout_tc.name.clone();
         name.name += &suffix;
@@ -726,16 +729,20 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 assert_eq!(lambda.is_body(), as_body);
                 if !as_body {
                     let own = self.repr.of(self.set_of(walk.instance, node.ty.slots[0]));
+                    let instance = &self.spec.instances[walk.instance];
+                    let args: Vec<SetId> =
+                        lambda.params.iter().map(|p| instance.args[*p]).collect();
                     let value = match own {
                         Repr::Single(c) => {
-                            assert_eq!(self.repr.classes[c as usize].lam, lam);
+                            assert_eq!(
+                                self.repr.class_of(lam, &args),
+                                c,
+                                "a lambda is built in a class other than its set's"
+                            );
                             self.ask_lift(c);
                             Some(self.capture_struct_value(c))
                         }
                         Repr::Closure if lambda.is_lifted_from_closures() => {
-                            let instance = &self.spec.instances[walk.instance];
-                            let args: Vec<SetId> =
-                                lambda.params.iter().map(|p| instance.args[*p]).collect();
                             let c = self.repr.class_of(lam, &args);
                             self.ask_lift(c);
                             Some(self.closure_value(c, ty.clone()))
@@ -883,7 +890,17 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let sets = self.sets_of(walk.instance, ty);
         if let Some(lam) = self.body_lambda.get(name) {
             if let Repr::Single(c) = self.repr.of(sets[0]) {
-                assert_eq!(self.repr.classes[c as usize].lam, *lam);
+                let args: Vec<SetId> = self.analysis.lambdas[*lam as usize]
+                    .params
+                    .iter()
+                    .map(|p| self.spec.instances[target].args[*p])
+                    .collect();
+                assert_eq!(
+                    self.repr.class_of(*lam, &args),
+                    c,
+                    "a reference to `{}` builds a value of a class other than its set's",
+                    name.to_string()
+                );
                 assert_eq!(self.body_copy_of_class(c), copy);
                 return self.capture_struct_value(c);
             }

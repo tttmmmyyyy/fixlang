@@ -114,7 +114,7 @@ impl<'e> SlotLayout<'e> {
     }
 
     /// The number of arguments `tc` takes.
-    pub(super) fn arity(&self, tc: &TyCon) -> usize {
+    fn arity(&self, tc: &TyCon) -> usize {
         self.type_env.tycon_info(tc).tyvars.len()
     }
 
@@ -313,7 +313,7 @@ impl<'e> SlotLayout<'e> {
     }
 
     /// The number of own slots of the type constructor `tc` applied to all its arguments.
-    pub(super) fn own_slot_count(&self, tc: &TyCon) -> usize {
+    fn own_slot_count(&self, tc: &TyCon) -> usize {
         if tc.is_arrow() {
             return 1;
         }

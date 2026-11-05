@@ -7,8 +7,9 @@
 // generalized over the variables of its symbols' types, so that a function taking a function is
 // inferred once and copied for each lambda set it is given. Specialization then walks from the
 // program's entry, and gives each copy the concrete lambda sets of its parameters. The program is
-// then rewritten: each copy becomes copies of the symbols, and a value whose set holds one lambda
-// becomes that lambda's capture struct, called by calling the lambda directly.
+// then rewritten: each copy becomes copies of the symbols, and a value whose set's elements make
+// one class, elements naming one lambda that make the same code, becomes that class's capture
+// struct, called by calling the lambda directly.
 //
 // The design is laid out in `dev-docs/2026-10-24-lambda-set-specialization/design.md`.
 
@@ -22,6 +23,7 @@ mod rewrite;
 mod slots;
 mod solver;
 mod specialize;
+
 use crate::{
     ast::{program::Program, type_agreement::validate_types},
     constants::DOT_FIXLANG,
@@ -73,23 +75,13 @@ mod tests {
         specialize::{specialize, Specialization},
     };
     use crate::{
-        ast::program::Program,
-        configuration::{Configuration, FixOptimizationLevel, SubCommand},
-        elaboration::elaborate_via_config,
-        error::panic_if_err,
-        misc::save_temporary_source,
-        optimization::unwrap_newtype,
+        ast::program::Program, elaboration::elaborate_at_max, optimization::unwrap_newtype,
     };
 
     /// `source` elaborated into the form the inference reads: monomorphic, curried, and with its
     /// newtypes unwrapped.
     fn program_of(source: &str) -> Program {
-        let mut config = panic_if_err(Configuration::release_mode(SubCommand::Build));
-        config.set_fix_opt_level(FixOptimizationLevel::Max);
-        config.num_worker_thread = 0;
-        let saved = panic_if_err(save_temporary_source(source, "lambda_set"));
-        config.add_user_source_file(saved.file_path);
-        let mut prg = panic_if_err(elaborate_via_config(&config));
+        let (mut prg, _) = elaborate_at_max(source, "lambda_set", 0);
         unwrap_newtype::run(&mut prg, 0);
         prg
     }
@@ -271,15 +263,12 @@ main = (
             sorted(inf.writers(s)),
             vec![main_lam(), Some("rec".to_string())]
         );
-        let holds_itself = inf.spec.store.elems(s).iter().any(|e| match e {
-            Elem::Lam(lam, args) => {
-                inf.analysis.lambdas[*lam as usize]
-                    .symbol
-                    .name
-                    .starts_with("rec")
-                    && args.contains(&s)
-            }
-            Elem::Dynamic => false,
+        let holds_itself = inf.spec.store.lam_elems(s).any(|(lam, args)| {
+            inf.analysis.lambdas[lam as usize]
+                .symbol
+                .name
+                .starts_with("rec")
+                && args.contains(&s)
         });
         assert!(holds_itself);
     }
@@ -316,10 +305,11 @@ main = (
                 Some("compose_all".to_string())
             ]
         );
-        let holds_itself = inf.spec.store.elems(s).iter().any(|e| match e {
-            Elem::Lam(_, args) => args.contains(&s),
-            Elem::Dynamic => false,
-        });
+        let holds_itself = inf
+            .spec
+            .store
+            .lam_elems(s)
+            .any(|(_, args)| args.contains(&s));
         assert!(holds_itself);
     }
 

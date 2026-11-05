@@ -144,14 +144,14 @@ pub const CLOSURE_CALL_LAM_SUFFIX: &str = "#closure_call_lam";
 /// The prefix of the type constructor naming a capture list that closure specialization builds. A
 /// parameter of this type is a function whose identity the receiving body knows.
 pub const CAP_LIST_PREFIX: &str = "#CapList";
-/// The suffix, followed by a hash of the lambda sets it is made for, of a copy of a symbol or of a
-/// type constructor that lambda set specialization makes.
+/// The suffix, followed by a hash of how the lambda sets it is made for are represented, of a copy
+/// of a symbol or of a type constructor that lambda set specialization makes.
 pub const LS_COPY_SUFFIX: &str = "#ls";
 /// The suffix, followed by the lambda's position among the lambdas of its symbol, of the global
 /// function lambda set specialization lifts a lambda to.
 pub const LS_LAM_SUFFIX: &str = "#ls_lam";
 /// The prefix of the type constructor of the capture struct that lambda set specialization
-/// represents a value of a set of one lambda by.
+/// represents a value of a set by, where the set's elements make one class.
 pub const LS_CAP_PREFIX: &str = "#LsCap";
 /// The name of the parameter through which a lambda lifted by lambda set specialization receives
 /// its capture struct.
