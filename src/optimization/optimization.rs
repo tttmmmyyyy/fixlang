@@ -161,10 +161,10 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| closure_specialization::run(prg, config.verbose, config.num_worker_thread),
     );
 
-    // Move the capture list of the function given to a scope op such as
+    // Move the capture struct of the function given to a scope op such as
     // `Std::Array::borrow_elements` into the op's environment operand, so that the function captures
-    // nothing. It runs after closure specialization, which leaves every such function a global
-    // function applied to its capture list.
+    // nothing. It runs after the rewrite by the lambda sets, which leaves every such function a
+    // global function applied to its capture struct.
     run_pass(
         prg,
         config,

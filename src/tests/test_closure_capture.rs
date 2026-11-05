@@ -190,8 +190,9 @@ mod tests {
     /// A captured `IOState` is left out of the closure and made where it is read.
     ///
     /// The level is `none` because that is where a closure meets an `IOState` as a captured value of
-    /// its own: closure specialization, which runs from `-O max` up, gathers a lambda's captures into
-    /// one capture struct, and that struct occupies storage as soon as one of the values in it does.
+    /// its own: the rewrite by the lambda sets, which runs from `-O max` up, gathers a lambda's
+    /// captures into one capture struct, and that struct occupies storage as soon as one of the values
+    /// in it does.
     #[test]
     fn test_an_iostate_capture_is_left_out_of_the_closure() {
         let dump = build_run_and_read_rc_ir(
@@ -348,7 +349,7 @@ mod tests {
         // The standard library builds closures of this kind for what it prints, so the closure of
         // each built-in's lambda is picked out by its type after the capture struct: the rest of the
         // tuple the lambda is applied to, and what the lambda returns.
-        for (builtin, type_after_capture_list) in [
+        for (builtin, type_after_capture_struct) in [
             ("borrow_elements", "), Std::Ptr) -> Std::I64 "),
             (
                 "mutate_elements",
@@ -362,7 +363,7 @@ mod tests {
             assert!(
                 built
                     .iter()
-                    .any(|line| line.contains(type_after_capture_list)),
+                    .any(|line| line.contains(type_after_capture_struct)),
                 "the lambda given to `{}` should be built as a closure taking its capture struct \
                  through the environment:\n{}",
                 builtin,

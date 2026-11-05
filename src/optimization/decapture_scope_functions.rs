@@ -6,10 +6,11 @@ and the mutating ones behind `mutate_elements` and `mutate_boxed` — are builti
 `BuiltinOp::env_operand`. Such an op applies one of its operands, a function, to a tuple whose first
 field is another of its operands, the environment.
 
-`closure_specialization` lifts every lambda to a global function taking its capture list as the
-first argument, so the function such an op is given is that global function applied to a capture
-list: a closure holding the capture list, built on the heap on every call. This pass moves the
-capture list into the environment instead, so that the function the op is given captures nothing.
+The rewrite by the lambda sets lifts every lambda to a global function taking its capture struct as
+the first argument, so the function such an op is given is that global function applied to a
+capture struct: a closure holding the capture struct, built on the heap on every call. This pass
+moves the capture struct into the environment instead, so that the function the op is given
+captures nothing.
 
 ```
 let h = F(cap);
@@ -44,11 +45,11 @@ where it is built, and `collapse_constructions`, run after this pass, reads the 
 
 ## Relations to other optimizations
 
-* It runs after `closure_specialization`, which is what turns the function every such op is given
-  into a global function applied to its capture list. Running after it also leaves a lambda given to
-  such an op capturing what it captures while specialization reads it, so a function whose parameter
-  the lambda calls is specialized on the closure that parameter receives, as it would be for any
-  other lambda calling it.
+* It runs after the rewrite by the lambda sets, which is what turns the function every such op is
+  given into a global function applied to its capture struct. Running after it also leaves a lambda
+  given to such an op capturing what it captures while the lambda sets are inferred, so a function
+  whose parameter the lambda calls is specialized on the function that parameter receives, as it
+  would be for any other lambda calling it.
 * It runs above `collapse_constructions`, which reads the tuple built for `F` into the pattern that
   takes it apart in `F`'s body.
 */
@@ -77,10 +78,10 @@ use crate::{
 };
 use std::sync::Arc;
 
-/// Moves the capture list of every function given to an op declaring `BuiltinOp::env_operand` into the
-/// op's environment operand, where the function is a global function applied to its capture list,
-/// bound by `let` and used nowhere else. The bodies of the global functions those functions now
-/// call are then put in place of the calls, on up to `num_threads` threads.
+/// Moves the capture struct of every function given to an op declaring `BuiltinOp::env_operand`
+/// into the op's environment operand, where the function is a global function applied to its
+/// capture struct, bound by `let` and used nowhere else. The bodies of the global functions those
+/// functions now call are then put in place of the calls, on up to `num_threads` threads.
 pub fn run(prg: &mut Program, num_threads: usize) {
     // For each symbol, the global functions the functions it gives to ops now call.
     let mut callees_by_caller: Map<FullName, Vec<FullName>> = Map::default();
@@ -93,7 +94,7 @@ pub fn run(prg: &mut Program, num_threads: usize) {
         if collector.names.is_empty() {
             continue;
         }
-        let mut mover = CaptureListMover {
+        let mut mover = CaptureStructMover {
             env_functions: collector.names,
             type_env: &prg.type_env,
             counter: 0,
@@ -117,7 +118,7 @@ fn env_function_operand(builtin: &BuiltinOpExpr) -> Option<FullName> {
 
 /// Collects the names an expression passes as the function operand of an op declaring
 /// `BuiltinOp::env_operand`, wherever they are bound. Only a binding of one of these names can be
-/// rewritten, so `CaptureListMover` checks the uses of these names alone.
+/// rewritten, so `CaptureStructMover` checks the uses of these names alone.
 struct EnvFunctionCollector {
     /// The names collected so far.
     names: Set<FullName>,
@@ -138,7 +139,7 @@ impl ExprVisitor for EnvFunctionCollector {
 }
 
 /// Rewrites the bindings of one symbol, as the module comment describes.
-struct CaptureListMover<'a> {
+struct CaptureStructMover<'a> {
     /// The names the symbol passes as the function operand of an op declaring
     /// `BuiltinOp::env_operand`.
     env_functions: Set<FullName>,
@@ -150,7 +151,7 @@ struct CaptureListMover<'a> {
     callees: Vec<FullName>,
 }
 
-impl CaptureListMover<'_> {
+impl CaptureStructMover<'_> {
     /// `expr` rewritten as the module comment describes, where it is `let h = F(cap); body`, `F` is
     /// a global function, and `h` is used once in `body`, as the function operand of an op declaring
     /// `BuiltinOp::env_operand`.
@@ -246,7 +247,7 @@ impl CaptureListMover<'_> {
         );
         assert!(
             new_func.lambda_cap_names().is_empty(),
-            "the function bound to `{}` still captures {:?} once its capture list is moved into \
+            "the function bound to `{}` still captures {:?} once its capture struct is moved into \
              the environment",
             name.to_string(),
             new_func
@@ -276,7 +277,7 @@ fn var_expr(name: &FullName, ty: &Arc<TypeNode>) -> Arc<ExprNode> {
     expr_var(name.clone(), None).set_type(ty.clone())
 }
 
-impl ExprVisitor for CaptureListMover<'_> {
+impl ExprVisitor for CaptureStructMover<'_> {
     /// Rewrites a `let` binding a function given to ops, and visits what the rewrite left.
     fn start_visit_let(
         &mut self,
@@ -309,7 +310,7 @@ fn shadowed(name: &FullName, state: &VisitState) -> bool {
 struct OpRewriter<'a> {
     /// The name the function is bound to.
     function: &'a FullName,
-    /// The capture list of the function, read by name.
+    /// The capture struct of the function, read by name.
     cap: Arc<ExprNode>,
     /// The name the new environment is bound to ahead of an op.
     new_env: FullName,
