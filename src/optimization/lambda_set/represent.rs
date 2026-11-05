@@ -318,7 +318,8 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
             false => vec![],
         })
         .collect();
-    let (struct_block, struct_block_elems) = canonical_classes(vec![0; set_count], &capture_struct_elems);
+    let (struct_block, struct_block_elems) =
+        canonical_classes(vec![0; set_count], &capture_struct_elems);
     let mut class_of_block: Map<usize, u32> = Map::default();
     let mut first_set: Vec<usize> = vec![];
     let mut of_set: Vec<Repr> = vec![Repr::Closure; set_count];
@@ -349,15 +350,17 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
             .iter()
             .map(|s| of_set[*s as usize])
             .collect();
-        let class = *class_of_reprs.entry((lam, reprs.clone())).or_insert_with(|| {
-            classes.push(LamClass {
-                lam,
-                interface_reprs: reprs,
-                instance: builder.instance,
-                hash: String::new(),
+        let class = *class_of_reprs
+            .entry((lam, reprs.clone()))
+            .or_insert_with(|| {
+                classes.push(LamClass {
+                    lam,
+                    interface_reprs: reprs,
+                    instance: builder.instance,
+                    hash: String::new(),
+                });
+                (classes.len() - 1) as u32
             });
-            (classes.len() - 1) as u32
-        });
         class_of_elem.insert((lam, args.to_vec()), class);
         class
     };

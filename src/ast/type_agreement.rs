@@ -355,7 +355,8 @@ main = eval to_abs(-3_I32); pure();
         let body = lam.get_lam_body();
         let call = body.get_let_value();
         let read = call.get_ffi_call_args()[0].set_type(make_i64_ty());
-        symbol.expr = Some(lam.set_lam_body(body.set_let_value(call.set_ffi_call_args(vec![read]))));
+        symbol.expr =
+            Some(lam.set_lam_body(body.set_let_value(call.set_ffi_call_args(vec![read]))));
         validate_types(&prg);
     }
 }
