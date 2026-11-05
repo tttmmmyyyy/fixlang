@@ -305,6 +305,31 @@ fn test_a_cycle_of_three_wrapping_its_function_on_each_turn_computes_the_chain()
     test_source(source, Configuration::develop_mode());
 }
 
+/// A recursion handing the next round a lambda that captures, in an `Option`, the function it was
+/// given: the set of that function holds the one lambda, and its capture struct would hold in place
+/// a capture struct of the same set.
+#[test]
+fn test_a_lambda_capturing_an_optional_function_of_its_own_set_computes_the_chain() {
+    let source = r#"
+    module Main;
+
+    chain : I64 -> Option (I64 -> I64) -> I64 -> I64;
+    chain = |n, prev, x| (
+        let run = |y| if prev.is_some { (prev.as_some)(y) } else { y };
+        if n == 0 { run(x) };
+        chain(n - 1, some(|y| run(y) + n), x)
+    );
+
+    main : IO ();
+    main = (
+        let k = *get_args.map(|args| args.@size);
+        assert_eq(|_|"unexpected result", chain(3, none(), k), k + 6);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
 /// What the rewrite by the lambda sets makes of a program, read off the `--emit-rc-ir` dump: a
 /// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
 /// takes as an argument. The program cannot observe either one — the answer is the same with

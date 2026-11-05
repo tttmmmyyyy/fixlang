@@ -408,4 +408,22 @@ mod tests {
         assert_eq!(x, vec![y]);
         assert_eq!(store.len(), 1);
     }
+
+    /// A cycle of the system gets the sets the store holds for it whatever order the system lists
+    /// its equations in: `a = {lam1[b]}` with `b = {lam2[a]}`, interned again with `b` written
+    /// first, gets the two sets held already.
+    #[test]
+    fn test_a_cycle_written_in_another_order_gets_the_sets_held() {
+        let mut store = SetStore::new();
+        let ab = store.intern(vec![
+            vec![PendingElem::Lam(1, vec![Ref::Local(1)])],
+            vec![PendingElem::Lam(2, vec![Ref::Local(0)])],
+        ]);
+        let ba = store.intern(vec![
+            vec![PendingElem::Lam(2, vec![Ref::Local(1)])],
+            vec![PendingElem::Lam(1, vec![Ref::Local(0)])],
+        ]);
+        assert_eq!(ba, vec![ab[1], ab[0]]);
+        assert_eq!(store.len(), 2);
+    }
 }
