@@ -204,20 +204,22 @@ const NOT_A_MODULE_FILE: &str = "it is not a file of type-checked modules";
 /// file that does not exist answers `None`; one that cannot be read, or is not a file of
 /// type-checked modules, answers the reason.
 ///
-/// It reads only the footer and the record, so that a build reads only the bodies it asks for
-/// later.
+/// Only the pages of the footer and the record are read here, so that a build reads only the
+/// bodies it asks for later.
 fn map_record(path: &Path) -> Result<Option<(ModuleRecord, Mmap)>, String> {
-    let mut file = match File::open(path) {
-        Ok(file) => file,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => return Err(e.to_string()),
+    let Some(bytes) = map_file(path).map_err(|e| e.to_string())? else {
+        return Ok(None);
     };
-    match read_record_of(&mut file) {
-        Ok(Ok((record, _bodies_end))) => map(&file)
-            .map(|bytes| Some((record, bytes)))
-            .map_err(|e| e.to_string()),
-        Ok(Err(why)) => Err(why),
-        Err(e) => Err(e.to_string()),
+    let (record, _bodies_end) = decode_module_file(&bytes)?;
+    Ok(Some((record, bytes)))
+}
+
+/// The file at `path` mapped into memory, or `None` when there is no file there.
+fn map_file(path: &Path) -> io::Result<Option<Mmap>> {
+    match File::open(path) {
+        Ok(file) => map(&file).map(Some),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
     }
 }
 
@@ -225,36 +227,29 @@ fn map_record(path: &Path) -> Result<Option<(ModuleRecord, Mmap)>, String> {
 fn map(file: &File) -> io::Result<Mmap> {
     // SAFETY: the mapping is read for as long as the build runs, and a file of type-checked modules
     // is never written in place: a build writes a new version under another name and renames it
-    // over the file, or removes the file, and either leaves the mapped bytes as they were.
+    // over the file, or removes the file, and either leaves the mapped bytes as they were. A read
+    // of a page that cannot be loaded stops the process with SIGBUS: a file truncated in place by
+    // another program, an I/O error of the disk, or a file that a build on another host removed
+    // from a network file system.
     unsafe { Mmap::map(file) }
 }
 
-/// The record of the module file `file`, and the offset its bodies end at. The inner `Err` holds
-/// the reason a file is not one of type-checked modules, and the outer one the error of a file that
-/// cannot be read.
-fn read_record_of(file: &mut File) -> io::Result<Result<(ModuleRecord, u64), String>> {
-    let read = |file: &mut File| -> io::Result<Option<(Vec<u8>, u64)>> {
-        let len = file.metadata()?.len();
-        if len < FOOTER_LEN {
-            return Ok(None);
-        }
-        let mut footer = [0u8; FOOTER_LEN as usize];
-        file.seek(SeekFrom::Start(len - FOOTER_LEN))?;
-        file.read_exact(&mut footer)?;
-        let Some(range) = record_range(&footer, len) else {
-            return Ok(None);
-        };
-        let mut record_bytes = vec![0u8; (range.end - range.start) as usize];
-        file.seek(SeekFrom::Start(range.start))?;
-        file.read_exact(&mut record_bytes)?;
-        Ok(Some((record_bytes, range.start)))
+/// The record of the module file whose bytes are `bytes`, and the offset its bodies end at. Bytes
+/// that are not a file of type-checked modules answer the reason.
+fn decode_module_file(bytes: &[u8]) -> Result<(ModuleRecord, u64), String> {
+    let len = bytes.len() as u64;
+    if len < FOOTER_LEN {
+        return Err(NOT_A_MODULE_FILE.to_string());
+    }
+    let footer = bytes[(len - FOOTER_LEN) as usize..].try_into().unwrap();
+    let Some(range) = record_range(footer, len) else {
+        return Err(NOT_A_MODULE_FILE.to_string());
     };
-    Ok(match read(file)? {
-        Some((record_bytes, bodies_end)) => {
-            decode_record(&record_bytes, bodies_end).map(|record| (record, bodies_end))
-        }
-        None => Err(NOT_A_MODULE_FILE.to_string()),
-    })
+    let record = decode_record(
+        &bytes[range.start as usize..range.end as usize],
+        range.start,
+    )?;
+    Ok((record, range.start))
 }
 
 /// The typed expression of the body `identity` lying at `range` in `file`, the bytes of a module's
@@ -365,22 +360,13 @@ impl ModuleFileWriter {
             record: ModuleRecord::default(),
             bodies_end: 0,
         };
-        let mut held = match File::open(&path) {
-            Ok(held) => held,
-            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(writer),
-            Err(e) => return Err(e),
-        };
-        let Ok((record, bodies_end)) = read_record_of(&mut held)? else {
+        let Some(held) = map_file(&path)? else {
             return Ok(writer);
         };
-        held.seek(SeekFrom::Start(0))?;
-        let copied = io::copy(&mut held.take(bodies_end), writer.tmp_file())?;
-        if copied != bodies_end {
-            return Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                "the file ended before its bodies did",
-            ));
-        }
+        let Ok((record, bodies_end)) = decode_module_file(&held) else {
+            return Ok(writer);
+        };
+        writer.tmp_file().write_all(&held[..bodies_end as usize])?;
         writer.record = record;
         writer.bodies_end = bodies_end;
         Ok(writer)
@@ -767,27 +753,30 @@ impl Program {
                 SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
                     map_record(&path)
                 });
-            let (record, mapped) = match mapped {
-                Ok(Some((record, bytes))) => (
+            let mapped = match mapped {
+                Ok(Some((record, bytes))) => Some((
                     record,
-                    Some(Arc::new(MappedModuleFile {
+                    Arc::new(MappedModuleFile {
                         file: file.clone(),
                         bytes,
-                    })),
-                ),
-                Ok(None) => (ModuleRecord::default(), None),
+                    }),
+                )),
+                Ok(None) => None,
                 Err(why) => {
                     warn_unreadable_file(&path, &why);
-                    (ModuleRecord::default(), None)
+                    None
                 }
             };
             for loc in locs {
                 let identity = self.entity_identity_at(&loc);
-                match (record.get(&identity), &mapped) {
-                    (Some(entry), Some(mapped)) => {
-                        self.store_body(loc, mapped.clone(), identity, entry.clone())
-                    }
-                    _ => to_check.push((loc, file.clone(), identity)),
+                let recorded = mapped.as_ref().and_then(|(record, mapped)| {
+                    record
+                        .get(&identity)
+                        .map(|entry| (mapped.clone(), entry.clone()))
+                });
+                match recorded {
+                    Some((mapped, entry)) => self.store_body(loc, mapped, identity, entry),
+                    None => to_check.push((loc, file.clone(), identity)),
                 }
             }
         }
