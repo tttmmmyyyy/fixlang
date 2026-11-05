@@ -447,6 +447,41 @@ fn test_a_lambda_capturing_a_function_chosen_from_two_alike_sets_computes_both()
     test_source(source, Configuration::develop_mode());
 }
 
+/// A recursion carrying in an `Option` a function `mk` builds from one of two functions whose sets
+/// hold Dynamic: the set of the carried function holds `mk`'s lambda twice, two elements of one
+/// class, and each captures in place, through the `Option`, a function of that set again.
+#[test]
+fn test_two_elements_of_one_class_capturing_an_optional_function_of_their_own_set_compute_the_chain(
+) {
+    let source = r#"
+    module Main;
+
+    fixed : ((I64 -> I64) -> I64 -> I64) -> I64 -> I64;
+    fixed = |step| fix(step);
+
+    mk : I64 -> (I64 -> I64) -> Option (I64 -> I64) -> Option (I64 -> I64);
+    mk = |d, g, o| if d > 100 { mk(d - 1, g, o) } else {
+        some(|y| g(y) + match o { some(f) => f(y), none(_) => 0 })
+    };
+
+    rec : I64 -> (I64 -> I64) -> (I64 -> I64) -> Option (I64 -> I64) -> I64 -> I64;
+    rec = |n, g1, g2, o, x| if n == 0 { match o { some(f) => f(x), none(_) => x } } else {
+        let o2 = if n % 2 == 0 { mk(n, g1, o) } else { mk(n, g2, o) };
+        rec(n - 1, g1, g2, o2, x)
+    };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let g1 = if n > 0 { fixed(|loop, i| if i <= 0 { 0 } else { i + loop(i - 1) }) } else { |x| x + n };
+        let g2 = if n > 0 { fixed(|loop, i| if i <= 0 { 1 } else { i * loop(i - 1) }) } else { |x| x * n };
+        assert_eq(|_|"unexpected result", rec(4, g1, g2, none(), 3), 24);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
 /// What the rewrite by the lambda sets makes of a program, read off the `--emit-rc-ir` dump: a
 /// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
 /// takes as an argument. The program cannot observe either one — the answer is the same with
@@ -883,5 +918,58 @@ mod dump_tests {
             "no function the chain carries should stand as a function of its own, and these do:\n{}",
             standing.join("\n")
         );
+    }
+
+    /// `k` captures `g`, which `mk` builds from one of two functions whose sets hold Dynamic, so the
+    /// set of `g` holds `mk`'s lambda twice, two elements that differ only in sets of closures.
+    const TWO_ALIKE_ELEMENTS_SOURCE: &str = r#"
+    module Main;
+
+    fixed : ((I64 -> I64) -> I64 -> I64) -> I64 -> I64;
+    fixed = |step| fix(step);
+
+    mk : I64 -> (I64 -> I64) -> I64 -> I64;
+    mk = |d, f| if d > 100 { mk(d - 1, f) } else { |x| f(x) + 1 };
+
+    k : I64 -> (I64 -> I64) -> (I64 -> I64) -> I64 -> I64;
+    k = |d, f1, f2| if d > 100 { k(d - 1, f1, f2) } else {
+        let g = if d == 1 { mk(d, f1) } else { mk(d, f2) };
+        |y| g(y) + d
+    };
+
+    main : IO () = (
+        let n = *get_args.map(|args| args.@size);
+        let h1 = if n > 0 { fixed(|loop, i| if i <= 0 { 0 } else { i + loop(i - 1) }) } else { |x| x + n };
+        let h2 = if n > 0 { fixed(|loop, i| if i <= 0 { 1 } else { i * loop(i - 1) }) } else { |x| x * n };
+        println((k(n, h1, h2)(4) + k(n + 1, h1, h2)(4)).to_string)
+    );
+    "#;
+
+    /// What `TWO_ALIKE_ELEMENTS_SOURCE` prints: `k(1, ..)` adds 2 to the sum of `1..4`, and
+    /// `k(2, ..)` adds 3 to the factorial of 4.
+    const TWO_ALIKE_ELEMENTS_OUTPUT: &str = "39";
+
+    /// A set whose elements make one class is represented by that class's capture struct, however
+    /// many elements it holds: `mk` builds `g` as a capture struct, and no closure.
+    #[test]
+    fn test_a_set_of_two_elements_of_one_class_is_a_capture_struct() {
+        let dump = build_run_and_read_rc_ir(
+            TWO_ALIKE_ELEMENTS_SOURCE,
+            "max",
+            TWO_ALIKE_ELEMENTS_OUTPUT,
+            "a lambda capturing a function built from one of two alike functions",
+        );
+        let bodies = rc_ir_function_bodies(&dump, "Main::mk");
+        assert!(
+            !bodies.is_empty(),
+            "the dump should hold functions named with `Main::mk`, and it holds none"
+        );
+        for body in bodies {
+            assert!(
+                !body.contains("= closure "),
+                "`mk` should build `g` as a capture struct, and this function builds a closure:\n{}",
+                body
+            );
+        }
     }
 }

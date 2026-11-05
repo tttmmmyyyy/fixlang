@@ -301,3 +301,53 @@ impl<'p> Check<'p> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::validate_types;
+    use crate::{
+        configuration::{Configuration, FixOptimizationLevel, SubCommand},
+        elaboration::elaborate_via_config,
+        error::panic_if_err,
+        fixstd::builtin::make_i64_ty,
+        misc::save_temporary_source,
+    };
+
+    /// A read of a local typed otherwise than the `let` binding it is reported. The read is the
+    /// argument of a call of a C function, whose argument types are trusted as written, so no other
+    /// meeting place sees it.
+    #[test]
+    #[should_panic(expected = "a local's type and its reference's")]
+    fn test_a_local_read_at_a_type_other_than_its_binders_is_reported() {
+        let source = r#"
+module Main;
+
+to_abs : I32 -> I32;
+to_abs = |x| FFI_CALL[I32 abs(I32), x];
+
+main : IO ();
+main = eval to_abs(-3_I32); pure();
+"#;
+        let mut config = panic_if_err(Configuration::release_mode(SubCommand::Build));
+        config.set_fix_opt_level(FixOptimizationLevel::Max);
+        config.num_worker_thread = 0;
+        let saved = panic_if_err(save_temporary_source(source, "type_agreement"));
+        config.add_user_source_file(saved.file_path);
+        let mut prg = panic_if_err(elaborate_via_config(&config));
+        validate_types(&prg);
+
+        let name = prg
+            .symbols
+            .keys()
+            .find(|s| s.namespace.to_string() == "Main" && s.name.starts_with("to_abs"))
+            .unwrap()
+            .clone();
+        let symbol = prg.symbols.get_mut(&name).unwrap();
+        let lam = symbol.expr.clone().unwrap();
+        let body = lam.get_lam_body();
+        let call = body.get_let_value();
+        let read = call.get_ffi_call_args()[0].set_type(make_i64_ty());
+        symbol.expr = Some(lam.set_lam_body(body.set_let_value(call.set_ffi_call_args(vec![read]))));
+        validate_types(&prg);
+    }
+}
