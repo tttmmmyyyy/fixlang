@@ -15,7 +15,7 @@ use std::{
     mem,
     panic::resume_unwind,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{mpsc, Mutex},
     thread::{self, JoinHandle},
 };
 
@@ -133,37 +133,73 @@ where
     T: Send,
     R: Send,
 {
+    let mut results = (0..items.len()).map(|_| None).collect::<Vec<Option<R>>>();
+    consume_on_compiler_threads(
+        items.into_iter().enumerate().collect(),
+        num_threads,
+        |(idx, item)| (idx, f(item)),
+        |(idx, result)| results[idx] = Some(result),
+    );
+    results.into_iter().map(Option::unwrap).collect()
+}
+
+/// Runs `f` on each of `items` on up to `num_threads` compiler threads, or on the calling thread
+/// alone when `num_threads` is 1 or less, and hands each result to `consume` on the calling thread
+/// as soon as it is ready.
+///
+/// Each thread takes the next item left as soon as it finishes one, so an item that costs far more
+/// than the rest holds up one thread and leaves the others working.
+///
+/// The results reach `consume` in the order they become ready, and `consume` runs while the threads
+/// go on with the remaining items. A thread whose result would make more than `num_threads` results
+/// wait for `consume` waits until `consume` takes one. So what a result holds is freed as soon as
+/// `consume` is done with it, and at most twice `num_threads` results are held at once besides the
+/// one in `consume`.
+pub fn consume_on_compiler_threads<T, R>(
+    items: Vec<T>,
+    num_threads: usize,
+    f: impl Fn(T) -> R + Sync,
+    mut consume: impl FnMut(R),
+) where
+    T: Send,
+    R: Send,
+{
     if num_threads <= 1 || items.len() <= 1 {
-        return items.into_iter().map(f).collect();
+        for item in items {
+            consume(f(item));
+        }
+        return;
     }
-    let item_count = items.len();
-    let queue = Mutex::new(items.into_iter().enumerate());
+    let thread_count = num_threads.min(items.len());
+    let queue = Mutex::new(items.into_iter());
     let (queue, f) = (&queue, &f);
-    let indexed_results = thread::scope(|scope| {
-        let threads = (0..num_threads.min(item_count))
+    thread::scope(|scope| {
+        let (sender, receiver) = mpsc::sync_channel(thread_count);
+        let threads = (0..thread_count)
             .map(|_| {
+                let sender = sender.clone();
                 compiler_thread_builder()
-                    .spawn_scoped(scope, move || {
-                        let mut results = vec![];
-                        loop {
-                            let next = queue.lock().unwrap().next();
-                            let Some((idx, item)) = next else {
-                                break;
-                            };
-                            results.push((idx, f(item)));
+                    .spawn_scoped(scope, move || loop {
+                        let next = queue.lock().unwrap().next();
+                        let Some(item) = next else {
+                            break;
+                        };
+                        // The receiver is gone only when `consume` panicked, which the scope
+                        // carries on once every thread has stopped.
+                        if sender.send(f(item)).is_err() {
+                            break;
                         }
-                        results
                     })
                     .expect("failed to spawn a compiler thread")
             })
             .collect::<Vec<_>>();
-        values_or_first_panic(threads.into_iter().map(|thread| thread.join()))
+        // The loop ends once every thread has dropped its sender, the ones that panicked included.
+        drop(sender);
+        for result in receiver {
+            consume(result);
+        }
+        values_or_first_panic(threads.into_iter().map(|thread| thread.join()));
     });
-    let mut results = (0..item_count).map(|_| None).collect::<Vec<Option<R>>>();
-    for (idx, result) in indexed_results.into_iter().flatten() {
-        results[idx] = Some(result);
-    }
-    results.into_iter().map(Option::unwrap).collect()
 }
 
 /// The name a source is saved under in the temporary directory: `file_name` with `hash` — a digest
@@ -532,16 +568,17 @@ pub fn upper_camel_to_lower_snake(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        char_pos_to_utf16_pos, join_compiler_threads, map_on_compiler_threads,
-        spawn_compiler_thread, split_at_name_boundaries, split_string_by_unquoted_spaces,
-        upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos, Set,
+        char_pos_to_utf16_pos, consume_on_compiler_threads, join_compiler_threads,
+        map_on_compiler_threads, spawn_compiler_thread, split_at_name_boundaries,
+        split_string_by_unquoted_spaces, upper_camel_to_lower_snake, utf16_pos_to_utf8_byte_pos,
+        Set,
     };
     use crate::error::any_to_string;
     use std::panic::{catch_unwind, AssertUnwindSafe};
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::thread::{self, JoinHandle};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     /// Every thread has finished by the time a worker's panic is carried on, so unwinding never
     /// tears down state that a thread still running is working on.
@@ -611,6 +648,113 @@ mod tests {
                 }
                 i
             })
+        }))
+        .expect_err("the panic of f is carried on");
+        assert_eq!(any_to_string(&*payload), MESSAGE);
+    }
+
+    /// Every item's result reaches `consume` once, and `consume` runs on the calling thread.
+    #[test]
+    fn test_consume_on_compiler_threads_consumes_each_result_once_on_the_calling_thread() {
+        let caller = thread::current().id();
+        let mut consumed = vec![];
+        consume_on_compiler_threads(
+            (0..16u64).collect(),
+            4,
+            |i| i * 10,
+            |result| {
+                assert_eq!(thread::current().id(), caller);
+                consumed.push(result);
+            },
+        );
+        consumed.sort();
+        assert_eq!(consumed, (0..16u64).map(|i| i * 10).collect::<Vec<_>>());
+    }
+
+    /// While `consume` takes its time over a result, the threads stop once twice `num_threads`
+    /// results wait for it besides the one in `consume`.
+    #[test]
+    fn test_consume_on_compiler_threads_holds_at_most_twice_num_threads_results() {
+        const NUM_THREADS: usize = 2;
+        let produced = AtomicUsize::new(0);
+        let mut consumed = 0;
+        let mut most_waiting = 0;
+        consume_on_compiler_threads(
+            (0..64).collect(),
+            NUM_THREADS,
+            |i: usize| {
+                produced.fetch_add(1, Ordering::SeqCst);
+                i
+            },
+            |_| {
+                consumed += 1;
+                if consumed == 1 {
+                    // Long enough for threads that are not held back to finish every item.
+                    thread::sleep(Duration::from_millis(200));
+                }
+                most_waiting = most_waiting.max(produced.load(Ordering::SeqCst) - consumed);
+            },
+        );
+        assert_eq!(consumed, 64);
+        assert!(
+            most_waiting <= 2 * NUM_THREADS,
+            "{} results waited for consume at once",
+            most_waiting
+        );
+    }
+
+    /// A result reaches `consume` while the threads still work on other items, so a caller that
+    /// writes the results out holds only those not yet written.
+    #[test]
+    fn test_consume_on_compiler_threads_consumes_a_result_before_every_item_is_done() {
+        let consumed_any = AtomicBool::new(false);
+        let mut consumed = vec![];
+        consume_on_compiler_threads(
+            vec![0, 1],
+            2,
+            |i| {
+                if i == 0 {
+                    return (i, true);
+                }
+                // Item 1 waits for a result to have been consumed, giving up after a while so that
+                // an implementation consuming nothing before every item is done fails instead of
+                // hanging.
+                let deadline = Instant::now() + Duration::from_secs(10);
+                while !consumed_any.load(Ordering::SeqCst) && Instant::now() < deadline {
+                    thread::sleep(Duration::from_millis(1));
+                }
+                (i, consumed_any.load(Ordering::SeqCst))
+            },
+            |(i, saw)| {
+                consumed_any.store(true, Ordering::SeqCst);
+                consumed.push((i, saw));
+            },
+        );
+        consumed.sort();
+        assert_eq!(
+            consumed,
+            vec![(0, true), (1, true)],
+            "item 1 finished before any result was consumed"
+        );
+    }
+
+    /// A panic of `f` on one item is carried on with its own payload, so the renderer the compiler
+    /// reports through still finds the message in it.
+    #[test]
+    fn test_consume_on_compiler_threads_carries_the_panic_of_f_with_its_payload() {
+        const MESSAGE: &str = "f panics on purpose";
+        let payload = catch_unwind(AssertUnwindSafe(|| {
+            consume_on_compiler_threads(
+                (0..8).collect(),
+                4,
+                |i| {
+                    if i == 5 {
+                        panic!("{}", MESSAGE);
+                    }
+                    i
+                },
+                |_| {},
+            )
         }))
         .expect_err("the panic of f is carried on");
         assert_eq!(any_to_string(&*payload), MESSAGE);

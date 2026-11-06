@@ -5,9 +5,11 @@
 use crate::{constants::DOT_FIXLANG, error::Errors};
 use rand::random;
 use std::{
-    env, fs,
+    env,
+    fs::{self, File},
     io::{self, ErrorKind},
     path::{Component, Path, PathBuf},
+    time::Duration,
 };
 
 /// The error reporting that an operation, named by `verb`, failed on `path` with `e`.
@@ -93,6 +95,74 @@ pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
     .map_err(failed)
 }
 
+/// The name of a new temporary file. It begins with a dot and carries a random number drawn by this
+/// call, so that it names no file a project or another call has, and is no longer than the names
+/// the file system allows.
+///
+/// # Examples
+///
+/// `.3f2a9c0d81b4e675.tmp`
+fn temporary_file_name() -> String {
+    format!(".{:016x}.tmp", random::<u64>())
+}
+
+/// Whether `name` is one `temporary_file_name` gives.
+fn is_temporary_file_name(name: &str) -> bool {
+    name.strip_prefix('.')
+        .and_then(|name| name.strip_suffix(".tmp"))
+        .is_some_and(|digits| digits.len() == 16 && digits.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+/// How long a temporary file (`create_temporary_file_in`) goes unmodified before it is taken for
+/// one a build left when it was killed. A build puts each temporary file it writes in place, or
+/// removes it, before it ends, so a file this old belongs to no build still running.
+const ABANDONED_TEMPORARY_FILE_AGE: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// A temporary file `create_temporary_file_in` created.
+pub struct TemporaryFile {
+    /// The file, open for reading and writing.
+    pub file: File,
+    /// Where the file lies.
+    pub path: PathBuf,
+}
+
+/// Creates a temporary file in `dir`, named by `temporary_file_name`.
+pub fn create_temporary_file_in(dir: &Path) -> io::Result<TemporaryFile> {
+    let path = dir.join(temporary_file_name());
+    let file = File::options()
+        .read(true)
+        .write(true)
+        .create_new(true)
+        .open(&path)?;
+    Ok(TemporaryFile { file, path })
+}
+
+/// Removes the temporary files in `dir` (`create_temporary_file_in`) that have gone unmodified for
+/// `ABANDONED_TEMPORARY_FILE_AGE`.
+pub fn remove_abandoned_temporary_files(dir: &Path) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if !is_temporary_file_name(&entry.file_name().to_string_lossy()) {
+            continue;
+        }
+        // A modification time later than now, which the clock of another host can give on a
+        // network file system, counts as recent.
+        let abandoned = entry
+            .metadata()
+            .and_then(|metadata| metadata.modified())
+            .is_ok_and(|modified| {
+                modified
+                    .elapsed()
+                    .is_ok_and(|age| age >= ABANDONED_TEMPORARY_FILE_AGE)
+            });
+        if abandoned {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
 /// Writes the file at `path` by having `write` write a new file beside it, at the path it is handed,
 /// and renaming that onto `path`, so that `path` holds either what it held before or the whole of
 /// what `write` wrote. A symbolic link at `path` is replaced by the new file, and what it pointed to
@@ -101,7 +171,7 @@ pub fn remove_inside_dot_fixlang(path: &Path) -> Result<(), Errors> {
 /// The new file is named apart from `path`, so that a name of `path` as long as the file system
 /// allows still leaves room for it.
 pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) -> io::Result<()> {
-    let tmp_path = path.with_file_name(format!(".{:016x}.tmp", random::<u64>()));
+    let tmp_path = path.with_file_name(temporary_file_name());
     write(&tmp_path)
         .and_then(|()| fs::rename(&tmp_path, path))
         .inspect_err(|_| {
