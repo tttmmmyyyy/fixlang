@@ -1076,8 +1076,8 @@ main = println $ (double(21), 3).to_string;
         dir.join(PARSED_MODULES_PATH).join(name)
     }
 
-    /// A body that fails to read back from its file of parsed bodies is taken from a parse of its
-    /// source file made again. The file is reported once, and written anew from that parse, so the
+    /// A body that fails to read back from its file of parsed bodies is taken from a new parse of
+    /// its source file. The file is reported once, and written anew from that parse, so the
     /// file is again what the first build wrote, and the build after it reads every body back and
     /// reports nothing.
     #[test]
@@ -1089,7 +1089,7 @@ main = println $ (double(21), 3).to_string;
         build(dir, "main.fix", &lib);
         let main_file = parsed_file_of(dir, "main.fix");
         let written = fs::read(&main_file).expect("Failed to read the file of parsed bodies");
-        // The first body lies at the beginning of the file, and bytes all set do not decode.
+        // The first body lies at the beginning of the file, and bytes set to 0xff do not decode.
         let mut damaged = written.clone();
         damaged[..8].fill(0xff);
         fs::write(&main_file, &damaged).expect("Failed to damage the file of parsed bodies");
@@ -1291,7 +1291,7 @@ main = println $ (double(21), 3).to_string;
 
     /// A body whose place in its file of parsed bodies holds the expression of another body of the
     /// same source file is read as one that fails to read back: the build reports the file once,
-    /// and takes the bodies from a parse of the source file made again, so each value keeps the
+    /// and takes the bodies from a new parse of the source file, so each value keeps the
     /// body its source writes, and the file is again what the first build wrote.
     #[test]
     fn a_build_parses_a_source_again_when_its_file_of_parsed_bodies_holds_another_body_at_a_place()

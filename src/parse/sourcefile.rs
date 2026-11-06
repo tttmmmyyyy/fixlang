@@ -154,8 +154,7 @@ impl SourceFile {
     /// alone, and every type node with the span it was written at.
     ///
     /// This is the form a syntax tree parsed from this file is written in: the file is named once
-    /// for the whole tree rather than once for each span, and the type annotations keep the
-    /// positions their diagnostics point at.
+    /// for the whole tree, and the type annotations keep the positions their diagnostics point at.
     ///
     /// Panics when it runs inside another `with_spans_within` on the same thread, and when a span of
     /// another file is serialized.
@@ -179,8 +178,8 @@ impl SourceFile {
         work()
     }
 
-    /// What `read` answers of the file `with_spans_within` runs for on this thread, or of `None`
-    /// outside it.
+    /// Calls `read` with the file `with_spans_within` runs for on this thread, or with `None`
+    /// outside it, and returns what `read` returns.
     pub fn with_enclosing<R>(read: impl FnOnce(Option<&SourceFile>) -> R) -> R {
         ENCLOSING_SOURCE_FILE.with(|cell| read(cell.borrow().as_ref()))
     }

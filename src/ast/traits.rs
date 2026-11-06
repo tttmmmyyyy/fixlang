@@ -489,13 +489,14 @@ impl TraitDefn {
 }
 
 /// What an implementation of a trait writes for one member: the expression it defines the member
-/// as, and what `TraitEnv::validate_trait_impl` reads from that expression.
+/// as, and the type variables of its type annotations, which validating the implementation reads
+/// without reading the expression back.
 #[derive(Clone)]
 pub struct ImplMember {
     /// The expression the member is defined as.
     pub body: ParsedBody,
     /// The type variables the type annotations in the expression write, each with where it is
-    /// written, as `collect_annotation_tyvars` finds them.
+    /// written.
     pub annotation_tyvars: Vec<(Arc<TyVar>, Option<Span>)>,
 }
 

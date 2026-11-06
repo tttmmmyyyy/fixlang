@@ -488,13 +488,14 @@ pub struct TypeNode {
     pub ty: Type,
     /// Where the type was written, for a type read from a source file.
     ///
-    /// Left out of the serialized form outside `SourceFile::with_spans_within`, so that a node
-    /// serializes to its type expression — the same thing `PartialEq` compares and `Hash` hashes. A
-    /// reader that must not follow an edit shifting a position would otherwise have to take the type
-    /// out of whatever holds it, and a builtin op holds its types behind a trait object no reader
-    /// can reach into (`divide_program::generated_code_hash` reads one). A syntax tree written
-    /// inside `SourceFile::with_spans_within` keeps the positions, which the diagnostics of a type
-    /// annotation point at.
+    /// Serialized only inside `SourceFile::with_spans_within`, where a syntax tree keeps the
+    /// positions the diagnostics of a type annotation point at.
+    ///
+    /// Elsewhere a node serializes to its type expression alone — the same thing `PartialEq`
+    /// compares and `Hash` hashes. A reader that must not follow an edit shifting a position would
+    /// otherwise have to take the type out of whatever holds it, and a builtin op holds its types
+    /// behind a trait object no reader can reach into (`divide_program::generated_code_hash` reads
+    /// one).
     pub info: TypeInfo,
     /// The hash of `ty`, kept once computed.
     ///

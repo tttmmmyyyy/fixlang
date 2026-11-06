@@ -29,15 +29,15 @@ pub type FileMagic = [u8; 8];
 /// The length of the footer: the offset of the index, its length, and the magic.
 const FOOTER_LEN: u64 = 8 + 8 + size_of::<FileMagic>() as u64;
 
-/// How many characters of the name a file is named after its file name carries. With the two
-/// digests the file name stays well within the 255 bytes file systems allow.
+/// How many characters of a name the names of the files named after it keep. With the two digests
+/// the file name stays well within the 255 bytes file systems allow.
 const READABLE_NAME_LEN: usize = 100;
 
 /// The part every file named after `name` begins its name with, whatever the digest after it.
 ///
 /// The digest of `name` is what tells the files of two names apart. The part in front of it shows
 /// the name to someone reading the directory, and is filename-safe because it keeps only ASCII
-/// alphanumeric characters; several names can wear the same one.
+/// alphanumeric characters; several names can share it.
 ///
 /// # Examples
 ///
@@ -203,8 +203,8 @@ fn remove_stale_files(dir: &Path, prefix: &str, file_name: &str) {
 pub struct CacheDirs(Arc<Mutex<Map<&'static str, Option<PathBuf>>>>);
 
 impl CacheDirs {
-    /// The directory `path` under `CACHE_PATH`, created when it is missing, when files can be
-    /// created in it; `None` otherwise, which is reported as a warning the first time.
+    /// The directory `path` under `CACHE_PATH`, created when it is missing. When files cannot be
+    /// created in it, answers `None`, and reports that as a warning the first time.
     ///
     /// `CACHE_PATH` itself is made ready first, so that a `CACHE_PATH` the build may not write
     /// through is reported once for all the directories under it.

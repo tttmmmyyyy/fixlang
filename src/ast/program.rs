@@ -246,7 +246,7 @@ pub enum ParsedBody {
 }
 
 impl ParsedBody {
-    /// The expression.
+    /// The expression, read back from its file when it is stored there.
     pub fn expr(&self) -> Arc<ExprNode> {
         match self {
             ParsedBody::InMemory(expr) => expr.clone(),
@@ -331,8 +331,9 @@ impl Body {
         })
     }
 
-    /// Has the expression wrapped in `wrapping` when it is type-checked. The body is one not yet
-    /// type-checked, and not wrapped before.
+    /// Has the expression wrapped in `wrapping` when it is type-checked.
+    ///
+    /// Panics on a body already type-checked or already wrapped.
     pub fn wrap_for_opaque_types(&mut self, wrapping: OpaqueWrapping) {
         let Body::Unchecked(body) = self else {
             panic!("a body wrapped for its opaque types after it was type-checked")
@@ -346,9 +347,9 @@ impl Body {
 
     /// The expression held in memory: the typed one, or the one parsed or built.
     ///
-    /// Panics on a body that holds its expression in a file, as the bodies of a build that
-    /// type-checks through the files of type-checked modules do; no walk over the bodies of a
-    /// program reads one of those.
+    /// Panics on a body whose expression lies in a file. A build that type-checks through the files
+    /// of type-checked modules holds its bodies that way, and no walk over the bodies of a program
+    /// reaches such a body.
     pub fn expr(&self) -> &Arc<ExprNode> {
         match self {
             Body::Checked(te) => &te.expr,
@@ -689,8 +690,8 @@ pub struct Program {
     /// The errors the compiler carries on past, to report as diagnostics once the work that can
     /// still be done is done.
     pub deferred_errors: Errors,
-    /// What the bodies held as `Body::Recorded` are read back from the files of
-    /// `TYPED_MODULES_PATH` with.
+    /// Reads the typed expressions of the bodies held as `Body::Recorded` back from the files of
+    /// `TYPED_MODULES_PATH`.
     pub typed_modules: TypedModules,
     /// The names each module refers to and therefore has to import, keyed by that module.
     pub import_required: Map<Name, Set<FullName>>,

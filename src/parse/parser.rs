@@ -510,7 +510,7 @@ pub fn parse_source_file(
 }
 
 /// Parses `source` as `parse_source_file` does. `source_name` names the source whatever its
-/// content: the path of a source file, and the name of a source the compiler writes.
+/// content: the path of a source file, or the name of a source the compiler writes.
 ///
 /// A build that type-checks through the files of type-checked modules writes the bodies of the
 /// program to the file of parsed bodies of `source`, and holds them as ones read back from it
@@ -533,14 +533,14 @@ fn parse_source_named(
     Ok(program)
 }
 
-/// What one parse of a source file is made from: a source file parsed from one `ParseOrigin` gives
-/// one program.
+/// Everything a parse of a source file depends on: two parses from equal `ParseOrigin`s give the
+/// same program.
 #[derive(Clone)]
 pub struct ParseOrigin {
     /// The source file.
     pub source: SourceFile,
-    /// The name the module of the source is compiled under, when that is another than the one it
-    /// writes.
+    /// The name the module of the source is compiled under, when it differs from the name the
+    /// source writes.
     pub renaming: Option<ModuleRenaming>,
     /// The C numeric types of the target, which the C types an `FFI_CALL` writes stand for.
     pub c_numeric_types: CNumericTypes,

@@ -1317,8 +1317,8 @@ impl Configuration {
 
     /// Whether the bodies a parse produces are written to the files of parsed bodies under
     /// `PARSED_MODULES_PATH` and read back when they are type-checked
-    /// (`elaboration::parsed_modules`), which a build that type-checks through the files of
-    /// type-checked modules does.
+    /// (`elaboration::parsed_modules`). A build that type-checks through the files of type-checked
+    /// modules does this.
     pub fn stores_parsed_bodies(&self) -> bool {
         self.subcommand.typecheck() && matches!(self.type_check_store, TypeCheckStore::TypedModules)
     }

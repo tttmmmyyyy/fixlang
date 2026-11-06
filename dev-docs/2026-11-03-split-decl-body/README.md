@@ -105,7 +105,7 @@ flowchart LR
 - **ソースから構文解析した本体**: 利用者と std と依存ライブラリの値、およびタプルのトレイトの実装（生成したソースを構文解析したもの）。parsed-modules に書いてメモリから捨て、型検査するときに読み戻す（`ParsedBody::Stored`）。
 - **コンパイラが宣言から生成した本体**: アクセサ、`Std::Boxed` の実装、Rust で組み立てる std の実装。メモリに持ち続ける。量が宣言の量に比例する（アクセサは構造体のフィールドの数、実装は型の数で決まる）ので、目的の上限を外れない。依存 26 個で、シリアライズした大きさは本体全体の約 1 割である。
 
-大域値の本体（`Body`）は、型検査の前の `Unchecked`、型検査を通って型付きの式が typed-modules のファイルにある `Recorded`、型付きの式をメモリに持つ `Checked`（`TypedExpr`）のどれかである。`Unchecked` の本体（`UncheckedBody`）は、式（`ParsedBody`）と、不透明型のために包む `#wrap_opaque`（`OpaqueWrapping`）を持つ。式は、メモリに持つ（`InMemory`）か、parsed-modules のファイルにある（`Stored`）かのどちらかである。
+大域値の本体（`Body`）には 3 つの状態がある。型検査の前の `Unchecked`、型検査を通って型付きの式が typed-modules のファイルにある `Recorded`、型付きの式をメモリに持つ `Checked`（`TypedExpr`）である。`Unchecked` の本体（`UncheckedBody`）は、式（`ParsedBody`）と、不透明型のために包む `#wrap_opaque`（`OpaqueWrapping`）を持つ。式は、メモリにある（`InMemory`）か、parsed-modules のファイルにある（`Stored`）。
 
 不透明型で本体を包む処理は、本体 1 つを型検査する関数（`check_body`）の入口にある。`desugar_opaque_types` は宣言の側の処理をする。不透明型の型構築子と制約の登録、型スキームの書き換え、`#wrap_opaque` の生成に加えて、値と実装ごとに、包むのに使う `#wrap_opaque` の名前と、右辺が空の `OpaqueTyConResolution` の列を `OpaqueWrapping` として本体に持たせる。型検査の入口（`UncheckedBody::expr_to_check`）は、式をこの名前で包み、この列を型付きの式に写してから型検査する。どの出どころの本体も、型検査の直前にこの入口を通るので、包む処理がかかる場所は一か所になる。parsed-modules に書く式は包む前のものなので、その中身はソースファイルと構文解析の設定だけで決まる。
 

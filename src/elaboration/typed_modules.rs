@@ -531,8 +531,8 @@ pub struct StoredTypedBody {
     warning_facts: Vec<WarningFact>,
 }
 
-/// What a program reads the typed expressions of its bodies back from the files of their modules
-/// with (`Body::Recorded`).
+/// Reads the typed expressions of the bodies a program holds as `Body::Recorded` back from the
+/// files of their modules.
 #[derive(Default)]
 pub struct TypedModules {
     /// The typed expressions read back so far, so that a value instantiated at several types is

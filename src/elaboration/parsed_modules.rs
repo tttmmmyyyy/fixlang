@@ -13,11 +13,12 @@
 // `SourceFile::with_spans_within`, so a span is written as a range of the source file alone, and a
 // type annotation keeps the position its diagnostics point at.
 //
-// A file is named after its source, by the path of a source file or the name of a source the
-// compiler writes, and after the digest of what the parse is made from (`ParseOrigin`), so a file
-// answers for exactly one parse, and replaces the files of the other contents of its source. A build that finds the file of a source
-// file it parses reads only the index, and leaves the file as it is. When a body fails to read back
-// from the file, the source file is parsed again, and the bodies are taken from that parse.
+// A file is named after its source (the path of a source file, or the name of a source the compiler
+// writes) and after the digest of what the parse is made from (`ParseOrigin`). So a file belongs to
+// exactly one parse, and writing it removes the files of the other contents of its source. A build
+// that finds the file of a source file it parses reads only the index, and leaves the file as it
+// is. When a body fails to read back from the file, the source file is parsed again, and the bodies
+// are taken from that parse.
 
 use crate::ast::expr::ExprNode;
 use crate::ast::program::{Body, ParsedBody, Program, SymbolExpr};
@@ -40,8 +41,8 @@ use std::sync::{Arc, OnceLock};
 /// The last bytes of a file of parsed bodies: they mark the file as one.
 const FILE_MAGIC: &FileMagic = b"FIXPAMOD";
 
-/// Where an expression is written in its source file, by which a file of parsed bodies lists the
-/// expression.
+/// Where an expression is written in its source file, as the byte offsets it starts and ends at. A
+/// file of parsed bodies lists each expression by it.
 type ExprKey = (usize, usize);
 
 /// The key of the expression written at `span`.
@@ -70,9 +71,9 @@ impl StoredParsedBody {
         &self.source
     }
 
-    /// The expression, read back from the file. An expression the file fails to hold is taken from
-    /// a parse of the source file made again, which then replaces the file, so that the next build
-    /// reads every body back.
+    /// The expression, read back from the file. When it fails to read back, it is taken from a new
+    /// parse of the source file, which then replaces the file, so that the next build reads every
+    /// body back.
     pub fn expr(&self) -> Arc<ExprNode> {
         let bytes = &self.file.bytes[self.range.start as usize..self.range.end as usize];
         let read = self
@@ -88,7 +89,7 @@ impl StoredParsedBody {
         let reparsed = self.file.reparsed.get_or_init(|| {
             warn_unreadable_file(&parsed_file_path(&self.file.file_name), &why);
             let origin = &self.file.origin;
-            // The source parsed into the program this build holds, from the content it keeps.
+            // `origin.source` keeps the content this build parsed, so the new parse reads it again.
             let Ok(mut program) = parse_origin(origin) else {
                 panic!(
                     "a source parsed once fails to parse again: \"{}\"",
@@ -125,14 +126,14 @@ struct MappedParsedFile {
     origin: ParseOrigin,
     /// The name of the file, without its directory.
     file_name: String,
-    /// The part the file of every content of its source begins its name with.
+    /// The part that begins the names of the files of every content of its source.
     prefix: String,
     /// The bytes of the file.
     bytes: Mmap,
     /// The cache directories of the build, which a file written anew is written in.
     cache_dirs: CacheDirs,
-    /// The bodies of a parse of the source file made again, by the keys of their expressions, once
-    /// a body has failed to read back from the file.
+    /// The bodies of a new parse of the source file, by the keys of their expressions, made once a
+    /// body has failed to read back from the file.
     reparsed: OnceLock<Map<ExprKey, Arc<ExprNode>>>,
 }
 
@@ -142,7 +143,7 @@ fn parsed_file_path(file_name: &str) -> PathBuf {
 }
 
 /// The name of the file of parsed bodies of `origin`, a content of the source named `source_name`,
-/// and the part the file of every content of that source begins its name with.
+/// and the part that begins the names of the files of every content of that source.
 ///
 /// `origin.source` holds its content, as it does once it has been parsed.
 fn parsed_file_name(origin: &ParseOrigin, source_name: &str) -> (String, String) {
@@ -181,8 +182,9 @@ fn decode_parsed_file(bytes: &[u8]) -> Option<ParsedIndex> {
 }
 
 /// Writes the bodies of `program`, parsed from `origin`, to the file of parsed bodies of `origin`
-/// in the directory `cache_dirs` gives, or finds them in the file an earlier build wrote, and holds
-/// each of them as one read back from the file (see `bodies_to_store` for which bodies). The bodies
+/// in the directory `cache_dirs` gives, or finds them in the file an earlier build wrote, and
+/// replaces each of them in `program` with one read back from the file (see `bodies_to_store` for
+/// which bodies). The bodies
 /// stay in memory when the file can be neither found nor written.
 ///
 /// A file found that cannot be read, or lacks a body, is reported as a warning, and written anew.
@@ -225,7 +227,7 @@ pub fn store_parsed_bodies(
 
 /// The file of parsed bodies named `file_name` an earlier build wrote, mapped into memory, with its
 /// index, when it holds every one of `bodies`. A file that cannot be read, or lacks one of
-/// `bodies`, is reported as a warning, and answers `None`, as no file does.
+/// `bodies`, is reported as a warning, and answers `None`, as a missing file does.
 fn find_parsed_file(
     file_name: &str,
     bodies: &[(ExprKey, &mut ParsedBody)],
