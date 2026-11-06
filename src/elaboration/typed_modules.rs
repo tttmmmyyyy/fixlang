@@ -34,16 +34,15 @@ use crate::constants::TYPED_MODULES_PATH;
 use crate::elaboration::typecheck::TypeCheckContext;
 use crate::elaboration::typecheckcache::EntityIdentity;
 use crate::error::Errors;
-use crate::misc::{consume_on_compiler_threads, map_on_compiler_threads, warn_msg, Map};
-use crate::parse::sourcefile::{SourceFile, Span};
-use crate::project_fs::{
-    create_dir_guarding_project_links, create_temporary_file_in, remove_abandoned_temporary_files,
-    TemporaryFile, DOT_FIXLANG_LINK_HINT,
+use crate::elaboration::cache_files::{
+    create_cache_dir, find_index, map_file, probe_file_creation, readable_file_prefix,
+    warn_unreadable_file, warn_unwritable_file, CacheFileWriter, FileMagic,
 };
+use crate::misc::{consume_on_compiler_threads, map_on_compiler_threads, Map};
+use crate::parse::sourcefile::{SourceFile, Span};
 use memmap2::Mmap;
 use serde::{Deserialize, Serialize};
-use std::fs::{self, File};
-use std::io::{self, Seek, SeekFrom, Write};
+use std::io;
 use std::mem::take;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
@@ -112,61 +111,16 @@ struct EntityEntry {
 type ModuleRecord = Map<EntityIdentity, EntityEntry>;
 
 /// The last bytes of a module's file: they mark the file as a file of type-checked modules.
-const FILE_MAGIC: &[u8; 8] = b"FIXTYMOD";
-
-/// The length of the footer: the offset of the record, its length, and `FILE_MAGIC`.
-const FOOTER_LEN: u64 = 8 + 8 + FILE_MAGIC.len() as u64;
-
-/// How many characters of a module's name the name of its file carries. With the two digests the
-/// file name stays well within the 255 bytes file systems allow.
-const READABLE_NAME_LENGTH: usize = 100;
-
-/// The part every file of `module` begins its name with, whatever its hash.
-///
-/// The digest of the module's name is what tells the files of two modules apart. The part in front
-/// of it names the module for someone reading the directory, and is filename-safe because it keeps
-/// only ASCII alphanumeric characters; several modules can wear the same one.
-///
-/// # Examples
-///
-/// The files of `Main.Sub` are named `Main_Sub_<digest of the name>_<digest of the hash>`.
-fn module_file_prefix(module: &Name) -> String {
-    let readable: String = module
-        .chars()
-        .take(READABLE_NAME_LENGTH)
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-        .collect();
-    format!("{}_{:x}_", readable, md5::compute(module))
-}
+const FILE_MAGIC: &FileMagic = b"FIXTYMOD";
 
 /// The name of the file holding the bodies of `module` checked under `module_hash`, its
 /// `module_dependency_hash`.
 fn module_file_name(module: &Name, module_hash: &str) -> String {
     format!(
         "{}{:x}",
-        module_file_prefix(module),
+        readable_file_prefix(module),
         md5::compute(format!("{}\n{}", module, module_hash))
     )
-}
-
-/// Where the record lies in a file of `len` bytes that ends in `footer`, or `None` when the footer
-/// is not one a file of type-checked modules ends in.
-fn record_range(footer: &[u8; FOOTER_LEN as usize], len: u64) -> Option<Range<u64>> {
-    assert!(
-        len >= FOOTER_LEN,
-        "a footer of {} bytes in a file of {} bytes",
-        FOOTER_LEN,
-        len
-    );
-    if &footer[16..] != FILE_MAGIC {
-        return None;
-    }
-    let offset = u64::from_le_bytes(footer[0..8].try_into().unwrap());
-    let record_len = u64::from_le_bytes(footer[8..16].try_into().unwrap());
-    if offset.checked_add(record_len) != Some(len - FOOTER_LEN) {
-        return None;
-    }
-    Some(offset..offset + record_len)
 }
 
 /// The record serialized as `bytes`. A record that points past `bodies_end`, where the bodies of
@@ -220,36 +174,10 @@ fn map_module_file(
     Ok(Some((record, mapped)))
 }
 
-/// The file at `path` mapped into memory, or `None` when there is no file there.
-fn map_file(path: &Path) -> io::Result<Option<Mmap>> {
-    match File::open(path) {
-        Ok(file) => map_into_memory(&file).map(Some),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e),
-    }
-}
-
-/// `file` mapped into memory. `file` must be a file of type-checked modules, or a temporary file
-/// that becomes one, since the mapping stays sound only while nothing writes the file in place.
-fn map_into_memory(file: &File) -> io::Result<Mmap> {
-    // SAFETY: the mapping is read for as long as the build runs, and a file of type-checked modules
-    // is never written in place: a build writes a new version under another name and renames it
-    // over the file, or removes the file, and either leaves the mapped bytes as they were. A read
-    // of a page that cannot be loaded stops the process with SIGBUS: a file truncated in place by
-    // another program, an I/O error of the disk, or a file that a build on another host removed
-    // from a network file system.
-    unsafe { Mmap::map(file) }
-}
-
 /// The record of the module file whose bytes are `bytes`, and the offset its bodies end at. Bytes
 /// that are not a file of type-checked modules answer the reason.
 fn decode_module_file(bytes: &[u8]) -> Result<(ModuleRecord, u64), String> {
-    let len = bytes.len() as u64;
-    if len < FOOTER_LEN {
-        return Err(NOT_A_MODULE_FILE.to_string());
-    }
-    let footer = bytes[(len - FOOTER_LEN) as usize..].try_into().unwrap();
-    let Some(range) = record_range(footer, len) else {
+    let Some(range) = find_index(bytes, FILE_MAGIC) else {
         return Err(NOT_A_MODULE_FILE.to_string());
     };
     let record = decode_record(
@@ -341,12 +269,10 @@ struct MappedModuleFile {
 /// dropped from memory as soon as it is written. A writer dropped before `finish` removes the
 /// temporary file, and the module's file stays as it was.
 struct ModuleFileWriter {
-    /// The directory the files of type-checked modules are written in.
-    dir: PathBuf,
     /// The module file the new version replaces.
     file: Arc<ModuleFile>,
-    /// The temporary file the new version is written to, until `finish` renames it.
-    tmp: Option<TemporaryFile>,
+    /// The new version.
+    writer: CacheFileWriter,
     /// The file the new version replaces, mapped into memory, when it held bodies; the bodies
     /// `record` begins with lie in it as in the new version.
     held: Option<Mmap>,
@@ -365,11 +291,9 @@ impl ModuleFileWriter {
     /// `finish` replaces it either way.
     fn create(dir: &Path, file: Arc<ModuleFile>) -> io::Result<Self> {
         let path = file.path_in(dir);
-        let tmp = create_temporary_file_in(dir)?;
         let mut writer = ModuleFileWriter {
-            dir: dir.to_path_buf(),
             file,
-            tmp: Some(tmp),
+            writer: CacheFileWriter::create(dir)?,
             held: None,
             held_end: 0,
             record: ModuleRecord::default(),
@@ -381,21 +305,12 @@ impl ModuleFileWriter {
         let Ok((record, bodies_end)) = decode_module_file(&held) else {
             return Ok(writer);
         };
-        writer.tmp_file().write_all(&held[..bodies_end as usize])?;
+        writer.writer.write_at(0, &held[..bodies_end as usize])?;
         writer.held = Some(held);
         writer.held_end = bodies_end;
         writer.record = record;
         writer.bodies_end = bodies_end;
         Ok(writer)
-    }
-
-    /// The temporary file the new version is written to.
-    fn tmp_file(&mut self) -> &mut File {
-        &mut self
-            .tmp
-            .as_mut()
-            .expect("a module file written after it was finished")
-            .file
     }
 
     /// Adds `entry` after the bodies written so far. A body the file held is kept as it is when its
@@ -428,9 +343,7 @@ impl ModuleFileWriter {
             }
         }
         let start = self.bodies_end;
-        let tmp = self.tmp_file();
-        tmp.seek(SeekFrom::Start(start))?;
-        tmp.write_all(&entry.bytes)?;
+        self.writer.write_at(start, &entry.bytes)?;
         self.bodies_end = start + entry.bytes.len() as u64;
         self.record.insert(
             entry.identity,
@@ -450,113 +363,19 @@ impl ModuleFileWriter {
         let mut entries: Vec<(EntityIdentity, EntityEntry)> =
             take(&mut self.record).into_iter().collect();
         entries.sort_by(|(lhs, _), (rhs, _)| lhs.cmp(rhs));
-        let mut tail = postcard::to_allocvec(&entries).unwrap();
-        let record_len = tail.len() as u64;
-        tail.extend_from_slice(&self.bodies_end.to_le_bytes());
-        tail.extend_from_slice(&record_len.to_le_bytes());
-        tail.extend_from_slice(FILE_MAGIC);
-        let bodies_end = self.bodies_end;
-        let tmp = self.tmp_file();
-        tmp.seek(SeekFrom::Start(bodies_end))?;
-        tmp.write_all(&tail)?;
-        let bytes = map_into_memory(tmp)?;
-
-        let tmp = self.tmp.take().unwrap();
-        let file_name = self.file.name();
-        // The name holds no path separator, and a rename replaces a symbolic link at the path
-        // instead of writing through it, so the file is written in `dir`.
-        if let Err(e) = fs::rename(&tmp.path, self.dir.join(&file_name)) {
-            let _ = fs::remove_file(&tmp.path);
-            return Err(e);
-        }
-
-        self.remove_stale_files(&file_name);
+        let bytes = self.writer.finish(
+            self.bodies_end,
+            &postcard::to_allocvec(&entries).unwrap(),
+            FILE_MAGIC,
+            &self.file.name(),
+            &readable_file_prefix(&self.file.module),
+        )?;
         let mapped = MappedModuleFile {
             file: self.file.clone(),
             bytes,
         };
         Ok((entries.into_iter().collect(), mapped))
     }
-
-    /// Removes the files of the module checked under any other hash than the file named
-    /// `file_name`, and the temporary files left in the directory by builds that were killed. The
-    /// file named `file_name` is in place already, so a file this fails to remove costs only disk
-    /// space, and the next write tries again.
-    fn remove_stale_files(&self, file_name: &str) {
-        remove_abandoned_temporary_files(&self.dir);
-        let Ok(dir_entries) = fs::read_dir(&self.dir) else {
-            return;
-        };
-        // The temporary files begin with a dot, which no prefix does.
-        let prefix = module_file_prefix(&self.file.module);
-        for dir_entry in dir_entries.flatten() {
-            let entry_name = dir_entry.file_name();
-            let entry_name = entry_name.to_string_lossy();
-            if entry_name.starts_with(&prefix) && entry_name != file_name {
-                let _ = fs::remove_file(self.dir.join(entry_name.as_ref()));
-            }
-        }
-    }
-}
-
-impl Drop for ModuleFileWriter {
-    /// Removes the temporary file of a new version that was not finished.
-    fn drop(&mut self) {
-        if let Some(tmp) = self.tmp.take() {
-            let _ = fs::remove_file(&tmp.path);
-        }
-    }
-}
-
-/// The directory the files of type-checked modules are written in, `TYPED_MODULES_PATH`, created
-/// when it is missing. A directory that cannot be created is reported as a warning, and answers
-/// `None`.
-fn create_typed_modules_dir() -> Option<PathBuf> {
-    match create_dir_guarding_project_links(Path::new(TYPED_MODULES_PATH), DOT_FIXLANG_LINK_HINT) {
-        Ok(dir) => Some(dir),
-        Err(errs) => {
-            for err in errs.errors() {
-                warn_msg(&err.msg);
-            }
-            None
-        }
-    }
-}
-
-/// Whether a file can be created in `dir`. When it cannot, that is reported as a warning.
-fn probe_file_creation(dir: &Path) -> bool {
-    match create_temporary_file_in(dir) {
-        Ok(probe) => {
-            let _ = fs::remove_file(&probe.path);
-            true
-        }
-        Err(e) => {
-            warn_msg(&format!(
-                "Failed to write cache files in \"{}\": {}.",
-                dir.to_string_lossy(),
-                e
-            ));
-            false
-        }
-    }
-}
-
-/// Reports, as a warning, that the file of `file` in `dir` could not be written for `e`.
-fn warn_unwritable_file(dir: &Path, file: &ModuleFile, e: &io::Error) {
-    warn_msg(&format!(
-        "Failed to write cache file \"{}\": {}.",
-        file.path_in(dir).to_string_lossy(),
-        e
-    ));
-}
-
-/// Reports, as a warning, that the file at `path` could not be read for `why`.
-fn warn_unreadable_file(path: &Path, why: &str) {
-    warn_msg(&format!(
-        "Failed to read cache file \"{}\": {}.",
-        path.to_string_lossy(),
-        why
-    ));
 }
 
 /// The writing of one module's file while the bodies of the module are checked.
@@ -842,7 +661,7 @@ impl Program {
         let dir = if to_check.is_empty() {
             None
         } else {
-            create_typed_modules_dir().filter(|dir| probe_file_creation(dir))
+            create_cache_dir(TYPED_MODULES_PATH).filter(|dir| probe_file_creation(dir))
         };
         let mut outcomes: Vec<Option<CheckOutcome>> = to_check.iter().map(|_| None).collect();
         let mut unchecked_of_module: Map<Name, usize> = Map::default();
@@ -908,7 +727,7 @@ impl Program {
             let dir = dir
                 .as_deref()
                 .expect("a module file failed to be written with no directory to write in");
-            warn_unwritable_file(dir, file, e);
+            warn_unwritable_file(&file.path_in(dir), e);
         }
 
         let checked_again =
@@ -983,7 +802,7 @@ impl Program {
                     return Err(checked.diagnostics);
                 }
                 if checked.passed() {
-                    if let Some(dir) = create_typed_modules_dir() {
+                    if let Some(dir) = create_cache_dir(TYPED_MODULES_PATH) {
                         let stored = &self.typed_modules.stored[loc];
                         let entry = NewEntry::of(stored.identity.clone(), &checked);
                         let source_files = &mut self.typed_modules.source_files;
@@ -994,7 +813,7 @@ impl Program {
                                 writer.finish()
                             });
                         if let Err(e) = written {
-                            warn_unwritable_file(&dir, file, &e);
+                            warn_unwritable_file(&file.path_in(&dir), &e);
                         }
                     }
                 }

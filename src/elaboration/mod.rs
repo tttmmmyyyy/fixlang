@@ -1,3 +1,4 @@
+pub mod cache_files;
 pub mod check_holes;
 pub mod desugar_opaque;
 pub mod name_resolution;
