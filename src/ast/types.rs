@@ -29,7 +29,7 @@ use crate::parse::sourcefile::{SourceFile, SourcePos, Span};
 use crate::rc_ir::ast::RcState;
 use core::panic;
 use inkwell::types::{BasicTypeEnum, StructType};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::hash_map::DefaultHasher;
 use std::fmt::{self, Debug, Formatter};
 use std::hash::{Hash, Hasher};
@@ -2222,7 +2222,7 @@ pub struct TypeInfo {
 }
 
 impl Serialize for TypeInfo {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         if SourceFile::with_enclosing(|enclosing| enclosing.is_some()) {
             self.source.serialize(serializer)
         } else {
@@ -2232,7 +2232,7 @@ impl Serialize for TypeInfo {
 }
 
 impl<'de> Deserialize<'de> for TypeInfo {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         if SourceFile::with_enclosing(|enclosing| enclosing.is_some()) {
             Ok(TypeInfo {
                 source: Option::<Span>::deserialize(deserializer)?,

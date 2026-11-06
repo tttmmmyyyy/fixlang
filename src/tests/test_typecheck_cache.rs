@@ -74,6 +74,7 @@ mod integration_tests {
     use crate::constants::{DOT_FIXLANG, PARSED_MODULES_PATH, TYPED_MODULES_PATH};
     use crate::tests::test_util::{fix_command, run_fix};
     use std::fs::{self, File, Permissions};
+    use std::ops::Range;
     use std::os::unix::fs::PermissionsExt;
     use std::path::{Path, PathBuf};
     use std::process::{Command, Stdio};
@@ -1318,7 +1319,7 @@ main = println $ (double(21), 3).to_string;
         // place holding a whole expression, of the other body.
         let footer_start = written.len() - 24;
         let index_start = u64::from_le_bytes(written[footer_start..footer_start + 8].try_into().unwrap());
-        let index: Vec<((usize, usize), std::ops::Range<u64>)> =
+        let index: Vec<((usize, usize), Range<u64>)> =
             postcard::from_bytes(&written[index_start as usize..footer_start])
                 .expect("Failed to read the index of the file of parsed bodies");
         let [(_, first), (_, second)] = &index[..] else {
