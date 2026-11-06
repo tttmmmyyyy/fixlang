@@ -2,6 +2,7 @@ pub mod cache_files;
 pub mod check_holes;
 pub mod desugar_opaque;
 pub mod name_resolution;
+pub mod parsed_modules;
 pub mod typecheck;
 pub mod typecheckcache;
 pub mod typed_modules;

@@ -28,6 +28,7 @@ use crate::elaboration::desugar_opaque::{
     wrap_with_opaque,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
+use crate::elaboration::parsed_modules::StoredParsedBody;
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use crate::elaboration::typecheckcache::{entity_identity, EntityIdentity, SharedTypeCheckCache};
 use crate::elaboration::typed_modules::{warning_facts, TypedModules, WarningFact};
@@ -239,13 +240,17 @@ impl GlobalValue {
 pub enum ParsedBody {
     /// The expression, held in memory.
     InMemory(Arc<ExprNode>),
+    /// The expression, written to the file of parsed bodies of the source file it was parsed from,
+    /// and read back from there.
+    Stored(StoredParsedBody),
 }
 
 impl ParsedBody {
     /// The expression.
-    pub fn expr(&self) -> Result<Arc<ExprNode>, Errors> {
+    pub fn expr(&self) -> Arc<ExprNode> {
         match self {
-            ParsedBody::InMemory(expr) => Ok(expr.clone()),
+            ParsedBody::InMemory(expr) => expr.clone(),
+            ParsedBody::Stored(stored) => stored.expr(),
         }
     }
 
@@ -253,6 +258,7 @@ impl ParsedBody {
     pub fn source(&self) -> Option<Span> {
         match self {
             ParsedBody::InMemory(expr) => expr.source.clone(),
+            ParsedBody::Stored(stored) => Some(stored.source().clone()),
         }
     }
 }
@@ -280,16 +286,16 @@ pub struct UncheckedBody {
 impl UncheckedBody {
     /// The expression as the type check takes it: wrapped in the `#wrap_opaque` of its value when
     /// the value has opaque types, with the concrete types of those left for the check to fill in.
-    pub fn to_check(&self) -> Result<TypedExpr, Errors> {
-        let expr = self.expr.expr()?;
-        Ok(match &self.opaque_wrapping {
+    pub fn to_check(&self) -> TypedExpr {
+        let expr = self.expr.expr();
+        match &self.opaque_wrapping {
             Some(wrapping) => TypedExpr {
                 expr: wrap_with_opaque(&wrapping.wrapper, expr),
                 equalities: vec![],
                 opaque_types: wrapping.opaque_types.clone(),
             },
             None => TypedExpr::from_expr(expr),
-        })
+        }
     }
 }
 
@@ -325,6 +331,10 @@ impl Body {
     }
 
     /// The expression held in memory: the typed one, or the one parsed or built.
+    ///
+    /// Panics on a body written to its file of parsed bodies, which only a build that type-checks
+    /// through the files of type-checked modules writes, and which no walk over the bodies of a
+    /// program reads.
     pub fn expr(&self) -> &Arc<ExprNode> {
         match self {
             Body::Checked(te) => &te.expr,
@@ -332,6 +342,15 @@ impl Body {
                 expr: ParsedBody::InMemory(expr),
                 ..
             }) => expr,
+            Body::Unchecked(UncheckedBody {
+                expr: ParsedBody::Stored(stored),
+                ..
+            }) => panic!(
+                "the body written at {}..{} of \"{}\" walked in its file of parsed bodies",
+                stored.source().start,
+                stored.source().end,
+                stored.source().input.file_path.to_string_lossy()
+            ),
         }
     }
 
@@ -1422,7 +1441,7 @@ impl Program {
 
         let def_mod = self.find_mod(&def_mod).unwrap();
         let mut nrctx = NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
-        let mut te = body.to_check()?;
+        let mut te = body.to_check();
 
         // Perform namespace inference.
         te.expr = te.expr.resolve_namespace(&mut nrctx)?;

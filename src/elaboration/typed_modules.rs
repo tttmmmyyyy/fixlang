@@ -35,7 +35,7 @@ use crate::elaboration::typecheck::TypeCheckContext;
 use crate::elaboration::typecheckcache::EntityIdentity;
 use crate::error::Errors;
 use crate::elaboration::cache_files::{
-    create_cache_dir, find_index, map_file, probe_file_creation, readable_file_prefix,
+    find_index, map_file, readable_file_prefix, CacheDirs,
     warn_unreadable_file, warn_unwritable_file, CacheFileWriter, FileMagic,
 };
 use crate::misc::{consume_on_compiler_threads, map_on_compiler_threads, Map};
@@ -540,6 +540,8 @@ pub struct TypedModules {
     read_back: Map<BodyLocation, TypedExpr>,
     /// The source files the spans read back point into, by path.
     source_files: Map<PathBuf, SourceFile>,
+    /// The cache directories of the build, which the files are written in.
+    cache_dirs: CacheDirs,
 }
 
 impl TypedModules {
@@ -566,6 +568,7 @@ impl Program {
         config: &Configuration,
     ) -> Result<(), Errors> {
         let mut errors = Errors::empty();
+        self.typed_modules.cache_dirs = config.cache_dirs.clone();
 
         // The spans read back share the source files the parser made.
         for module in &self.modules {
@@ -661,7 +664,7 @@ impl Program {
         let dir = if to_check.is_empty() {
             None
         } else {
-            create_cache_dir(TYPED_MODULES_PATH).filter(|dir| probe_file_creation(dir))
+            self.typed_modules.cache_dirs.writable(TYPED_MODULES_PATH)
         };
         let mut outcomes: Vec<Option<CheckOutcome>> = to_check.iter().map(|_| None).collect();
         let mut unchecked_of_module: Map<Name, usize> = Map::default();
@@ -802,7 +805,7 @@ impl Program {
                     return Err(checked.diagnostics);
                 }
                 if checked.passed() {
-                    if let Some(dir) = create_cache_dir(TYPED_MODULES_PATH) {
+                    if let Some(dir) = self.typed_modules.cache_dirs.writable(TYPED_MODULES_PATH) {
                         let stored = &self.typed_modules.stored[loc];
                         let entry = NewEntry::of(stored.identity.clone(), &checked);
                         let source_files = &mut self.typed_modules.source_files;

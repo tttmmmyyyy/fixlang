@@ -30,14 +30,16 @@ use crate::ast::{
         type_tyapp, type_tycon, type_tyvar_star, AssocType, Kind, Scheme, TyCon, TyVar, TypeNode,
     },
 };
-use crate::configuration::{Configuration, DiagnosticsConfig, SubCommand};
+use crate::configuration::{Configuration, SubCommand};
 use crate::constants::{
     COMPOSE_FUNCTION_NAME, F64_NAME, I64_NAME, INDEXABLE_TRAIT_ACT_NAME, INDEXABLE_TRAIT_NAME,
     IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME,
     PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX,
 };
 use crate::error::Errors;
-use crate::ffi::unsupported_128_bit_integer_msg;
+use crate::elaboration::parsed_modules::store_parsed_bodies;
+use crate::ffi::{unsupported_128_bit_integer_msg, CNumericTypes};
+use crate::target_triple::build_target_triple;
 use crate::fixstd::builtin::{
     expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, floating_literal_value,
     integral_literal_value, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty,
@@ -73,8 +75,8 @@ struct ParseContext {
     module_name: Name,
     // Curent namespace.
     namespace: NameSpace,
-    // Configuration.
-    config: Configuration,
+    /// The C numeric types of the target, which the C types an `FFI_CALL` writes stand for.
+    c_numeric_types: CNumericTypes,
     /// Every absolute-path `FullName` (value or type position) parsed
     /// from this source, paired with a `Vec<Span>` covering each token
     /// of the path in order: `[module_span, ns1_span, ..., leaf_span]`.
@@ -126,7 +128,7 @@ impl ParseContext {
     /// name.
     fn from_source(
         source: SourceFile,
-        config: &Configuration,
+        c_numeric_types: CNumericTypes,
         renaming: Option<ModuleRenaming>,
     ) -> Self {
         Self {
@@ -135,7 +137,7 @@ impl ParseContext {
             source,
             module_name: "".to_string(),
             namespace: NameSpace::local(),
-            config: config.clone(),
+            c_numeric_types,
             abs_path_uses: vec![],
             pattern_wildcard_counter: 0,
             type_wildcard_counter: 0,
@@ -505,21 +507,53 @@ pub fn parse_source_file(source: SourceFile, config: &Configuration) -> Result<P
 
 /// Parses `source` as `parse_source_file` does, compiling the module `renaming` names under the name
 /// it gives.
+///
+/// A build that type-checks through the files of type-checked modules writes the bodies of the
+/// program to the file of parsed bodies of `source`, and holds them as ones read back from it
+/// (`store_parsed_bodies`).
 pub fn parse_renamed_source_file(
     source: SourceFile,
     renaming: Option<ModuleRenaming>,
     config: &Configuration,
 ) -> Result<Program, Errors> {
-    let source_cloned = source.clone();
+    let origin = ParseOrigin {
+        source,
+        renaming,
+        c_numeric_types: config.c_numeric_types.clone(),
+    };
+    let mut program = parse_origin(&origin)?;
+    if config.stores_parsed_bodies() {
+        store_parsed_bodies(&mut program, origin, &config.cache_dirs);
+    }
+    Ok(program)
+}
+
+/// What one parse of a source file is made from: a source file parsed from one `ParseOrigin` gives
+/// one program.
+#[derive(Clone)]
+pub struct ParseOrigin {
+    /// The source file.
+    pub source: SourceFile,
+    /// The name the module of the source is compiled under, when that is another than the one it
+    /// writes.
+    pub renaming: Option<ModuleRenaming>,
+    /// The C numeric types of the target, which the C types an `FFI_CALL` writes stand for.
+    pub c_numeric_types: CNumericTypes,
+}
+
+/// Parses `origin.source` into the program of the one module it declares, with every span pointing
+/// into the source.
+pub fn parse_origin(origin: &ParseOrigin) -> Result<Program, Errors> {
+    let source = &origin.source;
     let source_code = source.string()?;
     let file = match FixParser::parse(Rule::file, &source_code) {
         Ok(res) => res,
         Err(e) => {
-            return Err(message_parse_error(e, &source));
+            return Err(message_parse_error(e, source));
         }
     };
-    reject_underscore_capital_value_names(file.clone(), &source)?;
-    parse_file(file, source_cloned, renaming, config)
+    reject_underscore_capital_value_names(file.clone(), source)?;
+    parse_file(file, origin)
 }
 
 /// Reports every value, field and variant of the parsed `file` named with `_` followed by a capital
@@ -547,17 +581,12 @@ fn reject_underscore_capital_value_names(
     errors.to_result()
 }
 
-/// The program the parsed file `file` declares, which is the one module it is made of. `src` is the
-/// source it was parsed from, which its spans point into, and `renaming` renames its module.
-fn parse_file(
-    mut file: Pairs<Rule>,
-    src: SourceFile,
-    renaming: Option<ModuleRenaming>,
-    config: &Configuration,
-) -> Result<Program, Errors> {
+/// The program the parsed file `file` declares, which is the one module it is made of. `origin` is
+/// what it was parsed from; its spans point into `origin.source`.
+fn parse_file(mut file: Pairs<Rule>, origin: &ParseOrigin) -> Result<Program, Errors> {
     let pair = file.next().unwrap();
     match pair.as_rule() {
-        Rule::module => return parse_module(pair, src, renaming, config),
+        Rule::module => return parse_module(pair, origin),
         _ => unreachable!(),
     }
 }
@@ -659,24 +688,26 @@ fn parse_source_as_rule<T>(
             )));
         }
     };
-    let config = Configuration::diagnostics_mode(DiagnosticsConfig::default())?; // Use any Configuration
-    let mut ctx = ParseContext::from_source(source, &config, None);
+    // The rules parsed here write no `FFI_CALL`, so any target's C numeric types serve.
+    let c_numeric_types =
+        CNumericTypes::of_target(&build_target_triple().as_str().to_string_lossy());
+    let mut ctx = ParseContext::from_source(source, c_numeric_types, None);
     parser(file.next().unwrap(), &mut ctx)
 }
 
 /// The program of the one module `pair` declares: its declaration, its import statements, and
-/// everything defined in it. `src` is the source it was parsed from, which its spans point into,
-/// and `renaming` renames the module.
-fn parse_module(
-    pair: Pair<Rule>,
-    src: SourceFile,
-    renaming: Option<ModuleRenaming>,
-    config: &Configuration,
-) -> Result<Program, Errors> {
+/// everything defined in it. `origin` is what it was parsed from; its spans point into
+/// `origin.source`.
+fn parse_module(pair: Pair<Rule>, origin: &ParseOrigin) -> Result<Program, Errors> {
     assert_eq!(pair.as_rule(), Rule::module);
     let mut errors = Errors::empty();
 
-    let mut ctx = ParseContext::from_source(src.clone(), config, renaming);
+    let src = origin.source.clone();
+    let mut ctx = ParseContext::from_source(
+        src.clone(),
+        origin.c_numeric_types.clone(),
+        origin.renaming.clone(),
+    );
 
     let mut pairs = pair.into_inner();
     let mod_info = parse_module_defn(pairs.next().unwrap(), &mut ctx);
@@ -2823,7 +2854,7 @@ fn parse_ffi_c_fun_ty(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Ty
         make_tuple_name_abs(0)
     } else {
         let mut name = pair.as_str().to_string();
-        for (c_type_name, sign, size) in ctx.config.c_numeric_types.get_c_types() {
+        for (c_type_name, sign, size) in ctx.c_numeric_types.get_c_types() {
             if c_type_name == pair.as_str() {
                 name = format!("{}{}", sign, size);
             }

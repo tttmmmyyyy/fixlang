@@ -25,7 +25,7 @@ use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::program::{EndNode, Program};
 use crate::ast::types::TypeNode;
 use crate::configuration::{
-    BuildConfigType, Configuration, DiagnosticsConfig, SubCommand, TypeCheckStore,
+    BuildConfigType, Configuration, DiagnosticsConfig, TypeCheckStore,
 };
 use crate::constants::chars_allowed_in_identifiers;
 use crate::dependency::lockfile::LockFileType;
@@ -35,8 +35,10 @@ use crate::elaboration::typecheckcache::SharedTypeCheckCache;
 use crate::error::Errors;
 use crate::metafiles::project_file::ProjectFile;
 use crate::misc::{map_on_compiler_threads, to_absolute_path, Map, Set};
-use crate::parse::parser::parse_source_file;
+use crate::ffi::CNumericTypes;
+use crate::parse::parser::{parse_origin, ParseOrigin};
 use crate::parse::sourcefile::{SourceFile, Span};
+use crate::target_triple::build_target_triple;
 use crate::write_log;
 use lsp_types::{
     CompletionItem, CompletionParams, Documentation, InsertTextFormat, TextDocumentPositionParams,
@@ -437,14 +439,16 @@ fn run_completion_elaborate(
 /// walks the parsed `global_values`, returning the `FullName` of the
 /// first definition whose body span covers `cursor_byte`.
 fn find_enclosing_gv(abs_path: &PathBuf, content: &str, cursor_byte: usize) -> Option<FullName> {
-    // `parse_source_file` requires a `Configuration` so that
-    // `parse_module` can inject the FFI type aliases that
-    // `c_numeric_types` decides. That injection does not affect the discovered
-    // global-value names or source spans, so any successfully-built
-    // configuration is fine here.
-    let config = Configuration::release_mode(SubCommand::Build).ok()?;
-    let source_file = SourceFile::from_file_path_and_content(abs_path.clone(), content.to_string());
-    let program = parse_source_file(source_file, &config).ok()?;
+    // The C numeric types decide what the C types of an `FFI_CALL` stand for, which affects neither
+    // the names of the global values nor where they are written, so any target's serve.
+    let origin = ParseOrigin {
+        source: SourceFile::from_file_path_and_content(abs_path.clone(), content.to_string()),
+        renaming: None,
+        c_numeric_types: CNumericTypes::of_target(
+            &build_target_triple().as_str().to_string_lossy(),
+        ),
+    };
+    let program = parse_origin(&origin).ok()?;
     let covers = |span: Option<&Span>| span.map(|s| s.includes_byte(cursor_byte)).unwrap_or(false);
     for (name, gv) in program.global_values.iter() {
         if gv.expr.exprs().iter().any(|e| covers(e.source.as_ref())) {

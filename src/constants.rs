@@ -309,7 +309,9 @@ pub const UNIT_MODULE_NAME_PREFIX: &str = "Module-";
 // Paths
 pub const DOT_FIXLANG: &str = ".fixlang";
 pub const RUN_PATH: &str = ".fixlang/run";
+pub const CACHE_PATH: &str = ".fixlang/cache";
 pub const TYPED_MODULES_PATH: &str = ".fixlang/cache/typed-modules";
+pub const PARSED_MODULES_PATH: &str = ".fixlang/cache/parsed-modules";
 pub const UNITS_CACHE_PATH: &str = ".fixlang/cache/units";
 pub const INTERMEDIATE_PATH: &str = ".fixlang/intermediate";
 pub const COMPILATION_UNITS_PATH: &str = ".fixlang/intermediate/units";

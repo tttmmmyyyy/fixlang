@@ -6,6 +6,7 @@ use crate::constants::{
     OPTIMIZATION_LEVEL_NONE, TEST_FUNCTION_NAME, TEST_MODULE_NAME,
 };
 use crate::doc_test::ExampleBuild;
+use crate::elaboration::cache_files::CacheDirs;
 use crate::elaboration::typecheckcache::SharedTypeCheckCache;
 use crate::env_vars;
 use crate::error::{panic_if_err, panic_with_msg, Errors};
@@ -579,6 +580,8 @@ pub struct Configuration {
     /// Where the results of type-checking the global values are kept, so that a value whose sources
     /// are unchanged is served rather than checked again.
     pub type_check_store: TypeCheckStore,
+    /// The cache directories the build writes in, each made ready once.
+    pub cache_dirs: CacheDirs,
     /// How many threads the compiler itself runs its work over.
     pub num_worker_thread: usize,
     /// The arguments the built program is given in `run` mode.
@@ -708,6 +711,7 @@ impl Configuration {
             llvm_args: vec![],
             preliminary_commands: vec![],
             type_check_store: TypeCheckStore::TypedModules,
+            cache_dirs: CacheDirs::default(),
             num_worker_thread: 0,
             llvm_passes_override: None,
             run_program_args: vec![],
@@ -1172,6 +1176,7 @@ impl Configuration {
             cu_size: _,
             num_worker_thread: _,
             type_check_store: _,
+            cache_dirs: _,
 
             // The macros the runtime is compiled with. The runtime is C the compiler carries, so
             // it has object files and a key of its own.
@@ -1311,6 +1316,14 @@ impl Configuration {
     /// here a value of its own and checks that the hash follows.
     pub fn runtime_object_hash(&self) -> String {
         self.cache_hash_sources().runtime_object.finish()
+    }
+
+    /// Whether the bodies a parse produces are written to the files of parsed bodies under
+    /// `PARSED_MODULES_PATH` and read back when they are type-checked
+    /// (`elaboration::parsed_modules`), which a build that type-checks through the files of
+    /// type-checked modules does.
+    pub fn stores_parsed_bodies(&self) -> bool {
+        self.subcommand.typecheck() && matches!(self.type_check_store, TypeCheckStore::TypedModules)
     }
 
     /// The value of type `IO ()` the entry point of the program runs, which is what

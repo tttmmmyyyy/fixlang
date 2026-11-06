@@ -10,7 +10,8 @@
 // build reads it through a mapping into memory, so a build that replaces or removes a file leaves
 // the bytes another build has mapped as they were.
 
-use crate::misc::warn_msg;
+use crate::constants::CACHE_PATH;
+use crate::misc::{warn_msg, Map};
 use crate::project_fs::{
     create_dir_guarding_project_links, create_temporary_file_in, remove_abandoned_temporary_files,
     TemporaryFile, DOT_FIXLANG_LINK_HINT,
@@ -20,6 +21,7 @@ use std::fs::{self, File};
 use std::io::{self, Seek, SeekFrom, Write};
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 /// The eight bytes a cache file ends in, which tell its kind.
 pub type FileMagic = [u8; 8];
@@ -189,9 +191,43 @@ fn remove_stale_files(dir: &Path, prefix: &str, file_name: &str) {
     }
 }
 
+/// The cache directories one build writes in, each made ready the first time it is asked for
+/// (`writable`), and answered from then on as it was found then. Clones share what they found.
+#[derive(Clone, Default)]
+pub struct CacheDirs(Arc<Mutex<Map<&'static str, Option<PathBuf>>>>);
+
+impl CacheDirs {
+    /// The directory `path` under `CACHE_PATH`, created when it is missing, when files can be
+    /// created in it; `None` otherwise, which is reported as a warning the first time.
+    ///
+    /// `CACHE_PATH` itself is made ready first, so that a `CACHE_PATH` the build may not write
+    /// through is reported once for all the directories under it.
+    pub fn writable(&self, path: &'static str) -> Option<PathBuf> {
+        assert!(
+            Path::new(path).parent() == Some(Path::new(CACHE_PATH)),
+            "\"{}\" is not a directory of `CACHE_PATH`",
+            path
+        );
+        self.made_ready(CACHE_PATH, |path| create_cache_dir(path))?;
+        self.made_ready(path, |path| {
+            create_cache_dir(path).filter(|dir| probe_file_creation(dir))
+        })
+    }
+
+    /// The directory `path` as `make_ready` made it ready, the first time it is asked for.
+    fn made_ready(
+        &self,
+        path: &'static str,
+        make_ready: impl FnOnce(&str) -> Option<PathBuf>,
+    ) -> Option<PathBuf> {
+        let mut dirs = self.0.lock().unwrap();
+        dirs.entry(path).or_insert_with(|| make_ready(path)).clone()
+    }
+}
+
 /// The directory `path`, created when it is missing. A directory that cannot be created is reported
 /// as a warning, and answers `None`.
-pub fn create_cache_dir(path: &str) -> Option<PathBuf> {
+fn create_cache_dir(path: &str) -> Option<PathBuf> {
     match create_dir_guarding_project_links(Path::new(path), DOT_FIXLANG_LINK_HINT) {
         Ok(dir) => Some(dir),
         Err(errs) => {
@@ -204,7 +240,7 @@ pub fn create_cache_dir(path: &str) -> Option<PathBuf> {
 }
 
 /// Whether a file can be created in `dir`. When it cannot, that is reported as a warning.
-pub fn probe_file_creation(dir: &Path) -> bool {
+fn probe_file_creation(dir: &Path) -> bool {
     match create_temporary_file_in(dir) {
         Ok(probe) => {
             let _ = fs::remove_file(&probe.path);
