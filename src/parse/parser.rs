@@ -64,15 +64,15 @@ use std::{
 };
 
 struct ParseContext {
-    // The list of sizes of tuples used in this module.
+    /// The sizes of the tuples used in this module.
     tuple_sizes: Vec<u32>,
-    // Context for parsing *-operator.
+    /// The context of parsing the `*` operator.
     do_context: DoContext,
-    // The source code.
+    /// The source code.
     source: SourceFile,
-    // The module name.
+    /// The name of the module.
     module_name: Name,
-    // Curent namespace.
+    /// The current namespace.
     namespace: NameSpace,
     /// The C numeric types of the target, which the C types an `FFI_CALL` writes stand for.
     c_numeric_types: CNumericTypes,
@@ -89,10 +89,10 @@ struct ParseContext {
     /// diagnostics and LSP queries can locate any component of the
     /// absolute path.
     abs_path_uses: Vec<(FullName, Vec<Span>)>,
-    // Counter for naming pattern-wildcard (`_`) binders; see
-    // `fresh_pattern_wildcard_name`.
+    /// The counter naming the binders of pattern wildcards (`_`); see
+    /// `fresh_pattern_wildcard_name`.
     pattern_wildcard_counter: u32,
-    // Counter for naming `_` type wildcards; see `fresh_type_wildcard_name`.
+    /// The counter naming the type wildcards (`_`); see `fresh_type_wildcard_name`.
     type_wildcard_counter: u32,
     /// The renaming the module of this source is compiled under, if any.
     renaming: Option<ModuleRenaming>,
