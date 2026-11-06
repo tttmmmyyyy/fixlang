@@ -35,7 +35,7 @@ use crate::elaboration::typecheck::TypeCheckContext;
 use crate::elaboration::typecheckcache::EntityIdentity;
 use crate::error::Errors;
 use crate::elaboration::cache_files::{
-    find_index, map_file, readable_file_prefix, CacheDirs,
+    find_index, lies_within_entries, map_file, readable_file_prefix, CacheDirs,
     warn_unreadable_file, warn_unwritable_file, CacheFileWriter, FileMagic,
 };
 use crate::misc::{consume_on_compiler_threads, map_on_compiler_threads, Map};
@@ -130,7 +130,7 @@ fn decode_record(bytes: &[u8], bodies_end: u64) -> Result<ModuleRecord, String> 
         postcard::from_bytes(bytes).map_err(|e| e.to_string())?;
     if entries
         .iter()
-        .any(|(_, entry)| entry.body.start > entry.body.end || entry.body.end > bodies_end)
+        .any(|(_, entry)| !lies_within_entries(&entry.body, bodies_end))
     {
         return Err("its record points past its bodies".to_string());
     }

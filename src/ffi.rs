@@ -19,8 +19,8 @@ use crate::fixstd::builtin::{I32_TYPE, PTR_TYPE};
 use crate::generator::Generator;
 use crate::object::int_type_of_bits;
 use crate::target_triple::{
-    architecture_name_of_target, architecture_of_target, target_is_cygwin, target_is_darwin,
-    target_is_uefi, target_is_windows, Architecture,
+    architecture_name_of_target, architecture_of_target, build_target_triple, target_is_cygwin,
+    target_is_darwin, target_is_uefi, target_is_windows, Architecture,
 };
 use inkwell::attributes::AttributeLoc;
 use inkwell::context::Context;
@@ -165,6 +165,11 @@ impl CNumericTypes {
             float_bits: 32,
             double_bits: 64,
         }
+    }
+
+    /// The C numeric types of the target this compiler builds for when no other is asked for.
+    pub fn of_build_target() -> Self {
+        Self::of_target(&build_target_triple().as_str().to_string_lossy())
     }
 
     /// The C numeric types, each paired with the sign and the bit width of the Fix type it is an

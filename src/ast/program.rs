@@ -324,9 +324,9 @@ pub struct RecordedBody {
 
 impl Body {
     /// The body of the expression `expr`, before it is type-checked.
-    pub fn unchecked(expr: Arc<ExprNode>) -> Self {
+    pub fn unchecked(expr: ParsedBody) -> Self {
         Body::Unchecked(UncheckedBody {
-            expr: ParsedBody::InMemory(expr),
+            expr,
             opaque_wrapping: None,
         })
     }
@@ -410,7 +410,7 @@ impl SymbolExpr {
     ///   `EndNode::ValueDecl` where `pos` is on the left-hand side of a trait member implementation.
     pub fn find_node_at(&self, name: &FullName, pos: &SourcePos) -> Option<EndNode> {
         match self {
-            SymbolExpr::Simple(e) => e.find_node_at(pos),
+            SymbolExpr::Simple(body) => body.find_node_at(pos),
             SymbolExpr::Method(ms) => ms.iter().filter_map(|m| m.find_node_at(name, pos)).next(),
         }
     }
@@ -689,8 +689,8 @@ pub struct Program {
     /// The errors the compiler carries on past, to report as diagnostics once the work that can
     /// still be done is done.
     pub deferred_errors: Errors,
-    /// The bodies whose typed expressions lie in the files of `TYPED_MODULES_PATH`, which
-    /// `global_values` holds as they were parsed.
+    /// What the bodies held as `Body::Recorded` are read back from the files of
+    /// `TYPED_MODULES_PATH` with.
     pub typed_modules: TypedModules,
     /// The names each module refers to and therefore has to import, keyed by that module.
     pub import_required: Map<Name, Set<FullName>>,
@@ -1176,7 +1176,7 @@ impl Program {
         let gv = GlobalValue {
             scm: scm.clone(),
             syn_scm: None,
-            expr: SymbolExpr::Simple(Body::unchecked(expr)),
+            expr: SymbolExpr::Simple(Body::unchecked(ParsedBody::InMemory(expr))),
             decl_src,
             defn_src,
             document,
@@ -1332,7 +1332,7 @@ impl Program {
     pub fn body_at(&self, loc: &BodyLocation) -> (&Body, &Arc<Scheme>, Name) {
         let gv = &self.global_values[&loc.val_name];
         match (&gv.expr, loc.impl_idx) {
-            (SymbolExpr::Simple(te), None) => (te, &gv.scm, loc.val_name.module()),
+            (SymbolExpr::Simple(body), None) => (body, &gv.scm, loc.val_name.module()),
             (SymbolExpr::Method(impls), Some(i)) => {
                 let impl_ = &impls[i];
                 (&impl_.expr, &impl_.scm, impl_.define_module.clone())
@@ -2009,10 +2009,7 @@ impl Program {
                         member_impls.push(TraitMemberImpl {
                             scm,
                             scm_via_defn,
-                            expr: Body::Unchecked(UncheckedBody {
-                                expr: body,
-                                opaque_wrapping: None,
-                            }),
+                            expr: Body::unchecked(body),
                             define_module: trait_impl.define_module.clone(),
                             lhs_srcs,
                         });

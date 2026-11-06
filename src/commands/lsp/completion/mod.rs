@@ -38,7 +38,6 @@ use crate::misc::{map_on_compiler_threads, to_absolute_path, Map, Set};
 use crate::ffi::CNumericTypes;
 use crate::parse::parser::{parse_origin, ParseOrigin};
 use crate::parse::sourcefile::{SourceFile, Span};
-use crate::target_triple::build_target_triple;
 use crate::write_log;
 use lsp_types::{
     CompletionItem, CompletionParams, Documentation, InsertTextFormat, TextDocumentPositionParams,
@@ -444,9 +443,7 @@ fn find_enclosing_gv(abs_path: &PathBuf, content: &str, cursor_byte: usize) -> O
     let origin = ParseOrigin {
         source: SourceFile::from_file_path_and_content(abs_path.clone(), content.to_string()),
         renaming: None,
-        c_numeric_types: CNumericTypes::of_target(
-            &build_target_triple().as_str().to_string_lossy(),
-        ),
+        c_numeric_types: CNumericTypes::of_build_target(),
     };
     let program = parse_origin(&origin).ok()?;
     let covers = |span: Option<&Span>| span.map(|s| s.includes_byte(cursor_byte)).unwrap_or(false);

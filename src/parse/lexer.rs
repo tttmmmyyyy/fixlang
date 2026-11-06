@@ -1,7 +1,7 @@
 // A never-failing lexical scanner used by the LSP semantic-tokens feature.
 //
 // Syntax highlighting must work even while the buffer is syntactically broken
-// (the user is in the middle of an edit). The real parser (`parse_source_file`)
+// (the user is in the middle of an edit). The real parser (`parse_origin`)
 // fails fast on the first error and yields no AST, so it cannot drive
 // highlighting in that state. This module instead runs the additive
 // `lex_tokens` grammar rule, which is written so it can never fail: it

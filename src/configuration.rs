@@ -19,7 +19,6 @@ use crate::misc::{
 };
 use crate::parse::sourcefile::Span;
 use crate::preliminary_command::PreliminaryCommand;
-use crate::target_triple::build_target_triple;
 use build_time::build_time_utc;
 use inkwell::OptimizationLevel;
 use std::fmt;
@@ -580,7 +579,7 @@ pub struct Configuration {
     /// Where the results of type-checking the global values are kept, so that a value whose sources
     /// are unchanged is served rather than checked again.
     pub type_check_store: TypeCheckStore,
-    /// The cache directories the build writes in, each made ready once.
+    /// The directories the build writes its cache files in (`cache_files`), each made ready once.
     pub cache_dirs: CacheDirs,
     /// How many threads the compiler itself runs its work over.
     pub num_worker_thread: usize,
@@ -703,9 +702,7 @@ impl Configuration {
             valgrind_tool: ValgrindTool::None,
             sanitizer: Sanitizer::None,
             library_search_paths: vec![],
-            c_numeric_types: CNumericTypes::of_target(
-                &build_target_triple().as_str().to_string_lossy(),
-            ),
+            c_numeric_types: CNumericTypes::of_build_target(),
             host_cpu: HostCpu::of_this_machine(),
             disable_cpu_features_regex: vec![],
             llvm_args: vec![],

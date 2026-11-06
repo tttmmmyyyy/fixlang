@@ -39,7 +39,6 @@ use crate::constants::{
 use crate::error::Errors;
 use crate::elaboration::parsed_modules::store_parsed_bodies;
 use crate::ffi::{unsupported_128_bit_integer_msg, CNumericTypes};
-use crate::target_triple::build_target_triple;
 use crate::fixstd::builtin::{
     expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, floating_literal_value,
     integral_literal_value, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty,
@@ -124,13 +123,13 @@ fn next_prefixed_name(prefix: &str, counter: &mut u32) -> String {
 }
 
 impl ParseContext {
-    /// The context of parsing `source`, whose module `renaming`, if given, compiles under another
-    /// name.
-    fn from_source(
-        source: SourceFile,
-        c_numeric_types: CNumericTypes,
-        renaming: Option<ModuleRenaming>,
-    ) -> Self {
+    /// The context of the parse `origin` is made from.
+    fn from_origin(origin: ParseOrigin) -> Self {
+        let ParseOrigin {
+            source,
+            renaming,
+            c_numeric_types,
+        } = origin;
         Self {
             tuple_sizes: vec![],
             do_context: DoContext::default(),
@@ -275,7 +274,7 @@ pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Pro
         Some(content) => SourceFile::from_file_path_and_content(file_path, content.clone()),
         None => SourceFile::from_file_path(file_path),
     };
-    parse_source_file(source, config)
+    parse_renamed_source_file(source, None, config)
 }
 
 /// An identifier category `validate_token_str` checks a string against.
@@ -500,13 +499,7 @@ fn classify_repair_hint(positives: &[Rule]) -> RepairHintKind {
 }
 
 /// Parses `source` into the program of the one module it declares, with every span pointing into
-/// `source`.
-pub fn parse_source_file(source: SourceFile, config: &Configuration) -> Result<Program, Errors> {
-    parse_renamed_source_file(source, None, config)
-}
-
-/// Parses `source` as `parse_source_file` does, compiling the module `renaming` names under the name
-/// it gives.
+/// `source`, compiling the module `renaming` names under the name it gives.
 pub fn parse_renamed_source_file(
     source: SourceFile,
     renaming: Option<ModuleRenaming>,
@@ -701,9 +694,11 @@ fn parse_source_as_rule<T>(
         }
     };
     // The rules parsed here write no `FFI_CALL`, so any target's C numeric types serve.
-    let c_numeric_types =
-        CNumericTypes::of_target(&build_target_triple().as_str().to_string_lossy());
-    let mut ctx = ParseContext::from_source(source, c_numeric_types, None);
+    let mut ctx = ParseContext::from_origin(ParseOrigin {
+        source,
+        renaming: None,
+        c_numeric_types: CNumericTypes::of_build_target(),
+    });
     parser(file.next().unwrap(), &mut ctx)
 }
 
@@ -714,12 +709,7 @@ fn parse_module(pair: Pair<Rule>, origin: &ParseOrigin) -> Result<Program, Error
     assert_eq!(pair.as_rule(), Rule::module);
     let mut errors = Errors::empty();
 
-    let src = origin.source.clone();
-    let mut ctx = ParseContext::from_source(
-        src.clone(),
-        origin.c_numeric_types.clone(),
-        origin.renaming.clone(),
-    );
+    let mut ctx = ParseContext::from_origin(origin.clone());
 
     let mut pairs = pair.into_inner();
     let mod_info = parse_module_defn(pairs.next().unwrap(), &mut ctx);

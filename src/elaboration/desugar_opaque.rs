@@ -15,10 +15,12 @@
 //   QualPredScheme { gen_vars: [a], pred: ?it a : Iterator }
 //   EqualityScheme { gen_vars: [a], eq: Item (?it a) = a }
 //
-// Step 3: Rewrite scheme and wrap definition:
+// Step 3: Rewrite scheme, and have the definition wrapped when it is type-checked:
 //   repeat : a -> I64 -> ?it a
 //   #wrap_opaque : [x : Iterator, Item x = a] (a -> I64 -> x) -> (a -> I64 -> ?it a)
 //   repeat = #wrap_opaque(|x, n| range(0, n).map(|_| x))
+//   The body records the name of `#wrap_opaque` and the OpaqueTyConResolutions as its
+//   `OpaqueWrapping`, and `UncheckedBody::to_check` wraps it.
 //
 // === Trait member example ===
 //
@@ -38,7 +40,7 @@
 // Step 3: One #wrap_opaque is generated per method (shared across all impls):
 //   to_iter : [c : ToIter] c -> ?it c
 //   #wrap_opaque : [c : ToIter, x : Iterator, Item x = Elem c] (c -> x) -> (c -> ?it c)
-//   Each impl wraps its definition independently:
+//   Each impl has its definition wrapped independently:
 //     impl Array a : ToIter { to_iter = #wrap_opaque(|arr| ArrayIterator { ... }); }
 //   The OpaqueTyConResolution lhs is specialized per impl (e.g., `?it (Array a)`),
 //   using a defn_to_impl substitution that maps `c -> Array a`.
@@ -55,8 +57,8 @@ use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{
-    impl_signature_mismatch_error, Body, GlobalValue, OpaqueWrapping, Program, SymbolExpr,
-    TraitMemberImpl,
+    impl_signature_mismatch_error, Body, GlobalValue, OpaqueWrapping, ParsedBody, Program,
+    SymbolExpr, TraitMemberImpl,
 };
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::types::{
@@ -210,7 +212,7 @@ impl Program {
                 GlobalValue {
                     scm: wrap_scm,
                     syn_scm: None,
-                    expr: SymbolExpr::Simple(Body::unchecked(build_undefined_expr())),
+                    expr: SymbolExpr::Simple(Body::unchecked(ParsedBody::InMemory(build_undefined_expr()))),
                     decl_src: None,
                     defn_src: None,
                     document: None,

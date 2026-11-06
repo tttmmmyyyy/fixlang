@@ -82,6 +82,12 @@ pub fn find_index(bytes: &[u8], magic: &FileMagic) -> Option<Range<u64>> {
     index_range(footer, len, magic)
 }
 
+/// Whether `range`, which an index places an entry at, lies within the entries, which end at
+/// `entries_end`.
+pub fn lies_within_entries(range: &Range<u64>, entries_end: u64) -> bool {
+    range.start <= range.end && range.end <= entries_end
+}
+
 /// The file at `path` mapped into memory, or `None` when there is no file there.
 pub fn map_file(path: &Path) -> io::Result<Option<Mmap>> {
     match File::open(path) {
@@ -191,7 +197,7 @@ fn remove_stale_files(dir: &Path, prefix: &str, file_name: &str) {
     }
 }
 
-/// The cache directories one build writes in, each made ready the first time it is asked for
+/// The directories of the cache files of one build, each made ready the first time it is asked for
 /// (`writable`), and answered from then on as it was found then. Clones share what they found.
 #[derive(Clone, Default)]
 pub struct CacheDirs(Arc<Mutex<Map<&'static str, Option<PathBuf>>>>);

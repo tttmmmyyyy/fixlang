@@ -379,8 +379,14 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
 
     /// The files of the type-check cache under `dir`, by name, with when each was last written.
     fn cache_files(dir: &Path) -> Vec<(String, SystemTime)> {
-        let mut files: Vec<_> = fs::read_dir(dir.join(TYPED_MODULES_PATH))
-            .expect("Failed to read the type-check cache directory")
+        files_under(dir, TYPED_MODULES_PATH)
+    }
+
+    /// The name of each file in the directory `cache_path` of the project in `dir`, with when it was
+    /// written, in order of the names.
+    fn files_under(dir: &Path, cache_path: &str) -> Vec<(String, SystemTime)> {
+        let mut files: Vec<_> = fs::read_dir(dir.join(cache_path))
+            .expect("Failed to read a cache directory")
             .map(|entry| {
                 let entry = entry.expect("Failed to read a cache file");
                 let written = entry
@@ -1036,15 +1042,10 @@ main = println $ (double(21), 3).to_string;
 
     /// The names of the files of parsed bodies in `dir`, in order.
     fn parsed_files(dir: &Path) -> Vec<String> {
-        let mut files: Vec<String> = fs::read_dir(dir.join(PARSED_MODULES_PATH))
-            .expect("Failed to read the directory of the files of parsed bodies")
-            .map(|entry| {
-                let entry = entry.expect("Failed to read a file of parsed bodies");
-                entry.file_name().to_string_lossy().to_string()
-            })
-            .collect();
-        files.sort();
-        files
+        files_under(dir, PARSED_MODULES_PATH)
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect()
     }
 
     /// Writes into `dir` a module `Main` printing a value of the module `Lib`, and `Lib` defining

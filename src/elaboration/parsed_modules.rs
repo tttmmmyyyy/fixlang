@@ -23,7 +23,7 @@ use crate::ast::expr::ExprNode;
 use crate::ast::program::{Body, ParsedBody, Program, SymbolExpr};
 use crate::constants::PARSED_MODULES_PATH;
 use crate::elaboration::cache_files::{
-    find_index, map_file, readable_file_prefix, warn_unreadable_file, CacheDirs,
+    find_index, lies_within_entries, map_file, readable_file_prefix, warn_unreadable_file, CacheDirs,
     warn_unwritable_file, CacheFileWriter, FileMagic,
 };
 use crate::error::Errors;
@@ -166,7 +166,7 @@ fn decode_parsed_file(bytes: &[u8]) -> Option<ParsedIndex> {
         postcard::from_bytes(&bytes[range.start as usize..range.end as usize]).ok()?;
     if entries
         .iter()
-        .any(|(_, body)| body.start > body.end || body.end > range.start)
+        .any(|(_, body)| !lies_within_entries(body, range.start))
     {
         return None;
     }
