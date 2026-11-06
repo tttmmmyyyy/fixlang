@@ -1245,9 +1245,19 @@ answer : I64 = old;
     #[test]
     fn threading_turned_on_and_off() {
         let source = main_only("module Main;\n\nmain : IO () = println(\"hi\");\n".to_string());
+        // On macOS, a build linking `pthread` reports that it cannot choose how the library is
+        // linked.
+        let threaded = if cfg!(target_os = "macos") {
+            Outcome::WarnsAndPrints {
+                report: "it is not possible to specify whether a library should be dynamically or statically linked",
+                stdout: "hi",
+            }
+        } else {
+            Outcome::Prints("hi")
+        };
         assert_every_version_builds_as_from_nothing(vec![
             Version::of(&source, Outcome::Prints("hi")),
-            Version::of(&source, Outcome::Prints("hi")).built_with(&["-g", "--threaded"]),
+            Version::of(&source, threaded).built_with(&["-g", "--threaded"]),
             Version::of(&source, Outcome::Prints("hi")),
         ]);
     }
