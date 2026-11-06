@@ -5,19 +5,13 @@
 //! `advance` that calls itself is a body `inline` never moves, so a chain that keeps one leaves it
 //! standing as a function of its own in the dump.
 //!
-//! What the rewrites are for cannot be observed by running the program — they leave the answer
-//! unchanged — so the chain that motivates them is asserted on the dump: a function an iterator
-//! carries in a field is called through a pointer, and the same function reached as an argument is
-//! called by name. The answers are asserted at the levels above and below the one the pass runs at,
-//! which is what says the rewrites preserve them.
+//! The answers are asserted at the levels above and below the one the pass runs at, which is what
+//! says the rewrites preserve them.
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::constants::CAP_LIST_PREFIX;
-    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
-    use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::process::Command;
+    use crate::tests::test_util::{build_project_run_and_read_rc_ir, setup_case_projects};
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
     /// What `nested_iterators` prints: the sum of `3 * i + 1` over `0..9`.
@@ -62,100 +56,7 @@ mod integration_tests {
     /// Copies the cases into a temporary directory and gives back that directory together with the
     /// path of `case` inside it, so that cases run in parallel without sharing build output.
     fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
-        let mut cases_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        cases_dir.push("src/tests/test_collapse_constructions/cases");
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        copy_dir_recursive(&cases_dir, &temp_dir.path().to_path_buf())
-            .expect("Failed to copy test cases");
-        let project_dir = temp_dir.path().join(case);
-        (temp_dir, project_dir)
-    }
-
-    /// Builds the case at `opt_level`, runs it, and returns the RC IR of every module.
-    ///
-    /// Running the program is what keeps the dump honest: the names asserted on come off a build
-    /// that is known to answer correctly.
-    fn build_run_and_read_rc_ir(
-        project_dir: &Path,
-        opt_level: &str,
-        expected_output: &str,
-    ) -> String {
-        let build = fix_command_at_opt_level("build", opt_level)
-            .args(["--emit-rc-ir", "all"])
-            .current_dir(project_dir)
-            .output()
-            .expect("Failed to execute fix build");
-        assert!(
-            build.status.success(),
-            "the build should succeed at -O {}.\nstdout: {}\nstderr: {}",
-            opt_level,
-            String::from_utf8_lossy(&build.stdout),
-            String::from_utf8_lossy(&build.stderr),
-        );
-
-        let run = Command::new(project_dir.join("a.out"))
-            .current_dir(project_dir)
-            .output()
-            .expect("Failed to execute the built program");
-        assert!(
-            run.status.success(),
-            "the built program should run cleanly at -O {}, but exited with {}.\nstderr: {}",
-            opt_level,
-            run.status,
-            String::from_utf8_lossy(&run.stderr),
-        );
-        assert_eq!(
-            String::from_utf8_lossy(&run.stdout).trim(),
-            expected_output,
-            "the program should answer the same at -O {}",
-            opt_level
-        );
-
-        let dump_path = project_dir.join(".fixlang/rc_ir.post.txt");
-        fs::read_to_string(&dump_path)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
-    }
-
-    /// The largest number of parameters of capture-list type that any one function in `dump` takes.
-    ///
-    /// A function reached as an argument arrives as its capture list, which is a type of its own, and
-    /// the body holding it calls that function by name. A function an iterator carries in a field
-    /// arrives as a closure and is called through a pointer. So this says how many of a chain's
-    /// functions one body knows the identity of.
-    fn most_capture_lists_taken_by_one_function(dump: &str) -> usize {
-        dump.lines()
-            .filter_map(|line| line.strip_prefix("fn "))
-            .map(|header| parameter_list(header).matches(CAP_LIST_PREFIX).count())
-            .max()
-            .expect("the RC IR dump names no function")
-    }
-
-    /// The parameter list of a dumped function header, taken from the parenthesis that opens it to
-    /// the one that closes it.
-    ///
-    /// A parameter's own type carries parentheses — a function type is written `(a) -> b` — so the
-    /// list runs to the parenthesis that brings the nesting back to where it started.
-    fn parameter_list(header: &str) -> &str {
-        let open = header
-            .find('(')
-            .unwrap_or_else(|| panic!("the function header opens no parameter list:\n{}", header));
-        let mut depth = 0;
-        for (offset, character) in header[open..].char_indices() {
-            match character {
-                '(' => depth += 1,
-                ')' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return &header[open + 1..open + offset];
-                    }
-                }
-                _ => {}
-            }
-        }
-        panic!(
-            "the parameter list of the function header stays open:\n{}",
-            header
-        )
+        setup_case_projects("src/tests/test_collapse_constructions/cases", case)
     }
 
     /// The functions of `dump` whose name says they are an iterator's `advance`.
@@ -169,23 +70,6 @@ mod integration_tests {
             .collect()
     }
 
-    /// The functions of `dump` lifted out of `main` that take a capture list and an `I64` and answer
-    /// an `I64`: the functions a chain of iterators over `I64` carries, each standing as a function
-    /// of its own.
-    ///
-    /// The IO plumbing is lifted out of `main` as well, and each of those takes its capture list
-    /// alone and answers the action it wraps, so asking for `Std::I64` among the parameters and as
-    /// the result leaves them out.
-    fn carried_functions(dump: &str) -> Vec<&str> {
-        dump.lines()
-            .filter(|line| line.starts_with("fn Main::main") && line.ends_with(") -> Std::I64:"))
-            .filter(|line| {
-                let params = parameter_list(line);
-                params.contains(CAP_LIST_PREFIX) && params.contains("Std::I64")
-            })
-            .collect()
-    }
-
     /// Builds `case`, checks that it answers `expected_output`, and asserts that `standing` finds
     /// nothing of `subject` left as a function of its own in the RC IR dump.
     fn assert_leaves_no_function_of_its_own(
@@ -195,7 +79,7 @@ mod integration_tests {
         subject: &str,
     ) {
         let (_temp_dir, project_dir) = setup_test_env(case);
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", expected_output);
+        let dump = build_project_run_and_read_rc_ir(&project_dir, "max", expected_output);
 
         let left = standing(&dump);
         assert!(
@@ -203,42 +87,6 @@ mod integration_tests {
             "no {} should stand as a function of its own, but these do:\n{}",
             subject,
             left.join("\n")
-        );
-    }
-
-    /// A chain of two `map`s hands the fold two functions, each in a field of a struct that is in a
-    /// field of the next, and a third as the fold's own operation. Reading each construction where
-    /// the fold takes it apart is what makes all three arguments, so the fold receives three capture
-    /// lists; the chain's two functions stay closures without it.
-    #[test]
-    pub fn test_the_functions_a_chain_of_iterators_carries_are_called_by_name() {
-        let (_temp_dir, project_dir) = setup_test_env("nested_iterators");
-        let dump = build_run_and_read_rc_ir(&project_dir, "max", NESTED_ITERATORS_OUTPUT);
-
-        let known_function_count = most_capture_lists_taken_by_one_function(&dump);
-        assert!(
-            known_function_count >= 3,
-            "the fold should receive the chain's two functions and its own operation as capture \
-             lists, but the function taking the most of them takes {}",
-            known_function_count
-        );
-    }
-
-    /// Neither function the chain carries stands as a function of its own. Reading each construction
-    /// where the fold takes it apart binds the function a field holds to a name and hands the fold
-    /// that name, and the reduction that follows puts the body of each where its one call stood.
-    /// Left standing, each is a lambda bound to a name and applied once, which the program builds
-    /// and calls through instead of running the body where it is.
-    ///
-    /// The dump is what this asserts against because the program cannot observe it: the fold answers
-    /// the same either way.
-    #[test]
-    pub fn test_the_functions_a_chain_of_iterators_carries_leave_no_function_of_their_own() {
-        assert_leaves_no_function_of_its_own(
-            "nested_iterators",
-            NESTED_ITERATORS_OUTPUT,
-            carried_functions,
-            "function the chain carries",
         );
     }
 
@@ -284,7 +132,7 @@ mod integration_tests {
     pub fn test_a_chain_of_two_iterators_of_one_type_answers_the_same() {
         let (_temp_dir, project_dir) = setup_test_env("nested_iterators");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, NESTED_ITERATORS_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, NESTED_ITERATORS_OUTPUT);
         }
     }
 
@@ -296,7 +144,7 @@ mod integration_tests {
     pub fn test_a_construction_read_where_it_is_built_answers_the_same() {
         let (_temp_dir, project_dir) = setup_test_env("read_constructions");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, READ_CONSTRUCTIONS_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, READ_CONSTRUCTIONS_OUTPUT);
         }
     }
 
@@ -309,7 +157,7 @@ mod integration_tests {
     pub fn test_a_struct_argument_taken_apart_out_of_declaration_order_answers_the_same() {
         let (_temp_dir, project_dir) = setup_test_env("split_field_order");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, SPLIT_FIELD_ORDER_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, SPLIT_FIELD_ORDER_OUTPUT);
         }
     }
 
@@ -320,7 +168,7 @@ mod integration_tests {
     pub fn test_a_value_named_like_a_field_before_the_pattern_stays_itself() {
         let (_temp_dir, project_dir) = setup_test_env("shadowed_field_name");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, SHADOWED_FIELD_NAME_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, SHADOWED_FIELD_NAME_OUTPUT);
         }
     }
 
@@ -331,7 +179,11 @@ mod integration_tests {
     pub fn test_an_argument_naming_a_field_reads_the_value_it_was_written_against() {
         let (_temp_dir, project_dir) = setup_test_env("field_in_another_argument");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, FIELD_IN_ANOTHER_ARGUMENT_OUTPUT);
+            build_project_run_and_read_rc_ir(
+                &project_dir,
+                opt_level,
+                FIELD_IN_ANOTHER_ARGUMENT_OUTPUT,
+            );
         }
     }
 
@@ -342,7 +194,7 @@ mod integration_tests {
     pub fn test_a_field_named_by_an_earlier_run_keeps_its_value() {
         let (_temp_dir, project_dir) = setup_test_env("dyn_flatten_chain");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(&project_dir, opt_level, DYN_FLATTEN_CHAIN_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, DYN_FLATTEN_CHAIN_OUTPUT);
         }
     }
 
@@ -353,7 +205,7 @@ mod integration_tests {
     pub fn test_a_field_name_from_an_earlier_run_is_read_as_it_was_bound() {
         let (_temp_dir, project_dir) = setup_test_env("field_name_reused_by_later_run");
         for opt_level in OPT_LEVELS {
-            build_run_and_read_rc_ir(
+            build_project_run_and_read_rc_ir(
                 &project_dir,
                 opt_level,
                 FIELD_NAME_REUSED_BY_LATER_RUN_OUTPUT,

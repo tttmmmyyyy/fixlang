@@ -6,7 +6,10 @@
 // the variable of the place it is built at. A component of the call graph is inferred together and
 // generalized over the variables of its symbols' types, so that a function taking a function is
 // inferred once and copied for each lambda set it is given. Specialization then walks from the
-// program's entry, and gives each copy the concrete lambda sets of its parameters.
+// program's entry, and gives each copy the concrete lambda sets of its parameters. The program is
+// then rewritten: each copy becomes copies of the symbols, and a value whose set's elements make
+// one class, elements naming one lambda that make the same code, becomes that class's capture
+// struct, called by calling the lambda directly.
 //
 // The design is laid out in `dev-docs/2026-10-24-lambda-set-specialization/design.md`.
 
@@ -14,37 +17,52 @@ mod concrete;
 mod dump;
 mod flow;
 mod infer;
+mod partition;
+mod represent;
+mod rewrite;
 mod slots;
 mod solver;
 mod specialize;
 
 use crate::{
-    ast::program::Program,
+    ast::{program::Program, type_agreement::validate_types},
     constants::DOT_FIXLANG,
     error::panic_if_err,
     project_fs::{write_file_guarding_project_links, DOT_FIXLANG_LINK_HINT},
 };
 pub use flow::BuiltinFlow;
 use infer::infer;
+use represent::represent;
+use rewrite::rewrite;
 use slots::SlotLayout;
 use specialize::specialize;
 use std::{fs, path::PathBuf};
 
-/// Infers the lambda sets of `prg` and the copies they ask for, leaving the program as it is. With
-/// `dump_step`, writes them to a file under `.fixlang` named after it; a failure to write it ends
-/// the process with the error printed.
-pub fn run(prg: &Program, dump_step: Option<String>) {
-    let layout = SlotLayout::new(&prg.type_env);
-    let mut analysis = infer(prg, &layout);
-    let spec = specialize(&mut analysis);
-    if let Some(step) = dump_step {
-        let text = dump::render(&mut analysis, &spec, &layout);
-        let path = PathBuf::from(format!("{}/{}.lambda_sets.txt", DOT_FIXLANG, step));
-        panic_if_err(write_file_guarding_project_links(
-            &path,
-            DOT_FIXLANG_LINK_HINT,
-            |tmp_path| fs::write(tmp_path, &text),
-        ));
+/// Infers the lambda sets of `prg` and the copies they ask for, and rewrites the program by them.
+/// The bodies of the lifted lambdas are moved into their callers on up to `num_threads` threads.
+/// With `dump_step`, writes the sets and the copies to a file under `.fixlang` named after it; a
+/// failure to write it ends the process with the error printed. With `develop_mode`, checks that
+/// the types of the rewritten program agree where its expressions meet.
+pub fn run(prg: &mut Program, dump_step: Option<String>, num_threads: usize, develop_mode: bool) {
+    let rewritten = {
+        let layout = SlotLayout::new(&prg.type_env);
+        let mut analysis = infer(prg, &layout);
+        let spec = specialize(&mut analysis);
+        if let Some(step) = dump_step {
+            let text = dump::render(&mut analysis, &spec, &layout);
+            let path = PathBuf::from(format!("{}/{}.lambda_sets.txt", DOT_FIXLANG, step));
+            panic_if_err(write_file_guarding_project_links(
+                &path,
+                DOT_FIXLANG_LINK_HINT,
+                |tmp_path| fs::write(tmp_path, &text),
+            ));
+        }
+        let repr = represent(&analysis, &spec);
+        rewrite(prg, &layout, &analysis, &spec, &repr)
+    };
+    rewritten.apply(prg, num_threads);
+    if develop_mode {
+        validate_types(prg);
     }
 }
 
@@ -57,23 +75,13 @@ mod tests {
         specialize::{specialize, Specialization},
     };
     use crate::{
-        ast::program::Program,
-        configuration::{Configuration, FixOptimizationLevel, SubCommand},
-        elaboration::elaborate_via_config,
-        error::panic_if_err,
-        misc::save_temporary_source,
-        optimization::unwrap_newtype,
+        ast::program::Program, elaboration::elaborate_at_max, optimization::unwrap_newtype,
     };
 
     /// `source` elaborated into the form the inference reads: monomorphic, curried, and with its
     /// newtypes unwrapped.
     fn program_of(source: &str) -> Program {
-        let mut config = panic_if_err(Configuration::release_mode(SubCommand::Build));
-        config.set_fix_opt_level(FixOptimizationLevel::Max);
-        config.num_worker_thread = 0;
-        let saved = panic_if_err(save_temporary_source(source, "lambda_set"));
-        config.add_user_source_file(saved.file_path);
-        let mut prg = panic_if_err(elaborate_via_config(&config));
+        let (mut prg, _) = elaborate_at_max(source, "lambda_set", 0);
         unwrap_newtype::run(&mut prg, 0);
         prg
     }
@@ -255,15 +263,12 @@ main = (
             sorted(inf.writers(s)),
             vec![main_lam(), Some("rec".to_string())]
         );
-        let holds_itself = inf.spec.store.elems(s).iter().any(|e| match e {
-            Elem::Lam(lam, args) => {
-                inf.analysis.lambdas[*lam as usize]
-                    .symbol
-                    .name
-                    .starts_with("rec")
-                    && args.contains(&s)
-            }
-            Elem::Dynamic => false,
+        let holds_itself = inf.spec.store.lam_elems(s).any(|(lam, args)| {
+            inf.analysis.lambdas[lam as usize]
+                .symbol
+                .name
+                .starts_with("rec")
+                && args.contains(&s)
         });
         assert!(holds_itself);
     }
@@ -300,10 +305,11 @@ main = (
                 Some("compose_all".to_string())
             ]
         );
-        let holds_itself = inf.spec.store.elems(s).iter().any(|e| match e {
-            Elem::Lam(_, args) => args.contains(&s),
-            Elem::Dynamic => false,
-        });
+        let holds_itself = inf
+            .spec
+            .store
+            .lam_elems(s)
+            .any(|(_, args)| args.contains(&s));
         assert!(holds_itself);
     }
 

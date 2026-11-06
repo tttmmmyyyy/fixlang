@@ -48,7 +48,7 @@ and the cost for retaining and releasing an array is saved.
 
 use crate::{
     ast::{
-        expr::{collect_app, AppSourceCodeOrderType, Expr, ExprNode},
+        expr::{AppSourceCodeOrderType, Expr, ExprNode},
         name::FullName,
         pattern::PatternNode,
         program::Symbol,
@@ -562,7 +562,7 @@ fn is_global_lambda_strictly_partially_applied_to_names(
 ) -> bool {
     // One application may hand over one argument or several, as uncurrying writes it, so the
     // arguments are counted over the whole chain of applications.
-    let (func, args) = collect_app(expr);
+    let (func, args) = expr.destructure_app();
     if !func.is_var() {
         return false;
     }

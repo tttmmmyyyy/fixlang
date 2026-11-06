@@ -948,7 +948,10 @@ pub fn make_dynamic_object_ty() -> Arc<TypeNode> {
 /// The tuple type whose fields are `tys` in that order, such as `Std::Tuple2 I64 Bool`. An empty
 /// `tys` gives the unit type.
 pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
-    apply_type_args(&tycon(make_tuple_name_abs(tys.len() as u32)), &tys)
+    apply_type_args(
+        type_tycon(&tycon(make_tuple_name_abs(tys.len() as u32))),
+        &tys,
+    )
 }
 
 /// The name of the tuple type of `size` fields: `Std::Tuple3` for `3`.

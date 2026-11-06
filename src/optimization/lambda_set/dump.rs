@@ -78,10 +78,8 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
             continue;
         }
         lines.push((id, describe_set(&spec.store, id, &lambda_names)));
-        for elem in spec.store.elems(id) {
-            if let Elem::Lam(_, args) = elem {
-                stack.extend(args.iter().copied());
-            }
+        for (_, args) in spec.store.lam_elems(id) {
+            stack.extend(args.iter().copied());
         }
     }
     lines.sort();

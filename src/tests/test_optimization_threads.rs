@@ -4,21 +4,13 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::configuration::{Configuration, FixOptimizationLevel, SubCommand};
-    use crate::elaboration::elaborate_via_config;
-    use crate::error::panic_if_err;
-    use crate::misc::save_temporary_source;
+    use crate::elaboration::elaborate_at_max;
     use crate::optimization::optimization;
 
     /// The names of the symbols `source` is optimized into, in the order the program holds them, and
     /// the text of their definitions, with the passes running on `num_threads` threads.
     fn optimized_symbols(source: &str, num_threads: usize) -> (Vec<String>, String) {
-        let mut config = panic_if_err(Configuration::release_mode(SubCommand::Build));
-        config.set_fix_opt_level(FixOptimizationLevel::Max);
-        config.num_worker_thread = num_threads;
-        let saved_source = panic_if_err(save_temporary_source(source, "optimization_threads"));
-        config.add_user_source_file(saved_source.file_path);
-        let mut program = panic_if_err(elaborate_via_config(&config));
+        let (mut program, config) = elaborate_at_max(source, "optimization_threads", num_threads);
         optimization::run(&mut program, &config);
         let names = program
             .symbols

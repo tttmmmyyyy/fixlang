@@ -402,6 +402,54 @@ pub fn build_run_and_read_rc_ir(
     read_rc_ir_dump(temp_dir.path())
 }
 
+/// Builds the project in `project_dir` at `opt_level` with the RC IR dumped, runs the program, and
+/// returns the RC IR of every module.
+///
+/// Running the program is what keeps the dump honest: what a test asserts on then comes off a build
+/// that is known to answer correctly.
+///
+/// # Arguments
+/// * `opt_level` - the level to build at, which decides which optimizations the dump shows.
+/// * `expected_output` - what the program prints on stdout, with the surrounding whitespace removed.
+pub fn build_project_run_and_read_rc_ir(
+    project_dir: &Path,
+    opt_level: &str,
+    expected_output: &str,
+) -> String {
+    let build = fix_command_at_opt_level("build", opt_level)
+        .args(["--emit-rc-ir", "all"])
+        .current_dir(project_dir)
+        .output()
+        .expect("Failed to execute fix build");
+    assert!(
+        build.status.success(),
+        "the build should succeed at -O {}.\nstdout: {}\nstderr: {}",
+        opt_level,
+        String::from_utf8_lossy(&build.stdout),
+        String::from_utf8_lossy(&build.stderr),
+    );
+
+    let run = Command::new(project_dir.join("a.out"))
+        .current_dir(project_dir)
+        .output()
+        .expect("Failed to execute the built program");
+    assert!(
+        run.status.success(),
+        "the built program should run cleanly at -O {}, but exited with {}.\nstderr: {}",
+        opt_level,
+        run.status,
+        String::from_utf8_lossy(&run.stderr),
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&run.stdout).trim(),
+        expected_output,
+        "the program should answer the same at -O {}",
+        opt_level
+    );
+
+    read_rc_ir_dump(project_dir)
+}
+
 /// The RC IR of every module, read out of the dump a build with `--emit-rc-ir all` left in `dir`.
 pub fn read_rc_ir_dump(dir: &Path) -> String {
     let dump_path = dir.join(".fixlang/rc_ir.post.txt");

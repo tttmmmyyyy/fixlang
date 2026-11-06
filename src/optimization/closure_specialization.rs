@@ -6,15 +6,11 @@ use super::{
     move_bodies::move_bodies_into_callers,
     pull_let,
     rename::rename_free_names,
-    uncurry::internalize_let_to_var_at_head,
     unique_local_names,
 };
 use crate::{
     ast::{
-        expr::{
-            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_local,
-            var_var, ExprNode,
-        },
+        expr::{expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_var, ExprNode},
         name::FullName,
         pattern::{Pattern, PatternNode},
         program::{Program, Symbol},
@@ -1461,13 +1457,7 @@ impl SpecializationRequest {
 /// The global function a lifted lambda becomes: it receives the captured environment as an argument
 /// and destructures it at the head of the body.
 fn lifted_lambda_func(cap: &CaptureStruct, lam: &Arc<ExprNode>) -> Arc<ExprNode> {
-    let body = expr_let_typed(
-        cap.pattern(),
-        expr_var(FullName::local(CLOSURE_CAP_NAME), None).set_type(cap.ty.clone()),
-        lam.clone(),
-    );
-    let func = expr_abs_typed(var_local(CLOSURE_CAP_NAME), cap.ty.clone(), body);
-    internalize_let_to_var_at_head(&func)
+    cap.lifted_function(&FullName::local(CLOSURE_CAP_NAME), lam.clone())
 }
 
 /// The arrow type taking `doms` in order and returning `codom`, which is what `collect_app_src`
