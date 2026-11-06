@@ -153,7 +153,7 @@ enum WarningFact {
 - **`EntityIdentity`**: 型検査の 1 単位を指す。グローバル値なら名前と型スキーム、トレイトのメソッドの実装なら、メソッドの名前と実装の型スキームと実装を書いたモジュールである。今のキャッシュのキーと同じものを指す。
 - **`ModuleRecord` が保証すること**: `ModuleRecord` にある各本体が、同じキャッシュキーのもとで、診断を 1 つも出さずに型検査を通ったこと。診断を 1 つも出さない型検査とは、通常のビルドの型検査（`error_tolerant` でない検査）が、エラーも、穴（`?`）などの許容された診断も出さなかったことを指す。今のキャッシュも、この条件を満たした結果だけを書く。トレイトの実装なら、実装の型が宣言と一致すること（`check_scheme_equivalent`）も含む。
 - **2 回目以降のビルド**: 宣言から分かる今回の本体の集合と `ModuleRecord` を比べ、`ModuleRecord` にある本体は型検査を省く。`ModuleRecord` にない本体だけを型検査する。Std の本体の集合は、使うタプルのサイズで増える（9 要素のタプルを使うと Std の値が 107 個増え、Std のキャッシュキーは変わらない）。集合で比べるので、こうして増えた本体も型検査される。
-- **新しく通った本体を加える**: その時点のファイルを読み直し、古い本体のバイト列を同じ位置にそのまま写し、新しい本体を足して、`ModuleRecord` を書き直した新しいファイルを作り、`replace_file` で置き換える。古い本体の位置が変わらないので、前に読んだ `ModuleRecord` の位置は、書き直した後のファイルでも同じ本体を指す。Std のファイルは約 7 MB で、書き直しは数十 ms の見込みである。`ModuleRecord` の本体は増える一方なので、タプルのサイズが違う `fix build` と `fix test` を交互に実行しても、両方を一度ずつ実行した後は型検査し直さない。
+- **新しく通った本体を加える**: その時点のファイルを読み直し、古い本体のバイト列を同じ位置にそのまま写し、新しい本体を足して、`ModuleRecord` を書き直した新しいファイルを、同じディレクトリの一時ファイルとして書き、元のファイルの名前へ `rename` する。古い本体の位置が変わらないので、元の `ModuleRecord` の項目は、新しいファイルでもそのまま使える。ビルドは、`ModuleRecord` を読んだファイル（自分で書いたモジュールなら、置き換えに使った新しいファイル）を `mmap` でメモリに写して持ち、本体はそこから読む。同じモジュールのファイルを 2 つのビルドが同時に書くと、それぞれのファイルは同じ本体を別の位置に持ち、後から置き換えた方が残る。それでも各ビルドは、自分が開いたファイルから、そのファイルの位置で本体を読む。Std のファイルは約 7 MB で、書き直しは数十 ms の見込みである。`ModuleRecord` の本体は増える一方なので、タプルのサイズが違う `fix build` と `fix test` を交互に実行しても、両方を一度ずつ実行した後は型検査し直さない。
 - **診断の出た本体**: ファイルに書かない。毎回型検査し直す。
 - **古いファイル**: 新しいキャッシュキーのファイルを書き終えたら、同じモジュールの、キャッシュキーの違うファイルを消す。
 - **キャッシュキーが成り立つ条件**: 本体の中身は、その `EntityIdentity` と、モジュールのキャッシュキーが覆うもので決まる。たとえば、タプルの実装の中身はサイズだけで決まり、アクセサの中身はそのモジュールの構造体の定義で決まる。今の値ごとのキャッシュも同じ条件に立っている。実装では、この条件をコメントと assert に書く。
@@ -174,7 +174,7 @@ flowchart LR
         a2[実装 A]
     end
     n1 -- ModuleRecord にない --> tc[型検査]
-    tc -- 通った --> w["古いバイト列 + 新しい本体<br/>-> replace_file"]
+    tc -- 通った --> w["古いバイト列 + 新しい本体<br/>-> rename"]
     w -- 加える --> passed
 ```
 
@@ -212,7 +212,7 @@ struct CheckedBody {
 }
 ```
 
-どちらの関数も、ファイルがない、壊れている、書けなかった、のどの場合も「なかった」として作り直すので、結果は同じになる。違うのは、かかる時間だけである。本体を読むときは、本体の前に書いた `EntityIdentity` が求めたものと一致することを確かめる。別のプロセスがファイルを書き直しても、古い本体の位置は変わらない。別のキャッシュキーのファイルに置き換わって消えたときは、本体を型検査し直す。
+どちらの関数も、ファイルがない、壊れている、書けなかった、のどの場合も「なかった」として作り直すので、結果は同じになる。違うのは、かかる時間だけである。本体を読むときは、本体の前に書いた `EntityIdentity` が求めたものと一致することを確かめる。本体は `ModuleRecord` を読んだときにメモリに写したファイルから読むので、別のプロセスがファイルを置き換えても消しても、同じ本体が読める。
 
 読み戻した位置（`Span`）は、ソースファイルをパスで共有する `SourceFile` を指すようにする。今のシリアライズは `SourceFile` の中身を落とすので、読み戻した位置はそれぞれ別の `SourceFile` を持つ。`-g` のビルドでは、デバッグ情報の行番号を求めるたびに、その `SourceFile` がファイル全体（std.fix は 743 KB）を読んで持つ。そのため、今の 2 回目以降のビルドは、`-g` で最大 RSS が 327 MB から 766 MB になっている。
 
@@ -225,11 +225,10 @@ run targets on the compiler threads, at most k in flight:   // モジュール�
     checked = typed_body(entity)        // body_ast -> 不透明型で包む -> check_scheme_equivalent -> 型検査
     keep  checked.opaque_types, checked.diagnostics, checked.warning_facts
     if checked.diagnostics is empty:
-        hand checked.typed to the writer of its module's file
+        append checked.typed to the new file of its module   // old bodies first, copied when it begins
     free  checked.typed
-
-for each module whose file gained entities:
-    write the new file (old bodies + new bodies, record, index); replace_file
+    if entity is the last target of its module:
+        finish the new file (record, index); replace the file with it
 
 opaque types  = from the records + from the checked
 validate_opaque_types_are_acyclic(opaque types)
@@ -237,7 +236,7 @@ warnings      = derive from the warning facts of the records + of the checked
 report all diagnostics and warnings; stop on an error
 ```
 
-今は全部の型検査を `map_on_compiler_threads` に一度に渡していて、1 本の重さが大きくばらついても、空いたスレッドが次を取る。モジュールごとや k 個ごとに完了を待つと、並列度が落ちる。そこで、対象の本体を全モジュールにわたって一つの作業の列に入れ、同時に処理中の本体を k 個までに抑える。
+今は全部の型検査を `map_on_compiler_threads` に一度に渡していて、1 本の重さが大きくばらついても、空いたスレッドが次を取る。モジュールごとや k 個ごとに完了を待つと、並列度が落ちる。そこで、対象の本体を全モジュールにわたって一つの作業の列に入れ、同時に処理中の本体を k 個までに抑える。k はコンパイラのスレッドの数で、各スレッドは型検査を終えた本体を呼び出し側のスレッドへ渡してから次を取る。呼び出し側のスレッドは、渡された本体をすぐにモジュールの新しいファイルへ書き足すので、モジュールの最後の本体を待つ間も、書いた本体はメモリに残らない。
 
 このフェーズが終わると、すべての値の不透明型の具体型が決まっている。型検査のエラーを全部報告してからインスタンス化に進む順序も、今と同じである。
 
@@ -251,7 +250,14 @@ typed-modules に書く型付きの本体は、今のキャッシュが書く `T
 
 ### トレイトの実装の本体
 
-トレイトの実装の本体は、`GlobalValue` の `TraitMemberImpl` と、`TraitEnv` の `TraitImpl::members` の両方から参照されている。`create_typechecker` は `TraitEnv` を複製して型検査器に持たせる。そのため、`GlobalValue` の側の本体を捨てても、本体は残る。`TraitImpl::members` の本体を使うのは実装の名前を調べる処理だけなので、`members` は名前だけを持つ形にし、本体は `GlobalValue` の側にだけ置く。
+トレイトの実装の本体は、`GlobalValue` の `TraitMemberImpl` と、`TraitEnv` の `TraitImpl::members` の両方から、同じ `Arc` で参照されている。`create_typechecker` は `TraitEnv` を複製して型検査器に持たせる。そのため、`GlobalValue` の側の本体を捨てても、本体は残る。`members` は名前だけを持つ形にし、本体は `GlobalValue` の側にだけ置く。
+
+`TraitImpl::members` の本体を読む処理は、名前を調べるもののほかに、`validate_trait_impl` の 2 つの検査がある。
+
+- トレイトが宣言していないメンバを実装したときの報告は、本体の `source` を位置に使う。
+- 型シグネチャを書かないメンバについて、本体の型注釈の型変数が実装の型に現れることを確かめる（`collect_annotation_tyvars`）。
+
+`members` を名前だけにするときは、この 2 つが読むものを、本体の AST を捨てる前に取り出しておくか、検査を本体の AST を読み戻す場所へ移す。
 
 ### 2 回目以降のビルド
 
@@ -278,7 +284,6 @@ typed-modules に書く型付きの本体は、今のキャッシュが書く `T
 ### 段階 2: 本体を k 個までずつ型検査し、書いて捨てる
 
 - 全本体を型検査するフェーズを、上の擬似コードの形にする。型付きの本体は、型検査したそばから typed-modules に渡して捨てる。
-- `TraitImpl::members` を名前だけにする。
 
 改善するもの: 1 回目のビルドのメモリのうち、型検査のぶん（依存 26 個で約 320 MiB）。
 
@@ -287,6 +292,7 @@ typed-modules に書く型付きの本体は、今のキャッシュが書く `T
 - ソースファイルを 1 つ構文解析するたびに、本体の AST を位置ごと parsed-modules に書いて捨てる。
 - 不透明型で本体を包む処理を、型検査の入口へ移す。
 - `body_ast` を作る。
+- `TraitImpl::members` を名前だけにする。`GlobalValue` の側の本体を捨てるこの段階で、はじめてメモリが減る。
 
 改善するもの: 構文解析のぶんのメモリ（依存 26 個で約 100 MiB）。
 

@@ -18,6 +18,7 @@ mod test_borrow_tail_call;
 mod test_borrow_unit_ownership;
 mod test_borrowed_union_field;
 mod test_build_exit_status;
+mod test_cache_invalidation;
 mod test_check;
 mod test_check_integer_operations_setting;
 mod test_closure_capture;
