@@ -27,7 +27,7 @@
 use crate::ast::expr::ExprNode;
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::Pattern;
-use crate::ast::program::{Body, BodyLocation, CheckedBody, Program, TypedExpr};
+use crate::ast::program::{Body, BodyLocation, CheckedBody, Program, RecordedBody, TypedExpr};
 use crate::ast::types::{OpaqueTyConResolution, TyCon};
 use crate::configuration::Configuration;
 use crate::constants::TYPED_MODULES_PATH;
@@ -517,9 +517,10 @@ enum CheckOutcome {
     InMemory(Result<CheckedBody, Errors>),
 }
 
-/// A body whose typed expression lies in its module's file, and which `Program::global_values`
-/// holds as it was parsed.
-struct StoredBody {
+/// Where the typed expression of a body lies in its module's file, and what the file records of the
+/// body.
+#[derive(Clone)]
+pub struct StoredBody {
     /// The file of the module the body is defined in, which the body is read back from.
     mapped: Arc<MappedModuleFile>,
     /// The entity the body belongs to, which the file writes in front of the body.
@@ -530,11 +531,10 @@ struct StoredBody {
     warning_facts: Vec<WarningFact>,
 }
 
-/// The bodies of a program whose typed expressions lie in the files of their modules.
+/// What a program reads the typed expressions of its bodies back from the files of their modules
+/// with (`Body::Recorded`).
 #[derive(Default)]
 pub struct TypedModules {
-    /// The bodies whose typed expressions lie in the files, by where each lies in the program.
-    stored: Map<BodyLocation, StoredBody>,
     /// The typed expressions read back so far, so that a value instantiated at several types is
     /// read once.
     read_back: Map<BodyLocation, TypedExpr>,
@@ -544,13 +544,10 @@ pub struct TypedModules {
     cache_dirs: CacheDirs,
 }
 
-impl TypedModules {
-    /// The facts a warning after type checking may be derived from about the body at `loc`, when
-    /// its typed expression lies in its module's file.
-    pub fn stored_warning_facts(&self, loc: &BodyLocation) -> Option<&[WarningFact]> {
-        self.stored
-            .get(loc)
-            .map(|body| body.warning_facts.as_slice())
+impl StoredBody {
+    /// The facts about the body a warning after type checking may be derived from.
+    pub fn warning_facts(&self) -> &[WarningFact] {
+        &self.warning_facts
     }
 }
 
@@ -558,8 +555,8 @@ impl Program {
     /// Resolves namespaces in, and type-checks, the bodies of `modules` that the files of
     /// `TYPED_MODULES_PATH` do not record, and adds those that pass to the files.
     ///
-    /// A body the file of its module holds, whether recorded before or added here, is left as it
-    /// was parsed, and its typed expression is read back when instantiation asks for it
+    /// A body the file of its module holds, whether recorded before or added here, becomes
+    /// `Body::Recorded`, and its typed expression is read back when instantiation asks for it
     /// (`typed_body`). The typed expressions of the other bodies are put in place of their bodies.
     pub fn check_bodies_through_typed_modules(
         &mut self,
@@ -757,15 +754,23 @@ impl Program {
         entry: EntityEntry,
     ) {
         self.add_opaque_types(entry.opaque_types);
-        self.typed_modules.stored.insert(
-            loc,
-            StoredBody {
-                mapped,
-                identity,
-                range: entry.body,
-                warning_facts: entry.warning_facts,
-            },
-        );
+        let stored = StoredBody {
+            mapped,
+            identity,
+            range: entry.body,
+            warning_facts: entry.warning_facts,
+        };
+        let body = self.body_at_mut(&loc);
+        let Body::Unchecked(unchecked) = body else {
+            panic!(
+                "a body of `{}` recorded once more",
+                loc.val_name.to_string()
+            )
+        };
+        *body = Body::Recorded(RecordedBody {
+            unchecked: unchecked.clone(),
+            stored,
+        });
     }
 
     /// The typed expression of the body at `loc`: read from the file of its module when the
@@ -779,18 +784,17 @@ impl Program {
         loc: &BodyLocation,
         tc: &TypeCheckContext,
     ) -> Result<TypedExpr, Errors> {
-        let Some(stored) = self.typed_modules.stored.get(loc) else {
-            let (Body::Checked(te), _scm, _module) = self.body_at(loc) else {
-                panic!(
-                    "a body of `{}` instantiated before it was type-checked",
-                    loc.val_name.to_string()
-                )
-            };
-            return Ok(te.clone());
-        };
         if let Some(te) = self.typed_modules.read_back.get(loc) {
             return Ok(te.clone());
         }
+        let stored = match self.body_at(loc).0 {
+            Body::Recorded(recorded) => recorded.stored.clone(),
+            Body::Checked(te) => return Ok(te.clone()),
+            Body::Unchecked(_) => panic!(
+                "a body of `{}` instantiated before it was type-checked",
+                loc.val_name.to_string()
+            ),
+        };
         let read =
             SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
                 read_body(&stored.mapped.bytes, &stored.range, &stored.identity)
@@ -806,7 +810,6 @@ impl Program {
                 }
                 if checked.passed() {
                     if let Some(dir) = self.typed_modules.cache_dirs.writable(TYPED_MODULES_PATH) {
-                        let stored = &self.typed_modules.stored[loc];
                         let entry = NewEntry::of(stored.identity.clone(), &checked);
                         let source_files = &mut self.typed_modules.source_files;
                         let file = &stored.mapped.file;

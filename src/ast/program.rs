@@ -31,7 +31,7 @@ use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionE
 use crate::elaboration::parsed_modules::StoredParsedBody;
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use crate::elaboration::typecheckcache::{entity_identity, EntityIdentity, SharedTypeCheckCache};
-use crate::elaboration::typed_modules::{warning_facts, TypedModules, WarningFact};
+use crate::elaboration::typed_modules::{warning_facts, StoredBody, TypedModules, WarningFact};
 use crate::error::{
     Error, Errors, WARN_DEPRECATED, WARN_MISSING_PATTERN_FIELD, WARN_UNDECLARED_DEPENDENCY,
 };
@@ -304,8 +304,22 @@ impl UncheckedBody {
 pub enum Body {
     /// The body before it is type-checked.
     Unchecked(UncheckedBody),
-    /// The body type-checked.
+    /// The body type-checked, with the typed expression held in the file of its module under
+    /// `TYPED_MODULES_PATH`, which instantiation reads it back from.
+    Recorded(RecordedBody),
+    /// The body type-checked, with the typed expression held in memory.
     Checked(TypedExpr),
+}
+
+/// A body type-checked whose typed expression lies in the file of its module under
+/// `TYPED_MODULES_PATH`.
+#[derive(Clone)]
+pub struct RecordedBody {
+    /// The body before it is type-checked, which is checked again when the typed expression fails
+    /// to read back from the file.
+    pub unchecked: UncheckedBody,
+    /// Where the typed expression lies, and what the file records of the body.
+    pub stored: StoredBody,
 }
 
 impl Body {
@@ -332,9 +346,9 @@ impl Body {
 
     /// The expression held in memory: the typed one, or the one parsed or built.
     ///
-    /// Panics on a body written to its file of parsed bodies, which only a build that type-checks
-    /// through the files of type-checked modules writes, and which no walk over the bodies of a
-    /// program reads.
+    /// Panics on a body that holds its expression in a file, as the bodies of a build that
+    /// type-checks through the files of type-checked modules do; no walk over the bodies of a
+    /// program reads one of those.
     pub fn expr(&self) -> &Arc<ExprNode> {
         match self {
             Body::Checked(te) => &te.expr,
@@ -351,6 +365,9 @@ impl Body {
                 stored.source().end,
                 stored.source().input.file_path.to_string_lossy()
             ),
+            Body::Recorded(_) => {
+                panic!("a body walked whose typed expression lies in the file of its module")
+            }
         }
     }
 
@@ -1409,11 +1426,13 @@ impl Program {
         tc: &TypeCheckContext,
     ) -> Result<CheckedBody, Errors> {
         let (body, req_scm, def_mod) = self.body_at(loc);
-        let Body::Unchecked(body) = body else {
-            panic!(
+        let body = match body {
+            Body::Unchecked(body) => body,
+            Body::Recorded(recorded) => &recorded.unchecked,
+            Body::Checked(_) => panic!(
                 "a body of `{}` type-checked once more",
                 loc.val_name.to_string()
-            )
+            ),
         };
         if let Some(impl_idx) = loc.impl_idx {
             let gv = &self.global_values[&loc.val_name];
@@ -1492,13 +1511,21 @@ impl Program {
     pub fn install_checked_body(&mut self, loc: &BodyLocation, checked: CheckedBody) -> Errors {
         self.add_opaque_types(checked.opaque_types);
         self.merge_import_required(checked.import_required);
+        *self.body_at_mut(loc) = Body::Checked(checked.te);
+        checked.diagnostics
+    }
+
+    /// The body at `loc`, to be replaced.
+    pub fn body_at_mut(&mut self, loc: &BodyLocation) -> &mut Body {
         let gv = self.global_values.get_mut(&loc.val_name).unwrap();
         match (&mut gv.expr, loc.impl_idx) {
-            (SymbolExpr::Simple(e), None) => *e = Body::Checked(checked.te),
-            (SymbolExpr::Method(impls), Some(i)) => impls[i].expr = Body::Checked(checked.te),
-            _ => unreachable!(),
+            (SymbolExpr::Simple(body), None) => body,
+            (SymbolExpr::Method(impls), Some(i)) => &mut impls[i].expr,
+            _ => panic!(
+                "`{}` is not the kind of value its location says",
+                loc.val_name.to_string()
+            ),
         }
-        checked.diagnostics
     }
 
     /// Adds the concrete types the opaque type constructors of one body stand for to
@@ -2332,13 +2359,12 @@ impl Program {
         for (name, gv) in &self.global_values {
             let mut facts = vec![];
             for loc in self.body_locations(slice::from_ref(name), |_| true) {
-                match self.typed_modules.stored_warning_facts(&loc) {
-                    Some(stored) => facts.extend(stored.iter().cloned()),
-                    None => {
-                        if let Body::Checked(te) = self.body_at(&loc).0 {
-                            facts.append(&mut warning_facts(&te.expr))
-                        }
+                match self.body_at(&loc).0 {
+                    Body::Recorded(recorded) => {
+                        facts.extend(recorded.stored.warning_facts().iter().cloned())
                     }
+                    Body::Checked(te) => facts.append(&mut warning_facts(&te.expr)),
+                    Body::Unchecked(_) => {}
                 }
             }
             facts_by_value.push((gv, facts));
