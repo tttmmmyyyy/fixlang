@@ -190,8 +190,7 @@ fn decode_parsed_file(bytes: &[u8]) -> Option<ParsedIndex> {
 /// Writes the bodies of `program`, parsed from `origin`, to the file of parsed bodies of `origin`
 /// in the directory `cache_dirs` gives, or finds them in the file an earlier build wrote, and
 /// replaces each of them in `program` with one read back from the file (see `bodies_to_store` for
-/// which bodies). The bodies
-/// stay in memory when the file can be neither found nor written.
+/// which bodies). The bodies stay in memory when the file can be neither found nor written.
 ///
 /// A file found that cannot be read, or lacks a body, is reported as a warning, and written anew.
 pub fn store_parsed_bodies(
