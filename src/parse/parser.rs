@@ -21,7 +21,7 @@ use crate::ast::{
     qual_pred::QualPred,
     qual_type::QualType,
     traits::{
-        AssocTypeDefn, AssocTypeImpl, KindSignature, TraitAlias, TraitDefn, TraitId, TraitImpl,
+        AssocTypeDefn, AssocTypeImpl, ImplMember, KindSignature, TraitAlias, TraitDefn, TraitId, TraitImpl,
         TraitMember,
     },
     typedecl::{Field, Struct, TypeAlias, TypeDeclValue, TypeDefn, Union},
@@ -1067,7 +1067,7 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitImp
     let mut pairs = pair.into_inner();
     let qual_pred = parse_predicate_qualified(pairs.next().unwrap(), ctx)?;
     let impl_type = qual_pred.predicate.ty.clone();
-    let mut value_impls: Map<Name, Arc<ExprNode>> = Map::default();
+    let mut value_impls: Map<Name, ImplMember> = Map::default();
     let mut value_lhs_srcs: Map<Name, Vec<Span>> = Map::default();
     let mut value_type_sigs: Map<Name, QualType> = Map::default();
     let mut assoc_types: Map<Name, AssocTypeImpl> = Map::default();
@@ -1088,7 +1088,7 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitImp
                     .entry(name.clone())
                     .or_default()
                     .push(name_span);
-                value_impls.insert(name, expr);
+                value_impls.insert(name, ImplMember::new(expr));
             }
             TraitMemberImpl::TypeSig {
                 name,
@@ -1114,7 +1114,7 @@ fn parse_trait_impl(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<TraitImp
                             &[&Some(span)],
                         ));
                     }
-                    value_impls.insert(name, expr);
+                    value_impls.insert(name, ImplMember::new(expr));
                 }
             }
             TraitMemberImpl::Type(assoc_type_impl) => {

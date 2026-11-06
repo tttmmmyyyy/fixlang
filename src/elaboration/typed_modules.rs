@@ -27,7 +27,7 @@
 use crate::ast::expr::ExprNode;
 use crate::ast::name::{FullName, Name};
 use crate::ast::pattern::Pattern;
-use crate::ast::program::{BodyLocation, CheckedBody, Program, TypedExpr};
+use crate::ast::program::{Body, BodyLocation, CheckedBody, Program, TypedExpr};
 use crate::ast::types::{OpaqueTyConResolution, TyCon};
 use crate::configuration::Configuration;
 use crate::constants::TYPED_MODULES_PATH;
@@ -958,7 +958,12 @@ impl Program {
         tc: &TypeCheckContext,
     ) -> Result<TypedExpr, Errors> {
         let Some(stored) = self.typed_modules.stored.get(loc) else {
-            let (te, _scm, _module) = self.body_at(loc);
+            let (Body::Checked(te), _scm, _module) = self.body_at(loc) else {
+                panic!(
+                    "a body of `{}` instantiated before it was type-checked",
+                    loc.val_name.to_string()
+                )
+            };
             return Ok(te.clone());
         };
         if let Some(te) = self.typed_modules.read_back.get(loc) {

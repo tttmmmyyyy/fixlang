@@ -25,6 +25,7 @@ use crate::constants::{
 };
 use crate::elaboration::desugar_opaque::{
     remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type,
+    wrap_with_opaque,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
@@ -233,11 +234,118 @@ impl GlobalValue {
     }
 }
 
+/// The expression of a body as the parser produced it or the compiler built it.
+#[derive(Clone)]
+pub enum ParsedBody {
+    /// The expression, held in memory.
+    InMemory(Arc<ExprNode>),
+}
+
+impl ParsedBody {
+    /// The expression.
+    pub fn expr(&self) -> Result<Arc<ExprNode>, Errors> {
+        match self {
+            ParsedBody::InMemory(expr) => Ok(expr.clone()),
+        }
+    }
+
+    /// Where the expression is written.
+    pub fn source(&self) -> Option<Span> {
+        match self {
+            ParsedBody::InMemory(expr) => expr.source.clone(),
+        }
+    }
+}
+
+/// What a body is wrapped in before it is type-checked, when the type of its value has opaque
+/// types (see `desugar_opaque_types`).
+#[derive(Clone)]
+pub struct OpaqueWrapping {
+    /// The `#wrap_opaque` the expression is passed to.
+    pub wrapper: FullName,
+    /// The opaque type constructors of the body, each with the concrete type it stands for left
+    /// for the type check to fill in.
+    pub opaque_types: Map<FullName, Vec<OpaqueTyConResolution>>,
+}
+
+/// A body before it is type-checked.
+#[derive(Clone)]
+pub struct UncheckedBody {
+    /// The expression.
+    pub expr: ParsedBody,
+    /// What the expression is wrapped in before it is type-checked.
+    pub opaque_wrapping: Option<OpaqueWrapping>,
+}
+
+impl UncheckedBody {
+    /// The expression as the type check takes it: wrapped in the `#wrap_opaque` of its value when
+    /// the value has opaque types, with the concrete types of those left for the check to fill in.
+    pub fn to_check(&self) -> Result<TypedExpr, Errors> {
+        let expr = self.expr.expr()?;
+        Ok(match &self.opaque_wrapping {
+            Some(wrapping) => TypedExpr {
+                expr: wrap_with_opaque(&wrapping.wrapper, expr),
+                equalities: vec![],
+                opaque_types: wrapping.opaque_types.clone(),
+            },
+            None => TypedExpr::from_expr(expr),
+        })
+    }
+}
+
+/// The body of a simple value or of an implementation of a trait member.
+#[derive(Clone)]
+pub enum Body {
+    /// The body before it is type-checked.
+    Unchecked(UncheckedBody),
+    /// The body type-checked.
+    Checked(TypedExpr),
+}
+
+impl Body {
+    /// The body of the expression `expr`, before it is type-checked.
+    pub fn unchecked(expr: Arc<ExprNode>) -> Self {
+        Body::Unchecked(UncheckedBody {
+            expr: ParsedBody::InMemory(expr),
+            opaque_wrapping: None,
+        })
+    }
+
+    /// Has the expression wrapped in `wrapping` when it is type-checked. The body is one not yet
+    /// type-checked, and not wrapped before.
+    pub fn wrap_for_opaque_types(&mut self, wrapping: OpaqueWrapping) {
+        let Body::Unchecked(body) = self else {
+            panic!("a body wrapped for its opaque types after it was type-checked")
+        };
+        assert!(
+            body.opaque_wrapping.is_none(),
+            "a body wrapped twice for its opaque types"
+        );
+        body.opaque_wrapping = Some(wrapping);
+    }
+
+    /// The expression held in memory: the typed one, or the one parsed or built.
+    pub fn expr(&self) -> &Arc<ExprNode> {
+        match self {
+            Body::Checked(te) => &te.expr,
+            Body::Unchecked(UncheckedBody {
+                expr: ParsedBody::InMemory(expr),
+                ..
+            }) => expr,
+        }
+    }
+
+    /// The smallest node of the expression covering `pos`.
+    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
+        self.expr().find_node_at(pos)
+    }
+}
+
 /// What a global value is defined by.
 #[derive(Clone)]
 pub enum SymbolExpr {
     /// The expression the name is bound to, as in `id : a -> a; id = |x| x`.
-    Simple(TypedExpr),
+    Simple(Body),
     /// The implementations of a trait member, one for each `impl` giving the member a definition.
     Method(Vec<TraitMemberImpl>),
 }
@@ -259,16 +367,6 @@ impl SymbolExpr {
         }
     }
 
-    /// Where the defining expression is written: for a trait member, where the expression of the
-    /// first of its implementations is written.
-    #[allow(dead_code)]
-    pub fn source(&self) -> Option<Span> {
-        match self {
-            SymbolExpr::Simple(e) => e.expr.source.clone(),
-            SymbolExpr::Method(ms) => ms.first().map(|m| m.expr.expr.source.clone()).flatten(),
-        }
-    }
-
     /// The smallest node of this definition covering `pos`.
     ///
     /// # Arguments
@@ -285,8 +383,8 @@ impl SymbolExpr {
     /// of each implementation of a trait member.
     pub fn exprs(&self) -> Vec<&Arc<ExprNode>> {
         match self {
-            SymbolExpr::Simple(te) => vec![&te.expr],
-            SymbolExpr::Method(impls) => impls.iter().map(|m| &m.expr.expr).collect(),
+            SymbolExpr::Simple(body) => vec![body.expr()],
+            SymbolExpr::Method(impls) => impls.iter().map(|m| m.expr.expr()).collect(),
         }
     }
 
@@ -393,16 +491,6 @@ impl TypedExpr {
             opaque_types: Map::default(),
         }
     }
-
-    /// The smallest node of the expression covering `pos`.
-    pub fn find_node_at(&self, pos: &SourcePos) -> Option<EndNode> {
-        let node = self.expr.find_node_at(pos);
-        if node.is_none() {
-            return None;
-        }
-        let node = node.unwrap();
-        Some(node)
-    }
 }
 
 /// One `impl`'s definition of one trait member.
@@ -420,7 +508,7 @@ pub struct TraitMemberImpl {
     /// user wrote has to be equivalent to.
     pub scm_via_defn: Arc<Scheme>,
     /// The expression this implementation defines the member as.
-    pub expr: TypedExpr,
+    pub expr: Body,
     /// The module the `impl` is written in.
     ///
     /// This may differ from the first component of the member's namespace: where the `Main` module
@@ -1052,7 +1140,7 @@ impl Program {
         let gv = GlobalValue {
             scm: scm.clone(),
             syn_scm: None,
-            expr: SymbolExpr::Simple(TypedExpr::from_expr(expr)),
+            expr: SymbolExpr::Simple(Body::unchecked(expr)),
             decl_src,
             defn_src,
             document,
@@ -1205,7 +1293,7 @@ impl Program {
 
     /// The body at `loc`: the expression, the type scheme it is checked against, and the module it
     /// is defined in.
-    pub fn body_at(&self, loc: &BodyLocation) -> (&TypedExpr, &Arc<Scheme>, Name) {
+    pub fn body_at(&self, loc: &BodyLocation) -> (&Body, &Arc<Scheme>, Name) {
         let gv = &self.global_values[&loc.val_name];
         match (&gv.expr, loc.impl_idx) {
             (SymbolExpr::Simple(te), None) => (te, &gv.scm, loc.val_name.module()),
@@ -1301,7 +1389,13 @@ impl Program {
         nrenv: &Arc<NameResolutionEnv>,
         tc: &TypeCheckContext,
     ) -> Result<CheckedBody, Errors> {
-        let (te, req_scm, def_mod) = self.body_at(loc);
+        let (body, req_scm, def_mod) = self.body_at(loc);
+        let Body::Unchecked(body) = body else {
+            panic!(
+                "a body of `{}` type-checked once more",
+                loc.val_name.to_string()
+            )
+        };
         if let Some(impl_idx) = loc.impl_idx {
             let gv = &self.global_values[&loc.val_name];
             let SymbolExpr::Method(impls) = &gv.expr else {
@@ -1320,7 +1414,7 @@ impl Program {
                 return Err(impl_signature_mismatch_error(
                     req_scm,
                     &impl_.scm_via_defn,
-                    &te.expr.source.as_ref().map(|s| s.to_head_character()),
+                    &body.expr.source().map(|s| s.to_head_character()),
                     &gv.decl_src.as_ref().map(|s| s.to_head_character()),
                 ));
             }
@@ -1328,7 +1422,7 @@ impl Program {
 
         let def_mod = self.find_mod(&def_mod).unwrap();
         let mut nrctx = NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
-        let mut te = te.clone();
+        let mut te = body.to_check()?;
 
         // Perform namespace inference.
         te.expr = te.expr.resolve_namespace(&mut nrctx)?;
@@ -1381,8 +1475,8 @@ impl Program {
         self.merge_import_required(checked.import_required);
         let gv = self.global_values.get_mut(&loc.val_name).unwrap();
         match (&mut gv.expr, loc.impl_idx) {
-            (SymbolExpr::Simple(e), None) => *e = checked.te,
-            (SymbolExpr::Method(impls), Some(i)) => impls[i].expr = checked.te,
+            (SymbolExpr::Simple(e), None) => *e = Body::Checked(checked.te),
+            (SymbolExpr::Method(impls), Some(i)) => impls[i].expr = Body::Checked(checked.te),
             _ => unreachable!(),
         }
         checked.diagnostics
@@ -1860,7 +1954,7 @@ impl Program {
                     for trait_impl in instances {
                         let scm = trait_impl.member_scheme(&member.name, trait_);
                         let scm_via_defn = trait_impl.member_scheme_by_defn(&member.name, trait_);
-                        let expr = trait_impl.member_expr(&member.name);
+                        let body = trait_impl.member(&member.name).body.clone();
                         let lhs_srcs = trait_impl
                             .member_lhs_srcs
                             .get(&member.name)
@@ -1869,7 +1963,10 @@ impl Program {
                         member_impls.push(TraitMemberImpl {
                             scm,
                             scm_via_defn,
-                            expr: TypedExpr::from_expr(expr),
+                            expr: Body::Unchecked(UncheckedBody {
+                                expr: body,
+                                opaque_wrapping: None,
+                            }),
                             define_module: trait_impl.define_module.clone(),
                             lhs_srcs,
                         });
@@ -2210,7 +2307,7 @@ impl Program {
 
     /// The facts a warning after type checking may be derived from, of every body of every global
     /// value, grouped by the global value. A body whose typed expression lies in its module's file
-    /// is answered by what the file records of it.
+    /// is answered by what the file records of it, and a body not type-checked has none.
     fn warning_facts_of_bodies(&self) -> Vec<(&GlobalValue, Vec<WarningFact>)> {
         let mut facts_by_value = vec![];
         for (name, gv) in &self.global_values {
@@ -2218,7 +2315,11 @@ impl Program {
             for loc in self.body_locations(slice::from_ref(name), |_| true) {
                 match self.typed_modules.stored_warning_facts(&loc) {
                     Some(stored) => facts.extend(stored.iter().cloned()),
-                    None => facts.append(&mut warning_facts(&self.body_at(&loc).0.expr)),
+                    None => {
+                        if let Body::Checked(te) = self.body_at(&loc).0 {
+                            facts.append(&mut warning_facts(&te.expr))
+                        }
+                    }
                 }
             }
             facts_by_value.push((gv, facts));

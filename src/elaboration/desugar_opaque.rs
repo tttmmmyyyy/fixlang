@@ -55,7 +55,8 @@ use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::pattern::{Pattern, PatternNode};
 use crate::ast::predicate::Predicate;
 use crate::ast::program::{
-    impl_signature_mismatch_error, GlobalValue, Program, SymbolExpr, TraitMemberImpl, TypedExpr,
+    impl_signature_mismatch_error, Body, GlobalValue, OpaqueWrapping, Program, SymbolExpr,
+    TraitMemberImpl,
 };
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::types::{
@@ -209,7 +210,7 @@ impl Program {
                 GlobalValue {
                     scm: wrap_scm,
                     syn_scm: None,
-                    expr: SymbolExpr::Simple(TypedExpr::from_expr(build_undefined_expr())),
+                    expr: SymbolExpr::Simple(Body::unchecked(build_undefined_expr())),
                     decl_src: None,
                     defn_src: None,
                     document: None,
@@ -222,10 +223,15 @@ impl Program {
             let gv = self.global_values.get_mut(gv_name).unwrap();
             gv.scm = new_scm;
             match &mut gv.expr {
-                SymbolExpr::Simple(te) => {
-                    te.expr = wrap_with_opaque(&wrap_name, te.expr.clone());
-                    te.opaque_types =
-                        build_opaque_resolutions(opaque_infos, &Substitution::default(), decl_src);
+                SymbolExpr::Simple(body) => {
+                    body.wrap_for_opaque_types(OpaqueWrapping {
+                        wrapper: wrap_name.clone(),
+                        opaque_types: build_opaque_resolutions(
+                            opaque_infos,
+                            &Substitution::default(),
+                            decl_src,
+                        ),
+                    });
                 }
                 SymbolExpr::Method(impls) => {
                     let impl_correspondences = correspondences.remove(gv_name).unwrap();
@@ -258,12 +264,15 @@ impl Program {
                             &defn_to_via_defn,
                             opaque_infos,
                         );
-                        impl_.expr.expr = wrap_with_opaque(&wrap_name, impl_.expr.expr.clone());
-                        impl_.expr.opaque_types = build_opaque_resolutions(
+                        let opaque_types = build_opaque_resolutions(
                             opaque_infos,
                             &defn_to_impl,
                             impl_.first_lhs_src(),
                         );
+                        impl_.expr.wrap_for_opaque_types(OpaqueWrapping {
+                            wrapper: wrap_name.clone(),
+                            opaque_types,
+                        });
                     }
                 }
             }
@@ -970,7 +979,7 @@ fn build_wrap_scheme(
 ///
 /// The reference to `#wrap_opaque` is written as an absolute name, so that a trait method
 /// implemented in a module other than the trait's needs no import of it.
-fn wrap_with_opaque(wrap_name: &FullName, inner: Arc<ExprNode>) -> Arc<ExprNode> {
+pub fn wrap_with_opaque(wrap_name: &FullName, inner: Arc<ExprNode>) -> Arc<ExprNode> {
     let src = inner.source.clone();
     let mut wrap_name = wrap_name.clone();
     wrap_name.global_to_absolute();

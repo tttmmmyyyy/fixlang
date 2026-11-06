@@ -1364,7 +1364,7 @@ fn collect_symbol_expr_called_globals(expr: &SymbolExpr) -> Map<FullName, Vec<Sp
     let mut result: Map<FullName, Vec<Span>> = Map::default();
     match expr {
         SymbolExpr::Simple(typed_expr) => {
-            collect_exprnode_called_globals(&typed_expr.expr, &mut result);
+            collect_exprnode_called_globals(typed_expr.expr(), &mut result);
         }
         SymbolExpr::Method(_) => {
             // Intentionally not supported. See the comment above.

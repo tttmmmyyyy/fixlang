@@ -8,7 +8,7 @@ use crate::ast::{
     pattern::PatternNode,
     predicate::Predicate,
     qual_pred::QualPred,
-    traits::{TraitId, TraitImpl},
+    traits::{ImplMember, TraitId, TraitImpl},
     type_env::TypeEnv,
     typedecl::{Field, Struct, TypeDeclValue, TypeDefn},
     types::{
@@ -10034,11 +10034,11 @@ pub fn unary_opeartor_instance(
         },
         members: make_map([(
             method_name.to_string(),
-            expr_abs(
+            ImplMember::new(expr_abs(
                 vec![var_local(UNARY_OPERATOR_RHS_NAME)],
                 expr_builtin(op, result_ty, None),
                 None,
-            ),
+            )),
         )]),
         member_lhs_srcs: Map::default(),
         assoc_types: Map::default(),
@@ -10068,7 +10068,7 @@ pub fn binary_opeartor_instance(
         },
         members: make_map([(
             method_name.to_string(),
-            expr_abs(
+            ImplMember::new(expr_abs(
                 vec![var_local(BINARY_OPERATOR_LHS_NAME)],
                 expr_abs(
                     vec![var_local(BINARY_OPERATOR_RHS_NAME)],
@@ -10076,7 +10076,7 @@ pub fn binary_opeartor_instance(
                     None,
                 ),
                 None,
-            ),
+            )),
         )]),
         member_lhs_srcs: Map::default(),
         assoc_types: Map::default(),

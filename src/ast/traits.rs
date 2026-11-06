@@ -5,7 +5,7 @@ use crate::ast::expr::ExprNode;
 use crate::ast::kind_scope::{KindEnv, KindScope};
 use crate::ast::name::{FullName, Name};
 use crate::ast::predicate::Predicate;
-use crate::ast::program::EndNode;
+use crate::ast::program::{EndNode, ParsedBody};
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::qual_type::QualType;
 use crate::ast::type_env::TypeEnv;
@@ -488,6 +488,27 @@ impl TraitDefn {
     }
 }
 
+/// What an implementation of a trait writes for one member: the expression it defines the member
+/// as, and what `TraitEnv::validate_trait_impl` reads from that expression.
+#[derive(Clone)]
+pub struct ImplMember {
+    /// The expression the member is defined as.
+    pub body: ParsedBody,
+    /// The type variables the type annotations in the expression write, each with where it is
+    /// written, as `collect_annotation_tyvars` finds them.
+    pub annotation_tyvars: Vec<(Arc<TyVar>, Option<Span>)>,
+}
+
+impl ImplMember {
+    /// The member defined as `expr`.
+    pub fn new(expr: Arc<ExprNode>) -> Self {
+        ImplMember {
+            annotation_tyvars: collect_annotation_tyvars(&expr),
+            body: ParsedBody::InMemory(expr),
+        }
+    }
+}
+
 /// An implementation of a trait, i.e. `impl [a : Show, b : Show] (a, b) : Show { ... }` and what it
 /// writes between the braces.
 #[derive(Clone)]
@@ -495,8 +516,8 @@ pub struct TraitImpl {
     /// The head of the implementation with its context: `[a : Show, b : Show] (a, b) : Show`. The
     /// trait implemented and the type it is implemented for are read from here.
     pub qual_pred: QualPred,
-    /// The expression implementing each member, by the member's local name.
-    pub members: Map<Name, Arc<ExprNode>>,
+    /// What the implementation writes for each member, by the member's local name.
+    pub members: Map<Name, ImplMember>,
     /// The source spans of each left-hand side naming a member: in
     /// `impl MyType : ToString { to_string : MyType -> String; to_string = ...; }`, both
     /// occurrences of `to_string`.
@@ -698,10 +719,10 @@ impl TraitImpl {
         Scheme::generalize(&kind_signs, preds, eqs, qual_ty.ty)
     }
 
-    /// Get expression that implements a member.
+    /// What this implementation writes for the member `name`.
     /// Panics when this implementation has no member of that name.
-    pub fn member_expr(&self, name: &Name) -> Arc<ExprNode> {
-        self.members.get(name).unwrap().clone()
+    pub fn member(&self, name: &Name) -> &ImplMember {
+        &self.members[name]
     }
 
     /// The type the trait is implemented for, i.e., the head of this implementation: `(a, b)` in
@@ -1162,8 +1183,13 @@ impl TraitEnv {
             ))
         }
 
-        for (member_name, member_expr) in impl_members {
-            validate_member_is_declared(trait_members, trait_id, member_name, &member_expr.source)?;
+        for (member_name, member) in impl_members {
+            validate_member_is_declared(
+                trait_members,
+                trait_id,
+                member_name,
+                &member.body.source(),
+            )?;
         }
 
         // Validate the set of associated types.
@@ -1237,11 +1263,11 @@ impl TraitEnv {
         // (including opaque type variables like `?it`) that are not visible to the user
         // in the impl context. If the user wants to use such variables, they should
         // provide an explicit type signature on the member of the implementation.
-        for (member_name, member_expr) in impl_members {
+        for (member_name, member) in impl_members {
             if !member_sigs.contains_key(member_name) {
                 let mut allowed_tyvars = vec![];
                 impl_.impl_type().free_vars_to_vec(&mut allowed_tyvars);
-                for (used_tv, tv_src) in collect_annotation_tyvars(&member_expr) {
+                for (used_tv, tv_src) in &member.annotation_tyvars {
                     if allowed_tyvars
                         .iter()
                         .all(|allowed_tv| allowed_tv.name != used_tv.name)
