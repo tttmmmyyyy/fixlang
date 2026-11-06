@@ -89,8 +89,8 @@ flowchart LR
     parse -- 宣言 --> decl[全モジュールの宣言<br/>Program]
     decl -- 生成 --> gen[生成した本体]
     parse -- "本体の AST を書いて捨てる (段階 3)" --> pm[(parsed-modules)]
-    pm -- body_ast --> tb["typed_body<br/>包む -> 型検査<br/>同時に k 個まで"]
-    gen -- body_ast --> tb
+    pm -- "ParsedBody::expr" --> tb["check_body<br/>包む -> 型検査<br/>同時に k 個まで"]
+    gen -- "ParsedBody::expr" --> tb
     tb -- 不透明型の具体型, 警告の事実 --> decl
     tb -- "通った本体を書いて捨てる (段階 2)" --> tm[(typed-modules)]
     tm -- "使う本体だけ読む (段階 1)" --> inst[インスタンス化]
@@ -102,16 +102,26 @@ flowchart LR
 
 型検査する本体は、出どころで二つに分かれる。
 
-- **ソースから構文解析した本体**: 利用者と std と依存ライブラリの値、およびタプルのトレイトの実装（生成したソースを構文解析したもの）。parsed-modules に書いてメモリから捨て、必要なときに `body_ast` で読み戻す。
+- **ソースから構文解析した本体**: 利用者と std と依存ライブラリの値、およびタプルのトレイトの実装（生成したソースを構文解析したもの）。parsed-modules に書いてメモリから捨て、型検査するときに読み戻す（`ParsedBody::Stored`）。
 - **コンパイラが宣言から生成した本体**: アクセサ、`Std::Boxed` の実装、Rust で組み立てる std の実装。メモリに持ち続ける。量が宣言の量に比例する（アクセサは構造体のフィールドの数、実装は型の数で決まる）ので、目的の上限を外れない。依存 26 個で、シリアライズした大きさは本体全体の約 1 割である。
 
-不透明型で本体を包む処理は、`desugar_opaque_types` から、本体 1 つを型検査する関数の入口へ移す。`desugar_opaque_types` には宣言の側の処理を残す。不透明型の型構築子と制約の登録、型スキームの書き換え、`#wrap_opaque` の生成に加えて、値と実装ごとに、包むのに使う `#wrap_opaque` の名前と、右辺が空の `OpaqueTyConResolution` の列を宣言の側に持たせる。型検査の入口は、本体の AST をこの名前で包み、この列を型付きの式に写してから型検査する。どの出どころの本体も、型検査の直前にこの入口を通るので、包む処理がかかる場所は一か所になる。parsed-modules に書く AST は包む前のものなので、その中身はソースファイルと構文解析の設定だけで決まる。
+大域値の本体（`Body`）は、型検査の前の `Unchecked` と、型検査の後の `Checked`（`TypedExpr`）のどちらかである。`Unchecked` の本体（`UncheckedBody`）は、式（`ParsedBody`）と、不透明型のために包む `#wrap_opaque`（`OpaqueWrapping`）を持つ。式は、メモリに持つ（`InMemory`）か、parsed-modules のファイルにある（`Stored`）かのどちらかである。
+
+不透明型で本体を包む処理は、本体 1 つを型検査する関数（`check_body`）の入口にある。`desugar_opaque_types` は宣言の側の処理をする。不透明型の型構築子と制約の登録、型スキームの書き換え、`#wrap_opaque` の生成に加えて、値と実装ごとに、包むのに使う `#wrap_opaque` の名前と、右辺が空の `OpaqueTyConResolution` の列を `OpaqueWrapping` として本体に持たせる。型検査の入口（`UncheckedBody::to_check`）は、式をこの名前で包み、この列を型付きの式に写してから型検査する。どの出どころの本体も、型検査の直前にこの入口を通るので、包む処理がかかる場所は一か所になる。parsed-modules に書く式は包む前のものなので、その中身はソースファイルと構文解析の設定だけで決まる。
 
 ### parsed-modules
 
-- **書く時点**: ソースファイルを 1 つ構文解析するたびに、その本体の AST を書いて捨てる。どのモジュールに `ModuleRecord` があるかは、全ファイルを構文解析するまで分からない（キャッシュキーが import をたどった先のソースからも決まる）。そこで、記録の有無とは関係なく書く。こうすると、構文解析のフェーズでメモリに載る本体の AST は、ファイル 1 つ分で済む。
-- **キャッシュキー**: ソースファイルの中身のハッシュ、コンパイラのビルド時刻、構文解析が依存する設定（`c_numeric_types` と、doc test のソースの名前の付け替え）。ソースが変わっていないファイルについては、2 回目以降のビルドで何も書かない。書き終えたら、同じソースファイルの、キャッシュキーの違うファイルを消す。
-- **位置**: AST は、型注釈の `TypeNode` の位置も含めてシリアライズする。今のシリアライズは `TypeNode` の位置を落とす（`#[serde(skip)]`）ので、そのままでは、読み戻した本体の型注釈のエラーに位置が付かない。
+ソースファイルごとに 1 ファイルを置く（`elaboration::parsed_modules`）。中身は、本体の式を並べた後に、索引と footer を置いたものである。索引は、各本体を、その式がソースファイルに書かれた位置（バイトの範囲）で引く。footer の形は typed-modules のファイルと共通である（`elaboration::cache_files`）。
+
+```
+[式 A] [式 B] [式 C] ... [索引] [footer]
+```
+
+- **書く時点**: ソースファイルを 1 つ構文解析するたびに、その本体の式を書いて捨てる（`store_parsed_bodies`）。どのモジュールに `ModuleRecord` があるかは、全ファイルを構文解析するまで分からない（キャッシュキーが import をたどった先のソースからも決まる）。そこで、記録の有無とは関係なく書く。こうすると、構文解析のフェーズでメモリに載る本体の式は、ファイル 1 つ分で済む。書くのは、`fix build` と `fix check` のように typed-modules を通して型検査するビルドだけである（`Configuration::stores_parsed_bodies`）。
+- **キャッシュキー**: パースの材料（`ParseOrigin`）から作る。ソースファイルのパスと中身のハッシュ、doc test のソースの名前の付け替え、`c_numeric_types`、コンパイラのビルド時刻である。パーサは設定のうち `c_numeric_types` だけを読む。ファイル名は、ソースファイルのパスと、キャッシュキーのダイジェストから作る。
+- **2 回目以降のビルド**: 同じキャッシュキーのファイルがあれば、索引だけを読み、ファイルには何も書かない。読めないファイルや、本体の欠けたファイルは、警告を出してから書き直す。書き終えたら、同じソースファイルの、キャッシュキーの違うファイルを消す。
+- **位置**: 式は `SourceFile::with_spans_within` の中でシリアライズする。その中では、位置（`Span`）をソースファイルの中の範囲だけで書き、型注釈の `TypeNode` の位置も書く。それ以外の場所でのシリアライズは、`TypeNode` の位置を書かない（`divide_program::generated_code_hash` が、位置の動く編集で生成コードのハッシュを変えないため）。
+- **読めない本体**: 本体は `ModuleRecord` と同じく、メモリに写したファイルから読む。読めない本体、または索引と違う位置の式が読めた本体は、警告を出し、ソースファイルを構文解析し直して取る。構文解析し直すのはファイルにつき 1 回で、その結果でファイルを書き直す。
 
 ### typed-modules と `ModuleRecord`
 
@@ -192,13 +202,12 @@ flowchart LR
 本体を得る手段を、次の 2 つの関数にまとめる。全本体を型検査するフェーズもインスタンス化も、本体はこの 2 つからだけ取る。呼び出す側は、本体がどこから来たか（ファイルから読んだか、作り直したか）を知らない。
 
 ```rust
-/// The AST of the body of `entity` as the parser produced it: read from
-/// parsed-modules, or parsed from its source file when that has none.
-/// Bodies the compiler generates are held in memory and returned from there.
-fn body_ast(&self, entity: &EntityIdentity) -> Result<Arc<ExprNode>, Errors>
+/// The expression as the parser produced it or the compiler built it: read
+/// back from parsed-modules, or held in memory.
+fn ParsedBody::expr(&self) -> Arc<ExprNode>
 
 /// The result of type-checking `entity`: read from typed-modules, or
-/// type-checked from `body_ast(entity)` when that has none.
+/// type-checked from `ParsedBody::expr` when that has none.
 fn typed_body(&self, entity: &EntityIdentity) -> Result<CheckedBody, Errors>
 
 /// What one type check yields besides the typed expression, which the caller
@@ -222,7 +231,7 @@ struct CheckedBody {
 targets = every entity of every module that its module's record lacks
 
 run targets on the compiler threads, at most k in flight:   // モジュールをまたいで流す
-    checked = typed_body(entity)        // body_ast -> 不透明型で包む -> check_scheme_equivalent -> 型検査
+    checked = check_body(entity)        // ParsedBody::expr -> 不透明型で包む -> check_scheme_equivalent -> 型検査
     keep  checked.opaque_types, checked.diagnostics, checked.warning_facts
     if checked.diagnostics is empty:
         append checked.typed to the new file of its module   // old bodies first, copied when it begins
@@ -250,14 +259,14 @@ typed-modules に書く型付きの本体は、今のキャッシュが書く `T
 
 ### トレイトの実装の本体
 
-トレイトの実装の本体は、`GlobalValue` の `TraitMemberImpl` と、`TraitEnv` の `TraitImpl::members` の両方から、同じ `Arc` で参照されている。`create_typechecker` は `TraitEnv` を複製して型検査器に持たせる。そのため、`GlobalValue` の側の本体を捨てても、本体は残る。`members` は名前だけを持つ形にし、本体は `GlobalValue` の側にだけ置く。
+トレイトの実装の本体は、`GlobalValue` の `TraitMemberImpl` と、`TraitEnv` の `TraitImpl::members` の両方が持つ。`create_typechecker` は `TraitEnv` を複製して型検査器に持たせる。`members` の各メンバ（`ImplMember`）は、本体を `ParsedBody` として持つので、parsed-modules に書いた本体なら、持つのはファイルの中の位置だけである。そのため、どちらの側も、型検査の後に本体の式をメモリに残さない。
 
-`TraitImpl::members` の本体を読む処理は、名前を調べるもののほかに、`validate_trait_impl` の 2 つの検査がある。
+`validate_trait_impl` は、メンバの本体から 2 つのものを読む。
 
-- トレイトが宣言していないメンバを実装したときの報告は、本体の `source` を位置に使う。
-- 型シグネチャを書かないメンバについて、本体の型注釈の型変数が実装の型に現れることを確かめる（`collect_annotation_tyvars`）。
+- トレイトが宣言していないメンバを実装したときの報告は、本体の位置（`ParsedBody::source`）を使う。
+- 型シグネチャを書かないメンバについて、本体の型注釈の型変数が実装の型に現れることを確かめる。型注釈の型変数は、構文解析のときに `collect_annotation_tyvars` で取り出して、`ImplMember::annotation_tyvars` に持たせる。
 
-`members` を名前だけにするときは、この 2 つが読むものを、本体の AST を捨てる前に取り出しておくか、検査を本体の AST を読み戻す場所へ移す。
+どちらも、本体の式を読み戻さずに読める。
 
 ### 2 回目以降のビルド
 
@@ -289,10 +298,10 @@ typed-modules に書く型付きの本体は、今のキャッシュが書く `T
 
 ### 段階 3: 本体の AST を parsed-modules に書いて捨てる
 
-- ソースファイルを 1 つ構文解析するたびに、本体の AST を位置ごと parsed-modules に書いて捨てる。
+- ソースファイルを 1 つ構文解析するたびに、本体の式を位置ごと parsed-modules に書いて捨てる。
 - 不透明型で本体を包む処理を、型検査の入口へ移す。
-- `body_ast` を作る。
-- `TraitImpl::members` を名前だけにする。`GlobalValue` の側の本体を捨てるこの段階で、はじめてメモリが減る。
+- 本体を `Body`（型検査の前と後）と `ParsedBody`（メモリかファイルか）で持つ。
+- `TraitImpl::members` は、本体を `ParsedBody` として持ち、型注釈の型変数を構文解析のときに取り出す。
 
 改善するもの: 構文解析のぶんのメモリ（依存 26 個で約 100 MiB）。
 
@@ -330,7 +339,7 @@ typed-modules に書く型付きの本体は、今のキャッシュが書く `T
 | 型検査の後の警告 | 警告の元になる事実を `ModuleRecord` に入れ、毎回の設定と宣言から出し直す。 |
 | キャッシュのファイルの形 | モジュールごとに 1 ファイル（型付きの本体 + `ModuleRecord`）。古いキャッシュキーのファイルは、書くときに消す。 |
 | 今の形のキャッシュの扱い | 新しい形は別のフォルダ（`.fixlang/cache/typed-modules`）に置く。今のフォルダ `.fixlang/cache/typecheck` は消さない。 |
-| 本体の AST の持ち方 | ソースから構文解析した本体は parsed-modules に書いて捨て、`body_ast` で読み戻す。ファイルになければソースファイルを構文解析する。生成した本体はメモリに持つ。不透明型で包む処理は型検査の入口へ移す。 |
+| 本体の AST の持ち方 | ソースから構文解析した本体は parsed-modules に書いて捨て、`ParsedBody::expr` で読み戻す。ファイルから読めなければソースファイルを構文解析し直す。生成した本体はメモリに持つ。不透明型で包む処理は型検査の入口へ移す。 |
 | 構文解析の結果の置き場所 | `.fixlang/cache/parsed-modules` にソースファイルごとに置き、ビルドをまたいで残す。 |
 | 言語サーバ | 今の形のまま残す。本体を捨てるのは `fix build` と `fix check` の経路だけ。 |
 | 段取り | 段階 1 -> 段階 2 -> 段階 3 の順に、段階ごとに PR を出す。段階 1 の後、playground の Dockerfile でビルドしておく。 |
