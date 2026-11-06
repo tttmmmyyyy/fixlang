@@ -96,10 +96,10 @@ impl StoredParsedBody {
                 )
             };
             let bodies = bodies_to_store(&mut program, origin);
-            let dir = self.file.path.parent().unwrap();
-            if let Ok((file_name, prefix)) = parsed_file_name(origin) {
-                if let Err(e) = write_parsed_file(dir, &file_name, &prefix, origin, &bodies) {
-                    warn_unwritable_file(&self.file.path, &e);
+            let dir = self.file.cache_dirs.writable(PARSED_MODULES_PATH);
+            if let (Some(dir), Ok((file_name, prefix))) = (dir, parsed_file_name(origin)) {
+                if let Err(e) = write_parsed_file(&dir, &file_name, &prefix, origin, &bodies) {
+                    warn_unwritable_file(&dir.join(&file_name), &e);
                 }
             }
             bodies
@@ -131,6 +131,8 @@ struct MappedParsedFile {
     path: PathBuf,
     /// The bytes of the file.
     bytes: Mmap,
+    /// The cache directories of the build, which a file written anew is written in.
+    cache_dirs: CacheDirs,
     /// The bodies of a parse of the source file made again, by the keys of their expressions, once
     /// a body has failed to read back from the file.
     reparsed: OnceLock<Map<ExprKey, Arc<ExprNode>>>,
@@ -170,6 +172,8 @@ fn decode_parsed_file(bytes: &[u8]) -> Option<ParsedIndex> {
 /// in the directory `cache_dirs` gives, or finds them in the file an earlier build wrote, and holds
 /// each of them as one read back from the file (see `bodies_to_store` for which bodies). The bodies
 /// stay in memory when the file can be neither found nor written.
+///
+/// A file found that cannot be read, or lacks a body, is reported as a warning, and written anew.
 pub fn store_parsed_bodies(program: &mut Program, origin: ParseOrigin, cache_dirs: &CacheDirs) {
     let bodies = bodies_to_store(program, &origin);
     if bodies.is_empty() {
@@ -178,31 +182,47 @@ pub fn store_parsed_bodies(program: &mut Program, origin: ParseOrigin, cache_dir
     let Ok((file_name, prefix)) = parsed_file_name(&origin) else {
         return;
     };
-    let Some(dir) = cache_dirs.writable(PARSED_MODULES_PATH) else {
-        return;
-    };
-    let path = dir.join(&file_name);
-    let found = map_file(&path).ok().flatten().and_then(|bytes| {
-        let index = decode_parsed_file(&bytes)?;
-        bodies
-            .iter()
-            .all(|(key, _)| index.contains_key(key))
-            .then_some((bytes, index))
-    });
-    let (bytes, index) = match found {
-        Some(found) => found,
-        None => match write_parsed_file(&dir, &file_name, &prefix, &origin, &bodies) {
-            Ok(written) => written,
-            Err(e) => {
-                warn_unwritable_file(&path, &e);
-                return;
+    let path = Path::new(PARSED_MODULES_PATH).join(&file_name);
+    let found = match map_file(&path) {
+        Ok(None) => None,
+        Ok(Some(bytes)) => match decode_parsed_file(&bytes) {
+            Some(index) if bodies.iter().all(|(key, _)| index.contains_key(key)) => {
+                Some((bytes, index))
+            }
+            Some(_) => {
+                warn_unreadable_file(&path, "it lacks a body of its source file");
+                None
+            }
+            None => {
+                warn_unreadable_file(&path, "it is not a file of parsed bodies");
+                None
             }
         },
+        Err(e) => {
+            warn_unreadable_file(&path, &e.to_string());
+            None
+        }
+    };
+    let (bytes, index) = match found {
+        Some(found) => found,
+        None => {
+            let Some(dir) = cache_dirs.writable(PARSED_MODULES_PATH) else {
+                return;
+            };
+            match write_parsed_file(&dir, &file_name, &prefix, &origin, &bodies) {
+                Ok(written) => written,
+                Err(e) => {
+                    warn_unwritable_file(&dir.join(&file_name), &e);
+                    return;
+                }
+            }
+        }
     };
     let file = Arc::new(MappedParsedFile {
         origin,
         path,
         bytes,
+        cache_dirs: cache_dirs.clone(),
         reparsed: OnceLock::new(),
     });
     for (key, body) in bodies {
@@ -296,5 +316,74 @@ impl Program {
             .into_iter()
             .filter_map(|body| Some((expr_key(&body.source()?), body)))
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ast::expr::{Expr, ExprNode};
+    use crate::ast::name::FullName;
+    use crate::ast::program::{Body, ParsedBody, SymbolExpr};
+    use crate::ffi::CNumericTypes;
+    use crate::parse::parser::{parse_origin, ParseOrigin};
+    use crate::parse::sourcefile::{SourceFile, Span};
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    /// Every place an expression or a type written in `expr` is written at: the span of each node,
+    /// and of each type a type annotation writes.
+    fn positions(expr: &Arc<ExprNode>) -> Vec<Option<Span>> {
+        let mut positions = vec![];
+        expr.walk_nodes(&mut |node| {
+            positions.push(node.source.clone());
+            if let Expr::TyAnno(_, ty) = &*node.expr {
+                positions.push(ty.get_source().clone());
+            }
+        });
+        positions
+    }
+
+    /// A body written to its file of parsed bodies reads back with every position its source gives
+    /// it: those of its expressions, and those of the types its annotations write, which the
+    /// diagnostics of a type annotation point at.
+    #[test]
+    fn a_parsed_body_reads_back_with_the_positions_of_its_expressions_and_types() {
+        let source = SourceFile::from_file_path_and_content(
+            PathBuf::from("main.fix"),
+            "module Main;\n\nmain : IO () = println((1 : I64).to_string);\n".to_string(),
+        );
+        let origin = ParseOrigin {
+            source: source.clone(),
+            renaming: None,
+            c_numeric_types: CNumericTypes::of_target("x86_64-unknown-linux-gnu"),
+        };
+        let program = parse_origin(&origin).unwrap();
+        let SymbolExpr::Simple(Body::Unchecked(body)) =
+            &program.global_values[&FullName::from_strs(&["Main"], "main")].expr
+        else {
+            panic!("`main` was parsed as another kind of body")
+        };
+        let ParsedBody::InMemory(expr) = &body.expr else {
+            panic!("a body parsed alone was held outside memory")
+        };
+
+        let bytes = source.with_spans_within(|| postcard::to_allocvec(expr).unwrap());
+        let read: Arc<ExprNode> =
+            source.with_spans_within(|| postcard::from_bytes(&bytes).unwrap());
+
+        let start = source.string().unwrap().find("I64)").unwrap();
+        let annotated = Span {
+            input: source.clone(),
+            start,
+            end: start + 3,
+        };
+        assert!(
+            positions(expr).contains(&Some(annotated)),
+            "the parse gave the annotated type no position"
+        );
+        assert!(
+            positions(&read) == positions(expr),
+            "the body read back is written at other places than the body parsed"
+        );
     }
 }

@@ -71,7 +71,7 @@ fn test_the_module_dependency_hash_covers_the_c_numeric_types() {
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::constants::{DOT_FIXLANG, TYPED_MODULES_PATH};
+    use crate::constants::{DOT_FIXLANG, PARSED_MODULES_PATH, TYPED_MODULES_PATH};
     use crate::tests::test_util::{fix_command, run_fix};
     use std::fs::{self, File, Permissions};
     use std::os::unix::fs::PermissionsExt;
@@ -1032,5 +1032,171 @@ main = println $ (double(21), 3).to_string;
         let stderr = build(dir, "main.fix", &[]);
         assert!(!stderr.contains("cache file"), "stderr: {}", stderr);
         assert_eq!(run_out(dir), "3");
+    }
+
+    /// The names of the files of parsed bodies in `dir`, in order.
+    fn parsed_files(dir: &Path) -> Vec<String> {
+        let mut files: Vec<String> = fs::read_dir(dir.join(PARSED_MODULES_PATH))
+            .expect("Failed to read the directory of the files of parsed bodies")
+            .map(|entry| {
+                let entry = entry.expect("Failed to read a file of parsed bodies");
+                entry.file_name().to_string_lossy().to_string()
+            })
+            .collect();
+        files.sort();
+        files
+    }
+
+    /// Writes into `dir` a module `Main` printing a value of the module `Lib`, and `Lib` defining
+    /// the value as `value`, so that a build after an edit of `lib.fix` type-checks the body of
+    /// `main` again from the source `main.fix` that the edit leaves as it was.
+    fn write_main_and_lib(dir: &Path, value: &str) {
+        fs::write(
+            dir.join("main.fix"),
+            "module Main;\nimport Lib;\n\nmain : IO ();\nmain = println $ (Lib::value : I64).to_string;\n",
+        )
+        .expect("Failed to write main.fix");
+        fs::write(
+            dir.join("lib.fix"),
+            format!("module Lib;\n\nvalue : I64;\nvalue = {};\n", value),
+        )
+        .expect("Failed to write lib.fix");
+    }
+
+    /// The file of parsed bodies the builds in `dir` wrote for `main.fix`.
+    fn parsed_file_of_main(dir: &Path) -> PathBuf {
+        let name = parsed_files(dir)
+            .into_iter()
+            .find(|name| name.starts_with("main_fix_"))
+            .expect("the build wrote no file of parsed bodies of main.fix");
+        dir.join(PARSED_MODULES_PATH).join(name)
+    }
+
+    /// A body that fails to read back from its file of parsed bodies is taken from a parse of its
+    /// source file made again. The file is reported once, and written anew from that parse, so the
+    /// file is again what the first build wrote, and the build after it reads every body back and
+    /// reports nothing.
+    #[test]
+    fn a_build_parses_a_source_again_when_its_file_of_parsed_bodies_is_damaged() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        let lib = ["--file", "lib.fix"];
+        write_main_and_lib(dir, "1");
+        build(dir, "main.fix", &lib);
+        let main_file = parsed_file_of_main(dir);
+        let written = fs::read(&main_file).expect("Failed to read the file of parsed bodies");
+        // The first body lies at the beginning of the file, and bytes all set do not decode.
+        let mut damaged = written.clone();
+        damaged[..8].fill(0xff);
+        fs::write(&main_file, &damaged).expect("Failed to damage the file of parsed bodies");
+
+        write_main_and_lib(dir, "2");
+        let stderr = build(dir, "main.fix", &lib);
+        assert_eq!(
+            stderr.matches("Failed to read cache file").count(),
+            1,
+            "stderr: {}",
+            stderr
+        );
+        assert_eq!(run_out(dir), "2");
+        assert_eq!(
+            fs::read(&main_file).expect("Failed to read the file of parsed bodies"),
+            written,
+            "the build parsing `main.fix` again wrote another file than the first build"
+        );
+
+        write_main_and_lib(dir, "3");
+        let stderr = build(dir, "main.fix", &lib);
+        assert!(!stderr.contains("cache file"), "stderr: {}", stderr);
+        assert_eq!(run_out(dir), "3");
+    }
+
+    /// A file of parsed bodies whose index cannot be read is reported once, and written anew as the
+    /// build parses its source file.
+    #[test]
+    fn a_build_replaces_a_file_of_parsed_bodies_whose_index_is_damaged() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        let lib = ["--file", "lib.fix"];
+        write_main_and_lib(dir, "1");
+        build(dir, "main.fix", &lib);
+        let main_file = parsed_file_of_main(dir);
+        let written = fs::read(&main_file).expect("Failed to read the file of parsed bodies");
+        fs::write(&main_file, &written[..written.len() - 1])
+            .expect("Failed to damage the file of parsed bodies");
+
+        let stderr = build(dir, "main.fix", &lib);
+        assert_eq!(
+            stderr.matches("Failed to read cache file").count(),
+            1,
+            "stderr: {}",
+            stderr
+        );
+        assert_eq!(run_out(dir), "1");
+        assert_eq!(
+            fs::read(&main_file).expect("Failed to read the file of parsed bodies"),
+            written,
+            "the build parsing `main.fix` wrote another file than the first build"
+        );
+    }
+
+    /// A build that cannot write the files of parsed bodies builds the program from the bodies it
+    /// holds in memory, and reports the directory once, however many source files it parses.
+    #[test]
+    fn a_build_that_cannot_write_the_parsed_bodies_builds_the_program() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        write_main_and_lib(dir, "1");
+        let parsed_dir = dir.join(PARSED_MODULES_PATH);
+        fs::create_dir_all(&parsed_dir)
+            .expect("Failed to create the directory of the files of parsed bodies");
+        fs::set_permissions(&parsed_dir, Permissions::from_mode(0o555))
+            .expect("Failed to make the directory of the files of parsed bodies read-only");
+
+        let (built, stderr) = try_build(dir, "main.fix", &["--file", "lib.fix"]);
+        fs::set_permissions(&parsed_dir, Permissions::from_mode(0o755))
+            .expect("Failed to make the directory of the files of parsed bodies writable");
+        assert!(built, "stderr: {}", stderr);
+        assert_eq!(
+            stderr.matches("Failed to write cache file").count(),
+            1,
+            "stderr: {}",
+            stderr
+        );
+        assert_eq!(run_out(dir), "1");
+    }
+
+    /// A build after an edit of a source file replaces the file of parsed bodies of that source
+    /// file, and leaves the files of the others as they were.
+    #[test]
+    fn a_build_after_an_edit_replaces_the_file_of_parsed_bodies_of_the_source_edited() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        let lib = ["--file", "lib.fix"];
+        write_main_and_lib(dir, "1");
+        build(dir, "main.fix", &lib);
+        let before = parsed_files(dir);
+
+        write_main_and_lib(dir, "2");
+        build(dir, "main.fix", &lib);
+        assert_eq!(run_out(dir), "2");
+        let after = parsed_files(dir);
+        let of_lib = |files: &[String]| -> Vec<String> {
+            files
+                .iter()
+                .filter(|name| name.starts_with("lib_fix_"))
+                .cloned()
+                .collect()
+        };
+        let others = |files: &[String]| -> Vec<String> {
+            files
+                .iter()
+                .filter(|name| !name.starts_with("lib_fix_"))
+                .cloned()
+                .collect()
+        };
+        assert_eq!(of_lib(&after).len(), 1, "files: {:?}", after);
+        assert_ne!(of_lib(&before), of_lib(&after), "files: {:?}", after);
+        assert_eq!(others(&before), others(&after), "files: {:?}", after);
     }
 }

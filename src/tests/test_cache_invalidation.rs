@@ -684,6 +684,29 @@ main : IO () = println((parsed + "1".from_string.as_ok).to_string);
         ]);
     }
 
+    /// Removing from an imported module the type a type annotation in a body names, which reports
+    /// the annotation where it is written in the source the edit leaves as it was.
+    #[test]
+    fn the_type_a_type_annotation_names_removed_from_an_imported_module() {
+        let main = r#"module Main;
+
+import Lib;
+
+main : IO () = (
+    let p : P = P { x : 1 };
+    println(p.@x.to_string)
+);
+"#;
+        let lib = |name: &str| format!("module Lib;\n\ntype {} = struct {{ x : I64 }};\n", name);
+        assert_every_version_builds_as_from_nothing(vec![
+            Version::of(&main_and_lib(main, lib("P")), Outcome::Prints("1")),
+            Version::of(
+                &main_and_lib(main, lib("Q")),
+                Outcome::Rejects("6:13-6:14 in \"main.fix\""),
+            ),
+        ]);
+    }
+
     /// Editing the body of a member of a trait implementation in an imported module.
     #[test]
     fn the_body_of_a_member_of_an_imported_trait_implementation() {
