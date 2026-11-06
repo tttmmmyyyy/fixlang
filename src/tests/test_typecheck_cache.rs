@@ -1064,12 +1064,14 @@ main = println $ (double(21), 3).to_string;
         .expect("Failed to write lib.fix");
     }
 
-    /// The file of parsed bodies the builds in `dir` wrote for `main.fix`.
-    fn parsed_file_of_main(dir: &Path) -> PathBuf {
+    /// The file of parsed bodies the builds in `dir` wrote for the source file `source`, such as
+    /// `main.fix`.
+    fn parsed_file_of(dir: &Path, source: &str) -> PathBuf {
+        let prefix = format!("{}_", source.replace('.', "_"));
         let name = parsed_files(dir)
             .into_iter()
-            .find(|name| name.starts_with("main_fix_"))
-            .expect("the build wrote no file of parsed bodies of main.fix");
+            .find(|name| name.starts_with(&prefix))
+            .unwrap_or_else(|| panic!("the build wrote no file of parsed bodies of {}", source));
         dir.join(PARSED_MODULES_PATH).join(name)
     }
 
@@ -1084,7 +1086,7 @@ main = println $ (double(21), 3).to_string;
         let lib = ["--file", "lib.fix"];
         write_main_and_lib(dir, "1");
         build(dir, "main.fix", &lib);
-        let main_file = parsed_file_of_main(dir);
+        let main_file = parsed_file_of(dir, "main.fix");
         let written = fs::read(&main_file).expect("Failed to read the file of parsed bodies");
         // The first body lies at the beginning of the file, and bytes all set do not decode.
         let mut damaged = written.clone();
@@ -1121,7 +1123,7 @@ main = println $ (double(21), 3).to_string;
         let lib = ["--file", "lib.fix"];
         write_main_and_lib(dir, "1");
         build(dir, "main.fix", &lib);
-        let main_file = parsed_file_of_main(dir);
+        let main_file = parsed_file_of(dir, "main.fix");
         let written = fs::read(&main_file).expect("Failed to read the file of parsed bodies");
         fs::write(&main_file, &written[..written.len() - 1])
             .expect("Failed to damage the file of parsed bodies");
@@ -1265,14 +1267,10 @@ main = println $ (double(21), 3).to_string;
         let lib = ["--file", "lib.fix"];
         write_main_and_lib(dir, "1");
         build(dir, "main.fix", &lib);
-        let main_file = parsed_file_of_main(dir);
+        let main_file = parsed_file_of(dir, "main.fix");
         let written = fs::read(&main_file).expect("Failed to read the file of parsed bodies");
-        let lib_file = parsed_files(dir)
-            .into_iter()
-            .find(|name| name.starts_with("lib_fix_"))
-            .expect("the build wrote no file of parsed bodies of lib.fix");
         // The bodies of `lib.fix` are written at other places than the body of `main.fix`.
-        fs::copy(dir.join(PARSED_MODULES_PATH).join(lib_file), &main_file)
+        fs::copy(parsed_file_of(dir, "lib.fix"), &main_file)
             .expect("Failed to put the file of lib.fix in place of the file of main.fix");
 
         let stderr = build(dir, "main.fix", &lib);
@@ -1313,12 +1311,7 @@ main = println $ (double(21), 3).to_string;
         build(dir, "main.fix", &lib);
         assert_eq!(run_out(dir), "12");
 
-        let lib_file = dir.join(PARSED_MODULES_PATH).join(
-            parsed_files(dir)
-                .into_iter()
-                .find(|name| name.starts_with("lib_fix_"))
-                .expect("the build wrote no file of parsed bodies of lib.fix"),
-        );
+        let lib_file = parsed_file_of(dir, "lib.fix");
         let written = fs::read(&lib_file).expect("Failed to read the file of parsed bodies");
         // The footer begins with the offset of the index, and the index lists where each body
         // lies. The two bodies are written the same length, so swapping their bytes leaves each

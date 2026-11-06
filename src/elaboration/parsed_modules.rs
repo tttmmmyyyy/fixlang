@@ -26,7 +26,6 @@ use crate::elaboration::cache_files::{
     find_index, lies_within_entries, map_file, readable_file_prefix, warn_unreadable_file, CacheDirs,
     warn_unwritable_file, CacheFileWriter, FileMagic,
 };
-use crate::error::Errors;
 use crate::hash::HashSource;
 use crate::misc::{Map, Set};
 use crate::parse::parser::{parse_origin, ParseOrigin};
@@ -87,7 +86,7 @@ impl StoredParsedBody {
             Err(e) => e.to_string(),
         };
         let reparsed = self.file.reparsed.get_or_init(|| {
-            warn_unreadable_file(&self.file.path, &why);
+            warn_unreadable_file(&parsed_file_path(&self.file.file_name), &why);
             let origin = &self.file.origin;
             // The source parsed into the program this build holds, from the content it keeps.
             let Ok(mut program) = parse_origin(origin) else {
@@ -97,12 +96,8 @@ impl StoredParsedBody {
                 )
             };
             let bodies = bodies_to_store(&mut program, origin);
-            if let Some(dir) = self.file.cache_dirs.writable(PARSED_MODULES_PATH) {
-                let (file_name, prefix) = (&self.file.file_name, &self.file.prefix);
-                if let Err(e) = write_parsed_file(&dir, file_name, prefix, origin, &bodies) {
-                    warn_unwritable_file(&dir.join(file_name), &e);
-                }
-            }
+            let file = &self.file;
+            write_parsed_file(&file.cache_dirs, &file.file_name, &file.prefix, origin, &bodies);
             bodies
                 .into_iter()
                 .map(|(key, body)| (key, body.expr()))
@@ -132,8 +127,6 @@ struct MappedParsedFile {
     file_name: String,
     /// The part the file of every content of its source begins its name with.
     prefix: String,
-    /// The path of the file.
-    path: PathBuf,
     /// The bytes of the file.
     bytes: Mmap,
     /// The cache directories of the build, which a file written anew is written in.
@@ -143,11 +136,25 @@ struct MappedParsedFile {
     reparsed: OnceLock<Map<ExprKey, Arc<ExprNode>>>,
 }
 
+/// The path of the file of parsed bodies named `file_name`.
+fn parsed_file_path(file_name: &str) -> PathBuf {
+    Path::new(PARSED_MODULES_PATH).join(file_name)
+}
+
 /// The name of the file of parsed bodies of `origin`, a content of the source named `source_name`,
 /// and the part the file of every content of that source begins its name with.
-fn parsed_file_name(origin: &ParseOrigin, source_name: &str) -> Result<(String, String), Errors> {
+///
+/// `origin.source` holds its content, as it does once it has been parsed.
+fn parsed_file_name(origin: &ParseOrigin, source_name: &str) -> (String, String) {
     let mut hash_source = HashSource::default();
-    hash_source.push_text(&origin.source.hash()?);
+    let source_hash = origin.source.hash().unwrap_or_else(|errs| {
+        panic!(
+            "a source parsed fails to give its content: \"{}\": {}",
+            origin.source.file_path.to_string_lossy(),
+            errs
+        )
+    });
+    hash_source.push_text(&source_hash);
     match &origin.renaming {
         Some(renaming) => hash_source.push_list([&renaming.written, &renaming.compiled]),
         None => hash_source.push_list::<[&str; 0]>([]),
@@ -155,7 +162,7 @@ fn parsed_file_name(origin: &ParseOrigin, source_name: &str) -> Result<(String, 
     hash_source.push_text(&origin.c_numeric_types.to_string());
     hash_source.push_text(build_time_utc!());
     let prefix = readable_file_prefix(source_name);
-    Ok((format!("{}{}", prefix, hash_source.finish()), prefix))
+    (format!("{}{}", prefix, hash_source.finish()), prefix)
 }
 
 /// The index of the file of parsed bodies whose bytes are `bytes`, or `None` when the bytes are
@@ -189,57 +196,23 @@ pub fn store_parsed_bodies(
     if bodies.is_empty() {
         return;
     }
-    let Ok((file_name, prefix)) = parsed_file_name(&origin, source_name) else {
+    let (file_name, prefix) = parsed_file_name(&origin, source_name);
+    let found = find_parsed_file(&file_name, &bodies)
+        .or_else(|| write_parsed_file(cache_dirs, &file_name, &prefix, &origin, &bodies));
+    let Some((bytes, index)) = found else {
         return;
-    };
-    let path = Path::new(PARSED_MODULES_PATH).join(&file_name);
-    let found = match map_file(&path) {
-        Ok(None) => None,
-        Ok(Some(bytes)) => match decode_parsed_file(&bytes) {
-            Some(index) if bodies.iter().all(|(key, _)| index.contains_key(key)) => {
-                Some((bytes, index))
-            }
-            Some(_) => {
-                warn_unreadable_file(&path, "it lacks a body of its source file");
-                None
-            }
-            None => {
-                warn_unreadable_file(&path, "it is not a file of parsed bodies");
-                None
-            }
-        },
-        Err(e) => {
-            warn_unreadable_file(&path, &e.to_string());
-            None
-        }
-    };
-    let (bytes, index) = match found {
-        Some(found) => found,
-        None => {
-            let Some(dir) = cache_dirs.writable(PARSED_MODULES_PATH) else {
-                return;
-            };
-            match write_parsed_file(&dir, &file_name, &prefix, &origin, &bodies) {
-                Ok(written) => written,
-                Err(e) => {
-                    warn_unwritable_file(&dir.join(&file_name), &e);
-                    return;
-                }
-            }
-        }
     };
     let file = Arc::new(MappedParsedFile {
         origin,
         file_name,
         prefix,
-        path,
         bytes,
         cache_dirs: cache_dirs.clone(),
         reparsed: OnceLock::new(),
     });
     for (key, body) in bodies {
         let ParsedBody::InMemory(expr) = body else {
-            unreachable!()
+            unreachable!("a body to store held outside memory")
         };
         let source = expr.source.clone().unwrap();
         *body = ParsedBody::Stored(StoredParsedBody {
@@ -247,6 +220,34 @@ pub fn store_parsed_bodies(
             range: index[&key].clone(),
             source,
         });
+    }
+}
+
+/// The file of parsed bodies named `file_name` an earlier build wrote, mapped into memory, with its
+/// index, when it holds every one of `bodies`. A file that cannot be read, or lacks one of
+/// `bodies`, is reported as a warning, and answers `None`, as no file does.
+fn find_parsed_file(
+    file_name: &str,
+    bodies: &[(ExprKey, &mut ParsedBody)],
+) -> Option<(Mmap, ParsedIndex)> {
+    let path = parsed_file_path(file_name);
+    let bytes = match map_file(&path) {
+        Ok(bytes) => bytes?,
+        Err(e) => {
+            warn_unreadable_file(&path, &e.to_string());
+            return None;
+        }
+    };
+    match decode_parsed_file(&bytes) {
+        Some(index) if bodies.iter().all(|(key, _)| index.contains_key(key)) => Some((bytes, index)),
+        Some(_) => {
+            warn_unreadable_file(&path, "it lacks a body of its source file");
+            None
+        }
+        None => {
+            warn_unreadable_file(&path, "it is not a file of parsed bodies");
+            None
+        }
     }
 }
 
@@ -277,9 +278,29 @@ fn bodies_to_store<'p>(
     bodies
 }
 
+/// Writes the file of parsed bodies `file_name` in the directory `cache_dirs` gives, holding the
+/// expressions of `bodies`, parsed from `origin`, and answers it mapped into memory, with its index.
+/// A file that cannot be written is reported as a warning, and answers `None`.
+fn write_parsed_file(
+    cache_dirs: &CacheDirs,
+    file_name: &str,
+    prefix: &str,
+    origin: &ParseOrigin,
+    bodies: &[(ExprKey, &mut ParsedBody)],
+) -> Option<(Mmap, ParsedIndex)> {
+    let dir = cache_dirs.writable(PARSED_MODULES_PATH)?;
+    match write_parsed_file_in(&dir, file_name, prefix, origin, bodies) {
+        Ok(written) => Some(written),
+        Err(e) => {
+            warn_unwritable_file(&dir.join(file_name), &e);
+            None
+        }
+    }
+}
+
 /// Writes the file of parsed bodies `file_name` in `dir`, holding the expressions of `bodies`,
 /// parsed from `origin`, and answers it mapped into memory, with its index.
-fn write_parsed_file(
+fn write_parsed_file_in(
     dir: &Path,
     file_name: &str,
     prefix: &str,
@@ -291,7 +312,7 @@ fn write_parsed_file(
     let mut end = 0;
     for (key, body) in bodies {
         let ParsedBody::InMemory(expr) = body else {
-            unreachable!()
+            unreachable!("a body to store held outside memory")
         };
         let bytes = origin
             .source
@@ -420,7 +441,7 @@ mod tests {
             renaming: None,
             c_numeric_types: CNumericTypes::of_target("x86_64-unknown-linux-gnu"),
         };
-        let name = |origin: &ParseOrigin| parsed_file_name(origin, "main.fix").unwrap().0;
+        let name = |origin: &ParseOrigin| parsed_file_name(origin, "main.fix").0;
 
         let mut wider_int = origin.clone();
         wider_int.c_numeric_types.int_bits = origin.c_numeric_types.int_bits * 2;

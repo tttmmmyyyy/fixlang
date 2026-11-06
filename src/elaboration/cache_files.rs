@@ -27,7 +27,7 @@ use std::sync::{Arc, Mutex};
 pub type FileMagic = [u8; 8];
 
 /// The length of the footer: the offset of the index, its length, and the magic.
-const FOOTER_LEN: u64 = 8 + 8 + 8;
+const FOOTER_LEN: u64 = 8 + 8 + size_of::<FileMagic>() as u64;
 
 /// How many characters of the name a file is named after its file name carries. With the two
 /// digests the file name stays well within the 255 bytes file systems allow.
@@ -214,7 +214,7 @@ impl CacheDirs {
             "\"{}\" is not a directory of `CACHE_PATH`",
             path
         );
-        self.made_ready(CACHE_PATH, |path| create_cache_dir(path))?;
+        self.made_ready(CACHE_PATH, create_cache_dir)?;
         self.made_ready(path, |path| {
             create_cache_dir(path).filter(|dir| probe_file_creation(dir))
         })
