@@ -272,7 +272,7 @@ struct ModuleFileWriter {
     /// The module file the new version replaces.
     file: Arc<ModuleFile>,
     /// The new version.
-    writer: CacheFileWriter,
+    cache_file: CacheFileWriter,
     /// The file the new version replaces, mapped into memory, when it held bodies; the bodies
     /// `record` begins with lie in it as in the new version.
     held: Option<Mmap>,
@@ -293,7 +293,7 @@ impl ModuleFileWriter {
         let path = file.path_in(dir);
         let mut writer = ModuleFileWriter {
             file,
-            writer: CacheFileWriter::create(dir)?,
+            cache_file: CacheFileWriter::create(dir)?,
             held: None,
             held_end: 0,
             record: ModuleRecord::default(),
@@ -305,7 +305,7 @@ impl ModuleFileWriter {
         let Ok((record, bodies_end)) = decode_module_file(&held) else {
             return Ok(writer);
         };
-        writer.writer.write_at(0, &held[..bodies_end as usize])?;
+        writer.cache_file.write_at(0, &held[..bodies_end as usize])?;
         writer.held = Some(held);
         writer.held_end = bodies_end;
         writer.record = record;
@@ -343,7 +343,7 @@ impl ModuleFileWriter {
             }
         }
         let start = self.bodies_end;
-        self.writer.write_at(start, &entry.bytes)?;
+        self.cache_file.write_at(start, &entry.bytes)?;
         self.bodies_end = start + entry.bytes.len() as u64;
         self.record.insert(
             entry.identity,
@@ -363,7 +363,7 @@ impl ModuleFileWriter {
         let mut entries: Vec<(EntityIdentity, EntityEntry)> =
             take(&mut self.record).into_iter().collect();
         entries.sort_by(|(lhs, _), (rhs, _)| lhs.cmp(rhs));
-        let bytes = self.writer.finish(
+        let bytes = self.cache_file.finish(
             self.bodies_end,
             &postcard::to_allocvec(&entries).unwrap(),
             FILE_MAGIC,
@@ -520,7 +520,7 @@ enum CheckOutcome {
 /// Where the typed expression of a body lies in its module's file, and what the file records of the
 /// body.
 #[derive(Clone)]
-pub struct StoredBody {
+pub struct StoredTypedBody {
     /// The file of the module the body is defined in, which the body is read back from.
     mapped: Arc<MappedModuleFile>,
     /// The entity the body belongs to, which the file writes in front of the body.
@@ -544,7 +544,7 @@ pub struct TypedModules {
     cache_dirs: CacheDirs,
 }
 
-impl StoredBody {
+impl StoredTypedBody {
     /// The facts about the body a warning after type checking may be derived from.
     pub fn warning_facts(&self) -> &[WarningFact] {
         &self.warning_facts
@@ -661,7 +661,7 @@ impl Program {
         let dir = if to_check.is_empty() {
             None
         } else {
-            self.typed_modules.cache_dirs.writable(TYPED_MODULES_PATH)
+            self.typed_modules.cache_dirs.writable_dir(TYPED_MODULES_PATH)
         };
         let mut outcomes: Vec<Option<CheckOutcome>> = to_check.iter().map(|_| None).collect();
         let mut unchecked_of_module: Map<Name, usize> = Map::default();
@@ -754,7 +754,7 @@ impl Program {
         entry: EntityEntry,
     ) {
         self.add_opaque_types(entry.opaque_types);
-        let stored = StoredBody {
+        let stored = StoredTypedBody {
             mapped,
             identity,
             range: entry.body,
@@ -813,7 +813,7 @@ impl Program {
                     return Err(checked.diagnostics);
                 }
                 if checked.passed() {
-                    if let Some(dir) = self.typed_modules.cache_dirs.writable(TYPED_MODULES_PATH) {
+                    if let Some(dir) = self.typed_modules.cache_dirs.writable_dir(TYPED_MODULES_PATH) {
                         let entry = NewEntry::of(identity, &checked);
                         let source_files = &mut self.typed_modules.source_files;
                         let file = &mapped.file;

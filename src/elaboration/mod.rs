@@ -12,7 +12,7 @@ use crate::configuration::{Configuration, OutputFileType, SubCommand, TypeCheckS
 use crate::error::Errors;
 use crate::fixstd::builtin::make_io_unit_ty;
 use crate::fixstd::stdlib::{make_std_mod, make_tuple_traits_mod};
-use crate::parse::parser::{parse_file_path, parse_renamed_source_file};
+use crate::parse::parser::{parse_file_path, parse_source_file};
 use crate::tool::stopwatch::StopWatch;
 use std::fs::File;
 use std::io::Read;
@@ -227,7 +227,7 @@ pub fn load_source_files(config: &Configuration) -> Result<Program, Errors> {
         .iter()
         .flat_map(|example_build| example_build.sources())
     {
-        let parse_result = parse_renamed_source_file(source, renaming, config);
+        let parse_result = parse_source_file(source, renaming, config);
         errors.eat_err_or(parse_result, |parsed_program| {
             parsed_programs.push(parsed_program)
         });

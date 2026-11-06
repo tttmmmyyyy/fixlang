@@ -288,7 +288,7 @@ fn write_parsed_file(
     origin: &ParseOrigin,
     bodies: &[(ExprKey, &mut ParsedBody)],
 ) -> Option<(Mmap, ParsedIndex)> {
-    let dir = cache_dirs.writable(PARSED_MODULES_PATH)?;
+    let dir = cache_dirs.writable_dir(PARSED_MODULES_PATH)?;
     match write_parsed_file_in(&dir, file_name, prefix, origin, bodies) {
         Ok(written) => Some(written),
         Err(e) => {

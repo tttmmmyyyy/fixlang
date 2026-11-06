@@ -31,7 +31,7 @@ use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionE
 use crate::elaboration::parsed_modules::StoredParsedBody;
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use crate::elaboration::typecheckcache::{entity_identity, EntityIdentity, SharedTypeCheckCache};
-use crate::elaboration::typed_modules::{warning_facts, StoredBody, TypedModules, WarningFact};
+use crate::elaboration::typed_modules::{warning_facts, StoredTypedBody, TypedModules, WarningFact};
 use crate::error::{
     Error, Errors, WARN_DEPRECATED, WARN_MISSING_PATTERN_FIELD, WARN_UNDECLARED_DEPENDENCY,
 };
@@ -286,7 +286,7 @@ pub struct UncheckedBody {
 impl UncheckedBody {
     /// The expression as the type check takes it: wrapped in the `#wrap_opaque` of its value when
     /// the value has opaque types, with the concrete types of those left for the check to fill in.
-    pub fn to_check(&self) -> TypedExpr {
+    pub fn expr_to_check(&self) -> TypedExpr {
         let expr = self.expr.expr();
         match &self.opaque_wrapping {
             Some(wrapping) => TypedExpr {
@@ -319,7 +319,7 @@ pub struct RecordedBody {
     /// to read back from the file.
     pub unchecked: UncheckedBody,
     /// Where the typed expression lies, and what the file records of the body.
-    pub stored: StoredBody,
+    pub stored: StoredTypedBody,
 }
 
 impl Body {
@@ -420,7 +420,7 @@ impl SymbolExpr {
     pub fn exprs(&self) -> Vec<&Arc<ExprNode>> {
         match self {
             SymbolExpr::Simple(body) => vec![body.expr()],
-            SymbolExpr::Method(impls) => impls.iter().map(|m| m.expr.expr()).collect(),
+            SymbolExpr::Method(impls) => impls.iter().map(|m| m.body.expr()).collect(),
         }
     }
 
@@ -544,7 +544,7 @@ pub struct TraitMemberImpl {
     /// user wrote has to be equivalent to.
     pub scm_via_defn: Arc<Scheme>,
     /// The expression this implementation defines the member as.
-    pub expr: Body,
+    pub body: Body,
     /// The module the `impl` is written in.
     ///
     /// This may differ from the first component of the member's namespace: where the `Main` module
@@ -578,7 +578,7 @@ impl TraitMemberImpl {
     /// * `name` — the name of the global value, e.g. `Std::ToString::to_string`, answered as
     ///   `EndNode::ValueDecl` where `pos` is on a left-hand side name of this implementation.
     pub fn find_node_at(&self, name: &FullName, pos: &SourcePos) -> Option<EndNode> {
-        let node = self.expr.find_node_at(pos);
+        let node = self.body.find_node_at(pos);
         if node.is_some() {
             return node;
         }
@@ -1335,7 +1335,7 @@ impl Program {
             (SymbolExpr::Simple(body), None) => (body, &gv.scm, loc.val_name.module()),
             (SymbolExpr::Method(impls), Some(i)) => {
                 let impl_ = &impls[i];
-                (&impl_.expr, &impl_.scm, impl_.define_module.clone())
+                (&impl_.body, &impl_.scm, impl_.define_module.clone())
             }
             _ => panic!(
                 "`{}` is not the kind of value its location says",
@@ -1460,7 +1460,7 @@ impl Program {
 
         let def_mod = self.find_mod(&def_mod).unwrap();
         let mut nrctx = NameResolutionContext::new(def_mod.name.clone(), nrenv.clone());
-        let mut te = body.to_check();
+        let mut te = body.expr_to_check();
 
         // Perform namespace inference.
         te.expr = te.expr.resolve_namespace(&mut nrctx)?;
@@ -1520,7 +1520,7 @@ impl Program {
         let gv = self.global_values.get_mut(&loc.val_name).unwrap();
         match (&mut gv.expr, loc.impl_idx) {
             (SymbolExpr::Simple(body), None) => body,
-            (SymbolExpr::Method(impls), Some(i)) => &mut impls[i].expr,
+            (SymbolExpr::Method(impls), Some(i)) => &mut impls[i].body,
             _ => panic!(
                 "`{}` is not the kind of value its location says",
                 loc.val_name.to_string()
@@ -2009,7 +2009,7 @@ impl Program {
                         member_impls.push(TraitMemberImpl {
                             scm,
                             scm_via_defn,
-                            expr: Body::unchecked(body),
+                            body: Body::unchecked(body),
                             define_module: trait_impl.define_module.clone(),
                             lhs_srcs,
                         });

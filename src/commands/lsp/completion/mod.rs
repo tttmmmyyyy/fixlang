@@ -439,7 +439,8 @@ fn run_completion_elaborate(
 /// first definition whose body span covers `cursor_byte`.
 fn find_enclosing_gv(abs_path: &PathBuf, content: &str, cursor_byte: usize) -> Option<FullName> {
     // The C numeric types decide what the C types of an `FFI_CALL` stand for, which affects neither
-    // the names of the global values nor where they are written, so any target's serve.
+    // the names of the global values nor where they are written, so any target's C numeric types
+    // serve.
     let origin = ParseOrigin {
         source: SourceFile::from_file_path_and_content(abs_path.clone(), content.to_string()),
         renaming: None,

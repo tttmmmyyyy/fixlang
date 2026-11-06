@@ -107,7 +107,7 @@ flowchart LR
 
 大域値の本体（`Body`）は、型検査の前の `Unchecked`、型検査を通って型付きの式が typed-modules のファイルにある `Recorded`、型付きの式をメモリに持つ `Checked`（`TypedExpr`）のどれかである。`Unchecked` の本体（`UncheckedBody`）は、式（`ParsedBody`）と、不透明型のために包む `#wrap_opaque`（`OpaqueWrapping`）を持つ。式は、メモリに持つ（`InMemory`）か、parsed-modules のファイルにある（`Stored`）かのどちらかである。
 
-不透明型で本体を包む処理は、本体 1 つを型検査する関数（`check_body`）の入口にある。`desugar_opaque_types` は宣言の側の処理をする。不透明型の型構築子と制約の登録、型スキームの書き換え、`#wrap_opaque` の生成に加えて、値と実装ごとに、包むのに使う `#wrap_opaque` の名前と、右辺が空の `OpaqueTyConResolution` の列を `OpaqueWrapping` として本体に持たせる。型検査の入口（`UncheckedBody::to_check`）は、式をこの名前で包み、この列を型付きの式に写してから型検査する。どの出どころの本体も、型検査の直前にこの入口を通るので、包む処理がかかる場所は一か所になる。parsed-modules に書く式は包む前のものなので、その中身はソースファイルと構文解析の設定だけで決まる。
+不透明型で本体を包む処理は、本体 1 つを型検査する関数（`check_body`）の入口にある。`desugar_opaque_types` は宣言の側の処理をする。不透明型の型構築子と制約の登録、型スキームの書き換え、`#wrap_opaque` の生成に加えて、値と実装ごとに、包むのに使う `#wrap_opaque` の名前と、右辺が空の `OpaqueTyConResolution` の列を `OpaqueWrapping` として本体に持たせる。型検査の入口（`UncheckedBody::expr_to_check`）は、式をこの名前で包み、この列を型付きの式に写してから型検査する。どの出どころの本体も、型検査の直前にこの入口を通るので、包む処理がかかる場所は一か所になる。parsed-modules に書く式は包む前のものなので、その中身はソースファイルと構文解析の設定だけで決まる。
 
 ### parsed-modules
 

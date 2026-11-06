@@ -243,7 +243,7 @@ pub fn parse_and_save_to_temporary_file(
     config: &Configuration,
 ) -> Result<Program, Errors> {
     let src = save_temporary_source(source, file_name)?;
-    parse_named_source_file(src, file_name, None, config)
+    parse_source_named(src, file_name, None, config)
 }
 
 /// Parses the source at `file_path` into the program of the module it declares, reading the content
@@ -274,7 +274,7 @@ pub fn parse_file_path(file_path: PathBuf, config: &Configuration) -> Result<Pro
         Some(content) => SourceFile::from_file_path_and_content(file_path, content.clone()),
         None => SourceFile::from_file_path(file_path),
     };
-    parse_renamed_source_file(source, None, config)
+    parse_source_file(source, None, config)
 }
 
 /// An identifier category `validate_token_str` checks a string against.
@@ -500,22 +500,22 @@ fn classify_repair_hint(positives: &[Rule]) -> RepairHintKind {
 
 /// Parses `source` into the program of the one module it declares, with every span pointing into
 /// `source`, compiling the module `renaming` names under the name it gives.
-pub fn parse_renamed_source_file(
+pub fn parse_source_file(
     source: SourceFile,
     renaming: Option<ModuleRenaming>,
     config: &Configuration,
 ) -> Result<Program, Errors> {
     let source_name = source.file_path.to_string_lossy().to_string();
-    parse_named_source_file(source, &source_name, renaming, config)
+    parse_source_named(source, &source_name, renaming, config)
 }
 
-/// Parses `source` as `parse_renamed_source_file` does. `source_name` names the source whatever its
+/// Parses `source` as `parse_source_file` does. `source_name` names the source whatever its
 /// content: the path of a source file, and the name of a source the compiler writes.
 ///
 /// A build that type-checks through the files of type-checked modules writes the bodies of the
 /// program to the file of parsed bodies of `source`, and holds them as ones read back from it
 /// (`store_parsed_bodies`). The file replaces those of the other contents of `source_name`.
-fn parse_named_source_file(
+fn parse_source_named(
     source: SourceFile,
     source_name: &str,
     renaming: Option<ModuleRenaming>,

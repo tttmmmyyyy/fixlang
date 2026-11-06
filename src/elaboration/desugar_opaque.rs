@@ -20,7 +20,7 @@
 //   #wrap_opaque : [x : Iterator, Item x = a] (a -> I64 -> x) -> (a -> I64 -> ?it a)
 //   repeat = #wrap_opaque(|x, n| range(0, n).map(|_| x))
 //   The body records the name of `#wrap_opaque` and the OpaqueTyConResolutions as its
-//   `OpaqueWrapping`, and `UncheckedBody::to_check` wraps it.
+//   `OpaqueWrapping`, and `UncheckedBody::expr_to_check` wraps it.
 //
 // === Trait member example ===
 //
@@ -271,7 +271,7 @@ impl Program {
                             &defn_to_impl,
                             impl_.first_lhs_src(),
                         );
-                        impl_.expr.wrap_for_opaque_types(OpaqueWrapping {
+                        impl_.body.wrap_for_opaque_types(OpaqueWrapping {
                             wrapper: wrap_name.clone(),
                             opaque_types,
                         });

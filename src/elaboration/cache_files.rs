@@ -31,7 +31,7 @@ const FOOTER_LEN: u64 = 8 + 8 + size_of::<FileMagic>() as u64;
 
 /// How many characters of the name a file is named after its file name carries. With the two
 /// digests the file name stays well within the 255 bytes file systems allow.
-const READABLE_NAME_LENGTH: usize = 100;
+const READABLE_NAME_LEN: usize = 100;
 
 /// The part every file named after `name` begins its name with, whatever the digest after it.
 ///
@@ -45,7 +45,7 @@ const READABLE_NAME_LENGTH: usize = 100;
 pub fn readable_file_prefix(name: &str) -> String {
     let readable: String = name
         .chars()
-        .take(READABLE_NAME_LENGTH)
+        .take(READABLE_NAME_LEN)
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
         .collect();
     format!("{}_{:x}_", readable, md5::compute(name))
@@ -198,7 +198,7 @@ fn remove_stale_files(dir: &Path, prefix: &str, file_name: &str) {
 }
 
 /// The directories of the cache files of one build, each made ready the first time it is asked for
-/// (`writable`), and answered from then on as it was found then. Clones share what they found.
+/// (`writable_dir`), and answered from then on as it was found then. Clones share what they found.
 #[derive(Clone, Default)]
 pub struct CacheDirs(Arc<Mutex<Map<&'static str, Option<PathBuf>>>>);
 
@@ -208,7 +208,7 @@ impl CacheDirs {
     ///
     /// `CACHE_PATH` itself is made ready first, so that a `CACHE_PATH` the build may not write
     /// through is reported once for all the directories under it.
-    pub fn writable(&self, path: &'static str) -> Option<PathBuf> {
+    pub fn writable_dir(&self, path: &'static str) -> Option<PathBuf> {
         assert!(
             Path::new(path).parent() == Some(Path::new(CACHE_PATH)),
             "\"{}\" is not a directory of `CACHE_PATH`",
