@@ -75,6 +75,22 @@ pub fn path_env_with_dir_in_front(dir: PathBuf) -> OsString {
     env::join_paths(dirs).expect("The directory path contains a path separator.")
 }
 
+/// The names of the files in the directory `cache_path` of the project in `dir`, in order; none
+/// when the directory does not exist.
+pub fn cache_file_names(dir: &Path, cache_path: &str) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(dir.join(cache_path)) else {
+        return vec![];
+    };
+    let mut names: Vec<String> = entries
+        .map(|entry| {
+            let entry = entry.expect("Failed to read a cache file");
+            entry.file_name().to_string_lossy().to_string()
+        })
+        .collect();
+    names.sort();
+    names
+}
+
 /// A `Command` that runs this worktree's freshly built `fix` binary by absolute
 /// path. Building is triggered (once) first, so the returned command always
 /// targets a complete binary. The absolute path pins the run to the binary the

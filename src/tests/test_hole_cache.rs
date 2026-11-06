@@ -13,7 +13,7 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::TYPED_MODULES_PATH;
-    use crate::tests::test_util::{copy_dir_recursive, fix_command};
+    use crate::tests::test_util::{cache_file_names, copy_dir_recursive, fix_command};
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process;
@@ -51,14 +51,7 @@ mod integration_tests {
     /// The names of the files under `TYPED_MODULES_PATH` in the project. Empty if the directory
     /// doesn't exist.
     fn list_cache_files(project_dir: &Path) -> Vec<String> {
-        let cache_dir = project_dir.join(TYPED_MODULES_PATH);
-        if !cache_dir.exists() {
-            return vec![];
-        }
-        fs::read_dir(&cache_dir)
-            .expect("Failed to read cache directory")
-            .filter_map(|entry| entry.ok().and_then(|e| e.file_name().into_string().ok()))
-            .collect()
+        cache_file_names(project_dir, TYPED_MODULES_PATH)
     }
 
     /// Reports whether a cache file records a body of the global value `value_name`.

@@ -72,7 +72,7 @@ fn test_the_module_dependency_hash_covers_the_c_numeric_types() {
 #[cfg(test)]
 mod integration_tests {
     use crate::constants::{DOT_FIXLANG, PARSED_MODULES_PATH, TYPED_MODULES_PATH};
-    use crate::tests::test_util::{fix_command, run_fix};
+    use crate::tests::test_util::{cache_file_names, fix_command, run_fix};
     use std::fs::{self, File, Permissions};
     use std::ops::Range;
     use std::os::unix::fs::PermissionsExt;
@@ -325,14 +325,7 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
 "#,
         )
         .expect("Failed to write main.fix");
-        let cache_entries = || {
-            let mut names = fs::read_dir(dir.join(TYPED_MODULES_PATH))
-                .expect("Failed to read the type-check cache directory")
-                .map(|entry| entry.expect("Failed to read a cache entry").file_name())
-                .collect::<Vec<_>>();
-            names.sort();
-            names
-        };
+        let cache_entries = || cache_file_names(dir, TYPED_MODULES_PATH);
 
         build(dir, "main.fix", &[]);
         let first_build_entries = cache_entries();
@@ -1043,10 +1036,7 @@ main = println $ (double(21), 3).to_string;
 
     /// The names of the files of parsed bodies in `dir`, in order.
     fn parsed_files(dir: &Path) -> Vec<String> {
-        files_under(dir, PARSED_MODULES_PATH)
-            .into_iter()
-            .map(|(name, _)| name)
-            .collect()
+        cache_file_names(dir, PARSED_MODULES_PATH)
     }
 
     /// Writes into `dir` a module `Main` printing a value of the module `Lib`, and `Lib` defining
