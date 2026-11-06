@@ -1318,12 +1318,16 @@ main = println $ (double(21), 3).to_string;
         // lies. The two bodies are written the same length, so swapping their bytes leaves each
         // place holding a whole expression, of the other body.
         let footer_start = written.len() - 24;
-        let index_start = u64::from_le_bytes(written[footer_start..footer_start + 8].try_into().unwrap());
+        let index_start =
+            u64::from_le_bytes(written[footer_start..footer_start + 8].try_into().unwrap());
         let index: Vec<((usize, usize), Range<u64>)> =
             postcard::from_bytes(&written[index_start as usize..footer_start])
                 .expect("Failed to read the index of the file of parsed bodies");
         let [(_, first), (_, second)] = &index[..] else {
-            panic!("the file of parsed bodies of lib.fix holds {} bodies", index.len())
+            panic!(
+                "the file of parsed bodies of lib.fix holds {} bodies",
+                index.len()
+            )
         };
         let (first, second) = (
             first.start as usize..first.end as usize,

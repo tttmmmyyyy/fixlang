@@ -31,7 +31,9 @@ use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionE
 use crate::elaboration::parsed_modules::StoredParsedBody;
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use crate::elaboration::typecheckcache::{entity_identity, EntityIdentity, SharedTypeCheckCache};
-use crate::elaboration::typed_modules::{warning_facts, StoredTypedBody, TypedModules, WarningFact};
+use crate::elaboration::typed_modules::{
+    warning_facts, StoredTypedBody, TypedModules, WarningFact,
+};
 use crate::error::{
     Error, Errors, WARN_DEPRECATED, WARN_MISSING_PATTERN_FIELD, WARN_UNDECLARED_DEPENDENCY,
 };

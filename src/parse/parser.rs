@@ -21,8 +21,8 @@ use crate::ast::{
     qual_pred::QualPred,
     qual_type::QualType,
     traits::{
-        AssocTypeDefn, AssocTypeImpl, ImplMember, KindSignature, TraitAlias, TraitDefn, TraitId, TraitImpl,
-        TraitMember,
+        AssocTypeDefn, AssocTypeImpl, ImplMember, KindSignature, TraitAlias, TraitDefn, TraitId,
+        TraitImpl, TraitMember,
     },
     typedecl::{Field, Struct, TypeAlias, TypeDeclValue, TypeDefn, Union},
     types::{
@@ -36,8 +36,8 @@ use crate::constants::{
     IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME,
     PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX,
 };
-use crate::error::Errors;
 use crate::elaboration::parsed_modules::store_parsed_bodies;
+use crate::error::Errors;
 use crate::ffi::{unsupported_128_bit_integer_msg, CNumericTypes};
 use crate::fixstd::builtin::{
     expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, floating_literal_value,

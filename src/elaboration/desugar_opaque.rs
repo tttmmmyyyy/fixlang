@@ -212,7 +212,9 @@ impl Program {
                 GlobalValue {
                     scm: wrap_scm,
                     syn_scm: None,
-                    expr: SymbolExpr::Simple(Body::unchecked(ParsedBody::InMemory(build_undefined_expr()))),
+                    expr: SymbolExpr::Simple(Body::unchecked(ParsedBody::InMemory(
+                        build_undefined_expr(),
+                    ))),
                     decl_src: None,
                     defn_src: None,
                     document: None,

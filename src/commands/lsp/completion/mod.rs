@@ -24,18 +24,16 @@ use crate::ast::expr::{hole_full_name, Expr, ExprNode};
 use crate::ast::name::{FullName, Name, NameSpace};
 use crate::ast::program::{EndNode, Program};
 use crate::ast::types::TypeNode;
-use crate::configuration::{
-    BuildConfigType, Configuration, DiagnosticsConfig, TypeCheckStore,
-};
+use crate::configuration::{BuildConfigType, Configuration, DiagnosticsConfig, TypeCheckStore};
 use crate::constants::chars_allowed_in_identifiers;
 use crate::dependency::lockfile::LockFileType;
 use crate::elaboration::elaborate_via_config;
 use crate::elaboration::typecheck::TypeCheckContext;
 use crate::elaboration::typecheckcache::SharedTypeCheckCache;
 use crate::error::Errors;
+use crate::ffi::CNumericTypes;
 use crate::metafiles::project_file::ProjectFile;
 use crate::misc::{map_on_compiler_threads, to_absolute_path, Map, Set};
-use crate::ffi::CNumericTypes;
 use crate::parse::parser::{parse_origin, ParseOrigin};
 use crate::parse::sourcefile::{SourceFile, Span};
 use crate::write_log;

@@ -24,8 +24,8 @@ use crate::ast::expr::ExprNode;
 use crate::ast::program::{Body, ParsedBody, Program, SymbolExpr};
 use crate::constants::PARSED_MODULES_PATH;
 use crate::elaboration::cache_files::{
-    find_index, lies_within_entries, map_file, readable_file_prefix, warn_unreadable_file, CacheDirs,
-    warn_unwritable_file, CacheFileWriter, FileMagic,
+    find_index, lies_within_entries, map_file, readable_file_prefix, warn_unreadable_file,
+    warn_unwritable_file, CacheDirs, CacheFileWriter, FileMagic,
 };
 use crate::hash::HashSource;
 use crate::misc::{Map, Set};
@@ -98,7 +98,13 @@ impl StoredParsedBody {
             };
             let bodies = bodies_to_store(&mut program, origin);
             let file = &self.file;
-            write_parsed_file(&file.cache_dirs, &file.file_name, &file.prefix, origin, &bodies);
+            write_parsed_file(
+                &file.cache_dirs,
+                &file.file_name,
+                &file.prefix,
+                origin,
+                &bodies,
+            );
             bodies
                 .into_iter()
                 .map(|(key, body)| (key, body.expr()))
@@ -241,7 +247,9 @@ fn find_parsed_file(
         }
     };
     match decode_parsed_file(&bytes) {
-        Some(index) if bodies.iter().all(|(key, _)| index.contains_key(key)) => Some((bytes, index)),
+        Some(index) if bodies.iter().all(|(key, _)| index.contains_key(key)) => {
+            Some((bytes, index))
+        }
         Some(_) => {
             warn_unreadable_file(&path, "it lacks a body of its source file");
             None
@@ -363,11 +371,11 @@ impl Program {
 
 #[cfg(test)]
 mod tests {
+    use super::parsed_file_name;
     use crate::ast::expr::{Expr, ExprNode};
     use crate::ast::name::FullName;
     use crate::ast::program::{Body, ParsedBody, SymbolExpr};
     use crate::ffi::CNumericTypes;
-    use super::parsed_file_name;
     use crate::parse::parser::{parse_origin, ModuleRenaming, ParseOrigin};
     use crate::parse::sourcefile::{SourceFile, Span};
     use std::path::PathBuf;

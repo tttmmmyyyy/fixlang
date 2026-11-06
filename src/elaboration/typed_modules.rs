@@ -31,13 +31,13 @@ use crate::ast::program::{Body, BodyLocation, CheckedBody, Program, RecordedBody
 use crate::ast::types::{OpaqueTyConResolution, TyCon};
 use crate::configuration::Configuration;
 use crate::constants::TYPED_MODULES_PATH;
+use crate::elaboration::cache_files::{
+    find_index, lies_within_entries, map_file, readable_file_prefix, warn_unreadable_file,
+    warn_unwritable_file, CacheDirs, CacheFileWriter, FileMagic,
+};
 use crate::elaboration::typecheck::TypeCheckContext;
 use crate::elaboration::typecheckcache::EntityIdentity;
 use crate::error::Errors;
-use crate::elaboration::cache_files::{
-    find_index, lies_within_entries, map_file, readable_file_prefix, CacheDirs,
-    warn_unreadable_file, warn_unwritable_file, CacheFileWriter, FileMagic,
-};
 use crate::misc::{consume_on_compiler_threads, map_on_compiler_threads, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
 use memmap2::Mmap;
@@ -305,7 +305,9 @@ impl ModuleFileWriter {
         let Ok((record, bodies_end)) = decode_module_file(&held) else {
             return Ok(writer);
         };
-        writer.cache_file.write_at(0, &held[..bodies_end as usize])?;
+        writer
+            .cache_file
+            .write_at(0, &held[..bodies_end as usize])?;
         writer.held = Some(held);
         writer.held_end = bodies_end;
         writer.record = record;
@@ -661,7 +663,9 @@ impl Program {
         let dir = if to_check.is_empty() {
             None
         } else {
-            self.typed_modules.cache_dirs.writable_dir(TYPED_MODULES_PATH)
+            self.typed_modules
+                .cache_dirs
+                .writable_dir(TYPED_MODULES_PATH)
         };
         let mut outcomes: Vec<Option<CheckOutcome>> = to_check.iter().map(|_| None).collect();
         let mut unchecked_of_module: Map<Name, usize> = Map::default();
@@ -813,7 +817,11 @@ impl Program {
                     return Err(checked.diagnostics);
                 }
                 if checked.passed() {
-                    if let Some(dir) = self.typed_modules.cache_dirs.writable_dir(TYPED_MODULES_PATH) {
+                    if let Some(dir) = self
+                        .typed_modules
+                        .cache_dirs
+                        .writable_dir(TYPED_MODULES_PATH)
+                    {
                         let entry = NewEntry::of(identity, &checked);
                         let source_files = &mut self.typed_modules.source_files;
                         let file = &mapped.file;

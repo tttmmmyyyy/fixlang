@@ -53,7 +53,11 @@ pub fn readable_file_prefix(name: &str) -> String {
 
 /// Where the index lies in a file of `len` bytes that ends in `footer`, or `None` when the footer is
 /// not one a cache file ending in `magic` ends in.
-fn index_range(footer: &[u8; FOOTER_LEN as usize], len: u64, magic: &FileMagic) -> Option<Range<u64>> {
+fn index_range(
+    footer: &[u8; FOOTER_LEN as usize],
+    len: u64,
+    magic: &FileMagic,
+) -> Option<Range<u64>> {
     assert!(
         len >= FOOTER_LEN,
         "a footer of {} bytes in a file of {} bytes",
