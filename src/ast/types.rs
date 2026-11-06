@@ -25,7 +25,7 @@ use crate::fixstd::builtin::{
 use crate::generator::Generator;
 use crate::misc::{collect_results, number_to_varname, Map, Set};
 use crate::object::{ty_to_object_ty, ObjectType};
-use crate::parse::sourcefile::{SourcePos, Span};
+use crate::parse::sourcefile::{SourceFile, SourcePos, Span};
 use crate::rc_ir::ast::RcState;
 use core::panic;
 use inkwell::types::{BasicTypeEnum, StructType};
@@ -488,12 +488,13 @@ pub struct TypeNode {
     pub ty: Type,
     /// Where the type was written, for a type read from a source file.
     ///
-    /// Left out of the serialized form, so that a node serializes to its type expression — the
-    /// same thing `PartialEq` compares and `Hash` hashes. A reader that must not follow an edit
-    /// shifting a position would otherwise have to take the type out of whatever holds it, and a
-    /// builtin op holds its types behind a trait object no reader can reach into
-    /// (`divide_program::generated_code_hash` reads one).
-    #[serde(skip)]
+    /// Left out of the serialized form outside `SourceFile::with_spans_within`, so that a node
+    /// serializes to its type expression — the same thing `PartialEq` compares and `Hash` hashes. A
+    /// reader that must not follow an edit shifting a position would otherwise have to take the type
+    /// out of whatever holds it, and a builtin op holds its types behind a trait object no reader
+    /// can reach into (`divide_program::generated_code_hash` reads one). A syntax tree written
+    /// inside `SourceFile::with_spans_within` keeps the positions, which the diagnostics of a type
+    /// annotation point at.
     pub info: TypeInfo,
     /// The hash of `ty`, kept once computed.
     ///
@@ -2211,11 +2212,36 @@ pub fn apply_type_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNo
 }
 
 /// What a type node carries beside the type itself.
-#[derive(Default, Clone, Serialize, Deserialize)]
+///
+/// It serializes to nothing outside `SourceFile::with_spans_within` (see `TypeNode::info`).
+#[derive(Default, Clone)]
 pub struct TypeInfo {
     /// The span of the source text the type was written at. A type the compiler builds itself has
     /// none.
     source: Option<Span>,
+}
+
+impl Serialize for TypeInfo {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match SourceFile::enclosing() {
+            Some(_) => self.source.serialize(serializer),
+            None => serializer.serialize_unit(),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for TypeInfo {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        match SourceFile::enclosing() {
+            Some(_) => Ok(TypeInfo {
+                source: Option::<Span>::deserialize(deserializer)?,
+            }),
+            None => {
+                <()>::deserialize(deserializer)?;
+                Ok(TypeInfo::default())
+            }
+        }
+    }
 }
 
 impl TypeNode {

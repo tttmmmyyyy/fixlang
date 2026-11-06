@@ -6,7 +6,7 @@ use crate::{
 };
 use colored::{Color, Colorize};
 use pest::iterators::Pair;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{
     cell::RefCell,
     cmp::Ordering,
@@ -56,6 +56,10 @@ thread_local! {
     /// `SourceFile::with_shared_source_files` runs; `None` outside it.
     static SHARED_SOURCE_FILES: RefCell<Option<Map<PathBuf, SourceFile>>> =
         const { RefCell::new(None) };
+
+    /// The source file every span serialized or deserialized on this thread lies in, while
+    /// `SourceFile::with_spans_within` runs; `None` outside it.
+    static ENCLOSING_SOURCE_FILE: RefCell<Option<SourceFile>> = const { RefCell::new(None) };
 }
 
 impl<'de> Deserialize<'de> for SourceFile {
@@ -144,6 +148,40 @@ impl SourceFile {
         });
         let _restore = Restore(shared);
         deserialize()
+    }
+
+    /// Runs `serialize`, writing every span it serializes or deserializes as a range of this file
+    /// alone, and every type node with the span it was written at.
+    ///
+    /// This is the form a syntax tree parsed from this file is written in: the file is named once
+    /// for the whole tree rather than once for each span, and the type annotations keep the
+    /// positions their diagnostics point at.
+    ///
+    /// Panics when it runs inside another `with_spans_within` on the same thread, and when a span of
+    /// another file is serialized.
+    pub fn with_spans_within<R>(&self, serialize: impl FnOnce() -> R) -> R {
+        /// Leaves the thread outside the file when it is dropped, however `serialize` ends.
+        struct Restore;
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                ENCLOSING_SOURCE_FILE.with(|cell| cell.borrow_mut().take());
+            }
+        }
+
+        ENCLOSING_SOURCE_FILE.with(|cell| {
+            let previous = cell.borrow_mut().replace(self.clone());
+            assert!(
+                previous.is_none(),
+                "`SourceFile::with_spans_within` runs inside another"
+            );
+        });
+        let _restore = Restore;
+        serialize()
+    }
+
+    /// The file `with_spans_within` runs for on this thread, or `None` outside it.
+    pub fn enclosing() -> Option<SourceFile> {
+        ENCLOSING_SOURCE_FILE.with(|cell| cell.borrow().clone())
     }
 
     /// The content of the file. It is read from disk on the first request and kept for the later
@@ -411,7 +449,9 @@ pub fn line_comment_text(comment: &str) -> &str {
 ///
 /// It owns the file it points into, so it can be stored in the syntax tree and written into the
 /// compiler's caches, where a `pest::Span` lives only as long as the content it borrows.
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+///
+/// It serializes with its file, and inside `SourceFile::with_spans_within` as the range alone.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Span {
     /// The file the range lies in.
     pub input: SourceFile,
@@ -419,6 +459,64 @@ pub struct Span {
     pub start: usize,
     /// End byte index (exclusive).
     pub end: usize,
+}
+
+/// What a serialized `Span` carries outside `SourceFile::with_spans_within`: every field of `Span`,
+/// in its order.
+#[derive(Serialize, Deserialize)]
+struct SerializedSpan<F> {
+    input: F,
+    start: usize,
+    end: usize,
+}
+
+/// What a serialized `Span` carries inside `SourceFile::with_spans_within`.
+#[derive(Serialize, Deserialize)]
+struct SerializedRange {
+    start: usize,
+    end: usize,
+}
+
+impl Serialize for Span {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match SourceFile::enclosing() {
+            Some(enclosing) => {
+                assert!(
+                    self.input == enclosing,
+                    "a span of \"{}\" serialized as a range of \"{}\"",
+                    self.input.file_path.to_string_lossy(),
+                    enclosing.file_path.to_string_lossy()
+                );
+                SerializedRange {
+                    start: self.start,
+                    end: self.end,
+                }
+                .serialize(serializer)
+            }
+            None => SerializedSpan {
+                input: &self.input,
+                start: self.start,
+                end: self.end,
+            }
+            .serialize(serializer),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Span {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        match SourceFile::enclosing() {
+            Some(input) => {
+                let SerializedRange { start, end } = SerializedRange::deserialize(deserializer)?;
+                Ok(Span { input, start, end })
+            }
+            None => {
+                let SerializedSpan { input, start, end } =
+                    SerializedSpan::<SourceFile>::deserialize(deserializer)?;
+                Ok(Span { input, start, end })
+            }
+        }
+    }
 }
 
 impl Span {
