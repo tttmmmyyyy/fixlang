@@ -1316,10 +1316,10 @@ main = println $ (double(21), 3).to_string;
         // The footer begins with the offset of the index, and the index lists where each body
         // lies. The two bodies are written the same length, so swapping their bytes leaves each
         // place holding a whole expression, of the other body.
-        let footer = written.len() - 24;
-        let index_start = u64::from_le_bytes(written[footer..footer + 8].try_into().unwrap());
+        let footer_start = written.len() - 24;
+        let index_start = u64::from_le_bytes(written[footer_start..footer_start + 8].try_into().unwrap());
         let index: Vec<((usize, usize), std::ops::Range<u64>)> =
-            postcard::from_bytes(&written[index_start as usize..footer])
+            postcard::from_bytes(&written[index_start as usize..footer_start])
                 .expect("Failed to read the index of the file of parsed bodies");
         let [(_, first), (_, second)] = &index[..] else {
             panic!("the file of parsed bodies of lib.fix holds {} bodies", index.len())

@@ -150,7 +150,7 @@ impl SourceFile {
         deserialize()
     }
 
-    /// Runs `serialize`, writing every span it serializes or deserializes as a range of this file
+    /// Runs `work`, writing every span it serializes or deserializes as a range of this file
     /// alone, and every type node with the span it was written at.
     ///
     /// This is the form a syntax tree parsed from this file is written in: the file is named once
@@ -159,8 +159,8 @@ impl SourceFile {
     ///
     /// Panics when it runs inside another `with_spans_within` on the same thread, and when a span of
     /// another file is serialized.
-    pub fn with_spans_within<R>(&self, serialize: impl FnOnce() -> R) -> R {
-        /// Leaves the thread outside the file when it is dropped, however `serialize` ends.
+    pub fn with_spans_within<R>(&self, work: impl FnOnce() -> R) -> R {
+        /// Leaves the thread outside the file when it is dropped, however `work` ends.
         struct Restore;
         impl Drop for Restore {
             fn drop(&mut self) {
@@ -176,7 +176,7 @@ impl SourceFile {
             );
         });
         let _restore = Restore;
-        serialize()
+        work()
     }
 
     /// What `read` answers of the file `with_spans_within` runs for on this thread, or of `None`
