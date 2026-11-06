@@ -28,7 +28,7 @@ use crate::elaboration::cache_files::{
 };
 use crate::error::Errors;
 use crate::hash::HashSource;
-use crate::misc::Map;
+use crate::misc::{Map, Set};
 use crate::parse::parser::{parse_origin, ParseOrigin};
 use crate::parse::sourcefile::Span;
 use build_time::build_time_utc;
@@ -252,21 +252,28 @@ pub fn store_parsed_bodies(
 
 /// The bodies of `program`, parsed from `origin`, that its file of parsed bodies holds, each with
 /// the key of its expression: those held in memory whose expressions are written in
-/// `origin.source`, each at a place no other body's expression is written.
+/// `origin.source`.
+///
+/// Two bodies of one source are two definitions, written at two places, so a key names one body.
 fn bodies_to_store<'p>(
     program: &'p mut Program,
     origin: &ParseOrigin,
 ) -> Vec<(ExprKey, &'p mut ParsedBody)> {
     let mut bodies = program.parsed_bodies_mut();
-    let mut key_counts: Map<ExprKey, usize> = Map::default();
-    for (key, _) in &bodies {
-        *key_counts.entry(*key).or_default() += 1;
-    }
-    bodies.retain(|(key, body)| {
-        key_counts[key] == 1
-            && matches!(body, ParsedBody::InMemory(expr)
-                if expr.source.as_ref().is_some_and(|span| span.input == origin.source))
+    bodies.retain(|(_, body)| {
+        matches!(body, ParsedBody::InMemory(expr)
+            if expr.source.as_ref().is_some_and(|span| span.input == origin.source))
     });
+    let mut keys: Set<ExprKey> = Set::default();
+    for (key, _) in &bodies {
+        assert!(
+            keys.insert(*key),
+            "two bodies of \"{}\" written at {}..{}",
+            origin.source.file_path.to_string_lossy(),
+            key.0,
+            key.1
+        );
+    }
     bodies
 }
 
@@ -337,7 +344,8 @@ mod tests {
     use crate::ast::name::FullName;
     use crate::ast::program::{Body, ParsedBody, SymbolExpr};
     use crate::ffi::CNumericTypes;
-    use crate::parse::parser::{parse_origin, ParseOrigin};
+    use super::parsed_file_name;
+    use crate::parse::parser::{parse_origin, ModuleRenaming, ParseOrigin};
     use crate::parse::sourcefile::{SourceFile, Span};
     use std::path::PathBuf;
     use std::sync::Arc;
@@ -396,6 +404,43 @@ mod tests {
         assert!(
             positions(&read) == positions(expr),
             "the body read back is written at other places than the body parsed"
+        );
+    }
+
+    /// The name of a file of parsed bodies follows what the parse is made from beside the source:
+    /// the C numeric types, which decide the Fix types the C types of an `FFI_CALL` stand for, and
+    /// the renaming of the module, which decides the names the bodies are parsed under.
+    #[test]
+    fn the_name_of_a_file_of_parsed_bodies_follows_the_c_numeric_types_and_the_renaming() {
+        let origin = ParseOrigin {
+            source: SourceFile::from_file_path_and_content(
+                PathBuf::from("main.fix"),
+                "module Main;\n\nmain : IO () = pure();\n".to_string(),
+            ),
+            renaming: None,
+            c_numeric_types: CNumericTypes::of_target("x86_64-unknown-linux-gnu"),
+        };
+        let name = |origin: &ParseOrigin| parsed_file_name(origin, "main.fix").unwrap().0;
+
+        let mut wider_int = origin.clone();
+        wider_int.c_numeric_types.int_bits = origin.c_numeric_types.int_bits * 2;
+        assert_ne!(
+            name(&origin),
+            name(&wider_int),
+            "a C `int` of another width gives the parse other types, and the name of its file \
+             stayed where it was"
+        );
+
+        let mut renamed = origin.clone();
+        renamed.renaming = Some(ModuleRenaming {
+            written: "Main".to_string(),
+            compiled: "Other.Main".to_string(),
+        });
+        assert_ne!(
+            name(&origin),
+            name(&renamed),
+            "a module compiled under another name gives the parse other names, and the name of its \
+             file stayed where it was"
         );
     }
 }

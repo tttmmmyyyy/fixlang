@@ -1234,4 +1234,132 @@ main = println $ (double(21), 3).to_string;
         assert_eq!(after.len(), 1, "files: {:?}", parsed_files(dir));
         assert_ne!(before, after, "files: {:?}", parsed_files(dir));
     }
+
+    /// A build that finds the file of parsed bodies of each source file it parses reads only the
+    /// index, and leaves every file as the build before it wrote it.
+    #[test]
+    fn a_second_build_of_an_unedited_program_leaves_the_files_of_parsed_bodies_as_they_were() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        let lib = ["--file", "lib.fix"];
+        write_main_and_lib(dir, "1");
+        build(dir, "main.fix", &lib);
+        let written = files_under(dir, PARSED_MODULES_PATH);
+
+        let stderr = build(dir, "main.fix", &lib);
+        assert!(!stderr.contains("cache file"), "stderr: {}", stderr);
+        assert_eq!(run_out(dir), "1");
+        assert_eq!(
+            files_under(dir, PARSED_MODULES_PATH),
+            written,
+            "the second build wrote a file of parsed bodies the first build had written"
+        );
+    }
+
+    /// A file of parsed bodies whose index lacks a body of its source file is reported once, and
+    /// written anew as the build parses its source file.
+    #[test]
+    fn a_build_replaces_a_file_of_parsed_bodies_that_lacks_a_body_of_its_source() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        let lib = ["--file", "lib.fix"];
+        write_main_and_lib(dir, "1");
+        build(dir, "main.fix", &lib);
+        let main_file = parsed_file_of_main(dir);
+        let written = fs::read(&main_file).expect("Failed to read the file of parsed bodies");
+        let lib_file = parsed_files(dir)
+            .into_iter()
+            .find(|name| name.starts_with("lib_fix_"))
+            .expect("the build wrote no file of parsed bodies of lib.fix");
+        // The bodies of `lib.fix` are written at other places than the body of `main.fix`.
+        fs::copy(dir.join(PARSED_MODULES_PATH).join(lib_file), &main_file)
+            .expect("Failed to put the file of lib.fix in place of the file of main.fix");
+
+        let stderr = build(dir, "main.fix", &lib);
+        assert_eq!(
+            stderr.matches("Failed to read cache file").count(),
+            1,
+            "stderr: {}",
+            stderr
+        );
+        assert_eq!(run_out(dir), "1");
+        assert_eq!(
+            fs::read(&main_file).expect("Failed to read the file of parsed bodies"),
+            written,
+            "the build parsing `main.fix` wrote another file than the first build"
+        );
+    }
+
+    /// A body whose place in its file of parsed bodies holds the expression of another body of the
+    /// same source file is read as one that fails to read back: the build reports the file once,
+    /// and takes the bodies from a parse of the source file made again, so each value keeps the
+    /// body its source writes, and the file is again what the first build wrote.
+    #[test]
+    fn a_build_parses_a_source_again_when_its_file_of_parsed_bodies_holds_another_body_at_a_place()
+    {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("main.fix"),
+            "module Main;\nimport Lib;\n\nmain : IO ();\nmain = println $ Lib::value.to_string + Lib::other.to_string;\n",
+        )
+        .expect("Failed to write main.fix");
+        fs::write(
+            dir.join("lib.fix"),
+            "module Lib;\n\nvalue : I64;\nvalue = 1;\n\nother : I64;\nother = 2;\n",
+        )
+        .expect("Failed to write lib.fix");
+        let lib = ["--file", "lib.fix"];
+        build(dir, "main.fix", &lib);
+        assert_eq!(run_out(dir), "12");
+
+        let lib_file = dir.join(PARSED_MODULES_PATH).join(
+            parsed_files(dir)
+                .into_iter()
+                .find(|name| name.starts_with("lib_fix_"))
+                .expect("the build wrote no file of parsed bodies of lib.fix"),
+        );
+        let written = fs::read(&lib_file).expect("Failed to read the file of parsed bodies");
+        // The footer begins with the offset of the index, and the index lists where each body
+        // lies. The two bodies are written the same length, so swapping their bytes leaves each
+        // place holding a whole expression, of the other body.
+        let footer = written.len() - 24;
+        let index_start = u64::from_le_bytes(written[footer..footer + 8].try_into().unwrap());
+        let index: Vec<((usize, usize), std::ops::Range<u64>)> =
+            postcard::from_bytes(&written[index_start as usize..footer])
+                .expect("Failed to read the index of the file of parsed bodies");
+        let [(_, first), (_, second)] = &index[..] else {
+            panic!("the file of parsed bodies of lib.fix holds {} bodies", index.len())
+        };
+        let (first, second) = (
+            first.start as usize..first.end as usize,
+            second.start as usize..second.end as usize,
+        );
+        assert_eq!(first.len(), second.len(), "index: {:?}", index);
+        let mut swapped = written.clone();
+        swapped[first.clone()].copy_from_slice(&written[second.clone()]);
+        swapped[second].copy_from_slice(&written[first]);
+        fs::write(&lib_file, &swapped).expect("Failed to swap the bodies of lib.fix");
+        // Without its record, `Lib` is type-checked again from the bodies in the file.
+        for (name, _) in files_under(dir, TYPED_MODULES_PATH) {
+            if name.starts_with("Lib_") {
+                fs::remove_file(dir.join(TYPED_MODULES_PATH).join(name))
+                    .expect("Failed to remove the file of `Lib`");
+            }
+        }
+
+        let stderr = build(dir, "main.fix", &lib);
+        assert_eq!(
+            stderr.matches("Failed to read cache file").count(),
+            1,
+            "stderr: {}",
+            stderr
+        );
+        assert_eq!(run_out(dir), "12");
+        assert_eq!(
+            fs::read(&lib_file).expect("Failed to read the file of parsed bodies"),
+            written,
+            "the build parsing `lib.fix` again wrote another file than the first build"
+        );
+    }
 }
