@@ -1199,4 +1199,38 @@ main = println $ (double(21), 3).to_string;
         assert_ne!(of_lib(&before), of_lib(&after), "files: {:?}", after);
         assert_eq!(others(&before), others(&after), "files: {:?}", after);
     }
+
+    /// A source the compiler writes is named after its content, and its file of parsed bodies
+    /// replaces the file of its other contents: a build using other sizes of tuples than the build
+    /// before it leaves one file of the implementations `Std` carries for tuples.
+    #[test]
+    fn a_build_using_other_tuple_sizes_replaces_the_file_of_parsed_bodies_of_the_tuples() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        let write_main = |tuple: &str| {
+            fs::write(
+                dir.join("main.fix"),
+                format!(
+                    "module Main;\n\nmain : IO ();\nmain = println $ {}.to_string;\n",
+                    tuple
+                ),
+            )
+            .expect("Failed to write main.fix");
+        };
+        let of_tuples = |dir: &Path| -> Vec<String> {
+            parsed_files(dir)
+                .into_iter()
+                .filter(|name| name.starts_with("std_tuple_traits_"))
+                .collect()
+        };
+        write_main("(1, 2)");
+        build(dir, "main.fix", &[]);
+        let before = of_tuples(dir);
+        write_main("(1, 2, 3, 4, 5, 6, 7, 8, 9)");
+        build(dir, "main.fix", &[]);
+        assert_eq!(run_out(dir), "(1, 2, 3, 4, 5, 6, 7, 8, 9)");
+        let after = of_tuples(dir);
+        assert_eq!(after.len(), 1, "files: {:?}", parsed_files(dir));
+        assert_ne!(before, after, "files: {:?}", parsed_files(dir));
+    }
 }

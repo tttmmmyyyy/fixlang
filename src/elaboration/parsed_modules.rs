@@ -13,8 +13,9 @@
 // `SourceFile::with_spans_within`, so a span is written as a range of the source file alone, and a
 // type annotation keeps the position its diagnostics point at.
 //
-// A file is named after the source file and the digest of what the parse is made from
-// (`ParseOrigin`), so a file answers for exactly one parse. A build that finds the file of a source
+// A file is named after its source, by the path of a source file or the name of a source the
+// compiler writes, and after the digest of what the parse is made from (`ParseOrigin`), so a file
+// answers for exactly one parse, and replaces the files of the other contents of its source. A build that finds the file of a source
 // file it parses reads only the index, and leaves the file as it is. When a body fails to read back
 // from the file, the source file is parsed again, and the bodies are taken from that parse.
 
@@ -96,10 +97,10 @@ impl StoredParsedBody {
                 )
             };
             let bodies = bodies_to_store(&mut program, origin);
-            let dir = self.file.cache_dirs.writable(PARSED_MODULES_PATH);
-            if let (Some(dir), Ok((file_name, prefix))) = (dir, parsed_file_name(origin)) {
-                if let Err(e) = write_parsed_file(&dir, &file_name, &prefix, origin, &bodies) {
-                    warn_unwritable_file(&dir.join(&file_name), &e);
+            if let Some(dir) = self.file.cache_dirs.writable(PARSED_MODULES_PATH) {
+                let (file_name, prefix) = (&self.file.file_name, &self.file.prefix);
+                if let Err(e) = write_parsed_file(&dir, file_name, prefix, origin, &bodies) {
+                    warn_unwritable_file(&dir.join(file_name), &e);
                 }
             }
             bodies
@@ -127,6 +128,10 @@ impl StoredParsedBody {
 struct MappedParsedFile {
     /// What the bodies of the file were parsed from.
     origin: ParseOrigin,
+    /// The name of the file, without its directory.
+    file_name: String,
+    /// The part the file of every content of its source begins its name with.
+    prefix: String,
     /// The path of the file.
     path: PathBuf,
     /// The bytes of the file.
@@ -138,9 +143,9 @@ struct MappedParsedFile {
     reparsed: OnceLock<Map<ExprKey, Arc<ExprNode>>>,
 }
 
-/// The name of the file of parsed bodies of `origin`, and the part every file of parsed bodies of
-/// its source file begins its name with.
-fn parsed_file_name(origin: &ParseOrigin) -> Result<(String, String), Errors> {
+/// The name of the file of parsed bodies of `origin`, a content of the source named `source_name`,
+/// and the part the file of every content of that source begins its name with.
+fn parsed_file_name(origin: &ParseOrigin, source_name: &str) -> Result<(String, String), Errors> {
     let mut hash_source = HashSource::default();
     hash_source.push_text(&origin.source.hash()?);
     match &origin.renaming {
@@ -149,7 +154,7 @@ fn parsed_file_name(origin: &ParseOrigin) -> Result<(String, String), Errors> {
     }
     hash_source.push_text(&origin.c_numeric_types.to_string());
     hash_source.push_text(build_time_utc!());
-    let prefix = readable_file_prefix(&origin.source.file_path.to_string_lossy());
+    let prefix = readable_file_prefix(source_name);
     Ok((format!("{}{}", prefix, hash_source.finish()), prefix))
 }
 
@@ -174,12 +179,17 @@ fn decode_parsed_file(bytes: &[u8]) -> Option<ParsedIndex> {
 /// stay in memory when the file can be neither found nor written.
 ///
 /// A file found that cannot be read, or lacks a body, is reported as a warning, and written anew.
-pub fn store_parsed_bodies(program: &mut Program, origin: ParseOrigin, cache_dirs: &CacheDirs) {
+pub fn store_parsed_bodies(
+    program: &mut Program,
+    origin: ParseOrigin,
+    source_name: &str,
+    cache_dirs: &CacheDirs,
+) {
     let bodies = bodies_to_store(program, &origin);
     if bodies.is_empty() {
         return;
     }
-    let Ok((file_name, prefix)) = parsed_file_name(&origin) else {
+    let Ok((file_name, prefix)) = parsed_file_name(&origin, source_name) else {
         return;
     };
     let path = Path::new(PARSED_MODULES_PATH).join(&file_name);
@@ -220,6 +230,8 @@ pub fn store_parsed_bodies(program: &mut Program, origin: ParseOrigin, cache_dir
     };
     let file = Arc::new(MappedParsedFile {
         origin,
+        file_name,
+        prefix,
         path,
         bytes,
         cache_dirs: cache_dirs.clone(),
