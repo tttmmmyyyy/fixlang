@@ -60,8 +60,8 @@ use crate::ast::program::{
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::types::{
     apply_type_args, is_opaque_tyvar, kind_arrow, make_tyvar, tycon, type_arrow, type_from_tyvar,
-    type_tyapp, type_tycon, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant,
-    TyVar, Type, TypeNode,
+    type_tycon, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type,
+    TypeNode,
 };
 use crate::configuration::Configuration;
 use crate::constants::{WRAP_OPAQUE_FUNC_NAME, WRAP_OPAQUE_TYVAR_PREFIX};
@@ -689,7 +689,7 @@ fn collect_opaque_applications_inner(
             );
             applications.push(OpaqueApplication {
                 tycon_name: tycon.name.clone(),
-                applied_type: apply_type_args(&tycon, &args[..arity]),
+                applied_type: apply_type_args(type_tycon(&tycon), &args[..arity]),
             });
             // The arguments are types of their own; the TyCon they are applied to is this
             // application and is covered by the entry just pushed.
@@ -763,7 +763,7 @@ impl OpaqueInfo {
             .iter()
             .map(|tycon_var| type_from_tyvar(tycon_var.clone()))
             .collect();
-        apply_type_args(&self.tycon, &args)
+        apply_type_args(type_tycon(&self.tycon), &args)
     }
 
     /// Build a substitution mapping the opaque TyVar to the TyCon application.
@@ -868,11 +868,12 @@ fn rewrite_impl_scheme(
         };
 
         // Build TyCon application using the impl's type expressions for each type argument.
-        let mut ty = type_tycon(&info.tycon);
-        for defn_gv in &info.tycon_vars {
-            let impl_gv_ty = defn_to_impl.substitute_type(&type_from_tyvar(defn_gv.clone()));
-            ty = type_tyapp(ty, impl_gv_ty);
-        }
+        let impl_args: Vec<Arc<TypeNode>> = info
+            .tycon_vars
+            .iter()
+            .map(|defn_gv| defn_to_impl.substitute_type(&type_from_tyvar(defn_gv.clone())))
+            .collect();
+        let ty = apply_type_args(type_tycon(&info.tycon), &impl_args);
 
         // A signature writing one opaque type variable for two of the declaration is what this
         // merge would refuse, and it describes other values than the declaration, so
@@ -1023,7 +1024,7 @@ pub fn resolve_opaque_type_in_type(
             .collect();
         let rest_args = &all_args[arity..];
 
-        let prefix = apply_type_args(&tycon, &prefix_args);
+        let prefix = apply_type_args(type_tycon(&tycon), &prefix_args);
 
         // Try matching each resolution's lhs against the prefix.
         let mut matched = false;
@@ -1040,11 +1041,7 @@ pub fn resolve_opaque_type_in_type(
                     .rhs
                     .as_ref()
                     .expect("opaque type resolution rhs should be filled in by type-checking");
-                let mut resolved = sub.substitute_type(rhs);
-                for arg in rest_args {
-                    resolved = type_tyapp(resolved, arg.clone());
-                }
-                ty = resolved;
+                ty = apply_type_args(sub.substitute_type(rhs), rest_args);
                 matched = true;
                 break;
             }

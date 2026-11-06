@@ -21,9 +21,7 @@ use crate::{
         name::FullName,
         pattern::{Pattern, PatternNode},
         program::{Program, Symbol},
-        types::{
-            apply_type_args, type_arrow, type_tyapp, type_tycon, TyCon, TyConInfo, Type, TypeNode,
-        },
+        types::{apply_type_args, type_arrow, type_tycon, TyCon, TyConInfo, Type, TypeNode},
     },
     constants::{LS_CAP_NAME, LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_OPERAND_PREFIX, LS_UNREAD_NAME},
     misc::{Map, Set},
@@ -520,9 +518,11 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 if args.is_empty() {
                     return ty.clone();
                 }
-                args.iter().fold(spine[0].clone(), |applied, a| {
-                    type_tyapp(applied, self.rewrite_declared(a, group, own, cursor))
-                })
+                let new_args: Vec<Arc<TypeNode>> = args
+                    .iter()
+                    .map(|a| self.rewrite_declared(a, group, own, cursor))
+                    .collect();
+                apply_type_args(spine[0].clone(), &new_args)
             }
             Type::TyCon(tc) => {
                 if !self.layout.is_applied_to_all(tc, args.len()) {
@@ -541,7 +541,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     };
                 }
                 let head = self.tycon_copy(tc, &tc_own);
-                apply_type_args(&head, &new_args)
+                apply_type_args(type_tycon(&head), &new_args)
             }
             _ => panic!(
                 "the declared type `{}` has an unexpected head",
@@ -1002,6 +1002,6 @@ impl SlotFold<SetId> for TypeRewrite<'_, '_, '_> {
         if Arc::ptr_eq(&head, tc) && unchanged {
             return ty.clone();
         }
-        apply_type_args(&head, &folded)
+        apply_type_args(type_tycon(&head), &folded)
     }
 }

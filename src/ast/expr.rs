@@ -83,7 +83,6 @@ impl ExprNode {
     }
 
     /// This node with `aux_src` replaced by `src`.
-    #[allow(dead_code)]
     pub fn set_aux_src(&self, src: Option<Span>) -> Arc<Self> {
         let mut ret = self.clone_all();
         ret.aux_src = src;
@@ -111,17 +110,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    /// This node with its expression replaced by `expr`, leaving the free variables to be calculated
-    /// again.
-    #[allow(dead_code)]
-    pub fn set_expr(&self, expr: Arc<Expr>) -> Arc<Self> {
-        let mut ret = self.clone_except_fvs();
-        ret.expr = expr;
-        Arc::new(ret)
-    }
-
     // Check if the expression is a function application.
-    #[allow(dead_code)]
     pub fn is_app(&self) -> bool {
         matches!(self.expr.as_ref(), Expr::App(_, _))
     }
@@ -234,7 +223,6 @@ impl ExprNode {
         self.set_app_func(func)
     }
 
-    #[allow(dead_code)]
     pub fn get_app_func(&self) -> Arc<ExprNode> {
         match &*self.expr {
             Expr::App(func, _) => func.clone(),
@@ -244,7 +232,6 @@ impl ExprNode {
         }
     }
 
-    #[allow(dead_code)]
     pub fn get_app_args(&self) -> Vec<Arc<ExprNode>> {
         match &*self.expr {
             Expr::App(_, args) => args.clone(),
@@ -264,25 +251,17 @@ impl ExprNode {
         }
     }
 
-    /// The function a chain of applications calls and the arguments it is given, so `f(x, y, z)`,
-    /// which nests as `f(x)(y)(z)`, answers `(f, [x, y, z])`.
-    ///
-    /// Panics on an expression that is not an application, and on an application carrying more than
-    /// one argument, which the optimization passes write and the source language does not.
-    pub fn destructure_app(&self) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
+    /// The function at the root of the application spine and the arguments along it, in the order
+    /// they are applied, so `f(x, y)(z)` answers `(f, [x, y, z])`. An expression that is not an
+    /// application answers itself and no arguments.
+    pub fn destructure_app(self: &Arc<Self>) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
         match &*self.expr {
             Expr::App(func, args) => {
-                assert_eq!(args.len(), 1);
-                let arg = args[0].clone();
-                if func.is_app() {
-                    let (func, mut args) = func.destructure_app();
-                    args.push(arg);
-                    return (func, args);
-                } else {
-                    return (func.clone(), vec![arg]);
-                }
+                let (func, mut spine_args) = func.destructure_app();
+                spine_args.extend(args.iter().cloned());
+                (func, spine_args)
             }
-            _ => panic!("Call destructure_app for an expression which is not application!"),
+            _ => (self.clone(), vec![]),
         }
     }
 
@@ -321,7 +300,6 @@ impl ExprNode {
         arity
     }
 
-    #[allow(dead_code)]
     pub fn set_lam_params(&self, params: Vec<Arc<Var>>) -> Arc<Self> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
@@ -520,7 +498,6 @@ impl ExprNode {
     }
 
     // Set the value of let expression, and update the type of the let expression to the type of the value.
-    #[allow(dead_code)]
     pub fn set_let_value_typed(&self, value: Arc<ExprNode>) -> Arc<Self> {
         let value_ty = value.type_.as_ref().unwrap().clone();
         self.set_let_value(value).set_type(value_ty)
@@ -565,7 +542,6 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    #[allow(dead_code)]
     pub fn set_if_then_else(&self, then: Arc<ExprNode>, else_: Arc<ExprNode>) -> Arc<ExprNode> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
@@ -579,7 +555,6 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    #[allow(dead_code)]
     pub fn set_if_then_else_typed(
         &self,
         then: Arc<ExprNode>,
@@ -638,7 +613,6 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    #[allow(dead_code)]
     pub fn set_match_pat_vals_typed(
         &self,
         pat_vals: Vec<(Arc<PatternNode>, Arc<ExprNode>)>,
@@ -675,16 +649,6 @@ impl ExprNode {
             }
         }
         Arc::new(ret)
-    }
-
-    #[allow(dead_code)]
-    pub fn get_tyanno_ty(&self) -> Arc<TypeNode> {
-        match &*self.expr {
-            Expr::TyAnno(_, ty) => ty.clone(),
-            _ => {
-                panic!()
-            }
-        }
     }
 
     pub fn set_tyanno_ty(&self, ty: Arc<TypeNode>) -> Arc<Self> {
@@ -1533,7 +1497,9 @@ impl Expr {
             Expr::Builtin(b) => Text::from_string(b.op.name()),
             Expr::App(_, _) => {
                 // Stringify the funciton.
-                let (fun, args) = collect_app(&Arc::new(self.clone()).into_expr_node(None));
+                let (fun, args) = Arc::new(self.clone())
+                    .into_expr_node(None)
+                    .destructure_app();
                 let brace_fun = match *(fun.expr) {
                     Expr::Var(_) => false,
                     Expr::Builtin(_) => false,
@@ -1860,16 +1826,4 @@ pub fn expr_ffi_call(
         fun_name, ret_ty, param_tys, is_va_args, args, is_ios,
     ))
     .into_expr_node(src)
-}
-
-// Convert f(y, z) to (f, [y, z]).
-pub fn collect_app(expr: &Arc<ExprNode>) -> (Arc<ExprNode>, Vec<Arc<ExprNode>>) {
-    match &*expr.expr {
-        Expr::App(fun, arg) => {
-            let (fun, mut args) = collect_app(fun);
-            args.append(&mut arg.clone());
-            (fun, args)
-        }
-        _ => (expr.clone(), vec![]),
-    }
 }
