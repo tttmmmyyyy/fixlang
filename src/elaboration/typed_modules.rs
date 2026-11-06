@@ -787,8 +787,12 @@ impl Program {
         if let Some(te) = self.typed_modules.read_back.get(loc) {
             return Ok(te.clone());
         }
-        let stored = match self.body_at(loc).0 {
-            Body::Recorded(recorded) => recorded.stored.clone(),
+        let (mapped, range, identity) = match self.body_at(loc).0 {
+            Body::Recorded(RecordedBody { stored, .. }) => (
+                stored.mapped.clone(),
+                stored.range.clone(),
+                stored.identity.clone(),
+            ),
             Body::Checked(te) => return Ok(te.clone()),
             Body::Unchecked(_) => panic!(
                 "a body of `{}` instantiated before it was type-checked",
@@ -797,12 +801,12 @@ impl Program {
         };
         let read =
             SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
-                read_body(&stored.mapped.bytes, &stored.range, &stored.identity)
+                read_body(&mapped.bytes, &range, &identity)
             });
         let te = match read {
             Ok(te) => te,
             Err(why) => {
-                warn_unreadable_file(&stored.mapped.file.path(), &why);
+                warn_unreadable_file(&mapped.file.path(), &why);
                 // The opaque types of the body are already known from the record.
                 let checked = self.check_body(loc, &self.create_name_resolution_env(), tc)?;
                 if checked.diagnostics.has_error() {
@@ -810,9 +814,9 @@ impl Program {
                 }
                 if checked.passed() {
                     if let Some(dir) = self.typed_modules.cache_dirs.writable(TYPED_MODULES_PATH) {
-                        let entry = NewEntry::of(stored.identity.clone(), &checked);
+                        let entry = NewEntry::of(identity, &checked);
                         let source_files = &mut self.typed_modules.source_files;
-                        let file = &stored.mapped.file;
+                        let file = &mapped.file;
                         let written =
                             ModuleFileWriter::create(&dir, file.clone()).and_then(|mut writer| {
                                 writer.add(entry, source_files)?;

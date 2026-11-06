@@ -179,9 +179,10 @@ impl SourceFile {
         serialize()
     }
 
-    /// The file `with_spans_within` runs for on this thread, or `None` outside it.
-    pub fn enclosing() -> Option<SourceFile> {
-        ENCLOSING_SOURCE_FILE.with(|cell| cell.borrow().clone())
+    /// What `read` answers of the file `with_spans_within` runs for on this thread, or of `None`
+    /// outside it.
+    pub fn with_enclosing<R>(read: impl FnOnce(Option<&SourceFile>) -> R) -> R {
+        ENCLOSING_SOURCE_FILE.with(|cell| read(cell.borrow().as_ref()))
     }
 
     /// The content of the file. It is read from disk on the first request and kept for the later
@@ -479,10 +480,10 @@ struct SerializedRange {
 
 impl Serialize for Span {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match SourceFile::enclosing() {
+        SourceFile::with_enclosing(|enclosing| match enclosing {
             Some(enclosing) => {
                 assert!(
-                    self.input == enclosing,
+                    self.input == *enclosing,
                     "a span of \"{}\" serialized as a range of \"{}\"",
                     self.input.file_path.to_string_lossy(),
                     enclosing.file_path.to_string_lossy()
@@ -499,13 +500,13 @@ impl Serialize for Span {
                 end: self.end,
             }
             .serialize(serializer),
-        }
+        })
     }
 }
 
 impl<'de> Deserialize<'de> for Span {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        match SourceFile::enclosing() {
+        match SourceFile::with_enclosing(|enclosing| enclosing.cloned()) {
             Some(input) => {
                 let SerializedRange { start, end } = SerializedRange::deserialize(deserializer)?;
                 Ok(Span { input, start, end })

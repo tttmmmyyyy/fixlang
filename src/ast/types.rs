@@ -2223,23 +2223,23 @@ pub struct TypeInfo {
 
 impl Serialize for TypeInfo {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        match SourceFile::enclosing() {
-            Some(_) => self.source.serialize(serializer),
-            None => serializer.serialize_unit(),
+        if SourceFile::with_enclosing(|enclosing| enclosing.is_some()) {
+            self.source.serialize(serializer)
+        } else {
+            serializer.serialize_unit()
         }
     }
 }
 
 impl<'de> Deserialize<'de> for TypeInfo {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        match SourceFile::enclosing() {
-            Some(_) => Ok(TypeInfo {
+        if SourceFile::with_enclosing(|enclosing| enclosing.is_some()) {
+            Ok(TypeInfo {
                 source: Option::<Span>::deserialize(deserializer)?,
-            }),
-            None => {
-                <()>::deserialize(deserializer)?;
-                Ok(TypeInfo::default())
-            }
+            })
+        } else {
+            <()>::deserialize(deserializer)?;
+            Ok(TypeInfo::default())
         }
     }
 }
