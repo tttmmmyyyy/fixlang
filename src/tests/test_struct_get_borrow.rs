@@ -207,8 +207,8 @@ even_sum = |n, b| if n == 0 { b.@tag } else { odd_sum(n - 1, b) };
 odd_sum : I64 -> Node -> I64;
 odd_sum = |n, b| if n == 0 { b.@leaf.@v } else { even_sum(n - 1, b) };
 
-// A tail call passing an owned argument at its last use: the call lends `b` and passes `owned` to an
-// owned position, so no release is left after the tail call.
+// A tail call passing an owned argument at its last use: the call lends `b`, and the version it
+// reaches owns `owned`, so no release is left after the tail call.
 tail_owned : Node -> Node -> I64;
 tail_owned = |b, owned| read_only(0, b, owned);
 

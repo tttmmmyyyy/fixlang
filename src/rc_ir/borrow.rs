@@ -154,7 +154,8 @@ fn levelled_sites(func: &RcFunc, type_env: &TypeEnv) -> Vec<(RcVar, FieldPath)> 
     sites
 }
 
-/// Level every site of `sites` once (`level_ownership`), answering whether any leaf became owned.
+/// Own, for each of `sites`, every parameter leaf its candidate objects reach where the version owns
+/// any of them, answering whether any leaf became owned.
 fn level_sites(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -248,8 +249,8 @@ fn covered_leaves(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> V
 
 // --- borrow-ification ---
 
-/// What borrow-ification reads of one function's body, built once and shared by the inference and
-/// by the rewrite of every version of the function.
+/// What borrow-ification reads of one function's body, built once per function however many of its
+/// versions are rewritten.
 struct BodyFacts {
     /// The function's variables: what binds each one and its type, which decide the object a leaf
     /// belongs to.
@@ -259,8 +260,8 @@ struct BodyFacts {
 }
 
 /// What identifies one version of a function: the ownership of each of its parameters, one shape
-/// per parameter. A closure capture is not part of it, since only a function taking no capture gets
-/// a borrowing version. The all-`Own` key is the canonical one, whose version keeps the function's
+/// per parameter. It covers the parameters alone, since only a function taking no capture gets a
+/// borrowing version. The all-`Own` key is the canonical one, whose version keeps the function's
 /// name.
 type BorrowKey = Vec<OwnershipShape>;
 
@@ -959,7 +960,7 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     /// - an owned value whose object ends at the call. An owning callee frees it at its last use
     ///   inside the callee, and a borrowing one leaves it to the caller to release after the call.
     ///   Its object then lives through the rest of the callee, where a value read out of it is
-    ///   shared rather than unique and an update of that value copies it.
+    ///   shared, so an update of that value copies it.
     ///
     /// The units of the first two kinds are lendable, and those of the third are not. Which lendable
     /// units the callee can borrow is `Versions::levelled_key`'s to decide. A call in tail position

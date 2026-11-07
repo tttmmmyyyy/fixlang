@@ -311,8 +311,8 @@ pub(crate) enum AliasStep {
     /// container, the payload of an unboxed union's variant or of a catch-all, or a pure projection
     /// of one operand of a `Builtin` op.
     Projects(VarPath),
-    /// The value is a `Builtin` op's result whose leaves beneath the path the op declares one by one,
-    /// rather than as a projection of one operand.
+    /// The value is a `Builtin` op's result at a path whose own record names no object, so the leaves
+    /// the op declares beneath the path decide where it comes from.
     Gathers(Gathered),
     /// The value is a match binding, which receives the value at this path of whichever arm result
     /// the path taken returns: one entry per arm.
@@ -323,7 +323,8 @@ pub(crate) enum AliasStep {
 pub(crate) struct Gathered {
     /// The operand units those leaves project out of, each as the operand and the unit path.
     pub(crate) operand_units: Set<VarPath>,
-    /// Whether some leaf beneath the path is produced by the op rather than projected.
+    /// Whether the op produces some leaf beneath the path itself, which makes the result one of the
+    /// objects the value denotes.
     pub(crate) produced_here: bool,
 }
 
@@ -393,8 +394,8 @@ pub(crate) fn alias_step(
 /// level down, on the leaves of its variants, so a reader that stops at the union finds nothing
 /// recorded and would read the value as one produced here — its own to release, when it may be an
 /// operand's. The leaves beneath decide instead. A leaf recorded as `⊥` belongs to a variant the
-/// value does not have and holds no reference, so it names no object and is passed over; a leaf
-/// produced here rather than projected names this value itself. A leaf that records several sources
+/// value does not have and holds no reference, so it names no object and is passed over; a leaf the
+/// op produces names this value itself. A leaf that records several sources
 /// holds one per path it can be reached by, and each of them names an object.
 ///
 /// # Arguments
@@ -432,7 +433,7 @@ fn gather_leaves_under(
     }
 }
 
-/// The object a value denotes, from where its leaves come from (`Gathered`).
+/// The object a value denotes, read off where its leaves come from.
 ///
 /// Leaves that all reach one origin make this value an alias of it, so the answer is that origin
 /// whole, identity included — the same answer a leaf that is a plain projection gets. Where the

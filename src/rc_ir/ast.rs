@@ -357,6 +357,9 @@ impl OwnershipShape {
     /// The ownership written one letter per reference-counting unit, `O` for `Own` and `B` for
     /// `Borrow`, in field order. Shapes of one type spell strings of one length, which differ
     /// wherever the ownership does.
+    ///
+    /// # Examples
+    /// `Fields([Unit(Own), NoUnit, Unit(Borrow)])` spells `"OB"`.
     pub fn spelling(&self) -> String {
         match self {
             OwnershipShape::NoUnit => String::new(),

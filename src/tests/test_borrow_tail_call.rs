@@ -11,7 +11,7 @@ mod borrow_tail_call_tests {
     /// Deep tail recursion with a read-only parameter, and with a read-only parameter beside an
     /// owned one. Each tail call is routed to a version borrowing the read-only parameter, and must
     /// leave no release after the call. The owned argument a tail call passes is at its last use,
-    /// so it goes to an owned position, where the callee frees it. A release left after the call
+    /// so the version reached owns it and frees it. A release left after the call
     /// turns the loop into real recursion, and the depth here overflows the stack.
     ///
     /// The depth makes this a stack test, not a memcheck one, so Valgrind is switched off to keep
