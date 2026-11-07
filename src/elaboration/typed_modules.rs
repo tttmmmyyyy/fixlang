@@ -150,17 +150,6 @@ fn module_file_name(module: &Name, module_hash: &str) -> String {
     )
 }
 
-/// `name` without its last 32 characters, which is the `module_file_prefix` of a name that
-/// `module_file_name` gives.
-///
-/// # Examples
-///
-/// `Main_Sub_<digest of the name>_<digest of the hash>` gives `Main_Sub_<digest of the name>_`.
-fn module_file_prefix_of(name: &str) -> Option<&str> {
-    // `module_file_name` ends the name in the 32 hexadecimal digits of an MD5 digest.
-    name.get(..name.len().checked_sub(32)?)
-}
-
 /// Where the record lies in a file of `len` bytes that ends in `footer`, or `None` when the footer
 /// is not one a file of type-checked modules ends in.
 fn record_range(footer: &[u8; FOOTER_LEN as usize], len: u64) -> Option<Range<u64>> {
@@ -442,11 +431,13 @@ impl NewModuleFile {
     }
 }
 
-/// Writes `bytes` in place of `file` in `dir`, and answers the written file mapped into memory.
+/// Writes `bytes` in place of `file` in `dir`, removes the files of the module checked under any
+/// other hash and the temporary files that builds which were killed left in `dir`, and answers the
+/// written file mapped into memory.
 fn write_module_file(dir: &Path, file: &ModuleFile, bytes: &[u8]) -> io::Result<Mmap> {
     // The name holds no path separator, and `replace_file` replaces a symbolic link at the path
     // instead of writing through it, so the file is written in `dir`.
-    replace_file(&file.path_in(dir), |tmp_path| {
+    let mapped = replace_file(&file.path_in(dir), |tmp_path| {
         let mut tmp = File::options()
             .read(true)
             .write(true)
@@ -454,32 +445,26 @@ fn write_module_file(dir: &Path, file: &ModuleFile, bytes: &[u8]) -> io::Result<
             .open(tmp_path)?;
         tmp.write_all(bytes)?;
         map_into_memory(&tmp)
-    })
+    })?;
+    remove_stale_files(dir, file);
+    Ok(mapped)
 }
 
-/// Removes from `dir` the files of the modules of `written` checked under any other hash than the
-/// one each was written under, and the temporary files that builds which were killed left there.
-/// The files of `written` are in place already, so a file this fails to remove costs only disk
-/// space, and a later build tries again.
-fn remove_stale_files(dir: &Path, written: &[Arc<ModuleFile>]) {
+/// Removes from `dir` the files of the module of `file` checked under any other hash, and the
+/// temporary files that builds which were killed left there. `file` is in place already, so a file
+/// this fails to remove costs only disk space, and the next write tries again.
+fn remove_stale_files(dir: &Path, file: &ModuleFile) {
     remove_abandoned_temporary_files(dir);
     let Ok(dir_entries) = fs::read_dir(dir) else {
         return;
     };
-    let kept: Map<String, String> = written
-        .iter()
-        .map(|file| (module_file_prefix(&file.module), file.name()))
-        .collect();
+    // The temporary files begin with a dot, which no prefix does.
+    let prefix = module_file_prefix(&file.module);
+    let kept = file.name();
     for dir_entry in dir_entries.flatten() {
         let entry_name = dir_entry.file_name();
         let entry_name = entry_name.to_string_lossy();
-        let Some(prefix) = module_file_prefix_of(&entry_name) else {
-            continue;
-        };
-        if kept
-            .get(prefix)
-            .is_some_and(|kept_name| *kept_name != entry_name)
-        {
+        if entry_name.starts_with(&prefix) && entry_name != kept {
             let _ = fs::remove_file(dir.join(entry_name.as_ref()));
         }
     }
@@ -688,7 +673,6 @@ impl Program {
         // The new version of each module's file being built, with the indices in `to_check` of the
         // bodies added to it.
         let mut new_file_of_module: Map<Name, (NewModuleFile, Vec<usize>)> = Map::default();
-        let mut written: Vec<Arc<ModuleFile>> = vec![];
         let nrenv = self.create_name_resolution_env();
         consume_on_compiler_threads(
             (0..to_check.len()).collect(),
@@ -730,10 +714,7 @@ impl Program {
                 let (mut record, bytes) = new_file.finish();
                 let bytes = match &dir {
                     Some(dir) if !write_failed => match write_module_file(dir, file, &bytes) {
-                        Ok(mapped) => {
-                            written.push(file.clone());
-                            ModuleFileBytes::Mapped(mapped)
-                        }
+                        Ok(mapped) => ModuleFileBytes::Mapped(mapped),
                         Err(e) => {
                             warn_unwritable_file(dir, file, &e);
                             write_failed = true;
@@ -757,9 +738,6 @@ impl Program {
                 }
             },
         );
-        if let (Some(dir), false) = (&dir, written.is_empty()) {
-            remove_stale_files(dir, &written);
-        }
         outcomes
             .into_iter()
             .map(|outcome| outcome.expect("a body left unchecked"))
