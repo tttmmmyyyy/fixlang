@@ -212,7 +212,7 @@ struct CheckedBody {
 }
 ```
 
-どちらの関数も、ファイルがない、壊れている、書けなかった、のどの場合も「なかった」として作り直すので、結果は同じになる。違うのは、かかる時間だけである。本体を読むときは、本体の前に書いた `EntityIdentity` が求めたものと一致することを確かめる。本体は `ModuleRecord` を読んだときにメモリに写したファイルから読むので、別のプロセスがファイルを置き換えても消しても、同じ本体が読める。
+どちらの関数も、ファイルがない場合と壊れている場合は「なかった」として作り直すので、結果は同じになる。違うのは、かかる時間だけである。ファイルを書けなかったときは、書くはずだったバイト列をメモリに持ち、本体はそこから読む。本体を読むときは、本体の前に書いた `EntityIdentity` が求めたものと一致することを確かめる。本体は `ModuleRecord` を読んだときにメモリに写したファイルから読むので、別のプロセスがファイルを置き換えても消しても、同じ本体が読める。
 
 読み戻した位置（`Span`）は、ソースファイルをパスで共有する `SourceFile` を指すようにする。今のシリアライズは `SourceFile` の中身を落とすので、読み戻した位置はそれぞれ別の `SourceFile` を持つ。`-g` のビルドでは、デバッグ情報の行番号を求めるたびに、その `SourceFile` がファイル全体（std.fix は 743 KB）を読んで持つ。そのため、今の 2 回目以降のビルドは、`-g` で最大 RSS が 327 MB から 766 MB になっている。
 
@@ -225,10 +225,12 @@ run targets on the compiler threads, at most k in flight:   // モジュール�
     checked = typed_body(entity)        // body_ast -> 不透明型で包む -> check_scheme_equivalent -> 型検査
     keep  checked.opaque_types, checked.diagnostics, checked.warning_facts
     if checked.diagnostics is empty:
-        append checked.typed to the new file of its module   // old bodies first, copied when it begins
+        serialize checked.typed, and append the bytes to the new file of its module, in memory
+                                                    // old bodies first, copied when it begins
     free  checked.typed
     if entity is the last target of its module:
-        finish the new file (record, index); replace the file with it
+        finish the new file (record, footer); write it in place of the file
+        if it cannot be written: warn once, and keep this and every later new file in memory
 
 opaque types  = from the records + from the checked
 validate_opaque_types_are_acyclic(opaque types)
@@ -236,7 +238,7 @@ warnings      = derive from the warning facts of the records + of the checked
 report all diagnostics and warnings; stop on an error
 ```
 
-今は全部の型検査を `map_on_compiler_threads` に一度に渡していて、1 本の重さが大きくばらついても、空いたスレッドが次を取る。モジュールごとや k 個ごとに完了を待つと、並列度が落ちる。そこで、対象の本体を全モジュールにわたって一つの作業の列に入れ、同時に処理中の本体を k 個までに抑える。k はコンパイラのスレッドの数で、各スレッドは型検査を終えた本体を呼び出し側のスレッドへ渡してから次を取る。呼び出し側のスレッドは、渡された本体をすぐにモジュールの新しいファイルへ書き足すので、モジュールの最後の本体を待つ間も、書いた本体はメモリに残らない。
+今は全部の型検査を `map_on_compiler_threads` に一度に渡していて、1 本の重さが大きくばらついても、空いたスレッドが次を取る。モジュールごとや k 個ごとに完了を待つと、並列度が落ちる。そこで、対象の本体を全モジュールにわたって一つの作業の列に入れ、同時に処理中の本体を k 個までに抑える。k はコンパイラのスレッドの数で、各スレッドは型検査を終えた本体を呼び出し側のスレッドへ渡してから次を取る。型付きの本体は、型検査したスレッドがその場でバイト列にシリアライズして捨てる。呼び出し側のスレッドは、そのバイト列をモジュールの新しいファイルの内容としてメモリに足していき、モジュールの最後の本体が来たところで、ファイルを 1 回で書く。シリアライズしたバイト列は型付きの本体よりずっと小さい（依存 26 個で全モジュールの合計が約 30 MB）ので、モジュールの最後の本体を待つ間に持つのは小さな量で済む。
 
 このフェーズが終わると、すべての値の不透明型の具体型が決まっている。型検査のエラーを全部報告してからインスタンス化に進む順序も、今と同じである。
 
@@ -295,6 +297,8 @@ typed-modules に書く型付きの本体は、今のキャッシュが書く `T
 - `TraitImpl::members` を名前だけにする。`GlobalValue` の側の本体を捨てるこの段階で、はじめてメモリが減る。
 
 改善するもの: 構文解析のぶんのメモリ（依存 26 個で約 100 MiB）。
+
+この段階は #1001 で実装したが、入れなかった。依存 26 個の最大 RSS は 1 回目のビルドで 311 MiB から 224 MiB、2 回目以降で 291 MiB から 203 MiB に下がるが、依存のない hello は 163 MiB のまま変わらない。それに対して、parsed-modules という 2 つ目のキャッシュの形式と、位置のシリアライズの切り替えを保守し続けることになるからである。hello の最大メモリ使用量の大半は、std を構文解析している間の pest のトークンの配列（ヒープ 110 MiB のうち 80 MiB）が占める。
 
 ### 段階ごとに測るもの
 
