@@ -821,13 +821,13 @@ impl<'a> RewriteCtx<'a> {
         match node.expr.as_ref() {
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
                 let callee = self.route(x, callee, args, &After { k, enclosing });
-                let (before, after) = self.call_rc(&callee, args);
-                let k = prepend_rc(after, true, self.rewrite_in(k, enclosing));
+                let (rc_before, rc_after) = self.call_rc(&callee, args);
+                let k = prepend_rc(rc_after, true, self.rewrite_in(k, enclosing));
                 let app = expr_node(
                     RcExpr::Let(x.clone(), RcRhs::App(callee, args.clone()), k),
                     &node.source,
                 );
-                prepend_rc(before, false, app)
+                prepend_rc(rc_before, false, app)
             }
             RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
                 let after_arms = After { k, enclosing };
