@@ -149,8 +149,12 @@ fn module_file_name(module: &Name, module_hash: &str) -> String {
     )
 }
 
-/// The `module_file_prefix` that the file name `name` begins with, when `name` is long enough to be
-/// a name `module_file_name` gives.
+/// `name` without its last 32 characters, which is the `module_file_prefix` of a name that
+/// `module_file_name` gives.
+///
+/// # Examples
+///
+/// `Main_Sub_<digest of the name>_<digest of the hash>` gives `Main_Sub_<digest of the name>_`.
 fn module_file_prefix_of(name: &str) -> Option<&str> {
     // `module_file_name` ends the name in the 32 hexadecimal digits of an MD5 digest.
     name.get(..name.len().checked_sub(32)?)
@@ -334,14 +338,15 @@ impl ModuleFile {
 enum ModuleFileBytes {
     /// The file as this build found it or wrote it, mapped into memory.
     Mapped(Mmap),
-    /// The bytes this build meant the file to hold, kept in memory because the file could not be
-    /// written.
+    /// The bytes this build meant the file to hold, kept in memory when the file was left
+    /// unwritten.
     Unwritten(Vec<u8>),
 }
 
 impl Deref for ModuleFileBytes {
     type Target = [u8];
 
+    /// The bytes, whether mapped or kept in memory.
     fn deref(&self) -> &[u8] {
         match self {
             ModuleFileBytes::Mapped(bytes) => bytes,
@@ -350,9 +355,9 @@ impl Deref for ModuleFileBytes {
     }
 }
 
-/// The contents of a module's file as this build found it or wrote it. Each body the build takes
-/// from the file is read from `bytes`, so a file another build puts in place meanwhile, or removes,
-/// leaves the body where it was.
+/// The contents of a module's file as this build found it, wrote it, or meant to write it. Each
+/// body the build takes from the file is read from `bytes`, so a file another build puts in place
+/// meanwhile, or removes, leaves the body where it was.
 struct ModuleFileContents {
     /// The module and hash the file is named after.
     file: Arc<ModuleFile>,
@@ -423,8 +428,9 @@ impl ModuleFileWriter {
     }
 
     /// Puts the record and the footer after the bodies, writes the new version in place of the
-    /// module's file in `dir`, and answers the new version: its record, its contents, and why it
-    /// could not be written when it could not. Without `dir`, the new version is not written.
+    /// module's file in `dir`, and answers the record and the contents of the new version, with the
+    /// error that kept the file from being written, if any. When `dir` is `None`, the file is left
+    /// as it is.
     ///
     /// The contents are the file mapped into memory when it was written, and the bytes meant for it
     /// otherwise.
@@ -764,6 +770,7 @@ impl Program {
             .map(|outcome| outcome.expect("a body left unchecked"))
             .collect()
     }
+
     /// Takes the body at `loc`, of the entity `identity`, as the one the module file of `contents`
     /// records as `entry`: its typed expression is read back from the file when instantiation asks
     /// for it.

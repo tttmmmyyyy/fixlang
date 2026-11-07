@@ -741,8 +741,8 @@ main = (
                 .collect::<Vec<_>>()
         };
 
-        // An edit to `Main.Sub` gives both modules a hash of their own, so the build after it
-        // writes the files of both.
+        // An edit to `Main.Sub` changes the hash of both modules, so the build after it writes the
+        // files of both.
         let before_edit = build_with_value("1");
         let after_edit = build_with_value("2");
         assert!(
@@ -761,7 +761,7 @@ main = (
     }
 
     /// A build that cannot write the file of a module still builds the program from the bodies it
-    /// checked, and reports the first file it could not write, writing no file after it.
+    /// checked, reports the first file it could not write, and writes no file after it.
     #[test]
     fn a_build_that_cannot_write_the_cache_builds_the_program() {
         let temp = TempDir::new().expect("Failed to create temp directory");
