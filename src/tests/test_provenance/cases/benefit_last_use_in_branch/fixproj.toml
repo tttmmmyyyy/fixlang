@@ -1,0 +1,6 @@
+[general]
+name = "prov-benefit-last-use-in-branch"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

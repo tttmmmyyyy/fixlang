@@ -1,0 +1,6 @@
+[general]
+name = "prov-benefit-aggregate-after-match"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

@@ -460,6 +460,64 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that the benefit routing reads past every match a call's branch ends in, out to the
+    /// outermost: an array read again only after the outer of two nested `if`s is not at its last
+    /// use at a call that ends a branch of the inner one, so the call is routed to the borrow
+    /// version.
+    #[test]
+    fn test_benefit_routing_reads_past_nested_matches() {
+        let (_temp_dir, project_dir) = setup_test_env("benefit_after_nested_match");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let main = main_block(&dump);
+        let (borrow_calls, own_calls) = tally_call_routing(&main);
+        assert_eq!(
+            (borrow_calls, own_calls),
+            (1, 0),
+            "the call whose array is read after the outer `if` should route to the borrow \
+             version:\n{}",
+            main.join("\n")
+        );
+    }
+
+    /// Verifies that the benefit routing reads the lifetime of the object an argument refers to past
+    /// the match the call's branch ends in: a leaf read out of an aggregate the caller uses again
+    /// after the `if` is a reference this function made for the call, so the call is routed to the
+    /// borrow version.
+    #[test]
+    fn test_benefit_routing_by_the_objects_lifetime_past_the_match() {
+        let (_temp_dir, project_dir) = setup_test_env("benefit_aggregate_after_match");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let main = main_block(&dump);
+        let (borrow_calls, own_calls) = tally_call_routing(&main);
+        assert_eq!(
+            (borrow_calls, own_calls),
+            (1, 0),
+            "the call handed a leaf of an aggregate read after the `if` should route to the borrow \
+             version:\n{}",
+            main.join("\n")
+        );
+    }
+
+    /// Verifies that a call ending a branch of a match keeps the owning version when nothing after
+    /// the match names its argument: the call is the array's last use, and borrowing there would
+    /// only delay the release.
+    #[test]
+    fn test_benefit_routing_last_use_in_a_branch() {
+        let (_temp_dir, project_dir) = setup_test_env("benefit_last_use_in_branch");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let main = main_block(&dump);
+        let (borrow_calls, own_calls) = tally_call_routing(&main);
+        assert_eq!(
+            (borrow_calls, own_calls),
+            (0, 1),
+            "the call at the array's last use should stay on the own version:\n{}",
+            main.join("\n")
+        );
+    }
+
     /// Verifies that routing to a borrow version reads the lifetime of the object an argument refers
     /// to rather than of the name it arrives under: a leaf read out of an aggregate the caller goes
     /// on to use is a reference this function made for the call, so routing removes it together with
