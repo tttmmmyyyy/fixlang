@@ -368,8 +368,8 @@ struct ModuleFileContents {
 /// It begins with the bodies the file held, at the offsets they had, and each body `add`ed follows
 /// them; `finish` puts the record and the footer after the bodies.
 struct ModuleFileWriter {
-    /// The module file the new version replaces.
-    file: Arc<ModuleFile>,
+    /// The module whose file the new version replaces.
+    module: Name,
     /// The bodies the new version holds so far, serialized as the file holds them.
     bodies: Vec<u8>,
     /// Where the bodies taken from the file the new version replaces end.
@@ -383,14 +383,14 @@ impl ModuleFileWriter {
     /// build added to it since this build read its record are kept. A file that cannot be read, or
     /// does not decode as the file of a type-checked module, is begun anew, since the new version
     /// replaces it either way.
-    fn begin(file: Arc<ModuleFile>) -> Self {
+    fn begin(file: &ModuleFile) -> Self {
         let mut writer = ModuleFileWriter {
-            file,
+            module: file.module.clone(),
             bodies: vec![],
             held_end: 0,
             record: ModuleRecord::default(),
         };
-        let Ok(Some(held)) = map_file(&writer.file.path()) else {
+        let Ok(Some(held)) = map_file(&file.path()) else {
             return writer;
         };
         let Ok((record, bodies_end)) = decode_module_file(&held) else {
@@ -410,7 +410,7 @@ impl ModuleFileWriter {
                 recorded.body.end <= self.held_end,
                 "the body of {:?} added twice to the file of `{}`",
                 entry.identity,
-                self.file.module
+                self.module
             );
         }
         let start = self.bodies.len() as u64;
@@ -709,7 +709,7 @@ impl Program {
                     CheckedOnThread::Passed(entry) => {
                         let (writer, added) = writing_of_module
                             .entry(file.module.clone())
-                            .or_insert_with(|| (ModuleFileWriter::begin(file.clone()), vec![]));
+                            .or_insert_with(|| (ModuleFileWriter::begin(file), vec![]));
                         writer.add(entry);
                         added.push(i);
                     }
@@ -823,7 +823,7 @@ impl Program {
                     if let Some(dir) = create_typed_modules_dir() {
                         let stored = &self.typed_modules.stored[loc];
                         let file = &stored.contents.file;
-                        let mut writer = ModuleFileWriter::begin(file.clone());
+                        let mut writer = ModuleFileWriter::begin(file);
                         writer.add(NewEntry::of(stored.identity.clone(), &checked));
                         let (_record, bytes) = writer.finish();
                         if let Err(e) = write_module_file(&dir, file, &bytes) {
