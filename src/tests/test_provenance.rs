@@ -354,7 +354,7 @@ mod integration_tests {
             .iter()
             .filter(|l| l.contains("= Main::tally"))
             .collect::<Vec<_>>();
-        let borrow_calls = calls.iter().filter(|l| l.contains("#borrow(")).count();
+        let borrow_calls = calls.iter().filter(|l| l.contains("#borrow")).count();
         (borrow_calls, calls.len() - borrow_calls)
     }
 
@@ -494,6 +494,19 @@ mod integration_tests {
             (1, 0),
             "the call handed a leaf of an aggregate read after the `if` should route to the borrow \
              version",
+        );
+    }
+
+    /// Verifies that a call keeps the owning version when routing it would borrow an argument at its
+    /// last use: the owning callee frees that argument once it has read a value out of it, which
+    /// leaves the value unique for an update, so borrowing it there costs a copy however much the
+    /// other arguments gain.
+    #[test]
+    fn test_benefit_routing_keeps_a_last_use_owned_beside_a_benefit() {
+        assert_tally_routing(
+            "benefit_last_use_beside_a_benefit",
+            (0, 1),
+            "the call handed an array at its last use should stay on the own version",
         );
     }
 

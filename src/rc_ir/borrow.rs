@@ -12,9 +12,11 @@
 //!
 //! 2. *Version routing*: a function with a borrowable parameter is materialized in two versions, the
 //!    all-`Own` baseline (`f_own`, the original) and a borrowing clone (`f_borrow`). Each direct call
-//!    is routed to one version. A call is routed to the borrow version only when it is *safe* — the
-//!    call is not in tail position, or it passes no owned argument — so a tail call is never turned
-//!    into a non-tail one by an after-call release. Indirect calls keep the all-`Own` original.
+//!    is routed to one version. A call is routed to the borrow version when that removes a retain
+//!    and keeps no argument alive longer: no owned value at its last use is passed to a borrowed
+//!    position, where the owning version would have freed it inside the callee. A tail call passes
+//!    only values at their last use, so no release is ever left after a tail call. Indirect calls
+//!    keep the all-`Own` original.
 //!
 //! 3. *Reference-count rewrite*: the borrow clone drops the reference counting on its borrowed
 //!    parameter leaves, and each call site takes over the counting the callee no longer does — a
@@ -767,14 +769,14 @@ struct RewriteCtx<'a> {
     /// The inferred `Own` parameter leaves of the whole program, one `(parameter-name, unit-path)`
     /// each. A parameter leaf absent from it is borrowed.
     owned_units: &'a Set<VarPath>,
-    /// The borrow clone of each function that got one, which a call is routed to where routing is
-    /// safe and saves a reference count.
+    /// The borrow clone of each function that got one, which a call is routed to where routing pays
+    /// off.
     borrow_versions: &'a Map<FuncRef, FuncRef>,
     /// The parameter names and types of every version, original and borrow clone alike, so a call
     /// can look its callee's parameters up in `owned_units`.
     callee_params: &'a Map<FuncRef, Vec<(FullName, Arc<TypeNode>)>>,
-    /// The bindings of this version's tail-position calls and matches, whose calls stay on the
-    /// owning version so that no after-call release lands on a tail call.
+    /// The bindings of this version's tail-position calls and matches. No after-call release may
+    /// land on such a call, which the rewrite asserts.
     tail: Set<FullName>,
     /// This version's variables: what binds each one and its type, which decide the object a leaf
     /// belongs to and whether this version owns it.
@@ -820,8 +822,12 @@ impl<'a> RewriteCtx<'a> {
     fn rewrite_inner(&self, node: &RcExprNode, enclosing: Option<&After>) -> RcExprNode {
         match node.expr.as_ref() {
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
-                let callee = self.route(x, callee, args, &After { k, enclosing });
+                let callee = self.route(callee, args, &After { k, enclosing });
                 let (rc_before, rc_after) = self.call_rc(&callee, args);
+                assert!(
+                    rc_after.is_empty() || !self.tail.contains(&x.name),
+                    "a call in tail position was routed to a version that leaves a release after it"
+                );
                 let k = prepend_rc(rc_after, true, self.rewrite_in(k, enclosing));
                 let app = expr_node(
                     RcExpr::Let(x.clone(), RcRhs::App(callee, args.clone()), k),
@@ -872,17 +878,15 @@ impl<'a> RewriteCtx<'a> {
     }
 
     /// Route a direct call: retarget the callee to its borrow version when that has a version and
-    /// routing to it is both safe and beneficial; otherwise keep the original (the all-`Own` version,
-    /// or an indirect callee this leaves untouched). `after` is the code that runs after the call,
-    /// which the benefit test reads to tell an argument's last use from a use that outlives the call.
-    fn route(&self, x: &RcVar, callee: &RcVar, args: &[RcVar], after: &After) -> RcVar {
+    /// routing to it pays off; otherwise keep the original (the all-`Own` version, or an indirect
+    /// callee this leaves untouched). `after` is the code that runs after the call, which the test
+    /// reads to tell an argument's last use from a use that outlives the call.
+    fn route(&self, callee: &RcVar, args: &[RcVar], after: &After) -> RcVar {
         let orig = FuncRef {
             name: callee.name.clone(),
         };
         if let Some(borrow_version) = self.borrow_versions.get(&orig) {
-            if self.routing_is_safe(x, args)
-                && self.routing_saves_retain(borrow_version, args, after)
-            {
+            if self.routing_pays_off(borrow_version, args, after) {
                 let mut routed = callee.clone();
                 routed.name = borrow_version.name.clone();
                 return routed;
@@ -891,40 +895,46 @@ impl<'a> RewriteCtx<'a> {
         callee.clone()
     }
 
-    /// A call is safe to route to the borrow version when it is not in tail position, or it passes no
-    /// owned argument — so the after-call release the borrow version needs never lands on a tail call.
-    fn routing_is_safe(&self, x: &RcVar, args: &[RcVar]) -> bool {
-        !self.tail.contains(&x.name) || !args.iter().any(|a| self.any_owned_unit(a))
-    }
-
-    /// Whether routing this call to the borrow version removes a reference count it would otherwise
-    /// need, for at least one argument unit. Routing helps a unit that the borrow version borrows
-    /// and that would otherwise be retained. Two kinds qualify: a borrowed value, which an owning
-    /// callee makes the caller retain before the call, and an owned value whose object outlives the
-    /// call, where the borrow cancels the retain made ahead of it. An owned value whose object ends
-    /// at the call is moved either way, so borrowing it removes no retain and only delays its
-    /// release.
-    fn routing_saves_retain(
-        &self,
-        borrow_version: &FuncRef,
-        args: &[RcVar],
-        after: &After,
-    ) -> bool {
+    /// Whether routing this call to the borrow version removes a retain it would otherwise need and
+    /// keeps no argument alive longer. Each argument unit the borrow version borrows is one of
+    /// three kinds:
+    ///
+    /// - a borrowed value, which an owning callee makes the caller retain before the call, so
+    ///   borrowing it removes that retain;
+    /// - an owned value whose object outlives the call, where the borrow cancels the retain made
+    ///   ahead of it;
+    /// - an owned value whose object ends at the call. The owning callee frees it at its last use
+    ///   inside the callee, and the borrow version leaves it to the caller to release after the
+    ///   call. Its object then lives through the rest of the callee, where a value read out of it is
+    ///   shared rather than unique and an update of that value copies it.
+    ///
+    /// Routing pays off when some unit is of the first two kinds and none is of the third. A call
+    /// in tail position passes only values at their last use, so it never pays off with an owned
+    /// value in a borrowed position, and no release is left after a tail call.
+    fn routing_pays_off(&self, borrow_version: &FuncRef, args: &[RcVar], after: &After) -> bool {
         // `borrow_ify` registers the parameters of every version, so a borrow version is a key here.
         let borrow_params = &self.callee_params[borrow_version];
-        args.iter().enumerate().any(|(arg_idx, arg)| {
+        let mut borrows_any = false;
+        for (arg_idx, arg) in args.iter().enumerate() {
             let arg_used_later = after.uses(&arg.name);
-            rc_units(&arg.ty, self.type_env).iter().any(|unit| {
+            for unit in rc_units(&arg.ty, self.type_env) {
                 // `arg_idx` is in range since `args.len() <= params.len()`.
                 let callee_borrows = !self
                     .owned_units
                     .contains(&(borrow_params[arg_idx].0.clone(), unit.clone()));
-                callee_borrows
-                    && !(self.owns_unit(arg, unit)
-                        && !arg_used_later
-                        && !self.comes_from_a_value_used_later(arg, unit, after))
-            })
-        })
+                if !callee_borrows {
+                    continue;
+                }
+                let ends_at_the_call = self.owns_unit(arg, &unit)
+                    && !arg_used_later
+                    && !self.comes_from_a_value_used_later(arg, &unit, after);
+                if ends_at_the_call {
+                    return false;
+                }
+                borrows_any = true;
+            }
+        }
+        borrows_any
     }
 
     /// Whether `arg@unit` was read out of a value this function uses after the call. Such a leaf
@@ -935,13 +945,6 @@ impl<'a> RewriteCtx<'a> {
             .candidates()
             .iter()
             .any(|(root, _)| after.uses(root))
-    }
-
-    /// Whether this version owns the value at any of `arg`'s reference-counting units.
-    fn any_owned_unit(&self, arg: &RcVar) -> bool {
-        rc_units(&arg.ty, self.type_env)
-            .iter()
-            .any(|unit| self.owns_unit(arg, unit))
     }
 
     /// Whether this version owns the value at `arg@unit`: a leaf that comes from an owned parameter,
