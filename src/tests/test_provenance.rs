@@ -7,7 +7,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level, rc_ir_callee_of};
     use std::fs;
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
@@ -347,18 +347,10 @@ mod integration_tests {
         );
     }
 
-    /// The function a call on a dump line names, from the `=` to the opening parenthesis of its
-    /// arguments, or `None` for a line that binds no call.
-    fn callee_of(line: &str) -> Option<&str> {
-        let (_, rhs) = line.split_once(" = ")?;
-        let (callee, _) = rhs.split_once('(')?;
-        (!callee.contains(' ')).then_some(callee)
-    }
-
     /// Whether a dump line calls a borrowing version of `Main::tally`, whose name carries the
     /// `#borrow` tag.
     fn calls_tally_borrow_version(line: &str) -> bool {
-        callee_of(line).is_some_and(|c| c.starts_with("Main::tally") && c.contains("#borrow"))
+        rc_ir_callee_of(line).is_some_and(|c| c.starts_with("Main::tally") && c.contains("#borrow"))
     }
 
     /// How many of the `tally` calls in `main` route to a borrowing version, and how many stay on
@@ -444,9 +436,10 @@ mod integration_tests {
         assert_counts_nothing(&tally_borrow, "the tally borrow version");
     }
 
-    /// Verifies that routing to a borrow version is decided by benefit as well as safety: the call
-    /// whose array is read again afterwards is routed, and the call at the array's last use keeps
-    /// the owning version, since borrowing there would only delay a release.
+    /// Verifies that a call lends an owned argument only where the caller reads it afterwards: the
+    /// call whose array is read again afterwards is routed to the borrow version, and the call at
+    /// the array's last use keeps the owning version, since borrowing there would only delay a
+    /// release.
     #[test]
     fn test_routing_by_last_use() {
         let (_temp_dir, project_dir) = setup_test_env("routing_last_use");
@@ -458,8 +451,7 @@ mod integration_tests {
         // The array read again after its call is owned but not at its last use, so routing to the
         // borrow version removes a retain — that call goes to the borrow version. The array not used
         // after its call is at its last use, so borrowing it would remove no retain and only delay
-        // its release — that call stays on the own version. Safe-only routing would send both to the
-        // borrow version.
+        // its release — that call stays on the own version.
         assert_eq!(
             borrow_calls,
             1,
@@ -575,7 +567,7 @@ mod integration_tests {
         let callees: Vec<&str> = main
             .iter()
             .filter(|l| calls_tally_borrow_version(l))
-            .filter_map(|l| callee_of(l))
+            .filter_map(|l| rc_ir_callee_of(l))
             .collect();
         assert!(
             callees.len() == 2 && callees[0] != callees[1],
