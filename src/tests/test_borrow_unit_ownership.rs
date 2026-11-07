@@ -121,4 +121,67 @@ mod borrow_unit_ownership_tests {
         "#;
         test_source(source, Configuration::develop_mode());
     }
+    /// Every call of a function asked for more versions than the clone budget allows disposes of
+    /// each argument exactly once, whichever version it reaches.
+    ///
+    /// `peek` only reads its five arrays, so each of them is borrowable, and a call lends the ones
+    /// the caller reads afterwards. The 32 calls in `main` lend every subset of the five, so they ask
+    /// for 31 versions besides the all-owning original, past the budget on one function's clones.
+    /// The calls past it reach the original, which owns every argument, and the caller retains `h`
+    /// for each position it passes `h` at.
+    #[test]
+    pub fn test_calls_past_the_clone_budget_count_their_arguments() {
+        let source = r#"
+            module Main;
+
+            // Reads its five arrays. Recursive, so the inliner leaves it a call.
+            peek : Array I64 -> Array I64 -> Array I64 -> Array I64 -> Array I64 -> I64 -> I64;
+            peek = |a, b, c, d, e, n| (
+                if n == 0 { a.@(0) + b.@(1) + c.@(2) + d.@(0) + e.@(1) };
+                peek(a, b, c, d, e, n - 1)
+            );
+
+            main : IO ();
+            main = (
+                let s = Array::fill(1, 2).@(0);
+                let h = Array::fill(3, s);
+                let acc = 0;
+                let acc = acc + peek(Array::fill(3, s + 1), Array::fill(3, s + 1), Array::fill(3, s + 1), Array::fill(3, s + 1), Array::fill(3, s + 1), 2);
+                let acc = acc + peek(h, Array::fill(3, s + 1), Array::fill(3, s + 1), Array::fill(3, s + 1), Array::fill(3, s + 1), 2);
+                let acc = acc + peek(Array::fill(3, s + 1), h, Array::fill(3, s + 1), Array::fill(3, s + 1), Array::fill(3, s + 1), 2);
+                let acc = acc + peek(h, h, Array::fill(3, s + 1), Array::fill(3, s + 1), Array::fill(3, s + 1), 2);
+                let acc = acc + peek(Array::fill(3, s + 1), Array::fill(3, s + 1), h, Array::fill(3, s + 1), Array::fill(3, s + 1), 2);
+                let acc = acc + peek(h, Array::fill(3, s + 1), h, Array::fill(3, s + 1), Array::fill(3, s + 1), 2);
+                let acc = acc + peek(Array::fill(3, s + 1), h, h, Array::fill(3, s + 1), Array::fill(3, s + 1), 2);
+                let acc = acc + peek(h, h, h, Array::fill(3, s + 1), Array::fill(3, s + 1), 2);
+                let acc = acc + peek(Array::fill(3, s + 1), Array::fill(3, s + 1), Array::fill(3, s + 1), h, Array::fill(3, s + 1), 2);
+                let acc = acc + peek(h, Array::fill(3, s + 1), Array::fill(3, s + 1), h, Array::fill(3, s + 1), 2);
+                let acc = acc + peek(Array::fill(3, s + 1), h, Array::fill(3, s + 1), h, Array::fill(3, s + 1), 2);
+                let acc = acc + peek(h, h, Array::fill(3, s + 1), h, Array::fill(3, s + 1), 2);
+                let acc = acc + peek(Array::fill(3, s + 1), Array::fill(3, s + 1), h, h, Array::fill(3, s + 1), 2);
+                let acc = acc + peek(h, Array::fill(3, s + 1), h, h, Array::fill(3, s + 1), 2);
+                let acc = acc + peek(Array::fill(3, s + 1), h, h, h, Array::fill(3, s + 1), 2);
+                let acc = acc + peek(h, h, h, h, Array::fill(3, s + 1), 2);
+                let acc = acc + peek(Array::fill(3, s + 1), Array::fill(3, s + 1), Array::fill(3, s + 1), Array::fill(3, s + 1), h, 2);
+                let acc = acc + peek(h, Array::fill(3, s + 1), Array::fill(3, s + 1), Array::fill(3, s + 1), h, 2);
+                let acc = acc + peek(Array::fill(3, s + 1), h, Array::fill(3, s + 1), Array::fill(3, s + 1), h, 2);
+                let acc = acc + peek(h, h, Array::fill(3, s + 1), Array::fill(3, s + 1), h, 2);
+                let acc = acc + peek(Array::fill(3, s + 1), Array::fill(3, s + 1), h, Array::fill(3, s + 1), h, 2);
+                let acc = acc + peek(h, Array::fill(3, s + 1), h, Array::fill(3, s + 1), h, 2);
+                let acc = acc + peek(Array::fill(3, s + 1), h, h, Array::fill(3, s + 1), h, 2);
+                let acc = acc + peek(h, h, h, Array::fill(3, s + 1), h, 2);
+                let acc = acc + peek(Array::fill(3, s + 1), Array::fill(3, s + 1), Array::fill(3, s + 1), h, h, 2);
+                let acc = acc + peek(h, Array::fill(3, s + 1), Array::fill(3, s + 1), h, h, 2);
+                let acc = acc + peek(Array::fill(3, s + 1), h, Array::fill(3, s + 1), h, h, 2);
+                let acc = acc + peek(h, h, Array::fill(3, s + 1), h, h, 2);
+                let acc = acc + peek(Array::fill(3, s + 1), Array::fill(3, s + 1), h, h, h, 2);
+                let acc = acc + peek(h, Array::fill(3, s + 1), h, h, h, 2);
+                let acc = acc + peek(Array::fill(3, s + 1), h, h, h, h, 2);
+                let acc = acc + peek(h, h, h, h, h, 2);
+                assert_eq(|_|"the sums, then the held array", acc + h.@(0), 402);;
+                pure()
+            );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
 }
