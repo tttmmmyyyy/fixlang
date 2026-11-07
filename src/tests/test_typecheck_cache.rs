@@ -512,12 +512,16 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
 
     /// The path of the cache file of `Main` in the project at `dir`.
     fn cache_file_of_main(dir: &Path) -> PathBuf {
-        let main_file = cache_files(dir)
+        let main_file = cache_file_names(dir)
             .into_iter()
-            .map(|(name, _)| name)
             .find(|name| name.starts_with("Main_"))
             .expect("the build wrote no cache file of `Main`");
         dir.join(TYPED_MODULES_PATH).join(main_file)
+    }
+
+    /// The names of the files in the type-check cache of the project at `dir`, sorted.
+    fn cache_file_names(dir: &Path) -> Vec<String> {
+        cache_files(dir).into_iter().map(|(name, _)| name).collect()
     }
 
     /// A file of the type-check cache whose record, or the identity in front of a body, was damaged
@@ -1126,9 +1130,8 @@ main = println $ (double(21), 3).to_string;
             stderr
         );
         assert_eq!(run_out(dir), "4");
-        let main_files: Vec<String> = cache_files(dir)
+        let main_files: Vec<String> = cache_file_names(dir)
             .into_iter()
-            .map(|(name, _)| name)
             .filter(|name| name.starts_with("Main_"))
             .collect();
         assert_eq!(
@@ -1160,9 +1163,8 @@ main = println $ (double(21), 3).to_string;
             stderr
         );
         assert_eq!(run_out(dir), "3");
-        let temporaries: Vec<String> = cache_files(dir)
+        let temporaries: Vec<String> = cache_file_names(dir)
             .into_iter()
-            .map(|(name, _)| name)
             .filter(|name| name.ends_with(".tmp"))
             .collect();
         assert!(temporaries.is_empty(), "left behind: {:?}", temporaries);
