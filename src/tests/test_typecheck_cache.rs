@@ -715,6 +715,51 @@ main = (
         );
     }
 
+    /// A build that writes the files of several modules removes the files of the old hash of each,
+    /// so the cache holds one file for each module.
+    #[test]
+    fn a_build_writing_the_files_of_two_modules_removes_the_file_of_the_old_hash_of_each() {
+        let temp = TempDir::new().expect("Failed to create temp directory");
+        let dir = temp.path();
+        fs::write(
+            dir.join("main.fix"),
+            "module Main;\nimport Main.Sub;\n\nmain : IO ();\nmain = println $ Main.Sub::value.to_string;\n",
+        )
+        .expect("Failed to write main.fix");
+        let build_with_value = |value: &str| {
+            fs::write(
+                dir.join("sub.fix"),
+                format!("module Main.Sub;\n\nvalue : I64;\nvalue = {};\n", value),
+            )
+            .expect("Failed to write sub.fix");
+            build(dir, "main.fix", &["--file", "sub.fix"]);
+            assert_eq!(run_out(dir), value);
+            cache_files(dir)
+                .into_iter()
+                .map(|(name, _)| name)
+                .filter(|name| !name.starts_with("Std_"))
+                .collect::<Vec<_>>()
+        };
+
+        // An edit to `Main.Sub` gives both modules a hash of their own, so the build after it
+        // writes the files of both.
+        let before_edit = build_with_value("1");
+        let after_edit = build_with_value("2");
+        assert!(
+            after_edit.iter().all(|name| !before_edit.contains(name)),
+            "the build after the edit kept a file of an old hash, or wrote the file of one module \
+             alone.\nbefore: {:?}\nafter: {:?}",
+            before_edit,
+            after_edit
+        );
+        assert_eq!(
+            after_edit.len(),
+            2,
+            "the cache holds other than one file for each of `Main` and `Main.Sub`: {:?}",
+            after_edit
+        );
+    }
+
     /// A build that cannot write the file of a module still builds the program from the bodies it
     /// checked, and reports the first file it could not write, writing no file after it.
     #[test]
