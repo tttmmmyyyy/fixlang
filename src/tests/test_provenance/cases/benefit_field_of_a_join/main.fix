@@ -1,0 +1,35 @@
+module Main;
+
+// Read-only recursion: `arr` is only read, so it is inferred Borrow and `tally` gets a borrow
+// version.
+tally : Array I64 -> I64 -> I64;
+tally = |arr, i| (
+    if i == arr.@size { 0 } else { arr.@(i) + tally(arr, i + 1) }
+);
+
+// An array beside a scalar, so that a call can be handed the array read out of the pair.
+type Env = unbox struct { table : Array I64, key : I64 };
+
+// Recursive, so the inliner leaves it a call and what it answers with is a value the caller reads a
+// leaf out of.
+//
+// # Parameters
+// * `n` - How far the key is raised above the value it starts at.
+build : I64 -> Env;
+build = |n| (
+    if n == 0 { Env { table : Array::fill(4, 1), key : 3 } };
+    build(n - 1).mod_key(|k| k + 1)
+);
+
+main : IO ();
+main = (
+    pure();;
+    // `env` is whichever value the `if` takes, and it is read after the call, so the array
+    // `env.@table` holds is alive past it on either branch, and routing to the borrow version
+    // removes the retain made for the call.
+    let n = Array::fill(1, 2).@(0);
+    let env = if n == 2 { build(2) } else { build(3) };
+    let t = tally(env.@table, 0);
+    let k = env.@key;
+    println $ (t + k).to_string
+);

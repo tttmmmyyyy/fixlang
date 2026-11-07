@@ -49,8 +49,9 @@ use crate::rc_ir::ast::{
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
-    acted_references, all_owned_units, collect_consumes, destructure_consumes, origin, rc_units,
-    rhs_consumes, truncate_to_unit, unit_step, units_under, References, UnitStep, VarTable,
+    acted_references, alias_step, all_owned_units, collect_consumes, destructure_consumes, origin,
+    rc_units, rhs_consumes, truncate_to_unit, unit_step, units_under, AliasStep, References,
+    UnitStep, VarTable,
 };
 use crate::rc_ir::rename::{copy_suffix, fresh_rename_function};
 use std::sync::Arc;
@@ -901,8 +902,8 @@ impl<'a> RewriteCtx<'a> {
     ///
     /// - a borrowed value, which an owning callee makes the caller retain before the call, so
     ///   borrowing it removes that retain;
-    /// - an owned value whose object outlives the call, where the borrow cancels the retain made
-    ///   ahead of it;
+    /// - an owned value whose object is held after the call, where the borrow cancels the retain
+    ///   made ahead of it;
     /// - an owned value whose object ends at the call. The owning callee frees it at its last use
     ///   inside the callee, and the borrow version leaves it to the caller to release after the
     ///   call. Its object then lives through the rest of the callee, where a value read out of it is
@@ -916,7 +917,6 @@ impl<'a> RewriteCtx<'a> {
         let borrow_params = &self.callee_params[borrow_version];
         let mut borrows_any = false;
         for (arg_idx, arg) in args.iter().enumerate() {
-            let arg_used_later = after.uses(&arg.name);
             for unit in rc_units(&arg.ty, self.type_env) {
                 // `arg_idx` is in range since `args.len() <= params.len()`.
                 let callee_borrows = !self
@@ -926,8 +926,7 @@ impl<'a> RewriteCtx<'a> {
                     continue;
                 }
                 let ends_at_the_call = self.owns_unit(arg, &unit)
-                    && !arg_used_later
-                    && !self.comes_from_a_value_used_later(arg, &unit, after);
+                    && !self.held_after(&(arg.name.clone(), unit), after, &mut Map::default());
                 if ends_at_the_call {
                     return false;
                 }
@@ -937,14 +936,47 @@ impl<'a> RewriteCtx<'a> {
         borrows_any
     }
 
-    /// Whether `arg@unit` was read out of a value this function uses after the call. Such a leaf
-    /// holds a reference this function made for the call, and routing to the borrow version removes
-    /// that reference together with the retain that made it.
-    fn comes_from_a_value_used_later(&self, arg: &RcVar, unit: &FieldPath, after: &After) -> bool {
-        origin(&self.vars, self.type_env, &arg.name, unit)
-            .candidates()
-            .iter()
-            .any(|(root, _)| after.uses(root))
+    /// Whether the object at `value` is held by a variable the code after the call uses, on every
+    /// path the program can take to the call.
+    ///
+    /// Every name on the alias chain from `value` back to its object holds the reference `value`
+    /// holds (`alias_step`): the container a field was destructured out of, the match binding an
+    /// arm result flows into, the variable a move-bind renamed. A use of any of them after the call
+    /// keeps the object alive past it. Where the value may be one of several objects — a match
+    /// binding, or an op result whose leaves come from several operands — each of them has to be
+    /// held, unless a use of the value itself holds whichever it is.
+    ///
+    /// # Arguments
+    /// * `held` - the answers given so far in this query. A chain of match bindings, each rebuilding
+    ///   the one before, reaches one value along many paths, and answering each value once keeps
+    ///   the walk proportional to the chain.
+    fn held_after(&self, value: &VarPath, after: &After, held: &mut Map<VarPath, bool>) -> bool {
+        if let Some(answer) = held.get(value) {
+            return *answer;
+        }
+        let (var, path) = value;
+        let answer = after.uses(var)
+            || match alias_step(&self.vars, self.type_env, var, path) {
+                AliasStep::Stops => false,
+                AliasStep::Projects(source) => self.held_after(&source, after, held),
+                AliasStep::Gathers {
+                    operand_units,
+                    produced_here,
+                } => {
+                    // A leaf produced here belongs to this value alone, and a value with no leaf
+                    // beneath the path holds no reference to keep alive.
+                    !produced_here
+                        && !operand_units.is_empty()
+                        && operand_units
+                            .iter()
+                            .all(|operand_unit| self.held_after(operand_unit, after, held))
+                }
+                AliasStep::Joins(arm_results) => arm_results
+                    .iter()
+                    .all(|arm_result| self.held_after(arm_result, after, held)),
+            };
+        held.insert(value.clone(), answer);
+        answer
     }
 
     /// Whether this version owns the value at `arg@unit`: a leaf that comes from an owned parameter,

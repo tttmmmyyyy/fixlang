@@ -25,7 +25,7 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
   結果など）では 1 つの leaf が 1 参照なので、数は 2 になる。
 - `origin` は leaf でない path も受ける。unit path は leaf とは限らない（unbox union の unit は union 自身の
   path、その leaf は各 variant の中。punched array の unit は `[i]`、その leaf は `[i, 0]`）。`result_prov` に該当する leaf が
-  無いときは、**その下の leaf 群がどのオペランドの unit から射影されたか**で答える（`origin_from_leaves_under`）。
+  無いときは、**その下の leaf 群がどのオペランドの unit から射影されたか**で答える（`gather_leaves_under` と `origin_of_gathered`）。
   下の leaf が 1 つのオペランド unit に揃えば `Exactly`、複数に分かれるか射影でない leaf を含むなら、その値が
   取りうるオブジェクトを全部並べた `Join`。⊥（不在 variant）の leaf は参照を持たないので読み飛ばす。
 
@@ -70,7 +70,7 @@ RC IR 上で「どの構文がどの参照を消費するか」の仕様。実�
 - `Binding::Payload(scrut, variant)`: catch-all は scrutinee そのもの、**unbox union の variant** は別名、
   **boxed union の variant** は producer。
 - `Binding::Llvm`: `result_prov` の leaf が単一の `Arg(j, p)` なら引数 `j` の別名。leaf でない path は
-  その下の leaf 群から決める（`origin_from_leaves_under`）。unbox union の構築
+  その下の leaf 群から決める（`gather_leaves_under` と `origin_of_gathered`）。unbox union の構築
   （`InlineLLVMMakeUnionBody`）もこの規則で解ける。whole-union path の下の leaf は、構築された variant
   では payload の leaf、他の variant では ⊥ なので、答えは payload の unit 群になる。
 - `Binding::Param` / `Binding::Producer` はそこで止まる。

@@ -497,6 +497,33 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that the routing finds an argument's object held after the call through the variable
+    /// a pattern took it out of: `env` comes out of a pair nothing names afterwards, and `env` is read
+    /// after the call, so the array read out of it outlives the call and the call is routed to the
+    /// borrow version.
+    #[test]
+    fn test_benefit_routing_reads_the_variable_a_pattern_binds() {
+        assert_tally_routing(
+            "benefit_field_of_a_pattern",
+            (1, 0),
+            "the call handed a field of a value read after it should route to the borrow version",
+        );
+    }
+
+    /// Verifies that the routing finds an argument's object held after the call through the match
+    /// binding it flows out of: `env` is whichever value the `if` takes, and `env` is read after the
+    /// call, so the array read out of it outlives the call on either branch and the call is routed
+    /// to the borrow version.
+    #[test]
+    fn test_benefit_routing_reads_the_match_binding() {
+        assert_tally_routing(
+            "benefit_field_of_a_join",
+            (1, 0),
+            "the call handed a field of an `if` result read after it should route to the borrow \
+             version",
+        );
+    }
+
     /// Verifies that a call keeps the owning version when routing it would borrow an argument at its
     /// last use: the owning callee frees that argument once it has read a value out of it, which
     /// leaves the value unique for an update, so borrowing it there costs a copy however much the
