@@ -442,6 +442,24 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that the benefit routing weighs reads the code after the match a call's branch ends
+    /// in: an array read again after an `if` is not at its last use at a call that ends a branch of
+    /// that `if`, so the call is routed to the borrow version.
+    #[test]
+    fn test_benefit_routing_reads_past_the_match() {
+        let (_temp_dir, project_dir) = setup_test_env("benefit_after_match");
+        let dump = emit_main_rc_ir(&project_dir);
+
+        let main = main_block(&dump);
+        let (borrow_calls, own_calls) = tally_call_routing(&main);
+        assert_eq!(
+            (borrow_calls, own_calls),
+            (1, 0),
+            "the call whose array is read after the `if` should route to the borrow version:\n{}",
+            main.join("\n")
+        );
+    }
+
     /// Verifies that routing to a borrow version reads the lifetime of the object an argument refers
     /// to rather than of the name it arrives under: a leaf read out of an aggregate the caller goes
     /// on to use is a reference this function made for the call, so routing removes it together with

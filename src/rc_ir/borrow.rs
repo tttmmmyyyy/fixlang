@@ -807,16 +807,22 @@ impl<'a> RewriteCtx<'a> {
     /// with the reference counting the routed callee no longer does, and drop the counting this
     /// version's borrowed parameters no longer need.
     fn rewrite(&self, node: &RcExprNode) -> RcExprNode {
-        grow_stack(|| self.rewrite_inner(node))
+        self.rewrite_in(node, None)
+    }
+
+    /// Rewrite `node`, which `enclosing` runs after: the continuations of the matches whose arms
+    /// hold it.
+    fn rewrite_in(&self, node: &RcExprNode, enclosing: Option<&After>) -> RcExprNode {
+        grow_stack(|| self.rewrite_inner(node, enclosing))
     }
 
     /// One node of the rewrite, rebuilt over its rewritten continuation.
-    fn rewrite_inner(&self, node: &RcExprNode) -> RcExprNode {
+    fn rewrite_inner(&self, node: &RcExprNode, enclosing: Option<&After>) -> RcExprNode {
         match node.expr.as_ref() {
             RcExpr::Let(x, RcRhs::App(callee, args), k) => {
-                let callee = self.route(x, callee, args, k);
+                let callee = self.route(x, callee, args, &After { k, enclosing });
                 let (before, after) = self.call_rc(&callee, args);
-                let k = prepend_rc(after, true, self.rewrite(k));
+                let k = prepend_rc(after, true, self.rewrite_in(k, enclosing));
                 let app = expr_node(
                     RcExpr::Let(x.clone(), RcRhs::App(callee, args.clone()), k),
                     &node.source,
@@ -824,48 +830,57 @@ impl<'a> RewriteCtx<'a> {
                 prepend_rc(before, false, app)
             }
             RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
+                let after_arms = After { k, enclosing };
                 let arms = arms
                     .iter()
-                    .map(|arm| arm.with_body(self.rewrite(&arm.body)))
+                    .map(|arm| arm.with_body(self.rewrite_in(&arm.body, Some(&after_arms))))
                     .collect();
                 expr_node(
                     RcExpr::Let(
                         x.clone(),
                         RcRhs::Match(scrut.clone(), arms),
-                        self.rewrite(k),
+                        self.rewrite_in(k, enclosing),
                     ),
                     &node.source,
                 )
             }
             RcExpr::Let(x, rhs, k) => expr_node(
-                RcExpr::Let(x.clone(), rhs.clone(), self.rewrite(k)),
+                RcExpr::Let(x.clone(), rhs.clone(), self.rewrite_in(k, enclosing)),
                 &node.source,
             ),
             RcExpr::Retain(v, path, state, k) => {
-                self.rewrite_rc(v, path, *state, false, k, &node.source)
+                self.rewrite_rc(v, path, *state, false, k, enclosing, &node.source)
             }
             RcExpr::Release(v, path, state, k) => {
-                self.rewrite_rc(v, path, *state, true, k, &node.source)
+                self.rewrite_rc(v, path, *state, true, k, enclosing, &node.source)
             }
             RcExpr::Destructure(container, fields, state, k) => expr_node(
-                RcExpr::Destructure(container.clone(), fields.clone(), *state, self.rewrite(k)),
+                RcExpr::Destructure(
+                    container.clone(),
+                    fields.clone(),
+                    *state,
+                    self.rewrite_in(k, enclosing),
+                ),
                 &node.source,
             ),
-            RcExpr::Eval(v, k) => expr_node(RcExpr::Eval(v.clone(), self.rewrite(k)), &node.source),
+            RcExpr::Eval(v, k) => expr_node(
+                RcExpr::Eval(v.clone(), self.rewrite_in(k, enclosing)),
+                &node.source,
+            ),
             RcExpr::Ret(v) => expr_node(RcExpr::Ret(v.clone()), &node.source),
         }
     }
 
     /// Route a direct call: retarget the callee to its borrow version when that has a version and
     /// routing to it is both safe and beneficial; otherwise keep the original (the all-`Own` version,
-    /// or an indirect callee this leaves untouched). `k` is the call's continuation, which the
-    /// benefit test reads to tell an argument's last use from a use that outlives the call.
-    fn route(&self, x: &RcVar, callee: &RcVar, args: &[RcVar], k: &RcExprNode) -> RcVar {
+    /// or an indirect callee this leaves untouched). `after` is the code that runs after the call,
+    /// which the benefit test reads to tell an argument's last use from a use that outlives the call.
+    fn route(&self, x: &RcVar, callee: &RcVar, args: &[RcVar], after: &After) -> RcVar {
         let orig = FuncRef {
             name: callee.name.clone(),
         };
         if let Some(borrow_version) = self.borrow_versions.get(&orig) {
-            if self.routing_is_safe(x, args) && self.routing_saves_retain(borrow_version, args, k) {
+            if self.routing_is_safe(x, args) && self.routing_saves_retain(borrow_version, args, after) {
                 let mut routed = callee.clone();
                 routed.name = borrow_version.name.clone();
                 return routed;
@@ -891,12 +906,12 @@ impl<'a> RewriteCtx<'a> {
         &self,
         borrow_version: &FuncRef,
         args: &[RcVar],
-        k: &RcExprNode,
+        after: &After,
     ) -> bool {
         // `borrow_ify` registers the parameters of every version, so a borrow version is a key here.
         let borrow_params = &self.callee_params[borrow_version];
         args.iter().enumerate().any(|(arg_idx, arg)| {
-            let arg_used_later = used_later(&arg.name, k);
+            let arg_used_later = after.uses(&arg.name);
             rc_units(&arg.ty, self.type_env).iter().any(|unit| {
                 // `arg_idx` is in range since `args.len() <= params.len()`.
                 let callee_borrows = !self
@@ -905,7 +920,7 @@ impl<'a> RewriteCtx<'a> {
                 callee_borrows
                     && !(self.owns_unit(arg, unit)
                         && !arg_used_later
-                        && !self.comes_from_a_value_used_later(arg, unit, k))
+                        && !self.comes_from_a_value_used_later(arg, unit, after))
             })
         })
     }
@@ -913,11 +928,11 @@ impl<'a> RewriteCtx<'a> {
     /// Whether `arg@unit` was read out of a value this function uses after the call. Such a leaf
     /// holds a reference this function made for the call, and routing to the borrow version removes
     /// that reference together with the retain that made it.
-    fn comes_from_a_value_used_later(&self, arg: &RcVar, unit: &FieldPath, k: &RcExprNode) -> bool {
+    fn comes_from_a_value_used_later(&self, arg: &RcVar, unit: &FieldPath, after: &After) -> bool {
         origin(&self.vars, self.type_env, &arg.name, unit)
             .candidates()
             .iter()
-            .any(|(root, _)| used_later(root, k))
+            .any(|(root, _)| after.uses(root))
     }
 
     /// Whether this version owns the value at any of `arg`'s reference-counting units.
@@ -1031,9 +1046,10 @@ impl<'a> RewriteCtx<'a> {
         state: RcState,
         is_release: bool,
         k: &RcExprNode,
+        enclosing: Option<&After>,
         source: &Option<Span>,
     ) -> RcExprNode {
-        let k = self.rewrite(k);
+        let k = self.rewrite_in(k, enclosing);
         if !self.is_borrow_version {
             return rc_node(is_release, v.clone(), path.clone(), state, k, source);
         }
@@ -1044,6 +1060,21 @@ impl<'a> RewriteCtx<'a> {
         kept.into_iter().rev().fold(k, |cont, unit| {
             rc_node(is_release, v.clone(), unit, state, cont, source)
         })
+    }
+}
+
+/// The code that runs after a point of a body: the continuation there, then the continuation of
+/// each match whose arm holds that point, innermost first. An arm's result is the match's binding,
+/// so control goes on into the match's continuation once the arm ends.
+struct After<'b> {
+    k: &'b RcExprNode,
+    enclosing: Option<&'b After<'b>>,
+}
+
+impl After<'_> {
+    /// Whether the variable named `name` is used in the code that runs after this point.
+    fn uses(&self, name: &FullName) -> bool {
+        used_later(name, self.k) || self.enclosing.is_some_and(|outer| outer.uses(name))
     }
 }
 
