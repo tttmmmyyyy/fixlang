@@ -716,7 +716,7 @@ main = (
     }
 
     /// A build that cannot write the file of a module still builds the program from the bodies it
-    /// checked, and reports the file it could not write.
+    /// checked, and reports the first file it could not write, writing no file after it.
     #[test]
     fn a_build_that_cannot_write_the_cache_builds_the_program() {
         let temp = TempDir::new().expect("Failed to create temp directory");
@@ -742,8 +742,9 @@ main = println $ (double(21), 3).to_string;
         fs::set_permissions(&cache_dir, Permissions::from_mode(0o755))
             .expect("Failed to make the type-check cache directory writable");
         assert!(built, "stderr: {}", stderr);
-        assert!(
-            stderr.contains("Failed to write cache file"),
+        assert_eq!(
+            stderr.matches("Failed to write cache file").count(),
+            1,
             "stderr: {}",
             stderr
         );
@@ -916,9 +917,10 @@ main = println $ (double(21), 3).to_string;
     /// so a file another process removes while the build runs still hands the build every body it
     /// recorded: the build reports no file as unreadable and checks none of those bodies again.
     ///
-    /// `main.fix` is edited, so the build checks `Main` and writes its file; the file of
-    /// `Std` is removed once that writing has begun, which is after the build read the record of
-    /// every module and before instantiation reads a body of `Std`.
+    /// `main.fix` is edited, so the build checks the bodies of `Main` before instantiation reads a
+    /// body of `Std`; the file of `Std` is removed as soon as the build has mapped it into memory,
+    /// which is when it reads the record of `Std`.
+    #[cfg(target_os = "linux")]
     #[test]
     fn a_build_reads_every_body_from_the_file_it_found_after_the_file_is_removed() {
         let temp = TempDir::new().expect("Failed to create temp directory");
@@ -950,13 +952,17 @@ main = println $ (double(21), 3).to_string;
             .stderr(Stdio::piped())
             .spawn()
             .expect("Failed to execute fix");
-        while !names_in_cache().iter().any(|name| name.ends_with(".tmp")) {
+        let maps_path = format!("/proc/{}/maps", running.id());
+        while !fs::read_to_string(&maps_path)
+            .unwrap_or_default()
+            .contains(&std_file)
+        {
             assert!(
                 running
                     .try_wait()
                     .expect("Failed to wait for fix")
                     .is_none(),
-                "the build ended before it began writing a file"
+                "the build ended before it mapped the file of `Std`"
             );
             thread::sleep(Duration::from_millis(1));
         }

@@ -13,11 +13,12 @@
 //
 // A build reads the record of every module and type-checks only the bodies the record lacks. It
 // reads a typed expression back only when instantiation asks for it, from the file it found the
-// body in, which it keeps mapped into memory (`MappedModuleFile`). When the check passes bodies the
-// record lacked, the file is written anew: the bodies it holds are copied as they are, at the same
-// offsets, and each new body follows them as soon as it passes, so that it leaves memory then
-// (`ModuleFileWriter`). When instantiation finds a body that the file fails to hold, it checks the
-// body again and writes it the same way, after the bodies the file holds.
+// body in, which it keeps mapped into memory (`ModuleFileContents`). When the check passes bodies
+// the record lacked, the file is written anew (`ModuleFileWriter`): the bodies it holds are copied
+// as they are, at the same offsets, and each new body follows them. A new body is serialized as soon
+// as it passes, so that its typed expression leaves memory then, and the file is written once the
+// last body of the module is checked. When instantiation finds a body that the file fails to hold,
+// it checks the body again and writes it the same way, after the bodies the file holds.
 //
 // The record is valid because a body is determined by its `EntityIdentity` together with what the
 // module's `module_dependency_hash` covers. The set of bodies a module has can still differ between
@@ -34,18 +35,17 @@ use crate::constants::TYPED_MODULES_PATH;
 use crate::elaboration::typecheck::TypeCheckContext;
 use crate::elaboration::typecheckcache::EntityIdentity;
 use crate::error::Errors;
-use crate::misc::{consume_on_compiler_threads, map_on_compiler_threads, warn_msg, Map};
+use crate::misc::{consume_on_compiler_threads, warn_msg, Map};
 use crate::parse::sourcefile::{SourceFile, Span};
 use crate::project_fs::{
-    create_dir_guarding_project_links, create_temporary_file_in, remove_abandoned_temporary_files,
-    TemporaryFile, DOT_FIXLANG_LINK_HINT,
+    create_dir_guarding_project_links, remove_abandoned_temporary_files, replace_file,
+    DOT_FIXLANG_LINK_HINT,
 };
 use memmap2::Mmap;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
-use std::io::{self, Seek, SeekFrom, Write};
-use std::mem::take;
-use std::ops::Range;
+use std::io::{self, Write};
+use std::ops::{Deref, Range};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -208,16 +208,16 @@ const NOT_A_MODULE_FILE: &str = "it is not a file of type-checked modules";
 /// bodies it asks for later.
 fn map_module_file(
     file: &Arc<ModuleFile>,
-) -> Result<Option<(ModuleRecord, MappedModuleFile)>, String> {
+) -> Result<Option<(ModuleRecord, ModuleFileContents)>, String> {
     let Some(bytes) = map_file(&file.path()).map_err(|e| e.to_string())? else {
         return Ok(None);
     };
     let (record, _bodies_end) = decode_module_file(&bytes)?;
-    let mapped = MappedModuleFile {
+    let contents = ModuleFileContents {
         file: file.clone(),
-        bytes,
+        bytes: ModuleFileBytes::Mapped(bytes),
     };
-    Ok(Some((record, mapped)))
+    Ok(Some((record, contents)))
 }
 
 /// The file at `path` mapped into memory, or `None` when there is no file there.
@@ -229,8 +229,8 @@ fn map_file(path: &Path) -> io::Result<Option<Mmap>> {
     }
 }
 
-/// `file` mapped into memory. `file` must be a file of type-checked modules, or a temporary file
-/// that becomes one, since the mapping stays sound only while nothing writes the file in place.
+/// `file` mapped into memory. `file` must be a file of type-checked modules, or the temporary file
+/// of a new version of one, since the mapping stays sound only while nothing writes the file in place.
 fn map_into_memory(file: &File) -> io::Result<Mmap> {
     // SAFETY: the mapping is read for as long as the build runs, and a file of type-checked modules
     // is never written in place: a build writes a new version under another name and renames it
@@ -323,91 +323,78 @@ impl ModuleFile {
     }
 }
 
-/// A module's file mapped into memory, as this build found it or wrote it. Each body the build
-/// takes from the file is read from the mapping, so a file another build puts in place meanwhile,
-/// or removes, leaves the body where it was.
-struct MappedModuleFile {
+/// The bytes of a module's file that a build reads bodies from.
+enum ModuleFileBytes {
+    /// The file as this build found it or wrote it, mapped into memory.
+    Mapped(Mmap),
+    /// The bytes this build meant the file to hold, kept in memory because the file could not be
+    /// written.
+    Unwritten(Vec<u8>),
+}
+
+impl Deref for ModuleFileBytes {
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        match self {
+            ModuleFileBytes::Mapped(bytes) => bytes,
+            ModuleFileBytes::Unwritten(bytes) => bytes,
+        }
+    }
+}
+
+/// The contents of a module's file as this build found it or wrote it. Each body the build takes
+/// from the file is read from `bytes`, so a file another build puts in place meanwhile, or removes,
+/// leaves the body where it was.
+struct ModuleFileContents {
     /// The module and hash the file is named after.
     file: Arc<ModuleFile>,
     /// The bytes of the file.
-    bytes: Mmap,
+    bytes: ModuleFileBytes,
 }
 
-/// The new version of a module's file, written while the bodies of the module are checked. It begins
-/// with the bodies the file held, at the offsets they had, and each body `add`ed follows them;
-/// `finish` puts the record and the footer after the bodies and replaces the file with it.
-///
-/// The bodies go to a temporary file beside the module's file as they are added, so that a body is
-/// dropped from memory as soon as it is written. A writer dropped before `finish` removes the
-/// temporary file, and the module's file stays as it was.
+/// The new version of a module's file, built in memory while the bodies of the module are checked.
+/// It begins with the bodies the file held, at the offsets they had, and each body `add`ed follows
+/// them; `finish` puts the record and the footer after the bodies and writes it in place of the
+/// file.
 struct ModuleFileWriter {
-    /// The directory the files of type-checked modules are written in.
-    dir: PathBuf,
     /// The module file the new version replaces.
     file: Arc<ModuleFile>,
-    /// The temporary file the new version is written to, until `finish` renames it.
-    tmp: Option<TemporaryFile>,
-    /// The file the new version replaces, mapped into memory, when it held bodies; the bodies
-    /// `record` begins with lie in it as in the new version.
-    held: Option<Mmap>,
-    /// Where the bodies taken from `held` end.
+    /// The bodies the new version holds so far, serialized as the file holds them.
+    bodies: Vec<u8>,
+    /// Where the bodies taken from the file the new version replaces end.
     held_end: u64,
-    /// The bodies the new version holds so far.
+    /// Where each body of the new version lies in `bodies`, and what the file records of it.
     record: ModuleRecord,
-    /// Where the bodies written so far end, which is where the next body goes.
-    bodies_end: u64,
 }
 
 impl ModuleFileWriter {
-    /// Begins a new version of `file` in `dir`, with the bodies the file holds now, so that the
-    /// bodies another build added to it since this build read its record are kept. A file that
-    /// cannot be read, or does not decode as the file of a type-checked module, is begun anew, since
-    /// `finish` replaces it either way.
-    fn create(dir: &Path, file: Arc<ModuleFile>) -> io::Result<Self> {
-        let path = file.path_in(dir);
-        let tmp = create_temporary_file_in(dir)?;
+    /// Begins a new version of `file` with the bodies the file holds now, so that the bodies another
+    /// build added to it since this build read its record are kept. A file that cannot be read, or
+    /// does not decode as the file of a type-checked module, is begun anew, since `finish` replaces
+    /// it either way.
+    fn create(file: Arc<ModuleFile>) -> Self {
         let mut writer = ModuleFileWriter {
-            dir: dir.to_path_buf(),
             file,
-            tmp: Some(tmp),
-            held: None,
+            bodies: vec![],
             held_end: 0,
             record: ModuleRecord::default(),
-            bodies_end: 0,
         };
-        let Ok(Some(held)) = map_file(&path) else {
-            return Ok(writer);
+        let Ok(Some(held)) = map_file(&writer.file.path()) else {
+            return writer;
         };
         let Ok((record, bodies_end)) = decode_module_file(&held) else {
-            return Ok(writer);
+            return writer;
         };
-        writer.tmp_file().write_all(&held[..bodies_end as usize])?;
-        writer.held = Some(held);
+        writer.bodies = held[..bodies_end as usize].to_vec();
         writer.held_end = bodies_end;
         writer.record = record;
-        writer.bodies_end = bodies_end;
-        Ok(writer)
+        writer
     }
 
-    /// The temporary file the new version is written to.
-    fn tmp_file(&mut self) -> &mut File {
-        &mut self
-            .tmp
-            .as_mut()
-            .expect("a module file written after it was finished")
-            .file
-    }
-
-    /// Adds `entry` after the bodies written so far. A body the file held is kept as it is when its
-    /// bytes decode to it, and is replaced by `entry` otherwise.
-    ///
-    /// The bytes of a body the file held are decoded with the source files their spans point into
-    /// taken from `source_files`, which gains the paths it lacks.
-    fn add(
-        &mut self,
-        entry: NewEntry,
-        source_files: &mut Map<PathBuf, SourceFile>,
-    ) -> io::Result<()> {
+    /// Adds `entry` after the bodies so far. A body the file held under the same identity is
+    /// replaced by `entry`; its bytes stay in the file, recorded by nothing.
+    fn add(&mut self, entry: NewEntry) {
         if let Some(recorded) = self.record.get(&entry.identity) {
             assert!(
                 recorded.body.end <= self.held_end,
@@ -415,95 +402,90 @@ impl ModuleFileWriter {
                 entry.identity,
                 self.file.module
             );
-            let held = self
-                .held
-                .as_ref()
-                .expect("a module file records a body it took from no file");
-            let intact = SourceFile::with_shared_source_files(source_files, || {
-                read_body(held, &recorded.body, &entry.identity)
-            })
-            .is_ok();
-            if intact {
-                return Ok(());
-            }
         }
-        let start = self.bodies_end;
-        let tmp = self.tmp_file();
-        tmp.seek(SeekFrom::Start(start))?;
-        tmp.write_all(&entry.bytes)?;
-        self.bodies_end = start + entry.bytes.len() as u64;
+        let start = self.bodies.len() as u64;
+        self.bodies.extend_from_slice(&entry.bytes);
         self.record.insert(
             entry.identity,
             EntityEntry {
-                body: start..self.bodies_end,
+                body: start..self.bodies.len() as u64,
                 opaque_types: entry.opaque_types,
                 warning_facts: entry.warning_facts,
             },
         );
-        Ok(())
     }
 
-    /// Puts the record and the footer after the bodies, replaces the module's file with the new
-    /// version, removes the files of the module checked under any other hash, and answers the
-    /// new version: its record, and the file mapped into memory.
-    fn finish(mut self) -> io::Result<(ModuleRecord, MappedModuleFile)> {
-        let mut entries: Vec<(EntityIdentity, EntityEntry)> =
-            take(&mut self.record).into_iter().collect();
+    /// Puts the record and the footer after the bodies, writes the new version in place of the
+    /// module's file in `dir`, and answers the new version: its record, its contents, and why it
+    /// could not be written when it could not. Without `dir`, the new version is not written.
+    ///
+    /// The contents are the file mapped into memory when it was written, and the bytes meant for it
+    /// otherwise.
+    fn finish(self, dir: Option<&Path>) -> (ModuleRecord, ModuleFileContents, Option<io::Error>) {
+        let mut entries: Vec<(EntityIdentity, EntityEntry)> = self.record.into_iter().collect();
         entries.sort_by(|(lhs, _), (rhs, _)| lhs.cmp(rhs));
-        let mut tail = postcard::to_allocvec(&entries).unwrap();
-        let record_len = tail.len() as u64;
-        tail.extend_from_slice(&self.bodies_end.to_le_bytes());
-        tail.extend_from_slice(&record_len.to_le_bytes());
-        tail.extend_from_slice(FILE_MAGIC);
-        let bodies_end = self.bodies_end;
-        let tmp = self.tmp_file();
-        tmp.seek(SeekFrom::Start(bodies_end))?;
-        tmp.write_all(&tail)?;
-        let bytes = map_into_memory(tmp)?;
+        let mut bytes = self.bodies;
+        let bodies_end = bytes.len() as u64;
+        let record = postcard::to_allocvec(&entries).unwrap();
+        bytes.extend_from_slice(&record);
+        bytes.extend_from_slice(&bodies_end.to_le_bytes());
+        bytes.extend_from_slice(&(record.len() as u64).to_le_bytes());
+        bytes.extend_from_slice(FILE_MAGIC);
 
-        let tmp = self.tmp.take().unwrap();
-        let file_name = self.file.name();
-        // The name holds no path separator, and a rename replaces a symbolic link at the path
-        // instead of writing through it, so the file is written in `dir`.
-        if let Err(e) = fs::rename(&tmp.path, self.dir.join(&file_name)) {
-            let _ = fs::remove_file(&tmp.path);
-            return Err(e);
-        }
-
-        self.remove_stale_files(&file_name);
-        let mapped = MappedModuleFile {
-            file: self.file.clone(),
+        let mut mapped = None;
+        let failure = dir.and_then(|dir| {
+            // The name holds no path separator, and `replace_file` replaces a symbolic link at the
+            // path instead of writing through it, so the file is written in `dir`.
+            replace_file(&self.file.path_in(dir), |tmp_path| {
+                let mut tmp = File::options()
+                    .read(true)
+                    .write(true)
+                    .create_new(true)
+                    .open(tmp_path)?;
+                tmp.write_all(&bytes)?;
+                mapped = Some(map_into_memory(&tmp)?);
+                Ok(())
+            })
+            .err()
+        });
+        // A mapping of the whole new version stays sound when the rename fails after it.
+        let bytes = match mapped {
+            Some(mapped) => ModuleFileBytes::Mapped(mapped),
+            None => ModuleFileBytes::Unwritten(bytes),
+        };
+        let contents = ModuleFileContents {
+            file: self.file,
             bytes,
         };
-        Ok((entries.into_iter().collect(), mapped))
-    }
-
-    /// Removes the files of the module checked under any other hash than the file named
-    /// `file_name`, and the temporary files left in the directory by builds that were killed. The
-    /// file named `file_name` is in place already, so a file this fails to remove costs only disk
-    /// space, and the next write tries again.
-    fn remove_stale_files(&self, file_name: &str) {
-        remove_abandoned_temporary_files(&self.dir);
-        let Ok(dir_entries) = fs::read_dir(&self.dir) else {
-            return;
-        };
-        // The temporary files begin with a dot, which no prefix does.
-        let prefix = module_file_prefix(&self.file.module);
-        for dir_entry in dir_entries.flatten() {
-            let entry_name = dir_entry.file_name();
-            let entry_name = entry_name.to_string_lossy();
-            if entry_name.starts_with(&prefix) && entry_name != file_name {
-                let _ = fs::remove_file(self.dir.join(entry_name.as_ref()));
-            }
-        }
+        (entries.into_iter().collect(), contents, failure)
     }
 }
 
-impl Drop for ModuleFileWriter {
-    /// Removes the temporary file of a new version that was not finished.
-    fn drop(&mut self) {
-        if let Some(tmp) = self.tmp.take() {
-            let _ = fs::remove_file(&tmp.path);
+/// Removes from `dir` the files of the modules of `written` checked under any other hash than the
+/// one each was written under, and the temporary files that builds which were killed left there.
+/// The files of `written` are in place already, so a file this fails to remove costs only disk
+/// space, and a later build tries again.
+fn remove_stale_files(dir: &Path, written: &[Arc<ModuleFile>]) {
+    remove_abandoned_temporary_files(dir);
+    let Ok(dir_entries) = fs::read_dir(dir) else {
+        return;
+    };
+    let kept: Map<String, String> = written
+        .iter()
+        .map(|file| (module_file_prefix(&file.module), file.name()))
+        .collect();
+    for dir_entry in dir_entries.flatten() {
+        let entry_name = dir_entry.file_name();
+        let entry_name = entry_name.to_string_lossy();
+        // A file name is a prefix followed by the 32 hexadecimal digits of a digest.
+        let Some(prefix) = entry_name.get(..entry_name.len().saturating_sub(32)) else {
+            continue;
+        };
+        if kept
+            .get(prefix)
+            .is_some_and(|kept_name| *kept_name != entry_name)
+        {
+            let _ = fs::remove_file(dir.join(entry_name.as_ref()));
         }
     }
 }
@@ -519,24 +501,6 @@ fn create_typed_modules_dir() -> Option<PathBuf> {
                 warn_msg(&err.msg);
             }
             None
-        }
-    }
-}
-
-/// Whether a file can be created in `dir`. When it cannot, that is reported as a warning.
-fn probe_file_creation(dir: &Path) -> bool {
-    match create_temporary_file_in(dir) {
-        Ok(probe) => {
-            let _ = fs::remove_file(&probe.path);
-            true
-        }
-        Err(e) => {
-            warn_msg(&format!(
-                "Failed to write cache files in \"{}\": {}.",
-                dir.to_string_lossy(),
-                e
-            ));
-            false
         }
     }
 }
@@ -559,150 +523,33 @@ fn warn_unreadable_file(path: &Path, why: &str) {
     ));
 }
 
-/// The writing of one module's file while the bodies of the module are checked.
-struct ModuleWriting {
-    /// The new version of the file, or why writing it failed once it has.
-    writer: Result<ModuleFileWriter, io::Error>,
-    /// The bodies written to `writer`, each with its index among the bodies checked, its identity,
-    /// and the names it referred to that the module it is defined in has to import.
-    written: Vec<(usize, EntityIdentity, Map<Name, Vec<FullName>>)>,
-    /// The bodies that passed and that the file will not hold, by their index among the bodies
-    /// checked.
-    unwritten: Vec<usize>,
-}
-
-/// What became of the bodies of a module `ModuleWriting` wrote.
-struct WrittenModule {
-    /// The bodies the file holds, each with its index among the bodies checked.
-    stored: Vec<(usize, StoredOutcome)>,
-    /// The bodies that passed and that the file does not hold, by their index among the bodies
-    /// checked.
-    unwritten: Vec<usize>,
-    /// Why writing the file failed, when it did.
-    failure: Option<io::Error>,
-}
-
-impl ModuleWriting {
-    /// Begins writing the file of `file` in `dir`.
-    fn begin(dir: &Path, file: Arc<ModuleFile>) -> Self {
-        ModuleWriting {
-            writer: ModuleFileWriter::create(dir, file),
-            written: vec![],
-            unwritten: vec![],
-        }
-    }
-
-    /// Writes `body`, the body at index `i` among the bodies checked, to the file. When a write
-    /// fails, the bodies written before it, `body` with them, are left unwritten.
-    fn add(&mut self, i: usize, body: PassedBody, source_files: &mut Map<PathBuf, SourceFile>) {
-        let Ok(writer) = &mut self.writer else {
-            self.unwritten.push(i);
-            return;
-        };
-        let identity = body.entry.identity.clone();
-        match writer.add(body.entry, source_files) {
-            Ok(()) => self.written.push((i, identity, body.import_required)),
-            Err(e) => {
-                self.writer = Err(e);
-                self.unwritten
-                    .extend(self.written.drain(..).map(|(i, _, _)| i));
-                self.unwritten.push(i);
-            }
-        }
-    }
-
-    /// Finishes the file. When that fails, the bodies written to it are left unwritten.
-    fn finish(self) -> WrittenModule {
-        let mut unwritten = self.unwritten;
-        let writer = match self.writer {
-            Ok(writer) => writer,
-            Err(e) => {
-                return WrittenModule {
-                    stored: vec![],
-                    unwritten,
-                    failure: Some(e),
-                }
-            }
-        };
-        match writer.finish() {
-            Ok((mut record, mapped)) => {
-                let mapped = Arc::new(mapped);
-                let stored = self
-                    .written
-                    .into_iter()
-                    .map(|(i, identity, import_required)| {
-                        let entry = record
-                            .remove(&identity)
-                            .expect("the file written lacks a body written to it");
-                        (
-                            i,
-                            StoredOutcome {
-                                mapped: mapped.clone(),
-                                entry,
-                                import_required,
-                            },
-                        )
-                    })
-                    .collect();
-                WrittenModule {
-                    stored,
-                    unwritten,
-                    failure: None,
-                }
-            }
-            Err(e) => {
-                unwritten.extend(self.written.into_iter().map(|(i, _, _)| i));
-                WrittenModule {
-                    stored: vec![],
-                    unwritten,
-                    failure: Some(e),
-                }
-            }
-        }
-    }
-}
-
-/// A body that passed this build's type check, to be written to the file of its module.
-struct PassedBody {
-    /// The body, serialized for the file.
-    entry: NewEntry,
-    /// The names the body referred to that the module it is defined in has to import.
-    import_required: Map<Name, Vec<FullName>>,
-}
-
 /// What a compiler thread answers for a body it type-checked.
 enum CheckedOnThread {
     /// The body passed, and the file of its module is to hold it.
-    Passed(PassedBody),
-    /// The body is to be held in memory: what `Program::check_body` answered for a body that did
-    /// not pass, or for any body when the directory of the files cannot be written in.
-    InMemory(Result<CheckedBody, Errors>),
-}
-
-/// A body this build checked that passed and that the file of its module now records.
-struct StoredOutcome {
-    /// The file of the module, as this build wrote it.
-    mapped: Arc<MappedModuleFile>,
-    /// What the file records of the body.
-    entry: EntityEntry,
-    /// The names the body referred to that the module it is defined in has to import.
-    import_required: Map<Name, Vec<FullName>>,
+    Passed(NewEntry),
+    /// What `Program::check_body` answered for a body that did not pass.
+    NotPassed(Result<CheckedBody, Errors>),
 }
 
 /// What became of a body this build checked.
 enum CheckOutcome {
-    /// The body passed, and the file of its module records it.
-    Stored(StoredOutcome),
-    /// The body is held in memory: what `Program::check_body` answered for a body that did not
-    /// pass, or for one that passed and that the file of its module could not take.
-    InMemory(Result<CheckedBody, Errors>),
+    /// The body passed, and the new version of its module's file records it as `entry`.
+    Stored {
+        /// The contents of the new version.
+        contents: Arc<ModuleFileContents>,
+        /// What the new version records of the body.
+        entry: EntityEntry,
+    },
+    /// What `Program::check_body` answered for a body that did not pass.
+    NotPassed(Result<CheckedBody, Errors>),
 }
 
 /// A body whose typed expression lies in its module's file, and which `Program::global_values`
 /// holds as it was parsed.
 struct StoredBody {
-    /// The file of the module the body is defined in, which the body is read back from.
-    mapped: Arc<MappedModuleFile>,
+    /// The contents of the file of the module the body is defined in, which the body is read back
+    /// from.
+    contents: Arc<ModuleFileContents>,
     /// The entity the body belongs to, which the file writes in front of the body.
     identity: EntityIdentity,
     /// Where the body lies in the file.
@@ -737,9 +584,9 @@ impl Program {
     /// Resolves namespaces in, and type-checks, the bodies of `modules` that the files of
     /// `TYPED_MODULES_PATH` do not record, and adds those that pass to the files.
     ///
-    /// A body the file of its module holds, whether recorded before or added here, is left as it
-    /// was parsed, and its typed expression is read back when instantiation asks for it
-    /// (`typed_body`). The typed expressions of the other bodies are put in place of their bodies.
+    /// A body that passes, whether recorded before or added here, is left as it was parsed, and its
+    /// typed expression is read back when instantiation asks for it (`typed_body`). The typed
+    /// expressions of the other bodies are put in place of their bodies.
     pub fn check_bodies_through_typed_modules(
         &mut self,
         tc: &TypeCheckContext,
@@ -763,7 +610,8 @@ impl Program {
             bodies_by_module.entry(module).or_default().push(loc);
         }
 
-        // Skip the bodies the files record.
+        // Skip the bodies the files record. The bodies left to check stay grouped by module, so
+        // that the new versions of few files are held in memory at once.
         let mut to_check: Vec<(BodyLocation, Arc<ModuleFile>, EntityIdentity)> = vec![];
         for (module, locs) in bodies_by_module {
             let module_hash = self.module_dependency_hash(&module, config)?;
@@ -776,7 +624,7 @@ impl Program {
                     map_module_file(&file)
                 });
             let found = match found {
-                Ok(found) => found.map(|(record, mapped)| (record, Arc::new(mapped))),
+                Ok(found) => found.map(|(record, contents)| (record, Arc::new(contents))),
                 Err(why) => {
                     warn_unreadable_file(&file.path(), &why);
                     None
@@ -784,36 +632,29 @@ impl Program {
             };
             for loc in locs {
                 let identity = self.entity_identity_at(&loc);
-                let recorded = found.as_ref().and_then(|(record, mapped)| {
+                let recorded = found.as_ref().and_then(|(record, contents)| {
                     record
                         .get(&identity)
-                        .map(|entry| (mapped.clone(), entry.clone()))
+                        .map(|entry| (contents.clone(), entry.clone()))
                 });
                 match recorded {
-                    Some((mapped, entry)) => self.store_body(loc, mapped, identity, entry),
+                    Some((contents, entry)) => self.store_body(loc, contents, identity, entry),
                     None => to_check.push((loc, file.clone(), identity)),
                 }
             }
         }
 
         // Check the rest.
-        let mut source_files = take(&mut self.typed_modules.source_files);
-        let outcomes = self.check_and_write_bodies(&to_check, tc, &mut source_files);
-        self.typed_modules.source_files = source_files;
+        let outcomes = self.check_and_write_bodies(&to_check, tc);
         for ((loc, _file, identity), outcome) in to_check.into_iter().zip(outcomes) {
             match outcome {
-                CheckOutcome::Stored(StoredOutcome {
-                    mapped,
-                    entry,
-                    import_required,
-                }) => {
-                    self.merge_import_required(import_required);
-                    self.store_body(loc, mapped, identity, entry);
+                CheckOutcome::Stored { contents, entry } => {
+                    self.store_body(loc, contents, identity, entry)
                 }
-                CheckOutcome::InMemory(Ok(checked)) => {
+                CheckOutcome::NotPassed(Ok(checked)) => {
                     errors.append(self.install_checked_body(&loc, checked))
                 }
-                CheckOutcome::InMemory(Err(e)) => errors.append(e),
+                CheckOutcome::NotPassed(Err(e)) => errors.append(e),
             }
         }
 
@@ -824,34 +665,32 @@ impl Program {
         errors.to_result()
     }
 
-    /// Type-checks the bodies `to_check` on the compiler threads, writes each that passes to the file
+    /// Type-checks the bodies `to_check` on the compiler threads, adds each that passes to the file
     /// of its module, and answers what became of each, in the order of `to_check`.
     ///
-    /// A body that passes is written as soon as it is checked, and leaves memory then; the file of
-    /// a module is put in place once the last body of the module is checked. A body the file could
-    /// not take is checked again, to be held in memory.
-    ///
-    /// The bodies a file already held are decoded to see whether they are intact, with the source
-    /// files their spans point into taken from `source_files`, which gains the paths it lacks.
+    /// A body that passes is serialized on the thread that checked it, and its typed expression
+    /// leaves memory then; the file of a module is written once the last body of the module is
+    /// checked. When a file cannot be written, that is reported as a warning, and the bodies of that
+    /// module and of the modules after it are read from the bytes meant for their files.
     fn check_and_write_bodies(
         &self,
         to_check: &[(BodyLocation, Arc<ModuleFile>, EntityIdentity)],
         tc: &TypeCheckContext,
-        source_files: &mut Map<PathBuf, SourceFile>,
     ) -> Vec<CheckOutcome> {
-        let dir = if to_check.is_empty() {
+        let mut dir = if to_check.is_empty() {
             None
         } else {
-            create_typed_modules_dir().filter(|dir| probe_file_creation(dir))
+            create_typed_modules_dir()
         };
         let mut outcomes: Vec<Option<CheckOutcome>> = to_check.iter().map(|_| None).collect();
         let mut unchecked_of_module: Map<Name, usize> = Map::default();
         for (_loc, file, _identity) in to_check {
             *unchecked_of_module.entry(file.module.clone()).or_default() += 1;
         }
-        let mut writing_of_module: Map<Name, ModuleWriting> = Map::default();
-        let mut unwritten: Vec<usize> = vec![];
-        let mut failures: Vec<(Arc<ModuleFile>, io::Error)> = vec![];
+        // The new version of each module's file being built, with the indices in `to_check` of the
+        // bodies added to it.
+        let mut writing_of_module: Map<Name, (ModuleFileWriter, Vec<usize>)> = Map::default();
+        let mut written: Vec<Arc<ModuleFile>> = vec![];
         let nrenv = self.create_name_resolution_env();
         consume_on_compiler_threads(
             (0..to_check.len()).collect(),
@@ -859,78 +698,73 @@ impl Program {
             |i| {
                 let (loc, _file, identity) = &to_check[i];
                 let checked = match self.check_body(loc, &nrenv, tc) {
-                    Ok(checked) if checked.passed() && dir.is_some() => {
-                        CheckedOnThread::Passed(PassedBody {
-                            entry: NewEntry::of(identity.clone(), &checked),
-                            import_required: checked.import_required,
-                        })
+                    Ok(checked) if checked.passed() => {
+                        CheckedOnThread::Passed(NewEntry::of(identity.clone(), &checked))
                     }
-                    checked => CheckedOnThread::InMemory(checked),
+                    checked => CheckedOnThread::NotPassed(checked),
                 };
                 (i, checked)
             },
             |(i, checked)| {
                 let file = &to_check[i].1;
                 match checked {
-                    CheckedOnThread::Passed(body) => {
-                        let dir = dir
-                            .as_deref()
-                            .expect("a body passed to be written with no directory to write in");
-                        writing_of_module
+                    CheckedOnThread::Passed(entry) => {
+                        let (writer, added) = writing_of_module
                             .entry(file.module.clone())
-                            .or_insert_with(|| ModuleWriting::begin(dir, file.clone()))
-                            .add(i, body, source_files);
+                            .or_insert_with(|| (ModuleFileWriter::create(file.clone()), vec![]));
+                        writer.add(entry);
+                        added.push(i);
                     }
-                    CheckedOnThread::InMemory(checked) => {
-                        outcomes[i] = Some(CheckOutcome::InMemory(checked))
+                    CheckedOnThread::NotPassed(checked) => {
+                        outcomes[i] = Some(CheckOutcome::NotPassed(checked))
                     }
                 }
                 let unchecked = unchecked_of_module
                     .get_mut(&file.module)
                     .expect("a body of a module whose bodies were not counted");
                 *unchecked -= 1;
-                if *unchecked == 0 {
-                    if let Some(writing) = writing_of_module.remove(&file.module) {
-                        let written = writing.finish();
-                        for (stored_i, outcome) in written.stored {
-                            outcomes[stored_i] = Some(CheckOutcome::Stored(outcome));
-                        }
-                        unwritten.extend(written.unwritten);
-                        failures.extend(written.failure.map(|e| (file.clone(), e)));
+                if *unchecked > 0 {
+                    return;
+                }
+                let Some((writer, added)) = writing_of_module.remove(&file.module) else {
+                    return;
+                };
+                let (mut record, contents, failure) = writer.finish(dir.as_deref());
+                match failure {
+                    Some(e) => {
+                        warn_unwritable_file(dir.as_deref().unwrap(), file, &e);
+                        dir = None;
                     }
+                    None if dir.is_some() => written.push(file.clone()),
+                    None => {}
+                }
+                let contents = Arc::new(contents);
+                for added_i in added {
+                    let entry = record
+                        .remove(&to_check[added_i].2)
+                        .expect("the new version of a file lacks a body added to it");
+                    outcomes[added_i] = Some(CheckOutcome::Stored {
+                        contents: contents.clone(),
+                        entry,
+                    });
                 }
             },
         );
-        // The modules finish in whatever order their bodies are checked, so the failures are sorted
-        // to be reported in the order of the modules.
-        failures.sort_by(|(lhs, _), (rhs, _)| lhs.module.cmp(&rhs.module));
-        for (file, e) in &failures {
-            let dir = dir
-                .as_deref()
-                .expect("a module file failed to be written with no directory to write in");
-            warn_unwritable_file(dir, file, e);
-        }
-
-        let checked_again =
-            map_on_compiler_threads(unwritten.clone(), tc.num_worker_threads, |i| {
-                self.check_body(&to_check[i].0, &nrenv, tc)
-            });
-        for (i, checked) in unwritten.into_iter().zip(checked_again) {
-            outcomes[i] = Some(CheckOutcome::InMemory(checked));
+        if let (Some(dir), false) = (&dir, written.is_empty()) {
+            remove_stale_files(dir, &written);
         }
         outcomes
             .into_iter()
             .map(|outcome| outcome.expect("a body left unchecked"))
             .collect()
     }
-
-    /// Takes the body at `loc`, of the entity `identity`, as the one the module file `mapped`
+    /// Takes the body at `loc`, of the entity `identity`, as the one the module file of `contents`
     /// records as `entry`: its typed expression is read back from the file when instantiation asks
     /// for it.
     fn store_body(
         &mut self,
         loc: BodyLocation,
-        mapped: Arc<MappedModuleFile>,
+        contents: Arc<ModuleFileContents>,
         identity: EntityIdentity,
         entry: EntityEntry,
     ) {
@@ -938,7 +772,7 @@ impl Program {
         self.typed_modules.stored.insert(
             loc,
             StoredBody {
-                mapped,
+                contents,
                 identity,
                 range: entry.body,
                 warning_facts: entry.warning_facts,
@@ -966,12 +800,12 @@ impl Program {
         }
         let read =
             SourceFile::with_shared_source_files(&mut self.typed_modules.source_files, || {
-                read_body(&stored.mapped.bytes, &stored.range, &stored.identity)
+                read_body(&stored.contents.bytes, &stored.range, &stored.identity)
             });
         let te = match read {
             Ok(te) => te,
             Err(why) => {
-                warn_unreadable_file(&stored.mapped.file.path(), &why);
+                warn_unreadable_file(&stored.contents.file.path(), &why);
                 // The opaque types of the body are already known from the record.
                 let checked = self.check_body(loc, &self.create_name_resolution_env(), tc)?;
                 if checked.diagnostics.has_error() {
@@ -980,15 +814,11 @@ impl Program {
                 if checked.passed() {
                     if let Some(dir) = create_typed_modules_dir() {
                         let stored = &self.typed_modules.stored[loc];
-                        let entry = NewEntry::of(stored.identity.clone(), &checked);
-                        let source_files = &mut self.typed_modules.source_files;
-                        let file = &stored.mapped.file;
-                        let written =
-                            ModuleFileWriter::create(&dir, file.clone()).and_then(|mut writer| {
-                                writer.add(entry, source_files)?;
-                                writer.finish()
-                            });
-                        if let Err(e) = written {
+                        let file = &stored.contents.file;
+                        let mut writer = ModuleFileWriter::create(file.clone());
+                        writer.add(NewEntry::of(stored.identity.clone(), &checked));
+                        let (_record, _contents, failure) = writer.finish(Some(&dir));
+                        if let Some(e) = failure {
                             warn_unwritable_file(&dir, file, &e);
                         }
                     }
