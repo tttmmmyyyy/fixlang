@@ -1011,8 +1011,8 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
 mod tests {
     use super::{
         acted_references, as_arg_projection, gather_leaves_under, held_field_type, origin,
-        origin_of_gathered, rc_units, truncate_to_unit, unit_step, Binding, Origin,
-        UnitStep, VarTable,
+        origin_of_gathered, rc_units, truncate_to_unit, unit_step, Binding, Origin, UnitStep,
+        VarTable,
     };
     use crate::ast::name::FullName;
     use crate::ast::type_env::TypeEnv;
@@ -1341,7 +1341,12 @@ mod tests {
         args: &[RcVar],
         here: &VarPath,
     ) -> Option<Origin> {
-        origin_of_gathered(vars, type_env, &gather_leaves_under(type_env, decl, args, &[]), here)
+        origin_of_gathered(
+            vars,
+            type_env,
+            &gather_leaves_under(type_env, decl, args, &[]),
+            here,
+        )
     }
 
     /// A variable bound by the op that produced the value is the origin of that value.

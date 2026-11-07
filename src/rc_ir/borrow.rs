@@ -436,9 +436,7 @@ impl Versions<'_> {
             .iter()
             .map(|p| {
                 ownership_shape(&p.ty, type_env, &|unit| {
-                    Ownership::owned_if(owns_a_leaf_of_unit(
-                        &owned, &p.name, &p.ty, unit, type_env,
-                    ))
+                    Ownership::owned_if(owns_a_leaf_of_unit(&owned, &p.name, &p.ty, unit, type_env))
                 })
             })
             .collect();
@@ -1107,7 +1105,9 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         // to the union itself, which is where the shape states its ownership.
         units_under(root_ty, path, self.type_env())
             .iter()
-            .all(|unit| shape.at(&truncate_to_unit(root_ty, unit, self.type_env())) == Ownership::Own)
+            .all(|unit| {
+                shape.at(&truncate_to_unit(root_ty, unit, self.type_env())) == Ownership::Own
+            })
     }
 
     /// The reference-count operations a call site takes over: for each argument unit, a release after
