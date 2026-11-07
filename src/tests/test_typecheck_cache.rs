@@ -755,7 +755,7 @@ main = (
         assert_eq!(
             after_edit.len(),
             2,
-            "the cache holds other than one file for each of `Main` and `Main.Sub`: {:?}",
+            "the cache does not hold exactly one file for each of `Main` and `Main.Sub`: {:?}",
             after_edit
         );
     }
