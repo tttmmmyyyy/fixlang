@@ -738,7 +738,8 @@ mod integration_tests {
             }
             lending_copies += 1;
             assert!(
-                body.contains("Main::scaled_sum") && body.contains("#borrow("),
+                body.lines()
+                    .any(|l| l.contains("= Main::scaled_sum") && l.contains("#borrow")),
                 "the copy `{}` hands the array it captured to `scaled_sum`, which should be reached \
                  through its borrow version:\n{}",
                 func_name(header),

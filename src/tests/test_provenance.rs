@@ -347,14 +347,31 @@ mod integration_tests {
         );
     }
 
-    /// How many of the `tally` calls in `main` route to the borrow version, and how many stay on the
-    /// owning one.
+    /// The function a call on a dump line names, from the `=` to the opening parenthesis of its
+    /// arguments, or `None` for a line that binds no call.
+    fn callee_of(line: &str) -> Option<&str> {
+        let (_, rhs) = line.split_once(" = ")?;
+        let (callee, _) = rhs.split_once('(')?;
+        (!callee.contains(' ')).then_some(callee)
+    }
+
+    /// Whether a dump line calls a borrowing version of `Main::tally`, whose name carries the
+    /// `#borrow` tag.
+    fn calls_tally_borrow_version(line: &str) -> bool {
+        callee_of(line).is_some_and(|c| c.starts_with("Main::tally") && c.contains("#borrow"))
+    }
+
+    /// How many of the `tally` calls in `main` route to a borrowing version, and how many stay on
+    /// the owning one.
     fn tally_call_routing(main: &[&str]) -> (usize, usize) {
         let calls = main
             .iter()
             .filter(|l| l.contains("= Main::tally"))
             .collect::<Vec<_>>();
-        let borrow_calls = calls.iter().filter(|l| l.contains("#borrow")).count();
+        let borrow_calls = calls
+            .iter()
+            .filter(|l| calls_tally_borrow_version(l))
+            .count();
         (borrow_calls, calls.len() - borrow_calls)
     }
 
@@ -416,8 +433,7 @@ mod integration_tests {
         // `main` routes its non-tail, owned `tally(arr, ..)` call to the borrow version.
         let main = main_block(&dump);
         assert!(
-            main.iter()
-                .any(|l| l.contains("= Main::tally") && l.contains("#borrow(")),
+            main.iter().any(|l| calls_tally_borrow_version(l)),
             "main should call the tally borrow version:\n{}",
             main.join("\n")
         );
@@ -524,16 +540,27 @@ mod integration_tests {
         );
     }
 
-    /// Verifies that a call keeps the owning version when routing it would borrow an argument at its
-    /// last use: the owning callee frees that argument once it has read a value out of it, which
-    /// leaves the value unique for an update, so borrowing it there costs a copy however much the
-    /// other arguments gain.
+    /// Verifies that a call owns an argument at its last use and borrows the one beside it the
+    /// caller reads afterwards: the version it reaches takes `rows` owned, so the callee frees `rows`
+    /// once it has read a value out of it and that value stays unique for an update, and takes `key`
+    /// borrowed, so the caller makes no retain for it.
     #[test]
-    fn test_benefit_routing_keeps_a_last_use_owned_beside_a_benefit() {
-        assert_tally_routing(
-            "benefit_last_use_beside_a_benefit",
-            (0, 1),
-            "the call handed an array at its last use should stay on the own version",
+    fn test_benefit_routing_owns_a_last_use_beside_a_borrow() {
+        let (_temp_dir, project_dir) = setup_test_env("benefit_last_use_beside_a_benefit");
+        let dump = emit_main_rc_ir(&project_dir);
+        let main = main_block(&dump);
+        assert_eq!(
+            tally_call_routing(&main),
+            (1, 0),
+            "the call should route to a borrowing version:\n{}",
+            main.join("\n")
+        );
+        let tally_sig = sig_line(&dump, "fn Main::tally", |n| n.contains("#borrow"));
+        assert!(
+            tally_sig.contains("Std::Array (Std::Array Std::I64) [arg1] {own}")
+                && tally_sig.contains("Std::Array Std::I64 [arg2] {borrow}"),
+            "the version the call reaches should own `rows` and borrow `key`:\n{}",
+            tally_sig
         );
     }
 
@@ -623,12 +650,11 @@ mod integration_tests {
         );
     }
 
-    /// The first argument variable of a `...#borrow(a, b, ...)` call on a dump line.
-    fn borrow_call_first_arg(line: &str) -> &str {
-        let args = line
-            .split("#borrow(")
-            .nth(1)
-            .unwrap_or_else(|| panic!("the line carries no `#borrow(` call:\n{}", line));
+    /// The first argument variable of a call on a dump line.
+    fn call_first_arg(line: &str) -> &str {
+        let (_, args) = line
+            .split_once('(')
+            .unwrap_or_else(|| panic!("the line carries no call:\n{}", line));
         args.split([',', ')']).next().unwrap().trim()
     }
 
@@ -643,9 +669,9 @@ mod integration_tests {
         let main = main_block(&dump);
         let call = main
             .iter()
-            .find(|l| l.contains("= Main::tally") && l.contains("#borrow("))
+            .find(|l| calls_tally_borrow_version(l))
             .expect("main should call the tally borrow version");
-        let arr = borrow_call_first_arg(call);
+        let arr = call_first_arg(call);
 
         // Borrow-ification brackets the borrow call with a retain before it and a release after it;
         // because nothing between them consumes the array, cancellation removes both, leaving no
