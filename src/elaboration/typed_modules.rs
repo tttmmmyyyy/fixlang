@@ -14,10 +14,11 @@
 // A build reads the record of every module and type-checks only the bodies the record lacks. It
 // reads a typed expression back only when instantiation asks for it, from the file it found the
 // body in, which it keeps mapped into memory (`ModuleFileContents`). When the check passes bodies
-// the record lacked, the file is written anew (`ModuleFileWriter`): the bodies it holds are copied
-// as they are, at the same offsets, and each new body follows them. A new body is serialized as soon
-// as it passes, so that its typed expression leaves memory then, and the file is written once the
-// last body of the module is checked. When instantiation finds a body that the file fails to hold,
+// the record lacked, a new version of the file is built in memory (`NewModuleFile`): the bodies the
+// file holds are copied as they are, at the same offsets, and each new body follows them. A new body
+// is serialized as soon as it passes, so that its typed expression leaves memory then, and the new
+// version is written in place of the file once the last body of the module is checked
+// (`write_module_file`). When instantiation finds a body that the file fails to hold,
 // it checks the body again and writes it the same way, after the bodies the file holds.
 //
 // The record is valid because a body is determined by its `EntityIdentity` together with what the
@@ -367,7 +368,7 @@ struct ModuleFileContents {
 /// The new version of a module's file, built in memory while the bodies of the module are checked.
 /// It begins with the bodies the file held, at the offsets they had, and each body `add`ed follows
 /// them; `finish` puts the record and the footer after the bodies.
-struct ModuleFileWriter {
+struct NewModuleFile {
     /// The module whose file the new version replaces.
     module: Name,
     /// The bodies the new version holds so far, serialized as the file holds them.
@@ -378,28 +379,28 @@ struct ModuleFileWriter {
     record: ModuleRecord,
 }
 
-impl ModuleFileWriter {
+impl NewModuleFile {
     /// Begins a new version of `file` with the bodies the file holds now, so that the bodies another
     /// build added to it since this build read its record are kept. A file that cannot be read, or
     /// does not decode as the file of a type-checked module, is begun anew, since the new version
     /// replaces it either way.
     fn begin(file: &ModuleFile) -> Self {
-        let mut writer = ModuleFileWriter {
+        let mut new_file = NewModuleFile {
             module: file.module.clone(),
             bodies: vec![],
             held_end: 0,
             record: ModuleRecord::default(),
         };
         let Ok(Some(held)) = map_file(&file.path()) else {
-            return writer;
+            return new_file;
         };
         let Ok((record, bodies_end)) = decode_module_file(&held) else {
-            return writer;
+            return new_file;
         };
-        writer.bodies = held[..bodies_end as usize].to_vec();
-        writer.held_end = bodies_end;
-        writer.record = record;
-        writer
+        new_file.bodies = held[..bodies_end as usize].to_vec();
+        new_file.held_end = bodies_end;
+        new_file.record = record;
+        new_file
     }
 
     /// Adds `entry` after the bodies so far. A body the file held under the same identity is
@@ -687,7 +688,7 @@ impl Program {
         }
         // The new version of each module's file being built, with the indices in `to_check` of the
         // bodies added to it.
-        let mut writing_of_module: Map<Name, (ModuleFileWriter, Vec<usize>)> = Map::default();
+        let mut new_file_of_module: Map<Name, (NewModuleFile, Vec<usize>)> = Map::default();
         let mut written: Vec<Arc<ModuleFile>> = vec![];
         let nrenv = self.create_name_resolution_env();
         consume_on_compiler_threads(
@@ -707,10 +708,10 @@ impl Program {
                 let file = &to_check[i].1;
                 match checked {
                     CheckedOnThread::Passed(entry) => {
-                        let (writer, added) = writing_of_module
+                        let (new_file, added) = new_file_of_module
                             .entry(file.module.clone())
-                            .or_insert_with(|| (ModuleFileWriter::begin(file), vec![]));
-                        writer.add(entry);
+                            .or_insert_with(|| (NewModuleFile::begin(file), vec![]));
+                        new_file.add(entry);
                         added.push(i);
                     }
                     CheckedOnThread::NotPassed(checked) => {
@@ -724,10 +725,10 @@ impl Program {
                 if *unchecked > 0 {
                     return;
                 }
-                let Some((writer, added)) = writing_of_module.remove(&file.module) else {
+                let Some((new_file, added)) = new_file_of_module.remove(&file.module) else {
                     return;
                 };
-                let (mut record, bytes) = writer.finish();
+                let (mut record, bytes) = new_file.finish();
                 let bytes = match &dir {
                     Some(dir) if !write_failed => match write_module_file(dir, file, &bytes) {
                         Ok(mapped) => {
@@ -823,9 +824,9 @@ impl Program {
                     if let Some(dir) = create_typed_modules_dir() {
                         let stored = &self.typed_modules.stored[loc];
                         let file = &stored.contents.file;
-                        let mut writer = ModuleFileWriter::begin(file);
-                        writer.add(NewEntry::of(stored.identity.clone(), &checked));
-                        let (_record, bytes) = writer.finish();
+                        let mut new_file = NewModuleFile::begin(file);
+                        new_file.add(NewEntry::of(stored.identity.clone(), &checked));
+                        let (_record, bytes) = new_file.finish();
                         if let Err(e) = write_module_file(&dir, file, &bytes) {
                             warn_unwritable_file(&dir, file, &e);
                         }
