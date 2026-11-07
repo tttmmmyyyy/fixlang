@@ -458,9 +458,9 @@ mod integration_tests {
         );
     }
 
-    /// Verifies that the benefit routing weighs reads the code after the match a call's branch ends
-    /// in: an array read again after an `if` is not at its last use at a call that ends a branch of
-    /// that `if`, so the call is routed to the borrow version.
+    /// Verifies that the benefit routing reads the code after the match whose branch a call ends: an
+    /// array read again after an `if` is not at its last use at a call that ends a branch of that
+    /// `if`, so the call is routed to the borrow version.
     #[test]
     fn test_benefit_routing_reads_past_the_match() {
         assert_tally_routing(
@@ -470,7 +470,7 @@ mod integration_tests {
         );
     }
 
-    /// Verifies that the benefit routing reads past every match a call's branch ends in, out to the
+    /// Verifies that the benefit routing reads past every match whose branch a call ends, out to the
     /// outermost: an array read again only after the outer of two nested `if`s is not at its last
     /// use at a call that ends a branch of the inner one, so the call is routed to the borrow
     /// version.
@@ -483,10 +483,10 @@ mod integration_tests {
         );
     }
 
-    /// Verifies that the benefit routing reads the lifetime of the object an argument refers to past
-    /// the match the call's branch ends in: a leaf read out of an aggregate the caller uses again
-    /// after the `if` is a reference this function made for the call, so the call is routed to the
-    /// borrow version.
+    /// Verifies that the benefit routing follows the lifetime of an argument's object past the match
+    /// whose branch the call ends: a leaf read out of an aggregate the caller uses again after the
+    /// `if` is a reference this function made for the call, so the call is routed to the borrow
+    /// version.
     #[test]
     fn test_benefit_routing_by_the_objects_lifetime_past_the_match() {
         assert_tally_routing(

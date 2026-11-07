@@ -810,8 +810,8 @@ impl<'a> RewriteCtx<'a> {
         self.rewrite_in(node, None)
     }
 
-    /// Rewrite `node`, which `enclosing` runs after: the continuations of the matches whose arms
-    /// hold it.
+    /// Rewrite `node`. `enclosing` is the code that runs once `node` returns: the continuations of
+    /// the matches whose arms hold `node`, or `None` at the top of the body.
     fn rewrite_in(&self, node: &RcExprNode, enclosing: Option<&After>) -> RcExprNode {
         grow_stack(|| self.rewrite_inner(node, enclosing))
     }
@@ -1067,7 +1067,10 @@ impl<'a> RewriteCtx<'a> {
 /// each match whose arm holds that point, innermost first. An arm's result is the match's binding,
 /// so control goes on into the match's continuation once the arm ends.
 struct After<'b> {
+    /// The continuation at this point.
     k: &'b RcExprNode,
+    /// The code that runs once `k` returns: the continuations of the matches whose arms hold this
+    /// point, or `None` at the top of the body.
     enclosing: Option<&'b After<'b>>,
 }
 
