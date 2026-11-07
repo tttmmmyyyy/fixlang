@@ -276,17 +276,13 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
     match alias_step(vars, type_env, var, path) {
         AliasStep::Stops => Origin::Exactly(here),
         AliasStep::Projects((source, source_path)) => origin(vars, type_env, &source, &source_path),
-        AliasStep::Gathers {
-            operand_units,
-            produced_here,
-        } => {
+        AliasStep::Gathers(gathered) => {
             // The leaves beneath name no object only for a value that holds no reference: either the
             // path covers no boxed leaf, or every leaf beneath it is `⊥`, which an operation
             // declares for the variants a union does not have and for the result of one that
             // aborts. Taking the value for its own object is safe there, since a release is keyed to
             // a reference and none is keyed to this answer.
-            origin_of_gathered(vars, type_env, &operand_units, produced_here, &here)
-                .unwrap_or(Origin::Exactly(here))
+            origin_of_gathered(vars, type_env, &gathered, &here).unwrap_or(Origin::Exactly(here))
         }
         AliasStep::Joins(arm_results) => {
             // The arms bind their values to one variable, so a path into it is a path into each of
@@ -317,15 +313,18 @@ pub(crate) enum AliasStep {
     Projects(VarPath),
     /// The value is a `Builtin` op's result whose leaves beneath the path the op declares one by one,
     /// rather than as a projection of one operand.
-    Gathers {
-        /// The operand units those leaves project out of, each as the operand and the unit path.
-        operand_units: Set<VarPath>,
-        /// Whether some leaf beneath the path is produced by the op rather than projected.
-        produced_here: bool,
-    },
+    Gathers(Gathered),
     /// The value is a match binding, which receives the value at this path of whichever arm result
     /// the path taken returns: one entry per arm.
     Joins(Vec<VarPath>),
+}
+
+/// Where the leaves beneath a path of a `Builtin` op's result come from (`gather_leaves_under`).
+pub(crate) struct Gathered {
+    /// The operand units those leaves project out of, each as the operand and the unit path.
+    pub(crate) operand_units: Set<VarPath>,
+    /// Whether some leaf beneath the path is produced by the op rather than projected.
+    pub(crate) produced_here: bool,
 }
 
 /// The alias edge the binding of `var` offers at `path`.
@@ -359,7 +358,7 @@ pub(crate) fn alias_step(
             // unboxed union itself, whose provenance is declared on the leaves of its variants.
             match decl.leaf_origins_at(path).and_then(as_arg_projection) {
                 Some((j, p)) => AliasStep::Projects((args[j].name.clone(), p)),
-                None => gather_leaves_under(type_env, &decl, args, path),
+                None => AliasStep::Gathers(gather_leaves_under(type_env, &decl, args, path)),
             }
         }
         Some(Binding::Field(container, idx)) => {
@@ -406,7 +405,7 @@ fn gather_leaves_under(
     decl: &Provenance,
     args: &[RcVar],
     path: &[usize],
-) -> AliasStep {
+) -> Gathered {
     // The leaves of one unit usually project out of one operand unit, so the operand units are
     // gathered before any of them is followed back: resolving each distinct one once keeps a chain
     // of aliases from being walked once per leaf.
@@ -427,14 +426,13 @@ fn gather_leaves_under(
             }
         }
     }
-    AliasStep::Gathers {
+    Gathered {
         operand_units,
         produced_here,
     }
 }
 
-/// The object a value denotes, from the operand units its leaves project out of and whether any of
-/// them is produced here (`AliasStep::Gathers`).
+/// The object a value denotes, from where its leaves come from (`Gathered`).
 ///
 /// Leaves that all reach one origin make this value an alias of it, so the answer is that origin
 /// whole, identity included — the same answer a leaf that is a plain projection gets. Where the
@@ -457,17 +455,17 @@ fn gather_leaves_under(
 fn origin_of_gathered(
     vars: &VarTable,
     type_env: &TypeEnv,
-    operand_units: &Set<VarPath>,
-    produced_here: bool,
+    gathered: &Gathered,
     here: &VarPath,
 ) -> Option<Origin> {
     // The origins the leaves reach: one per operand unit, plus this value itself where a leaf was
     // produced here rather than projected.
-    let mut reached: Vec<Origin> = operand_units
+    let mut reached: Vec<Origin> = gathered
+        .operand_units
         .iter()
         .map(|(operand, unit)| origin(vars, type_env, operand, unit))
         .collect();
-    if produced_here {
+    if gathered.produced_here {
         reached.push(Origin::Exactly(here.clone()));
     }
     let first = reached.first()?;
@@ -1012,7 +1010,7 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
 mod tests {
     use super::{
         acted_references, as_arg_projection, gather_leaves_under, held_field_type, origin,
-        origin_of_gathered, rc_units, truncate_to_unit, unit_step, AliasStep, Binding, Origin,
+        origin_of_gathered, rc_units, truncate_to_unit, unit_step, Binding, Origin,
         UnitStep, VarTable,
     };
     use crate::ast::name::FullName;
@@ -1342,14 +1340,7 @@ mod tests {
         args: &[RcVar],
         here: &VarPath,
     ) -> Option<Origin> {
-        let AliasStep::Gathers {
-            operand_units,
-            produced_here,
-        } = gather_leaves_under(type_env, decl, args, &[])
-        else {
-            unreachable!("`gather_leaves_under` answers with the leaves it gathers")
-        };
-        origin_of_gathered(vars, type_env, &operand_units, produced_here, here)
+        origin_of_gathered(vars, type_env, &gather_leaves_under(type_env, decl, args, &[]), here)
     }
 
     /// A variable bound by the op that produced the value is the origin of that value.
