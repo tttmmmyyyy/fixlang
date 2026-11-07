@@ -311,6 +311,17 @@ pub enum Ownership {
     Borrow,
 }
 
+impl Ownership {
+    /// `Own` where `owned` holds, else `Borrow`.
+    pub fn owned_if(owned: bool) -> Ownership {
+        if owned {
+            Ownership::Own
+        } else {
+            Ownership::Borrow
+        }
+    }
+}
+
 /// The ownership of one argument, shaped like the value.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum OwnershipShape {

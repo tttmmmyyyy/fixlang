@@ -69,6 +69,33 @@ impl OwnedLeaves {
     fn owns(&self, var: &FullName, path: &FieldPath) -> bool {
         self.0.contains(&(var.clone(), path.clone()))
     }
+
+    /// Whether the unit `unit` of the parameter `var`, of type `ty`, is owned
+    /// (`owns_a_leaf_of_unit`).
+    fn owns_unit(
+        &self,
+        var: &FullName,
+        ty: &Arc<TypeNode>,
+        unit: &FieldPath,
+        type_env: &TypeEnv,
+    ) -> bool {
+        owns_a_leaf_of_unit(&self.0, var, ty, unit, type_env)
+    }
+}
+
+/// Whether `owned_leaves` holds a leaf of the parameter `var`, of type `ty`, that truncates to
+/// `unit`. A unit is owned once any of its leaves is.
+fn owns_a_leaf_of_unit(
+    owned_leaves: &Set<VarPath>,
+    var: &FullName,
+    ty: &Arc<TypeNode>,
+    unit: &FieldPath,
+    type_env: &TypeEnv,
+) -> bool {
+    boxed_leaf_paths(ty, type_env).iter().any(|leaf| {
+        truncate_to_unit(ty, leaf, type_env) == *unit
+            && owned_leaves.contains(&(var.clone(), leaf.clone()))
+    })
 }
 
 /// Infer parameter ownership for every function of `prog` by a fixed point: start every parameter
@@ -419,17 +446,10 @@ impl Versions<'_> {
             .params
             .iter()
             .map(|p| {
-                let leaves = boxed_leaf_paths(&p.ty, type_env);
                 ownership_shape(&p.ty, type_env, &|unit| {
-                    let owns_a_leaf = leaves.iter().any(|leaf| {
-                        truncate_to_unit(&p.ty, leaf, type_env) == *unit
-                            && owned.contains(&(p.name.clone(), leaf.clone()))
-                    });
-                    if owns_a_leaf {
-                        Ownership::Own
-                    } else {
-                        Ownership::Borrow
-                    }
+                    Ownership::owned_if(owns_a_leaf_of_unit(
+                        &owned, &p.name, &p.ty, unit, type_env,
+                    ))
                 })
             })
             .collect();
@@ -474,11 +494,7 @@ pub fn param_ownership_shapes(
     for func in prog.funcs.values() {
         for p in func.params.iter().chain(func.capture.iter()) {
             let shape = ownership_shape(&p.ty, type_env, &|unit| {
-                if owned_units.contains(&(p.name.clone(), unit.clone())) {
-                    Ownership::Own
-                } else {
-                    Ownership::Borrow
-                }
+                Ownership::owned_if(owned_units.contains(&(p.name.clone(), unit.clone())))
             });
             shapes.insert(p.name.clone(), shape);
         }
@@ -789,14 +805,9 @@ fn trivially_returns(k: &RcExprNode, x: &FullName) -> bool {
 /// The per-version state the body rewrite reads: this version's variables, the ownership its key
 /// gives its parameters, its tail calls, and the versions every call is routed among.
 struct RewriteCtx<'a, 'v> {
-    /// The type definitions, for resolving a value's type to its reference-counting units.
-    type_env: &'a TypeEnv,
     /// The ownership this version's key gives each of its parameters, by the parameter's name. A
     /// capture is owned at every unit, since no function taking one gets a borrowing version.
     param_ownership: Map<FullName, OwnershipShape>,
-    /// Whether this version borrows any parameter unit. The all-`Own` original keeps every
-    /// reference-count node it was given.
-    borrows_any: bool,
     /// The versions every call of this body is routed among, which a call adds to.
     versions: &'v mut Versions<'a>,
     /// The bindings of this version's tail-position calls and matches. No after-call release may
@@ -817,18 +828,36 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         body: &RcExprNode,
         versions: &'v mut Versions<'a>,
     ) -> RewriteCtx<'a, 'v> {
+        assert_eq!(
+            params.len(),
+            key.len(),
+            "a key of {} shapes names a version of a function of {} parameters",
+            key.len(),
+            params.len()
+        );
         RewriteCtx {
-            type_env: versions.type_env,
             param_ownership: params
                 .iter()
                 .map(|p| p.name.clone())
                 .zip(key.iter().cloned())
                 .collect(),
-            borrows_any: key.iter().any(OwnershipShape::borrows_any),
             versions,
             tail: tail_result_vars(body),
             vars,
         }
+    }
+
+    /// The type definitions, for resolving a value's type to its reference-counting units.
+    fn type_env(&self) -> &'a TypeEnv {
+        self.versions.type_env
+    }
+
+    /// Whether this version borrows any parameter unit. The all-`Own` original keeps every
+    /// reference-count node it was given.
+    fn borrows_any(&self) -> bool {
+        self.param_ownership
+            .values()
+            .any(OwnershipShape::borrows_any)
     }
 
     /// Rewrite a body for this version: route each direct call to a callee version, bracket a call
@@ -962,12 +991,11 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
             .iter()
             .zip(args)
             .map(|(p, arg)| {
-                ownership_shape(&p.ty, self.type_env, &|unit| {
+                ownership_shape(&p.ty, self.type_env(), &|unit| {
                     let inferred_owned =
-                        boxed_leaf_paths(&p.ty, self.type_env).iter().any(|leaf| {
-                            truncate_to_unit(&p.ty, leaf, self.type_env) == *unit
-                                && self.versions.owned_leaves.owns(&p.name, leaf)
-                        });
+                        self.versions
+                            .owned_leaves
+                            .owns_unit(&p.name, &p.ty, unit, self.type_env());
                     let ends_at_the_call = || {
                         self.owns_unit(arg, unit)
                             && !self.held_after(
@@ -976,11 +1004,7 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
                                 &mut Map::default(),
                             )
                     };
-                    if inferred_owned || ends_at_the_call() {
-                        Ownership::Own
-                    } else {
-                        Ownership::Borrow
-                    }
+                    Ownership::owned_if(inferred_owned || ends_at_the_call())
                 })
             })
             .collect()
@@ -1006,7 +1030,7 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         }
         let (var, path) = value;
         let answer = after.uses(var)
-            || match alias_step(&self.vars, self.type_env, var, path) {
+            || match alias_step(self.vars, self.type_env(), var, path) {
                 AliasStep::Stops => false,
                 AliasStep::Projects(source) => self.held_after(&source, after, held),
                 AliasStep::Gathers {
@@ -1021,9 +1045,16 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
                             .iter()
                             .all(|operand_unit| self.held_after(operand_unit, after, held))
                 }
-                AliasStep::Joins(arm_results) => arm_results
-                    .iter()
-                    .all(|arm_result| self.held_after(arm_result, after, held)),
+                AliasStep::Joins(arm_results) => {
+                    assert!(
+                        !arm_results.is_empty(),
+                        "the match binding `{}` joins no arm result",
+                        var.to_string()
+                    );
+                    arm_results
+                        .iter()
+                        .all(|arm_result| self.held_after(arm_result, after, held))
+                }
             };
         held.insert(value.clone(), answer);
         answer
@@ -1034,7 +1065,7 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     /// that comes from a borrowed parameter is not. A leaf that may be one of several objects is
     /// owned only when it is owned whichever it is.
     fn owns_unit(&self, arg: &RcVar, unit: &FieldPath) -> bool {
-        origin(&self.vars, self.type_env, &arg.name, unit)
+        origin(self.vars, self.type_env(), &arg.name, unit)
             .candidates()
             .iter()
             .all(|(root, path)| self.owns_object(root, path))
@@ -1052,11 +1083,11 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     /// Only a borrowing version needs checking. The all-`Own` original owns every parameter and
     /// capture unit, so `owns_object` is true of each of its objects.
     fn check_ownership_is_levelled(&self, func: &RcFunc) {
-        if !self.borrows_any {
+        if !self.borrows_any() {
             return;
         }
-        for (v, unit) in levelled_sites(func, self.type_env) {
-            let where_from = origin(&self.vars, self.type_env, &v.name, &unit);
+        for (v, unit) in levelled_sites(func, self.type_env()) {
+            let where_from = origin(self.vars, self.type_env(), &v.name, &unit);
             let mut answers = where_from
                 .candidates()
                 .into_iter()
@@ -1089,9 +1120,9 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         // The value is owned only when every reference-counting unit the path covers is owned. Each
         // covered path is truncated to its unit, so a path that descends into a union variant keys
         // to the union itself, which is where the shape states its ownership.
-        units_under(root_ty, path, self.type_env)
+        units_under(root_ty, path, self.type_env())
             .iter()
-            .all(|unit| shape.at(&truncate_to_unit(root_ty, unit, self.type_env)) == Ownership::Own)
+            .all(|unit| shape.at(&truncate_to_unit(root_ty, unit, self.type_env())) == Ownership::Own)
     }
 
     /// The reference-count operations a call site takes over: for each argument unit, a release after
@@ -1109,7 +1140,7 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         let mut before = vec![];
         let mut after = vec![];
         for (arg_idx, arg) in args.iter().enumerate() {
-            for unit in rc_units(&arg.ty, self.type_env) {
+            for unit in rc_units(&arg.ty, self.type_env()) {
                 let callee_owns = key.map_or(true, |key| key[arg_idx].at(&unit) == Ownership::Own);
                 let arg_owned = self.owns_unit(arg, &unit);
                 if !callee_owns && arg_owned {
@@ -1135,10 +1166,10 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         source: &Option<Span>,
     ) -> RcExprNode {
         let k = self.rewrite_in(k, enclosing);
-        if !self.borrows_any {
+        if !self.borrows_any() {
             return rc_node(is_release, v.clone(), path.clone(), state, k, source);
         }
-        let kept: Vec<FieldPath> = units_under(&v.ty, path, self.type_env)
+        let kept: Vec<FieldPath> = units_under(&v.ty, path, self.type_env())
             .into_iter()
             .filter(|unit| self.owns_unit(v, unit))
             .collect();
