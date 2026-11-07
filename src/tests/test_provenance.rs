@@ -564,6 +564,68 @@ mod integration_tests {
         );
     }
 
+    /// Verifies that two calls of one function lending different arguments reach two versions:
+    /// the call at `rows`'s last use reaches a version owning `rows` and borrowing `key`, and the
+    /// call at `key`'s last use reaches one borrowing `rows` and owning `key`.
+    #[test]
+    fn test_benefit_routing_gives_each_lent_set_its_own_version() {
+        let (_temp_dir, project_dir) = setup_test_env("benefit_two_calls_two_versions");
+        let dump = emit_main_rc_ir(&project_dir);
+        let main = main_block(&dump);
+        let callees: Vec<&str> = main
+            .iter()
+            .filter(|l| calls_tally_borrow_version(l))
+            .filter_map(|l| callee_of(l))
+            .collect();
+        assert!(
+            callees.len() == 2 && callees[0] != callees[1],
+            "the two calls should reach two different borrowing versions:\n{}",
+            main.join("\n")
+        );
+        for (rows, key) in [("own", "borrow"), ("borrow", "own")] {
+            let rows_param = format!("Std::Array (Std::Array Std::I64) [arg1] {{{}}}", rows);
+            let key_param = format!("Std::Array Std::I64 [arg2] {{{}}}", key);
+            assert!(
+                dump.lines().any(|l| {
+                    is_sig(l, "fn Main::tally", &|n: &str| n.contains("#borrow"))
+                        && l.contains(&rows_param)
+                        && l.contains(&key_param)
+                }),
+                "a borrowing version should take `rows` {} and `key` {}:\n{}",
+                rows,
+                key,
+                dump
+            );
+        }
+    }
+
+    /// Verifies that the routing lends a field of a match binding only when the object is held
+    /// after the call whichever arm the match takes: the call whose `env` may be `e1` or `e2`, both
+    /// read afterwards, routes to the borrow version, and the call whose `env2` may be `f2`, which
+    /// nothing reads afterwards, keeps the owning version.
+    #[test]
+    fn test_benefit_routing_holds_every_arm_of_a_match_binding() {
+        assert_tally_routing(
+            "benefit_field_of_a_join_held_on_one_arm",
+            (1, 1),
+            "the call whose array is held after it on both arms should route to the borrow version, \
+             and the call whose array ends there on one arm should stay on the own version",
+        );
+    }
+
+    /// Verifies that the routing finds an argument's object held after the call through an unboxed
+    /// union built around it: the union `Slot::full(arr)` is named nowhere after the call, but `arr`
+    /// is, so the call is routed to the borrow version.
+    #[test]
+    fn test_benefit_routing_reads_through_a_union_built_for_the_call() {
+        assert_tally_routing(
+            "benefit_union_built_for_the_call",
+            (1, 0),
+            "the call handed a union holding an array read after it should route to the borrow \
+             version",
+        );
+    }
+
     /// Verifies that a call ending a branch of a match keeps the owning version when nothing after
     /// the match names its argument: the call is the array's last use, and borrowing there would
     /// only delay the release.
