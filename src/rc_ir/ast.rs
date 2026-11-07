@@ -94,8 +94,8 @@ pub struct RcFunc {
     pub source: Option<Span>,
     /// The reference-counting units this version borrows among its parameters and capture — the units
     /// it does not own, one `(parameter-name, unit-path)` each. Everything not listed is owned, so the
-    /// empty set is the all-owning default. Borrow-ification writes it: an original version borrows
-    /// nothing, a borrow version borrows its inferred read-only units.
+    /// empty set is the all-owning default. Borrow-ification writes it: a version borrows the units
+    /// its key marks `Borrow`, and the all-`Own` original borrows nothing.
     ///
     /// The empty default is correct at every stage — before borrow-ification every parameter is owned
     /// (the discipline `insert_rc` establishes), and a version that owns everything borrows nothing.
