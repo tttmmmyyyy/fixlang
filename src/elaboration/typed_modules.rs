@@ -683,7 +683,7 @@ impl Program {
         to_check: &[(BodyLocation, Arc<ModuleFile>, EntityIdentity)],
         tc: &TypeCheckContext,
     ) -> Vec<CheckOutcome> {
-        let mut dir = if to_check.is_empty() {
+        let mut dir_to_write = if to_check.is_empty() {
             None
         } else {
             create_typed_modules_dir()
@@ -735,13 +735,13 @@ impl Program {
                 let Some((writer, added)) = writing_of_module.remove(&file.module) else {
                     return;
                 };
-                let (mut record, contents, failure) = writer.finish(dir.as_deref());
+                let (mut record, contents, failure) = writer.finish(dir_to_write.as_deref());
                 match failure {
                     Some(e) => {
-                        warn_unwritable_file(dir.as_deref().unwrap(), file, &e);
-                        dir = None;
+                        warn_unwritable_file(dir_to_write.as_deref().unwrap(), file, &e);
+                        dir_to_write = None;
                     }
-                    None if dir.is_some() => written.push(file.clone()),
+                    None if dir_to_write.is_some() => written.push(file.clone()),
                     None => {}
                 }
                 let contents = Arc::new(contents);
@@ -756,7 +756,7 @@ impl Program {
                 }
             },
         );
-        if let (Some(dir), false) = (&dir, written.is_empty()) {
+        if let (Some(dir), false) = (&dir_to_write, written.is_empty()) {
             remove_stale_files(dir, &written);
         }
         outcomes
