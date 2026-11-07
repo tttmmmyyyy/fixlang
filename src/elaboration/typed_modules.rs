@@ -658,8 +658,8 @@ impl Program {
     /// leaves memory then; the file of a module is written once the last body of the module is
     /// checked. When a file cannot be written, that is reported as a warning, no file is written
     /// after it, and the bodies of that module and of the modules after it are read from the bytes
-    /// meant for their files. The temporary files that builds which were killed left in the
-    /// directory are removed first.
+    /// meant for their files. First, the temporary files left in the directory by killed builds are
+    /// removed.
     fn check_and_write_bodies(
         &self,
         to_check: &[(BodyLocation, Arc<ModuleFile>, EntityIdentity)],
@@ -847,9 +847,8 @@ mod tests {
         );
     }
 
-    /// A name that begins with the prefix of a module's files but is longer than the names of
-    /// those files is the name of no file of the module, while the name of the module's file under
-    /// another hash is.
+    /// Verifies that the module's file name under another hash counts as a file of the module, and
+    /// a longer name that begins with the same prefix does not.
     #[test]
     fn a_name_longer_than_a_module_file_name_is_no_file_of_the_module() {
         let file = ModuleFile {
