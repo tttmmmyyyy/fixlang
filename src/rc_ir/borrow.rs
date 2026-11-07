@@ -880,7 +880,9 @@ impl<'a> RewriteCtx<'a> {
             name: callee.name.clone(),
         };
         if let Some(borrow_version) = self.borrow_versions.get(&orig) {
-            if self.routing_is_safe(x, args) && self.routing_saves_retain(borrow_version, args, after) {
+            if self.routing_is_safe(x, args)
+                && self.routing_saves_retain(borrow_version, args, after)
+            {
                 let mut routed = callee.clone();
                 routed.name = borrow_version.name.clone();
                 return routed;
