@@ -1,5 +1,5 @@
-//! Ownership at the granularity borrow-ification decides it: one parameter whose reference-counting
-//! units are owned and borrowed separately.
+//! Ownership at the granularity borrow-ification decides it, the reference-counting unit: one
+//! parameter whose units are owned and borrowed separately, and one unit holding two parameters.
 
 #[cfg(test)]
 mod borrow_unit_ownership_tests {
@@ -72,6 +72,50 @@ mod borrow_unit_ownership_tests {
                 assert_eq(|_|"the middle unit was taken", m.@(0), 70);;
                 assert_eq(|_|"the source keeps its middle unit", t.@y.@(0), 5);;
                 assert_eq(|_|"the whole answer", s1 + m.@(0) + t.@y.@(0), 153);;
+                pure()
+            );
+        "#;
+        test_source(source, Configuration::develop_mode());
+    }
+
+    /// A version owns both parameters whose objects one reference-counting unit of its body holds,
+    /// when the call reaching it lends only one of them.
+    ///
+    /// `tally` only reads its two arrays, so both are borrowable, and it puts them into one unboxed
+    /// union, whose single unit holds a reference from each. The call in `main` lends `a0`, which it
+    /// reads afterwards, and passes `b0` at its last use. A version borrowing `a` and owning `b`
+    /// would have to answer once for the union's unit, which is wrong for one of the two arrays:
+    /// leaving out the release frees nothing of `b`, and keeping it releases `a`, which the caller
+    /// still holds. So the version reached owns both.
+    #[test]
+    pub fn test_a_unit_holding_a_lent_and_an_owned_argument_is_owned() {
+        let source = r#"
+            module Main;
+
+            // One reference-counting unit holding two arrays.
+            type Pair = unbox union { pair : (Array I64, Array I64), none : () };
+
+            // Reads both arrays of the pair. Recursive, so the inliner leaves it a call.
+            peek : Pair -> I64 -> I64;
+            peek = |s, n| (
+                if n == 0 { s.as_pair.@0.@(0) + s.as_pair.@1.@(0) };
+                peek(s, n - 1)
+            );
+
+            // Reads `a` and `b` through a pair built of both.
+            tally : Array I64 -> Array I64 -> I64 -> I64;
+            tally = |a, b, i| (
+                if i == 0 { 0 };
+                let s = Pair::pair((a, b));
+                peek(s, 2) + tally(a, b, i - 1)
+            );
+
+            main : IO ();
+            main = (
+                let a0 = Array::fill(3, 1);
+                let b0 = Array::fill(3, 2);
+                let t = tally(a0, b0, 2);
+                assert_eq(|_|"the sums, then the lent array", t + a0.@(0), 7);;
                 pure()
             );
         "#;
