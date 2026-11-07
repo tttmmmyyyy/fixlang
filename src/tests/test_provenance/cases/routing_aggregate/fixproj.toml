@@ -1,5 +1,5 @@
 [general]
-name = "prov-benefit-after-match"
+name = "prov-routing-aggregate"
 version = "0.1.0"
 
 [build]
