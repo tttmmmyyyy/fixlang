@@ -272,26 +272,81 @@ pub(crate) fn origin(
 /// One step of `origin`: the alias edge the variable's binding offers, followed to the object at the
 /// far end, or the variable itself where the chain stops.
 fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usize]) -> Origin {
-    let here = || Origin::Exactly((var.clone(), path.to_vec()));
-    match vars.bindings.get(var) {
-        // A name the table does not bind is a global — a function a direct call names, or a global
-        // value read as an atom. No variable of this function aliases one, so it is its own origin,
-        // as a parameter and a producer are.
-        None | Some(Binding::Param) | Some(Binding::Producer) => here(),
-        Some(Binding::Move(y)) => origin(vars, type_env, &y.name, path),
-        Some(Binding::Join(arm_results)) => {
+    let here = (var.clone(), path.to_vec());
+    match alias_step(vars, type_env, var, path) {
+        AliasStep::Stops => Origin::Exactly(here),
+        AliasStep::Projects((source, source_path)) => origin(vars, type_env, &source, &source_path),
+        AliasStep::Gathers(gathered) => {
+            // The leaves beneath name no object only for a value that holds no reference: either the
+            // path covers no boxed leaf, or every leaf beneath it is `⊥`, which an operation
+            // declares for the variants a union does not have and for the result of one that
+            // aborts. Taking the value for its own object is safe there, since a release is keyed to
+            // a reference and none is keyed to this answer.
+            origin_of_gathered(vars, type_env, &gathered, &here).unwrap_or(Origin::Exactly(here))
+        }
+        AliasStep::Joins(arm_results) => {
             // The arms bind their values to one variable, so a path into it is a path into each of
             // them. Arms that all reach the same object leave the value exact. Each arm result
             // contributes everything an operation on it acts on (`acted_on`), so that an arm result
             // that is itself a join keeps the name its own retains and releases key to.
             let mut candidates = Set::default();
-            for arm_result in arm_results {
-                for p in origin(vars, type_env, &arm_result.name, path).acted_on() {
+            for (arm_result, arm_path) in &arm_results {
+                for p in origin(vars, type_env, arm_result, arm_path).acted_on() {
                     candidates.insert(p.clone());
                 }
             }
-            Origin::of_candidates(candidates, &(var.clone(), path.to_vec()))
+            Origin::of_candidates(candidates, &here)
         }
+    }
+}
+
+/// The alias edge a variable's binding offers at a path: where the value at that path comes from,
+/// one binding back. `origin` follows these edges to the object a leaf belongs to, and every name it
+/// passes on the way holds the same reference.
+pub(crate) enum AliasStep {
+    /// The value is its own object: a parameter or capture, a producer, a global, or a value read
+    /// out of a boxed container, which the read retains.
+    Stops,
+    /// The value is the value at this path of another variable: a move-bind, a field of an unboxed
+    /// container, the payload of an unboxed union's variant or of a catch-all, or a pure projection
+    /// of one operand of a `Builtin` op.
+    Projects(VarPath),
+    /// The value is a `Builtin` op's result at a path whose own record names no object, so the leaves
+    /// the op declares beneath the path decide where it comes from.
+    Gathers(Gathered),
+    /// The value is a match binding, which receives the value at this path of whichever arm result
+    /// the path taken returns: one entry per arm.
+    Joins(Vec<VarPath>),
+}
+
+/// Where the leaves beneath a path of a `Builtin` op's result come from (`gather_leaves_under`).
+pub(crate) struct Gathered {
+    /// The operand units those leaves project out of, each as the operand and the unit path.
+    pub(crate) operand_units: Set<VarPath>,
+    /// Whether the op produces some leaf beneath the path itself, which makes the result one of the
+    /// objects the value denotes.
+    pub(crate) produced_here: bool,
+}
+
+/// The alias edge the binding of `var` offers at `path`.
+pub(crate) fn alias_step(
+    vars: &VarTable,
+    type_env: &TypeEnv,
+    var: &FullName,
+    path: &[usize],
+) -> AliasStep {
+    match vars.bindings.get(var) {
+        // A name the table does not bind is a global — a function a direct call names, or a global
+        // value read as an atom. No variable of this function aliases one, so it is its own origin,
+        // as a parameter and a producer are.
+        None | Some(Binding::Param) | Some(Binding::Producer) => AliasStep::Stops,
+        Some(Binding::Move(y)) => AliasStep::Projects((y.name.clone(), path.to_vec())),
+        Some(Binding::Join(arm_results)) => AliasStep::Joins(
+            arm_results
+                .iter()
+                .map(|arm_result| (arm_result.name.clone(), path.to_vec()))
+                .collect(),
+        ),
         Some(Binding::Builtin(op, args, result_ty)) => {
             let arg_tys: Vec<Arc<TypeNode>> = args.iter().map(|a| a.ty.clone()).collect();
             let decl = op.result_prov(result_ty, &arg_tys, type_env);
@@ -299,58 +354,86 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
             // `p` — an alias; anything else (a fresh allocation, a boxed-container read, a join of
             // several sources) is a producer, stopping here. A `Builtin` op is never partially
             // applied, so a well-formed `result_prov` names only real argument indices (`args[j]`
-            // else panics). A path whose own record does not name an object is handled by
-            // `origin_from_leaves_under`: a reference-counting unit path may name an unboxed union
-            // itself, whose provenance is declared on the leaves of its variants.
+            // else panics). A path whose own record does not name an object is answered by the
+            // leaves beneath it (`gather_leaves_under`): a reference-counting unit path may name an
+            // unboxed union itself, whose provenance is declared on the leaves of its variants.
             match decl.leaf_origins_at(path).and_then(as_arg_projection) {
-                Some((j, p)) => origin(vars, type_env, &args[j].name, &p),
-                None => {
-                    // The leaves beneath name no object only for a value that holds no reference:
-                    // either the path covers no boxed leaf, or every leaf beneath it is `⊥`, which
-                    // an operation declares for the variants a union does not have and for the
-                    // result of one that aborts. Taking the value for its own object is safe there,
-                    // since a release is keyed to a reference and none is keyed to this answer.
-                    let here_identity = (var.clone(), path.to_vec());
-                    origin_from_leaves_under(vars, type_env, &decl, args, path, &here_identity)
-                        .unwrap_or_else(here)
-                }
+                Some((j, p)) => AliasStep::Projects((args[j].name.clone(), p)),
+                None => AliasStep::Gathers(gather_leaves_under(type_env, &decl, args, path)),
             }
         }
         Some(Binding::Field(container, idx)) => {
             if container.ty.is_box(type_env) {
                 // Reading a field of a boxed struct retains it: a producer.
-                here()
+                AliasStep::Stops
             } else {
                 let mut container_path = vec![*idx];
                 container_path.extend_from_slice(path);
-                origin(vars, type_env, &container.name, &container_path)
+                AliasStep::Projects((container.name.clone(), container_path))
             }
         }
         Some(Binding::Payload(scrut, variant)) => match variant {
             // A catch-all binds the whole scrutinee: the same object.
-            None => origin(vars, type_env, &scrut.name, path),
+            None => AliasStep::Projects((scrut.name.clone(), path.to_vec())),
             // An unboxed union's payload is the scrutinee's variant slot — an alias; a boxed union's
             // payload is read out (retained) — a producer.
             Some(tag) if !scrut.ty.is_box(type_env) => {
                 let mut scrut_path = vec![*tag];
                 scrut_path.extend_from_slice(path);
-                origin(vars, type_env, &scrut.name, &scrut_path)
+                AliasStep::Projects((scrut.name.clone(), scrut_path))
             }
-            Some(_) => here(),
+            Some(_) => AliasStep::Stops,
         },
     }
 }
 
-/// The object a value denotes at a path whose own record does not name one: the objects the leaves
-/// beneath that path reach.
+/// Where the leaves beneath `path` of a `Builtin` op's result come from, for a path whose own record
+/// does not name an object.
 ///
 /// A reference-counting unit path may name an unboxed union itself, whose provenance is declared one
 /// level down, on the leaves of its variants, so a reader that stops at the union finds nothing
 /// recorded and would read the value as one produced here — its own to release, when it may be an
-/// operand's. The leaves beneath decide instead. A leaf recorded as `⊥` belongs to a
-/// variant the value does not have and holds no reference, so it names no object and is passed
-/// over; a leaf produced here rather than projected names this value itself. A leaf that records
-/// several sources holds one per path it can be reached by, and each of them names an object.
+/// operand's. The leaves beneath decide instead. A leaf recorded as `⊥` belongs to a variant the
+/// value does not have and holds no reference, so it names no object and is passed over; a leaf the
+/// op produces names this value itself. A leaf that records several sources
+/// holds one per path it can be reached by, and each of them names an object.
+///
+/// # Arguments
+/// * `decl` - the provenance the op declares for its result.
+/// * `args` - the op's operands, which the declaration's `Arg` indices name.
+fn gather_leaves_under(
+    type_env: &TypeEnv,
+    decl: &Provenance,
+    args: &[RcVar],
+    path: &[usize],
+) -> Gathered {
+    // The leaves of one unit usually project out of one operand unit, so the operand units are
+    // gathered before any of them is followed back: resolving each distinct one once keeps a chain
+    // of aliases from being walked once per leaf.
+    let mut operand_units: Set<VarPath> = Set::default();
+    let mut produced_here = false;
+    for sources in decl.leaf_origins_under(path) {
+        // A leaf holds one source per path it can be reached by, so every one of them is an object
+        // the value may denote. A leaf recorded as `⊥` holds none and contributes nothing.
+        for src in sources {
+            match src {
+                LeafOrigin::Arg(j, leaf) => {
+                    operand_units.insert((
+                        args[*j].name.clone(),
+                        truncate_to_unit(&args[*j].ty, leaf, type_env),
+                    ));
+                }
+                LeafOrigin::Fresh | LeafOrigin::Unknown => produced_here = true,
+            }
+        }
+    }
+    Gathered {
+        operand_units,
+        produced_here,
+    }
+}
+
+/// The object a value denotes, read off where its leaves come from.
 ///
 /// Leaves that all reach one origin make this value an alias of it, so the answer is that origin
 /// whole, identity included — the same answer a leaf that is a plain projection gets. Where the
@@ -370,38 +453,20 @@ fn origin_inner(vars: &VarTable, type_env: &TypeEnv, var: &FullName, path: &[usi
 /// borrowed node, the `wait` leaf is `⊥` and both `pair` leaves project out of that node, so the
 /// answer is that node's origin. Give one of those two leaves a second operand and the answer
 /// becomes a `Join` naming both under this value's name.
-fn origin_from_leaves_under(
+fn origin_of_gathered(
     vars: &VarTable,
     type_env: &TypeEnv,
-    decl: &Provenance,
-    args: &[RcVar],
-    path: &[usize],
+    gathered: &Gathered,
     here: &VarPath,
 ) -> Option<Origin> {
-    // The leaves of one unit usually project out of one operand unit, so the operand units are
-    // gathered before any of them is followed back: resolving each distinct one once keeps a chain
-    // of aliases from being walked once per leaf.
-    let mut operand_units: Set<(usize, FieldPath)> = Set::default();
-    let mut produced_here = false;
-    for sources in decl.leaf_origins_under(path) {
-        // A leaf holds one source per path it can be reached by, so every one of them is an object
-        // the value may denote. A leaf recorded as `⊥` holds none and contributes nothing.
-        for src in sources {
-            match src {
-                LeafOrigin::Arg(j, leaf) => {
-                    operand_units.insert((*j, truncate_to_unit(&args[*j].ty, leaf, type_env)));
-                }
-                LeafOrigin::Fresh | LeafOrigin::Unknown => produced_here = true,
-            }
-        }
-    }
-    // The origins the leaves reach: one per operand unit, plus this value itself where a leaf was
-    // produced here rather than projected.
-    let mut reached: Vec<Origin> = operand_units
-        .into_iter()
-        .map(|(j, unit)| origin(vars, type_env, &args[j].name, &unit))
+    // The origins the leaves reach: one per operand unit, plus this value itself where the op
+    // produces a leaf.
+    let mut reached: Vec<Origin> = gathered
+        .operand_units
+        .iter()
+        .map(|(operand, unit)| origin(vars, type_env, operand, unit))
         .collect();
-    if produced_here {
+    if gathered.produced_here {
         reached.push(Origin::Exactly(here.clone()));
     }
     let first = reached.first()?;
@@ -945,8 +1010,9 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
 #[cfg(test)]
 mod tests {
     use super::{
-        acted_references, as_arg_projection, held_field_type, origin, origin_from_leaves_under,
-        rc_units, truncate_to_unit, unit_step, Binding, Origin, UnitStep, VarTable,
+        acted_references, as_arg_projection, gather_leaves_under, held_field_type, origin,
+        origin_of_gathered, rc_units, truncate_to_unit, unit_step, Binding, Origin, UnitStep,
+        VarTable,
     };
     use crate::ast::name::FullName;
     use crate::ast::type_env::TypeEnv;
@@ -1266,6 +1332,23 @@ mod tests {
         origin(vars, &TypeEnv::default(), &FullName::local(name), &[])
     }
 
+    /// The origin of the whole value of a `Builtin` op's result whose leaves `decl` declares, as
+    /// `origin` answers it for a path whose own record names no object.
+    fn origin_of_leaves_under(
+        vars: &VarTable,
+        type_env: &TypeEnv,
+        decl: &Provenance,
+        args: &[RcVar],
+        here: &VarPath,
+    ) -> Option<Origin> {
+        origin_of_gathered(
+            vars,
+            type_env,
+            &gather_leaves_under(type_env, decl, args, &[]),
+            here,
+        )
+    }
+
     /// A variable bound by the op that produced the value is the origin of that value.
     #[test]
     fn a_producer_is_exactly_itself() {
@@ -1352,12 +1435,11 @@ mod tests {
             in_container.extend_from_slice(leaf);
             sole_origin(LeafOrigin::Arg(0, in_container))
         });
-        let read = origin_from_leaves_under(
+        let read = origin_of_leaves_under(
             &vars,
             &type_env,
             &read_union_field,
             &[nested("m")],
-            &[],
             &at("read"),
         );
         let field_of_m = origin(&vars, &type_env, &FullName::local("m"), &[0]);
@@ -1380,12 +1462,11 @@ mod tests {
             let from_a = leaf.first() == Some(&0);
             sole_origin(LeafOrigin::Arg(if from_a { 0 } else { 1 }, leaf.clone()))
         });
-        let joined = origin_from_leaves_under(
+        let joined = origin_of_leaves_under(
             &vars,
             &type_env,
             &one_field_from_each,
             &[twins("a"), twins("b")],
-            &[],
             &at("mixed"),
         )
         .expect("both leaves name an object");

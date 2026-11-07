@@ -7,7 +7,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
+    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level, rc_ir_callee_of};
     use std::fs;
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
@@ -347,14 +347,23 @@ mod integration_tests {
         );
     }
 
-    /// How many of the `tally` calls in `main` route to the borrow version, and how many stay on the
-    /// owning one.
+    /// Whether a dump line calls a borrowing version of `Main::tally`, whose name carries the
+    /// `#borrow` tag.
+    fn calls_tally_borrow_version(line: &str) -> bool {
+        rc_ir_callee_of(line).is_some_and(|c| c.starts_with("Main::tally") && c.contains("#borrow"))
+    }
+
+    /// How many of the `tally` calls in `main` route to a borrowing version, and how many stay on
+    /// the owning one.
     fn tally_call_routing(main: &[&str]) -> (usize, usize) {
         let calls = main
             .iter()
             .filter(|l| l.contains("= Main::tally"))
             .collect::<Vec<_>>();
-        let borrow_calls = calls.iter().filter(|l| l.contains("#borrow(")).count();
+        let borrow_calls = calls
+            .iter()
+            .filter(|l| calls_tally_borrow_version(l))
+            .count();
         (borrow_calls, calls.len() - borrow_calls)
     }
 
@@ -416,8 +425,7 @@ mod integration_tests {
         // `main` routes its non-tail, owned `tally(arr, ..)` call to the borrow version.
         let main = main_block(&dump);
         assert!(
-            main.iter()
-                .any(|l| l.contains("= Main::tally") && l.contains("#borrow(")),
+            main.iter().any(|l| calls_tally_borrow_version(l)),
             "main should call the tally borrow version:\n{}",
             main.join("\n")
         );
@@ -428,12 +436,13 @@ mod integration_tests {
         assert_counts_nothing(&tally_borrow, "the tally borrow version");
     }
 
-    /// Verifies that routing to a borrow version is decided by benefit as well as safety: the call
-    /// whose array is read again afterwards is routed, and the call at the array's last use keeps
-    /// the owning version, since borrowing there would only delay a release.
+    /// Verifies that a call lends an owned argument only where the caller reads it afterwards: the
+    /// call whose array is read again afterwards is routed to the borrow version, and the call at
+    /// the array's last use keeps the owning version, since borrowing there would only delay a
+    /// release.
     #[test]
-    fn test_benefit_routing_by_last_use() {
-        let (_temp_dir, project_dir) = setup_test_env("benefit");
+    fn test_routing_by_last_use() {
+        let (_temp_dir, project_dir) = setup_test_env("routing_last_use");
         let dump = emit_main_rc_ir(&project_dir);
 
         let main = main_block(&dump);
@@ -442,8 +451,7 @@ mod integration_tests {
         // The array read again after its call is owned but not at its last use, so routing to the
         // borrow version removes a retain — that call goes to the borrow version. The array not used
         // after its call is at its last use, so borrowing it would remove no retain and only delay
-        // its release — that call stays on the own version. Safe-only routing would send both to the
-        // borrow version.
+        // its release — that call stays on the own version.
         assert_eq!(
             borrow_calls,
             1,
@@ -458,41 +466,154 @@ mod integration_tests {
         );
     }
 
-    /// Verifies that the benefit routing reads the code after the match whose branch a call ends: an
+    /// Verifies that the routing reads the code after the match whose branch a call ends: an
     /// array read again after an `if` is not at its last use at a call that ends a branch of that
     /// `if`, so the call is routed to the borrow version.
     #[test]
-    fn test_benefit_routing_reads_past_the_match() {
+    fn test_routing_reads_past_the_match() {
         assert_tally_routing(
-            "benefit_after_match",
+            "routing_after_match",
             (1, 0),
             "the call whose array is read after the `if` should route to the borrow version",
         );
     }
 
-    /// Verifies that the benefit routing reads past every match whose branch a call ends, out to the
+    /// Verifies that the routing reads past every match whose branch a call ends, out to the
     /// outermost: an array read again only after the outer of two nested `if`s is not at its last
     /// use at a call that ends a branch of the inner one, so the call is routed to the borrow
     /// version.
     #[test]
-    fn test_benefit_routing_reads_past_nested_matches() {
+    fn test_routing_reads_past_nested_matches() {
         assert_tally_routing(
-            "benefit_after_nested_match",
+            "routing_after_nested_match",
             (1, 0),
             "the call whose array is read after the outer `if` should route to the borrow version",
         );
     }
 
-    /// Verifies that the benefit routing follows the lifetime of an argument's object past the match
+    /// Verifies that the routing follows the lifetime of an argument's object past the match
     /// whose branch the call ends: a leaf read out of an aggregate the caller uses again after the
     /// `if` is a reference this function made for the call, so the call is routed to the borrow
     /// version.
     #[test]
-    fn test_benefit_routing_by_the_objects_lifetime_past_the_match() {
+    fn test_routing_by_the_objects_lifetime_past_the_match() {
         assert_tally_routing(
-            "benefit_aggregate_after_match",
+            "routing_aggregate_after_match",
             (1, 0),
             "the call handed a leaf of an aggregate read after the `if` should route to the borrow \
+             version",
+        );
+    }
+
+    /// Verifies that the routing finds an argument's object held after the call through the variable
+    /// a pattern took it out of: `env` comes out of a pair nothing names afterwards, and `env` is read
+    /// after the call, so the array read out of it outlives the call and the call is routed to the
+    /// borrow version.
+    #[test]
+    fn test_routing_reads_the_variable_a_pattern_binds() {
+        assert_tally_routing(
+            "routing_field_of_a_pattern",
+            (1, 0),
+            "the call handed a field of a value read after it should route to the borrow version",
+        );
+    }
+
+    /// Verifies that the routing finds an argument's object held after the call through the match
+    /// binding it flows out of: `env` is whichever value the `if` takes, and `env` is read after the
+    /// call, so the array read out of it outlives the call on either branch and the call is routed
+    /// to the borrow version.
+    #[test]
+    fn test_routing_reads_the_match_binding() {
+        assert_tally_routing(
+            "routing_field_of_a_join",
+            (1, 0),
+            "the call handed a field of an `if` result read after it should route to the borrow \
+             version",
+        );
+    }
+
+    /// Verifies that a call owns an argument at its last use and borrows the one beside it the
+    /// caller reads afterwards: the version it reaches takes `rows` owned, so the callee frees `rows`
+    /// once it has read a value out of it and that value stays unique for an update, and takes `key`
+    /// borrowed, so the caller makes no retain for it.
+    #[test]
+    fn test_routing_owns_a_last_use_beside_a_borrow() {
+        let (_temp_dir, project_dir) = setup_test_env("routing_last_use_beside_a_borrow");
+        let dump = emit_main_rc_ir(&project_dir);
+        let main = main_block(&dump);
+        assert_eq!(
+            tally_call_routing(&main),
+            (1, 0),
+            "the call should route to a borrowing version:\n{}",
+            main.join("\n")
+        );
+        let tally_sig = sig_line(&dump, "fn Main::tally", |n| n.contains("#borrow"));
+        assert!(
+            tally_sig.contains("Std::Array (Std::Array Std::I64) [arg1] {own}")
+                && tally_sig.contains("Std::Array Std::I64 [arg2] {borrow}"),
+            "the version the call reaches should own `rows` and borrow `key`:\n{}",
+            tally_sig
+        );
+    }
+
+    /// Verifies that two calls of one function lending different arguments reach two versions:
+    /// the call at `rows`'s last use reaches a version owning `rows` and borrowing `key`, and the
+    /// call at `key`'s last use reaches one borrowing `rows` and owning `key`.
+    #[test]
+    fn test_routing_gives_each_lent_set_its_own_version() {
+        let (_temp_dir, project_dir) = setup_test_env("routing_two_calls_two_versions");
+        let dump = emit_main_rc_ir(&project_dir);
+        let main = main_block(&dump);
+        let callees: Vec<&str> = main
+            .iter()
+            .filter(|l| calls_tally_borrow_version(l))
+            .filter_map(|l| rc_ir_callee_of(l))
+            .collect();
+        assert!(
+            callees.len() == 2 && callees[0] != callees[1],
+            "the two calls should reach two different borrowing versions:\n{}",
+            main.join("\n")
+        );
+        for (rows, key) in [("own", "borrow"), ("borrow", "own")] {
+            let rows_param = format!("Std::Array (Std::Array Std::I64) [arg1] {{{}}}", rows);
+            let key_param = format!("Std::Array Std::I64 [arg2] {{{}}}", key);
+            assert!(
+                dump.lines().any(|l| {
+                    is_sig(l, "fn Main::tally", &|n: &str| n.contains("#borrow"))
+                        && l.contains(&rows_param)
+                        && l.contains(&key_param)
+                }),
+                "a borrowing version should take `rows` {} and `key` {}:\n{}",
+                rows,
+                key,
+                dump
+            );
+        }
+    }
+
+    /// Verifies that the routing lends a field of a match binding only when the object is held
+    /// after the call whichever arm the match takes: the call whose `env` may be `e1` or `e2`, both
+    /// read afterwards, routes to the borrow version, and the call whose `env2` may be `f2`, which
+    /// nothing reads afterwards, keeps the owning version.
+    #[test]
+    fn test_routing_holds_every_arm_of_a_match_binding() {
+        assert_tally_routing(
+            "routing_field_of_a_join_held_on_one_arm",
+            (1, 1),
+            "the call whose array is held after it on both arms should route to the borrow version, \
+             and the call whose array ends there on one arm should stay on the own version",
+        );
+    }
+
+    /// Verifies that the routing finds an argument's object held after the call through an unboxed
+    /// union built around it: the union `Slot::full(arr)` is named nowhere after the call, but `arr`
+    /// is, so the call is routed to the borrow version.
+    #[test]
+    fn test_routing_reads_through_a_union_built_for_the_call() {
+        assert_tally_routing(
+            "routing_union_built_for_the_call",
+            (1, 0),
+            "the call handed a union holding an array read after it should route to the borrow \
              version",
         );
     }
@@ -501,9 +622,9 @@ mod integration_tests {
     /// the match names its argument: the call is the array's last use, and borrowing there would
     /// only delay the release.
     #[test]
-    fn test_benefit_routing_last_use_in_a_branch() {
+    fn test_routing_last_use_in_a_branch() {
         assert_tally_routing(
-            "benefit_last_use_in_branch",
+            "routing_last_use_in_branch",
             (0, 1),
             "the call at the array's last use should stay on the own version",
         );
@@ -515,8 +636,8 @@ mod integration_tests {
     /// the retain that made it. The call whose aggregate is named nowhere afterwards keeps the
     /// owning version, since the object that leaf refers to ends there either way.
     #[test]
-    fn test_benefit_routing_by_the_objects_lifetime() {
-        let (_temp_dir, project_dir) = setup_test_env("benefit_aggregate");
+    fn test_routing_by_the_objects_lifetime() {
+        let (_temp_dir, project_dir) = setup_test_env("routing_aggregate");
         let dump = emit_main_rc_ir(&project_dir);
 
         let main = main_block(&dump);
@@ -583,12 +704,11 @@ mod integration_tests {
         );
     }
 
-    /// The first argument variable of a `...#borrow(a, b, ...)` call on a dump line.
-    fn borrow_call_first_arg(line: &str) -> &str {
-        let args = line
-            .split("#borrow(")
-            .nth(1)
-            .unwrap_or_else(|| panic!("the line carries no `#borrow(` call:\n{}", line));
+    /// The first argument variable of a call on a dump line.
+    fn call_first_arg(line: &str) -> &str {
+        let (_, args) = line
+            .split_once('(')
+            .unwrap_or_else(|| panic!("the line carries no call:\n{}", line));
         args.split([',', ')']).next().unwrap().trim()
     }
 
@@ -603,9 +723,9 @@ mod integration_tests {
         let main = main_block(&dump);
         let call = main
             .iter()
-            .find(|l| l.contains("= Main::tally") && l.contains("#borrow("))
+            .find(|l| calls_tally_borrow_version(l))
             .expect("main should call the tally borrow version");
-        let arr = borrow_call_first_arg(call);
+        let arr = call_first_arg(call);
 
         // Borrow-ification brackets the borrow call with a retain before it and a release after it;
         // because nothing between them consumes the array, cancellation removes both, leaving no

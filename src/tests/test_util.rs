@@ -434,6 +434,18 @@ pub fn rc_ir_function_bodies(dump: &str, name_part: &str) -> Vec<String> {
     bodies
 }
 
+/// The text of an RC IR dump line from the `=` to the first opening parenthesis, where it holds no
+/// space: the function a call names, or the name of a `Builtin` op spelled with its operands.
+///
+/// # Examples
+/// `rc_ir_callee_of("let t = Main::tally#borrowB(arr, i)")` yields `Some("Main::tally#borrowB")`, and
+/// a line binding `closure f[c]` yields `None`.
+pub fn rc_ir_callee_of(line: &str) -> Option<&str> {
+    let (_, rhs) = line.split_once(" = ")?;
+    let (callee, _) = rhs.split_once('(')?;
+    (!callee.contains(' ')).then_some(callee)
+}
+
 /// Whether the RC IR function `body`, as `rc_ir_function_bodies` gives it, builds no closure that
 /// stores something. A closure that captures nothing carries a null capture pointer and allocates
 /// nothing, so it passes.

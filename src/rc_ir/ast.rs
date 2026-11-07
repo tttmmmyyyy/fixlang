@@ -95,8 +95,8 @@ pub struct RcFunc {
     pub source: Option<Span>,
     /// The reference-counting units this version borrows among its parameters and capture — the units
     /// it does not own, one `(parameter-name, unit-path)` each. Everything not listed is owned, so the
-    /// empty set is the all-owning default. Borrow-ification writes it: an original version borrows
-    /// nothing, a borrow version borrows its inferred read-only units.
+    /// empty set is the all-owning default. Borrow-ification writes it: a version borrows the units
+    /// its key marks `Borrow`, and the all-`Own` original borrows nothing.
     ///
     /// The empty default is correct at every stage — before borrow-ification every parameter is owned
     /// (the discipline `insert_rc` establishes), and a version that owns everything borrows nothing.
@@ -303,7 +303,7 @@ impl RcState {
 }
 
 /// The ownership of a single reference-counting unit.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Ownership {
     /// The callee receives ownership: it consumes the unit, by releasing it or by moving it into
     /// the result, and the caller retains it before the call at a non-last use.
@@ -312,8 +312,19 @@ pub enum Ownership {
     Borrow,
 }
 
+impl Ownership {
+    /// `Own` where `owned` holds, else `Borrow`.
+    pub fn owned_if(owned: bool) -> Ownership {
+        if owned {
+            Ownership::Own
+        } else {
+            Ownership::Borrow
+        }
+    }
+}
+
 /// The ownership of one argument, shaped like the value.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum OwnershipShape {
     /// A part of the value holding no reference-counting unit.
     NoUnit,
@@ -322,6 +333,42 @@ pub enum OwnershipShape {
     Fields(Vec<OwnershipShape>),
     /// A single reference-counting unit, owned or borrowed.
     Unit(Ownership),
+}
+
+impl OwnershipShape {
+    /// The ownership of the reference-counting unit at `unit`, a unit path of the value this shape
+    /// describes.
+    pub fn at(&self, unit: &[usize]) -> Ownership {
+        match (self, unit.split_first()) {
+            (OwnershipShape::Unit(ownership), None) => *ownership,
+            (OwnershipShape::Fields(fields), Some((idx, below))) => fields[*idx].at(below),
+            _ => panic!("the path {:?} names no unit of the shape {:?}", unit, self),
+        }
+    }
+
+    /// Whether the value borrows any of its units.
+    pub fn borrows_any(&self) -> bool {
+        match self {
+            OwnershipShape::NoUnit => false,
+            OwnershipShape::Fields(fields) => fields.iter().any(OwnershipShape::borrows_any),
+            OwnershipShape::Unit(ownership) => *ownership == Ownership::Borrow,
+        }
+    }
+
+    /// The ownership written one letter per reference-counting unit, `O` for `Own` and `B` for
+    /// `Borrow`, in field order. Shapes of one type spell strings of one length, which differ
+    /// wherever the ownership does.
+    ///
+    /// # Examples
+    /// `Fields([Unit(Own), NoUnit, Unit(Borrow)])` spells `"OB"`.
+    pub fn spelling(&self) -> String {
+        match self {
+            OwnershipShape::NoUnit => String::new(),
+            OwnershipShape::Fields(fields) => fields.iter().map(OwnershipShape::spelling).collect(),
+            OwnershipShape::Unit(Ownership::Own) => "O".to_string(),
+            OwnershipShape::Unit(Ownership::Borrow) => "B".to_string(),
+        }
+    }
 }
 
 /// The initializer of a global value, run once when a reader first asks for the value. The whole
