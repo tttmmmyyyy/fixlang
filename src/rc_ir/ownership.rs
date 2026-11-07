@@ -459,8 +459,8 @@ fn origin_of_gathered(
     gathered: &Gathered,
     here: &VarPath,
 ) -> Option<Origin> {
-    // The origins the leaves reach: one per operand unit, plus this value itself where a leaf was
-    // produced here rather than projected.
+    // The origins the leaves reach: one per operand unit, plus this value itself where the op
+    // produces a leaf.
     let mut reached: Vec<Origin> = gathered
         .operand_units
         .iter()
