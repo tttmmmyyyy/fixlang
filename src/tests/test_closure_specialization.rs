@@ -13,7 +13,9 @@
 mod integration_tests {
     use crate::constants::{CLOSURE_LAM_SUFFIX, CLOSURE_SPEC_SUFFIX, UNCURRIED_FUNC_SUFFIX};
     use crate::misc::{Map, Set};
-    use crate::tests::test_util::{fix_command_at_opt_level, read_rc_ir_dump, setup_case_projects};
+    use crate::tests::test_util::{
+        fix_command_at_opt_level, rc_ir_callee_of, read_rc_ir_dump, setup_case_projects,
+    };
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use tempfile::TempDir;
@@ -739,7 +741,7 @@ mod integration_tests {
             lending_copies += 1;
             assert!(
                 body.lines()
-                    .any(|l| l.contains("= Main::scaled_sum") && l.contains("#borrow")),
+                    .any(|l| rc_ir_callee_of(l).is_some_and(|c| c.starts_with("Main::scaled_sum") && c.contains("#borrow"))),
                 "the copy `{}` hands the array it captured to `scaled_sum`, which should be reached \
                  through its borrow version:\n{}",
                 func_name(header),

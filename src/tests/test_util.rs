@@ -434,6 +434,14 @@ pub fn rc_ir_function_bodies(dump: &str, name_part: &str) -> Vec<String> {
     bodies
 }
 
+/// The function a call on an RC IR dump line names, from the `=` to the opening parenthesis of its
+/// arguments, or `None` for a line that binds no call.
+pub fn rc_ir_callee_of(line: &str) -> Option<&str> {
+    let (_, rhs) = line.split_once(" = ")?;
+    let (callee, _) = rhs.split_once('(')?;
+    (!callee.contains(' ')).then_some(callee)
+}
+
 /// Whether the RC IR function `body`, as `rc_ir_function_bodies` gives it, builds no closure that
 /// stores something. A closure that captures nothing carries a null capture pointer and allocates
 /// nothing, so it passes.
