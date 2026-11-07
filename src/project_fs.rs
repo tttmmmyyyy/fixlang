@@ -145,15 +145,15 @@ pub fn remove_abandoned_temporary_files(dir: &Path) {
 
 /// Writes the file at `path` by having `write` write a new file beside it, at the path it is handed,
 /// and renaming that onto `path`, so that `path` holds either what it held before or the whole of
-/// what `write` wrote. A symbolic link at `path` is replaced by the new file, and what it pointed to
-/// is kept.
+/// what `write` wrote, and answers what `write` answered. A symbolic link at `path` is replaced by
+/// the new file, and what it pointed to is kept.
 ///
 /// The new file is named apart from `path`, so that a name of `path` as long as the file system
 /// allows still leaves room for it.
-pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) -> io::Result<()> {
+pub fn replace_file<T>(path: &Path, write: impl FnOnce(&Path) -> io::Result<T>) -> io::Result<T> {
     let tmp_path = path.with_file_name(temporary_file_name());
     write(&tmp_path)
-        .and_then(|()| fs::rename(&tmp_path, path))
+        .and_then(|written| fs::rename(&tmp_path, path).map(|()| written))
         .inspect_err(|_| {
             // The temporary path carries a random number drawn by this call, so removing it touches
             // nothing else.

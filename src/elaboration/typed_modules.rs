@@ -444,7 +444,6 @@ impl ModuleFileWriter {
 /// Writes `bytes` in place of the file of `file` in `dir`, and answers the written file mapped into
 /// memory.
 fn write_module_file(dir: &Path, file: &ModuleFile, bytes: &[u8]) -> io::Result<Mmap> {
-    let mut mapped = None;
     // The name holds no path separator, and `replace_file` replaces a symbolic link at the path
     // instead of writing through it, so the file is written in `dir`.
     replace_file(&file.path_in(dir), |tmp_path| {
@@ -454,10 +453,8 @@ fn write_module_file(dir: &Path, file: &ModuleFile, bytes: &[u8]) -> io::Result<
             .create_new(true)
             .open(tmp_path)?;
         tmp.write_all(bytes)?;
-        mapped = Some(map_into_memory(&tmp)?);
-        Ok(())
-    })?;
-    Ok(mapped.expect("a module file written without being mapped"))
+        map_into_memory(&tmp)
+    })
 }
 
 /// Removes from `dir` the files of the modules of `written` checked under any other hash than the
