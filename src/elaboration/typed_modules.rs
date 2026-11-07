@@ -338,8 +338,7 @@ impl ModuleFile {
 enum ModuleFileBytes {
     /// The file as this build found it or wrote it, mapped into memory.
     Mapped(Mmap),
-    /// The bytes this build meant the file to hold, kept in memory when the file was left
-    /// unwritten.
+    /// The bytes this build meant the file to hold, kept in memory when the file was not written.
     Unwritten(Vec<u8>),
 }
 
@@ -367,8 +366,7 @@ struct ModuleFileContents {
 
 /// The new version of a module's file, built in memory while the bodies of the module are checked.
 /// It begins with the bodies the file held, at the offsets they had, and each body `add`ed follows
-/// them; `finish` puts the record and the footer after the bodies and writes it in place of the
-/// file.
+/// them; `finish` puts the record and the footer after the bodies.
 struct ModuleFileWriter {
     /// The module file the new version replaces.
     file: Arc<ModuleFile>,
@@ -383,9 +381,9 @@ struct ModuleFileWriter {
 impl ModuleFileWriter {
     /// Begins a new version of `file` with the bodies the file holds now, so that the bodies another
     /// build added to it since this build read its record are kept. A file that cannot be read, or
-    /// does not decode as the file of a type-checked module, is begun anew, since `finish` replaces
-    /// it either way.
-    fn create(file: Arc<ModuleFile>) -> Self {
+    /// does not decode as the file of a type-checked module, is begun anew, since the new version
+    /// replaces it either way.
+    fn begin(file: Arc<ModuleFile>) -> Self {
         let mut writer = ModuleFileWriter {
             file,
             bodies: vec![],
@@ -427,14 +425,9 @@ impl ModuleFileWriter {
         );
     }
 
-    /// Puts the record and the footer after the bodies, writes the new version in place of the
-    /// module's file in `dir`, and answers the record and the contents of the new version, with the
-    /// error that kept the file from being written, if any. When `dir` is `None`, the file is left
-    /// as it is.
-    ///
-    /// The contents are the file mapped into memory when it was written, and the bytes meant for it
-    /// otherwise.
-    fn finish(self, dir: Option<&Path>) -> (ModuleRecord, ModuleFileContents, Option<io::Error>) {
+    /// The bytes of the new version: the bodies, then the record and the footer. The record is
+    /// answered beside them.
+    fn finish(self) -> (ModuleRecord, Vec<u8>) {
         let mut entries: Vec<(EntityIdentity, EntityEntry)> = self.record.into_iter().collect();
         entries.sort_by(|(lhs, _), (rhs, _)| lhs.cmp(rhs));
         let mut bytes = self.bodies;
@@ -444,34 +437,27 @@ impl ModuleFileWriter {
         bytes.extend_from_slice(&bodies_end.to_le_bytes());
         bytes.extend_from_slice(&(record.len() as u64).to_le_bytes());
         bytes.extend_from_slice(FILE_MAGIC);
-
-        let mut mapped = None;
-        let failure = dir.and_then(|dir| {
-            // The name holds no path separator, and `replace_file` replaces a symbolic link at the
-            // path instead of writing through it, so the file is written in `dir`.
-            replace_file(&self.file.path_in(dir), |tmp_path| {
-                let mut tmp = File::options()
-                    .read(true)
-                    .write(true)
-                    .create_new(true)
-                    .open(tmp_path)?;
-                tmp.write_all(&bytes)?;
-                mapped = Some(map_into_memory(&tmp)?);
-                Ok(())
-            })
-            .err()
-        });
-        // A mapping of the whole new version stays sound when the rename fails after it.
-        let bytes = match mapped {
-            Some(mapped) => ModuleFileBytes::Mapped(mapped),
-            None => ModuleFileBytes::Unwritten(bytes),
-        };
-        let contents = ModuleFileContents {
-            file: self.file,
-            bytes,
-        };
-        (entries.into_iter().collect(), contents, failure)
+        (entries.into_iter().collect(), bytes)
     }
+}
+
+/// Writes `bytes` in place of the file of `file` in `dir`, and answers the written file mapped into
+/// memory.
+fn write_module_file(dir: &Path, file: &ModuleFile, bytes: &[u8]) -> io::Result<Mmap> {
+    let mut mapped = None;
+    // The name holds no path separator, and `replace_file` replaces a symbolic link at the path
+    // instead of writing through it, so the file is written in `dir`.
+    replace_file(&file.path_in(dir), |tmp_path| {
+        let mut tmp = File::options()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(tmp_path)?;
+        tmp.write_all(bytes)?;
+        mapped = Some(map_into_memory(&tmp)?);
+        Ok(())
+    })?;
+    Ok(mapped.expect("a module file written without being mapped"))
 }
 
 /// Removes from `dir` the files of the modules of `written` checked under any other hash than the
@@ -597,7 +583,8 @@ impl Program {
     /// `TYPED_MODULES_PATH` do not record, and adds those that pass to the files.
     ///
     /// A body that passes, whether recorded before or added here, is left as it was parsed, and its
-    /// typed expression is read back when instantiation asks for it (`typed_body`). The typed
+    /// typed expression is read back when instantiation asks for it (`typed_body`), from the file
+    /// or, when the file could not be written, from the bytes meant for it. The typed
     /// expressions of the other bodies are put in place of their bodies.
     pub fn check_bodies_through_typed_modules(
         &mut self,
@@ -682,18 +669,20 @@ impl Program {
     ///
     /// A body that passes is serialized on the thread that checked it, and its typed expression
     /// leaves memory then; the file of a module is written once the last body of the module is
-    /// checked. When a file cannot be written, that is reported as a warning, and the bodies of that
-    /// module and of the modules after it are read from the bytes meant for their files.
+    /// checked. When a file cannot be written, that is reported as a warning, no file is written
+    /// after it, and the bodies of that module and of the modules after it are read from the bytes
+    /// meant for their files.
     fn check_and_write_bodies(
         &self,
         to_check: &[(BodyLocation, Arc<ModuleFile>, EntityIdentity)],
         tc: &TypeCheckContext,
     ) -> Vec<CheckOutcome> {
-        let mut dir_to_write = if to_check.is_empty() {
+        let dir = if to_check.is_empty() {
             None
         } else {
             create_typed_modules_dir()
         };
+        let mut write_failed = false;
         let mut outcomes: Vec<Option<CheckOutcome>> = to_check.iter().map(|_| None).collect();
         let mut unchecked_of_module: Map<Name, usize> = Map::default();
         for (_loc, file, _identity) in to_check {
@@ -723,7 +712,7 @@ impl Program {
                     CheckedOnThread::Passed(entry) => {
                         let (writer, added) = writing_of_module
                             .entry(file.module.clone())
-                            .or_insert_with(|| (ModuleFileWriter::create(file.clone()), vec![]));
+                            .or_insert_with(|| (ModuleFileWriter::begin(file.clone()), vec![]));
                         writer.add(entry);
                         added.push(i);
                     }
@@ -741,16 +730,25 @@ impl Program {
                 let Some((writer, added)) = writing_of_module.remove(&file.module) else {
                     return;
                 };
-                let (mut record, contents, failure) = writer.finish(dir_to_write.as_deref());
-                match failure {
-                    Some(e) => {
-                        warn_unwritable_file(dir_to_write.as_deref().unwrap(), file, &e);
-                        dir_to_write = None;
-                    }
-                    None if dir_to_write.is_some() => written.push(file.clone()),
-                    None => {}
-                }
-                let contents = Arc::new(contents);
+                let (mut record, bytes) = writer.finish();
+                let bytes = match &dir {
+                    Some(dir) if !write_failed => match write_module_file(dir, file, &bytes) {
+                        Ok(mapped) => {
+                            written.push(file.clone());
+                            ModuleFileBytes::Mapped(mapped)
+                        }
+                        Err(e) => {
+                            warn_unwritable_file(dir, file, &e);
+                            write_failed = true;
+                            ModuleFileBytes::Unwritten(bytes)
+                        }
+                    },
+                    _ => ModuleFileBytes::Unwritten(bytes),
+                };
+                let contents = Arc::new(ModuleFileContents {
+                    file: file.clone(),
+                    bytes,
+                });
                 for added_i in added {
                     let entry = record
                         .remove(&to_check[added_i].2)
@@ -762,7 +760,7 @@ impl Program {
                 }
             },
         );
-        if let (Some(dir), false) = (&dir_to_write, written.is_empty()) {
+        if let (Some(dir), false) = (&dir, written.is_empty()) {
             remove_stale_files(dir, &written);
         }
         outcomes
@@ -828,10 +826,10 @@ impl Program {
                     if let Some(dir) = create_typed_modules_dir() {
                         let stored = &self.typed_modules.stored[loc];
                         let file = &stored.contents.file;
-                        let mut writer = ModuleFileWriter::create(file.clone());
+                        let mut writer = ModuleFileWriter::begin(file.clone());
                         writer.add(NewEntry::of(stored.identity.clone(), &checked));
-                        let (_record, _contents, failure) = writer.finish(Some(&dir));
-                        if let Some(e) = failure {
+                        let (_record, bytes) = writer.finish();
+                        if let Err(e) = write_module_file(&dir, file, &bytes) {
                             warn_unwritable_file(&dir, file, &e);
                         }
                     }
