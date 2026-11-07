@@ -358,6 +358,22 @@ mod integration_tests {
         (borrow_calls, calls.len() - borrow_calls)
     }
 
+    /// Assert how the `tally` calls in `main` of the test project `case` route: `expected` is the
+    /// number routed to the borrow version and the number left on the owning one, and `what` states
+    /// the expectation in the message.
+    fn assert_tally_routing(case: &str, expected: (usize, usize), what: &str) {
+        let (_temp_dir, project_dir) = setup_test_env(case);
+        let dump = emit_main_rc_ir(&project_dir);
+        let main = main_block(&dump);
+        assert_eq!(
+            tally_call_routing(&main),
+            expected,
+            "{}:\n{}",
+            what,
+            main.join("\n")
+        );
+    }
+
     /// Verifies which functions get a borrow version and what it buys: a function that only reads
     /// its array gets a borrowing version its call site routes to, one that consumes its array stays
     /// single, and the borrowing version performs no reference counting on the borrowed parameter.
@@ -447,16 +463,10 @@ mod integration_tests {
     /// that `if`, so the call is routed to the borrow version.
     #[test]
     fn test_benefit_routing_reads_past_the_match() {
-        let (_temp_dir, project_dir) = setup_test_env("benefit_after_match");
-        let dump = emit_main_rc_ir(&project_dir);
-
-        let main = main_block(&dump);
-        let (borrow_calls, own_calls) = tally_call_routing(&main);
-        assert_eq!(
-            (borrow_calls, own_calls),
+        assert_tally_routing(
+            "benefit_after_match",
             (1, 0),
-            "the call whose array is read after the `if` should route to the borrow version:\n{}",
-            main.join("\n")
+            "the call whose array is read after the `if` should route to the borrow version",
         );
     }
 
@@ -466,17 +476,10 @@ mod integration_tests {
     /// version.
     #[test]
     fn test_benefit_routing_reads_past_nested_matches() {
-        let (_temp_dir, project_dir) = setup_test_env("benefit_after_nested_match");
-        let dump = emit_main_rc_ir(&project_dir);
-
-        let main = main_block(&dump);
-        let (borrow_calls, own_calls) = tally_call_routing(&main);
-        assert_eq!(
-            (borrow_calls, own_calls),
+        assert_tally_routing(
+            "benefit_after_nested_match",
             (1, 0),
-            "the call whose array is read after the outer `if` should route to the borrow \
-             version:\n{}",
-            main.join("\n")
+            "the call whose array is read after the outer `if` should route to the borrow version",
         );
     }
 
@@ -486,17 +489,11 @@ mod integration_tests {
     /// borrow version.
     #[test]
     fn test_benefit_routing_by_the_objects_lifetime_past_the_match() {
-        let (_temp_dir, project_dir) = setup_test_env("benefit_aggregate_after_match");
-        let dump = emit_main_rc_ir(&project_dir);
-
-        let main = main_block(&dump);
-        let (borrow_calls, own_calls) = tally_call_routing(&main);
-        assert_eq!(
-            (borrow_calls, own_calls),
+        assert_tally_routing(
+            "benefit_aggregate_after_match",
             (1, 0),
             "the call handed a leaf of an aggregate read after the `if` should route to the borrow \
-             version:\n{}",
-            main.join("\n")
+             version",
         );
     }
 
@@ -505,16 +502,10 @@ mod integration_tests {
     /// only delay the release.
     #[test]
     fn test_benefit_routing_last_use_in_a_branch() {
-        let (_temp_dir, project_dir) = setup_test_env("benefit_last_use_in_branch");
-        let dump = emit_main_rc_ir(&project_dir);
-
-        let main = main_block(&dump);
-        let (borrow_calls, own_calls) = tally_call_routing(&main);
-        assert_eq!(
-            (borrow_calls, own_calls),
+        assert_tally_routing(
+            "benefit_last_use_in_branch",
             (0, 1),
-            "the call at the array's last use should stay on the own version:\n{}",
-            main.join("\n")
+            "the call at the array's last use should stay on the own version",
         );
     }
 
