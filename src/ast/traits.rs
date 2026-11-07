@@ -1268,7 +1268,7 @@ impl TraitEnv {
         // Check Orphan rules.
         let instance_def_mod = &impl_.define_module;
         let trait_def_mod = trait_id.name.module();
-        let type_def_mod = impl_ty.toplevel_tycon().unwrap().name.module();
+        let type_def_mod = impl_ty.head_tycon().name.module();
         if trait_def_mod != *instance_def_mod && type_def_mod != *instance_def_mod {
             return Err(Errors::from_msg_srcs(
                 format!(

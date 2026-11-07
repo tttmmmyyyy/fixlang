@@ -2,6 +2,7 @@ use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::generator::{Generator, Object};
+use crate::optimization::lambda_set::BuiltinFlow;
 use crate::rc_ir::ast::{FieldPath, RcTarget, UniqueCheckOperand};
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::locality::ExtShape;
@@ -97,6 +98,9 @@ pub trait BuiltinOp: DynClone + Send + Sync {
     ///
     /// `Generator::apply_lambda` checks this in develop mode, so an op that starts applying an
     /// operand and does not say so here fails the test suite rather than quietly losing an edge.
+    ///
+    /// An op answering `true` makes the own slot of the operand it applies Dynamic in its
+    /// `lambda_set_flow`; the lambda set inference asserts that some operand's own slot is.
     fn applies_a_function_operand(&self) -> bool {
         self.env_operand().is_some()
     }
@@ -108,6 +112,19 @@ pub trait BuiltinOp: DynClone + Send + Sync {
     /// so that the lambda captures nothing and needs no closure object.
     fn env_operand(&self) -> Option<EnvOperand> {
         None
+    }
+
+    /// How the functions this op's operands hold flow into its result, for lambda set inference.
+    /// Default: every function the operands and the result hold is a closure built at run time.
+    ///
+    /// The default is always sound: a value at a Dynamic place stays a closure, and a closure works
+    /// wherever a function does. An op that moves values without calling them or handing them to
+    /// code outside the program declares the flow instead, so that what passes through it keeps
+    /// the lambda set it had. An op that applies a function operand, as `applies_a_function_operand`
+    /// says, makes that operand's own slot Dynamic, since the code it generates calls a closure;
+    /// the default rule does so, making every slot Dynamic.
+    fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
+        flow.make_all_dynamic();
     }
 
     /// The container operand and boxed-leaf path whose runtime uniqueness this op branches on, for

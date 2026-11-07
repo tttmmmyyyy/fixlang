@@ -1,19 +1,16 @@
 use super::{
+    call_graph::call_graph_of,
     capture_struct::CaptureStruct,
     find_usage_of_name::{self, UsageType},
     minted_names::{insert_minted_symbol, names_of_globals, MintedNames},
     move_bodies::move_bodies_into_callers,
     pull_let,
     rename::rename_free_names,
-    uncurry::internalize_let_to_var_at_head,
     unique_local_names,
 };
 use crate::{
     ast::{
-        expr::{
-            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_local,
-            var_var, ExprNode,
-        },
+        expr::{expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_var, ExprNode},
         name::FullName,
         pattern::{Pattern, PatternNode},
         program::{Program, Symbol},
@@ -24,7 +21,6 @@ use crate::{
         CAP_LIST_PREFIX, CAP_NAME, CLOSURE_CALL_LAM_SUFFIX, CLOSURE_CAP_NAME, CLOSURE_LAM_SUFFIX,
         CLOSURE_SPEC_SUFFIX,
     },
-    graph::Graph,
     misc::{Map, Set},
     tool::stopwatch::StopWatch,
 };
@@ -830,7 +826,9 @@ fn find_specializable_slots(
     symbols: &Map<FullName, Symbol>,
     lifted: &LiftedLambdas,
 ) -> SpecializableSlots {
-    let (call_graph, name_to_idx) = call_graph_of(symbols);
+    // A call site is rewritten to name a copy before that copy's body is made, so a callee absent
+    // from `symbols` is one about to be created and carries no edge yet.
+    let (call_graph, name_to_idx) = call_graph_of(symbols, symbols.keys().cloned().collect());
     let call_graph_scc = call_graph.compute_sccs();
 
     // Callers of each function, which is who has to be judged again once it enters the table. A
@@ -1023,29 +1021,6 @@ fn capture_list_destructuring(
         expr = expr.get_let_value();
     }
     None
-}
-
-/// The call graph of `symbols` — an edge from A to B means A calls B — together with the node each
-/// name is held at.
-///
-/// A call site is rewritten to name a copy before that copy's body is made, so a callee absent from
-/// `symbols` is one about to be created and carries no edge yet.
-fn call_graph_of(symbols: &Map<FullName, Symbol>) -> (Graph<FullName>, Map<FullName, usize>) {
-    let names = symbols.keys().cloned().collect::<Vec<_>>();
-    let name_to_idx = names
-        .iter()
-        .enumerate()
-        .map(|(idx, name)| (name.clone(), idx))
-        .collect::<Map<FullName, usize>>();
-    let mut graph = Graph::new(names);
-    for (caller, sym) in symbols {
-        for callee in sym.expr.as_ref().unwrap().free_vars() {
-            if let Some(callee_idx) = name_to_idx.get(&callee) {
-                graph.connect_idx(name_to_idx[caller], *callee_idx);
-            }
-        }
-    }
-    (graph, name_to_idx)
 }
 
 /// The capture list a copy of a lifted lambda receives in place of the one the lambda was built with.
@@ -1482,13 +1457,7 @@ impl SpecializationRequest {
 /// The global function a lifted lambda becomes: it receives the captured environment as an argument
 /// and destructures it at the head of the body.
 fn lifted_lambda_func(cap: &CaptureStruct, lam: &Arc<ExprNode>) -> Arc<ExprNode> {
-    let body = expr_let_typed(
-        cap.pattern(),
-        expr_var(FullName::local(CLOSURE_CAP_NAME), None).set_type(cap.ty.clone()),
-        lam.clone(),
-    );
-    let func = expr_abs_typed(var_local(CLOSURE_CAP_NAME), cap.ty.clone(), body);
-    internalize_let_to_var_at_head(&func)
+    cap.lifted_function(&FullName::local(CLOSURE_CAP_NAME), lam.clone())
 }
 
 /// The arrow type taking `doms` in order and returning `codom`, which is what `collect_app_src`

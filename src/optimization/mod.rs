@@ -1,4 +1,5 @@
 mod application_inlining;
+mod call_graph;
 mod capture_struct;
 mod closure_specialization;
 mod collapse_constructions;
@@ -11,6 +12,7 @@ mod eta_expansion;
 mod find_usage_of_name;
 mod inline;
 mod inline_local;
+pub(crate) mod lambda_set;
 mod let_elimination;
 mod minted_names;
 mod move_bodies;

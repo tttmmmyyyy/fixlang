@@ -1,8 +1,8 @@
 use super::{
     closure_specialization, collapse_constructions, constant_array_literals,
     dead_symbol_elimination, decapture_scope_functions, defunctionalize_fix, inline, inline_local,
-    optimize_act, remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args, uncurry,
-    unwrap_newtype,
+    lambda_set, optimize_act, remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args,
+    uncurry, unwrap_newtype,
 };
 use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
 
@@ -97,6 +97,27 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| inline_local::run(prg, config.num_worker_thread),
     );
 
+    // Specialize the program by its lambda sets, ahead of the passes that specialize closures,
+    // which go on to work on the values this leaves closures. With `emit_symbols`, write the sets
+    // to a dump named after the step the program is at.
+    run_pass(
+        prg,
+        config,
+        config.enable_closure_specialization(),
+        "lambda_set",
+        |prg| {
+            let dump_step = config
+                .emit_symbols
+                .then(|| format!("{}", prg.optimization_step));
+            lambda_set::run(
+                prg,
+                dump_step,
+                config.num_worker_thread,
+                config.develop_mode,
+            )
+        },
+    );
+
     // Give a function that takes a struct a twin taking one argument per field of it, so that a
     // closure a field holds becomes an argument the stages after it can follow.
     //
@@ -140,10 +161,10 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| closure_specialization::run(prg, config.verbose, config.num_worker_thread),
     );
 
-    // Move the capture list of the function given to a scope op such as
+    // Move the capture struct of the function given to a scope op such as
     // `Std::Array::borrow_elements` into the op's environment operand, so that the function captures
-    // nothing. It runs after closure specialization, which leaves every such function a global
-    // function applied to its capture list.
+    // nothing. It runs after the rewrite by the lambda sets, which leaves every such function a
+    // global function applied to its capture struct.
     run_pass(
         prg,
         config,

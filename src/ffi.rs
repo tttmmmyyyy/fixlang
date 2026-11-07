@@ -399,7 +399,7 @@ impl CSignature {
         CSignature {
             param_tys: exported_ty.doms.iter().map(boundary_tycon).collect(),
             ret_tycon: if exported_ty.codom.is_unit() {
-                exported_ty.codom.toplevel_tycon().unwrap()
+                exported_ty.codom.head_tycon()
             } else {
                 boundary_tycon(&exported_ty.codom)
             },

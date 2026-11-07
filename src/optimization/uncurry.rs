@@ -12,7 +12,7 @@ Higher-order uncurrying (https://xavierleroy.org/publi/higher-order-uncurrying.p
 use super::rename::rename_lam_param_avoiding;
 use crate::{
     ast::{
-        expr::{collect_app, expr_abs, expr_app, expr_let_typed, expr_var, Expr, ExprNode, Var},
+        expr::{expr_abs, expr_app, expr_let_typed, expr_var, Expr, ExprNode, Var},
         name::{FullName, Name},
         program::{Program, Symbol},
         types::type_func,
@@ -260,7 +260,7 @@ fn replace_closure_call_with_func_call(
     expr: &Arc<ExprNode>,
     funcs: &UncurriedFuncs,
 ) -> Arc<ExprNode> {
-    let (fun, args) = collect_app(expr);
+    let (fun, args) = expr.destructure_app();
     let fun_ty = fun.type_.as_ref().unwrap();
     match &*fun.expr {
         Expr::Var(v) => {

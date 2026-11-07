@@ -524,12 +524,7 @@ fn splittable_struct<'e>(
     ty: &Arc<TypeNode>,
     type_env: &'e TypeEnv,
 ) -> Option<(Arc<TyCon>, &'e TyConInfo)> {
-    let tycon = ty.toplevel_tycon().unwrap_or_else(|| {
-        panic!(
-            "the argument type `{}` is headed by no type constructor",
-            ty.to_string()
-        )
-    });
+    let tycon = ty.head_tycon();
     let info = type_env.tycon_info(&tycon);
     if info.variant != TyConVariant::Struct || !info.is_unbox || info.fields.is_empty() {
         return None;
