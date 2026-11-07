@@ -14,7 +14,10 @@
 //!    all-`Own` baseline (`f_own`, the original) and a borrowing clone (`f_borrow`). Each direct call
 //!    is routed to one version. A call is routed to the borrow version only when it is *safe* — the
 //!    call is not in tail position, or it passes no owned argument — so a tail call is never turned
-//!    into a non-tail one by an after-call release. Indirect calls keep the all-`Own` original.
+//!    into a non-tail one by an after-call release, and only when it *saves a retain* — some
+//!    argument unit the borrow version borrows would otherwise be retained for the call. An owned
+//!    value at its last use is moved into the own version, so borrowing it would only delay its
+//!    release. Indirect calls keep the all-`Own` original.
 //!
 //! 3. *Reference-count rewrite*: the borrow clone drops the reference counting on its borrowed
 //!    parameter leaves, and each call site takes over the counting the callee no longer does — a
