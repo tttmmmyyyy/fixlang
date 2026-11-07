@@ -313,6 +313,17 @@ impl ModuleFile {
         module_file_name(&self.module, &self.module_hash)
     }
 
+    /// Whether `name` is the name of a file of the same module checked under another hash.
+    fn is_name_under_another_hash(&self, name: &str) -> bool {
+        // A file name of a module is its prefix followed by a digest of a fixed length, so a name
+        // of that length beginning with the prefix is a file of the module. A temporary file
+        // begins with a dot, which no prefix does.
+        let own = self.name();
+        name.starts_with(&module_file_prefix(&self.module))
+            && name.len() == own.len()
+            && name != own
+    }
+
     /// The path of the file, under `TYPED_MODULES_PATH`.
     fn path(&self) -> PathBuf {
         self.path_in(Path::new(TYPED_MODULES_PATH))
@@ -456,16 +467,10 @@ fn remove_stale_files(dir: &Path, file: &ModuleFile) {
     let Ok(dir_entries) = fs::read_dir(dir) else {
         return;
     };
-    // A file name of a module is its prefix followed by a digest of a fixed length, so a name of
-    // that length beginning with the prefix is a file of the module. A temporary file begins with a
-    // dot, which no prefix does.
-    let prefix = module_file_prefix(&file.module);
-    let kept = file.name();
     for dir_entry in dir_entries.flatten() {
         let entry_name = dir_entry.file_name();
         let entry_name = entry_name.to_string_lossy();
-        if entry_name.starts_with(&prefix) && entry_name.len() == kept.len() && entry_name != kept
-        {
+        if file.is_name_under_another_hash(&entry_name) {
             let _ = fs::remove_file(dir.join(entry_name.as_ref()));
         }
     }

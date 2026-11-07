@@ -507,6 +507,11 @@ main = println $ (1, 2, 3, 4).to_string + 65.c_int.i64.to_string;
         )
         .expect("Failed to write main.fix");
         build(dir, "main.fix", &[]);
+        cache_file_of_main(dir)
+    }
+
+    /// The path of the cache file of `Main` in the project at `dir`.
+    fn cache_file_of_main(dir: &Path) -> PathBuf {
         let main_file = cache_files(dir)
             .into_iter()
             .map(|(name, _)| name)
@@ -924,9 +929,9 @@ main = println $ (double(21), 3).to_string;
         }
     }
 
-    /// A build that writes the file of a module removes the temporary files there that have gone
-    /// unmodified for a day, and keeps the more recent ones, which a build still running may be
-    /// writing.
+    /// A build that type-checks a body removes the temporary files in the cache directory that have
+    /// gone unmodified for a day, and keeps the more recent ones, which a build still running may
+    /// be writing.
     #[test]
     fn a_build_removes_the_temporary_files_left_a_day_ago() {
         let temp = TempDir::new().expect("Failed to create temp directory");
@@ -1099,13 +1104,7 @@ main = println $ (double(21), 3).to_string;
         )
         .expect("Failed to write main.fix");
         build(dir, "main.fix", &[]);
-        let new_file = dir.join(TYPED_MODULES_PATH).join(
-            cache_files(dir)
-                .into_iter()
-                .map(|(name, _)| name)
-                .find(|name| name.starts_with("Main_"))
-                .expect("the build wrote no cache file of `Main`"),
-        );
+        let new_file = cache_file_of_main(dir);
         assert_ne!(
             new_file, old_file,
             "the edit left the hash of `Main` as it was"
