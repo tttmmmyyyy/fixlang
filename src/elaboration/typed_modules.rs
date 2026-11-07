@@ -829,7 +829,7 @@ impl Program {
 
 #[cfg(test)]
 mod tests {
-    use super::decode_body;
+    use super::{decode_body, module_file_name, module_file_prefix, ModuleFile};
     use crate::ast::program::TypedExpr;
     use crate::elaboration::typecheckcache::EntityIdentity;
     use crate::fixstd::builtin::{expr_int_lit, make_u128_ty};
@@ -846,5 +846,24 @@ mod tests {
             read.expr.get_builtin().op.name(),
             format!("int({})", u128::MAX)
         );
+    }
+
+    /// A name that begins with the prefix of a module's files but is longer than the names of
+    /// those files is the name of no file of the module, while the name of the module's file under
+    /// another hash is.
+    #[test]
+    fn a_name_longer_than_a_module_file_name_is_no_file_of_the_module() {
+        let file = ModuleFile {
+            module: "Main".to_string(),
+            module_hash: "new".to_string(),
+        };
+        assert!(file.is_name_under_another_hash(&module_file_name(&file.module, "old")));
+        let longer = format!(
+            "{}{}_{}",
+            module_file_prefix(&file.module),
+            "0".repeat(32),
+            "0".repeat(32)
+        );
+        assert!(!file.is_name_under_another_hash(&longer));
     }
 }
