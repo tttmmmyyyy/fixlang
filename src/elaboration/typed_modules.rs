@@ -432,8 +432,7 @@ impl NewModuleFile {
 }
 
 /// Writes `bytes` in place of `file` in `dir`, removes the files of the module checked under any
-/// other hash and the temporary files that builds which were killed left in `dir`, and answers the
-/// written file mapped into memory.
+/// other hash, and answers the written file mapped into memory.
 fn write_module_file(dir: &Path, file: &ModuleFile, bytes: &[u8]) -> io::Result<Mmap> {
     // The name holds no path separator, and `replace_file` replaces a symbolic link at the path
     // instead of writing through it, so the file is written in `dir`.
@@ -450,21 +449,23 @@ fn write_module_file(dir: &Path, file: &ModuleFile, bytes: &[u8]) -> io::Result<
     Ok(mapped)
 }
 
-/// Removes from `dir` the files of the module of `file` checked under any other hash, and the
-/// temporary files that builds which were killed left there. `file` is in place already, so a file
-/// this fails to remove costs only disk space, and the next write tries again.
+/// Removes from `dir` the files of the module of `file` checked under any other hash. `file` is in
+/// place already, so a file this fails to remove costs only disk space, and the next write tries
+/// again.
 fn remove_stale_files(dir: &Path, file: &ModuleFile) {
-    remove_abandoned_temporary_files(dir);
     let Ok(dir_entries) = fs::read_dir(dir) else {
         return;
     };
-    // The temporary files begin with a dot, which no prefix does.
+    // A file name of a module is its prefix followed by a digest of a fixed length, so a name of
+    // that length beginning with the prefix is a file of the module. A temporary file begins with a
+    // dot, which no prefix does.
     let prefix = module_file_prefix(&file.module);
     let kept = file.name();
     for dir_entry in dir_entries.flatten() {
         let entry_name = dir_entry.file_name();
         let entry_name = entry_name.to_string_lossy();
-        if entry_name.starts_with(&prefix) && entry_name != kept {
+        if entry_name.starts_with(&prefix) && entry_name.len() == kept.len() && entry_name != kept
+        {
             let _ = fs::remove_file(dir.join(entry_name.as_ref()));
         }
     }
@@ -653,7 +654,8 @@ impl Program {
     /// leaves memory then; the file of a module is written once the last body of the module is
     /// checked. When a file cannot be written, that is reported as a warning, no file is written
     /// after it, and the bodies of that module and of the modules after it are read from the bytes
-    /// meant for their files.
+    /// meant for their files. The temporary files that builds which were killed left in the
+    /// directory are removed first.
     fn check_and_write_bodies(
         &self,
         to_check: &[(BodyLocation, Arc<ModuleFile>, EntityIdentity)],
@@ -664,6 +666,9 @@ impl Program {
         } else {
             create_typed_modules_dir()
         };
+        if let Some(dir) = &dir {
+            remove_abandoned_temporary_files(dir);
+        }
         let mut write_failed = false;
         let mut outcomes: Vec<Option<CheckOutcome>> = to_check.iter().map(|_| None).collect();
         let mut unchecked_of_module: Map<Name, usize> = Map::default();
