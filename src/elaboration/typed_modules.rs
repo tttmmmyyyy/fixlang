@@ -426,8 +426,8 @@ impl NewModuleFile {
         );
     }
 
-    /// The bytes of the new version: the bodies, then the record and the footer. The record is
-    /// answered beside them.
+    /// Answers the record of the new version, and its bytes: the bodies, then the record and the
+    /// footer.
     fn finish(self) -> (ModuleRecord, Vec<u8>) {
         let mut entries: Vec<(EntityIdentity, EntityEntry)> = self.record.into_iter().collect();
         entries.sort_by(|(lhs, _), (rhs, _)| lhs.cmp(rhs));
@@ -442,8 +442,7 @@ impl NewModuleFile {
     }
 }
 
-/// Writes `bytes` in place of the file of `file` in `dir`, and answers the written file mapped into
-/// memory.
+/// Writes `bytes` in place of `file` in `dir`, and answers the written file mapped into memory.
 fn write_module_file(dir: &Path, file: &ModuleFile, bytes: &[u8]) -> io::Result<Mmap> {
     // The name holds no path separator, and `replace_file` replaces a symbolic link at the path
     // instead of writing through it, so the file is written in `dir`.
