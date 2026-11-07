@@ -149,6 +149,13 @@ fn module_file_name(module: &Name, module_hash: &str) -> String {
     )
 }
 
+/// The `module_file_prefix` that the file name `name` begins with, when `name` is long enough to be
+/// a name `module_file_name` gives.
+fn module_file_prefix_of(name: &str) -> Option<&str> {
+    // `module_file_name` ends the name in the 32 hexadecimal digits of an MD5 digest.
+    name.get(..name.len().checked_sub(32)?)
+}
+
 /// Where the record lies in a file of `len` bytes that ends in `footer`, or `None` when the footer
 /// is not one a file of type-checked modules ends in.
 fn record_range(footer: &[u8; FOOTER_LEN as usize], len: u64) -> Option<Range<u64>> {
@@ -477,8 +484,7 @@ fn remove_stale_files(dir: &Path, written: &[Arc<ModuleFile>]) {
     for dir_entry in dir_entries.flatten() {
         let entry_name = dir_entry.file_name();
         let entry_name = entry_name.to_string_lossy();
-        // A file name is a prefix followed by the 32 hexadecimal digits of a digest.
-        let Some(prefix) = entry_name.get(..entry_name.len().saturating_sub(32)) else {
+        let Some(prefix) = module_file_prefix_of(&entry_name) else {
             continue;
         };
         if kept
