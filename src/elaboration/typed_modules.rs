@@ -316,8 +316,7 @@ impl ModuleFile {
     /// Whether `name` is the name of a file of the same module checked under another hash.
     fn is_name_under_another_hash(&self, name: &str) -> bool {
         // A file name of a module is its prefix followed by a digest of a fixed length, so a name
-        // of that length beginning with the prefix is a file of the module. A temporary file
-        // begins with a dot, which no prefix does.
+        // of that length beginning with the prefix is a file of the module.
         let own = self.name();
         name.starts_with(&module_file_prefix(&self.module))
             && name.len() == own.len()
