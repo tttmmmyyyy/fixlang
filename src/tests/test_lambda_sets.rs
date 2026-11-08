@@ -494,7 +494,7 @@ fn test_two_elements_of_one_class_capturing_an_optional_function_of_their_own_se
 /// function values left as closures — so these assert against the dump.
 #[cfg(test)]
 mod dump_tests {
-    use crate::constants::{LS_CAP_PREFIX, LS_LAM_SUFFIX};
+    use crate::constants::{LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX};
     use crate::tests::test_util::{
         build_run_and_read_rc_ir, rc_ir_callee_of, rc_ir_function_bodies,
     };
@@ -982,5 +982,129 @@ mod dump_tests {
                 body
             );
         }
+    }
+
+    /// Whether the function header `header` takes a value of a union that the rewrite represents a
+    /// set of two or more classes by.
+    fn takes_a_union(header: &str) -> bool {
+        parameters(header).contains(LS_UNION_PREFIX)
+    }
+
+    /// `apply` given one of two lambdas an `if` chooses. Recursive, so it stays a function of its
+    /// own.
+    const CHOSEN_SOURCE: &str = r#"
+    module Main;
+
+    apply : (I64 -> I64) -> I64 -> I64;
+    apply = |f, x| if x > 100 { 0 } else { f(x) + apply(f, x + 1) };
+
+    main : IO () = (
+        let n = Array::fill(1, 10).@(0);
+        let f = if n > 5 { |x| x + n } else { |x| x * 2 };
+        println(apply(f, 3).to_string)
+    );
+    "#;
+
+    /// What `CHOSEN_SOURCE` prints: the sum of `x + 10` over `3..100`.
+    const CHOSEN_OUTPUT: &str = "6027";
+
+    /// A set of two lambdas is represented by a union, and a function given a value of it calls
+    /// each lambda by name: `apply` takes the union and builds and calls no closure. At `basic`,
+    /// where the rewrite does not run, `apply` calls its function through a closure.
+    #[test]
+    fn test_a_function_given_one_of_two_lambdas_calls_each_by_name() {
+        let dump = build_run_and_read_rc_ir(
+            CHOSEN_SOURCE,
+            "max",
+            CHOSEN_OUTPUT,
+            "a function given one of two lambdas",
+        );
+        assert_calls_by_name(&dump, "Main::apply");
+        assert!(
+            rc_ir_function_bodies(&dump, "Main::apply")
+                .iter()
+                .any(|body| takes_a_union(header(body))),
+            "`apply` should take the union the two lambdas' set is represented by"
+        );
+
+        let dump = build_run_and_read_rc_ir(
+            CHOSEN_SOURCE,
+            "basic",
+            CHOSEN_OUTPUT,
+            "a function given one of two lambdas",
+        );
+        assert!(
+            rc_ir_function_bodies(&dump, "Main::apply")
+                .iter()
+                .any(|body| !closure_calls(body).is_empty()),
+            "at `basic` `apply` should call its function through a closure"
+        );
+    }
+
+    /// An array holding two lambdas and a global function, folded over by applying each to the
+    /// accumulator. The array's element set holds three classes.
+    const ARRAY_SOURCE: &str = r#"
+    module Main;
+
+    triple : I64 -> I64;
+    triple = |x| x * 3;
+
+    main : IO () = (
+        let n = Array::fill(1, 5).@(0);
+        let fs = [|x| x + n, triple, |x| x - 1];
+        println(fs.to_iter.fold(1, |f, acc| f(acc)).to_string)
+    );
+    "#;
+
+    /// What `ARRAY_SOURCE` prints: `((1 + 5) * 3) - 1`.
+    const ARRAY_OUTPUT: &str = "17";
+
+    /// The elements of an array of functions are values of a union, and the fold calls each by
+    /// name, the global function among them: the fold's copy builds and calls no closure.
+    #[test]
+    fn test_a_fold_over_an_array_of_functions_calls_each_by_name() {
+        let dump = build_run_and_read_rc_ir(
+            ARRAY_SOURCE,
+            "max",
+            ARRAY_OUTPUT,
+            "a fold over an array of functions",
+        );
+        assert_calls_by_name(&dump, "Std::Iterator::fold");
+        assert!(
+            dump.contains(LS_UNION_PREFIX),
+            "the array's elements should be values of a union:\n{}",
+            dump
+        );
+    }
+
+    /// A lambda capturing one of two lambdas an `if` chooses, handed to `apply`.
+    const CAPTURED_CHOICE_SOURCE: &str = r#"
+    module Main;
+
+    apply : (I64 -> I64) -> I64 -> I64;
+    apply = |f, x| if x > 100 { 0 } else { f(x) + apply(f, x + 1) };
+
+    main : IO () = (
+        let n = Array::fill(1, 10).@(0);
+        let f = if n > 5 { |x| x + n } else { |x| x * 2 };
+        let g = |x| f(x) + 1;
+        println(apply(g, 3).to_string)
+    );
+    "#;
+
+    /// What `CAPTURED_CHOICE_SOURCE` prints: the sum of `x + 11` over `3..100`.
+    const CAPTURED_CHOICE_OUTPUT: &str = "6125";
+
+    /// A union held in a capture struct is called by name: the copy of `apply` given `g` matches
+    /// the union `g` captures and calls the chosen lambda, and builds and calls no closure.
+    #[test]
+    fn test_a_lambda_capturing_one_of_two_lambdas_calls_it_by_name() {
+        let dump = build_run_and_read_rc_ir(
+            CAPTURED_CHOICE_SOURCE,
+            "max",
+            CAPTURED_CHOICE_OUTPUT,
+            "a lambda capturing one of two lambdas",
+        );
+        assert_calls_by_name(&dump, "Main::apply");
     }
 }
