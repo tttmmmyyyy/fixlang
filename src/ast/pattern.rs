@@ -1,4 +1,4 @@
-use crate::ast::expr::{FieldSrc, Var};
+use crate::ast::expr::{var_local, FieldSrc, Var};
 use crate::ast::name::{FullName, Name};
 use crate::ast::program::EndNode;
 use crate::ast::type_env::TypeEnv;
@@ -504,6 +504,12 @@ impl PatternNode {
         let mut node = self.clone();
         node.info.type_ = Some(ty);
         Arc::new(node)
+    }
+
+    /// A pattern binding the matched value to the local `name`, at the type `ty`, with no type
+    /// written for it and no source span.
+    pub fn make_local_var(name: &str, ty: Arc<TypeNode>) -> Arc<PatternNode> {
+        PatternNode::make_var(var_local(name), None).set_type(ty)
     }
 
     /// A pattern binding the matched value to `var`, with `anno_ty` as the type written for it and
