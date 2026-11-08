@@ -1,0 +1,6 @@
+[general]
+name = "prov-routing-field-of-a-join-held-on-one-arm"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

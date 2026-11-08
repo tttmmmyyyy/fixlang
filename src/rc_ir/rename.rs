@@ -23,7 +23,7 @@ use std::sync::Arc;
 /// suffix too, and each pass that adds such copies asserts that no other function has that name.
 ///
 /// # Examples
-/// `copy_suffix("u", "UD")` yields `"#uUD"`, and `copy_suffix("borrow", "")` yields `"#borrow"`.
+/// `copy_suffix("u", "UD")` yields `"#uUD"`, and `copy_suffix("borrow", "OB")` yields `"#borrowOB"`.
 pub(crate) fn copy_suffix(tag: &str, distinguisher: &str) -> String {
     assert!(
         !tag.is_empty() && tag.chars().all(|c| c.is_ascii_lowercase()),

@@ -9,10 +9,10 @@ mod borrow_tail_call_tests {
     };
 
     /// Deep tail recursion with a read-only parameter, and with a read-only parameter beside an
-    /// owned one. The first loop is routed to its borrow version, which must add no release after
-    /// the call; the second passes an owned argument in tail position, which must keep the call on
-    /// the owning version rather than un-tail it with an after-call release. Either mistake turns
-    /// the loop into real recursion, and the depth here overflows the stack.
+    /// owned one. Each tail call is routed to a version borrowing the read-only parameter, and must
+    /// leave no release after the call. The owned argument a tail call passes is at its last use,
+    /// so the version reached owns it and frees it. A release left after the call
+    /// turns the loop into real recursion, and the depth here overflows the stack.
     ///
     /// The depth makes this a stack test, not a memcheck one, so Valgrind is switched off to keep
     /// it fast.
@@ -28,8 +28,8 @@ mod borrow_tail_call_tests {
                 loop_sum(n - 1, acc + a.@(n % 3), a)
             );
 
-            // Reads `ro` and updates `rw`: the tail call passes an owned argument, so it stays on
-            // the owning version.
+            // Reads `ro` and updates `rw`: the tail call lends `ro` and passes `rw` at its last
+            // use, so it reaches a version borrowing `ro` and owning `rw`.
             loop_mix : I64 -> Array I64 -> Array I64 -> I64;
             loop_mix = |n, ro, rw| (
                 if n == 0 { ro.@(0) + rw.@(0) };
@@ -38,9 +38,9 @@ mod borrow_tail_call_tests {
             );
 
             // Borrows both parameters, and its tail call passes a borrowed value at one and a
-            // freshly built (owned) array at the other. Routing that call to the borrow version
-            // would put the fresh array's release after the call; it must stay on the owning
-            // version, which consumes the array in the call itself.
+            // freshly built (owned) array at the other. Borrowing the fresh array would put its
+            // release after the call, so the call reaches a version borrowing `ro` and owning `b`,
+            // which consumes the array in the call itself.
             churn : I64 -> Array I64 -> Array I64 -> I64;
             churn = |n, ro, b| (
                 if n == 0 { ro.@(0) + b.@(0) };

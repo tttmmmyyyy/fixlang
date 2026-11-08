@@ -6,6 +6,7 @@ use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use serde::{Serialize, Serializer};
+use std::ops::ControlFlow;
 use std::sync::Arc;
 
 /// A variable of the RC IR. Because a fresh name is minted at every binding, a name resolves its
@@ -94,8 +95,8 @@ pub struct RcFunc {
     pub source: Option<Span>,
     /// The reference-counting units this version borrows among its parameters and capture — the units
     /// it does not own, one `(parameter-name, unit-path)` each. Everything not listed is owned, so the
-    /// empty set is the all-owning default. Borrow-ification writes it: an original version borrows
-    /// nothing, a borrow version borrows its inferred read-only units.
+    /// empty set is the all-owning default. Borrow-ification writes it: a version borrows the units
+    /// its key marks `Borrow`, and the all-`Own` original borrows nothing.
     ///
     /// The empty default is correct at every stage — before borrow-ification every parameter is owned
     /// (the discipline `insert_rc` establishes), and a version that owns everything borrows nothing.
@@ -302,7 +303,7 @@ impl RcState {
 }
 
 /// The ownership of a single reference-counting unit.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Ownership {
     /// The callee receives ownership: it consumes the unit, by releasing it or by moving it into
     /// the result, and the caller retains it before the call at a non-last use.
@@ -311,8 +312,19 @@ pub enum Ownership {
     Borrow,
 }
 
+impl Ownership {
+    /// `Own` where `owned` holds, else `Borrow`.
+    pub fn owned_if(owned: bool) -> Ownership {
+        if owned {
+            Ownership::Own
+        } else {
+            Ownership::Borrow
+        }
+    }
+}
+
 /// The ownership of one argument, shaped like the value.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum OwnershipShape {
     /// A part of the value holding no reference-counting unit.
     NoUnit,
@@ -321,6 +333,42 @@ pub enum OwnershipShape {
     Fields(Vec<OwnershipShape>),
     /// A single reference-counting unit, owned or borrowed.
     Unit(Ownership),
+}
+
+impl OwnershipShape {
+    /// The ownership of the reference-counting unit at `unit`, a unit path of the value this shape
+    /// describes.
+    pub fn at(&self, unit: &[usize]) -> Ownership {
+        match (self, unit.split_first()) {
+            (OwnershipShape::Unit(ownership), None) => *ownership,
+            (OwnershipShape::Fields(fields), Some((idx, below))) => fields[*idx].at(below),
+            _ => panic!("the path {:?} names no unit of the shape {:?}", unit, self),
+        }
+    }
+
+    /// Whether the value borrows any of its units.
+    pub fn borrows_any(&self) -> bool {
+        match self {
+            OwnershipShape::NoUnit => false,
+            OwnershipShape::Fields(fields) => fields.iter().any(OwnershipShape::borrows_any),
+            OwnershipShape::Unit(ownership) => *ownership == Ownership::Borrow,
+        }
+    }
+
+    /// The ownership written one letter per reference-counting unit, `O` for `Own` and `B` for
+    /// `Borrow`, in field order. Shapes of one type spell strings of one length, which differ
+    /// wherever the ownership does.
+    ///
+    /// # Examples
+    /// `Fields([Unit(Own), NoUnit, Unit(Borrow)])` spells `"OB"`.
+    pub fn spelling(&self) -> String {
+        match self {
+            OwnershipShape::NoUnit => String::new(),
+            OwnershipShape::Fields(fields) => fields.iter().map(OwnershipShape::spelling).collect(),
+            OwnershipShape::Unit(Ownership::Own) => "O".to_string(),
+            OwnershipShape::Unit(Ownership::Borrow) => "B".to_string(),
+        }
+    }
 }
 
 /// The initializer of a global value, run once when a reader first asks for the value. The whole
@@ -498,6 +546,76 @@ fn for_each_var_of_rhs(rhs: &RcRhs, visit: &mut impl FnMut(&RcVar)) {
             }
         }
     }
+}
+
+/// Whether `node` reads the variable named `name` as a value. See `try_for_each_value_use` for
+/// what counts as such a read.
+pub(crate) fn is_value_used(name: &FullName, node: &RcExprNode) -> bool {
+    try_for_each_value_use(node, &mut |v| {
+        if v.name == *name {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    })
+    .is_break()
+}
+
+/// The number of times `node` reads the variable named `name` as a value. See
+/// `try_for_each_value_use` for what counts as such a read.
+pub(crate) fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
+    let mut count = 0;
+    let _ = try_for_each_value_use(node, &mut |v| {
+        count += (v.name == *name) as usize;
+        ControlFlow::Continue(())
+    });
+    count
+}
+
+/// Visit each place `node` reads a variable as a value, the bodies of the arms of every `Match`
+/// included, until `visit` breaks: a move, a call callee or argument, an operand of a builtin
+/// operation, a closure capture, a match scrutinee, a destructured container, an `eval`, or the
+/// returned variable. Binders are not reads. A `Retain`/`Release` names its variable only for
+/// reference counting, so it is not one either, which lets a call be recognized as an argument's
+/// last use even when the lowering brackets it with reference counts.
+fn try_for_each_value_use(
+    node: &RcExprNode,
+    visit: &mut impl FnMut(&RcVar) -> ControlFlow<()>,
+) -> ControlFlow<()> {
+    // A deep continuation chain recurses to its full depth here; grow the stack on demand.
+    grow_stack(|| match node.expr.as_ref() {
+        RcExpr::Ret(v) => visit(v),
+        RcExpr::Let(_, rhs, k) => {
+            match rhs {
+                RcRhs::Var(v) => visit(v)?,
+                RcRhs::App(callee, args) => {
+                    visit(callee)?;
+                    args.iter().try_for_each(&mut *visit)?
+                }
+                RcRhs::Closure(_, caps) => caps.iter().try_for_each(&mut *visit)?,
+                // The op's embedded names are its operand list again (`validate` checks it).
+                RcRhs::Builtin(_, args) => args.iter().try_for_each(&mut *visit)?,
+                RcRhs::Match(scrut, arms) => {
+                    visit(scrut)?;
+                    for arm in arms {
+                        try_for_each_value_use(&arm.body, visit)?;
+                    }
+                }
+            }
+            try_for_each_value_use(k, visit)
+        }
+        RcExpr::Destructure(container, _, _, k) => {
+            visit(container)?;
+            try_for_each_value_use(k, visit)
+        }
+        RcExpr::Eval(v, k) => {
+            visit(v)?;
+            try_for_each_value_use(k, visit)
+        }
+        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => {
+            try_for_each_value_use(k, visit)
+        }
+    })
 }
 
 /// Serialize a set of variable paths in the order of the paths themselves, so that a digest taken

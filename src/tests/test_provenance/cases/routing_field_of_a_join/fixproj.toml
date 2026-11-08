@@ -1,0 +1,6 @@
+[general]
+name = "prov-routing-field-of-a-join"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

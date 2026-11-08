@@ -495,7 +495,9 @@ fn test_two_elements_of_one_class_capturing_an_optional_function_of_their_own_se
 #[cfg(test)]
 mod dump_tests {
     use crate::constants::{LS_CAP_PREFIX, LS_LAM_SUFFIX};
-    use crate::tests::test_util::{build_run_and_read_rc_ir, rc_ir_function_bodies};
+    use crate::tests::test_util::{
+        build_run_and_read_rc_ir, rc_ir_callee_of, rc_ir_function_bodies,
+    };
 
     /// The function values that `body`, a function of an RC IR dump, calls: each call whose callee
     /// is a local value. A global is written with its namespace, and a builtin operation's name
@@ -846,7 +848,10 @@ mod dump_tests {
         let lending: Vec<String> = rc_ir_function_bodies(&dump, "Std::loop")
             .into_iter()
             .filter(|body| !header(body).split('(').next().unwrap().contains("#borrow"))
-            .filter(|body| body.contains("#borrow("))
+            .filter(|body| {
+                body.lines()
+                    .any(|l| rc_ir_callee_of(l).is_some_and(|c| c.contains("#borrow")))
+            })
             .collect();
         assert!(
             !lending.is_empty(),

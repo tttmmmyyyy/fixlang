@@ -16,8 +16,7 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
-    use std::fs;
+    use crate::tests::test_util::{build_project_and_read_rc_ir, copy_dir_recursive};
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
@@ -41,22 +40,7 @@ mod integration_tests {
     /// module. The build works at the `max` optimization level, the only one the locality pass runs
     /// at.
     fn emit_main_rc_ir(project_dir: &Path) -> String {
-        let output = fix_command_at_opt_level("build", "max")
-            .arg("--emit-rc-ir")
-            .arg("Main")
-            .current_dir(project_dir)
-            .output()
-            .expect("Failed to execute fix build --emit-rc-ir");
-
-        if !output.status.success() {
-            eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-            panic!("fix build --emit-rc-ir failed");
-        }
-
-        let dump_path = project_dir.join(".fixlang/rc_ir.Main.post.txt");
-        fs::read_to_string(&dump_path)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
+        build_project_and_read_rc_ir(project_dir, "Main", "rc_ir.Main.post.txt")
     }
 
     /// Every variable the dump binds under the source name `source_name` — one per clone of the

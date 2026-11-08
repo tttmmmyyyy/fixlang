@@ -37,7 +37,7 @@ use crate::configuration::Configuration;
 use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp};
 use crate::misc::{grow_stack, Map};
 use crate::parse::sourcefile::Span;
-use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
+use crate::rc_ir::ast::{count_value_uses, MatchArm, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
 use crate::rc_ir::rename::{clone_fresh, copy_suffix, substitute_expr};
 use std::sync::Arc;
 
@@ -494,45 +494,6 @@ fn with_continuation(node: &RcExprNode, k: RcExprNode) -> RcExprNode {
         RcExpr::Release(v, path, state, _) => RcExpr::Release(v.clone(), path.clone(), *state, k),
     };
     node_of(expr, &node.source)
-}
-
-/// The number of times `name` occurs as a value in `node`: a move, a call callee or argument, an
-/// operand of a builtin operation, a closure capture, a match scrutinee, a destructured container,
-/// an `eval`, or the returned variable. Binders do not count. `Retain`/`Release` name a variable
-/// only for reference counting, so they are transparent.
-fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
-    // A deep continuation chain recurses to its full depth here; grow the stack on demand.
-    grow_stack(|| {
-        let hit = |v: &RcVar| (v.name == *name) as usize;
-        match node.expr.as_ref() {
-            RcExpr::Ret(v) => hit(v),
-            RcExpr::Let(_, rhs, k) => rhs_value_uses(name, rhs) + count_value_uses(name, k),
-            RcExpr::Destructure(container, _, _state, k) => {
-                hit(container) + count_value_uses(name, k)
-            }
-            RcExpr::Eval(v, k) => hit(v) + count_value_uses(name, k),
-            RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => count_value_uses(name, k),
-        }
-    })
-}
-
-/// The number of times `name` occurs as a value in `rhs`, counting the arms of a `Match` as well as
-/// its scrutinee. The arm payloads are binders, so they do not count.
-fn rhs_value_uses(name: &FullName, rhs: &RcRhs) -> usize {
-    let hit = |v: &RcVar| (v.name == *name) as usize;
-    match rhs {
-        RcRhs::Var(v) => hit(v),
-        RcRhs::App(callee, args) => hit(callee) + args.iter().map(hit).sum::<usize>(),
-        RcRhs::Closure(_, caps) => caps.iter().map(hit).sum(),
-        RcRhs::Builtin(_, args) => args.iter().map(hit).sum(),
-        RcRhs::Match(scrut, arms) => {
-            hit(scrut)
-                + arms
-                    .iter()
-                    .map(|arm| count_value_uses(name, &arm.body))
-                    .sum::<usize>()
-        }
-    }
 }
 
 /// A one-entry substitution map.
