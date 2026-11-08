@@ -494,7 +494,7 @@ fn test_two_elements_of_one_class_capturing_an_optional_function_of_their_own_se
 /// function values left as closures — so these assert against the dump.
 #[cfg(test)]
 mod dump_tests {
-    use crate::constants::{LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX};
+    use crate::constants::{LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_UNION_VARIANTS};
     use crate::tests::test_util::{
         build_run_and_read_rc_ir, rc_ir_callee_of, rc_ir_function_bodies,
     };
@@ -1106,5 +1106,65 @@ mod dump_tests {
             "a lambda capturing one of two lambdas",
         );
         assert_calls_by_name(&dump, "Main::apply");
+    }
+
+    /// A program folding over an array of `count` lambdas, the `i`-th adding `i` times a number the
+    /// compiler does not know, so that every lambda is a class of its own.
+    fn many_lambdas_source(count: usize) -> String {
+        let lambdas: Vec<String> = (0..count).map(|i| format!("|x| x + n * {}", i)).collect();
+        format!(
+            r#"
+    module Main;
+
+    main : IO () = (
+        let n = Array::fill(1, 1).@(0);
+        let fs = [{}];
+        println(fs.to_iter.fold(0, |f, acc| f(acc)).to_string)
+    );
+    "#,
+            lambdas.join(", ")
+        )
+    }
+
+    /// What `many_lambdas_source(count)` prints: the sum of `0..count`.
+    fn many_lambdas_output(count: usize) -> String {
+        (count * (count - 1) / 2).to_string()
+    }
+
+    /// A set of as many classes as a union has variants is represented by a union, and one of a
+    /// class more by closures: the fold over 256 lambdas takes their union, and the fold over 257
+    /// calls them through closures, answering the same.
+    #[test]
+    fn test_a_set_of_more_classes_than_a_union_has_variants_is_a_set_of_closures() {
+        let source = many_lambdas_source(MAX_UNION_VARIANTS);
+        let dump = build_run_and_read_rc_ir(
+            &source,
+            "max",
+            &many_lambdas_output(MAX_UNION_VARIANTS),
+            "a fold over as many lambdas as a union has variants",
+        );
+        assert_calls_by_name(&dump, "Std::Iterator::fold");
+        assert!(
+            dump.contains(LS_UNION_PREFIX),
+            "the lambdas should be values of a union"
+        );
+
+        let source = many_lambdas_source(MAX_UNION_VARIANTS + 1);
+        let dump = build_run_and_read_rc_ir(
+            &source,
+            "max",
+            &many_lambdas_output(MAX_UNION_VARIANTS + 1),
+            "a fold over one lambda more than a union has variants",
+        );
+        assert!(
+            !dump.contains(LS_UNION_PREFIX),
+            "no union should stand for the lambdas"
+        );
+        assert!(
+            rc_ir_function_bodies(&dump, "Std::Iterator::fold")
+                .iter()
+                .any(|body| !closure_calls(body).is_empty()),
+            "the fold should call the lambdas through closures"
+        );
     }
 }

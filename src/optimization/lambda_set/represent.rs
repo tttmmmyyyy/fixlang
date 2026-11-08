@@ -8,7 +8,7 @@ use super::{
     specialize::Specialization,
 };
 use crate::{
-    constants::LS_COPY_SUFFIX,
+    constants::{LS_COPY_SUFFIX, MAX_UNION_VARIANTS},
     graph::Graph,
     hash::md5_hex,
     misc::{Map, Set},
@@ -260,6 +260,8 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
 ///    holds itself, where the capture structs of its elements hold in place, through the unboxed
 ///    fields of the values they capture, a set that holds in place this one again. Such a layout
 ///    would have no size, as an unboxed type reaching itself has none.
+///    So is a set whose elements make more classes in step 2 than a union has variants
+///    (`MAX_UNION_VARIANTS`), and step 2 is taken again with it among these.
 /// 2. The other sets and their elements are partitioned by the code they make: two elements are
 ///    equal when they name the same lambda and the sets at its interface (`Builder::interface`) are
 ///    equal, and two sets are equal when their elements are, counted up to that equality. The sets
@@ -281,30 +283,43 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     let builders = Builders::new(analysis, spec);
 
     // The sets a capture struct or a union of capture structs can stand for.
-    let unboxable = unboxable_sets(analysis, spec, &builders);
+    let mut unboxable = unboxable_sets(analysis, spec, &builders);
 
     // The partition of the sets by the code their values make. The sets of closures hold no
-    // element the partition reads, so they make one class of their own.
-    let elems: Vec<NodeElems<LamId>> = (0..set_count)
-        .map(|id| {
-            if !unboxable[id] {
-                return vec![];
-            }
-            store
-                .lam_elems(id as SetId)
-                .map(|(lam, args)| {
-                    let children = builders
-                        .of(lam, args)
-                        .interface
-                        .iter()
-                        .map(|s| Child::Node(*s as usize))
-                        .collect();
-                    (lam, children)
-                })
-                .collect()
-        })
-        .collect();
-    let (block, block_elems) = canonical_classes(vec![0; set_count], &elems);
+    // element the partition reads, so they make one class of their own. A set whose elements make
+    // more classes than a union has variants is represented by closures as well, and the partition
+    // is made again with it among them; the sets of closures only grow, so this ends.
+    let (block, block_elems) = loop {
+        let elems: Vec<NodeElems<LamId>> = (0..set_count)
+            .map(|id| {
+                if !unboxable[id] {
+                    return vec![];
+                }
+                store
+                    .lam_elems(id as SetId)
+                    .map(|(lam, args)| {
+                        let children = builders
+                            .of(lam, args)
+                            .interface
+                            .iter()
+                            .map(|s| Child::Node(*s as usize))
+                            .collect();
+                        (lam, children)
+                    })
+                    .collect()
+            })
+            .collect();
+        let (block, block_elems) = canonical_classes(vec![0; set_count], &elems);
+        let too_many: Vec<usize> = (0..set_count)
+            .filter(|id| unboxable[*id] && block_elems[block[*id]].len() > MAX_UNION_VARIANTS)
+            .collect();
+        if too_many.is_empty() {
+            break (block, block_elems);
+        }
+        for id in too_many {
+            unboxable[id] = false;
+        }
+    };
 
     // A set whose elements make one class is represented by that class's capture struct, and one
     // whose elements make more by a union of their capture structs. The sets of one block share the
