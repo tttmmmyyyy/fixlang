@@ -1,9 +1,9 @@
 // How the values of each concrete lambda set are represented once the program is rewritten.
 
 use super::{
-    concrete::{Elem, SetId},
+    concrete::{Elem, SetId, SetStore},
     infer::Analysis,
-    partition::{canonical_classes, Child, ChildKey, ElemKey, NodeElems},
+    partition::{canonical_classes, elem_key, Child, ElemKey, NodeElems},
     solver::LamId,
     specialize::Specialization,
 };
@@ -65,9 +65,9 @@ pub struct Representation {
     /// How each set is represented, by its id.
     of_set: Vec<Repr>,
     /// The classes of the elements the rewrite makes global functions of: the elements of each set
-    /// represented by a capture struct, and each element of a set of closures naming a lambda that
-    /// `Lambda::is_lifted_from_closures` holds of. The classes of the sets represented by a capture
-    /// struct come first.
+    /// represented by a capture struct or a union, and each element of a set of closures naming a
+    /// lambda that `Lambda::is_lifted_from_closures` holds of. The classes of the sets represented
+    /// by a capture struct come first.
     pub classes: Vec<LamClass>,
     /// The unions standing for the sets represented by an unboxed union.
     pub unions: Vec<UnionRepr>,
@@ -251,6 +251,38 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
     unboxable
 }
 
+/// The partition of the sets of `store` by the code their values make (`canonical_classes`), where
+/// `unboxable` holds the sets a capture struct or a union can stand for: the elements each set is
+/// partitioned by, in the order `SetStore::lam_elems` lists them, the class of each set, and the
+/// sorted elements of each class. A set no capture struct or union stands for is given no element.
+fn partition_sets(
+    store: &SetStore,
+    builders: &Builders,
+    unboxable: &[bool],
+) -> (Vec<NodeElems<LamId>>, Vec<usize>, Vec<Vec<ElemKey<LamId>>>) {
+    let elems: Vec<NodeElems<LamId>> = (0..store.len())
+        .map(|id| {
+            if !unboxable[id] {
+                return vec![];
+            }
+            store
+                .lam_elems(id as SetId)
+                .map(|(lam, args)| {
+                    let children = builders
+                        .of(lam, args)
+                        .interface
+                        .iter()
+                        .map(|s| Child::Node(*s as usize))
+                        .collect();
+                    (lam, children)
+                })
+                .collect()
+        })
+        .collect();
+    let (block, block_elems) = canonical_classes(vec![0; store.len()], &elems);
+    (elems, block, block_elems)
+}
+
 /// How the values of each set of `spec` are represented.
 ///
 /// The representation is decided in three steps.
@@ -288,38 +320,26 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     // The partition of the sets by the code their values make. The sets of closures hold no
     // element the partition reads, so they make one class of their own. A set whose elements make
     // more classes than a union has variants is represented by closures as well, and the partition
-    // is made again with it among them; the sets of closures only grow, so this ends.
-    let (block, block_elems) = loop {
-        let elems: Vec<NodeElems<LamId>> = (0..set_count)
-            .map(|id| {
-                if !unboxable[id] {
-                    return vec![];
-                }
-                store
-                    .lam_elems(id as SetId)
-                    .map(|(lam, args)| {
-                        let children = builders
-                            .of(lam, args)
-                            .interface
-                            .iter()
-                            .map(|s| Child::Node(*s as usize))
-                            .collect();
-                        (lam, children)
-                    })
-                    .collect()
-            })
-            .collect();
-        let (block, block_elems) = canonical_classes(vec![0; set_count], &elems);
-        let too_many: Vec<usize> = (0..set_count)
+    // is made again with it among them. Once is enough: the partition made first, with the blocks of
+    // those sets merged into the block of the sets of closures, is still stable, so the one made
+    // again is as coarse or coarser, and no set it holds makes more classes than before.
+    let (mut elems, mut block, mut block_elems) = partition_sets(store, &builders, &unboxable);
+    let too_many = |block: &[usize], block_elems: &[Vec<ElemKey<LamId>>], unboxable: &[bool]| {
+        (0..set_count)
             .filter(|id| unboxable[*id] && block_elems[block[*id]].len() > MAX_UNION_VARIANTS)
-            .collect();
-        if too_many.is_empty() {
-            break (block, block_elems);
-        }
-        for id in too_many {
+            .collect::<Vec<usize>>()
+    };
+    let demoted = too_many(&block, &block_elems, &unboxable);
+    if !demoted.is_empty() {
+        for id in demoted {
             unboxable[id] = false;
         }
-    };
+        (elems, block, block_elems) = partition_sets(store, &builders, &unboxable);
+        assert!(
+            too_many(&block, &block_elems, &unboxable).is_empty(),
+            "a set makes more classes than a union has variants once the partition is made again"
+        );
+    }
 
     // A set whose elements make one class is represented by that class's capture struct, and one
     // whose elements make more by a union of their capture structs. The sets of one block share the
@@ -389,17 +409,9 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     for id in &first_union_sets {
         let mut members: Vec<(ElemKey<LamId>, u32)> = store
             .lam_elems(*id as SetId)
-            .map(|(lam, args)| {
-                let key = (
-                    lam,
-                    builders
-                        .of(lam, args)
-                        .interface
-                        .iter()
-                        .map(|s| ChildKey::Class(block[*s as usize]))
-                        .collect(),
-                );
-                (key, add_class(lam, args))
+            .zip(&elems[*id])
+            .map(|((lam, args), (label, children))| {
+                (elem_key(label, children, &block), add_class(lam, args))
             })
             .collect();
         members.sort();
@@ -453,7 +465,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
             }
         }
     }
-    name_classes(analysis, &mut classes, &mut unions);
+    name_classes_and_unions(analysis, &mut classes, &mut unions);
 
     let mut class_counts: Map<LamId, usize> = Map::default();
     for class in &classes {
@@ -483,8 +495,12 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
 /// `[Closure, Single(B)]` and `B` of `g@lam0` representing it as `[Single(A)]`, are written
 /// `f@lam1(c,g@lam0(^0))` and `g@lam0(f@lam1(c,^0))`. A union of the classes of `f@lam0()` and
 /// `g@lam0()` is written `{f@lam0(),g@lam0()}`.
-fn name_classes(analysis: &Analysis, classes: &mut [LamClass], unions: &mut [UnionRepr]) {
-    let names = Names {
+fn name_classes_and_unions(
+    analysis: &Analysis,
+    classes: &mut [LamClass],
+    unions: &mut [UnionRepr],
+) {
+    let nodes = NameGraph {
         analysis,
         classes: &*classes,
         unions: &*unions,
@@ -492,7 +508,7 @@ fn name_classes(analysis: &Analysis, classes: &mut [LamClass], unions: &mut [Uni
     let node_count = classes.len() + unions.len();
     let mut graph = Graph::new((0..node_count).collect::<Vec<usize>>());
     for node in 0..node_count {
-        for child in names.children(node) {
+        for child in nodes.children(node) {
             graph.connect_idx(node, child);
         }
     }
@@ -502,7 +518,7 @@ fn name_classes(analysis: &Analysis, classes: &mut [LamClass], unions: &mut [Uni
         for node in &component {
             let mut text = String::new();
             let mut written: Map<usize, usize> = Map::default();
-            names.write(&members, &hashes, *node, &mut written, &mut text);
+            nodes.write(&members, &hashes, *node, &mut written, &mut text);
             hashes[*node] = md5_hex(&text);
         }
     }
@@ -527,9 +543,9 @@ fn name_classes(analysis: &Analysis, classes: &mut [LamClass], unions: &mut [Uni
     );
 }
 
-/// The classes and the unions `name_classes` writes, as the nodes of one graph: the classes first,
+/// The classes and the unions `name_classes_and_unions` writes, as the nodes of one graph: the classes first,
 /// by their positions in `classes`, then the unions, by their positions in `unions` after them.
-struct Names<'n> {
+struct NameGraph<'n> {
     /// The lambda sets inferred for the program, whose lambdas the texts name.
     analysis: &'n Analysis,
     /// The classes, as the nodes from 0 up to `classes.len()`.
@@ -538,7 +554,7 @@ struct Names<'n> {
     unions: &'n [UnionRepr],
 }
 
-impl Names<'_> {
+impl NameGraph<'_> {
     /// The node standing for the class or the union a representation names, if it names one.
     fn node_of(&self, repr: &Repr) -> Option<usize> {
         match repr {
