@@ -60,6 +60,7 @@ mod test_install_script;
 mod test_int128;
 mod test_integer_arithmetic;
 mod test_integer_text_buffer;
+mod test_lambda_sets;
 mod test_let_elimination;
 mod test_llvm_arg;
 mod test_llvm_passes;

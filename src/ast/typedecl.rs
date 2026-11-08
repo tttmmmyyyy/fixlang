@@ -3,8 +3,8 @@ use crate::ast::name::{FullName, Name};
 use crate::ast::program::EndNode;
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{
-    apply_type_args, kind_arrow, kind_star, type_from_tyvar, Kind, TyAliasInfo, TyCon, TyConInfo,
-    TyConVariant, TyVar, TypeNode,
+    apply_type_args, kind_arrow, kind_star, type_from_tyvar, type_tycon, Kind, TyAliasInfo, TyCon,
+    TyConInfo, TyConVariant, TyVar, TypeNode,
 };
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
@@ -145,7 +145,7 @@ impl TypeDefn {
             .iter()
             .map(|tyvar| type_from_tyvar(tyvar.clone()))
             .collect();
-        apply_type_args(&Arc::new(self.tycon()), &args)
+        apply_type_args(type_tycon(&Arc::new(self.tycon())), &args)
     }
 
     /// The struct this definition declares. Panics on a union or a type alias.
