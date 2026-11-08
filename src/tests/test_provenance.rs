@@ -327,12 +327,34 @@ mod integration_tests {
         block
     }
 
-    /// The body block of `main` itself. The main entry is `Main::main#<hash>#func1`, of three
-    /// `#`-segments; the lambdas lifted out of it carry a segment more.
-    fn main_block(dump: &str) -> Vec<&str> {
-        func_block(dump, "fn Main::main", |n| {
-            n.split('#').count() == 3 && n.ends_with("#func1")
-        })
+    /// The body block of the function holding the code `main` is written with, found by the call of
+    /// `callee` that code makes. That function is `main` itself, or one lifted out of it where `main`
+    /// opens with an `IO` bind such as `pure();;`.
+    fn main_block<'a>(dump: &'a str, callee: &str) -> Vec<&'a str> {
+        let mut blocks: Vec<Vec<&str>> = vec![];
+        let mut in_main = false;
+        for l in dump.lines() {
+            if l.starts_with("fn ") {
+                in_main = l.starts_with("fn Main::main#");
+                if in_main {
+                    blocks.push(vec![]);
+                }
+            } else if l.is_empty() {
+                in_main = false;
+            }
+            if in_main {
+                blocks.last_mut().unwrap().push(l);
+            }
+        }
+        blocks
+            .into_iter()
+            .find(|block| block.iter().any(|l| l.contains(&format!("= {}", callee))))
+            .unwrap_or_else(|| {
+                panic!(
+                    "neither `main` nor a function lifted out of it calls `{}`:\n{}",
+                    callee, dump
+                )
+            })
     }
 
     /// Assert that `block` performs no reference counting: no line of it is a `Retain` or a
@@ -373,7 +395,7 @@ mod integration_tests {
     fn assert_tally_routing(case: &str, expected: (usize, usize), what: &str) {
         let (_temp_dir, project_dir) = setup_test_env(case);
         let dump = emit_main_rc_ir(&project_dir);
-        let main = main_block(&dump);
+        let main = main_block(&dump, "Main::tally");
         assert_eq!(
             tally_call_routing(&main),
             expected,
@@ -423,7 +445,7 @@ mod integration_tests {
         );
 
         // `main` routes its non-tail, owned `tally(arr, ..)` call to the borrow version.
-        let main = main_block(&dump);
+        let main = main_block(&dump, "Main::tally");
         assert!(
             main.iter().any(|l| calls_tally_borrow_version(l)),
             "main should call the tally borrow version:\n{}",
@@ -445,7 +467,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("routing_last_use");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = main_block(&dump);
+        let main = main_block(&dump, "Main::tally");
         let (borrow_calls, own_calls) = tally_call_routing(&main);
 
         // The array read again after its call is owned but not at its last use, so routing to the
@@ -540,7 +562,7 @@ mod integration_tests {
     fn test_routing_owns_a_last_use_beside_a_borrow() {
         let (_temp_dir, project_dir) = setup_test_env("routing_last_use_beside_a_borrow");
         let dump = emit_main_rc_ir(&project_dir);
-        let main = main_block(&dump);
+        let main = main_block(&dump, "Main::tally");
         assert_eq!(
             tally_call_routing(&main),
             (1, 0),
@@ -563,7 +585,7 @@ mod integration_tests {
     fn test_routing_gives_each_lent_set_its_own_version() {
         let (_temp_dir, project_dir) = setup_test_env("routing_two_calls_two_versions");
         let dump = emit_main_rc_ir(&project_dir);
-        let main = main_block(&dump);
+        let main = main_block(&dump, "Main::tally");
         let callees: Vec<&str> = main
             .iter()
             .filter(|l| calls_tally_borrow_version(l))
@@ -640,7 +662,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("routing_aggregate");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = main_block(&dump);
+        let main = main_block(&dump, "Main::tally");
         let (borrow_calls, own_calls) = tally_call_routing(&main);
         assert_eq!(
             borrow_calls,
@@ -671,7 +693,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("multiunit");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = main_block(&dump);
+        let main = main_block(&dump, "Main::hand_back");
         // The whole-value retain of the pair `t` is normalized to one retain per field: `.0` and `.1`.
         // The tuple binding has no source name, so match the retains by their field paths. A retain
         // may carry a trailing reference-counting state tag, which is not part of the target.
@@ -720,7 +742,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("ownership");
         let dump = emit_main_rc_ir(&project_dir);
 
-        let main = main_block(&dump);
+        let main = main_block(&dump, "Main::tally");
         let call = main
             .iter()
             .find(|l| calls_tally_borrow_version(l))
