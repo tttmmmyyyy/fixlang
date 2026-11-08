@@ -121,6 +121,7 @@ mod borrow_unit_ownership_tests {
         "#;
         test_source(source, Configuration::develop_mode());
     }
+
     /// Every call of a function asked for more versions than the clone budget allows disposes of
     /// each argument exactly once, whichever version it reaches.
     ///
