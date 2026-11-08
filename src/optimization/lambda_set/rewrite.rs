@@ -402,7 +402,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             .enumerate()
             .map(|(i, c)| {
                 let payload = type_tycon(&self.capture_tycon(*c));
-                Field::make(format!("{}{}", LS_VARIANT_PREFIX, i), payload, None)
+                Field::make(Self::variant_name(&tycon, i).name, payload, None)
             })
             .collect();
         self.new_tycons.insert(
@@ -1017,11 +1017,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             variant,
             Self::variant_name(&tycon, variant).to_string(),
         );
-        let value =
-            expr_builtin(Box::new(op), type_tycon(&tycon), None).set_type(type_tycon(&tycon));
-        let pat = PatternNode::make_var(var_local(LS_PAYLOAD_NAME), None)
-            .set_type(payload.type_.clone().unwrap());
-        expr_let_typed(pat, payload, value)
+        let union_ty = type_tycon(&tycon);
+        let value = expr_builtin(Box::new(op), union_ty.clone(), None).set_type(union_ty);
+        let_local(LS_PAYLOAD_NAME, payload, value)
     }
 
     /// The closure of type `ty` that a lambda of the class `c` builds: the lifted function applied to
@@ -1071,9 +1069,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let partial = expr_app_typed(callee, vec![func]);
         e.set_app_func(partial).set_app_args(vec![arg]).set_type(ty)
     }
-}
 
-impl Rewriter<'_, '_> {
     /// The application `e` of `func`, a value of the union `u`, to `arg`, of type `ty`: a match of
     /// the variant `func` holds, each arm calling directly the function its class's values are
     /// called through. The function and the argument are bound first, in that order, so that each is
@@ -1109,9 +1105,7 @@ impl Rewriter<'_, '_> {
             .collect();
         let mut expr = expr_match_typed(func, arms).set_type(ty);
         for (name, value) in bindings.into_iter().rev() {
-            let pat =
-                PatternNode::make_var(var_local(name), None).set_type(value.type_.clone().unwrap());
-            expr = expr_let_typed(pat, value, expr);
+            expr = let_local(name, value, expr);
         }
         expr
     }
@@ -1130,6 +1124,12 @@ impl Rewriter<'_, '_> {
         bindings.push((name, value));
         expr_var(FullName::local(name), None).set_type(ty)
     }
+}
+
+/// `value` in the scope of a binding of the local `name` to `bound`, at the type of `bound`.
+fn let_local(name: &str, bound: Arc<ExprNode>, value: Arc<ExprNode>) -> Arc<ExprNode> {
+    let pat = PatternNode::make_var(var_local(name), None).set_type(bound.type_.clone().unwrap());
+    expr_let_typed(pat, bound, value)
 }
 
 /// The fold rewriting a type at the sets of its slots (`Rewriter::rewrite_type_at`).
@@ -1159,10 +1159,12 @@ impl SlotFold<SetId> for TypeRewrite<'_, '_, '_> {
         let unchanged = folded.iter().zip(args).all(|(n, o)| Arc::ptr_eq(n, o));
         if tc.is_arrow() {
             let keeps_function = self.root.as_ref().is_some_and(|root| Arc::ptr_eq(root, ty));
-            match (own[0], keeps_function) {
-                (Repr::Single(c), false) => return type_tycon(&self.rw.capture_tycon(c)),
-                (Repr::Union(u), false) => return type_tycon(&self.rw.union_tycon(u)),
-                _ => {}
+            if !keeps_function {
+                match own[0] {
+                    Repr::Single(c) => return type_tycon(&self.rw.capture_tycon(c)),
+                    Repr::Union(u) => return type_tycon(&self.rw.union_tycon(u)),
+                    Repr::Closure => {}
+                }
             }
             if unchanged {
                 return ty.clone();
