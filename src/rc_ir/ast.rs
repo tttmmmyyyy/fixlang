@@ -6,6 +6,7 @@ use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use serde::{Serialize, Serializer};
+use std::ops::ControlFlow;
 use std::sync::Arc;
 
 /// A variable of the RC IR. Because a fresh name is minted at every binding, a name resolves its
@@ -545,6 +546,76 @@ fn for_each_var_of_rhs(rhs: &RcRhs, visit: &mut impl FnMut(&RcVar)) {
             }
         }
     }
+}
+
+/// Whether `node` reads the variable named `name` as a value. See `try_for_each_value_use` for
+/// what counts as such a read.
+pub(crate) fn is_value_used(name: &FullName, node: &RcExprNode) -> bool {
+    try_for_each_value_use(node, &mut |v| {
+        if v.name == *name {
+            ControlFlow::Break(())
+        } else {
+            ControlFlow::Continue(())
+        }
+    })
+    .is_break()
+}
+
+/// The number of times `node` reads the variable named `name` as a value. See
+/// `try_for_each_value_use` for what counts as such a read.
+pub(crate) fn count_value_uses(name: &FullName, node: &RcExprNode) -> usize {
+    let mut count = 0;
+    let _ = try_for_each_value_use(node, &mut |v| {
+        count += (v.name == *name) as usize;
+        ControlFlow::Continue(())
+    });
+    count
+}
+
+/// Visit each place `node` reads a variable as a value, the bodies of the arms of every `Match`
+/// included, until `visit` breaks: a move, a call callee or argument, an operand of a builtin
+/// operation, a closure capture, a match scrutinee, a destructured container, an `eval`, or the
+/// returned variable. Binders are not reads. A `Retain`/`Release` names its variable only for
+/// reference counting, so it is not one either, which lets a call be recognized as an argument's
+/// last use even when the lowering brackets it with reference counts.
+fn try_for_each_value_use(
+    node: &RcExprNode,
+    visit: &mut impl FnMut(&RcVar) -> ControlFlow<()>,
+) -> ControlFlow<()> {
+    // A deep continuation chain recurses to its full depth here; grow the stack on demand.
+    grow_stack(|| match node.expr.as_ref() {
+        RcExpr::Ret(v) => visit(v),
+        RcExpr::Let(_, rhs, k) => {
+            match rhs {
+                RcRhs::Var(v) => visit(v)?,
+                RcRhs::App(callee, args) => {
+                    visit(callee)?;
+                    args.iter().try_for_each(&mut *visit)?
+                }
+                RcRhs::Closure(_, caps) => caps.iter().try_for_each(&mut *visit)?,
+                // The op's embedded names are its operand list again (`validate` checks it).
+                RcRhs::Builtin(_, args) => args.iter().try_for_each(&mut *visit)?,
+                RcRhs::Match(scrut, arms) => {
+                    visit(scrut)?;
+                    for arm in arms {
+                        try_for_each_value_use(&arm.body, visit)?;
+                    }
+                }
+            }
+            try_for_each_value_use(k, visit)
+        }
+        RcExpr::Destructure(container, _, _, k) => {
+            visit(container)?;
+            try_for_each_value_use(k, visit)
+        }
+        RcExpr::Eval(v, k) => {
+            visit(v)?;
+            try_for_each_value_use(k, visit)
+        }
+        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => {
+            try_for_each_value_use(k, visit)
+        }
+    })
 }
 
 /// Serialize a set of variable paths in the order of the paths themselves, so that a digest taken

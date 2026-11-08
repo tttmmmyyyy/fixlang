@@ -44,8 +44,8 @@ use crate::ast::types::{Type, TypeNode};
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    for_each_node, FieldPath, FuncRef, Ownership, OwnershipShape, RcExpr, RcExprNode, RcFunc,
-    RcGlobalInit, RcProgram, RcRhs, RcState, RcVar, VarPath,
+    for_each_node, is_value_used, FieldPath, FuncRef, Ownership, OwnershipShape, RcExpr,
+    RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar, VarPath,
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
@@ -1178,7 +1178,7 @@ struct After<'b> {
 impl After<'_> {
     /// Whether the variable named `name` is used in the code that runs after this point.
     fn uses(&self, name: &FullName) -> bool {
-        used_later(name, self.k) || self.enclosing.is_some_and(|outer| outer.uses(name))
+        is_value_used(name, self.k) || self.enclosing.is_some_and(|outer| outer.uses(name))
     }
 }
 
@@ -1212,39 +1212,6 @@ fn prepend_rc(units: Vec<(RcVar, FieldPath)>, is_release: bool, k: RcExprNode) -
     units.into_iter().rev().fold(k, |cont, (var, path)| {
         rc_node(is_release, var, path, RcState::Unknown, cont, &None)
     })
-}
-
-/// Whether the variable named `name` is used again in an expression subtree — any occurrence as a
-/// value: a move, a call callee or argument, an operand of a builtin operation, a closure capture,
-/// a match scrutinee, a destructured container, or the returned variable. A `Retain`/`Release`
-/// names its variable only for reference counting, not as a use, so those are transparent — which
-/// lets a call be recognized as an argument's last use even when the lowering brackets it with
-/// reference counts.
-fn used_later(name: &FullName, node: &RcExprNode) -> bool {
-    grow_stack(|| match node.expr.as_ref() {
-        RcExpr::Ret(v) => v.name == *name,
-        RcExpr::Let(_, rhs, k) => rhs_uses(name, rhs) || used_later(name, k),
-        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k) => used_later(name, k),
-        RcExpr::Destructure(container, _, _state, k) => {
-            container.name == *name || used_later(name, k)
-        }
-        // `Eval` observes its variable, so it counts as a use.
-        RcExpr::Eval(v, k) => v.name == *name || used_later(name, k),
-    })
-}
-
-/// Whether the variable named `name` occurs as a value in a right-hand side.
-fn rhs_uses(name: &FullName, rhs: &RcRhs) -> bool {
-    match rhs {
-        RcRhs::Var(v) => v.name == *name,
-        RcRhs::App(callee, args) => callee.name == *name || args.iter().any(|a| a.name == *name),
-        RcRhs::Closure(_, caps) => caps.iter().any(|c| c.name == *name),
-        // The op's embedded names are its operand list again (`validate` checks it).
-        RcRhs::Builtin(_, args) => args.iter().any(|a| a.name == *name),
-        RcRhs::Match(scrut, arms) => {
-            scrut.name == *name || arms.iter().any(|arm| used_later(name, &arm.body))
-        }
-    }
 }
 
 // --- unit normalization ---

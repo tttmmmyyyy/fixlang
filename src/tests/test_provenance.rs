@@ -7,8 +7,9 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level, rc_ir_callee_of};
-    use std::fs;
+    use crate::tests::test_util::{
+        build_project_and_read_rc_ir, copy_dir_recursive, rc_ir_callee_of,
+    };
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
@@ -36,7 +37,7 @@ mod integration_tests {
     /// levels produce — at `none` the same code stays as closures with no uncurried function to
     /// borrow.
     fn emit_main_rc_ir(project_dir: &Path) -> String {
-        emit_rc_ir(project_dir, "Main", "rc_ir.Main.post.txt")
+        build_project_and_read_rc_ir(project_dir, "Main", "rc_ir.Main.post.txt")
     }
 
     /// Build the case project at the `max` optimization level and return the dumped RC IR of every
@@ -45,28 +46,7 @@ mod integration_tests {
     /// The body of a loop written in `Main` is put into the copy of `Std::loop` made for it, so a
     /// case asserting on what such a body does reads the whole program rather than one module.
     fn emit_all_rc_ir(project_dir: &Path) -> String {
-        emit_rc_ir(project_dir, "all", "rc_ir.post.txt")
-    }
-
-    /// Build the case project with `--emit-rc-ir <filter>` and return what it wrote to `dump_file`
-    /// under `.fixlang/`.
-    fn emit_rc_ir(project_dir: &Path, filter: &str, dump_file: &str) -> String {
-        let output = fix_command_at_opt_level("build", "max")
-            .arg("--emit-rc-ir")
-            .arg(filter)
-            .current_dir(project_dir)
-            .output()
-            .expect("Failed to execute fix build --emit-rc-ir");
-
-        if !output.status.success() {
-            eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-            panic!("fix build --emit-rc-ir failed");
-        }
-
-        let dump_path = project_dir.join(".fixlang").join(dump_file);
-        fs::read_to_string(&dump_path)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
+        build_project_and_read_rc_ir(project_dir, "all", "rc_ir.post.txt")
     }
 
     /// The lines of the program's root, without its signature line. An operation performed in
