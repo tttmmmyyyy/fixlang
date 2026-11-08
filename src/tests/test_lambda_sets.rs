@@ -334,8 +334,8 @@ fn test_a_lambda_capturing_an_optional_function_of_its_own_set_computes_the_chai
 
 /// The lambda `mkm` returns is built both in a recursion that carries it in an `Option` and in a
 /// direct call, and each computes its result. The set of the captured `g` reaches itself in the
-/// recursion's copy and holds one lambda in the direct call's, while both copies give the lambda's
-/// parameter a set of closures.
+/// recursion's copy, where the lambda's parameter is given a set of closures, and holds one lambda
+/// in the direct call's, where the parameter is given a union of two lambdas.
 #[test]
 fn test_a_lambda_built_both_in_a_cycle_and_out_of_one_captures_each_its_own_way() {
     let source = r#"
@@ -364,8 +364,8 @@ fn test_a_lambda_built_both_in_a_cycle_and_out_of_one_captures_each_its_own_way(
 
 /// The source of the tests of a lambda capturing `g`, a function `mk2` chooses from two of its
 /// parameters: `MK2_CALLS` is replaced by the two calls of `mk2`. One call gives both parameters
-/// one set of closures, so that `g`'s set holds one lambda, and the other gives them two, so that
-/// it holds two, while both represent the parameters alike.
+/// one union of two lambdas, so that `g`'s set holds one lambda, and the other gives them two
+/// unions, so that it holds two.
 const CHOSEN_FROM_TWO_SOURCE: &str = r#"
     module Main;
 
@@ -414,11 +414,10 @@ fn test_a_lambda_capturing_a_function_chosen_from_two_sets_then_one_computes_bot
 /// A lambda capturing `g`, a function `k` chooses from its two function parameters, computes both
 /// results when `k` is called once with one function for both and once, through `w2`, with two
 /// functions that `wrap_a` builds over two different sets of two lambdas: `g`'s set holds one
-/// lambda in the first copy, and in the second two elements whose captured sets are represented by
-/// closures and differ in what they hold. The second set is represented by closures, and its
-/// elements share the global function and the capture struct of the first set's class, as a
-/// closure has one type whatever its set holds. Reaching the second copy through `w2` puts its sets
-/// before the first's, so the lambda's class is first met where `g`'s set holds two elements.
+/// lambda in the first copy, and in the second two elements whose captured sets are different
+/// unions. The second set is a union of two classes of `mk`'s lambda, one of them the class of the
+/// first set. Reaching the second copy through `w2` puts its sets before the first's, so the
+/// lambda's class is first met where `g`'s set holds two elements.
 #[test]
 fn test_a_lambda_capturing_a_function_chosen_from_two_alike_sets_computes_both() {
     let source = r#"
