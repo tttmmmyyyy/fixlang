@@ -5,8 +5,7 @@
 use crate::{constants::DOT_FIXLANG, error::Errors};
 use rand::random;
 use std::{
-    env,
-    fs::{self, File},
+    env, fs,
     io::{self, ErrorKind},
     path::{Component, Path, PathBuf},
     time::Duration,
@@ -113,31 +112,12 @@ fn is_temporary_file_name(name: &str) -> bool {
         .is_some_and(|digits| digits.len() == 16 && digits.chars().all(|c| c.is_ascii_hexdigit()))
 }
 
-/// How long a temporary file (`create_temporary_file_in`) goes unmodified before it is taken for
-/// one a build left when it was killed. A build puts each temporary file it writes in place, or
-/// removes it, before it ends, so a file this old belongs to no build still running.
+/// How long a temporary file (`replace_file`) goes unmodified before it is taken for one a build
+/// left when it was killed. A build puts each temporary file it writes in place, or removes it,
+/// before it ends, so a file this old belongs to no build still running.
 const ABANDONED_TEMPORARY_FILE_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 
-/// A temporary file `create_temporary_file_in` created.
-pub struct TemporaryFile {
-    /// The file, open for reading and writing.
-    pub file: File,
-    /// Where the file lies.
-    pub path: PathBuf,
-}
-
-/// Creates a temporary file in `dir`, named by `temporary_file_name`.
-pub fn create_temporary_file_in(dir: &Path) -> io::Result<TemporaryFile> {
-    let path = dir.join(temporary_file_name());
-    let file = File::options()
-        .read(true)
-        .write(true)
-        .create_new(true)
-        .open(&path)?;
-    Ok(TemporaryFile { file, path })
-}
-
-/// Removes the temporary files in `dir` (`create_temporary_file_in`) that have gone unmodified for
+/// Removes the temporary files in `dir` (`replace_file`) that have gone unmodified for
 /// `ABANDONED_TEMPORARY_FILE_AGE`.
 pub fn remove_abandoned_temporary_files(dir: &Path) {
     let Ok(entries) = fs::read_dir(dir) else {
@@ -165,15 +145,15 @@ pub fn remove_abandoned_temporary_files(dir: &Path) {
 
 /// Writes the file at `path` by having `write` write a new file beside it, at the path it is handed,
 /// and renaming that onto `path`, so that `path` holds either what it held before or the whole of
-/// what `write` wrote. A symbolic link at `path` is replaced by the new file, and what it pointed to
-/// is kept.
+/// what `write` wrote, and answers what `write` answered. A symbolic link at `path` is replaced by
+/// the new file, and what it pointed to is kept.
 ///
 /// The new file is named apart from `path`, so that a name of `path` as long as the file system
 /// allows still leaves room for it.
-pub fn replace_file(path: &Path, write: impl FnOnce(&Path) -> io::Result<()>) -> io::Result<()> {
+pub fn replace_file<T>(path: &Path, write: impl FnOnce(&Path) -> io::Result<T>) -> io::Result<T> {
     let tmp_path = path.with_file_name(temporary_file_name());
     write(&tmp_path)
-        .and_then(|()| fs::rename(&tmp_path, path))
+        .and_then(|written| fs::rename(&tmp_path, path).map(|()| written))
         .inspect_err(|_| {
             // The temporary path carries a random number drawn by this call, so removing it touches
             // nothing else.
