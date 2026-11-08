@@ -1,4 +1,6 @@
-use crate::{configuration::Configuration, tests::test_util::test_source};
+use crate::{
+    configuration::Configuration, constants::MAX_UNION_VARIANTS, tests::test_util::test_source,
+};
 
 // Programs whose function values take the paths the lambda set inference follows: through a
 // recursion, into a value that captures a value of its own set, through a `fix` left as a closure,
@@ -492,6 +494,43 @@ fn test_two_elements_of_one_class_capturing_an_optional_function_of_their_own_se
 /// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
 /// takes as an argument. The program cannot observe either one — the answer is the same with
 /// function values left as closures — so these assert against the dump.
+/// Two folds handing `mk` each lambda of an array of more lambdas than a union has variants, the
+/// two arrays holding different lambdas: `mk`'s lambda captures a value of one array's set in one
+/// copy and of the other's in the other. Both arrays' sets are represented by closures, and so are
+/// alike to the lambda that captures them, and each fold computes its sum.
+#[test]
+fn test_a_lambda_capturing_either_of_two_sets_of_too_many_classes_computes_both() {
+    let count = MAX_UNION_VARIANTS + 1;
+    let adding: Vec<String> = (0..count).map(|i| format!("|x| x + n * {}", i)).collect();
+    let subtracting: Vec<String> = (0..count).map(|i| format!("|x| x - n * {}", i)).collect();
+    let source = format!(
+        r#"
+    module Main;
+
+    mk : I64 -> (I64 -> I64) -> (I64 -> I64);
+    mk = |d, f| if d < -1000000 {{ mk(d + 1, f) }} else {{ |x| f(x) + 1 }};
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let fs = [{}];
+        let gs = [{}];
+        let a = fs.to_iter.fold(0, |f, acc| mk(n, f)(acc));
+        let b = gs.to_iter.fold(0, |g, acc| mk(n, g)(acc));
+        assert_eq(|_|"unexpected result", (a, b), ({} * n + {}, -{} * n + {}));;
+        pure()
+    );
+    "#,
+        adding.join(", "),
+        subtracting.join(", "),
+        count * (count - 1) / 2,
+        count,
+        count * (count - 1) / 2,
+        count
+    );
+    test_source(&source, Configuration::develop_mode());
+}
+
 #[cfg(test)]
 mod dump_tests {
     use crate::constants::{LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_UNION_VARIANTS};
