@@ -156,6 +156,22 @@ pub const LS_CAP_PREFIX: &str = "#LsCap";
 /// The name of the parameter through which a lambda lifted by lambda set specialization receives
 /// its capture struct.
 pub const LS_CAP_NAME: &str = "#ls_cap";
+/// The prefix, followed by `@` and the union's hash, of the type constructor of the unboxed union
+/// that lambda set specialization represents a value of a set by, where the set's elements make two
+/// or more classes.
+pub const LS_UNION_PREFIX: &str = "#LsUnion";
+/// The prefix, followed by the variant's position, of the name of a variant of a union named with
+/// `LS_UNION_PREFIX`.
+pub const LS_VARIANT_PREFIX: &str = "v";
+/// The local name lambda set specialization binds the capture struct to that a variant of a union
+/// named with `LS_UNION_PREFIX` is built from, and that an arm matching the variant binds.
+pub const LS_PAYLOAD_NAME: &str = "#ls_payload";
+/// The local name lambda set specialization binds the function of a call to, where the function is
+/// a value of a union named with `LS_UNION_PREFIX` that the call matches.
+pub const LS_FUNC_NAME: &str = "#ls_func";
+/// The local name lambda set specialization binds the argument of a call to, where the call matches
+/// a value of a union named with `LS_UNION_PREFIX` and passes the argument in each arm.
+pub const LS_ARG_NAME: &str = "#ls_arg";
 /// The prefix, followed by the operand's position, of the local name lambda set specialization binds
 /// an operand of a builtin to, where the operand names a global the rewritten program builds a
 /// value for in place of reading it.
