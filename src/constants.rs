@@ -163,8 +163,8 @@ pub const LS_UNION_PREFIX: &str = "#LsUnion";
 /// The prefix, followed by the variant's position, of the name of a variant of a union named with
 /// `LS_UNION_PREFIX`.
 pub const LS_VARIANT_PREFIX: &str = "v";
-/// The local name lambda set specialization binds the capture struct to that a variant of a union
-/// named with `LS_UNION_PREFIX` is built from, and that an arm matching the variant binds.
+/// The local name lambda set specialization gives the capture struct a variant of a union named
+/// with `LS_UNION_PREFIX` holds, both where the variant is built and in an arm matching it.
 pub const LS_PAYLOAD_NAME: &str = "#ls_payload";
 /// The local name lambda set specialization binds the function of a call to, where the function is
 /// a value of a union named with `LS_UNION_PREFIX` that the call matches.

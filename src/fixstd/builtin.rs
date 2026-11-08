@@ -7603,7 +7603,8 @@ pub struct MakeUnionOp {
 
 impl MakeUnionOp {
     /// The operation building the variant at `variant_index` out of the payload bound to
-    /// `payload_name`, whose union value carries `generated_union_name` in the LLVM module.
+    /// `payload_name`. The union value it builds carries the name `generated_union_name` in the
+    /// LLVM module.
     pub fn new(payload_name: FullName, variant_index: usize, generated_union_name: String) -> Self {
         MakeUnionOp {
             field_name: payload_name,

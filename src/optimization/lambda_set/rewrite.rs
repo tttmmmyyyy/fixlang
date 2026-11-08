@@ -1,7 +1,7 @@
 // Rewriting a program by its lambda sets: the copies of the symbols and the type constructors the
 // sets ask for, the lambdas lifted to global functions, each value of a set whose elements make one
 // class represented by that class's capture struct, and each value of a set whose elements make
-// more represented by an unboxed union of their capture structs. A lambda of a set represented by
+// two or more represented by an unboxed union of their capture structs. A lambda of a set represented by
 // closures is lifted too, and its closure is the lifted function applied to the capture struct,
 // except for the lambda that is the body of its symbol and one whose body reads its capture whole
 // (`Lambda::is_lifted_from_closures`).
@@ -372,7 +372,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
     }
 
     /// The type constructor of the union `u`, in the namespace of the symbol whose lambda its first
-    /// variant's class names.
+    /// variant's class names. Records `u` among the unions a type names.
     fn union_tycon(&mut self, u: u32) -> Arc<TyCon> {
         self.named_unions.insert(u);
         let union = &self.repr.unions[u as usize];
@@ -1110,8 +1110,8 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         expr
     }
 
-    /// `value` where it is a variable, and otherwise a variable named `name` that `bindings` gains a
-    /// binding of to `value`.
+    /// `value` itself when it is a variable. Otherwise, a variable named `name`, after pushing the
+    /// binding of `name` to `value` onto `bindings`.
     fn bind_unless_var<'n>(
         name: &'n str,
         value: Arc<ExprNode>,

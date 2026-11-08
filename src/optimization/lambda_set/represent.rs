@@ -33,11 +33,11 @@ pub enum Repr {
 /// classes.
 pub struct UnionRepr {
     /// The class of each variant, as its index into `Representation::classes`, in the order of the
-    /// variants: the order `canonical_classes` sorts the elements of the sets in, which reads only
-    /// the trees the sets unfold to.
+    /// variants: the order `canonical_classes` sorts the elements of the sets in, which depends only
+    /// on the trees the sets unfold to.
     pub members: Vec<u32>,
-    /// The hash of the text the union is written as, which is the same in every compilation of the
-    /// program, and different for two unions.
+    /// The hash of the text the union is written as. It is the same in every compilation of the
+    /// program, and differs between two unions.
     pub hash: String,
 }
 
@@ -532,9 +532,9 @@ fn name_classes(analysis: &Analysis, classes: &mut [LamClass], unions: &mut [Uni
 struct Names<'n> {
     /// The lambda sets inferred for the program, whose lambdas the texts name.
     analysis: &'n Analysis,
-    /// The classes.
+    /// The classes, as the nodes from 0 up to `classes.len()`.
     classes: &'n [LamClass],
-    /// The unions.
+    /// The unions, as the nodes from `classes.len()` on.
     unions: &'n [UnionRepr],
 }
 

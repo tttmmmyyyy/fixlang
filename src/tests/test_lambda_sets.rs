@@ -1171,8 +1171,8 @@ mod dump_tests {
     }
 
     /// A set of as many classes as a union has variants is represented by a union, and one of a
-    /// class more by closures: the fold over 256 lambdas takes their union, and the fold over 257
-    /// calls them through closures, answering the same.
+    /// class more by closures: the fold over `MAX_UNION_VARIANTS` lambdas takes their union, and the
+    /// fold over one lambda more calls them through closures, answering the same.
     #[test]
     fn test_a_set_of_more_classes_than_a_union_has_variants_is_a_set_of_closures() {
         let source = many_lambdas_source(MAX_UNION_VARIANTS);
