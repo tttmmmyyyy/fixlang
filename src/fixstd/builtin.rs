@@ -7725,11 +7725,7 @@ pub fn union_new_body(
     let name_cloned = name.clone();
     let field_name_local = FullName::local(field_name);
     expr_builtin(
-        Box::new(MakeUnionOp {
-            field_name: field_name_local,
-            generated_union_name: name_cloned,
-            field_idx,
-        }),
+        Box::new(MakeUnionOp::new(field_name_local, field_idx, name_cloned)),
         union_defn.applied_type(),
         None,
     )

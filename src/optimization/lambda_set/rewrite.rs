@@ -82,9 +82,10 @@ impl Rewritten {
 /// is lifted to a global function taking its capture struct, once for each class of its elements
 /// (`Representation::classes`); the lambda that is the body of its symbol is the symbol's copy
 /// instead. Where the lambda's set is represented by its capture struct, the struct is the value;
-/// where it is represented by closures, the lifted function applied to the struct is. A type
-/// constructor whose own slots hold a set represented by a capture struct is copied for each way
-/// its own slots are represented.
+/// where it is represented by a union, the variant holding the struct is; where it is represented
+/// by closures, the lifted function applied to the struct is. A type constructor whose own slots
+/// hold a set represented by a capture struct or a union is copied for each way its own slots are
+/// represented.
 pub fn rewrite(
     prg: &Program,
     layout: &SlotLayout,
@@ -100,7 +101,7 @@ pub fn rewrite(
         rw.make_lifted(c);
     }
     let (entry, exports) = rw.rewrite_roots();
-    rw.declare_capture_structs();
+    rw.declare_named_tycons();
     Rewritten {
         symbols: rw.symbols,
         tycons: rw.new_tycons,
@@ -423,9 +424,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
 
     /// Declares the capture struct of every class and every union a type made so far names.
     /// Declaring one may name another, so this goes on until none is left.
-    fn declare_capture_structs(&mut self) {
+    fn declare_named_tycons(&mut self) {
         loop {
-            let pending: Vec<u32> = self
+            let pending_classes: Vec<u32> = self
                 .named_capture_structs
                 .iter()
                 .filter(|c| !self.capture_structs.contains_key(*c))
@@ -437,10 +438,10 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 .filter(|u| !self.declared_unions.contains(*u))
                 .copied()
                 .collect();
-            if pending.is_empty() && pending_unions.is_empty() {
+            if pending_classes.is_empty() && pending_unions.is_empty() {
                 break;
             }
-            for c in pending {
+            for c in pending_classes {
                 self.capture_struct(c);
             }
             for u in pending_unions {
@@ -611,10 +612,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     .map(|a| self.rewrite_declared(a, group, own, cursor))
                     .collect();
                 if tc.is_arrow() {
-                    return match tc_own[0] {
-                        Repr::Single(c) => type_tycon(&self.capture_tycon(c)),
-                        Repr::Union(u) => type_tycon(&self.union_tycon(u)),
-                        Repr::Closure => type_arrow(new_args[0].clone(), new_args[1].clone()),
+                    return match self.value_tycon(tc_own[0]) {
+                        Some(value_tc) => type_tycon(&value_tc),
+                        None => type_arrow(new_args[0].clone(), new_args[1].clone()),
                     };
                 }
                 let head = self.tycon_copy(tc, &tc_own);
@@ -764,28 +764,20 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             }
             Expr::Builtin(b) => {
                 let mut builtin = b.as_ref().clone();
-                let mut bindings: Vec<(FullName, Arc<ExprNode>)> = vec![];
+                let mut bindings: Vec<(String, Arc<ExprNode>)> = vec![];
                 let operands = builtin.op.free_vars_mut();
                 for (i, (operand, name_ref)) in operands.into_iter().zip(&node.names).enumerate() {
                     if let NameRef::Local = name_ref {
                         continue;
                     }
                     let value = self.global_value(walk, operand, name_ref);
-                    if value.is_var() {
-                        *operand = value.get_var().name.clone();
-                    } else {
-                        let local = FullName::local(&format!("{}{}", LS_OPERAND_PREFIX, i));
-                        *operand = local.clone();
-                        bindings.push((local, value));
-                    }
+                    let name = format!("{}{}", LS_OPERAND_PREFIX, i);
+                    *operand = bind_unless_var(name, value, &mut bindings)
+                        .get_var()
+                        .name
+                        .clone();
                 }
-                let mut expr = e.set_builtin(builtin).set_type(ty);
-                for (local, value) in bindings.into_iter().rev() {
-                    let pat = PatternNode::make_var(var_local(&local.name), None)
-                        .set_type(value.type_.clone().unwrap());
-                    expr = expr_let_typed(pat, value, expr);
-                }
-                expr
+                let_locals(bindings, e.set_builtin(builtin).set_type(ty))
             }
             Expr::App(func, args) => {
                 let func_node = &walk.nodes[walk.cursor];
@@ -811,19 +803,10 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     let args: Vec<SetId> =
                         lambda.params.iter().map(|p| instance.args[*p]).collect();
                     let value = match own {
-                        Repr::Single(c) => {
-                            assert_eq!(
-                                self.repr.class_of(lam, &args),
-                                c,
-                                "a lambda is built in a class other than its set's"
-                            );
-                            self.ask_lift(c);
-                            Some(self.capture_struct_value(c))
-                        }
-                        Repr::Union(u) => {
+                        Repr::Single(_) | Repr::Union(_) => {
                             let c = self.repr.class_of(lam, &args);
                             self.ask_lift(c);
-                            Some(self.union_value(u, c))
+                            Some(self.class_value(own, c))
                         }
                         Repr::Closure if lambda.is_lifted_from_closures() => {
                             let c = self.repr.class_of(lam, &args);
@@ -950,7 +933,8 @@ impl<'a, 'e> Rewriter<'a, 'e> {
 
     /// The value a reference to the global `name` stands for in the walk's copy: the copy of the
     /// symbol the reference names, or, where the symbol's body is a lambda whose set at the
-    /// reference is represented by its capture struct, that struct.
+    /// reference is represented by a capture struct or a union, the value of that representation
+    /// the lambda builds (`class_value`).
     fn global_value(&mut self, walk: &Walk, name: &FullName, name_ref: &NameRef) -> Arc<ExprNode> {
         let NameRef::Global { site, ty } = name_ref else {
             panic!(
@@ -977,27 +961,46 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 .iter()
                 .map(|p| self.spec.instances[target].args[*p])
                 .collect();
-            match self.repr.of(sets[0]) {
-                Repr::Single(c) => {
-                    assert_eq!(
-                        self.repr.class_of(*lam, &args),
-                        c,
-                        "a reference to `{}` builds a value of a class other than its set's",
-                        name.to_string()
-                    );
-                    assert_eq!(self.body_copy_of_class(c), copy);
-                    return self.capture_struct_value(c);
-                }
-                Repr::Union(u) => {
-                    let c = self.repr.class_of(*lam, &args);
-                    assert_eq!(self.body_copy_of_class(c), copy);
-                    return self.union_value(u, c);
-                }
-                Repr::Closure => {}
+            let own = self.repr.of(sets[0]);
+            if own != Repr::Closure {
+                let c = self.repr.class_of(*lam, &args);
+                assert_eq!(self.body_copy_of_class(c), copy);
+                return self.class_value(own, c);
             }
         }
         let ty = self.rewrite_type_at(&ty.ty, &sets, false);
         expr_var(self.copy_name(name, copy), None).set_type(ty)
+    }
+
+    /// The value a lambda of the class `c` builds for a set represented by `own`: the class's capture
+    /// struct, or the variant of the union holding it. `own` represents a set by a capture struct
+    /// or a union, and the class is that capture struct's or a member of that union.
+    fn class_value(&mut self, own: Repr, c: u32) -> Arc<ExprNode> {
+        match own {
+            Repr::Single(class) => {
+                assert_eq!(
+                    class, c,
+                    "a value of the class {} is built for a set of the class {}",
+                    c, class
+                );
+                self.capture_struct_value(c)
+            }
+            Repr::Union(u) => self.union_value(u, c),
+            Repr::Closure => panic!(
+                "a value of the class {} is built as a capture struct for a set of closures",
+                c
+            ),
+        }
+    }
+
+    /// The type constructor of the values of a set represented by `own`: the capture struct of its
+    /// class, or its union. `None` for a set of closures, whose values keep a function type.
+    fn value_tycon(&mut self, own: Repr) -> Option<Arc<TyCon>> {
+        match own {
+            Repr::Single(c) => Some(self.capture_tycon(c)),
+            Repr::Union(u) => Some(self.union_tycon(u)),
+            Repr::Closure => None,
+        }
     }
 
     /// The construction of a capture struct of the class `c` out of the names its lambda captures.
@@ -1052,9 +1055,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             if func.is_var() {
                 return call;
             }
-            let pat = PatternNode::make_var(var_local(LS_UNREAD_NAME), None)
-                .set_type(func.type_.clone().unwrap());
-            return expr_let_typed(pat, func, call);
+            return let_local(LS_UNREAD_NAME, func, call);
         }
         self.ask_lift(c);
         if let Some(owner) = &walk.owner {
@@ -1083,9 +1084,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         arg: Arc<ExprNode>,
         ty: Arc<TypeNode>,
     ) -> Arc<ExprNode> {
-        let mut bindings: Vec<(&str, Arc<ExprNode>)> = vec![];
-        let func = Self::bind_unless_var(LS_FUNC_NAME, func, &mut bindings);
-        let arg = Self::bind_unless_var(LS_ARG_NAME, arg, &mut bindings);
+        let mut bindings: Vec<(String, Arc<ExprNode>)> = vec![];
+        let func = bind_unless_var(LS_FUNC_NAME.to_string(), func, &mut bindings);
+        let arg = bind_unless_var(LS_ARG_NAME.to_string(), arg, &mut bindings);
         let tycon = self.union_tycon(u);
         let members = self.repr.unions[u as usize].members.clone();
         let arms: Vec<(Arc<PatternNode>, Arc<ExprNode>)> = members
@@ -1103,27 +1104,32 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 (pat, call)
             })
             .collect();
-        let mut expr = expr_match_typed(func, arms).set_type(ty);
-        for (name, value) in bindings.into_iter().rev() {
-            expr = let_local(name, value, expr);
-        }
-        expr
+        let_locals(bindings, expr_match_typed(func, arms).set_type(ty))
     }
+}
 
-    /// `value` itself when it is a variable. Otherwise, a variable named `name`, after pushing the
-    /// binding of `name` to `value` onto `bindings`.
-    fn bind_unless_var<'n>(
-        name: &'n str,
-        value: Arc<ExprNode>,
-        bindings: &mut Vec<(&'n str, Arc<ExprNode>)>,
-    ) -> Arc<ExprNode> {
-        if value.is_var() {
-            return value;
-        }
-        let ty = value.type_.clone().unwrap();
-        bindings.push((name, value));
-        expr_var(FullName::local(name), None).set_type(ty)
+/// `value` itself when it is a variable. Otherwise, a variable named `name`, after pushing the
+/// binding of `name` to `value` onto `bindings`.
+fn bind_unless_var(
+    name: String,
+    value: Arc<ExprNode>,
+    bindings: &mut Vec<(String, Arc<ExprNode>)>,
+) -> Arc<ExprNode> {
+    if value.is_var() {
+        return value;
     }
+    let local = expr_var(FullName::local(&name), None).set_type(value.type_.clone().unwrap());
+    bindings.push((name, value));
+    local
+}
+
+/// `value` in the scope of `bindings`, each a local name and the value bound to it, bound in their
+/// order.
+fn let_locals(bindings: Vec<(String, Arc<ExprNode>)>, value: Arc<ExprNode>) -> Arc<ExprNode> {
+    bindings
+        .into_iter()
+        .rev()
+        .fold(value, |value, (name, bound)| let_local(&name, bound, value))
 }
 
 /// `value` in the scope of a binding of the local `name` to `bound`, at the type of `bound`.
@@ -1160,10 +1166,8 @@ impl SlotFold<SetId> for TypeRewrite<'_, '_, '_> {
         if tc.is_arrow() {
             let keeps_function = self.root.as_ref().is_some_and(|root| Arc::ptr_eq(root, ty));
             if !keeps_function {
-                match own[0] {
-                    Repr::Single(c) => return type_tycon(&self.rw.capture_tycon(c)),
-                    Repr::Union(u) => return type_tycon(&self.rw.union_tycon(u)),
-                    Repr::Closure => {}
+                if let Some(value_tc) = self.rw.value_tycon(own[0]) {
+                    return type_tycon(&value_tc);
                 }
             }
             if unchanged {
