@@ -490,10 +490,6 @@ fn test_two_elements_of_one_class_capturing_an_optional_function_of_their_own_se
     test_source(source, Configuration::develop_mode());
 }
 
-/// What the rewrite by the lambda sets makes of a program, read off the `--emit-rc-ir` dump: a
-/// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
-/// takes as an argument. The program cannot observe either one — the answer is the same with
-/// function values left as closures — so these assert against the dump.
 /// Two folds handing `mk` each lambda of an array of more lambdas than a union has variants, the
 /// two arrays holding different lambdas: `mk`'s lambda captures a value of one array's set in one
 /// copy and of the other's in the other. Both arrays' sets are represented by closures, and so are
@@ -531,6 +527,10 @@ fn test_a_lambda_capturing_either_of_two_sets_of_too_many_classes_computes_both(
     test_source(&source, Configuration::develop_mode());
 }
 
+/// What the rewrite by the lambda sets makes of a program, read off the `--emit-rc-ir` dump: a
+/// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
+/// takes as an argument. The program cannot observe either one — the answer is the same with
+/// function values left as closures — so these assert against the dump.
 #[cfg(test)]
 mod dump_tests {
     use crate::constants::{LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_UNION_VARIANTS};
