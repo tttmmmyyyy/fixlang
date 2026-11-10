@@ -7,7 +7,7 @@ use crate::ast::{
     pattern::{Pattern, PatternNode},
     program::Program,
     type_env::TypeEnv,
-    types::{type_arrow, TypeNode},
+    types::{type_arrow, type_func, TypeNode},
 };
 use crate::misc::Map;
 use std::sync::Arc;
@@ -144,10 +144,13 @@ impl<'p> Check<'p> {
                 for arg in args {
                     self.expr(arg, at, scope);
                 }
-                let expected = args
-                    .iter()
-                    .rev()
-                    .fold(ty(e).clone(), |acc, arg| type_arrow(ty(arg).clone(), acc));
+                let expected = if ty(func).is_func() {
+                    type_func(args.iter().map(|arg| ty(arg).clone()).collect(), ty(e).clone())
+                } else {
+                    args.iter()
+                        .rev()
+                        .fold(ty(e).clone(), |acc, arg| type_arrow(ty(arg).clone(), acc))
+                };
                 self.same(
                     ty(func),
                     &expected,
