@@ -315,22 +315,20 @@ fn too_large_sets(
                 return judged.unwrap_or(0);
             }
             let classes = class_elems(self.store, self.elems, self.block, id);
-            let mut n: u64 = 0;
-            if classes.len() <= MAX_UNION_VARIANTS {
+            let judged = if classes.len() > MAX_UNION_VARIANTS {
+                None
+            } else {
+                let mut n: u64 = 0;
                 for (_, lam, args) in &classes {
-                    n = n.saturating_add(1);
+                    n += 1;
                     for held in &self.builders.of(*lam, args).held_in_place {
-                        n = n.saturating_add(self.size(*held as usize));
+                        n += self.size(*held as usize);
                     }
                 }
-            }
-            let fits = classes.len() <= MAX_UNION_VARIANTS && n <= MAX_IN_PLACE_CAPTURE_STRUCTS;
-            self.of_block.insert(self.block[id], fits.then_some(n));
-            if fits {
-                n
-            } else {
-                0
-            }
+                (n <= MAX_IN_PLACE_CAPTURE_STRUCTS).then_some(n)
+            };
+            self.of_block.insert(self.block[id], judged);
+            judged.unwrap_or(0)
         }
     }
     let mut judge = Judge {
