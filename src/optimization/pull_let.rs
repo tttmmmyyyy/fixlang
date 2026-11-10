@@ -123,35 +123,45 @@ use crate::{
         pattern::PatternNode,
         traverse::{ExprVisitor, StartVisitResult, VisitState},
     },
+    misc::Set,
     optimization::rename::{generate_new_names, rename_pattern_value_avoiding},
 };
 use std::sync::Arc;
 
-/// Transformation (2): `{expr0}({non-variable-expr})` to `let f = {non-variable-expr}; {expr0}(f)`.
-fn pull_argument_into_let(app: &Arc<ExprNode>) -> Arc<ExprNode> {
+/// Transformation (2): `{expr0}({non-variable-expr})` to `let f = {non-variable-expr}; {expr0}(f)`,
+/// for the argument at `index`. The new name avoids the free names of the function and of the other
+/// arguments.
+fn pull_argument_into_let(app: &Arc<ExprNode>, index: usize) -> Arc<ExprNode> {
     let fun = app.get_app_func();
-    let arg = app.get_app_args()[0].clone();
+    let mut args = app.get_app_args();
+    let arg = args[index].clone();
 
-    let f_name = generate_new_names(&fun.free_vars(), 1)[0].clone();
+    let mut black_list = fun.free_vars();
+    for other in &args {
+        black_list.extend(other.free_vars());
+    }
+    let f_name = generate_new_names(&black_list, 1)[0].clone();
     let arg_ty = arg.type_.as_ref().unwrap();
     let f_pat = PatternNode::make_var(var_var(f_name.clone()), None).set_type(arg_ty.clone());
-    let f_var = expr_var(f_name, None).set_type(arg_ty.clone());
+    args[index] = expr_var(f_name, None).set_type(arg_ty.clone());
 
-    expr_let_typed(f_pat, arg, app.set_app_args(vec![f_var]))
+    expr_let_typed(f_pat, arg, app.set_app_args(args))
 }
 
 /// Transformation (3): `(let {pat} = {expr0}; {expr1})({expr2})` to
 /// `let {pat'} = {expr0}; {expr1'}({expr2})`.
 fn pull_let_out_of_function(app: &Arc<ExprNode>) -> Arc<ExprNode> {
     let fun = app.get_app_func();
-    let arg = app.get_app_args()[0].clone();
 
     let expr0 = fun.get_let_bound();
     let expr1 = fun.get_let_value();
     let pat = fun.get_let_pat();
 
-    // Rename `pat` and `expr1` to avoid conflicts with free variables in the argument.
-    let black_list = arg.free_vars();
+    // Rename `pat` and `expr1` to avoid conflicts with free variables in the arguments.
+    let mut black_list = Set::default();
+    for arg in app.get_app_args() {
+        black_list.extend(arg.free_vars());
+    }
     let (pat, expr1) = rename_pattern_value_avoiding(&black_list, pat, expr1);
 
     expr_let_typed(pat, expr0, app.set_app_func(expr1))
@@ -209,13 +219,12 @@ impl ExprVisitor for PullLet {
     ) -> StartVisitResult {
         let fun = expr.get_app_func();
         let args = expr.get_app_args();
-        assert_eq!(
-            args.len(),
-            1,
-            "an application of {} arguments reached the pull-let transformation",
+        assert!(
+            args.len() == 1 || fun.type_.as_ref().unwrap().is_func(),
+            "an application of a function of an arrow type to {} arguments reached the pull-let \
+             transformation",
             args.len()
         );
-        let arg = &args[0];
 
         // The `let`s leave an application in the order the call evaluates its arguments in, so
         // which of the function position and this argument is taken first is what sets that order.
@@ -233,8 +242,10 @@ impl ExprVisitor for PullLet {
             }
         }
 
-        if !arg.is_var() {
-            return StartVisitResult::ReplaceAndRevisit(pull_argument_into_let(expr));
+        // An uncurried function evaluates its arguments in the order they are listed, which is
+        // the order they are written in.
+        if let Some(index) = args.iter().position(|arg| !arg.is_var()) {
+            return StartVisitResult::ReplaceAndRevisit(pull_argument_into_let(expr, index));
         }
 
         if fun.is_let() {

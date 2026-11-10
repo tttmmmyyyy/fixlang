@@ -97,6 +97,14 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| inline_local::run(prg, config.num_worker_thread),
     );
 
+    let uncurried_funcs = run_pass(
+        prg,
+        config,
+        config.enable_uncurry_optimization(),
+        "uncurry",
+        |prg| uncurry::run(prg, config.num_worker_thread),
+    );
+
     // Specialize the program by its lambda sets, ahead of the passes that specialize closures,
     // which go on to work on the values this leaves closures. With `emit_symbols`, write the sets
     // to a dump named after the step the program is at.
@@ -189,7 +197,8 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config.enable_uncurry_optimization(),
         "uncurry",
         |prg| uncurry::run(prg, config.num_worker_thread),
-    );
+    )
+    .or(uncurried_funcs);
 
     // Inline the local functions once more. Specializing a closure puts the body of the function a
     // caller passed into the caller, so a body answering with a lambda leaves an application whose

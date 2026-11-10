@@ -97,11 +97,6 @@ impl ExprVisitor for Renamer {
         _state: &mut crate::ast::traverse::VisitState,
     ) -> crate::ast::traverse::StartVisitResult {
         let mut params = expr.get_lam_params();
-        assert_eq!(
-            params.len(),
-            1,
-            "This function does not support multi-parameter lambdas."
-        );
         let introduced_names: Vec<FullName> = params.iter().map(|p| p.name.clone()).collect();
 
         let bak_map = self.map.clone();

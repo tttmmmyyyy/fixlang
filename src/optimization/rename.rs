@@ -279,19 +279,13 @@ impl ExprVisitor for Substitutor {
     }
 
     /// Substitutes the body of a lambda under the scope its parameter opens, renaming the parameter
-    /// when it would capture a name a replacement expression reads. Panics on a lambda taking
-    /// several parameters.
+    /// when it would capture a name a replacement expression reads.
     fn start_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
         _state: &mut VisitState,
     ) -> StartVisitResult {
         let mut params = expr.get_lam_params();
-        assert_eq!(
-            params.len(),
-            1,
-            "This function does not support multi-parameter lambdas."
-        );
         let introduced_names: Vec<FullName> = params.iter().map(|p| p.name.clone()).collect();
 
         let body = expr.get_lam_body().clone();
@@ -300,7 +294,11 @@ impl ExprVisitor for Substitutor {
         let Some((backup, renaming)) = self.enter_scope(&introduced_names, expr, &body) else {
             unreachable!(
                 "the walk entered a lambda expression binding `{}` whose body no substituted name is free in",
-                introduced_names[0].to_string()
+                introduced_names
+                    .iter()
+                    .map(|name| name.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
         };
 
@@ -469,33 +467,29 @@ pub fn rename_match_pattern_avoiding(
     match_expr.set_match_pat_vals(pat_vals)
 }
 
-/// Renames the parameter of the lambda `lam_expr` so that it is disjoint from `ng_list`, and
-/// applies the same renaming to the body. Panics on a lambda taking several parameters.
+/// Renames the parameters of the lambda `lam_expr` so that they are disjoint from `ng_list`, and
+/// applies the same renaming to the body.
 pub fn rename_lam_param_avoiding(
     ng_list: &Set<FullName>,
     lam_expr: Arc<ExprNode>,
 ) -> Arc<ExprNode> {
-    if lam_expr.get_lam_params().len() > 1 {
-        panic!("This function does not support multi-parameter lambdas.");
-    }
     let old_params = lam_expr.get_lam_params();
-    let old_param = old_params[0].clone();
     let old_body = lam_expr.get_lam_body().clone();
     let renaming = calculate_renaming_bound_vars_avoiding(
         ng_list,
-        vec![old_param.name.clone()],
+        old_params.iter().map(|param| param.name.clone()).collect(),
         old_body.clone(),
     );
 
-    let new_param = if let Some(new_name) = renaming.get(&old_param.name) {
-        old_param.set_name(new_name.clone())
-    } else {
-        old_param.clone()
-    };
+    let new_params = old_params
+        .iter()
+        .map(|param| match renaming.get(&param.name) {
+            Some(new_name) => param.set_name(new_name.clone()),
+            None => param.clone(),
+        })
+        .collect();
     let new_body = rename_free_names(&old_body, renaming);
-    lam_expr
-        .set_lam_params(vec![new_param])
-        .set_lam_body(new_body)
+    lam_expr.set_lam_params(new_params).set_lam_body(new_body)
 }
 
 /// Computes how to rename the variables `bound_vars` that a `let`, `match` or lambda binds over the

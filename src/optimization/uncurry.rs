@@ -31,14 +31,34 @@ use std::{mem, sync::Arc};
 ///
 /// Returns the uncurried functions it defined, which a later `replace_calls_with_funcs` takes.
 pub fn run(prg: &mut Program, num_threads: usize) -> UncurriedFuncs {
-    // Define the uncurried functions of each global.
+    // The uncurried functions an earlier run defined, which this run keeps.
+    let mut funcs = UncurriedFuncs::default();
+    for name in prg.symbols.keys() {
+        for n_args in 1..=FUNC_ARGS_MAX as usize {
+            let mut func = name.clone();
+            convert_to_uncurried_func_name(func.name_as_mut(), n_args);
+            if !prg.symbols.contains_key(&func) {
+                break;
+            }
+            funcs.insert(func, (name.clone(), n_args));
+        }
+    }
+
+    // Define the uncurried functions of each global that has none yet.
     let syms = mem::replace(&mut prg.symbols, Default::default());
     let funcs_of_syms = map_on_compiler_threads(
         syms.into_iter().collect(),
         num_threads,
-        |(sym_name, sym)| with_uncurried_funcs(sym_name, sym),
+        |(sym_name, sym)| {
+            let mut first = sym_name.clone();
+            convert_to_uncurried_func_name(first.name_as_mut(), 1);
+            if funcs.contains_key(&first) || funcs.contains_key(&sym_name) {
+                vec![(sym_name, sym)]
+            } else {
+                with_uncurried_funcs(sym_name, sym)
+            }
+        },
     );
-    let mut funcs = UncurriedFuncs::default();
     for global_and_funcs in funcs_of_syms {
         let global = global_and_funcs[0].0.clone();
         for (n_args, (name, _)) in global_and_funcs.iter().enumerate().skip(1) {
@@ -278,11 +298,10 @@ fn replace_closure_call_with_func_call(
                 // An uncurried function of a global, called with its arguments and then the
                 // arguments of what it returns: `g#func{N}(a1, ..., aN)(b1, ..., bM)` becomes
                 // `g#func{N+M}(a1, ..., aN, b1, ..., bM)`.
+                // An uncurried function whose global the lambda sets copied under another name
+                // has no longer one to merge the call onto.
                 let Some((global, n_args)) = funcs.get(&f_func.name) else {
-                    unreachable!(
-                        "the global `{}` of a func type is not an uncurried function `run` defined",
-                        f_func.name.to_string()
-                    );
+                    return expr.clone();
                 };
                 let n_args = *n_args;
                 assert!(
