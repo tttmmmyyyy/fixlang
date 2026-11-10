@@ -1,6 +1,6 @@
 use crate::{
     configuration::Configuration,
-    constants::MAX_UNION_VARIANTS,
+    constants::MAX_LS_UNION_VARIANTS,
     tests::test_util::{build_within_and_run, test_source},
 };
 use std::time::Duration;
@@ -492,13 +492,13 @@ fn test_two_elements_of_one_class_capturing_an_optional_function_of_their_own_se
     test_source(source, Configuration::develop_mode());
 }
 
-/// Two folds handing `mk` each lambda of an array of more lambdas than a union has variants, the
+/// Two folds handing `mk` each lambda of an array of more lambdas than `MAX_LS_UNION_VARIANTS`, the
 /// two arrays holding different lambdas: `mk`'s lambda captures a value of one array's set in one
 /// copy and of the other's in the other. Both arrays' sets are represented by closures, and so are
 /// alike to the lambda that captures them, and each fold computes its sum.
 #[test]
 fn test_a_lambda_capturing_either_of_two_sets_of_too_many_classes_computes_both() {
-    let count = MAX_UNION_VARIANTS + 1;
+    let count = MAX_LS_UNION_VARIANTS + 1;
     let adding: Vec<String> = (0..count).map(|i| format!("|x| x + n * {}", i)).collect();
     let subtracting: Vec<String> = (0..count).map(|i| format!("|x| x - n * {}", i)).collect();
     let source = format!(
@@ -593,7 +593,7 @@ mod dump_tests {
     use super::{chain_source, CHAIN_DEPTH, CHAIN_OUTPUT};
     use crate::constants::{
         LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_IN_PLACE_CAPTURE_STRUCTS,
-        MAX_UNION_VARIANTS,
+        MAX_LS_UNION_VARIANTS,
     };
     use crate::misc::Set;
     use crate::tests::test_util::{
@@ -1232,17 +1232,17 @@ mod dump_tests {
         (count * (count - 1) / 2).to_string()
     }
 
-    /// A set of as many classes as a union has variants is represented by a union, and one of a
-    /// class more by closures: the fold over `MAX_UNION_VARIANTS` lambdas takes their union, and the
-    /// fold over one lambda more calls them through closures, answering the same.
+    /// A set of as many classes as `MAX_LS_UNION_VARIANTS` is represented by a union, and one of a
+    /// class more by closures: the fold over that many lambdas takes their union, and the fold over
+    /// one lambda more calls them through closures, answering the same.
     #[test]
-    fn test_a_set_of_more_classes_than_a_union_has_variants_is_a_set_of_closures() {
-        let source = many_lambdas_source(MAX_UNION_VARIANTS);
+    fn test_a_set_of_more_classes_than_a_union_may_have_variants_is_a_set_of_closures() {
+        let source = many_lambdas_source(MAX_LS_UNION_VARIANTS);
         let dump = build_run_and_read_rc_ir(
             &source,
             "max",
-            &many_lambdas_output(MAX_UNION_VARIANTS),
-            "a fold over as many lambdas as a union has variants",
+            &many_lambdas_output(MAX_LS_UNION_VARIANTS),
+            "a fold over as many lambdas as a union of lambda set specialization may have variants",
         );
         assert_calls_by_name(&dump, "Std::Iterator::fold");
         assert!(
@@ -1250,12 +1250,12 @@ mod dump_tests {
             "the lambdas should be values of a union"
         );
 
-        let source = many_lambdas_source(MAX_UNION_VARIANTS + 1);
+        let source = many_lambdas_source(MAX_LS_UNION_VARIANTS + 1);
         let dump = build_run_and_read_rc_ir(
             &source,
             "max",
-            &many_lambdas_output(MAX_UNION_VARIANTS + 1),
-            "a fold over one lambda more than a union has variants",
+            &many_lambdas_output(MAX_LS_UNION_VARIANTS + 1),
+            "a fold over one lambda more than a union of lambda set specialization may have variants",
         );
         assert!(
             !dump.contains(LS_UNION_PREFIX),

@@ -230,6 +230,15 @@ pub const MAX_UNION_VARIANTS: usize = 1 << UNION_TAG_BITS;
 /// once per capture struct it lays out (#1008), so without the bound their time doubles at each step
 /// of such a chain. The bound can go once those passes walk a type in time linear in its declaration.
 pub const MAX_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 10;
+/// How many variants a union that lambda set specialization represents the values of a set by may
+/// have: the most classes the set's elements may make. A set past it is represented by closures.
+///
+/// The passes of the RC IR grow faster than the number of variants on the values of a union
+/// (#1009), and a set of a few dozen classes, such as a table of functions chosen at run time,
+/// would make the build much slower than closures do. The bound can go up once those passes grow
+/// linearly; it stays within what a union's tag tells apart (`MAX_UNION_VARIANTS`).
+pub const MAX_LS_UNION_VARIANTS: usize = 32;
+const _: () = assert!(MAX_LS_UNION_VARIANTS <= MAX_UNION_VARIANTS);
 /// The index of the function pointer among a closure's fields.
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 /// The index, among a closure's fields, of the pointer to the captured values the function is
