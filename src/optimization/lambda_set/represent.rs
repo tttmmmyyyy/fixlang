@@ -8,7 +8,7 @@ use super::{
     specialize::Specialization,
 };
 use crate::{
-    constants::{LS_COPY_SUFFIX, MAX_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS},
+    constants::{LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS},
     graph::Graph,
     hash::md5_hex,
     misc::{Map, Set},
@@ -282,7 +282,7 @@ fn class_elems<'s>(
 
 /// Whether each set represented by a capture struct or a union under the partition `block` is too
 /// large for it: its elements make more classes than `MAX_LS_UNION_VARIANTS`, or its values would
-/// lay out more capture structs in place than `MAX_IN_PLACE_CAPTURE_STRUCTS`.
+/// lay out more capture structs in place than `MAX_LS_IN_PLACE_CAPTURE_STRUCTS`.
 ///
 /// A value lays out in place one capture struct per class of its set's elements, and with each the
 /// capture structs of the values the class's lambda holds in place. The sets are judged from the
@@ -332,7 +332,7 @@ fn too_large_sets(
                         n += self.in_place_count(*held as usize);
                     }
                 }
-                (n <= MAX_IN_PLACE_CAPTURE_STRUCTS).then_some(n)
+                (n <= MAX_LS_IN_PLACE_CAPTURE_STRUCTS).then_some(n)
             };
             self.in_place_of_block.insert(self.block[id], judged);
             judged.unwrap_or(0)
@@ -398,7 +398,7 @@ fn partition_sets(
 ///    would have no size, as an unboxed type reaching itself has none.
 ///    So is a set step 2 finds too large for a capture struct or a union (`too_large_sets`): its
 ///    elements make more classes than `MAX_LS_UNION_VARIANTS`, or its values would lay out more
-///    capture structs in place than `MAX_IN_PLACE_CAPTURE_STRUCTS`. Step 2 is then taken again with
+///    capture structs in place than `MAX_LS_IN_PLACE_CAPTURE_STRUCTS`. Step 2 is then taken again with
 ///    it among these.
 /// 2. The other sets and their elements are partitioned by the code they make: two elements are
 ///    equal when they name the same lambda and the sets at its interface (`Builder::interface`) are

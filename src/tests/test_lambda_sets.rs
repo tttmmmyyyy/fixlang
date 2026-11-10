@@ -592,7 +592,7 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
 mod dump_tests {
     use super::{chain_source, CHAIN_DEPTH, CHAIN_OUTPUT};
     use crate::constants::{
-        LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_IN_PLACE_CAPTURE_STRUCTS,
+        LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS,
         MAX_LS_UNION_VARIANTS,
     };
     use crate::misc::Set;
@@ -1236,13 +1236,13 @@ mod dump_tests {
     /// class more by closures: the fold over that many lambdas takes their union, and the fold over
     /// one lambda more calls them through closures, answering the same.
     #[test]
-    fn test_a_set_of_more_classes_than_a_union_may_have_variants_is_a_set_of_closures() {
+    fn test_a_set_of_too_many_classes_is_a_set_of_closures() {
         let source = many_lambdas_source(MAX_LS_UNION_VARIANTS);
         let dump = build_run_and_read_rc_ir(
             &source,
             "max",
             &many_lambdas_output(MAX_LS_UNION_VARIANTS),
-            "a fold over as many lambdas as a union of lambda set specialization may have variants",
+            "a fold over `MAX_LS_UNION_VARIANTS` lambdas",
         );
         assert_calls_by_name(&dump, "Std::Iterator::fold");
         assert!(
@@ -1255,7 +1255,7 @@ mod dump_tests {
             &source,
             "max",
             &many_lambdas_output(MAX_LS_UNION_VARIANTS + 1),
-            "a fold over one lambda more than a union of lambda set specialization may have variants",
+            "a fold over one lambda more than `MAX_LS_UNION_VARIANTS`",
         );
         assert!(
             !dump.contains(LS_UNION_PREFIX),
@@ -1270,7 +1270,7 @@ mod dump_tests {
     }
 
     /// Only the first set of a chain past the bound on the capture structs a value lays out in place
-    /// (`MAX_IN_PLACE_CAPTURE_STRUCTS`) is represented by closures: the sets outside it hold that
+    /// (`MAX_LS_IN_PLACE_CAPTURE_STRUCTS`) is represented by closures: the sets outside it hold that
     /// set's closures, which lay out none, so they are counted afresh and are unions again. The last
     /// function of `chain_source` is applied where it is built, which leaves no set of its own, so the
     /// dump names a union of `Main` for every other function but those the count puts past the bound.
@@ -1297,7 +1297,7 @@ mod dump_tests {
         let mut past_the_bound = 0;
         let mut since = 0;
         for _ in 0..CHAIN_DEPTH {
-            if (1u64 << (since + 2)) - 2 > MAX_IN_PLACE_CAPTURE_STRUCTS {
+            if (1u64 << (since + 2)) - 2 > MAX_LS_IN_PLACE_CAPTURE_STRUCTS {
                 past_the_bound += 1;
                 since = 0;
             } else {
