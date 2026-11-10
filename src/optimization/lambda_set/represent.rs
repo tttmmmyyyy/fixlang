@@ -261,7 +261,7 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
     unboxable
 }
 
-/// The elements of the set `id` one per class of the partition `block`, each with its key under the
+/// The elements of the set `id`, one per class of the partition `block`, each with its key under the
 /// partition, sorted by the key. `elems` holds the elements each set is partitioned by
 /// (`partition_sets`).
 fn class_elems<'s>(
@@ -295,15 +295,20 @@ fn too_large_sets(
     elems: &[NodeElems<LamId>],
     block: &[usize],
 ) -> Vec<bool> {
-    /// The partition being judged, and the judgment of each block met so far (`in_place_of_block`):
-    /// how many capture structs a value of its sets lays out in place, or `None` where its sets are
-    /// too large.
+    /// The partition being judged, and the judgment of each block met so far.
     struct Judge<'j> {
+        /// The sets being judged.
         store: &'j SetStore,
+        /// The `Builder` of each element, read for the sets its capture struct holds in place.
         builders: &'j Builders,
+        /// Whether each set is represented by a capture struct or a union.
         unboxable: &'j [bool],
+        /// The elements each set is partitioned by, in the order `SetStore::lam_elems` lists them.
         elems: &'j [NodeElems<LamId>],
+        /// The block of the partition each set falls in.
         block: &'j [usize],
+        /// How many capture structs a value of the sets of each block met so far lays out in place,
+        /// or `None` where its sets are too large.
         in_place_of_block: Map<usize, Option<u64>>,
     }
     impl Judge<'_> {

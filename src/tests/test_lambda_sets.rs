@@ -539,8 +539,8 @@ const CHAIN_OUTPUT: &str = "98385";
 /// A program building a chain of functions `f0` to `f{CHAIN_DEPTH}`, each chosen by an `if` from two
 /// lambdas, the lambdas of each capturing the function before, and printing what the last gives.
 /// Each set of the chain is of two classes, so a value of `f{i}` represented by a union lays out
-/// `2^(i + 2) - 2` capture structs in place: two for `f0`, whose lambdas hold no function, and with
-/// each step one per class plus those of the value before.
+/// `2^(i + 2) - 2` capture structs in place: two for `f0`, whose lambdas hold no function, and at
+/// each step, for each of the two classes, one plus those of the value before.
 fn chain_source() -> String {
     let links: Vec<String> = (1..=CHAIN_DEPTH)
         .map(|i| {
