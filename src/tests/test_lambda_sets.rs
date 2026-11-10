@@ -590,7 +590,10 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
 /// function values left as closures — so these assert against the dump.
 #[cfg(test)]
 mod dump_tests {
-    use crate::constants::{LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_UNION_VARIANTS};
+    use crate::constants::{
+        LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_IN_PLACE_CAPTURE_STRUCTS,
+        MAX_UNION_VARIANTS,
+    };
     use crate::misc::Set;
     use crate::tests::test_util::{
         build_run_and_read_rc_ir, rc_ir_callee_of, rc_ir_function_bodies,
@@ -1266,10 +1269,10 @@ mod dump_tests {
     }
 
     /// Only the first set of a chain past the bound on the capture structs a value lays out in place
-    /// is represented by closures: the sets outside it hold that set's closures, which lay out none,
-    /// so they are counted afresh and are unions again. In `chain_source`, `f9` is the first past the
-    /// bound of 1024, at 2046, and the last function is applied where it is built, which leaves no set
-    /// of its own: the dump names a union of `Main` for each of `f0` to `f8` and of `f10` to `f17`.
+    /// (`MAX_IN_PLACE_CAPTURE_STRUCTS`) is represented by closures: the sets outside it hold that
+    /// set's closures, which lay out none, so they are counted afresh and are unions again. The last
+    /// function of `chain_source` is applied where it is built, which leaves no set of its own, so the
+    /// dump names a union of `Main` for every other function but those the count puts past the bound.
     #[test]
     fn test_only_the_first_set_of_a_chain_past_the_bound_is_closures() {
         let dump = build_run_and_read_rc_ir(
@@ -1288,10 +1291,27 @@ mod dump_tests {
                     .unwrap()]
             })
             .collect();
+        // A value of the `j`-th function since the last one past the bound, `f0` counting as the
+        // 0th, lays out `2^(j + 2) - 2` capture structs in place.
+        let mut past_the_bound = 0;
+        let mut since = 0;
+        for _ in 0..super::CHAIN_DEPTH {
+            if (1u64 << (since + 2)) - 2 > MAX_IN_PLACE_CAPTURE_STRUCTS {
+                past_the_bound += 1;
+                since = 0;
+            } else {
+                since += 1;
+            }
+        }
+        assert!(
+            past_the_bound > 0,
+            "the chain should reach past the bound for the test to judge anything"
+        );
         assert_eq!(
             unions.len(),
-            super::CHAIN_DEPTH - 1,
-            "every set of the chain but the first past the bound should be a union: {:?}",
+            super::CHAIN_DEPTH - past_the_bound,
+            "every function of the chain but the last and those past the bound should have a union: \
+             {:?}",
             unions
         );
     }

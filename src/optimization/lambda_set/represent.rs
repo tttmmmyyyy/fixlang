@@ -8,7 +8,7 @@ use super::{
     specialize::Specialization,
 };
 use crate::{
-    constants::{LS_COPY_SUFFIX, MAX_UNION_VARIANTS},
+    constants::{LS_COPY_SUFFIX, MAX_IN_PLACE_CAPTURE_STRUCTS, MAX_UNION_VARIANTS},
     graph::Graph,
     hash::md5_hex,
     misc::{Map, Set},
@@ -173,6 +173,17 @@ impl Builders {
                     lambda.interface.iter().map(set_of).collect()
                 };
                 let held_in_place: Vec<SetId> = lambda.held_in_place.iter().map(set_of).collect();
+                // A held set decides the layout of the element's capture struct, so it is one the
+                // class reads at its interface, or one holding `Dynamic`, which the layout never
+                // holds in place.
+                for (v, held) in lambda.held_in_place.iter().zip(&held_in_place) {
+                    assert!(
+                        lambda.interface.contains(v)
+                            || spec.store.elems(*held).contains(&Elem::Dynamic),
+                        "{} holds in place a set outside its interface",
+                        lambda.to_string()
+                    );
+                }
                 match builders.get(&(*lam, args.clone())) {
                     Some(known) => assert_eq!(
                         known.interface,
@@ -250,16 +261,6 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
     unboxable
 }
 
-/// How many capture structs a value of a set represented by a capture struct or a union may lay
-/// out in place. A set past it is represented by closures.
-///
-/// A set whose elements capture values of another set held in place lays out that set's capture
-/// structs inside its own, once per class of its elements, so a chain of sets each of two classes
-/// capturing the one before lays out twice as many at each step. The passes of the RC IR walk a type
-/// once per capture struct it lays out (#1008), so without the bound their time doubles at each step
-/// of such a chain. The bound can go once those passes walk a type in time linear in its declaration.
-const MAX_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 10;
-
 /// The elements of the set `id` one per class of the partition `block`, each with its key under the
 /// partition, sorted by the key. `elems` holds the elements each set is partitioned by
 /// (`partition_sets`).
@@ -294,24 +295,25 @@ fn too_large_sets(
     elems: &[NodeElems<LamId>],
     block: &[usize],
 ) -> Vec<bool> {
-    /// The partition being judged, and the judgment of each block met so far: how many capture
-    /// structs a value of its sets lays out in place, or `None` where its sets are too large.
+    /// The partition being judged, and the judgment of each block met so far (`in_place_of_block`):
+    /// how many capture structs a value of its sets lays out in place, or `None` where its sets are
+    /// too large.
     struct Judge<'j> {
         store: &'j SetStore,
         builders: &'j Builders,
         unboxable: &'j [bool],
         elems: &'j [NodeElems<LamId>],
         block: &'j [usize],
-        of_block: Map<usize, Option<u64>>,
+        in_place_of_block: Map<usize, Option<u64>>,
     }
     impl Judge<'_> {
         /// How many capture structs a value of the set `id` lays out in place, counting none for a
         /// set of closures and for one too large.
-        fn size(&mut self, id: usize) -> u64 {
+        fn in_place_count(&mut self, id: usize) -> u64 {
             if !self.unboxable[id] {
                 return 0;
             }
-            if let Some(judged) = self.of_block.get(&self.block[id]) {
+            if let Some(judged) = self.in_place_of_block.get(&self.block[id]) {
                 return judged.unwrap_or(0);
             }
             let classes = class_elems(self.store, self.elems, self.block, id);
@@ -322,13 +324,19 @@ fn too_large_sets(
                 for (_, lam, args) in &classes {
                     n += 1;
                     for held in &self.builders.of(*lam, args).held_in_place {
-                        n += self.size(*held as usize);
+                        n += self.in_place_count(*held as usize);
                     }
                 }
                 (n <= MAX_IN_PLACE_CAPTURE_STRUCTS).then_some(n)
             };
-            self.of_block.insert(self.block[id], judged);
+            self.in_place_of_block.insert(self.block[id], judged);
             judged.unwrap_or(0)
+        }
+
+        /// Whether the set `id` is represented by a capture struct or a union and too large for it.
+        fn is_too_large(&mut self, id: usize) -> bool {
+            self.in_place_count(id);
+            self.unboxable[id] && self.in_place_of_block[&self.block[id]].is_none()
         }
     }
     let mut judge = Judge {
@@ -337,14 +345,9 @@ fn too_large_sets(
         unboxable,
         elems,
         block,
-        of_block: Map::default(),
+        in_place_of_block: Map::default(),
     };
-    (0..store.len())
-        .map(|id| {
-            judge.size(id);
-            unboxable[id] && judge.of_block[&block[id]].is_none()
-        })
-        .collect()
+    (0..store.len()).map(|id| judge.is_too_large(id)).collect()
 }
 
 /// The partition of the sets of `store` by the code their values make (`canonical_classes`), where
