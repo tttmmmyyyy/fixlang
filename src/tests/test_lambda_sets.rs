@@ -590,6 +590,7 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
 /// function values left as closures — so these assert against the dump.
 #[cfg(test)]
 mod dump_tests {
+    use super::{chain_source, CHAIN_DEPTH, CHAIN_OUTPUT};
     use crate::constants::{
         LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_IN_PLACE_CAPTURE_STRUCTS,
         MAX_UNION_VARIANTS,
@@ -598,7 +599,6 @@ mod dump_tests {
     use crate::tests::test_util::{
         build_run_and_read_rc_ir, rc_ir_callee_of, rc_ir_function_bodies,
     };
-    use super::{chain_source, CHAIN_DEPTH, CHAIN_OUTPUT};
 
     /// The function values that `body`, a function of an RC IR dump, calls: each call whose callee
     /// is a local value. A global is written with its namespace, and a builtin operation's name
