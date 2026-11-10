@@ -529,15 +529,19 @@ fn test_a_lambda_capturing_either_of_two_sets_of_too_many_classes_computes_both(
     test_source(&source, Configuration::develop_mode());
 }
 
-/// A chain of `CHAIN_DEPTH` functions, each chosen by an `if` from two lambdas capturing the one
-/// before, builds well within `CHAIN_TIMEOUT`. A set of two classes capturing a set of two classes
-/// lays out twice as many capture structs in place, so the first set of the chain whose values would
-/// lay out too many is represented by closures; as unions all the way out, the outermost value would
-/// lay out `2^(CHAIN_DEPTH + 1) - 2` of them, and the build would take far longer.
-#[test]
-fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
-    const CHAIN_DEPTH: usize = 18;
-    const CHAIN_TIMEOUT: Duration = Duration::from_secs(300);
+/// How deep the chain of `chain_source` goes in the tests of the bound on the capture structs a
+/// value lays out in place.
+const CHAIN_DEPTH: usize = 18;
+
+/// What `chain_source()` prints.
+const CHAIN_OUTPUT: &str = "98385";
+
+/// A program building a chain of functions `f0` to `f{CHAIN_DEPTH}`, each chosen by an `if` from two
+/// lambdas, the lambdas of each capturing the function before, and printing what the last gives.
+/// Each set of the chain is of two classes, so a value of `f{i}` represented by a union lays out
+/// `2^(i + 2) - 2` capture structs in place: two for `f0`, whose lambdas hold no function, and with
+/// each step one per class plus those of the value before.
+fn chain_source() -> String {
     let links: Vec<String> = (1..=CHAIN_DEPTH)
         .map(|i| {
             format!(
@@ -547,7 +551,7 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
             )
         })
         .collect();
-    let source = format!(
+    format!(
         "module Main;\n\
          \n\
          main : IO ();\n\
@@ -560,17 +564,24 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
          );\n",
         links.join("\n"),
         CHAIN_DEPTH
-    );
+    )
+}
+
+/// The chain of `chain_source` builds well within a deadline. The first set of the chain whose
+/// values would lay out too many capture structs in place is represented by closures; as unions all
+/// the way out, the build would take far longer.
+#[test]
+fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
     let printed = build_within_and_run(
-        &source,
+        &chain_source(),
         "max",
-        CHAIN_TIMEOUT,
+        Duration::from_secs(300),
         &format!(
             "a chain of {} unions each capturing the one before",
             CHAIN_DEPTH
         ),
     );
-    assert_eq!(printed, "98385", "the chain computed a wrong value");
+    assert_eq!(printed, CHAIN_OUTPUT, "the chain computed a wrong value");
 }
 
 /// What the rewrite by the lambda sets makes of a program, read off the `--emit-rc-ir` dump: a
@@ -580,6 +591,7 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
 #[cfg(test)]
 mod dump_tests {
     use crate::constants::{LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_UNION_VARIANTS};
+    use crate::misc::Set;
     use crate::tests::test_util::{
         build_run_and_read_rc_ir, rc_ir_callee_of, rc_ir_function_bodies,
     };
@@ -1250,6 +1262,37 @@ mod dump_tests {
                 .iter()
                 .any(|body| !closure_calls(body).is_empty()),
             "the fold should call the lambdas through closures"
+        );
+    }
+
+    /// Only the first set of a chain past the bound on the capture structs a value lays out in place
+    /// is represented by closures: the sets outside it hold that set's closures, which lay out none,
+    /// so they are counted afresh and are unions again. In `chain_source`, `f9` is the first past the
+    /// bound of 1024, at 2046, and the last function is applied where it is built, which leaves no set
+    /// of its own: the dump names a union of `Main` for each of `f0` to `f8` and of `f10` to `f17`.
+    #[test]
+    fn test_only_the_first_set_of_a_chain_past_the_bound_is_closures() {
+        let dump = build_run_and_read_rc_ir(
+            &super::chain_source(),
+            "max",
+            super::CHAIN_OUTPUT,
+            "a chain of unions each capturing the one before",
+        );
+        let main_union = format!("Main::{}", LS_UNION_PREFIX);
+        let unions: Set<&str> = dump
+            .match_indices(&main_union)
+            .map(|(at, _)| {
+                let rest = &dump[at..];
+                &rest[..rest
+                    .find(|c: char| c.is_whitespace() || c == ')' || c == ',')
+                    .unwrap()]
+            })
+            .collect();
+        assert_eq!(
+            unions.len(),
+            super::CHAIN_DEPTH - 1,
+            "every set of the chain but the first past the bound should be a union: {:?}",
+            unions
         );
     }
 }
