@@ -251,6 +251,78 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
     unboxable
 }
 
+/// How many capture structs a value of a set lays out in place maps no further than this. Past it,
+/// the set is represented by closures.
+///
+/// A set whose elements capture values of another set held in place lays out that set's capture
+/// structs inside its own, once per class of its elements, so a chain of sets each of two classes
+/// capturing the one before lays out twice as many at each step. The passes reading the types of the
+/// rewritten program walk such a type once per capture struct it lays out, so the bound keeps them
+/// from growing with the depth of the chain the way the number of capture structs does.
+const MAX_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 10;
+
+/// How many capture structs a value of each set lays out in place, counted as a tree: for a set
+/// represented by a capture struct or a union, one per class of its elements, each with the capture
+/// structs of the sets its lambda holds in place; for any other set, none.
+///
+/// # Arguments
+/// * `unboxable`, `elems`, `block` - the sets a capture struct or a union can stand for, and the
+///   partition of the sets (`partition_sets`).
+fn in_place_sizes(
+    analysis: &Analysis,
+    spec: &Specialization,
+    builders: &Builders,
+    unboxable: &[bool],
+    elems: &[NodeElems<LamId>],
+    block: &[usize],
+) -> Vec<u64> {
+    /// The size of the set `id`, the sizes of the blocks met so far in `sizes`.
+    fn size(
+        id: usize,
+        analysis: &Analysis,
+        spec: &Specialization,
+        builders: &Builders,
+        unboxable: &[bool],
+        elems: &[NodeElems<LamId>],
+        block: &[usize],
+        sizes: &mut Map<usize, u64>,
+    ) -> u64 {
+        if !unboxable[id] {
+            return 0;
+        }
+        if let Some(n) = sizes.get(&block[id]) {
+            return *n;
+        }
+        let mut classes: Set<ElemKey<LamId>> = Set::default();
+        let mut n: u64 = 0;
+        for ((lam, args), (label, children)) in spec.store.lam_elems(id as SetId).zip(&elems[id]) {
+            if !classes.insert(elem_key(label, children, block)) {
+                continue;
+            }
+            let instance = &spec.instances[builders.of(lam, args).instance];
+            let component = &analysis.components[instance.component];
+            n = n.saturating_add(1);
+            for v in &analysis.lambdas[lam as usize].held_in_place {
+                let held = instance.var_sets[component.var_index[v]] as usize;
+                let held_size = size(
+                    held, analysis, spec, builders, unboxable, elems, block, sizes,
+                );
+                n = n.saturating_add(held_size);
+            }
+        }
+        sizes.insert(block[id], n);
+        n
+    }
+    let mut sizes: Map<usize, u64> = Map::default();
+    (0..spec.store.len())
+        .map(|id| {
+            size(
+                id, analysis, spec, builders, unboxable, elems, block, &mut sizes,
+            )
+        })
+        .collect()
+}
+
 /// The partition of the sets of `store` by the code their values make (`canonical_classes`), where
 /// `unboxable` holds the sets a capture struct or a union can stand for: the elements each set is
 /// partitioned by, in the order `SetStore::lam_elems` lists them, the class of each set, and the
@@ -319,25 +391,35 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
 
     // The partition of the sets by the code their values make. The sets of closures hold no
     // element the partition reads, so they make one class of their own. A set whose elements make
-    // more classes than a union has variants is represented by closures as well, and the partition
-    // is made again with it among them. Once is enough: the partition made first, with the blocks of
-    // those sets merged into the block of the sets of closures, is still stable, so the one made
-    // again is as coarse or coarser, and no set it holds makes more classes than before.
+    // more classes than a union has variants, or whose values would lay out more capture structs in
+    // place than `MAX_IN_PLACE_CAPTURE_STRUCTS`, is represented by closures as well, and the
+    // partition is made again with it among them. Once is enough: the partition made first, with
+    // the blocks of those sets merged into the block of the sets of closures, is still stable, so
+    // the one made again is as coarse or coarser, and no set it holds makes more classes, or lays out
+    // more capture structs, than before.
     let (mut elems, mut block, mut block_elems) = partition_sets(store, &builders, &unboxable);
-    let too_many = |block: &[usize], block_elems: &[Vec<ElemKey<LamId>>], unboxable: &[bool]| {
+    let too_large = |elems: &[NodeElems<LamId>],
+                     block: &[usize],
+                     block_elems: &[Vec<ElemKey<LamId>>],
+                     unboxable: &[bool]| {
+        let sizes = in_place_sizes(analysis, spec, &builders, unboxable, elems, block);
         (0..set_count)
-            .filter(|id| unboxable[*id] && block_elems[block[*id]].len() > MAX_UNION_VARIANTS)
+            .filter(|id| {
+                unboxable[*id]
+                    && (block_elems[block[*id]].len() > MAX_UNION_VARIANTS
+                        || sizes[*id] > MAX_IN_PLACE_CAPTURE_STRUCTS)
+            })
             .collect::<Vec<usize>>()
     };
-    let demoted = too_many(&block, &block_elems, &unboxable);
+    let demoted = too_large(&elems, &block, &block_elems, &unboxable);
     if !demoted.is_empty() {
         for id in demoted {
             unboxable[id] = false;
         }
         (elems, block, block_elems) = partition_sets(store, &builders, &unboxable);
         assert!(
-            too_many(&block, &block_elems, &unboxable).is_empty(),
-            "a set makes more classes than a union has variants once the partition is made again"
+            too_large(&elems, &block, &block_elems, &unboxable).is_empty(),
+            "a set is too large for a capture struct or a union once the partition is made again"
         );
     }
 

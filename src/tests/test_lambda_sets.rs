@@ -1,6 +1,9 @@
 use crate::{
-    configuration::Configuration, constants::MAX_UNION_VARIANTS, tests::test_util::test_source,
+    configuration::Configuration,
+    constants::MAX_UNION_VARIANTS,
+    tests::test_util::{build_within_and_run, test_source},
 };
+use std::time::Duration;
 
 // Programs whose function values take the paths the lambda set inference follows: through a
 // recursion, into a value that captures a value of its own set, through a `fix` left as a closure,
@@ -524,6 +527,50 @@ fn test_a_lambda_capturing_either_of_two_sets_of_too_many_classes_computes_both(
         count
     );
     test_source(&source, Configuration::develop_mode());
+}
+
+/// A chain of `CHAIN_DEPTH` functions, each chosen by an `if` from two lambdas capturing the one
+/// before, builds in a few seconds. A set of two classes capturing a set of two classes lays out
+/// twice as many capture structs, so the chain's outer sets are represented by closures once their
+/// values would lay out too many in place; as unions all the way out, each value would lay out
+/// `2^CHAIN_DEPTH` of them, and the build would take far longer than `CHAIN_TIMEOUT`.
+#[test]
+fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
+    const CHAIN_DEPTH: usize = 16;
+    const CHAIN_TIMEOUT: Duration = Duration::from_secs(120);
+    let links: Vec<String> = (1..=CHAIN_DEPTH)
+        .map(|i| {
+            format!(
+                "    let f{i} = if (k + {i}) % 2 == 0 {{ |x| (f{p}(x) + {i}) % 1000003 }} else {{ |x| (f{p}(x) * 3) % 1000003 }};",
+                i = i,
+                p = i - 1
+            )
+        })
+        .collect();
+    let source = format!(
+        "module Main;\n\
+         \n\
+         main : IO ();\n\
+         main = (\n\
+         \x20   let k = *get_args.map(|args| args.@size);\n\
+         \x20   let s = k.to_string;\n\
+         \x20   let f0 = if k > 1 {{ |x| x + s.get_size }} else {{ |x| x * 2 }};\n\
+         {}\n\
+         \x20   println(f{}(k).to_string)\n\
+         );\n",
+        links.join("\n"),
+        CHAIN_DEPTH
+    );
+    let printed = build_within_and_run(
+        &source,
+        "max",
+        CHAIN_TIMEOUT,
+        &format!(
+            "a chain of {} unions each capturing the one before",
+            CHAIN_DEPTH
+        ),
+    );
+    assert_eq!(printed, "32778", "the chain computed a wrong value");
 }
 
 /// What the rewrite by the lambda sets makes of a program, read off the `--emit-rc-ir` dump: a
