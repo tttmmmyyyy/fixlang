@@ -4,11 +4,11 @@ use super::{
     concrete::{Elem, SetId, SetStore},
     infer::Analysis,
     partition::{canonical_classes, elem_key, Child, ElemKey, NodeElems},
-    solver::LamId,
+    solver::{LamId, SetVar},
     specialize::Specialization,
 };
 use crate::{
-    constants::{LS_COPY_SUFFIX, MAX_UNION_VARIANTS},
+    constants::{LS_COPY_SUFFIX, MAX_IN_PLACE_CAPTURE_STRUCTS, MAX_UNION_VARIANTS},
     graph::Graph,
     hash::md5_hex,
     misc::{Map, Set},
@@ -144,6 +144,9 @@ struct Builder {
     /// `Lambda::interface`. For the lambda that is the body of its symbol, they are the sets the
     /// element gives the lambda's parameters, as those are the parameters its body depends on.
     interface: Vec<SetId>,
+    /// The sets the copy gives the variables of `Lambda::held_in_place`: those whose values the
+    /// element's capture struct holds in place.
+    held_in_place: Vec<SetId>,
 }
 
 /// The `Builder` of each element naming a lambda, by the lambda and the sets the element gives the
@@ -163,15 +166,24 @@ impl Builders {
             for lam in &lambdas_of_component[instance.component] {
                 let lambda = &analysis.lambdas[*lam as usize];
                 let args: Vec<SetId> = lambda.params.iter().map(|p| instance.args[*p]).collect();
+                let set_of = |v: &SetVar| instance.var_sets[component.var_index[v]];
                 let interface: Vec<SetId> = if lambda.is_body() {
                     args.clone()
                 } else {
-                    lambda
-                        .interface
-                        .iter()
-                        .map(|v| instance.var_sets[component.var_index[v]])
-                        .collect()
+                    lambda.interface.iter().map(set_of).collect()
                 };
+                let held_in_place: Vec<SetId> = lambda.held_in_place.iter().map(set_of).collect();
+                // A held set decides the layout of the element's capture struct, so it is one the
+                // class reads at its interface, or one holding `Dynamic`, which the layout never
+                // holds in place.
+                for (v, held) in lambda.held_in_place.iter().zip(&held_in_place) {
+                    assert!(
+                        lambda.interface.contains(v)
+                            || spec.store.elems(*held).contains(&Elem::Dynamic),
+                        "{} holds in place a set outside its interface",
+                        lambda.to_string()
+                    );
+                }
                 match builders.get(&(*lam, args.clone())) {
                     Some(known) => assert_eq!(
                         known.interface,
@@ -186,6 +198,7 @@ impl Builders {
                             Builder {
                                 instance: k,
                                 interface,
+                                held_in_place,
                             },
                         );
                     }
@@ -231,12 +244,9 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
                 id,
                 lambda.to_string()
             );
-            let instance = &spec.instances[builders.of(lam, args).instance];
-            let component = &analysis.components[instance.component];
-            for v in &lambda.held_in_place {
-                let held = instance.var_sets[component.var_index[v]] as usize;
-                if unboxable[held] {
-                    holds.connect_idx(id, held);
+            for held in &builders.of(lam, args).held_in_place {
+                if unboxable[*held as usize] {
+                    holds.connect_idx(id, *held as usize);
                 }
             }
         }
@@ -249,6 +259,100 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
         }
     }
     unboxable
+}
+
+/// The elements of the set `id`, one per class of the partition `block`, each with its key under the
+/// partition, sorted by the key. `elems` holds the elements each set is partitioned by
+/// (`partition_sets`).
+fn class_elems<'s>(
+    store: &'s SetStore,
+    elems: &[NodeElems<LamId>],
+    block: &[usize],
+    id: usize,
+) -> Vec<(ElemKey<LamId>, LamId, &'s [SetId])> {
+    let mut classes: Vec<(ElemKey<LamId>, LamId, &[SetId])> = store
+        .lam_elems(id as SetId)
+        .zip(&elems[id])
+        .map(|((lam, args), (label, children))| (elem_key(label, children, block), lam, args))
+        .collect();
+    classes.sort_by(|a, b| a.0.cmp(&b.0));
+    classes.dedup_by(|a, b| a.0 == b.0);
+    classes
+}
+
+/// Whether each set represented by a capture struct or a union under the partition `block` is too
+/// large for it: its elements make more classes than a union has variants (`MAX_UNION_VARIANTS`),
+/// or its values would lay out more capture structs in place than `MAX_IN_PLACE_CAPTURE_STRUCTS`.
+///
+/// A value lays out in place one capture struct per class of its set's elements, and with each the
+/// capture structs of the values the class's lambda holds in place. The sets are judged from the
+/// inside out: a held set too large counts as a set of closures, which lays out none, so of a chain
+/// of growing sets only the first past the bound is too large.
+fn too_large_sets(
+    store: &SetStore,
+    builders: &Builders,
+    unboxable: &[bool],
+    elems: &[NodeElems<LamId>],
+    block: &[usize],
+) -> Vec<bool> {
+    /// The partition being judged, and the judgment of each block met so far.
+    struct Judge<'j> {
+        /// The sets being judged.
+        store: &'j SetStore,
+        /// The `Builder` of each element, read for the sets its capture struct holds in place.
+        builders: &'j Builders,
+        /// Whether each set is represented by a capture struct or a union.
+        unboxable: &'j [bool],
+        /// The elements each set is partitioned by, in the order `SetStore::lam_elems` lists them.
+        elems: &'j [NodeElems<LamId>],
+        /// The block of the partition each set falls in.
+        block: &'j [usize],
+        /// How many capture structs a value of the sets of each block met so far lays out in place,
+        /// or `None` where its sets are too large.
+        in_place_of_block: Map<usize, Option<u64>>,
+    }
+    impl Judge<'_> {
+        /// How many capture structs a value of the set `id` lays out in place, counting none for a
+        /// set of closures and for one too large.
+        fn in_place_count(&mut self, id: usize) -> u64 {
+            if !self.unboxable[id] {
+                return 0;
+            }
+            if let Some(judged) = self.in_place_of_block.get(&self.block[id]) {
+                return judged.unwrap_or(0);
+            }
+            let classes = class_elems(self.store, self.elems, self.block, id);
+            let judged = if classes.len() > MAX_UNION_VARIANTS {
+                None
+            } else {
+                let mut n: u64 = 0;
+                for (_, lam, args) in &classes {
+                    n += 1;
+                    for held in &self.builders.of(*lam, args).held_in_place {
+                        n += self.in_place_count(*held as usize);
+                    }
+                }
+                (n <= MAX_IN_PLACE_CAPTURE_STRUCTS).then_some(n)
+            };
+            self.in_place_of_block.insert(self.block[id], judged);
+            judged.unwrap_or(0)
+        }
+
+        /// Whether the set `id` is represented by a capture struct or a union and too large for it.
+        fn is_too_large(&mut self, id: usize) -> bool {
+            self.in_place_count(id);
+            self.unboxable[id] && self.in_place_of_block[&self.block[id]].is_none()
+        }
+    }
+    let mut judge = Judge {
+        store,
+        builders,
+        unboxable,
+        elems,
+        block,
+        in_place_of_block: Map::default(),
+    };
+    (0..store.len()).map(|id| judge.is_too_large(id)).collect()
 }
 
 /// The partition of the sets of `store` by the code their values make (`canonical_classes`), where
@@ -292,8 +396,10 @@ fn partition_sets(
 ///    holds itself, where the capture structs of its elements hold in place, through the unboxed
 ///    fields of the values they capture, a set that holds in place this one again. Such a layout
 ///    would have no size, as an unboxed type reaching itself has none.
-///    So is a set whose elements make more classes in step 2 than a union has variants
-///    (`MAX_UNION_VARIANTS`), and step 2 is taken again with it among these.
+///    So is a set step 2 finds too large for a capture struct or a union (`too_large_sets`): its
+///    elements make more classes than a union has variants, or its values would lay out more
+///    capture structs in place than `MAX_IN_PLACE_CAPTURE_STRUCTS`. Step 2 is then taken again with
+///    it among these.
 /// 2. The other sets and their elements are partitioned by the code they make: two elements are
 ///    equal when they name the same lambda and the sets at its interface (`Builder::interface`) are
 ///    equal, and two sets are equal when their elements are, counted up to that equality. The sets
@@ -318,26 +424,24 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     let mut unboxable = unboxable_sets(analysis, spec, &builders);
 
     // The partition of the sets by the code their values make. The sets of closures hold no
-    // element the partition reads, so they make one class of their own. A set whose elements make
-    // more classes than a union has variants is represented by closures as well, and the partition
-    // is made again with it among them. Once is enough: the partition made first, with the blocks of
-    // those sets merged into the block of the sets of closures, is still stable, so the one made
-    // again is as coarse or coarser, and no set it holds makes more classes than before.
+    // element the partition reads, so they make one class of their own. A set too large for a
+    // capture struct or a union is represented by closures as well, and the partition is made again
+    // with it among them. Once is enough: the partition made first, with the blocks of those sets
+    // merged into the block of the sets of closures, is still stable, so the one made again is as
+    // coarse or coarser, and no set it holds makes more classes, or lays out more capture structs,
+    // than `too_large_sets` counted for it.
     let (mut elems, mut block, mut block_elems) = partition_sets(store, &builders, &unboxable);
-    let too_many = |block: &[usize], block_elems: &[Vec<ElemKey<LamId>>], unboxable: &[bool]| {
-        (0..set_count)
-            .filter(|id| unboxable[*id] && block_elems[block[*id]].len() > MAX_UNION_VARIANTS)
-            .collect::<Vec<usize>>()
-    };
-    let demoted = too_many(&block, &block_elems, &unboxable);
-    if !demoted.is_empty() {
-        for id in demoted {
-            unboxable[id] = false;
+    let too_large = too_large_sets(store, &builders, &unboxable, &elems, &block);
+    if too_large.contains(&true) {
+        for (id, large) in too_large.into_iter().enumerate() {
+            if large {
+                unboxable[id] = false;
+            }
         }
         (elems, block, block_elems) = partition_sets(store, &builders, &unboxable);
         assert!(
-            too_many(&block, &block_elems, &unboxable).is_empty(),
-            "a set makes more classes than a union has variants once the partition is made again"
+            !too_large_sets(store, &builders, &unboxable, &elems, &block).contains(&true),
+            "a set is too large for a capture struct or a union once the partition is made again"
         );
     }
 
@@ -407,15 +511,10 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     // partition, as the representation of a set is decided by its block.
     let mut unions: Vec<UnionRepr> = vec![];
     for id in &first_union_sets {
-        let mut members: Vec<(ElemKey<LamId>, u32)> = store
-            .lam_elems(*id as SetId)
-            .zip(&elems[*id])
-            .map(|((lam, args), (label, children))| {
-                (elem_key(label, children, &block), add_class(lam, args))
-            })
+        let members: Vec<(ElemKey<LamId>, u32)> = class_elems(store, &elems, &block, *id)
+            .into_iter()
+            .map(|(key, lam, args)| (key, add_class(lam, args)))
             .collect();
-        members.sort();
-        members.dedup();
         assert!(
             members
                 .iter()

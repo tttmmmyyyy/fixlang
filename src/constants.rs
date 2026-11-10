@@ -221,6 +221,15 @@ pub const UNION_DATA_IDX: u32 = UNION_TAG_IDX + 1;
 pub const UNION_TAG_BITS: u32 = 8;
 /// How many variants a union may declare: the indices a tag of `UNION_TAG_BITS` bits tells apart.
 pub const MAX_UNION_VARIANTS: usize = 1 << UNION_TAG_BITS;
+/// How many capture structs a value of a lambda set represented by a capture struct or a union may
+/// lay out in place (lambda set specialization). A set past it is represented by closures.
+///
+/// A set whose elements capture values of another set held in place lays out that set's capture
+/// structs inside its own, once per class of its elements, so a chain of sets each of two classes
+/// capturing the one before lays out twice as many at each step. The passes of the RC IR walk a type
+/// once per capture struct it lays out (#1008), so without the bound their time doubles at each step
+/// of such a chain. The bound can go once those passes walk a type in time linear in its declaration.
+pub const MAX_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 10;
 /// The index of the function pointer among a closure's fields.
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 /// The index, among a closure's fields, of the pointer to the captured values the function is

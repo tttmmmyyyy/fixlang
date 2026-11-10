@@ -1,6 +1,9 @@
 use crate::{
-    configuration::Configuration, constants::MAX_UNION_VARIANTS, tests::test_util::test_source,
+    configuration::Configuration,
+    constants::MAX_UNION_VARIANTS,
+    tests::test_util::{build_within_and_run, test_source},
 };
+use std::time::Duration;
 
 // Programs whose function values take the paths the lambda set inference follows: through a
 // recursion, into a value that captures a value of its own set, through a `fix` left as a closure,
@@ -526,13 +529,73 @@ fn test_a_lambda_capturing_either_of_two_sets_of_too_many_classes_computes_both(
     test_source(&source, Configuration::develop_mode());
 }
 
+/// How deep the chain of `chain_source` goes in the tests of the bound on the capture structs a
+/// value lays out in place.
+const CHAIN_DEPTH: usize = 18;
+
+/// What `chain_source()` prints.
+const CHAIN_OUTPUT: &str = "98385";
+
+/// A program building a chain of functions `f0` to `f{CHAIN_DEPTH}`, each chosen by an `if` from two
+/// lambdas, the lambdas of each capturing the function before, and printing what the last gives.
+/// Each set of the chain is of two classes, so a value of `f{i}` represented by a union lays out
+/// `2^(i + 2) - 2` capture structs in place: two for `f0`, whose lambdas hold no function, and at
+/// each step, for each of the two classes, one plus those of the value before.
+fn chain_source() -> String {
+    let links: Vec<String> = (1..=CHAIN_DEPTH)
+        .map(|i| {
+            format!(
+                "    let f{i} = if (k + {i}) % 2 == 0 {{ |x| (f{p}(x) + {i}) % 1000003 }} else {{ |x| (f{p}(x) * 3) % 1000003 }};",
+                i = i,
+                p = i - 1
+            )
+        })
+        .collect();
+    format!(
+        "module Main;\n\
+         \n\
+         main : IO ();\n\
+         main = (\n\
+         \x20   let k = *get_args.map(|args| args.@size);\n\
+         \x20   let s = k.to_string;\n\
+         \x20   let f0 = if k > 1 {{ |x| x + s.get_size }} else {{ |x| x * 2 }};\n\
+         {}\n\
+         \x20   println(f{}(k).to_string)\n\
+         );\n",
+        links.join("\n"),
+        CHAIN_DEPTH
+    )
+}
+
+/// The chain of `chain_source` builds well within a deadline. The first set of the chain whose
+/// values would lay out too many capture structs in place is represented by closures; as unions all
+/// the way out, the build would take far longer.
+#[test]
+fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
+    let printed = build_within_and_run(
+        &chain_source(),
+        "max",
+        Duration::from_secs(300),
+        &format!(
+            "a chain of {} unions each capturing the one before",
+            CHAIN_DEPTH
+        ),
+    );
+    assert_eq!(printed, CHAIN_OUTPUT, "the chain computed a wrong value");
+}
+
 /// What the rewrite by the lambda sets makes of a program, read off the `--emit-rc-ir` dump: a
 /// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
 /// takes as an argument. The program cannot observe either one — the answer is the same with
 /// function values left as closures — so these assert against the dump.
 #[cfg(test)]
 mod dump_tests {
-    use crate::constants::{LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_UNION_VARIANTS};
+    use super::{chain_source, CHAIN_DEPTH, CHAIN_OUTPUT};
+    use crate::constants::{
+        LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_IN_PLACE_CAPTURE_STRUCTS,
+        MAX_UNION_VARIANTS,
+    };
+    use crate::misc::Set;
     use crate::tests::test_util::{
         build_run_and_read_rc_ir, rc_ir_callee_of, rc_ir_function_bodies,
     };
@@ -1203,6 +1266,54 @@ mod dump_tests {
                 .iter()
                 .any(|body| !closure_calls(body).is_empty()),
             "the fold should call the lambdas through closures"
+        );
+    }
+
+    /// Only the first set of a chain past the bound on the capture structs a value lays out in place
+    /// (`MAX_IN_PLACE_CAPTURE_STRUCTS`) is represented by closures: the sets outside it hold that
+    /// set's closures, which lay out none, so they are counted afresh and are unions again. The last
+    /// function of `chain_source` is applied where it is built, which leaves no set of its own, so the
+    /// dump names a union of `Main` for every other function but those the count puts past the bound.
+    #[test]
+    fn test_only_the_first_set_of_a_chain_past_the_bound_is_closures() {
+        let dump = build_run_and_read_rc_ir(
+            &chain_source(),
+            "max",
+            CHAIN_OUTPUT,
+            "a chain of unions each capturing the one before",
+        );
+        let main_union = format!("Main::{}", LS_UNION_PREFIX);
+        let unions: Set<&str> = dump
+            .match_indices(&main_union)
+            .map(|(at, _)| {
+                let rest = &dump[at..];
+                &rest[..rest
+                    .find(|c: char| c.is_whitespace() || c == ')' || c == ',')
+                    .unwrap()]
+            })
+            .collect();
+        // A value of the `j`-th function since the last one past the bound, `f0` counting as the
+        // 0th, lays out `2^(j + 2) - 2` capture structs in place.
+        let mut past_the_bound = 0;
+        let mut since = 0;
+        for _ in 0..CHAIN_DEPTH {
+            if (1u64 << (since + 2)) - 2 > MAX_IN_PLACE_CAPTURE_STRUCTS {
+                past_the_bound += 1;
+                since = 0;
+            } else {
+                since += 1;
+            }
+        }
+        assert!(
+            past_the_bound > 0,
+            "the chain should reach past the bound for the test to judge anything"
+        );
+        assert_eq!(
+            unions.len(),
+            CHAIN_DEPTH - past_the_bound,
+            "every function of the chain but the last and those past the bound should have a union: \
+             {:?}",
+            unions
         );
     }
 }
