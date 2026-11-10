@@ -461,7 +461,8 @@ impl<'e> SlotLayout<'e> {
     /// itself where it is a function, and otherwise each function reached from it through fields
     /// of unboxed structs and unions alone. A function whose set is represented by a capture struct,
     /// or by a union of capture structs, is laid out where it is held, so these are the slots whose
-    /// capture structs a value of `ty` contains. `solver` gives the new variables of a place the slots of `ty` leave untracked.
+    /// capture structs a value of `ty` contains. `solver` gives the new variables of a place the
+    /// slots of `ty` leave untracked.
     pub fn collect_held_in_place(&self, ty: &AType, solver: &mut Solver, out: &mut Vec<SetVar>) {
         let tc = ty.ty.head_tycon();
         assert!(
