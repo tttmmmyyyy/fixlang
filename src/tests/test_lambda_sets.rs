@@ -598,6 +598,7 @@ mod dump_tests {
     use crate::tests::test_util::{
         build_run_and_read_rc_ir, rc_ir_callee_of, rc_ir_function_bodies,
     };
+    use super::{chain_source, CHAIN_DEPTH, CHAIN_OUTPUT};
 
     /// The function values that `body`, a function of an RC IR dump, calls: each call whose callee
     /// is a local value. A global is written with its namespace, and a builtin operation's name
@@ -1276,9 +1277,9 @@ mod dump_tests {
     #[test]
     fn test_only_the_first_set_of_a_chain_past_the_bound_is_closures() {
         let dump = build_run_and_read_rc_ir(
-            &super::chain_source(),
+            &chain_source(),
             "max",
-            super::CHAIN_OUTPUT,
+            CHAIN_OUTPUT,
             "a chain of unions each capturing the one before",
         );
         let main_union = format!("Main::{}", LS_UNION_PREFIX);
@@ -1295,7 +1296,7 @@ mod dump_tests {
         // 0th, lays out `2^(j + 2) - 2` capture structs in place.
         let mut past_the_bound = 0;
         let mut since = 0;
-        for _ in 0..super::CHAIN_DEPTH {
+        for _ in 0..CHAIN_DEPTH {
             if (1u64 << (since + 2)) - 2 > MAX_IN_PLACE_CAPTURE_STRUCTS {
                 past_the_bound += 1;
                 since = 0;
@@ -1309,7 +1310,7 @@ mod dump_tests {
         );
         assert_eq!(
             unions.len(),
-            super::CHAIN_DEPTH - past_the_bound,
+            CHAIN_DEPTH - past_the_bound,
             "every function of the chain but the last and those past the bound should have a union: \
              {:?}",
             unions
