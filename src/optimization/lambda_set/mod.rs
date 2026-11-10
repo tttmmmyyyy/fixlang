@@ -9,7 +9,10 @@
 // program's entry, and gives each copy the concrete lambda sets of its parameters. The program is
 // then rewritten: each copy becomes copies of the symbols, and a value whose set's elements make
 // one class, elements naming one lambda that make the same code, becomes that class's capture
-// struct, called by calling the lambda directly.
+// struct, called by calling the lambda directly. A value whose set's elements make two or more
+// classes becomes an unboxed union of their capture structs, called by matching the variant and
+// calling its class's lambda directly. A set no capture struct or union can stand for stays a set of
+// closures (`represent::represent` lists them).
 //
 // The design is laid out in `dev-docs/2026-10-24-lambda-set-specialization/design.md`.
 

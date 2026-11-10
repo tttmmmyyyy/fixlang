@@ -53,16 +53,7 @@ pub fn canonical_classes<L: Ord + Clone>(
             .map(|(p, node_elems)| {
                 let mut keys: Vec<ElemKey<L>> = node_elems
                     .iter()
-                    .map(|(label, children)| {
-                        let children = children
-                            .iter()
-                            .map(|ch| match ch {
-                                Child::Node(q) => ChildKey::Class(class[*q]),
-                                Child::Fixed(id) => ChildKey::Fixed(*id),
-                            })
-                            .collect();
-                        (label.clone(), children)
-                    })
+                    .map(|(label, children)| elem_key(label, children, &class))
                     .collect();
                 keys.sort();
                 keys.dedup();
@@ -91,4 +82,17 @@ pub fn canonical_classes<L: Ord + Clone>(
             .map(|sig| distinct.binary_search(sig).unwrap())
             .collect();
     }
+}
+
+/// The element of `label` and `children` as the refinement compares it, where `class` is the class
+/// of each node.
+pub fn elem_key<L: Clone>(label: &L, children: &[Child], class: &[usize]) -> ElemKey<L> {
+    let children = children
+        .iter()
+        .map(|ch| match ch {
+            Child::Node(q) => ChildKey::Class(class[*q]),
+            Child::Fixed(id) => ChildKey::Fixed(*id),
+        })
+        .collect();
+    (label.clone(), children)
 }

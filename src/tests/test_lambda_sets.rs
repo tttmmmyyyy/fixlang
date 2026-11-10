@@ -1,4 +1,9 @@
-use crate::{configuration::Configuration, tests::test_util::test_source};
+use crate::{
+    configuration::Configuration,
+    constants::MAX_LS_UNION_VARIANTS,
+    tests::test_util::{build_within_and_run, test_source},
+};
+use std::time::Duration;
 
 // Programs whose function values take the paths the lambda set inference follows: through a
 // recursion, into a value that captures a value of its own set, through a `fix` left as a closure,
@@ -332,8 +337,8 @@ fn test_a_lambda_capturing_an_optional_function_of_its_own_set_computes_the_chai
 
 /// The lambda `mkm` returns is built both in a recursion that carries it in an `Option` and in a
 /// direct call, and each computes its result. The set of the captured `g` reaches itself in the
-/// recursion's copy and holds one lambda in the direct call's, while both copies give the lambda's
-/// parameter a set of closures.
+/// recursion's copy, where the lambda's parameter is given a set of closures, and holds one lambda
+/// in the direct call's, where the parameter is given a union of two lambdas.
 #[test]
 fn test_a_lambda_built_both_in_a_cycle_and_out_of_one_captures_each_its_own_way() {
     let source = r#"
@@ -362,8 +367,8 @@ fn test_a_lambda_built_both_in_a_cycle_and_out_of_one_captures_each_its_own_way(
 
 /// The source of the tests of a lambda capturing `g`, a function `mk2` chooses from two of its
 /// parameters: `MK2_CALLS` is replaced by the two calls of `mk2`. One call gives both parameters
-/// one set of closures, so that `g`'s set holds one lambda, and the other gives them two, so that
-/// it holds two, while both represent the parameters alike.
+/// one union of two lambdas, so that `g`'s set holds one lambda, and the other gives them two
+/// unions, so that it holds two.
 const CHOSEN_FROM_TWO_SOURCE: &str = r#"
     module Main;
 
@@ -412,11 +417,10 @@ fn test_a_lambda_capturing_a_function_chosen_from_two_sets_then_one_computes_bot
 /// A lambda capturing `g`, a function `k` chooses from its two function parameters, computes both
 /// results when `k` is called once with one function for both and once, through `w2`, with two
 /// functions that `wrap_a` builds over two different sets of two lambdas: `g`'s set holds one
-/// lambda in the first copy, and in the second two elements whose captured sets are represented by
-/// closures and differ in what they hold. The second set is represented by closures, and its
-/// elements share the global function and the capture struct of the first set's class, as a
-/// closure has one type whatever its set holds. Reaching the second copy through `w2` puts its sets
-/// before the first's, so the lambda's class is first met where `g`'s set holds two elements.
+/// lambda in the first copy, and in the second two elements whose captured sets are different
+/// unions. The second set is a union of two classes of `mk`'s lambda, one of them the class of the
+/// first set. Reaching the second copy through `w2` puts its sets before the first's, so the
+/// lambda's class is first met where `g`'s set holds two elements.
 #[test]
 fn test_a_lambda_capturing_a_function_chosen_from_two_alike_sets_computes_both() {
     let source = r#"
@@ -488,13 +492,110 @@ fn test_two_elements_of_one_class_capturing_an_optional_function_of_their_own_se
     test_source(source, Configuration::develop_mode());
 }
 
+/// Two folds handing `mk` each lambda of an array of more lambdas than `MAX_LS_UNION_VARIANTS`, the
+/// two arrays holding different lambdas: `mk`'s lambda captures a value of one array's set in one
+/// copy and of the other's in the other. Both arrays' sets are represented by closures, and so are
+/// alike to the lambda that captures them, and each fold computes its sum.
+#[test]
+fn test_a_lambda_capturing_either_of_two_sets_of_too_many_classes_computes_both() {
+    let count = MAX_LS_UNION_VARIANTS + 1;
+    let adding: Vec<String> = (0..count).map(|i| format!("|x| x + n * {}", i)).collect();
+    let subtracting: Vec<String> = (0..count).map(|i| format!("|x| x - n * {}", i)).collect();
+    let source = format!(
+        r#"
+    module Main;
+
+    mk : I64 -> (I64 -> I64) -> (I64 -> I64);
+    mk = |d, f| if d < -1000000 {{ mk(d + 1, f) }} else {{ |x| f(x) + 1 }};
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let fs = [{}];
+        let gs = [{}];
+        let a = fs.to_iter.fold(0, |f, acc| mk(n, f)(acc));
+        let b = gs.to_iter.fold(0, |g, acc| mk(n, g)(acc));
+        assert_eq(|_|"unexpected result", (a, b), ({} * n + {}, -{} * n + {}));;
+        pure()
+    );
+    "#,
+        adding.join(", "),
+        subtracting.join(", "),
+        count * (count - 1) / 2,
+        count,
+        count * (count - 1) / 2,
+        count
+    );
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// How deep the chain of `chain_source` goes in the tests of the bound on the capture structs a
+/// value lays out in place.
+const CHAIN_DEPTH: usize = 18;
+
+/// What `chain_source()` prints.
+const CHAIN_OUTPUT: &str = "98385";
+
+/// A program building a chain of functions `f0` to `f{CHAIN_DEPTH}`, each chosen by an `if` from two
+/// lambdas, the lambdas of each capturing the function before, and printing what the last gives.
+/// Each set of the chain is of two classes, so a value of `f{i}` represented by a union lays out
+/// `2^(i + 2) - 2` capture structs in place: two for `f0`, whose lambdas hold no function, and at
+/// each step, for each of the two classes, one plus those of the value before.
+fn chain_source() -> String {
+    let links: Vec<String> = (1..=CHAIN_DEPTH)
+        .map(|i| {
+            format!(
+                "    let f{i} = if (k + {i}) % 2 == 0 {{ |x| (f{p}(x) + {i}) % 1000003 }} else {{ |x| (f{p}(x) * 3) % 1000003 }};",
+                i = i,
+                p = i - 1
+            )
+        })
+        .collect();
+    format!(
+        "module Main;\n\
+         \n\
+         main : IO ();\n\
+         main = (\n\
+         \x20   let k = *get_args.map(|args| args.@size);\n\
+         \x20   let s = k.to_string;\n\
+         \x20   let f0 = if k > 1 {{ |x| x + s.get_size }} else {{ |x| x * 2 }};\n\
+         {}\n\
+         \x20   println(f{}(k).to_string)\n\
+         );\n",
+        links.join("\n"),
+        CHAIN_DEPTH
+    )
+}
+
+/// The chain of `chain_source` builds well within a deadline. The first set of the chain whose
+/// values would lay out too many capture structs in place is represented by closures; as unions all
+/// the way out, the build would take far longer.
+#[test]
+fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
+    let printed = build_within_and_run(
+        &chain_source(),
+        "max",
+        Duration::from_secs(300),
+        &format!(
+            "a chain of {} unions each capturing the one before",
+            CHAIN_DEPTH
+        ),
+    );
+    assert_eq!(printed, CHAIN_OUTPUT, "the chain computed a wrong value");
+}
+
 /// What the rewrite by the lambda sets makes of a program, read off the `--emit-rc-ir` dump: a
 /// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
 /// takes as an argument. The program cannot observe either one — the answer is the same with
 /// function values left as closures — so these assert against the dump.
 #[cfg(test)]
 mod dump_tests {
-    use crate::constants::{LS_CAP_PREFIX, LS_LAM_SUFFIX};
+    use super::{chain_source, CHAIN_DEPTH, CHAIN_OUTPUT};
+    use crate::constants::{
+        LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS,
+        MAX_LS_UNION_VARIANTS,
+    };
+    use crate::misc::Set;
     use crate::tests::test_util::{
         build_run_and_read_rc_ir, rc_ir_callee_of, rc_ir_function_bodies,
     };
@@ -982,5 +1083,237 @@ mod dump_tests {
                 body
             );
         }
+    }
+
+    /// Whether the function header `header` takes a value of a union that the rewrite represents a
+    /// set of two or more classes by.
+    fn takes_a_union(header: &str) -> bool {
+        parameters(header).contains(LS_UNION_PREFIX)
+    }
+
+    /// `apply` given one of two lambdas an `if` chooses. Recursive, so it stays a function of its
+    /// own.
+    const CHOSEN_SOURCE: &str = r#"
+    module Main;
+
+    apply : (I64 -> I64) -> I64 -> I64;
+    apply = |f, x| if x > 100 { 0 } else { f(x) + apply(f, x + 1) };
+
+    main : IO () = (
+        let n = Array::fill(1, 10).@(0);
+        let f = if n > 5 { |x| x + n } else { |x| x * 2 };
+        println(apply(f, 3).to_string)
+    );
+    "#;
+
+    /// What `CHOSEN_SOURCE` prints: the sum of `x + 10` over `3..100`.
+    const CHOSEN_OUTPUT: &str = "6027";
+
+    /// A set of two lambdas is represented by a union, and a function given a value of it calls
+    /// each lambda by name: `apply` takes the union and builds and calls no closure. At `basic`,
+    /// where the rewrite does not run, `apply` calls its function through a closure.
+    #[test]
+    fn test_a_function_given_one_of_two_lambdas_calls_each_by_name() {
+        let dump = build_run_and_read_rc_ir(
+            CHOSEN_SOURCE,
+            "max",
+            CHOSEN_OUTPUT,
+            "a function given one of two lambdas",
+        );
+        assert_calls_by_name(&dump, "Main::apply");
+        assert!(
+            rc_ir_function_bodies(&dump, "Main::apply")
+                .iter()
+                .any(|body| takes_a_union(header(body))),
+            "`apply` should take the union the two lambdas' set is represented by"
+        );
+
+        let dump = build_run_and_read_rc_ir(
+            CHOSEN_SOURCE,
+            "basic",
+            CHOSEN_OUTPUT,
+            "a function given one of two lambdas",
+        );
+        assert!(
+            rc_ir_function_bodies(&dump, "Main::apply")
+                .iter()
+                .any(|body| !closure_calls(body).is_empty()),
+            "at `basic` `apply` should call its function through a closure"
+        );
+    }
+
+    /// An array holding two lambdas and a global function, folded over by applying each to the
+    /// accumulator. The array's element set holds three classes.
+    const ARRAY_SOURCE: &str = r#"
+    module Main;
+
+    triple : I64 -> I64;
+    triple = |x| x * 3;
+
+    main : IO () = (
+        let n = Array::fill(1, 5).@(0);
+        let fs = [|x| x + n, triple, |x| x - 1];
+        println(fs.to_iter.fold(1, |f, acc| f(acc)).to_string)
+    );
+    "#;
+
+    /// What `ARRAY_SOURCE` prints: `((1 + 5) * 3) - 1`.
+    const ARRAY_OUTPUT: &str = "17";
+
+    /// The elements of an array of functions are values of a union, and the fold calls each by
+    /// name, the global function among them: the fold's copy builds and calls no closure.
+    #[test]
+    fn test_a_fold_over_an_array_of_functions_calls_each_by_name() {
+        let dump = build_run_and_read_rc_ir(
+            ARRAY_SOURCE,
+            "max",
+            ARRAY_OUTPUT,
+            "a fold over an array of functions",
+        );
+        assert_calls_by_name(&dump, "Std::Iterator::fold");
+        assert!(
+            dump.contains(LS_UNION_PREFIX),
+            "the array's elements should be values of a union:\n{}",
+            dump
+        );
+    }
+
+    /// A lambda capturing one of two lambdas an `if` chooses, handed to `apply`.
+    const CAPTURED_CHOICE_SOURCE: &str = r#"
+    module Main;
+
+    apply : (I64 -> I64) -> I64 -> I64;
+    apply = |f, x| if x > 100 { 0 } else { f(x) + apply(f, x + 1) };
+
+    main : IO () = (
+        let n = Array::fill(1, 10).@(0);
+        let f = if n > 5 { |x| x + n } else { |x| x * 2 };
+        let g = |x| f(x) + 1;
+        println(apply(g, 3).to_string)
+    );
+    "#;
+
+    /// What `CAPTURED_CHOICE_SOURCE` prints: the sum of `x + 11` over `3..100`.
+    const CAPTURED_CHOICE_OUTPUT: &str = "6125";
+
+    /// A union held in a capture struct is called by name: the copy of `apply` given `g` matches
+    /// the union `g` captures and calls the chosen lambda, and builds and calls no closure.
+    #[test]
+    fn test_a_lambda_capturing_one_of_two_lambdas_calls_it_by_name() {
+        let dump = build_run_and_read_rc_ir(
+            CAPTURED_CHOICE_SOURCE,
+            "max",
+            CAPTURED_CHOICE_OUTPUT,
+            "a lambda capturing one of two lambdas",
+        );
+        assert_calls_by_name(&dump, "Main::apply");
+    }
+
+    /// A program folding over an array of `count` lambdas, the `i`-th adding `i` times a number the
+    /// compiler does not know, so that every lambda is a class of its own.
+    fn many_lambdas_source(count: usize) -> String {
+        let lambdas: Vec<String> = (0..count).map(|i| format!("|x| x + n * {}", i)).collect();
+        format!(
+            r#"
+    module Main;
+
+    main : IO () = (
+        let n = Array::fill(1, 1).@(0);
+        let fs = [{}];
+        println(fs.to_iter.fold(0, |f, acc| f(acc)).to_string)
+    );
+    "#,
+            lambdas.join(", ")
+        )
+    }
+
+    /// What `many_lambdas_source(count)` prints: the sum of `0..count`.
+    fn many_lambdas_output(count: usize) -> String {
+        (count * (count - 1) / 2).to_string()
+    }
+
+    /// A set of as many classes as `MAX_LS_UNION_VARIANTS` is represented by a union, and one of a
+    /// class more by closures: the fold over that many lambdas takes their union, and the fold over
+    /// one lambda more calls them through closures, answering the same.
+    #[test]
+    fn test_a_set_of_too_many_classes_is_a_set_of_closures() {
+        let source = many_lambdas_source(MAX_LS_UNION_VARIANTS);
+        let dump = build_run_and_read_rc_ir(
+            &source,
+            "max",
+            &many_lambdas_output(MAX_LS_UNION_VARIANTS),
+            "a fold over `MAX_LS_UNION_VARIANTS` lambdas",
+        );
+        assert_calls_by_name(&dump, "Std::Iterator::fold");
+        assert!(
+            dump.contains(LS_UNION_PREFIX),
+            "the lambdas should be values of a union"
+        );
+
+        let source = many_lambdas_source(MAX_LS_UNION_VARIANTS + 1);
+        let dump = build_run_and_read_rc_ir(
+            &source,
+            "max",
+            &many_lambdas_output(MAX_LS_UNION_VARIANTS + 1),
+            "a fold over one lambda more than `MAX_LS_UNION_VARIANTS`",
+        );
+        assert!(
+            !dump.contains(LS_UNION_PREFIX),
+            "no union should stand for the lambdas"
+        );
+        assert!(
+            rc_ir_function_bodies(&dump, "Std::Iterator::fold")
+                .iter()
+                .any(|body| !closure_calls(body).is_empty()),
+            "the fold should call the lambdas through closures"
+        );
+    }
+
+    /// Only the first set of a chain past the bound on the capture structs a value lays out in place
+    /// (`MAX_LS_IN_PLACE_CAPTURE_STRUCTS`) is represented by closures: the sets outside it hold that
+    /// set's closures, which lay out none, so they are counted afresh and are unions again. The last
+    /// function of `chain_source` is applied where it is built, which leaves no set of its own, so the
+    /// dump names a union of `Main` for every other function but those the count puts past the bound.
+    #[test]
+    fn test_only_the_first_set_of_a_chain_past_the_bound_is_closures() {
+        let dump = build_run_and_read_rc_ir(
+            &chain_source(),
+            "max",
+            CHAIN_OUTPUT,
+            "a chain of unions each capturing the one before",
+        );
+        let main_union = format!("Main::{}", LS_UNION_PREFIX);
+        let unions: Set<&str> = dump
+            .match_indices(&main_union)
+            .map(|(at, _)| {
+                let rest = &dump[at..];
+                &rest[..rest
+                    .find(|c: char| c.is_whitespace() || c == ')' || c == ',')
+                    .unwrap()]
+            })
+            .collect();
+        // A value of the `j`-th function since the last one past the bound, `f0` counting as the
+        // 0th, lays out `2^(j + 2) - 2` capture structs in place.
+        let mut past_the_bound = 0;
+        let mut since = 0;
+        for _ in 0..CHAIN_DEPTH {
+            if (1u64 << (since + 2)) - 2 > MAX_LS_IN_PLACE_CAPTURE_STRUCTS {
+                past_the_bound += 1;
+                since = 0;
+            } else {
+                since += 1;
+            }
+        }
+        assert!(
+            past_the_bound > 0,
+            "the chain should reach past the bound for the test to judge anything"
+        );
+        assert_eq!(
+            unions.len(),
+            CHAIN_DEPTH - past_the_bound,
+            "every function of the chain but the last and those past the bound should have a union: \
+             {:?}",
+            unions
+        );
     }
 }

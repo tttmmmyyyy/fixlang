@@ -156,6 +156,22 @@ pub const LS_CAP_PREFIX: &str = "#LsCap";
 /// The name of the parameter through which a lambda lifted by lambda set specialization receives
 /// its capture struct.
 pub const LS_CAP_NAME: &str = "#ls_cap";
+/// The prefix, followed by `@` and the union's hash, of the type constructor of the unboxed union
+/// that lambda set specialization represents a value of a set by, where the set's elements make two
+/// or more classes.
+pub const LS_UNION_PREFIX: &str = "#LsUnion";
+/// The prefix, followed by the variant's position, of the name of a variant of a union named with
+/// `LS_UNION_PREFIX`.
+pub const LS_VARIANT_PREFIX: &str = "v";
+/// The local name lambda set specialization gives the capture struct a variant of a union named
+/// with `LS_UNION_PREFIX` holds, both where the variant is built and in an arm matching it.
+pub const LS_PAYLOAD_NAME: &str = "#ls_payload";
+/// The local name lambda set specialization binds the function of a call to, where the function is
+/// a value of a union named with `LS_UNION_PREFIX` that the call matches.
+pub const LS_FUNC_NAME: &str = "#ls_func";
+/// The local name lambda set specialization binds the argument of a call to, where the call matches
+/// a value of a union named with `LS_UNION_PREFIX` and passes the argument in each arm.
+pub const LS_ARG_NAME: &str = "#ls_arg";
 /// The prefix, followed by the operand's position, of the local name lambda set specialization binds
 /// an operand of a builtin to, where the operand names a global the rewritten program builds a
 /// value for in place of reading it.
@@ -205,6 +221,25 @@ pub const UNION_DATA_IDX: u32 = UNION_TAG_IDX + 1;
 pub const UNION_TAG_BITS: u32 = 8;
 /// How many variants a union may declare: the indices a tag of `UNION_TAG_BITS` bits tells apart.
 pub const MAX_UNION_VARIANTS: usize = 1 << UNION_TAG_BITS;
+/// How many capture structs a value of a lambda set represented by a capture struct or a union may
+/// lay out in place (lambda set specialization). A set past it is represented by closures.
+///
+/// A set whose elements capture values of another set held in place lays out that set's capture
+/// structs inside its own, once per class of its elements, so a chain of sets each of two classes
+/// capturing the one before lays out twice as many at each step. The passes of the RC IR walk a type
+/// once per capture struct it lays out (#1008), so without the bound their time doubles at each step
+/// of such a chain. The bound can go once those passes walk a type in time linear in its declaration.
+pub const MAX_LS_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 10;
+/// How many classes the elements of a lambda set represented by a union may make (lambda set
+/// specialization), which is how many variants that union may have. A set past it is represented
+/// by closures.
+///
+/// The time the passes of the RC IR spend on a value of a union grows faster than linearly in the
+/// union's variants (#1009). A set of a few dozen classes, such as a table of functions chosen at
+/// run time, would then build much more slowly as a union than as closures. The bound can go up
+/// once those passes take linear time, up to `MAX_UNION_VARIANTS`.
+pub const MAX_LS_UNION_VARIANTS: usize = 32;
+const _: () = assert!(MAX_LS_UNION_VARIANTS <= MAX_UNION_VARIANTS);
 /// The index of the function pointer among a closure's fields.
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 /// The index, among a closure's fields, of the pointer to the captured values the function is
