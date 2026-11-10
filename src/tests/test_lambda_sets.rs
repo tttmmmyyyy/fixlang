@@ -530,14 +530,14 @@ fn test_a_lambda_capturing_either_of_two_sets_of_too_many_classes_computes_both(
 }
 
 /// A chain of `CHAIN_DEPTH` functions, each chosen by an `if` from two lambdas capturing the one
-/// before, builds in a few seconds. A set of two classes capturing a set of two classes lays out
-/// twice as many capture structs, so the chain's outer sets are represented by closures once their
-/// values would lay out too many in place; as unions all the way out, each value would lay out
-/// `2^CHAIN_DEPTH` of them, and the build would take far longer than `CHAIN_TIMEOUT`.
+/// before, builds well within `CHAIN_TIMEOUT`. A set of two classes capturing a set of two classes
+/// lays out twice as many capture structs in place, so the first set of the chain whose values would
+/// lay out too many is represented by closures; as unions all the way out, the outermost value would
+/// lay out `2^(CHAIN_DEPTH + 1) - 2` of them, and the build would take far longer.
 #[test]
 fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
-    const CHAIN_DEPTH: usize = 16;
-    const CHAIN_TIMEOUT: Duration = Duration::from_secs(120);
+    const CHAIN_DEPTH: usize = 18;
+    const CHAIN_TIMEOUT: Duration = Duration::from_secs(300);
     let links: Vec<String> = (1..=CHAIN_DEPTH)
         .map(|i| {
             format!(
@@ -570,7 +570,7 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
             CHAIN_DEPTH
         ),
     );
-    assert_eq!(printed, "32778", "the chain computed a wrong value");
+    assert_eq!(printed, "98385", "the chain computed a wrong value");
 }
 
 /// What the rewrite by the lambda sets makes of a program, read off the `--emit-rc-ir` dump: a
