@@ -33,7 +33,7 @@ pub fn test_a_parameter_pattern_mismatch_names_the_pattern_and_the_lambda_type()
     test_source_fail(
         PARAM_PATTERN_ON_FOLD_ELEMENT,
         Configuration::develop_mode(),
-        ": The pattern `(arr, flag)` matches a value of type `(t1, t2)`, but the parameter of the lambda has type `Std::I64`.\n\
+        ": This pattern matches a value of type `(t1, t2)`, but the parameter of the lambda has type `Std::I64`.\n\
          From this parameter on, the lambda is expected to have type `Std::I64 -> (Std::Array t3, Std::I64) -> (Std::Array t3, Std::I64)`.",
     );
     test_source_fail(
@@ -69,7 +69,7 @@ main : IO () = println(second((1, 2)).to_string);
         source,
         Configuration::develop_mode(),
         ": `Std::String` and `Std::I64` do not match.\n\
-         The pattern `(a: Std::String, b)` matches a value of type `(Std::String, t1)`, but the parameter of the lambda has type `(Std::I64, Std::I64)`.",
+         This pattern matches a value of type `(Std::String, t1)`, but the parameter of the lambda has type `(Std::I64, Std::I64)`.",
     );
 }
 
@@ -255,4 +255,71 @@ main : IO () = (
          - (1) `Main::A::f` of type `Std::I64 -> Std::String`: `Std::I64` and `Std::Array t2` do not match.\n\
          - (2) `Main::B::f` of type `[t1 : Main::Foo] t1 -> Std::String`: `Std::Array t2 : Main::Foo` cannot be deduced.",
     );
+}
+
+/// A type variable the inference created is not named after a type variable of the signature of
+/// the value being checked, which the program has in scope at the report, also where the report
+/// prints no type of that signature.
+#[test]
+pub fn test_a_created_type_variable_skips_a_name_the_signature_holds() {
+    let source = r##"
+module Main;
+
+describe : [t1 : ToString] t1 -> String = |x| (
+    let n : I64 = [?].@size;
+    x.to_string + n.to_string
+);
+
+main : IO () = println(describe(1));
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": Expected expression of type `t2`.",
+    );
+}
+
+/// A type variable a value's scheme generalizes gets no pointer to a source, even where a type
+/// variable of the enclosing signature has its name.
+#[test]
+pub fn test_a_generalized_type_variable_of_a_value_is_not_located() {
+    let source = r##"
+module Main;
+
+h : [a : ToString] a -> I64 = |x| (
+    let y : String = Option::is_some;
+    x.to_string.get_size
+);
+
+main : IO () = println(h(1).to_string);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`Std::Option::is_some` of type `Std::Option a -> Std::Bool` does not match the expected type `Std::String`.",
+    );
+    test_source_fail_excludes(
+        source,
+        Configuration::develop_mode(),
+        "`a` is the type for",
+    );
+}
+
+/// A parameter pattern written with a type wildcard is reported without the name the parser gives
+/// the wildcard.
+#[test]
+pub fn test_a_parameter_pattern_with_a_type_wildcard_is_reported_without_its_inner_name() {
+    let source = r##"
+module Main;
+
+f : I64 -> I64 = |(x : _, y)| y;
+
+main : IO () = println(f(1).to_string);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": This pattern matches a value of type `(t1, t2)`, but the parameter of the lambda has type `Std::I64`.",
+    );
+    test_source_fail_excludes(source, Configuration::develop_mode(), "#typewildcard");
 }

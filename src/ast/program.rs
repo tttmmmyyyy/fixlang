@@ -1782,7 +1782,7 @@ impl Program {
         let ret_ty = ret.type_.as_ref().unwrap();
         if !ret_ty.is_ground() {
             let tvs = ret_ty.free_vars_vec();
-            let names = ReportTyVarNames::new(&tvs);
+            let names = ReportTyVarNames::new(&tvs, &[]);
             // Must stay in sync with the same message in typecheck.rs (check_is_type_fixed).
             return Err(Errors::from_msg_srcs(
                 format!(

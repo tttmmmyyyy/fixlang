@@ -6,7 +6,8 @@ use std::sync::Arc;
 
 /// The names one error report prints for the type variables the inference created (`#a3`): `t1`,
 /// `t2`, ... in the order the report first mentions them. A name that another type variable of the
-/// report already has is skipped, so two variables of one report never print alike.
+/// report already has, or that the program has in scope where the report points, is skipped, so a
+/// name the report prints stands for one variable.
 pub struct ReportTyVarNames {
     /// Every type variable the report mentions, each once, in the order it first mentions them.
     vars: Vec<Arc<TyVar>>,
@@ -20,9 +21,12 @@ impl ReportTyVarNames {
     /// Names the type variables of a report.
     ///
     /// # Arguments
-    /// * `vars` — every type variable the report mentions, in the order it mentions them, the ones
-    ///   a scheme generalizes included.
-    pub fn new(vars: &[Arc<TyVar>]) -> Self {
+    /// * `vars` — every type variable the report mentions, in the order it mentions them, apart
+    ///   from those a scheme it prints generalizes.
+    /// * `reserved` — the type variables whose names no variable of the inference takes: those a
+    ///   scheme the report prints generalizes, and those the program has in scope where the
+    ///   report points.
+    pub fn new(vars: &[Arc<TyVar>], reserved: &[Arc<TyVar>]) -> Self {
         let mut seen = Set::default();
         let vars = vars
             .iter()
@@ -31,6 +35,7 @@ impl ReportTyVarNames {
             .collect::<Vec<_>>();
         let taken = vars
             .iter()
+            .chain(reserved)
             .filter(|tv| !is_inference_tyvar(&tv.name))
             .map(|tv| tv.name.clone())
             .collect::<Set<_>>();

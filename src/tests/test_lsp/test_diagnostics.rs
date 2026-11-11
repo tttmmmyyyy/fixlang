@@ -351,17 +351,17 @@ mod tests {
     }
 
     /// A lambda's parameter pattern that does not match the parameter is reported in the editor on
-    /// the pattern, and the first line of the report, which an editor shows inline, names the
-    /// pattern with its type and the parameter's type.
+    /// the pattern, and the first line of the report, which an editor shows inline, gives the
+    /// pattern's type and the parameter's type.
     #[test]
-    fn test_a_parameter_pattern_mismatch_opens_with_the_pattern_and_the_parameter_type() {
+    fn test_a_parameter_pattern_mismatch_opens_with_the_pattern_type_and_the_parameter_type() {
         let (_temp_dir, project_dir) = setup_test_env("lambda_param_pattern_mismatch");
         let diagnostics = diagnostics_of(&project_dir, Path::new("main.fix"));
-        let diag = sole_diagnostic_containing(&diagnostics, "The pattern `(arr, flag)`");
+        let diag = sole_diagnostic_containing(&diagnostics, "This pattern matches a value of type `(t1, t2)`");
         assert_eq!(
             diag["message"].as_str().unwrap().lines().next(),
             Some(
-                "The pattern `(arr, flag)` matches a value of type `(t1, t2)`, but the parameter of the lambda has type `Std::I64`."
+                "This pattern matches a value of type `(t1, t2)`, but the parameter of the lambda has type `Std::I64`."
             )
         );
         // `main.fix` writes `(arr, flag)` on the 4th line, from the 37th column to the 47th.

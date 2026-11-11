@@ -17,10 +17,9 @@ use crate::{
         type_env::TypeEnv,
         typedecl::describe_field_names,
         types::{
-            is_inference_tyvar, is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar,
-            type_arrow, type_from_tyvar, type_tyapp, type_tycon, AssocType, Kind,
-            OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode,
-            MAX_TYPE_DEPTH,
+            is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar, type_arrow,
+            type_from_tyvar, type_tyapp, type_tycon, AssocType, Kind, OpaqueTyConResolution,
+            Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
         },
     },
     constants::{
@@ -908,7 +907,7 @@ impl TypeCheckContext {
             return Err(Errors::from_msg_srcs(
                 format!(
                     "The matched value has non-union type `{}`, but it is matched on a variant pattern `{}`.",
-                    ReportTyVarNames::new(&cond_ty.free_vars_vec()).ty(&cond_ty),
+                    self.report_tyvar_names(&cond_ty.free_vars_vec(), &[]).ty(&cond_ty),
                     pat.pattern.to_string()
                 ),
                 &[&cond.source, &pat.info.source],
@@ -1290,16 +1289,25 @@ impl TypeCheckContext {
                         // A value with no type variable of its own, mismatched with the expected
                         // type as a whole, is reported by the sentence naming the two types.
                         let whole = scm.gen_vars.is_empty().then(|| (&scm.ty, &expected_type));
-                        let mut tvs = scm.all_vars();
+                        let mut tvs = vec![];
+                        scm.free_vars_to_vec(&mut tvs);
                         expected_type.free_vars_to_vec(&mut tvs);
-                        self.create_mismatch_report(e, whole, tvs, &ei.source, |names, _| {
-                            format!(
-                                "`{}` of type `{}` does not match the expected type `{}`.",
-                                fullname.to_string(),
-                                names.scheme(scm),
-                                names.ty(&expected_type),
-                            )
-                        })
+                        let reserved = &scm.gen_vars;
+                        self.create_mismatch_report(
+                            e,
+                            whole,
+                            tvs,
+                            reserved,
+                            &ei.source,
+                            |names, _| {
+                                format!(
+                                    "`{}` of type `{}` does not match the expected type `{}`.",
+                                    fullname.to_string(),
+                                    names.scheme(scm),
+                                    names.ty(&expected_type),
+                                )
+                            },
+                        )
                     } else {
                         self.create_no_candidate_matches_report(
                             &var.name,
@@ -1774,6 +1782,20 @@ impl TypeCheckContext {
         msg_srcs
     }
 
+    /// Names the type variables of a report on this context's check, as
+    /// `ReportTyVarNames::new` does, reserving besides `reserved` the names
+    /// of the type variables the checked value's signature holds fixed,
+    /// which the program has in scope wherever the report points.
+    pub fn report_tyvar_names(
+        &self,
+        vars: &[Arc<TyVar>],
+        reserved: &[Arc<TyVar>],
+    ) -> ReportTyVarNames {
+        let mut reserved = reserved.to_vec();
+        reserved.extend(self.fixed_tyvars.iter().cloned());
+        ReportTyVarNames::new(vars, &reserved)
+    }
+
     /// Build the error reported at `source` where a unification failed with
     /// `unif_err`: its headline, the sentence naming the two types that do
     /// not match or the constraint that could not be deduced, followed by
@@ -1785,7 +1807,8 @@ impl TypeCheckContext {
     /// * `unif_err` — the error, under the substitution its types are to be
     ///   printed in.
     /// * `body_vars` — the type variables `body` prints, in the order it
-    ///   prints them.
+    ///   prints them, apart from those a scheme it prints generalizes.
+    /// * `reserved` — the type variables a scheme `body` prints generalizes.
     /// * `body` — writes the text after the headline from the names the
     ///   report gives the type variables, and is told whether the headline
     ///   opens the message.
@@ -1794,6 +1817,7 @@ impl TypeCheckContext {
         unif_err: &UnificationErr,
         whole: Option<(&Arc<TypeNode>, &Arc<TypeNode>)>,
         body_vars: Vec<Arc<TyVar>>,
+        reserved: &[Arc<TyVar>],
         source: &Option<Span>,
         body: impl FnOnce(&ReportTyVarNames, bool) -> String,
     ) -> Error {
@@ -1803,7 +1827,7 @@ impl TypeCheckContext {
             unif_err.free_vars_to_vec(&mut tvs);
         }
         tvs.extend(body_vars);
-        let names = ReportTyVarNames::new(&tvs);
+        let names = self.report_tyvar_names(&tvs, reserved);
         let body = body(&names, with_headline);
         let msg = if with_headline {
             format!(
@@ -1840,23 +1864,20 @@ impl TypeCheckContext {
         source: &Option<Span>,
     ) -> Error {
         let expected_tvs = expected_ty.free_vars_vec();
-        // The names the programs writes in any of the lines, which no line
-        // gives to a type variable of the inference, so that the expected
-        // type's variables are named alike in every line.
-        let mut written_tvs = vec![];
-        for (_, scm, e) in failures {
-            written_tvs.append(&mut scm.all_vars());
-            e.free_vars_to_vec(&mut written_tvs);
-        }
-        written_tvs.retain(|tv| !is_inference_tyvar(&tv.name));
-        let line_names = |own_tvs: Vec<Arc<TyVar>>| {
+        // The type variables the values' schemes generalize, whose names
+        // no line gives to a type variable of the inference, so that the
+        // expected type's variables are named alike in every line.
+        let reserved = failures
+            .iter()
+            .flat_map(|(_, scm, _)| scm.gen_vars.iter().cloned())
+            .collect::<Vec<_>>();
+        let line_names = |own_tvs: &[Arc<TyVar>]| {
             let mut tvs = expected_tvs.clone();
-            tvs.extend(written_tvs.iter().cloned());
-            tvs.extend(own_tvs);
-            ReportTyVarNames::new(&tvs)
+            tvs.extend(own_tvs.iter().cloned());
+            self.report_tyvar_names(&tvs, &reserved)
         };
 
-        let names = line_names(vec![]);
+        let names = line_names(&[]);
         let mut lines = vec![format!(
             "No value named `{}` matches the expected type `{}`.",
             name.to_string(),
@@ -1864,10 +1885,11 @@ impl TypeCheckContext {
         )];
         let mut srcs = self.create_tyvar_location_messages(&expected_tvs, &names, None);
         for (ref_no, (fullname, scm, e)) in (1..).zip(failures) {
-            let mut own_tvs = scm.all_vars();
+            let mut own_tvs = vec![];
+            scm.free_vars_to_vec(&mut own_tvs);
             e.free_vars_to_vec(&mut own_tvs);
             own_tvs.retain(|tv| !expected_tvs.iter().any(|etv| etv.name == tv.name));
-            let names = line_names(own_tvs.clone());
+            let names = line_names(&own_tvs);
             lines.push(format!(
                 "- ({}) `{}` of type `{}`: {}",
                 ref_no,
@@ -1903,6 +1925,7 @@ impl TypeCheckContext {
             &unif_err,
             Some((&expected_ty, &found_ty)),
             tvs,
+            &[],
             source,
             |names, with_headline| {
                 let expected_and_found = format!(
@@ -1942,11 +1965,11 @@ impl TypeCheckContext {
             &unif_err,
             Some((&pat_ty, &param_ty)),
             tvs,
+            &[],
             &pat.info.source,
             |names, _| {
                 format!(
-                    "The pattern `{}` matches a value of type `{}`, but the parameter of the lambda has type `{}`.\nFrom this parameter on, the lambda is expected to have type `{}`.",
-                    pat.to_string(),
+                    "This pattern matches a value of type `{}`, but the parameter of the lambda has type `{}`.\nFrom this parameter on, the lambda is expected to have type `{}`.",
                     names.ty(&pat_ty),
                     names.ty(&param_ty),
                     names.ty(&lambda_ty),
@@ -2111,7 +2134,7 @@ impl TypeCheckContext {
             src: &Option<Span>,
         ) -> Error {
             let unif_err = tc.substitution.substitute_unification_error(&unif_err);
-            let names = ReportTyVarNames::new(&unif_err.free_vars_vec());
+            let names = tc.report_tyvar_names(&unif_err.free_vars_vec(), &[]);
             let printed_err = names.rename_unification_error(&unif_err);
             let mut error = Error::from_msg_srcs(
                 printed_err.message_with_note(format!(
@@ -2773,7 +2796,7 @@ impl TypeCheckContext {
         let fv = tvs
             .iter()
             .find(|fv| !self.fixed_tyvars.iter().any(|tv| tv.name == fv.name))?;
-        let names = ReportTyVarNames::new(&tvs);
+        let names = self.report_tyvar_names(&tvs, &[]);
         // Must stay in sync with the same message in program.rs (instantiate_expr).
         let mut err = Error::from_msg_srcs(
             format!(
@@ -3386,7 +3409,7 @@ impl TypeReduction {
         for (ancestor, _src) in round {
             ancestor.free_vars_to_vec(&mut tvs);
         }
-        let names = ReportTyVarNames::new(&tvs);
+        let names = ReportTyVarNames::new(&tvs, &[]);
         let way: Vec<String> = round
             .iter()
             .map(|(ancestor, _src)| names.ty(ancestor))
@@ -3415,7 +3438,7 @@ impl TypeReduction {
         // about, which says nothing about any equality, so the report is drawn where that type is
         // written; one that has applied equalities reached it by applying them, and the last is the
         // one to draw the report at.
-        let printed_ty = ReportTyVarNames::new(&ty.free_vars_vec()).ty(ty);
+        let printed_ty = ReportTyVarNames::new(&ty.free_vars_vec(), &[]).ty(ty);
         let Some((_ancestor_str, src)) = self.path.last() else {
             return Errors::from_msg_srcs(
                 format!(
