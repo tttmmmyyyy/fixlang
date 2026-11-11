@@ -6,7 +6,7 @@
 
 #### Language
 
-- A type error now opens with the two types that do not match, or the constraint that cannot be deduced, so that an editor showing the first line of a report shows the cause. A lambda's parameter pattern that does not match the parameter is reported on the pattern, with the type the lambda is expected to have from that parameter on, where the report used to name `#param`. Type variables the inference creates print as `t1`, `t2`, ..., where they printed as `#a575`.
+- #1013: A type error now opens with the two types that do not match, or the constraint that cannot be deduced, so that an editor showing the first line of a report shows the cause. A lambda's parameter pattern that does not match the parameter is reported on the pattern, with the type the lambda is expected to have from that parameter on, where the report used to name `#param`. Type variables the inference creates print as `t1`, `t2`, ..., where they printed as `#a575`.
 
 #### Tool
 
