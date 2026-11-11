@@ -3455,7 +3455,10 @@ impl UnificationErr {
     pub fn is_mismatch_of(&self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> bool {
         match self {
             UnificationErr::Disjoint(e1, e2) => (e1 == ty1 && e2 == ty2) || (e1 == ty2 && e2 == ty1),
-            _ => false,
+            UnificationErr::IndivisibleOpaque(_, _)
+            | UnificationErr::Unsatisfiable(_)
+            | UnificationErr::Circular(_)
+            | UnificationErr::Endless(_) => false,
         }
     }
 

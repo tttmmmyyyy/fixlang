@@ -41,7 +41,8 @@ impl ReportTyVars {
                 }
             };
             let replacement = type_from_tyvar(tv.set_name(name.clone()));
-            renaming.merge(&Substitution::single(&tv.name, replacement));
+            let merged = renaming.merge(&Substitution::single(&tv.name, replacement));
+            assert!(merged, "type variable `{}` named twice in one report", tv.name);
             names.insert(tv.name.clone(), name);
         }
         ReportTyVars { renaming, names }
@@ -49,7 +50,17 @@ impl ReportTyVars {
 
     /// The name the report prints for the type variable `name`.
     pub fn name(&self, name: &Name) -> Name {
-        self.names.get(name).unwrap_or(name).clone()
+        match self.names.get(name) {
+            Some(printed) => printed.clone(),
+            None => {
+                assert!(
+                    !is_inference_tyvar(name),
+                    "type variable `{}` is missing from the variables the report was named for",
+                    name
+                );
+                name.clone()
+            }
+        }
     }
 
     /// `ty` as the report prints it.
