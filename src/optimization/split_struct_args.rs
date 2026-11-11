@@ -374,7 +374,7 @@ fn twin_call(
         let name = fresh.next().unwrap();
         let ty = arg.type_.as_ref().unwrap().clone();
         bindings.push((
-            PatternNode::make_var(var_local(&name.name), None).set_type(ty.clone()),
+            PatternNode::make_local_var(&name.name, ty.clone()),
             arg.clone(),
         ));
         named_args.push(expr_var(name, None).set_type(ty));
