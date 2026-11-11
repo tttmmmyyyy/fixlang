@@ -141,3 +141,85 @@ main : IO () = (
         ": `n` of type `Std::I64` does not match the expected type `Std::String`.\n",
     );
 }
+
+/// An expression whose type mismatches the expected one as a whole is reported by the one
+/// sentence on the two types.
+#[test]
+pub fn test_a_whole_mismatch_of_an_expression_is_one_sentence() {
+    let source = r##"
+module Main;
+
+main : IO () = (
+    let a : Array String = [1, 2];
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": Type mismatch. Expected `Std::String`, found `Std::I64`.\n",
+    );
+}
+
+/// An expression whose type differs from the expected one inside the two opens the report with the
+/// two types that do not match, followed by the expected type and the found one.
+#[test]
+pub fn test_a_mismatch_inside_the_types_of_an_expression_opens_with_the_mismatched_pair() {
+    let source = r##"
+module Main;
+
+main : IO () = (
+    let n = match (1, "a") { (a, b : I64) => a };
+    println(n.to_string)
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": `Std::I64` and `Std::String` do not match.\n\
+         Expected `(Std::I64, Std::I64)`, found `(Std::I64, Std::String)`.",
+    );
+}
+
+/// A type the inference cannot settle is printed, and its unresolved variable named, with the name
+/// the report gives that variable.
+#[test]
+pub fn test_an_unresolved_type_variable_is_named_as_the_inferred_type_prints_it() {
+    let source = r##"
+module Main;
+
+main : IO () = (
+    let x = [];
+    assert_eq(|_|"", x.@size, 0)
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": Cannot infer the type of this pattern: inferred as `Std::Array t1`, but the type variable `t1` is unresolved.",
+    );
+}
+
+/// A hole whose type the inference leaves open is reported with that type under the name the
+/// report gives it, the same name the pointer to its origin uses.
+#[test]
+pub fn test_a_hole_of_an_open_type_names_the_type_variable() {
+    let source = r##"
+module Main;
+
+main : IO () = (
+    let y : I64 = [?].@size;
+    println(y.to_string)
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": Expected expression of type `t1`.",
+    );
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`t1` is the type for `?`.",
+    );
+}
