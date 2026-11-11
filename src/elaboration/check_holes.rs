@@ -11,7 +11,7 @@
 use crate::ast::expr::{hole_full_name, Expr, ExprNode};
 use crate::ast::name::FullName;
 use crate::constants::ERR_HOLE;
-use crate::elaboration::report_tyvars::ReportTyVars;
+use crate::elaboration::report_tyvar_names::ReportTyVarNames;
 use crate::elaboration::typecheck::TypeCheckContext;
 use crate::error::{Error, Errors};
 use std::sync::Arc;
@@ -88,13 +88,13 @@ fn visit(expr: &Arc<ExprNode>, hole_name: &FullName, tc: &TypeCheckContext, erro
 
 /// Build an ERR_HOLE diagnostic for the hole reference at `node`.
 ///
-/// When the hole's type was resolved by elaboration the message
-/// includes it (`Expected expression of type ...`). When it wasn't,
-/// the message degrades to `Expected expression.` and no type-variable
-/// origin annotations are attached.
+/// When elaboration gave the hole a type, the message includes it
+/// (`Expected expression of type ...`). Otherwise the message is
+/// `Expected expression.`, with no pointer to the origin of a type
+/// variable.
 fn report_hole(node: &Arc<ExprNode>, tc: &TypeCheckContext) -> Errors {
     let free_tvs = node.type_.as_ref().map_or(vec![], |ty| ty.free_vars_vec());
-    let names = ReportTyVars::new(&free_tvs);
+    let names = ReportTyVarNames::new(&free_tvs);
     let msg = match node.type_.as_ref() {
         Some(ty) => format!("Expected expression of type `{}`.", names.ty(ty)),
         None => "Expected expression.".to_string(),
@@ -105,6 +105,6 @@ fn report_hole(node: &Arc<ExprNode>, tc: &TypeCheckContext) -> Errors {
     // (typically when the hole is in an unconstrained context), point
     // at the expression that originally produced that type variable so
     // the user can see where the indeterminacy started.
-    err.add_srcs(tc.create_tyvar_location_messages(&free_tvs, &names, None));
+    err.add_srcs(tc.create_tyvar_location_messages(names.vars(), &names, None));
     Errors::from_err(err)
 }

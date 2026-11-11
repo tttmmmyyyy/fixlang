@@ -17,17 +17,18 @@ use crate::{
         type_env::TypeEnv,
         typedecl::describe_field_names,
         types::{
-            is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar, type_arrow,
-            type_from_tyvar, type_tyapp, type_tycon, AssocType, Kind, OpaqueTyConResolution,
-            Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
+            is_inference_tyvar, is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar,
+            type_arrow, type_from_tyvar, type_tyapp, type_tycon, AssocType, Kind,
+            OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode,
+            MAX_TYPE_DEPTH,
         },
     },
     constants::{
         ERR_AMBIGUOUS_NAME, ERR_MISSING_STRUCT_FIELD, ERR_NO_VALUE_MATCH, ERR_UNKNOWN_NAME,
-        WRAP_OPAQUE_TYVAR_PREFIX,
+        INFERENCE_TYVAR_PREFIX, WRAP_OPAQUE_TYVAR_PREFIX,
     },
     elaboration::name_resolution::NameResolutionContext,
-    elaboration::report_tyvars::ReportTyVars,
+    elaboration::report_tyvar_names::ReportTyVarNames,
     error::{Error, Errors},
     fixstd::builtin::{make_array_ty, make_bool_ty, make_iostate_ty, make_tuple_ty},
     parse::sourcefile::Span,
@@ -36,15 +37,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::mem;
 use std::sync::Arc;
-
-/// The prefix of the name of a type variable the inference creates, followed by a number (`#a3`).
-const INFERENCE_TYVAR_PREFIX: &str = "#a";
-
-/// Whether `name` is the name of a type variable the inference created.
-pub fn is_inference_tyvar(name: &str) -> bool {
-    name.strip_prefix(INFERENCE_TYVAR_PREFIX)
-        .is_some_and(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
-}
 
 /// The names a value of type `T` can be written under: the local names bound around the expression
 /// being checked, and the global names of the whole program.
@@ -284,10 +276,11 @@ impl Substitution {
         }
     }
 
-    /// Substitutes the types the error carries, so it is reported in terms of
-    /// the current substitution.
-    pub fn substitute_unification_error(&self, e: &mut UnificationErr) {
-        match e {
+    /// `e` with the types it carries substituted, so that it is reported in terms of this
+    /// substitution.
+    pub fn substitute_unification_error(&self, e: &UnificationErr) -> UnificationErr {
+        let mut e = e.clone();
+        match &mut e {
             UnificationErr::Unsatisfiable(predicate) => {
                 self.substitute_predicate(predicate);
             }
@@ -301,6 +294,7 @@ impl Substitution {
                 *ty2 = self.substitute_type(ty2);
             }
         }
+        e
     }
 
     /// Replaces the type variables this substitution replaces throughout `scm`: in its type, its
@@ -703,10 +697,24 @@ impl TypeCheckContext {
         found: &Arc<TypeNode>,
         source: &Option<Span>,
     ) -> Result<(), Errors> {
-        if let Err(e) = UnifOrOtherErr::extract_others(self.unify(expected, found))? {
+        self.unify_or_tolerated(expected, found, |tc, e| {
+            tc.create_type_mismatch_error(expected, found, e, source)
+        })
+    }
+
+    /// Unify `ty1` and `ty2`, surfacing the error `report` builds from the
+    /// unification error on failure. In `error_tolerant` mode a unification
+    /// mismatch is swallowed (`Ok(())`) so the caller can keep elaborating
+    /// siblings; non-unification errors always propagate.
+    fn unify_or_tolerated(
+        &mut self,
+        ty1: &Arc<TypeNode>,
+        ty2: &Arc<TypeNode>,
+        report: impl FnOnce(&Self, &UnificationErr) -> Error,
+    ) -> Result<(), Errors> {
+        if let Err(e) = UnifOrOtherErr::extract_others(self.unify(ty1, ty2))? {
             if !self.error_tolerant {
-                let err = self.create_type_mismatch_error(expected, found, &e, source);
-                return Err(Errors::from_err(err));
+                return Err(Errors::from_err(report(self, &e)));
             }
         }
         Ok(())
@@ -900,7 +908,7 @@ impl TypeCheckContext {
             return Err(Errors::from_msg_srcs(
                 format!(
                     "The matched value has non-union type `{}`, but it is matched on a variant pattern `{}`.",
-                    cond_ty.to_string_normalize(),
+                    ReportTyVarNames::new(&cond_ty.free_vars_vec()).ty(&cond_ty),
                     pat.pattern.to_string()
                 ),
                 &[&cond.source, &pat.info.source],
@@ -1266,102 +1274,42 @@ impl TypeCheckContext {
                     .filter(|cand| cand.is_ok())
                     .count();
                 if ok_count == 0 {
-                    let mut extra_srcs = vec![];
-
-                    let err_count = candidates_check_res
-                        .iter()
-                        .filter(|cand| cand.is_err())
-                        .count();
                     let expected_type = self.substitute_type(&ty);
-                    let msg = if err_count == 1 {
-                        let (tc, fullname, scm, e) = candidates_check_res
-                            .iter()
-                            .find_map(|cand| cand.as_ref().err())
-                            .unwrap();
-                        let scm = tc.substitution.substitute_scheme(scm);
-                        let mut e = e.clone();
-                        tc.substitution.substitute_unification_error(&mut e);
-                        // When the error is the mismatch of the value's monomorphic type with
-                        // the expected type itself, the sentence naming the two types is the
-                        // whole message.
-                        let with_headline =
-                            !(scm.gen_vars.is_empty() && e.is_mismatch_of(&scm.ty, &expected_type));
-                        let mut tvs = vec![];
-                        if with_headline {
-                            e.free_vars_to_vec(&mut tvs);
-                        }
-                        tvs.append(&mut scm.all_vars());
+                    let failures = candidates_check_res
+                        .iter()
+                        .filter_map(|cand| cand.as_ref().err())
+                        .map(|(tc, fullname, scm, e)| {
+                            (
+                                fullname,
+                                tc.substitution.substitute_scheme(scm),
+                                tc.substitution.substitute_unification_error(e),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    let mut error = if let [(fullname, scm, e)] = failures.as_slice() {
+                        // A value with no type variable of its own, mismatched with the expected
+                        // type as a whole, is reported by the sentence naming the two types.
+                        let whole = scm.gen_vars.is_empty().then(|| (&scm.ty, &expected_type));
+                        let mut tvs = scm.all_vars();
                         expected_type.free_vars_to_vec(&mut tvs);
-                        let names = ReportTyVars::new(&tvs);
-                        extra_srcs
-                            .append(&mut self.create_tyvar_location_messages(&tvs, &names, None));
-                        let mismatch = format!(
-                            "`{}` of type `{}` does not match the expected type `{}`.",
-                            fullname.to_string(),
-                            names.scheme(&scm),
-                            names.ty(&expected_type),
-                        );
-                        if with_headline {
-                            format!("{}\n{}", names.unification_error(&e).headline(), mismatch)
-                        } else {
-                            mismatch
-                        }
-                    } else {
-                        let expected_tvs = expected_type.free_vars_vec();
-                        let expected_names = ReportTyVars::new(&expected_tvs);
-                        let mut msg = format!(
-                            "No value named `{}` matches the expected type `{}`.",
-                            var.name.to_string(),
-                            expected_names.ty(&expected_type),
-                        );
-                        extra_srcs.append(&mut self.create_tyvar_location_messages(
-                            &expected_tvs,
-                            &expected_names,
-                            None,
-                        ));
-
-                        let mut candidates_errors = vec![];
-                        for (tc, fullname, scm, e) in candidates_check_res
-                            .iter()
-                            .filter_map(|cand| cand.as_ref().err())
-                        {
-                            let ref_no = candidates_errors.len() + 1;
-                            let scm = tc.substitution.substitute_scheme(scm);
-                            let mut e = e.clone();
-                            tc.substitution.substitute_unification_error(&mut e);
-                            // The expected type's variables come first, so that they keep the
-                            // names the first line gives them.
-                            let mut tvs = expected_tvs.clone();
-                            tvs.append(&mut scm.all_vars());
-                            e.free_vars_to_vec(&mut tvs);
-                            let names = ReportTyVars::new(&tvs);
-                            candidates_errors.push(format!(
-                                "- ({}) `{}` of type `{}`: {}",
-                                ref_no,
+                        self.create_mismatch_report(e, whole, tvs, &ei.source, |names, _| {
+                            format!(
+                                "`{}` of type `{}` does not match the expected type `{}`.",
                                 fullname.to_string(),
-                                names.scheme(&scm),
-                                names.unification_error(&e).headline(),
-                            ));
-                            let candidate_tvs = tvs
-                                .into_iter()
-                                .filter(|tv| !expected_tvs.iter().any(|etv| etv.name == tv.name))
-                                .collect::<Vec<_>>();
-                            extra_srcs.append(&mut self.create_tyvar_location_messages(
-                                &candidate_tvs,
-                                &names,
-                                Some(ref_no),
-                            ));
-                        }
-                        if candidates_errors.len() > 0 {
-                            msg.push_str("\n");
-                            msg.push_str(&candidates_errors.join("\n"));
-                        }
-                        msg
+                                names.scheme(scm),
+                                names.ty(&expected_type),
+                            )
+                        })
+                    } else {
+                        self.create_no_candidate_matches_report(
+                            &var.name,
+                            &expected_type,
+                            &failures,
+                            &ei.source,
+                        )
                     };
-                    let mut error = Error::from_msg_srcs(msg, &[&ei.source]);
                     error.code = Some(ERR_NO_VALUE_MATCH);
                     error.data = Some(Value::String(var.name.to_string()));
-                    error.add_srcs(extra_srcs);
                     return Err(Errors::from_err(error));
                 } else if ok_count >= 2 {
                     // FullName of candidates.
@@ -1458,19 +1406,15 @@ impl TypeCheckContext {
                 let elab = self.elaborate_pattern_binding(pat);
                 let (pat, var_ty) = self.tolerate_pattern_typed(elab, pat)?;
                 let pat_ty = pat.info.type_.as_ref().unwrap().clone();
-                let bound = if bound.is_lambda_param() {
+                let bound = if bound.is_synthetic_lambda_param() {
                     // This `let` binds a lambda's parameter pattern. The parameter
                     // gets a type of its own, and a mismatch with the pattern is
                     // reported on the pattern, in terms of the lambda.
                     let param_ty = type_from_tyvar(self.new_tyvar_star());
                     let bound = self.unify_type_of_expr(bound, param_ty.clone())?;
-                    if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&pat_ty, &param_ty))?
-                    {
-                        if !self.error_tolerant {
-                            let err = self.create_param_pattern_error(&pat, &param_ty, &ty, &e);
-                            return Err(Errors::from_err(err));
-                        }
-                    }
+                    self.unify_or_tolerated(&pat_ty, &param_ty, |tc, e| {
+                        tc.create_param_pattern_error(&pat, &param_ty, &ty, e)
+                    })?;
                     bound
                 } else {
                     self.unify_type_of_expr(bound, pat_ty)?
@@ -1797,7 +1741,7 @@ impl TypeCheckContext {
     pub fn create_tyvar_location_messages(
         &self,
         tvs: &[Arc<TyVar>],
-        names: &ReportTyVars,
+        names: &ReportTyVarNames,
         ref_no: Option<usize>,
     ) -> Vec<(String, Span)> {
         let mut seen = Set::default();
@@ -1830,12 +1774,119 @@ impl TypeCheckContext {
         msg_srcs
     }
 
-    /// Build the type mismatch error pointed at `source`: the two types of
-    /// `unif_err` that do not match or the constraint it could not deduce,
-    /// then `expected_ty` and `found_ty`, all with the current substitution
-    /// applied, and a source pointer for every type variable still free in
-    /// them. Where `unif_err` is the mismatch of `expected_ty` and `found_ty`
-    /// themselves, the message is the sentence naming them.
+    /// Build the error reported at `source` where a unification failed with
+    /// `unif_err`: its headline, the sentence naming the two types that do
+    /// not match or the constraint that could not be deduced, followed by
+    /// the text `body` writes, with a source pointer for each type variable
+    /// the report mentions. Where `unif_err` is the mismatch of the two types
+    /// of `whole` themselves, the body alone is the message.
+    ///
+    /// # Arguments
+    /// * `unif_err` — the error, under the substitution its types are to be
+    ///   printed in.
+    /// * `body_vars` — the type variables `body` prints, in the order it
+    ///   prints them.
+    /// * `body` — writes the text after the headline from the names the
+    ///   report gives the type variables, and is told whether the headline
+    ///   opens the message.
+    fn create_mismatch_report(
+        &self,
+        unif_err: &UnificationErr,
+        whole: Option<(&Arc<TypeNode>, &Arc<TypeNode>)>,
+        body_vars: Vec<Arc<TyVar>>,
+        source: &Option<Span>,
+        body: impl FnOnce(&ReportTyVarNames, bool) -> String,
+    ) -> Error {
+        let with_headline = !whole.is_some_and(|(ty1, ty2)| unif_err.is_mismatch_of(ty1, ty2));
+        let mut tvs = vec![];
+        if with_headline {
+            unif_err.free_vars_to_vec(&mut tvs);
+        }
+        tvs.extend(body_vars);
+        let names = ReportTyVarNames::new(&tvs);
+        let body = body(&names, with_headline);
+        let msg = if with_headline {
+            format!(
+                "{}\n{}",
+                names.rename_unification_error(unif_err).headline(),
+                body
+            )
+        } else {
+            body
+        };
+        let mut err = Error::from_msg_srcs(msg, &[source]);
+        err.add_srcs(self.create_tyvar_location_messages(names.vars(), &names, None));
+        err
+    }
+
+    /// Build the error reported at `source` where none of the values the
+    /// name `name` stands for has the type `expected_ty`: a line naming the
+    /// expected type, then a line for each value in `failures` with its
+    /// type and the headline of its error.
+    ///
+    /// A type variable of the expected type keeps one name across the
+    /// lines. The other type variables of a line come from the check of
+    /// that value alone, so a line's own names are its own, and a pointer
+    /// to the source of one carries the line's number.
+    ///
+    /// # Arguments
+    /// * `failures` — each value's full name, its type and its error,
+    ///   under the substitution of the check of that value.
+    fn create_no_candidate_matches_report(
+        &self,
+        name: &FullName,
+        expected_ty: &Arc<TypeNode>,
+        failures: &[(&FullName, Arc<Scheme>, UnificationErr)],
+        source: &Option<Span>,
+    ) -> Error {
+        let expected_tvs = expected_ty.free_vars_vec();
+        // The names the programs writes in any of the lines, which no line
+        // gives to a type variable of the inference, so that the expected
+        // type's variables are named alike in every line.
+        let mut written_tvs = vec![];
+        for (_, scm, e) in failures {
+            written_tvs.append(&mut scm.all_vars());
+            e.free_vars_to_vec(&mut written_tvs);
+        }
+        written_tvs.retain(|tv| !is_inference_tyvar(&tv.name));
+        let line_names = |own_tvs: Vec<Arc<TyVar>>| {
+            let mut tvs = expected_tvs.clone();
+            tvs.extend(written_tvs.iter().cloned());
+            tvs.extend(own_tvs);
+            ReportTyVarNames::new(&tvs)
+        };
+
+        let names = line_names(vec![]);
+        let mut lines = vec![format!(
+            "No value named `{}` matches the expected type `{}`.",
+            name.to_string(),
+            names.ty(expected_ty),
+        )];
+        let mut srcs = self.create_tyvar_location_messages(&expected_tvs, &names, None);
+        for (ref_no, (fullname, scm, e)) in (1..).zip(failures) {
+            let mut own_tvs = scm.all_vars();
+            e.free_vars_to_vec(&mut own_tvs);
+            own_tvs.retain(|tv| !expected_tvs.iter().any(|etv| etv.name == tv.name));
+            let names = line_names(own_tvs.clone());
+            lines.push(format!(
+                "- ({}) `{}` of type `{}`: {}",
+                ref_no,
+                fullname.to_string(),
+                names.scheme(scm),
+                names.rename_unification_error(e).headline(),
+            ));
+            srcs.append(&mut self.create_tyvar_location_messages(&own_tvs, &names, Some(ref_no)));
+        }
+        let mut err = Error::from_msg_srcs(lines.join("\n"), &[source]);
+        err.add_srcs(srcs);
+        err
+    }
+
+    /// Build the type mismatch error pointed at `source`, where unifying
+    /// `expected_ty` and `found_ty` failed with `unif_err`: the headline of
+    /// `unif_err`, then the expected type and the found one. Where `unif_err`
+    /// is the mismatch of the two types themselves, the sentence naming them
+    /// is the message.
     fn create_type_mismatch_error(
         &self,
         expected_ty: &Arc<TypeNode>,
@@ -1843,46 +1894,37 @@ impl TypeCheckContext {
         unif_err: &UnificationErr,
         source: &Option<Span>,
     ) -> Error {
-        let expected_ty = self.substitution.substitute_type(expected_ty);
-        let found_ty = self.substitution.substitute_type(found_ty);
-        let mut unif_err = unif_err.clone();
-        self.substitution
-            .substitute_unification_error(&mut unif_err);
-
-        let with_headline = !unif_err.is_mismatch_of(&expected_ty, &found_ty);
-        let mut tvs = vec![];
-        if with_headline {
-            unif_err.free_vars_to_vec(&mut tvs);
-        }
-        expected_ty.free_vars_to_vec(&mut tvs);
+        let expected_ty = self.substitute_type(expected_ty);
+        let found_ty = self.substitute_type(found_ty);
+        let unif_err = self.substitution.substitute_unification_error(unif_err);
+        let mut tvs = expected_ty.free_vars_vec();
         found_ty.free_vars_to_vec(&mut tvs);
-        let names = ReportTyVars::new(&tvs);
-        let expected_and_found = format!(
-            "Expected `{}`, found `{}`.",
-            names.ty(&expected_ty),
-            names.ty(&found_ty),
-        );
-        let msg = if with_headline {
-            format!(
-                "{}\n{}",
-                names.unification_error(&unif_err).headline(),
-                expected_and_found
-            )
-        } else {
-            format!("Type mismatch. {}", expected_and_found)
-        };
-        let mut err = Error::from_msg_srcs(msg, &[&source]);
-        err.add_srcs(self.create_tyvar_location_messages(&tvs, &names, None));
-        err
+        self.create_mismatch_report(
+            &unif_err,
+            Some((&expected_ty, &found_ty)),
+            tvs,
+            source,
+            |names, with_headline| {
+                let expected_and_found = format!(
+                    "Expected `{}`, found `{}`.",
+                    names.ty(&expected_ty),
+                    names.ty(&found_ty),
+                );
+                if with_headline {
+                    expected_and_found
+                } else {
+                    format!("Type mismatch. {}", expected_and_found)
+                }
+            },
+        )
     }
 
     /// Build the error reported where a lambda's parameter pattern `pat` does
-    /// not match the type `param_ty` the lambda takes there. It names the two
-    /// types that do not match or the constraint that could not be deduced,
-    /// then the pattern's type and the parameter's, then the type the lambda
-    /// is expected to have from this parameter on, whose result is `body_ty`.
-    /// Where `unif_err` is the mismatch of the pattern's type and the
-    /// parameter's themselves, the sentence naming them opens the message.
+    /// not match the type `param_ty` the lambda takes there, unifying the two
+    /// having failed with `unif_err`. It names the pattern's type and the
+    /// parameter's, then the type the lambda is expected to have from this
+    /// parameter on, whose result is `body_ty`, after the headline of
+    /// `unif_err` where that error lies inside the two types.
     fn create_param_pattern_error(
         &self,
         pat: &Arc<PatternNode>,
@@ -1893,31 +1935,24 @@ impl TypeCheckContext {
         let pat_ty = self.substitute_type(pat.info.type_.as_ref().unwrap());
         let param_ty = self.substitute_type(param_ty);
         let lambda_ty = type_arrow(param_ty.clone(), self.substitute_type(body_ty));
-        let mut unif_err = unif_err.clone();
-        self.substitution
-            .substitute_unification_error(&mut unif_err);
-
-        let with_headline = !unif_err.is_mismatch_of(&pat_ty, &param_ty);
-        let mut tvs = vec![];
-        if with_headline {
-            unif_err.free_vars_to_vec(&mut tvs);
-        }
-        pat_ty.free_vars_to_vec(&mut tvs);
+        let unif_err = self.substitution.substitute_unification_error(unif_err);
+        let mut tvs = pat_ty.free_vars_vec();
         lambda_ty.free_vars_to_vec(&mut tvs);
-        let names = ReportTyVars::new(&tvs);
-        let mut msg = format!(
-            "The pattern `{}` matches a value of type `{}`, but the parameter of the lambda has type `{}`.\nFrom this parameter on, the lambda is expected to have type `{}`.",
-            pat.to_string(),
-            names.ty(&pat_ty),
-            names.ty(&param_ty),
-            names.ty(&lambda_ty),
-        );
-        if with_headline {
-            msg = format!("{}\n{}", names.unification_error(&unif_err).headline(), msg);
-        }
-        let mut err = Error::from_msg_srcs(msg, &[&pat.info.source]);
-        err.add_srcs(self.create_tyvar_location_messages(&tvs, &names, None));
-        err
+        self.create_mismatch_report(
+            &unif_err,
+            Some((&pat_ty, &param_ty)),
+            tvs,
+            &pat.info.source,
+            |names, _| {
+                format!(
+                    "The pattern `{}` matches a value of type `{}`, but the parameter of the lambda has type `{}`.\nFrom this parameter on, the lambda is expected to have type `{}`.",
+                    pat.to_string(),
+                    names.ty(&pat_ty),
+                    names.ty(&param_ty),
+                    names.ty(&lambda_ty),
+                )
+            },
+        )
     }
 
     /// Panics unless no inference has run in this context yet: no type variable issued, an empty
@@ -2072,14 +2107,12 @@ impl TypeCheckContext {
         /// source-location notes for the type variables it mentions.
         fn make_error(
             tc: &TypeCheckContext,
-            mut unif_err: UnificationErr,
+            unif_err: UnificationErr,
             src: &Option<Span>,
         ) -> Error {
-            tc.substitution.substitute_unification_error(&mut unif_err);
-            let mut tvs = vec![];
-            unif_err.free_vars_to_vec(&mut tvs);
-            let names = ReportTyVars::new(&tvs);
-            let printed_err = names.unification_error(&unif_err);
+            let unif_err = tc.substitution.substitute_unification_error(&unif_err);
+            let names = ReportTyVarNames::new(&unif_err.free_vars_vec());
+            let printed_err = names.rename_unification_error(&unif_err);
             let mut error = Error::from_msg_srcs(
                 printed_err.message_with_note(format!(
                     "`{}` is required in the type inference of this expression but cannot be deduced from assumptions.",
@@ -2087,7 +2120,7 @@ impl TypeCheckContext {
                 )),
                 &[src],
             );
-            error.add_srcs(tc.create_tyvar_location_messages(&tvs, &names, None));
+            error.add_srcs(tc.create_tyvar_location_messages(names.vars(), &names, None));
             error
         }
 
@@ -2736,28 +2769,23 @@ impl TypeCheckContext {
         src: &Option<Span>,
         ty: &Arc<TypeNode>,
     ) -> Option<Errors> {
-        let mut errs = None;
-        let mut fvs = ty
-            .free_vars()
-            .into_iter()
-            .filter(|(k, _v)| !self.fixed_tyvars.iter().any(|tv| tv.name == *k));
-        if let Some((fv_name, fv)) = fvs.next() {
-            let tvs = ty.free_vars_vec();
-            let names = ReportTyVars::new(&tvs);
-            // Must stay in sync with the same message in program.rs (instantiate_expr).
-            let mut err = Error::from_msg_srcs(
-                format!(
-                    "Cannot infer the type of this {0}: inferred as `{1}`, but the type variable `{2}` is unresolved.\nHINT: add a type annotation to this {0}.",
-                    src_type,
-                    names.ty(ty),
-                    names.name(&fv_name),
-                ),
-                &[src],
-            );
-            err.add_srcs(self.create_tyvar_location_messages(&[fv], &names, None));
-            errs = Some(Errors::from_err(err));
-        }
-        errs
+        let tvs = ty.free_vars_vec();
+        let fv = tvs
+            .iter()
+            .find(|fv| !self.fixed_tyvars.iter().any(|tv| tv.name == fv.name))?;
+        let names = ReportTyVarNames::new(&tvs);
+        // Must stay in sync with the same message in program.rs (instantiate_expr).
+        let mut err = Error::from_msg_srcs(
+            format!(
+                "Cannot infer the type of this {0}: inferred as `{1}`, but the type variable `{2}` is unresolved.\nHINT: add a type annotation to this {0}.",
+                src_type,
+                names.ty(ty),
+                names.name(&fv.name),
+            ),
+            &[src],
+        );
+        err.add_srcs(self.create_tyvar_location_messages(&[fv.clone()], &names, None));
+        Some(Errors::from_err(err))
     }
 
     /// Substitute the accumulated type substitution into `ty` and reduce
@@ -3354,21 +3382,26 @@ impl TypeReduction {
             .position(|(ancestor, _src)| ancestor == ty)
             .expect("the caller found the type among the reductions it is inside");
         let round = &self.path[start..];
+        let mut tvs = ty.free_vars_vec();
+        for (ancestor, _src) in round {
+            ancestor.free_vars_to_vec(&mut tvs);
+        }
+        let names = ReportTyVarNames::new(&tvs);
         let way: Vec<String> = round
             .iter()
-            .map(|(ancestor, _src)| ancestor.to_string())
-            .chain([ty.to_string()])
+            .map(|(ancestor, _src)| names.ty(ancestor))
+            .chain([names.ty(ty)])
             .collect();
         let srcs: Vec<&Option<Span>> = round.iter().map(|(_ancestor, src)| src).collect();
         let sentence = if way.len() <= 2 {
             format!(
                 "The type `{}` is circular.",
-                shorten_for_report(ty.to_string()),
+                shorten_for_report(names.ty(ty)),
             )
         } else {
             format!(
                 "The type `{}` is circular: {}.",
-                shorten_for_report(ty.to_string()),
+                shorten_for_report(names.ty(ty)),
                 way_string(&way),
             )
         };
@@ -3382,11 +3415,12 @@ impl TypeReduction {
         // about, which says nothing about any equality, so the report is drawn where that type is
         // written; one that has applied equalities reached it by applying them, and the last is the
         // one to draw the report at.
+        let printed_ty = ReportTyVarNames::new(&ty.free_vars_vec()).ty(ty);
         let Some((_ancestor_str, src)) = self.path.last() else {
             return Errors::from_msg_srcs(
                 format!(
                     "The type `{}` is nested too deep.",
-                    shorten_for_report(ty.to_string()),
+                    shorten_for_report(printed_ty),
                 ),
                 &[ty.get_source()],
             );
@@ -3394,7 +3428,7 @@ impl TypeReduction {
         Errors::from_msg_srcs(
             format!(
                 "The type `{}` grew too large.",
-                shorten_for_report(ty.to_string()),
+                shorten_for_report(printed_ty),
             ),
             &[src],
         )
@@ -3403,8 +3437,8 @@ impl TypeReduction {
 
 /// A constraint that type checking required and could not settle.
 ///
-/// A report names the constraint, and adds what the deduction of it did where the deduction rather
-/// than the constraint is what fails.
+/// A report opens with the constraint that cannot be deduced, or with the two types that do not
+/// match, and adds what the deduction did where the deduction is what fails.
 #[derive(Clone)]
 pub enum UnificationErr {
     /// No instance the program declares gives the predicate.
@@ -3437,24 +3471,22 @@ impl UnificationErr {
         }
     }
 
-    /// The opening sentence of a report: what fails, followed by what the deduction did where the
-    /// deduction is what fails.
-    ///
-    /// An equation with an associated type on one side is a constraint the inference deduces, so it
-    /// is reported as one that cannot be deduced; two other types that cannot be made equal are
-    /// reported as a pair that does not match.
+    /// The opening sentence of a report: the predicate that cannot be deduced, or the two types that
+    /// do not match, followed by what the deduction did where the deduction is what fails.
     pub fn headline(&self) -> String {
         let reason = match self {
-            UnificationErr::Disjoint(ty1, ty2) | UnificationErr::IndivisibleOpaque(ty1, ty2)
-                if !ty1.is_assoc_ty() && !ty2.is_assoc_ty() =>
-            {
+            UnificationErr::Unsatisfiable(_)
+            | UnificationErr::Circular(_)
+            | UnificationErr::Endless(_) => {
+                format!("`{}` cannot be deduced.", self.to_constraint_string())
+            }
+            UnificationErr::Disjoint(ty1, ty2) | UnificationErr::IndivisibleOpaque(ty1, ty2) => {
                 format!(
                     "`{}` and `{}` do not match.",
                     ty1.to_string(),
                     ty2.to_string()
                 )
             }
-            _ => format!("`{}` cannot be deduced.", self.to_constraint_string()),
         };
         self.message_with_note(reason)
     }
@@ -3526,6 +3558,13 @@ impl UnificationErr {
                 ty2.free_vars_to_vec(buf);
             }
         }
+    }
+
+    /// The type variables free in the types this error carries, each once, in the order they stand.
+    pub fn free_vars_vec(&self) -> Vec<Arc<TyVar>> {
+        let mut buf = vec![];
+        self.free_vars_to_vec(&mut buf);
+        buf
     }
 
     /// The predicate a failed deduction is about: the one the report names.

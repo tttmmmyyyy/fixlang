@@ -1,26 +1,34 @@
 use crate::ast::name::Name;
-use crate::ast::types::{type_from_tyvar, Scheme, TyVar, TypeNode};
-use crate::elaboration::typecheck::{is_inference_tyvar, Substitution, UnificationErr};
+use crate::ast::types::{is_inference_tyvar, type_from_tyvar, Scheme, TyVar, TypeNode};
+use crate::elaboration::typecheck::{Substitution, UnificationErr};
 use crate::misc::{Map, Set};
 use std::sync::Arc;
 
 /// The names one error report prints for the type variables the inference created (`#a3`): `t1`,
 /// `t2`, ... in the order the report first mentions them. A name that another type variable of the
 /// report already has is skipped, so two variables of one report never print alike.
-pub struct ReportTyVars {
+pub struct ReportTyVarNames {
+    /// Every type variable the report mentions, each once, in the order it first mentions them.
+    vars: Vec<Arc<TyVar>>,
     /// Replaces each type variable the inference created by one under its printed name.
     renaming: Substitution,
     /// The printed name of each type variable the inference created, by its own name.
     names: Map<Name, Name>,
 }
 
-impl ReportTyVars {
+impl ReportTyVarNames {
     /// Names the type variables of a report.
     ///
     /// # Arguments
     /// * `vars` — every type variable the report mentions, in the order it mentions them, the ones
     ///   a scheme generalizes included.
     pub fn new(vars: &[Arc<TyVar>]) -> Self {
+        let mut seen = Set::default();
+        let vars = vars
+            .iter()
+            .filter(|tv| seen.insert(tv.name.clone()))
+            .cloned()
+            .collect::<Vec<_>>();
         let taken = vars
             .iter()
             .filter(|tv| !is_inference_tyvar(&tv.name))
@@ -29,10 +37,7 @@ impl ReportTyVars {
         let mut renaming = Substitution::default();
         let mut names = Map::default();
         let mut next_no = 1;
-        for tv in vars {
-            if !is_inference_tyvar(&tv.name) || names.contains_key(&tv.name) {
-                continue;
-            }
+        for tv in vars.iter().filter(|tv| is_inference_tyvar(&tv.name)) {
             let name = loop {
                 let name = format!("t{}", next_no);
                 next_no += 1;
@@ -49,7 +54,16 @@ impl ReportTyVars {
             );
             names.insert(tv.name.clone(), name);
         }
-        ReportTyVars { renaming, names }
+        ReportTyVarNames {
+            vars,
+            renaming,
+            names,
+        }
+    }
+
+    /// Every type variable the report mentions, each once, in the order it first mentions them.
+    pub fn vars(&self) -> &[Arc<TyVar>] {
+        &self.vars
     }
 
     /// The name the report prints for the type variable `name`.
@@ -78,9 +92,7 @@ impl ReportTyVars {
     }
 
     /// `err` with its type variables under the names the report prints.
-    pub fn unification_error(&self, err: &UnificationErr) -> UnificationErr {
-        let mut err = err.clone();
-        self.renaming.substitute_unification_error(&mut err);
-        err
+    pub fn rename_unification_error(&self, err: &UnificationErr) -> UnificationErr {
+        self.renaming.substitute_unification_error(err)
     }
 }

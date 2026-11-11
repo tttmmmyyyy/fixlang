@@ -223,3 +223,36 @@ main : IO () = (
         "`t1` is the type for `?`.",
     );
 }
+
+/// A type variable of the expected type is printed under one name in every line of a report
+/// listing the values of a name, also where one value's type writes the name `t1` itself.
+#[test]
+pub fn test_a_listed_value_writing_a_type_variable_name_leaves_the_expected_type_named_alike() {
+    let source = r##"
+module Main;
+
+trait t1 : Foo {
+    describe : t1 -> String;
+}
+
+namespace A {
+    f : I64 -> String = |x| x.to_string;
+}
+
+namespace B {
+    f : [t1 : Foo] t1 -> String = |x| x.describe;
+}
+
+main : IO () = (
+    let x = [];
+    println(x.f)
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": No value named `f` matches the expected type `Std::Array t2 -> Std::String`.\n\
+         - (1) `Main::A::f` of type `Std::I64 -> Std::String`: `Std::I64` and `Std::Array t2` do not match.\n\
+         - (2) `Main::B::f` of type `[t1 : Main::Foo] t1 -> Std::String`: `Std::Array t2 : Main::Foo` cannot be deduced.",
+    );
+}

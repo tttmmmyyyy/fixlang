@@ -27,6 +27,7 @@ use crate::elaboration::desugar_opaque::{
     remove_opaque_wrapper_func, resolve_opaque_tycon_in_expr, resolve_opaque_type_in_type,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionEnv};
+use crate::elaboration::report_tyvar_names::ReportTyVarNames;
 use crate::elaboration::typecheck::{TypeCheckContext, UnifOrOtherErr};
 use crate::elaboration::typecheckcache::{entity_identity, EntityIdentity, SharedTypeCheckCache};
 use crate::elaboration::typed_modules::{warning_facts, TypedModules, WarningFact};
@@ -1780,13 +1781,14 @@ impl Program {
         // NOTE: This check is a precaution, as we are determining whether there are any indeterminate type variables during the type inference phase.
         let ret_ty = ret.type_.as_ref().unwrap();
         if !ret_ty.is_ground() {
-            let (fv_name, _) = ret_ty.free_vars().into_iter().next().unwrap();
+            let tvs = ret_ty.free_vars_vec();
+            let names = ReportTyVarNames::new(&tvs);
             // Must stay in sync with the same message in typecheck.rs (check_is_type_fixed).
             return Err(Errors::from_msg_srcs(
                 format!(
                     "Cannot infer the type of this expression: inferred as `{}`, but the type variable `{}` is unresolved.\nHINT: add a type annotation to this expression.",
-                    ret_ty.to_string(),
-                    fv_name,
+                    names.ty(ret_ty),
+                    names.name(&tvs[0].name),
                 ),
                 &[&ret.source],
             ));

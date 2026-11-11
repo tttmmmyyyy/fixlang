@@ -160,7 +160,7 @@ impl ExprNode {
 
     /// Whether this expression is the parameter of a lambda written with a parameter pattern, which
     /// the lambda binds as `|#param| let pat = #param in body`.
-    pub fn is_lambda_param(&self) -> bool {
+    pub fn is_synthetic_lambda_param(&self) -> bool {
         match &*self.expr {
             Expr::Var(v) => v.name == FullName::local(PARAM_NAME),
             _ => false,

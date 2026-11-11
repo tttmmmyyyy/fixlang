@@ -167,6 +167,8 @@ pub const FIX_CAP_PARAM_PREFIX: &str = "#fixcap";
 /// The prefix of the type variable standing for the concrete type behind an opaque type. The rest of
 /// the name is the name of the opaque type's TyCon, which the type checker reads back off it.
 pub const WRAP_OPAQUE_TYVAR_PREFIX: &str = "#wrap_opaque_tyvar_";
+/// The prefix of the name of a type variable the inference creates, followed by a number (`#a3`).
+pub const INFERENCE_TYVAR_PREFIX: &str = "#a";
 /// The name of the global generated in the namespace of each value whose signature has an opaque
 /// type. It wraps the value's definition so that type inference records the concrete type behind the
 /// opaque type; instantiation then removes the applications of it.
