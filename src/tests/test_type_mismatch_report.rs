@@ -73,7 +73,7 @@ main : IO () = println(second((1, 2)).to_string);
     );
 }
 
-/// A name the program gives a type variable is not reused for one the inference created, so the
+/// A type variable the inference created skips the names the program gives type variables, so the
 /// two print apart.
 #[test]
 pub fn test_a_created_type_variable_skips_a_name_the_program_writes() {

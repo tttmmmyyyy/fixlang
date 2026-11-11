@@ -37,7 +37,7 @@ use serde_json::{json, Value};
 use std::mem;
 use std::sync::Arc;
 
-/// What the names of the type variables the inference creates start with, followed by a number.
+/// The prefix of the name of a type variable the inference creates, followed by a number (`#a3`).
 const INFERENCE_TYVAR_PREFIX: &str = "#a";
 
 /// Whether `name` is the name of a type variable the inference created.
@@ -1281,8 +1281,9 @@ impl TypeCheckContext {
                         let scm = tc.substitution.substitute_scheme(scm);
                         let mut e = e.clone();
                         tc.substitution.substitute_unification_error(&mut e);
-                        // A value whose type is all there is to it, mismatched as a whole, is
-                        // reported by the sentence on the two types alone.
+                        // When the error is the mismatch of the value's monomorphic type with
+                        // the expected type itself, the sentence naming the two types is the
+                        // whole message.
                         let with_headline =
                             !(scm.gen_vars.is_empty() && e.is_mismatch_of(&scm.ty, &expected_type));
                         let mut tvs = vec![];
@@ -1459,9 +1460,9 @@ impl TypeCheckContext {
                 let (pat, var_ty) = self.tolerate_pattern_typed(elab, pat)?;
                 let pat_ty = pat.info.type_.as_ref().unwrap().clone();
                 let bound = if bound.is_lambda_param() {
-                    // The let a lambda's parameter pattern is written as: the
-                    // parameter is checked by its own type, and a mismatch is
-                    // reported on the pattern, in the lambda's terms.
+                    // This `let` binds a lambda's parameter pattern. The parameter
+                    // gets a type of its own, and a mismatch with the pattern is
+                    // reported on the pattern, in terms of the lambda.
                     let param_ty = type_from_tyvar(self.new_tyvar_star());
                     let bound = self.unify_type_of_expr(bound, param_ty.clone())?;
                     if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&pat_ty, &param_ty))? {
@@ -1786,7 +1787,7 @@ impl TypeCheckContext {
     /// Say where each of `tvs` came from: for every type variable whose source
     /// expression is known, a sentence naming it paired with that expression's
     /// span, to hang off an error as extra source pointers. The sentences follow
-    /// the order of `tvs`, one for each variable.
+    /// the order of `tvs`, at most one for each variable.
     ///
     /// # Arguments
     /// * `names` — the names the error prints for the type variables.
@@ -1834,7 +1835,7 @@ impl TypeCheckContext {
     /// then `expected_ty` and `found_ty`, all with the current substitution
     /// applied, and a source pointer for every type variable still free in
     /// them. Where `unif_err` is the mismatch of `expected_ty` and `found_ty`
-    /// themselves, the sentence naming them is all of the message.
+    /// themselves, the message is the sentence naming them.
     fn create_type_mismatch_error(
         &self,
         expected_ty: &Arc<TypeNode>,
