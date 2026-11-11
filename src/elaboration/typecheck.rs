@@ -1856,15 +1856,15 @@ impl TypeCheckContext {
         expected_ty.free_vars_to_vec(&mut tvs);
         found_ty.free_vars_to_vec(&mut tvs);
         let names = ReportTyVars::new(&tvs);
-        let types = format!(
+        let expected_and_found = format!(
             "Expected `{}`, found `{}`.",
             names.ty(&expected_ty),
             names.ty(&found_ty),
         );
         let msg = if with_headline {
-            format!("{}\n{}", names.unification_error(&unif_err).headline(), types)
+            format!("{}\n{}", names.unification_error(&unif_err).headline(), expected_and_found)
         } else {
-            format!("Type mismatch. {}", types)
+            format!("Type mismatch. {}", expected_and_found)
         };
         let mut err = Error::from_msg_srcs(msg, &[&source]);
         err.add_srcs(self.create_tyvar_location_messages(&tvs, &names, None));
