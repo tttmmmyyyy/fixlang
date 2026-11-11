@@ -9624,7 +9624,7 @@ pub fn test_call_unimplemented_trait_method_regression_issue_43() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "`Main::Foo::foo` of type `[a : Main::Foo] a -> Std::IO ()` does not match the expected type `Std::I64 -> Std::IO ()` since `Std::I64 : Main::Foo` cannot be deduced.",
+        "`Std::I64 : Main::Foo` cannot be deduced.\n`Main::Foo::foo` of type `[a : Main::Foo] a -> Std::IO ()` does not match the expected type `Std::I64 -> Std::IO ()`.",
     );
 }
 

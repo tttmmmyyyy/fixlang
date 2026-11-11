@@ -751,6 +751,11 @@ impl TypeNode {
         }
     }
 
+    /// Whether this type is an associated type applied to its arguments, as `Item c` is.
+    pub fn is_assoc_ty(&self) -> bool {
+        matches!(self.ty, Type::AssocTy(_, _))
+    }
+
     /// Whether this type is a type constructor standing on its own, with no argument applied.
     pub fn is_tycon(&self) -> bool {
         match &self.ty {

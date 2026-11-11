@@ -11,6 +11,7 @@
 use crate::ast::expr::{hole_full_name, Expr, ExprNode};
 use crate::ast::name::FullName;
 use crate::constants::ERR_HOLE;
+use crate::elaboration::report_tyvars::ReportTyVars;
 use crate::elaboration::typecheck::TypeCheckContext;
 use crate::error::{Error, Errors};
 use std::sync::Arc;
@@ -92,24 +93,21 @@ fn visit(expr: &Arc<ExprNode>, hole_name: &FullName, tc: &TypeCheckContext, erro
 /// the message degrades to `Expected expression.` and no type-variable
 /// origin annotations are attached.
 fn report_hole(node: &Arc<ExprNode>, tc: &TypeCheckContext) -> Errors {
-    let (msg, free_tvs) = match node.type_.as_ref() {
-        Some(ty) => {
-            let mut free = vec![];
-            ty.free_vars_to_vec(&mut free);
-            (
-                format!("Expected expression of type `{}`.", ty.to_string()),
-                free,
-            )
-        }
-        None => ("Expected expression.".to_string(), vec![]),
+    let free_tvs = node
+        .type_
+        .as_ref()
+        .map_or(vec![], |ty| ty.free_vars_vec());
+    let names = ReportTyVars::new(&free_tvs);
+    let msg = match node.type_.as_ref() {
+        Some(ty) => format!("Expected expression of type `{}`.", names.ty(ty)),
+        None => "Expected expression.".to_string(),
     };
     let mut err = Error::from_msg_srcs(msg, &[&node.source]);
     err.code = Some(ERR_HOLE);
     // For each free type variable that survives in the hole's type
-    // (typically `#a0` style names when the hole is in an
-    // unconstrained context), point at the expression that originally
-    // produced that type variable so the user can see where the
-    // indeterminacy started.
-    err.add_srcs(tc.create_tyvar_location_messages(&free_tvs, None));
+    // (typically when the hole is in an unconstrained context), point
+    // at the expression that originally produced that type variable so
+    // the user can see where the indeterminacy started.
+    err.add_srcs(tc.create_tyvar_location_messages(&free_tvs, &names, None));
     Errors::from_err(err)
 }

@@ -1,0 +1,71 @@
+use crate::ast::name::Name;
+use crate::ast::types::{type_from_tyvar, Scheme, TyVar, TypeNode};
+use crate::elaboration::typecheck::{is_inference_tyvar, Substitution, UnificationErr};
+use crate::misc::{Map, Set};
+use std::sync::Arc;
+
+/// The names one error report prints for the type variables the inference created (`#a3`): `t1`,
+/// `t2`, ... in the order the report first mentions them. A name that another type variable of the
+/// report already has is skipped, so two variables of one report never print alike.
+pub struct ReportTyVars {
+    /// Replaces each type variable the inference created by one under its printed name.
+    renaming: Substitution,
+    /// The printed name of each type variable the inference created, by its own name.
+    names: Map<Name, Name>,
+}
+
+impl ReportTyVars {
+    /// Names the type variables of a report.
+    ///
+    /// # Arguments
+    /// * `vars` — every type variable the report mentions, in the order it mentions them, the ones
+    ///   a scheme generalizes included.
+    pub fn new(vars: &[Arc<TyVar>]) -> Self {
+        let taken = vars
+            .iter()
+            .filter(|tv| !is_inference_tyvar(&tv.name))
+            .map(|tv| tv.name.clone())
+            .collect::<Set<_>>();
+        let mut renaming = Substitution::default();
+        let mut names = Map::default();
+        let mut next_no = 1;
+        for tv in vars {
+            if !is_inference_tyvar(&tv.name) || names.contains_key(&tv.name) {
+                continue;
+            }
+            let name = loop {
+                let name = format!("t{}", next_no);
+                next_no += 1;
+                if !taken.contains(&name) {
+                    break name;
+                }
+            };
+            let replacement = type_from_tyvar(tv.set_name(name.clone()));
+            renaming.merge(&Substitution::single(&tv.name, replacement));
+            names.insert(tv.name.clone(), name);
+        }
+        ReportTyVars { renaming, names }
+    }
+
+    /// The name the report prints for the type variable `name`.
+    pub fn name(&self, name: &Name) -> Name {
+        self.names.get(name).unwrap_or(name).clone()
+    }
+
+    /// `ty` as the report prints it.
+    pub fn ty(&self, ty: &Arc<TypeNode>) -> String {
+        self.renaming.substitute_type(ty).to_string()
+    }
+
+    /// `scm` as the report prints it.
+    pub fn scheme(&self, scm: &Arc<Scheme>) -> String {
+        self.renaming.substitute_scheme(scm).to_string()
+    }
+
+    /// `err` with its type variables under the names the report prints.
+    pub fn unification_error(&self, err: &UnificationErr) -> UnificationErr {
+        let mut err = err.clone();
+        self.renaming.substitute_unification_error(&mut err);
+        err
+    }
+}
