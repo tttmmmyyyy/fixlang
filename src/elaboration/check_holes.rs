@@ -93,10 +93,7 @@ fn visit(expr: &Arc<ExprNode>, hole_name: &FullName, tc: &TypeCheckContext, erro
 /// the message degrades to `Expected expression.` and no type-variable
 /// origin annotations are attached.
 fn report_hole(node: &Arc<ExprNode>, tc: &TypeCheckContext) -> Errors {
-    let free_tvs = node
-        .type_
-        .as_ref()
-        .map_or(vec![], |ty| ty.free_vars_vec());
+    let free_tvs = node.type_.as_ref().map_or(vec![], |ty| ty.free_vars_vec());
     let names = ReportTyVars::new(&free_tvs);
     let msg = match node.type_.as_ref() {
         Some(ty) => format!("Expected expression of type `{}`.", names.ty(ty)),

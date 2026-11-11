@@ -1293,9 +1293,8 @@ impl TypeCheckContext {
                         tvs.append(&mut scm.all_vars());
                         expected_type.free_vars_to_vec(&mut tvs);
                         let names = ReportTyVars::new(&tvs);
-                        extra_srcs.append(&mut self.create_tyvar_location_messages(
-                            &tvs, &names, None,
-                        ));
+                        extra_srcs
+                            .append(&mut self.create_tyvar_location_messages(&tvs, &names, None));
                         let mismatch = format!(
                             "`{}` of type `{}` does not match the expected type `{}`.",
                             fullname.to_string(),
@@ -1465,7 +1464,8 @@ impl TypeCheckContext {
                     // reported on the pattern, in terms of the lambda.
                     let param_ty = type_from_tyvar(self.new_tyvar_star());
                     let bound = self.unify_type_of_expr(bound, param_ty.clone())?;
-                    if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&pat_ty, &param_ty))? {
+                    if let Err(e) = UnifOrOtherErr::extract_others(self.unify(&pat_ty, &param_ty))?
+                    {
                         if !self.error_tolerant {
                             let err = self.create_param_pattern_error(&pat, &param_ty, &ty, &e);
                             return Err(Errors::from_err(err));
@@ -1863,7 +1863,11 @@ impl TypeCheckContext {
             names.ty(&found_ty),
         );
         let msg = if with_headline {
-            format!("{}\n{}", names.unification_error(&unif_err).headline(), expected_and_found)
+            format!(
+                "{}\n{}",
+                names.unification_error(&unif_err).headline(),
+                expected_and_found
+            )
         } else {
             format!("Type mismatch. {}", expected_and_found)
         };
@@ -3444,7 +3448,11 @@ impl UnificationErr {
             UnificationErr::Disjoint(ty1, ty2) | UnificationErr::IndivisibleOpaque(ty1, ty2)
                 if !ty1.is_assoc_ty() && !ty2.is_assoc_ty() =>
             {
-                format!("`{}` and `{}` do not match.", ty1.to_string(), ty2.to_string())
+                format!(
+                    "`{}` and `{}` do not match.",
+                    ty1.to_string(),
+                    ty2.to_string()
+                )
             }
             _ => format!("`{}` cannot be deduced.", self.to_constraint_string()),
         };
@@ -3455,7 +3463,9 @@ impl UnificationErr {
     /// the two, in either order.
     pub fn is_mismatch_of(&self, ty1: &Arc<TypeNode>, ty2: &Arc<TypeNode>) -> bool {
         match self {
-            UnificationErr::Disjoint(e1, e2) => (e1 == ty1 && e2 == ty2) || (e1 == ty2 && e2 == ty1),
+            UnificationErr::Disjoint(e1, e2) => {
+                (e1 == ty1 && e2 == ty2) || (e1 == ty2 && e2 == ty1)
+            }
             UnificationErr::IndivisibleOpaque(_, _)
             | UnificationErr::Unsatisfiable(_)
             | UnificationErr::Circular(_)

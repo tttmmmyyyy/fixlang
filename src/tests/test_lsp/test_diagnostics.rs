@@ -365,7 +365,10 @@ mod tests {
             )
         );
         // `main.fix` writes `(arr, flag)` on the 4th line, from the 37th column to the 47th.
-        assert_eq!(diag["range"]["start"], json!({ "line": 3, "character": 36 }));
+        assert_eq!(
+            diag["range"]["start"],
+            json!({ "line": 3, "character": 36 })
+        );
         assert_eq!(diag["range"]["end"], json!({ "line": 3, "character": 47 }));
     }
 

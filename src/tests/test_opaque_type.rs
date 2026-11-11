@@ -2156,7 +2156,11 @@ pub fn test_opaque_impl_assoc_type_mismatch_global() {
         main : IO ();
         main = pure();
     "#;
-    test_source_fail(&source, Configuration::develop_mode(), "`Std::String` and `Std::I64` do not match.");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Std::String` and `Std::I64` do not match.",
+    );
 }
 
 /// An implementation of a member declared to return an opaque type constrained by `Iterator` whose
@@ -2202,7 +2206,11 @@ pub fn test_opaque_impl_assoc_type_mismatch_method() {
         main : IO ();
         main = pure();
     "#;
-    test_source_fail(&source, Configuration::develop_mode(), "`Std::String` and `Std::I64` do not match.");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Std::String` and `Std::I64` do not match.",
+    );
 }
 
 /// An opaque return type in a module whose `import Std::{...}` names one by one what it uses: the

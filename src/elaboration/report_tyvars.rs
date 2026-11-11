@@ -42,7 +42,11 @@ impl ReportTyVars {
             };
             let replacement = type_from_tyvar(tv.set_name(name.clone()));
             let merged = renaming.merge(&Substitution::single(&tv.name, replacement));
-            assert!(merged, "type variable `{}` named twice in one report", tv.name);
+            assert!(
+                merged,
+                "type variable `{}` named twice in one report",
+                tv.name
+            );
             names.insert(tv.name.clone(), name);
         }
         ReportTyVars { renaming, names }
