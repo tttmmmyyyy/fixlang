@@ -9,23 +9,16 @@ use std::sync::Arc;
 
 // A use of the name being searched for, told apart by what receives the name there.
 pub enum UsageType {
-    // The name is passed as an argument to a call. The first component names the function called,
-    // and is `None` where the callee is an expression rather than a name; the second is the index of
-    // the argument the name was passed as.
-    FunctionArgument(Option<FullName>, usize),
     // The name is used as a function and is called, with the number of arguments the call supplies.
     CalledAsFunction { arg_count: usize },
-    // The name is stored into a field of a struct being built. The first component names the type
-    // constructor of that struct, and the second the position of the field among the fields the
-    // type constructor declares.
-    CapturedInto(FullName, usize),
     // The name is the operand a builtin operation declaring `BuiltinOp::env_operand` applies as a
     // function.
     EnvFunctionOperand,
-    // The name stands where none of the above receives it: the bound value of a `let`, a branch of
-    // an `if` or a `match`, an element of an array literal, under a type annotation, either side of
-    // an `eval`, or another operand of a builtin operation. What holds it there passes it on whole,
-    // so the position says nothing about the name beyond its being there.
+    // The name stands where none of the above receives it: an argument of a call, a field of a
+    // struct being built, the bound value of a `let`, a branch of an `if` or a `match`, an element
+    // of an array literal, under a type annotation, either side of an `eval`, or another operand of
+    // a builtin operation. What holds it there passes it on whole, so the position says nothing
+    // about the name beyond its being there.
     Elsewhere,
 }
 
@@ -81,8 +74,8 @@ impl ExprVisitor for UsageFinder<'_> {
         expr.has_free_var(self.name)
     }
 
-    // The name standing anywhere the calls and the struct expressions below did not already take it
-    // from is held as a value there, which is what `Elsewhere` records.
+    // The name standing anywhere a call below did not already take it from as its callee is held as
+    // a value there, which is what `Elsewhere` records.
     fn start_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -118,8 +111,7 @@ impl ExprVisitor for UsageFinder<'_> {
         StartVisitResult::VisitChildren
     }
 
-    // A call records the name once for standing as the callee, and once for each argument position
-    // it is passed at, with the callee named where the callee is a name.
+    // A call records the name once for standing as the callee.
     //
     // A call of `n` arguments is written as `n` nested applications, and this reads the whole nest
     // at its outermost node, so the walk goes on into the places the nest holds rather than into the
@@ -141,38 +133,8 @@ impl ExprVisitor for UsageFinder<'_> {
         } else {
             self.visit_expr(&fun, state);
         }
-        let fun_name = if fun.is_var() {
-            Some(fun.get_var().name.clone())
-        } else {
-            None
-        };
-        for (i, arg) in args.iter().enumerate() {
-            if self.is_the_name(arg) {
-                self.add_usage(UsageType::FunctionArgument(fun_name.clone(), i));
-            } else {
-                self.visit_expr(arg, state);
-            }
-        }
-        StartVisitResult::Return
-    }
-
-    // A struct being built records the name once for each field it is stored into, by the position
-    // that field holds among the fields the type constructor declares.
-    fn start_visit_make_struct(
-        &mut self,
-        expr: &Arc<ExprNode>,
-        state: &mut VisitState,
-    ) -> StartVisitResult {
-        if self.shadowed(state) {
-            return StartVisitResult::VisitChildren;
-        }
-        let (tycon, fields) = expr.destructure_make_struct().unwrap();
-        for (position, (_, _, value)) in fields.iter().enumerate() {
-            if self.is_the_name(value) {
-                self.add_usage(UsageType::CapturedInto(tycon.name.clone(), position));
-            } else {
-                self.visit_expr(value, state);
-            }
+        for arg in args.iter() {
+            self.visit_expr(arg, state);
         }
         StartVisitResult::Return
     }
@@ -219,19 +181,8 @@ mod tests {
         let arg_count = 4;
         for at_index in 0..arg_count {
             let expr = call_with_name_at(&func, arg_count, at_index, &name);
-            let indices = run(&expr, &name)
-                .iter()
-                .map(|usage| match usage {
-                    UsageType::FunctionArgument(callee, index) => {
-                        assert_eq!(callee.as_ref(), Some(&func));
-                        *index
-                    }
-                    _ => panic!("a name standing only as an argument is recorded only as one"),
-                })
-                .collect::<Vec<_>>();
-            assert_eq!(
-                indices,
-                vec![at_index],
+            assert!(
+                matches!(run(&expr, &name).as_slice(), [UsageType::Elsewhere]),
                 "an argument at index {} of a call of {} arguments",
                 at_index,
                 arg_count
@@ -246,7 +197,7 @@ mod tests {
 
     /// The walk records one use per place the name is written, at every position an expression has,
     /// because a caller putting an expression where the name stands puts it in every one of them.
-    /// The positions no call and no struct expression takes the name from record it as held.
+    /// The positions other than the callee of a call record it as held.
     #[test]
     fn every_position_records_one_use() {
         let name = FullName::from_strs(&["Main"], "f");
@@ -256,6 +207,19 @@ mod tests {
         let cases: Vec<(&str, Arc<ExprNode>, usize)> = vec![
             ("the name itself", here(), 1),
             ("another name", other(), 0),
+            (
+                "an argument of a call",
+                expr_app(other(), vec![here()], None),
+                1,
+            ),
+            (
+                "a field of a struct being built",
+                expr_make_struct(
+                    tycon(FullName::from_strs(&["Main"], "T")),
+                    vec![("a".to_string(), here()), ("b".to_string(), other())],
+                ),
+                1,
+            ),
             (
                 "the body of a lambda",
                 expr_abs(vec![binder("x")], here(), None),
@@ -351,36 +315,19 @@ mod tests {
         }
     }
 
-    /// A call takes the name from the callee position and from each argument position, so those
-    /// record what the call does with it rather than that it is held.
+    /// A call takes the name from the callee position, and records it there once for the whole
+    /// call, with the arguments the call supplies.
     #[test]
-    fn a_call_records_its_callee_once_and_each_argument_once() {
+    fn a_call_records_its_callee_once() {
         let func = FullName::from_strs(&["Main"], "f");
         let arg_count = 4;
         let call = call_with_name_at(&func, arg_count, 1, &FullName::from_strs(&["Main"], "x"));
-        let callee_usages = run(&call, &func);
         assert!(
             matches!(
-                callee_usages.as_slice(),
+                run(&call, &func).as_slice(),
                 [UsageType::CalledAsFunction { arg_count: n }] if *n == arg_count
             ),
             "a callee is recorded once for the whole call, with the arguments it supplies"
-        );
-        let struct_ty = tycon(FullName::from_strs(&["Main"], "T"));
-        let held = FullName::from_strs(&["Main"], "x");
-        let made = expr_make_struct(
-            struct_ty.clone(),
-            vec![
-                ("a".to_string(), expr_var(held.clone(), None)),
-                ("b".to_string(), expr_var(func.clone(), None)),
-            ],
-        );
-        assert!(
-            matches!(
-                run(&made, &held).as_slice(),
-                [UsageType::CapturedInto(name, 0)] if *name == struct_ty.name
-            ),
-            "a name stored into a field is recorded at the field it is stored in"
         );
     }
 }

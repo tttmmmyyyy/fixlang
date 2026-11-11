@@ -1,8 +1,10 @@
 /*
 # Overview
 
-`Pulls let` transformation.
-This transformation is used to increase the number of places where the decapturing of `closure_specialization` can be applied.
+`Pull let` transformation. It floats a `let` outward, out of the bound expression of another `let`
+and out of the function position of an application, and it binds an argument that is not a variable
+to a `let` of its own. `collapse_constructions` runs it between its rounds, which brings a
+construction that sits under `let`s out to the chain of `let`s its reader stands in.
 
 # Transformation
 
@@ -61,49 +63,6 @@ let {pat'} = {expr0};
 ```
 
 where `{pat'}` and `{expr1'}` are the same as `{pat}` and `{expr1}`, but with all variables in `{pat}` renamed to avoid conflicts with free variables in `{expr2}`.
-
-# Expected Effects
-
-(1)
-As described in the comment for `closure_specialization`, the following code can be optimized with decapturing:
-
-```
-let f = |x| x + n;
-```
-
-On the other hand, decapturing cannot be applied to the following code:
-
-```
-let f = (
-    let n = m;
-    |x| x + n
-);
-```
-
-After applying the pull-let transformation (1), the second code can be transformed into a form that decapturing applies to.
-
-(2) and (3)
-The following code can be optimized with decapturing
-
-```
-let f = |i, s| s + n;
-it.fold(s0, f)
-```
-
-into
-
-```
-let f = #Cap { n : n };
-it.fold#spec(s0, f)
-```
-
-On the other hand, decapturing cannot be applied to the following code:
-
-```
-it.fold(s0, |i, s| s + n)
-```
-
-After applying the pull-let transformation (2) and (3), the second code can be transformed into a form that decapturing applies to.
 
 # Evaluation order
 

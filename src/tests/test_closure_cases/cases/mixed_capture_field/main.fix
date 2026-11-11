@@ -1,9 +1,7 @@
 module Main;
 
-// One closure reached three ways from inside the lambda that captures it: called there, handed to a
-// function that calls it, and handed to a function nothing reaches a direct call through. Narrowing
-// the capture field has to serve the first two and leave the third a closure, so the narrowed value
-// has to wrap back into one at that third place.
+// One function reached three ways from inside the lambda that captures it: called there, handed to
+// a function that calls it, and handed to a function that puts it into an array before calling it.
 
 // Recursive, so that they stay functions of their own rather than being expanded into their callers.
 terminal : (I64 -> I64) -> I64 -> I64;

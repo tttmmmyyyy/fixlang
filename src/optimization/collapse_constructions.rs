@@ -4,8 +4,7 @@
 //! `let T { g : a } = s`, where `s` was built as `T { g : x }`, binds `a` to `x`; a `match` on a
 //! union variant the walk has seen built runs the arm that variant selects. Doing that here leaves
 //! the construction with one fewer reader, and it hands the stages below a name they can trace to
-//! the value it holds — which a name bound by a pattern is not, and which is what decides whether
-//! `closure_specialization` recognizes the function an iterator carries.
+//! the value it holds, which a name bound by a pattern is not.
 //!
 //! Three shapes stand between a construction and its reader, and the pass takes each away:
 //!
@@ -207,7 +206,7 @@ impl<'a> Collapser<'a> {
 
     /// A name for a field value, which nothing else in the global binds.
     ///
-    /// The global can already hold names of this shape, bound by an earlier run of this pass, so
+    /// A name of this shape is not reserved to this walk, and the global can already bind one, so
     /// the count alone does not make a name fresh.
     fn fresh_field_name(&mut self) -> FullName {
         loop {

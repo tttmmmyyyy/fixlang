@@ -49,11 +49,11 @@ use super::rename::{
     rename_match_pattern_avoiding,
 };
 use crate::ast::{
-    name::FullName,
     expr::{
         expr_eval_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var, var_var,
         AppSourceCodeOrderType, Expr, ExprNode,
     },
+    name::FullName,
     pattern::PatternNode,
     traverse::{EndVisitResult, ExprVisitor, VisitState},
 };

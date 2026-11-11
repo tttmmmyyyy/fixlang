@@ -131,19 +131,6 @@ pub const PUNCHED_TYPE_SYMBOL: &str = "#PunchedAt";
 /// The name standing for the captured environment of a lambda. Every lambda binds it implicitly, so
 /// it is the one local name that the free variables of an expression leave out.
 pub const CAP_NAME: &str = "#CAP";
-/// The name of the parameter through which a decaptured lambda receives its capture list.
-pub const CLOSURE_CAP_NAME: &str = "#closure_cap";
-/// The suffix, followed by a counter, of the global function a decaptured lambda becomes.
-pub const CLOSURE_LAM_SUFFIX: &str = "#closure_lam";
-/// The suffix, followed by a hash of which argument received which decaptured lambda, of a
-/// function specialized on the lambdas passed to it.
-pub const CLOSURE_SPEC_SUFFIX: &str = "#closure_spec";
-/// The suffix of the local binding holding the call of a decaptured lambda, which a builtin
-/// expression reads in place of the variable that held the lambda's capture list.
-pub const CLOSURE_CALL_LAM_SUFFIX: &str = "#closure_call_lam";
-/// The prefix of the type constructor naming a capture list that closure specialization builds. A
-/// parameter of this type is a function whose identity the receiving body knows.
-pub const CAP_LIST_PREFIX: &str = "#CapList";
 /// The suffix, followed by a hash of how the lambda sets it is made for are represented, of a copy
 /// of a symbol or of a type constructor that lambda set specialization makes.
 pub const LS_COPY_SUFFIX: &str = "#ls";
@@ -184,9 +171,6 @@ pub const DECAPTURE_PREFIX: &str = "#decapture";
 /// The prefix of the name `collapse_constructions` binds a field value to, so that a reader of the
 /// struct is given a name rather than the expression that produced the value.
 pub const BOUND_FIELD_PREFIX: &str = "#field";
-/// The suffix, followed by a counter, of the global function taking one argument per field of a
-/// struct argument of the function it is named after.
-pub const SPLIT_ARG_SUFFIX: &str = "#split_arg";
 /// The suffix, followed by a counter, of the global function the argument of an application of
 /// `Std::fix` is lifted to.
 pub const FIX_DEFUNCT_SUFFIX: &str = "#fix_defunct";

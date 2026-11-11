@@ -145,7 +145,10 @@ impl<'p> Check<'p> {
                     self.expr(arg, at, scope);
                 }
                 let expected = if ty(func).is_func() {
-                    type_func(args.iter().map(|arg| ty(arg).clone()).collect(), ty(e).clone())
+                    type_func(
+                        args.iter().map(|arg| ty(arg).clone()).collect(),
+                        ty(e).clone(),
+                    )
                 } else {
                     args.iter()
                         .rev()

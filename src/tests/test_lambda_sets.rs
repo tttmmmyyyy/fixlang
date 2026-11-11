@@ -592,8 +592,8 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
 mod dump_tests {
     use super::{chain_source, CHAIN_DEPTH, CHAIN_OUTPUT};
     use crate::constants::{
-        LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS,
-        MAX_LS_UNION_VARIANTS,
+        LS_CAP_PREFIX, LS_COPY_SUFFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX,
+        MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS,
     };
     use crate::misc::Set;
     use crate::tests::test_util::{
@@ -982,11 +982,11 @@ mod dump_tests {
     /// What `NESTED_ITERATORS_SOURCE` prints: the sum of `3 * i + 1` over `0..9`.
     const NESTED_ITERATORS_OUTPUT: &str = "145";
 
-    /// The functions an iterator carries in its fields reach the fold through the iterator's type,
-    /// so the fold takes the capture struct of each, three with its own operation, and calls each
-    /// by name.
+    /// The functions an iterator carries in its fields reach the fold through the iterator's type:
+    /// the fold takes the capture struct of its own operation, and an iterator whose type is a copy
+    /// of `MapIterator` made for each of the two functions the chain carries. It calls each by name.
     #[test]
-    fn test_a_fold_takes_the_functions_a_chain_of_iterators_carries_as_capture_structs() {
+    fn test_a_fold_takes_the_functions_a_chain_of_iterators_carries_through_its_types() {
         let dump = build_run_and_read_rc_ir(
             NESTED_ITERATORS_SOURCE,
             "max",
@@ -994,16 +994,28 @@ mod dump_tests {
             "a fold over two maps",
         );
         assert_calls_by_name(&dump, "Std::Iterator::fold");
-        let most = rc_ir_function_bodies(&dump, "Std::Iterator::fold")
+        let map_iterator_copy = format!("Std::Iterator::MapIterator{}", LS_COPY_SUFFIX);
+        let takes_all_three = rc_ir_function_bodies(&dump, "Std::Iterator::fold")
             .iter()
-            .map(|body| capture_struct_parameters(header(body)).len())
-            .max()
-            .unwrap();
+            .any(|body| {
+                let params = parameters(header(body));
+                let mut copies = params
+                    .split(|c: char| c.is_whitespace() || c == ',' || c == '(' || c == ')')
+                    .filter(|token| token.starts_with(&map_iterator_copy))
+                    .collect::<Vec<_>>();
+                copies.sort();
+                copies.dedup();
+                capture_struct_parameters(header(body)).len() == 1 && copies.len() == 2
+            });
         assert!(
-            most >= 3,
-            "the fold should take the capture structs of the two functions the chain carries and \
-             of its own operation, and the most one of its functions takes is {}",
-            most
+            takes_all_three,
+            "a fold should take the capture struct of its own operation and an iterator of two \
+             copies of `MapIterator`, one for each function the chain carries:\n{}",
+            rc_ir_function_bodies(&dump, "Std::Iterator::fold")
+                .iter()
+                .map(|body| header(body))
+                .collect::<Vec<_>>()
+                .join("\n")
         );
     }
 

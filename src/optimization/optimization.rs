@@ -1,8 +1,7 @@
 use super::{
-    closure_specialization, collapse_constructions, constant_array_literals,
-    dead_symbol_elimination, decapture_scope_functions, defunctionalize_fix, inline, inline_local,
-    lambda_set, optimize_act, remove_tyanno, simplify_symbol_names, skip_eval, split_struct_args,
-    uncurry, unwrap_newtype,
+    collapse_constructions, constant_array_literals, dead_symbol_elimination,
+    decapture_scope_functions, defunctionalize_fix, inline, inline_local, lambda_set, optimize_act,
+    remove_tyanno, simplify_symbol_names, skip_eval, uncurry, unwrap_newtype,
 };
 use crate::{ast::program::Program, configuration::Configuration, tool::stopwatch::StopWatch};
 
@@ -70,8 +69,8 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     );
 
     // Defunctionalize `Std::fix` into directly self-recursive global functions. It runs before
-    // inlining and closure specialization, which would otherwise rewrite the `fix` argument out of
-    // the literal lambda form this pass matches; uncurrying (later) then turns each self-call into a
+    // inlining and the lambda sets, which would otherwise rewrite the `fix` argument out of the
+    // literal lambda form this pass matches; uncurrying (later) then turns each self-call into a
     // direct call that LLVM folds into a loop.
     run_pass(
         prg,
@@ -105,13 +104,12 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| uncurry::run(prg, config.num_worker_thread),
     );
 
-    // Specialize the program by its lambda sets, ahead of the passes that specialize closures,
-    // which go on to work on the values this leaves closures. With `emit_symbols`, write the sets
-    // to a dump named after the step the program is at.
+    // Specialize the program by its lambda sets. With `emit_symbols`, write the sets to a dump named
+    // after the step the program is at.
     run_pass(
         prg,
         config,
-        config.enable_closure_specialization(),
+        config.enable_lambda_set_specialization(),
         "lambda_set",
         |prg| {
             let dump_step = config
@@ -126,47 +124,14 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         },
     );
 
-    // Give a function that takes a struct a twin taking one argument per field of it, so that a
-    // closure a field holds becomes an argument the stages after it can follow.
-    //
-    // It runs after inlining because that is what puts a combinator's `advance` into the function
-    // consuming it, and a body that never takes its struct argument apart offers nothing to split.
+    // Inline again, which puts the lambdas the lambda sets lift to global functions into the
+    // places that call them by name.
     run_pass(
         prg,
         config,
-        config.enable_split_struct_args(),
-        "split_struct_args",
-        |prg| split_struct_args::run(prg, config.num_worker_thread),
-    );
-
-    // Inline again, which is what puts the two lines a split leaves behind into the callers: there
-    // the struct a caller builds meets the pattern taking it apart, and the two cancel. The twin is
-    // left where it is, being either self-recursive or as large as the body it copies.
-    run_pass(
-        prg,
-        config,
-        config.enable_split_struct_args() && config.enable_inline_optimization(),
+        config.enable_lambda_set_specialization() && config.enable_inline_optimization(),
         "inline",
         |prg| inline::run(prg, config.develop_mode, config.num_worker_thread),
-    );
-
-    // Read every construction the code taking it apart can see. That is what turns the two lines a
-    // split leaves behind into the fields handed over one by one, and what carries the function an
-    // iterator holds through the `Option` its `advance` builds.
-    run_pass(
-        prg,
-        config,
-        config.enable_collapse_constructions(),
-        "collapse_constructions",
-        |prg| collapse_constructions::run(prg, config.num_worker_thread),
-    );
-
-    run_pass(
-        prg,
-        config,
-        config.enable_closure_specialization(),
-        "closure_specialization",
-        |prg| closure_specialization::run(prg, config.verbose, config.num_worker_thread),
     );
 
     // Move the capture struct of the function given to a scope op such as
@@ -200,17 +165,17 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     )
     .or(uncurried_funcs);
 
-    // Inline the local functions once more. Specializing a closure puts the body of the function a
-    // caller passed into the caller, so a body answering with a lambda leaves an application whose
-    // function is an `if`, or a name bound to one, and the lambda of the branch taken is built at
-    // run time.
+    // Inline the local functions once more. Inlining the lambdas the lambda sets lift puts the body
+    // of the function a caller passed into the caller, so a body answering with a lambda leaves an
+    // application whose function is an `if`, or a name bound to one, and the lambda of the branch
+    // taken is built at run time.
     //
     // It runs below uncurrying because that is what brings the application and the `if` into one
     // scope: above it, the application sits inside a lambda the `if` is outside of. Uncurrying's eta
     // expansion closes that gap, leaving the application where the name bound to the `if` is read
     // first. `let_elimination` then moves the `if` to the application, and `application_inlining`
     // pushes the application into its branches.
-    let inline_local_after_uncurry = config.enable_closure_specialization()
+    let inline_local_after_uncurry = config.enable_lambda_set_specialization()
         && config.enable_uncurry_optimization()
         && config.enable_inline_local_optimization();
     run_pass(
