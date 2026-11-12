@@ -582,6 +582,36 @@ main = (
         }
     }
 
+    /// A global function whose body is a lambda depends on no set of its own type: it is the
+    /// symbol's function, built nowhere as a value, so the sets it is put into beside other lambdas
+    /// leave its body as it is, and one copy of it serves them all.
+    #[test]
+    fn test_a_global_function_put_into_several_sets_depends_on_none_of_them() {
+        let prg = program_of(
+            r#"
+module Main;
+
+g : I64 -> I64;
+g = |x| x * 3 + 1;
+
+main : IO ();
+main = (
+    let n = *get_args.map(|args| args.@size);
+    let a = if n > 2 { g } else { |x| x + 1 };
+    let b = if n > 3 { g } else { |x| x + 2 };
+    println((a(1) + b(2)).to_string)
+);
+"#,
+        );
+        let inf = Inferred::new(&prg);
+        let (c, _) = inf.component_of("g");
+        assert_eq!(
+            inf.analysis.components[c].body_params,
+            Vec::<usize>::new(),
+            "the body of `g` depends on parameters of its component"
+        );
+    }
+
     /// The source of a chain of `depth` symbols over `both`, which builds a value from two: each
     /// symbol of the chain refers twice to the one below. With `of_functions` the symbols are
     /// functions of a `P` passing it down, otherwise global values. `both` and each function of
