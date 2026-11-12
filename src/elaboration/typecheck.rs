@@ -1292,7 +1292,7 @@ impl TypeCheckContext {
                         let mut tvs = vec![];
                         scm.free_vars_to_vec(&mut tvs);
                         expected_type.free_vars_to_vec(&mut tvs);
-                        self.create_mismatch_report(e, whole, tvs, &ei.source, |names, _| {
+                        self.create_mismatch_report(e, whole, tvs, &ei.source, |names| {
                             format!(
                                 "`{}` of type `{}` does not match the expected type `{}`.",
                                 fullname.to_string(),
@@ -1787,15 +1787,14 @@ impl TypeCheckContext {
     /// * `body_vars` — the type variables `body` prints, in the order it
     ///   prints them, apart from those a scheme it prints generalizes.
     /// * `body` — writes the text after the headline from the names the
-    ///   report gives the type variables, and is told whether the headline
-    ///   opens the message.
+    ///   report gives the type variables.
     fn create_mismatch_report(
         &self,
         unif_err: &UnificationErr,
         whole: Option<(&Arc<TypeNode>, &Arc<TypeNode>)>,
         body_vars: Vec<Arc<TyVar>>,
         source: &Option<Span>,
-        body: impl FnOnce(&ReportTyVarNames, bool) -> String,
+        body: impl FnOnce(&ReportTyVarNames) -> String,
     ) -> Error {
         let with_headline = !whole.is_some_and(|(ty1, ty2)| unif_err.is_mismatch_of(ty1, ty2));
         let mut tvs = vec![];
@@ -1804,7 +1803,7 @@ impl TypeCheckContext {
         }
         tvs.extend(body_vars);
         let names = ReportTyVarNames::new(&tvs);
-        let body = body(&names, with_headline);
+        let body = body(&names);
         let msg = if with_headline {
             format!(
                 "{}\n{}",
@@ -1895,17 +1894,12 @@ impl TypeCheckContext {
             Some((&expected_ty, &found_ty)),
             tvs,
             source,
-            |names, with_headline| {
-                let expected_and_found = format!(
+            |names| {
+                format!(
                     "Expected `{}`, found `{}`.",
                     names.ty(&expected_ty),
                     names.ty(&found_ty),
-                );
-                if with_headline {
-                    expected_and_found
-                } else {
-                    format!("Type mismatch. {}", expected_and_found)
-                }
+                )
             },
         )
     }
@@ -1934,7 +1928,7 @@ impl TypeCheckContext {
             Some((&pat_ty, &param_ty)),
             tvs,
             &pat.info.source,
-            |names, _| {
+            |names| {
                 format!(
                     "This pattern matches a value of type `{}`, but the parameter of the lambda has type `{}`.\nThe lambda is expected to have type `{}`.",
                     names.ty(&pat_ty),

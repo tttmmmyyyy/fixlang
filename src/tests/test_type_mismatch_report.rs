@@ -133,7 +133,7 @@ main : IO () = (
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        ": Type mismatch. Expected `Std::String`, found `Std::I64`.\n",
+        ": Expected `Std::String`, found `Std::I64`.\n",
     );
 }
 
