@@ -26,15 +26,15 @@ main : IO () = println(decode(5, 3).to_string);
 "##;
 
 /// A parameter pattern that does not match the parameter is reported on the pattern, with the
-/// pattern's type and the parameter's, and the type the lambda is expected to have from that
-/// parameter on, which shows the parameters the lambda is missing.
+/// pattern's type and the parameter's, and the type the lambda is expected to have, which shows the
+/// parameters the lambda is missing.
 #[test]
 pub fn test_a_parameter_pattern_mismatch_names_the_pattern_and_the_lambda_type() {
     test_source_fail(
         PARAM_PATTERN_ON_FOLD_ELEMENT,
         Configuration::develop_mode(),
         ": This pattern matches a value of type `(#1, #2)`, but the parameter of the lambda has type `Std::I64`.\n\
-         From this parameter on, the lambda is expected to have type `Std::I64 -> (Std::Array #3, Std::I64) -> (Std::Array #3, Std::I64)`.",
+         The lambda is expected to have type `Std::I64 -> (Std::Array #3, Std::I64) -> (Std::Array #3, Std::I64)`.",
     );
     test_source_fail(
         PARAM_PATTERN_ON_FOLD_ELEMENT,

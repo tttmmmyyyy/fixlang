@@ -1913,9 +1913,9 @@ impl TypeCheckContext {
     /// Build the error reported where a lambda's parameter pattern `pat` does
     /// not match the type `param_ty` the lambda takes there, unifying the two
     /// having failed with `unif_err`. It names the pattern's type and the
-    /// parameter's, then the type the lambda is expected to have from this
-    /// parameter on, whose result is `body_ty`, after the headline of
-    /// `unif_err` where that error lies inside the two types.
+    /// parameter's, then the type the lambda is expected to have, whose result
+    /// is `body_ty`, after the headline of `unif_err` where that error lies
+    /// inside the two types.
     fn create_param_pattern_error(
         &self,
         pat: &Arc<PatternNode>,
@@ -1936,7 +1936,7 @@ impl TypeCheckContext {
             &pat.info.source,
             |names, _| {
                 format!(
-                    "This pattern matches a value of type `{}`, but the parameter of the lambda has type `{}`.\nFrom this parameter on, the lambda is expected to have type `{}`.",
+                    "This pattern matches a value of type `{}`, but the parameter of the lambda has type `{}`.\nThe lambda is expected to have type `{}`.",
                     names.ty(&pat_ty),
                     names.ty(&param_ty),
                     names.ty(&lambda_ty),
