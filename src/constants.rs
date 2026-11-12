@@ -213,7 +213,7 @@ pub const MAX_UNION_VARIANTS: usize = 1 << UNION_TAG_BITS;
 /// capturing the one before lays out twice as many at each step. The passes of the RC IR walk a type
 /// once per capture struct it lays out (#1008), so without the bound their time doubles at each step
 /// of such a chain. The bound can go once those passes walk a type in time linear in its declaration.
-pub const MAX_LS_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 10;
+pub const MAX_LS_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 6;
 /// How many classes the elements of a lambda set represented by a union may make (lambda set
 /// specialization), which is how many variants that union may have. A set past it is represented
 /// by closures.
