@@ -934,6 +934,18 @@ impl References {
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// The object these act on, where they are one reference of one object.
+    ///
+    /// # Examples
+    /// References holding one reference of `a` give `a`. One holding two of `a`, or one of `a` and
+    /// one of `b`, give `None`.
+    pub(crate) fn sole_reference(&self) -> Option<&VarPath> {
+        match self.0.iter().collect::<Vec<_>>().as_slice() {
+            [(object, 1)] => Some(object),
+            _ => None,
+        }
+    }
 }
 
 /// The references an operation on the subtree of `v` that `path` names acts on: the reference each

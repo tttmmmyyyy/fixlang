@@ -489,6 +489,53 @@ fn for_each_node_inner(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
     }
 }
 
+/// `node` with its continuation replaced by what `f` makes of it. A `Ret` has no continuation and
+/// comes back as it is.
+pub(crate) fn map_continuation(
+    node: &RcExprNode,
+    f: impl FnOnce(&RcExprNode) -> RcExprNode,
+) -> RcExprNode {
+    let expr = match node.expr.as_ref() {
+        RcExpr::Let(x, rhs, k) => RcExpr::Let(x.clone(), rhs.clone(), f(k)),
+        RcExpr::Retain(v, path, state, k) => RcExpr::Retain(v.clone(), path.clone(), *state, f(k)),
+        RcExpr::Release(v, path, state, k) => {
+            RcExpr::Release(v.clone(), path.clone(), *state, f(k))
+        }
+        RcExpr::Destructure(container, fields, state, k) => {
+            RcExpr::Destructure(container.clone(), fields.clone(), *state, f(k))
+        }
+        RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), f(k)),
+        RcExpr::Ret(_) => return node.clone(),
+    };
+    RcExprNode {
+        expr: Arc::new(expr),
+        source: node.source.clone(),
+    }
+}
+
+/// `node` with each node right under it replaced by what `f` makes of it: the body of each arm of
+/// the `Match` it binds, if it binds one, and then its continuation.
+pub(crate) fn map_children(
+    node: &RcExprNode,
+    mut f: impl FnMut(&RcExprNode) -> RcExprNode,
+) -> RcExprNode {
+    let node = match node.expr.as_ref() {
+        RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => RcExprNode {
+            expr: Arc::new(RcExpr::Let(
+                x.clone(),
+                RcRhs::Match(
+                    scrutinee.clone(),
+                    arms.iter().map(|arm| arm.with_body(f(&arm.body))).collect(),
+                ),
+                k.clone(),
+            )),
+            source: node.source.clone(),
+        },
+        _ => node.clone(),
+    };
+    map_continuation(&node, f)
+}
+
 /// Visit every variable `node` binds or reads, the payload of every arm of every `Match` included.
 ///
 /// A variable carries the type of the value bound to it, so this is also the walk over the types a

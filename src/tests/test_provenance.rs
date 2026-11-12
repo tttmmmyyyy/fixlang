@@ -8,7 +8,8 @@
 #[cfg(test)]
 mod integration_tests {
     use crate::tests::test_util::{
-        build_project_and_read_rc_ir, copy_dir_recursive, rc_ir_callee_of,
+        build_project_and_read_rc_ir, build_project_run_and_read_rc_ir, copy_dir_recursive,
+        rc_ir_callee_of,
     };
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
@@ -1112,6 +1113,42 @@ mod integration_tests {
             "the checked and the elided set should live in different clones of the loop body, but \
              a function holds both:\n{}",
             dump
+        );
+    }
+
+    /// Verifies that a retain only one path of a loop body needs is moved onto that path. The body
+    /// takes its captures apart at the top, so the tree it captured is retained there for the
+    /// capture handed on to the next iteration; the path that starts again from the root hands that
+    /// reference on, and the paths that stop or go on down release it. On those paths the retain and
+    /// the release do nothing between them, and they go together.
+    #[test]
+    fn test_retain_sinks_to_the_path_consuming_it() {
+        let (_temp_dir, project_dir) = setup_test_env("sink_retain");
+        let dump = build_project_run_and_read_rc_ir(&project_dir, "max", "7");
+
+        let sig = dump
+            .lines()
+            .find(|l| l.starts_with("fn Std::loop#") && l.contains("LsCap@walk"))
+            .unwrap_or_else(|| panic!("no copy of `loop` runs the body of `walk`:\n{}", dump));
+        let body: Vec<&str> = dump
+            .lines()
+            .skip_while(|l| *l != sig)
+            .skip(1)
+            .take_while(|l| !l.is_empty())
+            .collect();
+        let retains: Vec<usize> = (0..body.len())
+            .filter(|&i| body[i].trim_start().starts_with("retain "))
+            .collect();
+        assert_eq!(
+            retains.len(),
+            1,
+            "the loop body should retain the tree once, on the path starting again from the root:\n{}",
+            body.join("\n")
+        );
+        assert!(
+            body[retains[0] + 1].contains("= Std::loop#"),
+            "the retain should stand right before the call starting the next iteration:\n{}",
+            body.join("\n")
         );
     }
 }
