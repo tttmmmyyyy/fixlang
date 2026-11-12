@@ -1,5 +1,5 @@
 //! How a type error reads: the types that do not match, or the constraint that cannot be deduced,
-//! open the report, and the type variables the inference created are printed as `t1`, `t2`, ... in
+//! open the report, and the type variables the inference created are printed as `#1`, `#2`, ... in
 //! the order the report mentions them.
 //!
 //! An expected text that starts with `: ` is matched right after the label `error`, so it pins the
@@ -33,13 +33,13 @@ pub fn test_a_parameter_pattern_mismatch_names_the_pattern_and_the_lambda_type()
     test_source_fail(
         PARAM_PATTERN_ON_FOLD_ELEMENT,
         Configuration::develop_mode(),
-        ": This pattern matches a value of type `(t1, t2)`, but the parameter of the lambda has type `Std::I64`.\n\
-         From this parameter on, the lambda is expected to have type `Std::I64 -> (Std::Array t3, Std::I64) -> (Std::Array t3, Std::I64)`.",
+        ": This pattern matches a value of type `(#1, #2)`, but the parameter of the lambda has type `Std::I64`.\n\
+         From this parameter on, the lambda is expected to have type `Std::I64 -> (Std::Array #3, Std::I64) -> (Std::Array #3, Std::I64)`.",
     );
     test_source_fail(
         PARAM_PATTERN_ON_FOLD_ELEMENT,
         Configuration::develop_mode(),
-        "`t1` is the type for `arr`.",
+        "`#1` is the type for `arr`.",
     );
 }
 
@@ -69,31 +69,7 @@ main : IO () = println(second((1, 2)).to_string);
         source,
         Configuration::develop_mode(),
         ": `Std::String` and `Std::I64` do not match.\n\
-         This pattern matches a value of type `(Std::String, t1)`, but the parameter of the lambda has type `(Std::I64, Std::I64)`.",
-    );
-}
-
-/// A type variable the inference created skips the names the program gives type variables, so the
-/// two print apart.
-#[test]
-pub fn test_a_created_type_variable_skips_a_name_the_program_writes() {
-    let source = r##"
-module Main;
-
-trait t1 : Foo {
-    foo : t1 -> IO ();
-}
-
-main : IO () = (
-    let x = [];
-    x.foo
-);
-"##;
-    test_source_fail(
-        source,
-        Configuration::develop_mode(),
-        ": `Std::Array t2 : Main::Foo` cannot be deduced.\n\
-         `Main::Foo::foo` of type `[t1 : Main::Foo] t1 -> Std::IO ()` does not match the expected type `Std::Array t2 -> Std::IO ()`.",
+         This pattern matches a value of type `(Std::String, #1)`, but the parameter of the lambda has type `(Std::I64, Std::I64)`.",
     );
 }
 
@@ -196,7 +172,7 @@ main : IO () = (
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        ": Cannot infer the type of this pattern: inferred as `Std::Array t1`, but the type variable `t1` is unresolved.",
+        ": Cannot infer the type of this pattern: inferred as `Std::Array #1`, but the type variable `#1` is unresolved.",
     );
 }
 
@@ -215,24 +191,24 @@ main : IO () = (
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        ": Expected expression of type `t1`.",
+        ": Expected expression of type `#1`.",
     );
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        "`t1` is the type for `?`.",
+        "`#1` is the type for `?`.",
     );
 }
 
 /// A type variable of the expected type is printed under one name in every line of a report
-/// listing the values of a name, also where one value's type writes the name `t1` itself.
+/// listing the values of a name.
 #[test]
-pub fn test_a_listed_value_writing_a_type_variable_name_leaves_the_expected_type_named_alike() {
+pub fn test_a_type_variable_of_the_expected_type_is_named_alike_in_every_listed_line() {
     let source = r##"
 module Main;
 
-trait t1 : Foo {
-    describe : t1 -> String;
+trait a : Foo {
+    describe : a -> String;
 }
 
 namespace A {
@@ -240,7 +216,7 @@ namespace A {
 }
 
 namespace B {
-    f : [t1 : Foo] t1 -> String = |x| x.describe;
+    f : [a : Foo] a -> String = |x| x.describe;
 }
 
 main : IO () = (
@@ -251,31 +227,9 @@ main : IO () = (
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        ": No value named `f` matches the expected type `Std::Array t2 -> Std::String`.\n\
-         - (1) `Main::A::f` of type `Std::I64 -> Std::String`: `Std::I64` and `Std::Array t2` do not match.\n\
-         - (2) `Main::B::f` of type `[t1 : Main::Foo] t1 -> Std::String`: `Std::Array t2 : Main::Foo` cannot be deduced.",
-    );
-}
-
-/// A type variable the inference created is not named after a type variable of the signature of
-/// the value being checked, which the program has in scope at the report, also where the report
-/// prints no type of that signature.
-#[test]
-pub fn test_a_created_type_variable_skips_a_name_the_signature_holds() {
-    let source = r##"
-module Main;
-
-describe : [t1 : ToString] t1 -> String = |x| (
-    let n : I64 = [?].@size;
-    x.to_string + n.to_string
-);
-
-main : IO () = println(describe(1));
-"##;
-    test_source_fail(
-        source,
-        Configuration::develop_mode(),
-        ": Expected expression of type `t2`.",
+        ": No value named `f` matches the expected type `Std::Array #1 -> Std::String`.\n\
+         - (1) `Main::A::f` of type `Std::I64 -> Std::String`: `Std::I64` and `Std::Array #1` do not match.\n\
+         - (2) `Main::B::f` of type `[a : Main::Foo] a -> Std::String`: `Std::Array #1 : Main::Foo` cannot be deduced.",
     );
 }
 
@@ -298,11 +252,7 @@ main : IO () = println(h(1).to_string);
         Configuration::develop_mode(),
         "`Std::Option::is_some` of type `Std::Option a -> Std::Bool` does not match the expected type `Std::String`.",
     );
-    test_source_fail_excludes(
-        source,
-        Configuration::develop_mode(),
-        "`a` is the type for",
-    );
+    test_source_fail_excludes(source, Configuration::develop_mode(), "`a` is the type for");
 }
 
 /// A parameter pattern written with a type wildcard is reported without the name the parser gives
@@ -319,7 +269,7 @@ main : IO () = println(f(1).to_string);
     test_source_fail(
         source,
         Configuration::develop_mode(),
-        ": This pattern matches a value of type `(t1, t2)`, but the parameter of the lambda has type `Std::I64`.",
+        ": This pattern matches a value of type `(#1, #2)`, but the parameter of the lambda has type `Std::I64`.",
     );
     test_source_fail_excludes(source, Configuration::develop_mode(), "#typewildcard");
 }

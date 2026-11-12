@@ -11,6 +11,7 @@
 use crate::ast::expr::{hole_full_name, Expr, ExprNode};
 use crate::ast::name::FullName;
 use crate::constants::ERR_HOLE;
+use crate::elaboration::report_tyvar_names::ReportTyVarNames;
 use crate::elaboration::typecheck::TypeCheckContext;
 use crate::error::{Error, Errors};
 use std::sync::Arc;
@@ -93,7 +94,7 @@ fn visit(expr: &Arc<ExprNode>, hole_name: &FullName, tc: &TypeCheckContext, erro
 /// variable.
 fn report_hole(node: &Arc<ExprNode>, tc: &TypeCheckContext) -> Errors {
     let free_tvs = node.type_.as_ref().map_or(vec![], |ty| ty.free_vars_vec());
-    let names = tc.report_tyvar_names(&free_tvs, &[]);
+    let names = ReportTyVarNames::new(&free_tvs);
     let msg = match node.type_.as_ref() {
         Some(ty) => format!("Expected expression of type `{}`.", names.ty(ty)),
         None => "Expected expression.".to_string(),

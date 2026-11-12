@@ -12450,7 +12450,7 @@ pub fn test_match_on_variant_for_nonunion() {
         pure()
     );
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "The matched value has non-union type `Std::Array t1`, but it is matched on a variant pattern `foo(_)`.");
+    test_source_fail(&source, Configuration::develop_mode(), "The matched value has non-union type `Std::Array #1`, but it is matched on a variant pattern `foo(_)`.");
 }
 
 /// Verifies that a variant pattern on a value whose type is still unknown at the `match` is

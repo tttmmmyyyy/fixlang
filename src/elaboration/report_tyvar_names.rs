@@ -4,10 +4,9 @@ use crate::elaboration::typecheck::{Substitution, UnificationErr};
 use crate::misc::{Map, Set};
 use std::sync::Arc;
 
-/// The names one error report prints for the type variables the inference created (`#a3`): `t1`,
-/// `t2`, ... in the order the report first mentions them. A name that another type variable of the
-/// report already has, or that the program has in scope where the report points, is skipped, so a
-/// name the report prints stands for one variable.
+/// The names one error report prints for the type variables the inference created (`#a575`): `#1`,
+/// `#2`, ... in the order the report first mentions them. A program cannot write a name beginning
+/// with `#`, so a name the report prints stands for one variable.
 pub struct ReportTyVarNames {
     /// Every type variable the report mentions, each once, in the order it first mentions them.
     vars: Vec<Arc<TyVar>>,
@@ -23,33 +22,17 @@ impl ReportTyVarNames {
     /// # Arguments
     /// * `vars` — every type variable the report mentions, in the order it mentions them, apart
     ///   from those a scheme it prints generalizes.
-    /// * `reserved` — the type variables whose names no variable of the inference takes: those a
-    ///   scheme the report prints generalizes, and those the program has in scope where the
-    ///   report points.
-    pub fn new(vars: &[Arc<TyVar>], reserved: &[Arc<TyVar>]) -> Self {
+    pub fn new(vars: &[Arc<TyVar>]) -> Self {
         let mut seen = Set::default();
         let vars = vars
             .iter()
             .filter(|tv| seen.insert(tv.name.clone()))
             .cloned()
             .collect::<Vec<_>>();
-        let taken = vars
-            .iter()
-            .chain(reserved)
-            .filter(|tv| !is_inference_tyvar(&tv.name))
-            .map(|tv| tv.name.clone())
-            .collect::<Set<_>>();
         let mut renaming = Substitution::default();
         let mut names = Map::default();
-        let mut next_no = 1;
-        for tv in vars.iter().filter(|tv| is_inference_tyvar(&tv.name)) {
-            let name = loop {
-                let name = format!("t{}", next_no);
-                next_no += 1;
-                if !taken.contains(&name) {
-                    break name;
-                }
-            };
+        for (no, tv) in (1..).zip(vars.iter().filter(|tv| is_inference_tyvar(&tv.name))) {
+            let name = format!("#{}", no);
             let replacement = type_from_tyvar(tv.set_name(name.clone()));
             let merged = renaming.merge(&Substitution::single(&tv.name, replacement));
             assert!(
