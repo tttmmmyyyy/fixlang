@@ -40,6 +40,7 @@ mod test_docs;
 mod test_dynamic_library;
 mod test_evaluation_order;
 mod test_explicit_import;
+mod test_expression_spans;
 mod test_external_projects;
 mod test_ffi;
 mod test_file_io;
