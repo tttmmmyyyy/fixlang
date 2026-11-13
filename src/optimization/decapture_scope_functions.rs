@@ -218,8 +218,14 @@ impl CaptureStructMover<'_> {
         let env_pat = PatternNode::make_struct(
             tycon(make_tuple_name_abs(2)),
             vec![
-                ("0".to_string(), var_pattern(&env0, &env_ty)),
-                ("1".to_string(), var_pattern(&cap0, &cap_ty)),
+                (
+                    "0".to_string(),
+                    PatternNode::make_local_var(&env0.name, env_ty.clone()),
+                ),
+                (
+                    "1".to_string(),
+                    PatternNode::make_local_var(&cap0.name, cap_ty.clone()),
+                ),
             ],
         )
         .set_type(new_env_ty);
@@ -227,7 +233,10 @@ impl CaptureStructMover<'_> {
         let mut param_field_exprs = vec![("0".to_string(), var_expr(&env0, &env_ty))];
         for (i, ty) in param_field_tys.iter().enumerate().skip(1) {
             let field_name = local(&format!("_{}", i));
-            param_field_pats.push((i.to_string(), var_pattern(&field_name, ty)));
+            param_field_pats.push((
+                i.to_string(),
+                PatternNode::make_local_var(&field_name.name, ty.clone()),
+            ));
             param_field_exprs.push((i.to_string(), var_expr(&field_name, ty)));
         }
         let new_param = local("_arg");
@@ -260,16 +269,11 @@ impl CaptureStructMover<'_> {
         // `let c = cap; let h = |q| ..; body`, where `cap` is read where `F(cap)` read it.
         let new_func_ty = new_func.type_.as_ref().unwrap().clone();
         Some(expr_let_typed(
-            var_pattern(&cap_name, &cap_ty),
+            PatternNode::make_local_var(&cap_name.name, cap_ty.clone()),
             cap,
             expr_let_typed(pat.set_type(new_func_ty), new_func, body),
         ))
     }
-}
-
-/// A pattern binding the local `name` at type `ty`.
-fn var_pattern(name: &FullName, ty: &Arc<TypeNode>) -> Arc<PatternNode> {
-    PatternNode::make_var(var_local(&name.name), None).set_type(ty.clone())
 }
 
 /// The name `name` read at type `ty`.
@@ -350,7 +354,7 @@ impl ExprVisitor for OpRewriter<'_> {
         )
         .set_type(self.new_env_ty.clone());
         StartVisitResult::ReplaceAndReturn(expr_let_typed(
-            var_pattern(&self.new_env, &self.new_env_ty),
+            PatternNode::make_local_var(&self.new_env.name, self.new_env_ty.clone()),
             env_and_cap,
             expr.set_builtin(builtin),
         ))

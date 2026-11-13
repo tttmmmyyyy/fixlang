@@ -78,7 +78,9 @@ mod tests {
         specialize::{specialize, Specialization},
     };
     use crate::{
-        ast::program::Program, elaboration::elaborate_at_max, optimization::unwrap_newtype,
+        ast::program::Program,
+        elaboration::elaborate_at_max,
+        optimization::{inline, inline_local, unwrap_newtype},
     };
 
     /// `source` elaborated into the form the inference reads: monomorphic, curried, and with its
@@ -94,8 +96,8 @@ mod tests {
     /// caller.
     fn program_after_inlining(source: &str) -> Program {
         let mut prg = program_of(source);
-        crate::optimization::inline::run(&mut prg, false, 0);
-        crate::optimization::inline_local::run(&mut prg, 0);
+        inline::run(&mut prg, false, 0);
+        inline_local::run(&mut prg, 0);
         prg
     }
 
