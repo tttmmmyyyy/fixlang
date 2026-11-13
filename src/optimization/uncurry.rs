@@ -50,9 +50,9 @@ pub fn run(prg: &mut Program, num_threads: usize) -> UncurriedFuncs {
         syms.into_iter().collect(),
         num_threads,
         |(sym_name, sym)| {
-            let mut first = sym_name.clone();
-            convert_to_uncurried_func_name(first.name_as_mut(), 1);
-            if funcs.contains_key(&first) || funcs.contains_key(&sym_name) {
+            let mut func1 = sym_name.clone();
+            convert_to_uncurried_func_name(func1.name_as_mut(), 1);
+            if funcs.contains_key(&func1) || funcs.contains_key(&sym_name) {
                 vec![(sym_name, sym)]
             } else {
                 with_uncurried_funcs(sym_name, sym)

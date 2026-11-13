@@ -586,12 +586,12 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         // The lambda that is the body of its symbol is the symbol's function, built nowhere as a
         // value, so the set it is a member of takes no part in what the body does.
         let is_body_lambda = index == 0 && e.is_lam() && !ty.is_func();
-        let recorded = if is_body_lambda {
+        let slots_to_record = if is_body_lambda {
             &result.slots[1..]
         } else {
             &result.slots[..]
         };
-        self.record_vars(recorded);
+        self.record_vars(slots_to_record);
         self.nodes[index] = Some(NodeType {
             ty: result.clone(),
             names,
