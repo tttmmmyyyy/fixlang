@@ -1266,7 +1266,9 @@ impl ExprNode {
     }
 
     /// The names free in any of `exprs`.
-    pub fn free_vars_of_all<'a>(exprs: impl IntoIterator<Item = &'a Arc<ExprNode>>) -> Set<FullName> {
+    pub fn free_vars_of_all<'a>(
+        exprs: impl IntoIterator<Item = &'a Arc<ExprNode>>,
+    ) -> Set<FullName> {
         let mut names = Set::default();
         for expr in exprs {
             expr.with_free_vars(|free_vars| names.extend(free_vars.iter().cloned()));

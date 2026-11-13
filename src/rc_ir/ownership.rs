@@ -1574,7 +1574,12 @@ mod tests {
     #[test]
     fn only_one_reference_of_one_object_is_a_sole_reference() {
         let references = |counts: &[(&str, usize)]| {
-            References(counts.iter().map(|(name, count)| (at(name), *count)).collect())
+            References(
+                counts
+                    .iter()
+                    .map(|(name, count)| (at(name), *count))
+                    .collect(),
+            )
         };
         assert_eq!(references(&[("a", 1)]).sole_reference(), Some(&at("a")));
         assert_eq!(
