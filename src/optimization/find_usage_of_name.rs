@@ -142,7 +142,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{run, Arc, ExprNode, FullName, UsageType};
     use crate::ast::expr::{
         expr_abs, expr_app, expr_array_lit, expr_builtin, expr_eval, expr_ffi_call, expr_if,
         expr_let, expr_make_struct, expr_match, expr_tyanno, expr_var, var_var, Var,
