@@ -174,13 +174,12 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     // expansion closes that gap, leaving the application where the name bound to the `if` is read
     // first. `let_elimination` then moves the `if` to the application, and `application_inlining`
     // pushes the application into its branches.
-    let inline_local_after_uncurry = config.enable_lambda_set_specialization()
-        && config.enable_uncurry_optimization()
-        && config.enable_inline_local_optimization();
     run_pass(
         prg,
         config,
-        inline_local_after_uncurry,
+        config.enable_lambda_set_specialization()
+            && config.enable_uncurry_optimization()
+            && config.enable_inline_local_optimization(),
         "inline_local",
         |prg| inline_local::run(prg, config.num_worker_thread),
     );
