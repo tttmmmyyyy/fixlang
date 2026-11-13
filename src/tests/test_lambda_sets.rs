@@ -665,11 +665,18 @@ mod dump_tests {
         )
     }
 
+    /// The words of the parameter list of the function header `header`: the names of the parameters
+    /// and of the types they and their type arguments have.
+    fn parameter_tokens(header: &str) -> impl Iterator<Item = &str> {
+        parameters(header)
+            .split(|c: char| c.is_whitespace() || c == ',' || c == '(' || c == ')')
+            .filter(|token| !token.is_empty())
+    }
+
     /// The capture structs among the parameters of the function header `header`, by the name of
     /// their type.
     fn capture_struct_parameters(header: &str) -> Vec<&str> {
-        parameters(header)
-            .split(|c: char| c.is_whitespace() || c == ',' || c == '(' || c == ')')
+        parameter_tokens(header)
             .filter(|token| token.contains(LS_CAP_PREFIX))
             .collect()
     }
@@ -998,9 +1005,7 @@ mod dump_tests {
         let takes_all_three = rc_ir_function_bodies(&dump, "Std::Iterator::fold")
             .iter()
             .any(|body| {
-                let params = parameters(header(body));
-                let mut copies = params
-                    .split(|c: char| c.is_whitespace() || c == ',' || c == '(' || c == ')')
+                let mut copies = parameter_tokens(header(body))
                     .filter(|token| token.starts_with(&map_iterator_copy))
                     .collect::<Vec<_>>();
                 copies.sort();
