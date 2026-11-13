@@ -32,7 +32,7 @@ pub fn test_an_expression_built_from_parts_spans_the_parentheses_at_its_ends() {
         "(f)()",
         "(1).f(2)",
         "(1).f",
-        "(a)[0]",
+        "(a).b[0]",
         "f $ (1)",
         "(1) + (2)",
         "(1) == (2)",
