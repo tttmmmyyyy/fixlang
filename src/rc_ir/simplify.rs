@@ -37,7 +37,10 @@ use crate::configuration::Configuration;
 use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp};
 use crate::misc::{grow_stack, Map};
 use crate::parse::sourcefile::Span;
-use crate::rc_ir::ast::{count_value_uses, MatchArm, RcExpr, RcExprNode, RcProgram, RcRhs, RcVar};
+use crate::rc_ir::ast::{
+    count_value_uses, map_children, map_continuation, MatchArm, RcExpr, RcExprNode, RcProgram,
+    RcRhs, RcVar,
+};
 use crate::rc_ir::rename::{clone_fresh, copy_suffix, substitute_expr};
 use std::sync::Arc;
 
@@ -91,48 +94,9 @@ fn simplify_to_fixpoint(node: &RcExprNode, config: &Configuration) -> RcExprNode
 fn rewrite(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExprNode {
     // The continuation chain recurses deeply for a large function; grow the stack on demand.
     grow_stack(|| {
-        let node = rewrite_children(node, counter, changed);
+        let node = map_children(node, |child| rewrite(child, counter, changed));
         try_local(&node, counter, changed)
     })
-}
-
-/// Rebuild a node with `rewrite` applied to its sub-expressions (match arms and the continuation).
-fn rewrite_children(node: &RcExprNode, counter: &mut u64, changed: &mut bool) -> RcExprNode {
-    let expr = match node.expr.as_ref() {
-        RcExpr::Ret(v) => RcExpr::Ret(v.clone()),
-        RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
-            let arms = arms
-                .iter()
-                .map(|arm| arm.with_body(rewrite(&arm.body, counter, changed)))
-                .collect();
-            RcExpr::Let(
-                x.clone(),
-                RcRhs::Match(scrut.clone(), arms),
-                rewrite(k, counter, changed),
-            )
-        }
-        RcExpr::Let(x, rhs, k) => RcExpr::Let(x.clone(), rhs.clone(), rewrite(k, counter, changed)),
-        RcExpr::Destructure(container, fields, state, k) => RcExpr::Destructure(
-            container.clone(),
-            fields.clone(),
-            *state,
-            rewrite(k, counter, changed),
-        ),
-        RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), rewrite(k, counter, changed)),
-        RcExpr::Retain(v, path, state, k) => RcExpr::Retain(
-            v.clone(),
-            path.clone(),
-            *state,
-            rewrite(k, counter, changed),
-        ),
-        RcExpr::Release(v, path, state, k) => RcExpr::Release(
-            v.clone(),
-            path.clone(),
-            *state,
-            rewrite(k, counter, changed),
-        ),
-    };
-    node_of(expr, &node.source)
 }
 
 /// Try the local rewrites at `node`, in order. Returns the rewritten node and sets `changed` if one
@@ -413,10 +377,7 @@ fn replace_tail_union(
             let (variant, operand) = union_construction(rhs).expect("the tail builds no union");
             f(variant, operand)
         }
-        _ => with_continuation(
-            node,
-            replace_tail_union(continuation_of(node), result_ty, f),
-        ),
+        _ => map_continuation(node, |k| replace_tail_union(k, result_ty, f)),
     })
 }
 
@@ -463,7 +424,7 @@ fn replace_tail(node: &RcExprNode, f: &mut dyn FnMut(&RcVar) -> RcExprNode) -> R
     // An arm body is a continuation chain that recurses to its full depth here; grow the stack.
     grow_stack(|| match node.expr.as_ref() {
         RcExpr::Ret(r) => f(r),
-        _ => with_continuation(node, replace_tail(continuation_of(node), f)),
+        _ => map_continuation(node, |k| replace_tail(k, f)),
     })
 }
 
@@ -478,22 +439,6 @@ fn continuation_of(node: &RcExprNode) -> &RcExprNode {
         | RcExpr::Retain(_, _, _, k)
         | RcExpr::Release(_, _, _, k) => k,
     }
-}
-
-/// `node` with `k` in place of its continuation, its own step left as it is. A `ret` ends the chain,
-/// so a caller answers for that case before asking.
-fn with_continuation(node: &RcExprNode, k: RcExprNode) -> RcExprNode {
-    let expr = match node.expr.as_ref() {
-        RcExpr::Ret(v) => unreachable!("`ret {}` ends the chain", v.name.to_string()),
-        RcExpr::Let(x, rhs, _) => RcExpr::Let(x.clone(), rhs.clone(), k),
-        RcExpr::Destructure(container, fields, state, _) => {
-            RcExpr::Destructure(container.clone(), fields.clone(), *state, k)
-        }
-        RcExpr::Eval(v, _) => RcExpr::Eval(v.clone(), k),
-        RcExpr::Retain(v, path, state, _) => RcExpr::Retain(v.clone(), path.clone(), *state, k),
-        RcExpr::Release(v, path, state, _) => RcExpr::Release(v.clone(), path.clone(), *state, k),
-    };
-    node_of(expr, &node.source)
 }
 
 /// A one-entry substitution map.
