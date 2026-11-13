@@ -9624,7 +9624,7 @@ pub fn test_call_unimplemented_trait_method_regression_issue_43() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "`Main::Foo::foo` of type `[a : Main::Foo] a -> Std::IO ()` does not match the expected type `Std::I64 -> Std::IO ()` since `Std::I64 : Main::Foo` cannot be deduced.",
+        "`Std::I64 : Main::Foo` cannot be deduced.\n`Main::Foo::foo` of type `[a : Main::Foo] a -> Std::IO ()` does not match the expected type `Std::I64 -> Std::IO ()`.",
     );
 }
 
@@ -12450,7 +12450,7 @@ pub fn test_match_on_variant_for_nonunion() {
         pure()
     );
     "##;
-    test_source_fail(&source, Configuration::develop_mode(), "The matched value has non-union type `Std::Array a`, but it is matched on a variant pattern `foo(_)`.");
+    test_source_fail(&source, Configuration::develop_mode(), "The matched value has non-union type `Std::Array #1`, but it is matched on a variant pattern `foo(_)`.");
 }
 
 /// Verifies that a variant pattern on a value whose type is still unknown at the `match` is

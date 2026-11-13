@@ -4,7 +4,7 @@ use crate::ast::pattern::PatternNode;
 use crate::ast::program::EndNode;
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{type_arrow, TyCon, TypeNode};
-use crate::constants::{CAP_NAME, FORMAT_LINE_LIMIT, HOLE_NAME, STD_NAME};
+use crate::constants::{CAP_NAME, FORMAT_LINE_LIMIT, HOLE_NAME, PARAM_NAME, STD_NAME};
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;
 use crate::misc::{collect_results, grow_stack, Map, Set};
@@ -154,6 +154,15 @@ impl ExprNode {
     pub fn is_var(&self) -> bool {
         match &*self.expr {
             Expr::Var(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Whether this expression is the parameter of a lambda written with a parameter pattern, which
+    /// the lambda binds as `|#param| let pat = #param in body`.
+    pub fn is_synthetic_lambda_param(&self) -> bool {
+        match &*self.expr {
+            Expr::Var(v) => v.name == FullName::local(PARAM_NAME),
             _ => false,
         }
     }
