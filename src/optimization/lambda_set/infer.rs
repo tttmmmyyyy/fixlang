@@ -461,7 +461,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 assert_eq!(
                     params.len(),
                     1,
-                    "a lambda at this stage takes one parameter"
+                    "a lambda of an arrow type takes one parameter"
                 );
                 let lam_ty = self.layout.fresh(&ty, &mut self.analysis.solver);
                 let lam = self.new_lambda(e, index);

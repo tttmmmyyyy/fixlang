@@ -35,8 +35,14 @@
 //! value is consumed. That keeps the value `Unique` for the uniqueness analysis, the reason
 //! borrow-ification exists.
 //!
+//! `sink_retains` moves each retain `cancel` leaves down every path, to where that path consumes the
+//! reference, and deletes it with the release on a path that releases the reference. It runs after
+//! the passes that decide uniqueness from provenance, which reads a retain as demoting only the
+//! variable it names.
+//!
 //! Which construct consumes which reference, and which object a reference belongs to, is the shared
-//! model in `ownership`, so every part of this pass gives the same answer.
+//! model in `ownership`. `BodyModel` reads that model for one body, so `cancel` and `sink_retains`
+//! give the same answer.
 
 use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
