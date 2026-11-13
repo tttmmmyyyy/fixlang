@@ -68,7 +68,10 @@ pub fn run(prg: &mut Program, num_threads: usize) {
     }
 
     // Rewrite the calls onto the uncurried functions.
-    replace_calls_with_funcs(prg, &funcs, num_threads);
+    for_each_on_compiler_threads(prg.symbols.values_mut().collect(), num_threads, |sym| {
+        let expr = replace_closure_calls_with_func_calls(sym.expr.as_ref().unwrap(), &funcs);
+        sym.expr = Some(expr);
+    });
 
     // Replace export statements so that they use uncurried functions.
     for export in &mut prg.export_statements {
@@ -96,28 +99,6 @@ pub fn run(prg: &mut Program, num_threads: usize) {
             prg.entry_io_value = Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
         }
     }
-}
-
-/// Rewrites every call of a global in the program onto the uncurried function matching the
-/// number of arguments it supplies, on up to `num_threads` threads.
-///
-/// # Examples
-/// `g(a)(b)` becomes `g#func2(a, b)`, and so does `g#func1(a)(b)`.
-///
-/// # Arguments
-/// * `funcs` — the uncurried functions of the program, each of which must be in the program.
-fn replace_calls_with_funcs(prg: &mut Program, funcs: &UncurriedFuncs, num_threads: usize) {
-    for func in funcs.keys() {
-        assert!(
-            prg.symbols.contains_key(func),
-            "the uncurried function `{}` is not in the program",
-            func.to_string()
-        );
-    }
-    for_each_on_compiler_threads(prg.symbols.values_mut().collect(), num_threads, |sym| {
-        let expr = replace_closure_calls_with_func_calls(sym.expr.as_ref().unwrap(), funcs);
-        sym.expr = Some(expr);
-    });
 }
 
 /// The uncurried functions of a program: the name of each, mapped to the name of the global
@@ -345,6 +326,9 @@ fn replace_closure_call_with_func_call(
 
 /// `expr` with every call of a global in it rewritten onto the uncurried function taking as many
 /// arguments as the call supplies.
+///
+/// # Examples
+/// `g(a)(b)` becomes `g#func2(a, b)`, and so does `g#func1(a)(b)`.
 fn replace_closure_calls_with_func_calls(
     expr: &Arc<ExprNode>,
     funcs: &UncurriedFuncs,
