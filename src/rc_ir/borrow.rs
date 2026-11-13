@@ -1502,9 +1502,8 @@ fn rewrite_bodies(
     }
 }
 
-/// What the reference-count nodes and the consumes of one body act on: the answers `cancel` and
-/// `sink_retains` both decide by, so a retain the one deletes and a retain the other moves are judged
-/// alike.
+/// What the reference-count nodes and the consumes of one body act on. Every pass that deletes or
+/// moves a retain decides by these answers, so they all judge a retain alike.
 struct BodyModel<'a> {
     /// The body's variables: what binds each one and its type, which decide the objects a retain
     /// and a release act on, and so which of them pair.
@@ -1950,6 +1949,10 @@ struct SinkingRetain<'n> {
 impl SinkingRetain<'_> {
     /// A copy of the retain placed right before `node`, which is where a path that has not
     /// un-bumped it needs the reference.
+    ///
+    /// # Arguments
+    /// * `met` — whether the path met a node that consumes or releases the retain's object; it
+    ///   becomes `Sunk::met`.
     fn placed_before(&self, node: &RcExprNode, met: bool) -> Sunk {
         Sunk {
             node: map_continuation(self.retain, |_| node.clone()),

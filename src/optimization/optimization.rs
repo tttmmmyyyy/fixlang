@@ -69,9 +69,9 @@ pub fn run(prg: &mut Program, config: &Configuration) {
     );
 
     // Defunctionalize `Std::fix` into directly self-recursive global functions. It runs before
-    // inlining and the lambda sets, which would otherwise rewrite the `fix` argument out of the
-    // literal lambda form this pass matches; uncurrying (later) then turns each self-call into a
-    // direct call that LLVM folds into a loop.
+    // inlining and lambda set specialization, which would otherwise rewrite the `fix` argument out
+    // of the literal lambda form this pass matches; uncurrying (later) then turns each self-call
+    // into a direct call that LLVM folds into a loop.
     run_pass(
         prg,
         config,

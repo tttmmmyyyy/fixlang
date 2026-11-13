@@ -206,8 +206,8 @@ impl<'a> Collapser<'a> {
 
     /// A name for a field value, which nothing else in the global binds.
     ///
-    /// A name of this shape is not reserved to this walk, and the global can already bind one, so
-    /// the count alone does not make a name fresh.
+    /// The global can already bind a name of this shape, so the count alone does not make a name
+    /// fresh.
     fn fresh_field_name(&mut self) -> FullName {
         loop {
             let name = FullName::local(&format!("{}{}", BOUND_FIELD_PREFIX, self.bound_fields));

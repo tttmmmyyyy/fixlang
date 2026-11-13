@@ -214,10 +214,11 @@ pub const MAX_UNION_VARIANTS: usize = 1 << UNION_TAG_BITS;
 /// once per capture struct it lays out (#1008), so without the bound their time doubles at each step
 /// of such a chain.
 ///
-/// The bound also caps the boxed leaves of the sets after one past it. Each capture struct a value of
-/// those sets lays out that captured the closure left by the set past the bound holds that closure,
-/// so such a value holds up to half the bound of boxed leaves, and the provenance analysis copies
-/// every leaf of every variable in scope at each `match` (#1015).
+/// The bound also limits the boxed leaves of a value. A set past the bound is represented by a
+/// closure, and in each later set of the chain, every capture struct that captures that closure
+/// holds it as a boxed leaf. A value of a later set therefore holds up to half the bound of boxed
+/// leaves, and the provenance analysis copies every leaf of every variable in scope at each `match`
+/// (#1015).
 ///
 /// The bound can go once those passes walk a type in time linear in its declaration and the
 /// provenance analysis copies only what a `match` arm changes.

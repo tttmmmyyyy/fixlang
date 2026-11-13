@@ -100,10 +100,9 @@ fn lower_and_insert_rc(
 
 /// Normalize reference counting to unit granularity, then — at `Max` and above — optimize: borrow
 /// read-only parameters, cancel the reference counting a borrow makes net-zero, specialize functions
-/// by input uniqueness to elide unique checks, and move each retain left down to where each path
-/// needs it. Borrow-ification records each version's
-/// borrowed parameters on the functions (`RcFunc::borrowed_units`), which `param_ownership_shapes`
-/// reads back as the owned complement.
+/// by input uniqueness to elide unique checks, and move each remaining retain down to where each
+/// path needs it. Borrow-ification records each version's borrowed parameters on the functions
+/// (`RcFunc::borrowed_units`), which `param_ownership_shapes` reads back as the owned complement.
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,

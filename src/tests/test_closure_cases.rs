@@ -1,6 +1,7 @@
 //! Programs whose functions travel through values and combinators before they are called, built as
-//! projects and run at the optimization levels below and above the one the lambda sets run at. One
-//! of them also reads the `--emit-rc-ir` dump, for what a program cannot observe.
+//! projects and run at the optimization level where lambda set specialization starts and at the
+//! levels below and above it. One of them also reads the `--emit-rc-ir` dump, for what a program
+//! cannot observe.
 
 #[cfg(test)]
 mod integration_tests {

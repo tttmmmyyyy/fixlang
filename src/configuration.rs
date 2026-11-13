@@ -988,8 +988,8 @@ impl Configuration {
     /// Make a value of a newtype — an unboxed struct of exactly one field — a value of that field,
     /// so that a type written in that shape, such as `Std::IO`, a state monad or an iterator,
     /// becomes the function it wraps. The gain is that change of type: only once an expression is
-    /// typed as a closure can the inlining and the lambda sets below take hold of it, so it runs at
-    /// `Max` and above alongside them.
+    /// typed as a closure can the inlining and the lambda set specialization below take hold of it,
+    /// so it runs at `Max` and above alongside them.
     pub fn enable_unwrap_newtype_optimization(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Max)
     }
@@ -1003,8 +1003,9 @@ impl Configuration {
     }
 
     /// Replace a destructuring that meets the construction it reads by what the construction put
-    /// there. Runs at `Max` and above, where it reads the tuple `decapture_scope_functions` builds
-    /// for a function into the pattern taking that tuple apart.
+    /// there. Runs at `Max` and above, where `decapture_scope_functions` builds a tuple for a
+    /// function that a pattern then takes apart, and this pass hands the pattern the tuple's
+    /// fields.
     pub fn enable_collapse_constructions(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Max)
     }
@@ -1039,14 +1040,14 @@ impl Configuration {
 
     /// Borrow-ification and cancellation of the RC IR: borrows a parameter a function only reads,
     /// then cancels the reference counting the borrow makes net-zero. Its full benefit relies on
-    /// the lambda sets and inlining (which are also `Max`-only), and it adds compile-time
+    /// lambda set specialization and inlining (which are also `Max`-only), and it adds compile-time
     /// analysis, so it runs only at `Max` and above; `Basic` stays lighter for faster compilation.
     pub fn enable_borrow_optimization(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Max)
     }
 
     /// The RC-IR term simplifier (case-of-known-constructor, case-of-case) runs at `Max` and above.
-    /// It composes with the same rewrite by the lambda sets that borrow-ification needs — a
+    /// It composes with the same lambda set specialization that borrow-ification needs — a
     /// specialized loop's body is a known function whose union it can cancel — so it shares that
     /// threshold.
     pub fn enable_simplify(&self) -> bool {
