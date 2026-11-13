@@ -69,13 +69,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let globals: Vec<RcGlobalInit> = prog
         .globals
         .iter()
-        .map(|g| RcGlobalInit {
-            symbol: g.symbol.clone(),
-            ty: g.ty.clone(),
-            init: spec.rewrite_expr(&g.init, &[]),
-            owns_initializer: true,
-            owns_storage: true,
-        })
+        .map(|g| g.with_init(spec.rewrite_expr(&g.init, &[])))
         .collect();
 
     // Materialize every enqueued clone; each materialization may request further clones.
