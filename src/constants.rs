@@ -212,7 +212,15 @@ pub const MAX_UNION_VARIANTS: usize = 1 << UNION_TAG_BITS;
 /// structs inside its own, once per class of its elements, so a chain of sets each of two classes
 /// capturing the one before lays out twice as many at each step. The passes of the RC IR walk a type
 /// once per capture struct it lays out (#1008), so without the bound their time doubles at each step
-/// of such a chain. The bound can go once those passes walk a type in time linear in its declaration.
+/// of such a chain.
+///
+/// The bound also caps the boxed leaves of the sets after one past it. Each capture struct a value of
+/// those sets lays out that captured the closure left by the set past the bound holds that closure,
+/// so such a value holds up to half the bound of boxed leaves, and the provenance analysis copies
+/// every leaf of every variable in scope at each `match` (#1015).
+///
+/// The bound can go once those passes walk a type in time linear in its declaration and the
+/// provenance analysis copies only what a `match` arm changes.
 pub const MAX_LS_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 6;
 /// How many classes the elements of a lambda set represented by a union may make (lambda set
 /// specialization), which is how many variants that union may have. A set past it is represented
