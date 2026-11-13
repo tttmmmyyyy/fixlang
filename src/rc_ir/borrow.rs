@@ -1957,12 +1957,12 @@ impl SinkingRetain<'_> {
     /// un-bumped it needs the reference.
     ///
     /// # Arguments
-    /// * `met` — whether the path met a node that consumes or releases the retain's object; it
-    ///   becomes `Sunk::met`.
-    fn placed_before(&self, node: &RcExprNode, met: bool) -> Sunk {
+    /// * `met_object` — whether the path met a node that consumes or releases the retain's
+    ///   object; it becomes `Sunk::met_object`.
+    fn placed_before(&self, node: &RcExprNode, met_object: bool) -> Sunk {
         Sunk {
             node: map_continuation(self.retain, |_| node.clone()),
-            met,
+            met_object,
         }
     }
 }
@@ -1973,7 +1973,7 @@ struct Sunk {
     node: RcExprNode,
     /// Whether some path through the node met a node that consumes or releases the retain's object.
     /// Where none did, every copy of the retain stands before a `Ret`.
-    met: bool,
+    met_object: bool,
 }
 
 impl RetainSinker<'_> {
@@ -1990,7 +1990,7 @@ impl RetainSinker<'_> {
             return rewritten;
         };
         let references = self.model.acted_references(v, path);
-        let Some(object) = references.sole_reference() else {
+        let Some(object) = references.sole_object() else {
             return rewritten;
         };
         let retain = SinkingRetain {
@@ -2017,10 +2017,10 @@ impl RetainSinker<'_> {
                     return r.placed_before(node, true);
                 }
                 let un_bumped = self.model.acted_references(v, path);
-                if un_bumped.sole_reference() == Some(&r.object) {
+                if un_bumped.sole_object() == Some(&r.object) {
                     return Sunk {
                         node: k.clone(),
-                        met: true,
+                        met_object: true,
                     };
                 }
                 // A release reaching more than the retain bumped un-bumps a reference something
@@ -2028,12 +2028,12 @@ impl RetainSinker<'_> {
                 if un_bumped.names(&r.object) {
                     return r.placed_before(node, true);
                 }
-                self.pass(r, node)
+                self.sink_past(r, node)
             }
             RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => {
                 let sunk: Vec<Sunk> = arms.iter().map(|arm| self.sink(r, &arm.body)).collect();
-                if !sunk.iter().any(|arm| arm.met) {
-                    return self.pass(r, node);
+                if !sunk.iter().any(|arm| arm.met_object) {
+                    return self.sink_past(r, node);
                 }
                 let arms = arms
                     .iter()
@@ -2045,7 +2045,7 @@ impl RetainSinker<'_> {
                         RcExpr::Let(x.clone(), RcRhs::Match(scrutinee.clone(), arms), k.clone()),
                         &node.source,
                     ),
-                    met: true,
+                    met_object: true,
                 }
             }
             RcExpr::Let(x, rhs, _) if consumes(self.model.rhs_consumed_objects(rhs, &x.ty)) => {
@@ -2057,19 +2057,19 @@ impl RetainSinker<'_> {
                 r.placed_before(node, true)
             }
             RcExpr::Let(..) | RcExpr::Destructure(..) | RcExpr::Retain(..) | RcExpr::Eval(..) => {
-                self.pass(r, node)
+                self.sink_past(r, node)
             }
         }
     }
 
     /// `node` with the retain sunk into its continuation, where every path through `node` goes on.
-    fn pass(&self, r: &SinkingRetain, node: &RcExprNode) -> Sunk {
-        let mut met = false;
+    fn sink_past(&self, r: &SinkingRetain, node: &RcExprNode) -> Sunk {
+        let mut met_object = false;
         let node = map_continuation(node, |k| {
             let sunk = self.sink(r, k);
-            met = sunk.met;
+            met_object = sunk.met_object;
             sunk.node
         });
-        Sunk { node, met }
+        Sunk { node, met_object }
     }
 }

@@ -940,7 +940,7 @@ impl References {
     /// # Examples
     /// References holding one reference of `a` give `a`. One holding two of `a`, or one of `a` and
     /// one of `b`, give `None`.
-    pub(crate) fn sole_reference(&self) -> Option<&VarPath> {
+    pub(crate) fn sole_object(&self) -> Option<&VarPath> {
         let mut references = self.0.iter();
         match (references.next(), references.next()) {
             (Some((object, 1)), None) => Some(object),
@@ -1572,7 +1572,7 @@ mod tests {
     /// References name a sole object only where they are one reference of one object: two
     /// references of one object, references of two objects, and no reference at all name none.
     #[test]
-    fn only_one_reference_of_one_object_is_a_sole_reference() {
+    fn only_one_reference_of_one_object_names_a_sole_object() {
         let references = |counts: &[(&str, usize)]| {
             References(
                 counts
@@ -1581,17 +1581,17 @@ mod tests {
                     .collect(),
             )
         };
-        assert_eq!(references(&[("a", 1)]).sole_reference(), Some(&at("a")));
+        assert_eq!(references(&[("a", 1)]).sole_object(), Some(&at("a")));
         assert_eq!(
-            references(&[("a", 2)]).sole_reference(),
+            references(&[("a", 2)]).sole_object(),
             None,
             "two references of one object"
         );
         assert_eq!(
-            references(&[("a", 1), ("b", 1)]).sole_reference(),
+            references(&[("a", 1), ("b", 1)]).sole_object(),
             None,
             "one reference each of two objects"
         );
-        assert_eq!(references(&[]).sole_reference(), None, "no reference");
+        assert_eq!(references(&[]).sole_object(), None, "no reference");
     }
 }
