@@ -1244,38 +1244,7 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
             let k = split_body(k, type_env);
             split_rc(v, path, *state, true, k, &node.source, type_env)
         }
-        RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
-            let arms = arms
-                .iter()
-                .map(|arm| arm.with_body(split_body(&arm.body, type_env)))
-                .collect();
-            expr_node(
-                RcExpr::Let(
-                    x.clone(),
-                    RcRhs::Match(scrut.clone(), arms),
-                    split_body(k, type_env),
-                ),
-                &node.source,
-            )
-        }
-        RcExpr::Let(x, rhs, k) => expr_node(
-            RcExpr::Let(x.clone(), rhs.clone(), split_body(k, type_env)),
-            &node.source,
-        ),
-        RcExpr::Destructure(container, fields, state, k) => expr_node(
-            RcExpr::Destructure(
-                container.clone(),
-                fields.clone(),
-                *state,
-                split_body(k, type_env),
-            ),
-            &node.source,
-        ),
-        RcExpr::Eval(v, k) => expr_node(
-            RcExpr::Eval(v.clone(), split_body(k, type_env)),
-            &node.source,
-        ),
-        RcExpr::Ret(v) => expr_node(RcExpr::Ret(v.clone()), &node.source),
+        _ => map_children(node, |child| split_body(child, type_env)),
     }
 }
 
