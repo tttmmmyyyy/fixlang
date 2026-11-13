@@ -82,7 +82,6 @@ use crate::{
         pattern::PatternNode,
         traverse::{ExprVisitor, StartVisitResult, VisitState},
     },
-    misc::Set,
     optimization::rename::{generate_new_names, rename_pattern_value_avoiding},
 };
 use std::sync::Arc;
@@ -96,9 +95,7 @@ fn pull_argument_into_let(app: &Arc<ExprNode>, index: usize) -> Arc<ExprNode> {
     let arg = args[index].clone();
 
     let mut black_list = fun.free_vars();
-    for other in &args {
-        black_list.extend(other.free_vars());
-    }
+    black_list.extend(ExprNode::free_vars_of_all(&args));
     let f_name = generate_new_names(&black_list, 1)[0].clone();
     let arg_ty = arg.type_.as_ref().unwrap();
     let f_pat = PatternNode::make_var(var_var(f_name.clone()), None).set_type(arg_ty.clone());
@@ -117,10 +114,7 @@ fn pull_let_out_of_function(app: &Arc<ExprNode>) -> Arc<ExprNode> {
     let pat = fun.get_let_pat();
 
     // Rename `pat` and `expr1` to avoid conflicts with free variables in the arguments.
-    let mut black_list = Set::default();
-    for arg in app.get_app_args() {
-        black_list.extend(arg.free_vars());
-    }
+    let black_list = ExprNode::free_vars_of_all(&app.get_app_args());
     let (pat, expr1) = rename_pattern_value_avoiding(&black_list, pat, expr1);
 
     expr_let_typed(pat, expr0, app.set_app_func(expr1))

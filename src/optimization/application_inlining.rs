@@ -105,39 +105,31 @@ impl PushedArg {
     ///
     /// The binder of a fresh name wraps the whole rewritten expression, so its scope covers `func`,
     /// what every other argument is pushed in as, and the arguments listed after it. The fresh name
-    /// therefore avoids the names free in `func` and in the other arguments, and the other fresh
-    /// names.
+    /// therefore avoids the names free in `func` and in the arguments, and the other fresh names.
     ///
     /// # Arguments
     /// * `func` — the function the application is pushed into.
     fn new_all(args: &[Arc<ExprNode>], func: &Arc<ExprNode>) -> Vec<Self> {
-        let mut fresh_names = Set::default();
-        let mut pushed = vec![];
-        for (i, arg) in args.iter().enumerate() {
-            if arg.is_var() {
-                pushed.push(PushedArg {
-                    value: arg.clone(),
-                    binding: None,
-                });
-                continue;
-            }
-            let mut black_list = func.free_vars();
-            for (j, other) in args.iter().enumerate() {
-                if j != i {
-                    black_list.extend(other.free_vars());
+        let mut black_list = func.free_vars();
+        black_list.extend(ExprNode::free_vars_of_all(args));
+        args.iter()
+            .map(|arg| {
+                if arg.is_var() {
+                    return PushedArg {
+                        value: arg.clone(),
+                        binding: None,
+                    };
                 }
-            }
-            black_list.extend(fresh_names.iter().cloned());
-            let ty = arg.type_.as_ref().unwrap().clone();
-            let name = generate_new_names(&black_list, 1)[0].clone();
-            fresh_names.insert(name.clone());
-            let pat = PatternNode::make_var(var_var(name.clone()), None).set_type(ty.clone());
-            pushed.push(PushedArg {
-                value: expr_var(name, None).set_type(ty),
-                binding: Some((pat, arg.clone())),
-            });
-        }
-        pushed
+                let ty = arg.type_.as_ref().unwrap().clone();
+                let name = generate_new_names(&black_list, 1)[0].clone();
+                black_list.insert(name.clone());
+                let pat = PatternNode::make_var(var_var(name.clone()), None).set_type(ty.clone());
+                PushedArg {
+                    value: expr_var(name, None).set_type(ty),
+                    binding: Some((pat, arg.clone())),
+                }
+            })
+            .collect()
     }
 
     /// What each of `pushed` stands for in the subexpressions of the function.
@@ -147,11 +139,7 @@ impl PushedArg {
 
     /// The names free in what any of `pushed` stands for.
     fn free_vars_of_values(pushed: &[Self]) -> Set<FullName> {
-        let mut names = Set::default();
-        for arg in pushed {
-            names.extend(arg.value.free_vars());
-        }
-        names
+        ExprNode::free_vars_of_all(pushed.iter().map(|arg| &arg.value))
     }
 
     /// Wraps the rewritten expression in the bindings of `pushed`, the argument listed first
@@ -194,10 +182,7 @@ impl ExprVisitor for AppInliner {
                 );
                 // The `let` of a parameter has the arguments listed after it in its scope, so the
                 // parameters are renamed away from the names free in those.
-                let mut black_list = Set::default();
-                for arg in &args[1..] {
-                    black_list.extend(arg.free_vars());
-                }
+                let black_list = ExprNode::free_vars_of_all(&args[1..]);
                 let func = rename_lam_param_avoiding(&black_list, func.clone());
                 let (params, body) = func.destructure_lam();
                 let expr = params
@@ -230,9 +215,7 @@ impl ExprVisitor for AppInliner {
                 // in them join the list.
                 let mut black_list = PushedArg::free_vars_of_values(&pushed);
                 if bound_first {
-                    for arg in &args {
-                        black_list.extend(arg.free_vars());
-                    }
+                    black_list.extend(ExprNode::free_vars_of_all(&args));
                 }
                 let func = rename_let_pattern_avoiding(&black_list, func.clone());
 

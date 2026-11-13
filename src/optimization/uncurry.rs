@@ -298,8 +298,10 @@ fn replace_closure_call_with_func_call(
                 // An uncurried function of a global, called with its arguments and then the
                 // arguments of what it returns: `g#func{N}(a1, ..., aN)(b1, ..., bM)` becomes
                 // `g#func{N+M}(a1, ..., aN, b1, ..., bM)`.
-                // An uncurried function whose global the lambda sets copied under another name
-                // has no longer one to merge the call onto.
+                // An uncurried function whose global is no longer in the program under its name,
+                // such as `Std::Debug::assert`'s once the passes after the first run have removed
+                // the global or copied it under another name, has no longer one to merge the call
+                // onto.
                 let Some((global, n_args)) = funcs.get(&f_func.name) else {
                     return expr.clone();
                 };

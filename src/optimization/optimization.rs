@@ -96,7 +96,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| inline_local::run(prg, config.num_worker_thread),
     );
 
-    let uncurried_funcs = run_pass(
+    run_pass(
         prg,
         config,
         config.enable_uncurry_optimization(),
@@ -162,8 +162,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         config.enable_uncurry_optimization(),
         "uncurry",
         |prg| uncurry::run(prg, config.num_worker_thread),
-    )
-    .or(uncurried_funcs);
+    );
 
     // Inline the local functions once more. Inlining the lambdas the lambda sets lift puts the body
     // of the function a caller passed into the caller, so a body answering with a lambda leaves an

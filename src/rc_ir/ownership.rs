@@ -941,8 +941,9 @@ impl References {
     /// References holding one reference of `a` give `a`. One holding two of `a`, or one of `a` and
     /// one of `b`, give `None`.
     pub(crate) fn sole_reference(&self) -> Option<&VarPath> {
-        match self.0.iter().collect::<Vec<_>>().as_slice() {
-            [(object, 1)] => Some(object),
+        let mut references = self.0.iter();
+        match (references.next(), references.next()) {
+            (Some((object, 1)), None) => Some(object),
             _ => None,
         }
     }

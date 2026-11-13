@@ -9,7 +9,7 @@
 mod integration_tests {
     use crate::tests::test_util::{
         build_project_and_read_rc_ir, build_project_run_and_read_rc_ir, copy_dir_recursive,
-        rc_ir_callee_of,
+        rc_ir_callee_of, rc_ir_function_bodies,
     };
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
@@ -1126,16 +1126,11 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("sink_retain");
         let dump = build_project_run_and_read_rc_ir(&project_dir, "max", "7");
 
-        let sig = dump
-            .lines()
-            .find(|l| l.starts_with("fn Std::loop#") && l.contains("LsCap@walk"))
+        let function = rc_ir_function_bodies(&dump, "LsCap@walk")
+            .into_iter()
+            .find(|function| function.starts_with("fn Std::loop#"))
             .unwrap_or_else(|| panic!("no copy of `loop` runs the body of `walk`:\n{}", dump));
-        let body: Vec<&str> = dump
-            .lines()
-            .skip_while(|l| *l != sig)
-            .skip(1)
-            .take_while(|l| !l.is_empty())
-            .collect();
+        let body: Vec<&str> = function.lines().skip(1).collect();
         let retains: Vec<usize> = (0..body.len())
             .filter(|&i| body[i].trim_start().starts_with("retain "))
             .collect();
