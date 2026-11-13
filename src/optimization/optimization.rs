@@ -156,7 +156,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| collapse_constructions::run(prg, config.num_worker_thread),
     );
 
-    let uncurried_funcs = run_pass(
+    run_pass(
         prg,
         config,
         config.enable_uncurry_optimization(),
@@ -185,29 +185,7 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| inline_local::run(prg, config.num_worker_thread),
     );
 
-    // Rewrite the calls onto the uncurried functions once more. A call of one bound to a name
-    // outside a lambda reaches the place where the lambda applies its result only when the local
-    // functions are inlined above. So `g#func1(a)` and its application to `b` meet only here, and
-    // this rewrites them into `g#func2(a, b)`, which builds no closure.
-    run_pass(
-        prg,
-        config,
-        inline_local_after_uncurry,
-        "replace_calls_with_funcs",
-        |prg| {
-            uncurry::replace_calls_with_funcs(
-                prg,
-                uncurried_funcs
-                    .as_ref()
-                    .expect("the rewrite runs only where uncurrying ran"),
-                config.num_worker_thread,
-            )
-        },
-    );
-
-    // Drop the symbols nothing reaches, such as the uncurried functions no call uses. This runs
-    // after the rewrite above, because the rewrite can make a call of an uncurried function that
-    // had no call before.
+    // Drop the symbols nothing reaches, such as the uncurried functions no call uses.
     run_pass(
         prg,
         config,
@@ -225,23 +203,21 @@ pub fn run(prg: &mut Program, config: &Configuration) {
 }
 
 /// Runs the pass named `pass_name` on `prg` if `enabled`, timing it and emitting the symbols it
-/// leaves behind as one optimization step. Returns what the pass returns, or `None` if it did not
-/// run.
-fn run_pass<R>(
+/// leaves behind as one optimization step.
+fn run_pass(
     prg: &mut Program,
     config: &Configuration,
     enabled: bool,
     pass_name: &str,
-    pass: impl FnOnce(&mut Program) -> R,
-) -> Option<R> {
+    pass: impl FnOnce(&mut Program),
+) {
     if !enabled {
-        return None;
+        return;
     }
     let _sw = StopWatch::new(&format!("{}::run", pass_name), config.verbose);
-    let result = pass(prg);
+    pass(prg);
     if config.emit_symbols {
         prg.emit_symbols(&format!("{}.{}", prg.optimization_step, pass_name));
         prg.optimization_step += 1;
     }
-    Some(result)
 }
