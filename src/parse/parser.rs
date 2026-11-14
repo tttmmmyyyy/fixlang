@@ -171,18 +171,25 @@ impl ParseContext {
     }
 }
 
+/// The `*`s met while an expression is parsed, which are turned into binds around it once it is
+/// parsed.
 #[derive(Default)]
 struct DoContext {
+    /// The number of `*`s pushed, which numbers the variable of the next one's result.
     counter: u32,
     /// The `*`s in the expression being parsed, in the order they were pushed.
     monads: Vec<BindOperatorInfo>,
 }
 
+/// One `*` met while an expression is parsed.
 struct BindOperatorInfo {
+    /// The span of the `*`.
     operator_src: Span,
+    /// The monadic value the `*` is written before.
     operand: Arc<ExprNode>,
     /// The span of the source the operand was parsed from, which covers parentheses around it.
     operand_src: Span,
+    /// The variable the result of the operand's action is bound to.
     result_var: Arc<Var>,
 }
 
@@ -2597,12 +2604,12 @@ fn parse_expr_let_recursively(
         let _semicolon = pairs.next().unwrap(); // Skip ";" or "in".
         assert_eq!(_semicolon.as_rule(), Rule::in_of_let);
 
-        // Parse the rest of the expression recursively.
-        // Here we create a new DoContext.
+        // Parse the rest of the expression recursively. Its `*`s are bound around it, apart from
+        // those of the expression the `let` is in.
         let old_doctx = replace(&mut ctx.do_context, DoContext::default());
         let (value, value_span) = parse_expr_let_recursively(pairs, ctx)?;
         let value = ctx.do_context.expand_binds(value);
-        ctx.do_context = old_doctx; // Restore old DoContext.
+        ctx.do_context = old_doctx;
 
         // Create the let expression.
         let span = let_span.unite(&value_span);
