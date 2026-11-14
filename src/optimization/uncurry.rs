@@ -17,8 +17,8 @@ use crate::{
         program::{Program, Symbol},
         types::type_func,
     },
-    constants::{FUNC_ARGS_MAX, INSTANCIATED_NAME_SEPARATOR, STD_NAME, UNCURRIED_FUNC_SUFFIX},
-    fixstd::stdlib::FIX_NAME,
+    constants::{FUNC_ARGS_MAX, UNCURRIED_FUNC_SUFFIX},
+    fixstd::stdlib::is_std_fix,
     misc::{for_each_on_compiler_threads, map_on_compiler_threads, Map, Set},
     optimization::eta_expansion,
 };
@@ -149,20 +149,6 @@ fn uncurried_symbol<'a>(
         }
     }
     None
-}
-
-/// Is this symbol `Std::fix` or an instance of it? `Program::determine_symbol_name` names an
-/// instance after the original, followed by the separator and the hash of the type it was
-/// instantiated at, so the separator is what tells `fix#<hash>` apart from a name that merely begins
-/// with `fix`.
-pub fn is_std_fix(name: &FullName) -> bool {
-    if name.namespace.names != [STD_NAME] {
-        return false;
-    }
-    match name.name.strip_prefix(FIX_NAME) {
-        Some(suffix) => suffix.is_empty() || suffix.starts_with(INSTANCIATED_NAME_SEPARATOR),
-        None => false,
-    }
 }
 
 /// Rewrites `name` in place into the name carried by the uncurried function taking `n_args`
@@ -444,42 +430,5 @@ pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
             }
         }
         _ => expr.clone(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{is_std_fix, FullName, FIX_NAME, INSTANCIATED_NAME_SEPARATOR, STD_NAME};
-
-    /// The name a global of `namespace` called `name` carries, once instantiated at some type.
-    fn instance_of(namespace: &str, name: &str) -> FullName {
-        FullName::from_strs(
-            &[namespace],
-            &format!("{}{}0123abcd", name, INSTANCIATED_NAME_SEPARATOR),
-        )
-    }
-
-    /// A global reaches the predicate both as declared and as instantiated at a type, so both forms
-    /// have to be recognized.
-    #[test]
-    fn std_fix_and_its_instances_are_recognized() {
-        assert!(is_std_fix(&FullName::from_strs(&[STD_NAME], FIX_NAME)));
-        assert!(is_std_fix(&instance_of(STD_NAME, FIX_NAME)));
-    }
-
-    /// A name sharing `fix` as a prefix belongs to a distinct global, whose application would be
-    /// rewritten into a fixed-point computation were the predicate to accept it.
-    #[test]
-    fn a_name_that_merely_begins_with_fix_is_not_std_fix() {
-        assert!(!is_std_fix(&FullName::from_strs(&[STD_NAME], "fixup")));
-        assert!(!is_std_fix(&instance_of(STD_NAME, "fixup")));
-    }
-
-    /// A module's own `fix` is an ordinary global, so recognition demands the `Std` namespace as
-    /// well as the name.
-    #[test]
-    fn a_global_named_fix_outside_std_is_not_std_fix() {
-        assert!(!is_std_fix(&FullName::from_strs(&["Main"], FIX_NAME)));
-        assert!(!is_std_fix(&instance_of("Main", FIX_NAME)));
     }
 }
