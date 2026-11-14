@@ -171,18 +171,25 @@ impl ParseContext {
     }
 }
 
+/// The `*`s met while an expression is parsed, which are turned into binds around it once it is
+/// parsed.
 #[derive(Default)]
 struct DoContext {
+    /// The number of `*`s pushed, which numbers the variable of the next one's result.
     counter: u32,
     /// The `*`s in the expression being parsed, in the order they were pushed.
     monads: Vec<BindOperatorInfo>,
 }
 
+/// One `*` met while an expression is parsed.
 struct BindOperatorInfo {
+    /// The span of the `*`.
     operator_src: Span,
+    /// The monadic value the `*` is written before.
     operand: Arc<ExprNode>,
     /// The span of the source the operand was parsed from, which covers parentheses around it.
     operand_src: Span,
+    /// The variable the result of the operand's action is bound to.
     result_var: Arc<Var>,
 }
 
@@ -246,18 +253,6 @@ impl DoContext {
                 .set_app_order(AppSourceCodeOrderType::XDotF);
         }
         expr
-    }
-}
-
-fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
-    match lhs {
-        None => rhs.clone(),
-        Some(lhs) => match rhs {
-            None => return Some(lhs.clone()),
-            Some(rhs) => {
-                return Some(Span::unite(lhs, rhs));
-            }
-        },
     }
 }
 
@@ -1785,6 +1780,8 @@ fn parse_expr_type_annotation(
     Ok(expr)
 }
 
+/// Parses a sequence of expressions joined by `;;`, each run after the one before it through
+/// `Std::Monad::bind`.
 fn parse_expr_and_then_sequence(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -2006,7 +2003,7 @@ fn parse_expr_cmp(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     )
 }
 
-// Operator && (right-associative)
+/// Parses a sequence of operands joined by `&&`, right associative, into nested `if`s.
 fn parse_expr_and(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_and);
     let exprs = pair
@@ -2023,7 +2020,7 @@ fn parse_expr_and(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     }))
 }
 
-// Operator || (right-associative)
+/// Parses a sequence of operands joined by `||`, right associative, into nested `if`s.
 fn parse_expr_or(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_or);
     let exprs = pair
@@ -2146,7 +2143,7 @@ fn parse_expr_unary(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
     unreachable!()
 }
 
-// Parse right to left application sequence, e.g., `g $ f $ x`. (right-associative)
+/// Parses a right-to-left application sequence, e.g., `g $ f $ x`, right associative.
 fn parse_expr_rtl_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_rtl_app);
     let exprs = parse_combinator_sequence(pair, ctx, parse_expr_or)?;
@@ -2155,7 +2152,8 @@ fn parse_expr_rtl_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Ex
     }))
 }
 
-// Parse function composition operator >> and <<.
+/// Parses a sequence of functions joined by the composition operators `>>` and `<<`, left
+/// associative.
 fn parse_expr_composition(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -2217,9 +2215,10 @@ fn parse_expr_bind(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
     Ok(expr)
 }
 
-// Parse sequence of dot application and index syntax, e.g., `a.b[c].d[e][^f]`.
-//
-// Such sequence is should be parsed left-to-right: `(((a.b)[c]).d)([e]<<[^f])` where `<<` represents lens composition.
+/// Parses a sequence of dot applications and index syntax, e.g., `a.b[c].d[e][^f]`.
+///
+/// The sequence is parsed left to right: `(((a.b)[c]).d)([e]<<[^f])`, where `<<` is lens
+/// composition.
 fn parse_expr_dot_sequence_of_index(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -2324,7 +2323,7 @@ fn construct_expr_index(
                     vec![index_expr],
                     index.source.clone(),
                 );
-                let new_action_span = unite_span(&index.source, &action.source);
+                let new_action_span = Span::unite_present(&index.source, &action.source);
                 action = expr_app(act_func, vec![action], new_action_span);
             }
             IndexAccessor::Field(field_name, field_span) => {
@@ -2333,7 +2332,7 @@ fn construct_expr_index(
                 *act_func_name.name_as_mut() = format!("{}{}", STRUCT_ACT_SYMBOL, field_name.name);
                 let act_func = expr_var(act_func_name, field_span.clone())
                     .set_struct_act_func_in_index_syntax(true);
-                let new_action_span = unite_span(&field_span, &action.source);
+                let new_action_span = Span::unite_present(&field_span, &action.source);
                 action = expr_app(act_func, vec![action], new_action_span);
             }
         }
@@ -2388,7 +2387,7 @@ fn parse_index_syntax(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<IndexS
     })
 }
 
-// Parse application sequence, e.g., `f(x, y)`. (left-associative)
+/// Parses an application sequence, e.g., `f(x, y)`, left associative.
 fn parse_expr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_app);
     let mut pairs = pair.into_inner();
@@ -2574,7 +2573,7 @@ fn parse_expr_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     })
 }
 
-// Parse the expression `let {pat1} = {bound1}; let {pat2} = {bound2}; ...; {value}`.
+/// Parses the expression `let {pat1} = {bound1}; let {pat2} = {bound2}; ...; {value}`.
 fn parse_expr_let(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     let pairs = pair.into_inner();
     Ok(parse_expr_let_recursively(pairs, ctx)?.0)
@@ -2605,12 +2604,12 @@ fn parse_expr_let_recursively(
         let _semicolon = pairs.next().unwrap(); // Skip ";" or "in".
         assert_eq!(_semicolon.as_rule(), Rule::in_of_let);
 
-        // Parse the rest of the expression recursively.
-        // Here we create a new DoContext.
+        // Parse the rest of the expression recursively. Its `*`s are bound around it, apart from
+        // those of the expression the `let` is in.
         let old_doctx = replace(&mut ctx.do_context, DoContext::default());
         let (value, value_span) = parse_expr_let_recursively(pairs, ctx)?;
         let value = ctx.do_context.expand_binds(value);
-        ctx.do_context = old_doctx; // Restore old DoContext.
+        ctx.do_context = old_doctx;
 
         // Create the let expression.
         let span = let_span.unite(&value_span);
@@ -2629,6 +2628,8 @@ fn parse_expr_eval(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
     Ok(expr_eval(sub, main, Some(span)))
 }
 
+/// Parses a lambda, e.g., `|x, (y, z)| x + y`, into one abstraction per parameter. Each abstraction
+/// receives its argument as `#param` and binds the parameter's pattern to it with a `let`.
 fn parse_expr_lam(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
@@ -2642,7 +2643,7 @@ fn parse_expr_lam(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     let mut pat_body_span = Some(body_span);
     let var = var_local(PARAM_NAME);
     for pat in pats.iter().rev() {
-        pat_body_span = Span::unite_opt(&pat_body_span, &pat.info.source);
+        pat_body_span = Span::unite_both(&pat_body_span, &pat.info.source);
         expr = expr_abs_param_src(
             vec![var.clone()],
             expr_let(
@@ -3156,7 +3157,7 @@ fn parse_type_tyapp(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     let mut ret = parse_type_nlr(pair, ctx);
     for pair in pairs {
         let arg = parse_type_nlr(pair, ctx);
-        let span = unite_span(ret.get_source(), arg.get_source());
+        let span = Span::unite_present(ret.get_source(), arg.get_source());
         ret = type_tyapp(ret, arg).set_source(span);
     }
     ret.set_source(Some(span))
