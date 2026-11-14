@@ -30,11 +30,10 @@ use std::{mem, sync::Arc};
 /// threads.
 ///
 /// The program may be the output of an earlier run. A global that already has an uncurried
-/// function keeps the ones it has, and gets no new ones. The program is rewritten onto the
-/// uncurried functions this run defines only: the passes between two runs specialize each
-/// uncurried function from its own callers, as lambda set specialization does, so `g#func1` and
-/// `g#func2` of an earlier run can take different types where `g#func1(a)(b)` would become
-/// `g#func2(a, b)`.
+/// function keeps the ones it has, and gets no new ones. Calls are rewritten only onto the
+/// uncurried functions this run defines. The passes between two runs, such as lambda set
+/// specialization, specialize each uncurried function to its own callers, so the `g#func2` of an
+/// earlier run can take other types than a call `g#func1(a)(b)` supplies.
 pub fn run(prg: &mut Program, num_threads: usize) {
     // The globals an earlier run gave uncurried functions.
     let globals_with_funcs: Set<FullName> = prg
