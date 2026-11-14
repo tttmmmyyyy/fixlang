@@ -560,10 +560,12 @@ legendre で `--langarena` を、main のバイナリ (84301fd) と段階 4 の�
 | --- | ---: | ---: |
 | cp_dsegtree / cp_segtree | 0.994 | 0.998 |
 | cp_ldsegtree / cp_lsegtree (今の cp-library) | 1.134 | 1.118 |
-| 自然な書き方の LDSegtree / cp_lsegtree | 1.674 | 0.973 |
+| 自然な書き方の LDSegtree / cp_lsegtree | 1.654 | 0.959 |
 
-- 今の cp-library の LDSegtree は、main のコンパイラで速くなるように、演算を分解して受け取る書き方をしている。自然な書き方の行は、演算をフィールドのクロージャ (`_op`、`_act_op`、`_act`) に持たせた版 (cp-library のブランチ `natural-ldsegtree`) を、2026-11-11 に手元の機械で測ったもので、段階 4 の値は sink_retains を入れる前の段階 4 のコンパイラのものである。
+- 今の cp-library の LDSegtree は、main のコンパイラで速くなるように、演算を分解して受け取る書き方をしている。自然な書き方の行は、演算をフィールドのクロージャ (`_op`、`_act_op`、`_act`) に持たせた版 (cp-library のブランチ `natural-ldsegtree`) を、同じ二つのコンパイラでビルドし、legendre の `perf_counters.py` で測ったものである (自然な書き方の LDSegtree は main で 1,196,137,735 命令、段階 4 で 676,231,725 命令)。
 - cp_segtree は main より 8.96%、cp_dsegtree は 9.46% 多く、どちらも 65.6M 前後にいる (main の cp_segtree は 60.26M)。lambda set のパスの後の `inline` が `Segtree::set` を `main` に展開した結果、LLVM が `set` の親をたどるループの範囲検査を消せなくなった。Fix が LLVM に渡す添字の計算は、どちらのコンパイラでも `p / 2` を表す `sdiv` である。main では、ループを `set` の中で先に最適化するので `k >= 0` が分からず、`sdiv` が残り、`set` を `main` へ展開した後で CorrelatedValuePropagation が検査を消す。段階 4 では、ループが初めから `main` の中にあり、`k >= 0` が分かるので、InstCombine が CVP より先に `sdiv` を `lshr` に書き換える。LLVM の値の範囲の解析 (LVI) は、`lshr` で小さくなっていく再帰の値の範囲を求めないので、検査が残る。LLVM の側の限界として受け入れた。
+
+**サイクル数。** 同じ二つのコンパイラで、ほかに何も走っていない legendre でもう一度測ったサイクル数は、124 本のうち 40 本が 1% 以上減り、19 本が 1% 以上増え、65 本は差が 1% 未満で、比の幾何平均は -8.09% である。命令数が main と 0.01% も違わないのにサイクル数が動いた本もある (Etc::Sieve +5.9%、sort_ordered +8.6% など)。サイクル数はコードの置き場所でも動く (#654) ので、結論は命令数で読む。
 
 **main との比較。** 124 本のうち、1% 以上減ったものが 40 本、1% 以上増えたものが 15 本、残りの 69 本は差が 1% 未満である。命令数の比の幾何平均は -9.75% で、DynIterator の 3 本を除いた 121 本では -1.99% である。DynIterator の 3 本は、`to_dyn` で作った `DynIterator` を畳み込むもので、dyn_iter_map は -98.2% で iter_map と同じ 4,235,323 命令になり、dyn_iter_bind は -97.9%、dyn_iter_branch は -90.9% である。
 
