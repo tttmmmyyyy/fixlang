@@ -1322,6 +1322,23 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// A rename that starts on a name written after `*` in a field of a struct literal renames that
+    /// name. In the fixture `rename_bind_operand_in_struct_literal`, line 5 (0-indexed) is
+    /// `wrap = |local| pure(S { x : *local, y : 2 });`, with the binder `local` at col 8 and the
+    /// `local` after `*` at col 29.
+    #[test]
+    fn test_rename_from_the_operand_of_a_bind_in_a_struct_literal() {
+        let mut ctx = LspTestCtx::setup("rename_bind_operand_in_struct_literal", &["main.fix"]);
+        let we = ctx.rename("main.fix", 5, 30, "m");
+        assert_eq!(
+            edits_by_position(&we),
+            vec![((5, 8), "m".to_string()), ((5, 29), "m".to_string())],
+            "WorkspaceEdit: {:?}",
+            we
+        );
+        ctx.shutdown();
+    }
+
     // =======================================================================
     // rename_field_via_shorthand_accessor fixture, main.fix (0-indexed):
     //
