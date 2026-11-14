@@ -1,5 +1,6 @@
 //! The span of an expression the parser builds from parts covers the source it was parsed from,
-//! including the parentheses of a parenthesized part at either end.
+//! including the parentheses of a parenthesized part at either end, and a position in the source
+//! finds what is written there.
 
 use crate::{
     ast::{
@@ -50,6 +51,20 @@ fn parse_value(expr: &str) -> ParsedValue {
 fn span_text(expr: &ExprNode, content: &str) -> String {
     let span = expr.source.clone().unwrap();
     content[span.start..span.end].to_string()
+}
+
+/// What `find_node_at` finds at each position the expression of `value` spans, with the position.
+fn node_at_each_position(value: &ParsedValue) -> Vec<(usize, Option<EndNode>)> {
+    let span = value.expr.source.clone().unwrap();
+    (span.start..=span.end)
+        .map(|pos| {
+            let node = value.expr.find_node_at(&SourcePos {
+                input: span.input.clone(),
+                pos,
+            });
+            (pos, node)
+        })
+        .collect()
 }
 
 /// Verifies that an expression built from parts spans its whole source, for each way of building
@@ -136,19 +151,11 @@ pub fn test_the_binds_in_a_parenthesized_expression_span_the_text_inside() {
 #[test]
 pub fn test_no_position_finds_a_name_the_source_never_writes() {
     let value = parse_value("let x = *(m); f(*(g)(x), *n)");
-    let span = value.expr.source.clone().unwrap();
-    let generated = (span.start..=span.end)
-        .filter_map(|pos| {
-            let pos = SourcePos {
-                input: span.input.clone(),
-                pos,
-            };
-            match value.expr.find_node_at(&pos) {
-                Some(EndNode::Expr(var, _)) if var.name.is_generated() => {
-                    Some((pos.pos, var.name.name))
-                }
-                _ => None,
-            }
+    let generated = node_at_each_position(&value)
+        .into_iter()
+        .filter_map(|(pos, node)| match node {
+            Some(EndNode::Expr(var, _)) if var.name.is_generated() => Some((pos, var.name.name)),
+            _ => None,
         })
         .collect::<Vec<_>>();
     assert!(
@@ -166,15 +173,10 @@ pub fn test_only_the_type_name_of_a_struct_finds_its_type() {
     let exprs = ["S { a : ?todo, b : *local }", "let S { a : x, b : _ } = s; x"];
     for expr in exprs {
         let value = parse_value(expr);
-        let span = value.expr.source.clone().unwrap();
-        let type_positions = (span.start..=span.end)
-            .filter(|&pos| {
-                let pos = SourcePos {
-                    input: span.input.clone(),
-                    pos,
-                };
-                matches!(value.expr.find_node_at(&pos), Some(EndNode::Type(_)))
-            })
+        let type_positions = node_at_each_position(&value)
+            .into_iter()
+            .filter(|(_, node)| matches!(node, Some(EndNode::Type(_))))
+            .map(|(pos, _)| pos)
             .collect::<Vec<_>>();
         // A position just after a name also counts as in it.
         let name_start = value.content.find("S {").unwrap();
