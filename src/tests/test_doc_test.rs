@@ -956,7 +956,10 @@ other = 1;
     let stderr = String::from_utf8_lossy(&output.stderr);
     for position in ["4:4-5:30", "12:4-13:30"] {
         assert!(
-            stderr.contains(&format!("`#3` is the type for this expression.\n\n{} in \"lib.fix\"", position)),
+            stderr.contains(&format!(
+                "`#3` is the type for this expression.\n\n{} in \"lib.fix\"",
+                position
+            )),
             "the expression is reported at {}\n{}",
             position,
             streams(&output)
