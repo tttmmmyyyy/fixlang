@@ -180,14 +180,14 @@ fn convert_to_uncurried_func_name(name: &mut Name, n_args: usize) {
 /// # Examples
 /// `g#func2` gives `(g, 2)`, and `g#func2#ls0` gives `None`.
 fn split_uncurried_func_name(name: &FullName) -> Option<(FullName, usize)> {
-    let (global, suffix) = name.name.rsplit_once(UNCURRIED_FUNC_SUFFIX)?;
+    let (global_name, suffix) = name.name.rsplit_once(UNCURRIED_FUNC_SUFFIX)?;
     let n_args: usize = suffix.parse().ok()?;
     if n_args.to_string() != suffix {
         return None;
     }
-    let mut global_name = name.clone();
-    *global_name.name_as_mut() = global.to_string();
-    Some((global_name, n_args))
+    let mut global = name.clone();
+    *global.name_as_mut() = global_name.to_string();
+    Some((global, n_args))
 }
 
 /// The uncurried function taking `n_args` arguments that `expr`, the body of a global, becomes.
