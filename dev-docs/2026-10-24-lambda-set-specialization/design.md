@@ -466,13 +466,13 @@ union の値の呼び出し `f(x)` は、`f` と `x` をこの順に `let` に�
 - **`split_struct_args` から `closure_specialization` までのパスを止めた形を測り、要らないものを消す。** 行った。`split_struct_args`、その後の 1 回目の `collapse_constructions`、`closure_specialization` を消した。`split_struct_args` の後の `inline` は、lambda set のパスの後の `inline` として残した。止めて測った結果は次のとおりである (LangArena の命令数、統合ブランチの先端との比較)。
   - `closure_specialization` と 1 回目の `collapse_constructions` は、何も書き換えていなかった。止めても 121 本の命令数は変わらない。
   - `split_struct_args` の後の `inline` を一緒に止めると、Distance::NGram と Brainfuck::Recursion が増えた。この `inline` は、lambda set のパスがリフトした関数を呼び出し側に展開する。
-  - `split_struct_args` を止めると、Compress::HuffDecode が 10% 増えた。ループの関数は、ループの本体のラムダのキャプチャの構造体を受け取って先頭で分解し、構造体を次の周にもそのまま渡す。そのため、分解の手前で木の根が retain され、根を使わない周では同じ周のうちに release される。`split_struct_args` は、構造体を引数に分けることで、この組を作らなかった。この組は、RC IR のパス `sink_retains` が消す。`sink_retains` は、`cancel` が残した retain を経路ごとに下へ動かし、release で打ち消される経路では両方を消し、消費する経路では消費の直前に置く。`sink_retains` を入れて、HuffDecode は 9.1%、Etc::CacheSimulation は 3.8% 減った。
+  - `split_struct_args` を止めると、Compress::HuffDecode が 10% 増えた。ループの関数は、ループの本体のラムダのキャプチャの構造体を受け取って先頭で分解し、構造体を次の反復にもそのまま渡す。そのため、分解の手前で木の根が retain され、根を使わない反復では同じ反復のうちに release される。`split_struct_args` は、構造体を引数に分けることで、この組を作らなかった。この組は、RC IR のパス `sink_retains` が消す。`sink_retains` は、`cancel` が残した retain を経路ごとに下へ動かし、release で打ち消される経路では両方を消し、消費する経路では消費の直前に置く。`sink_retains` を入れて、HuffDecode は 9.1%、Etc::CacheSimulation は 3.8% 減った。
   - `sink_retains` は、一意性を決める `unique_check_elim` と `locality` の後に置く。provenance の解析は、retain が名指す変数だけを「一意とは限らない」に下げるので、retain が同じオブジェクトの別名を作る命令より前にあることを前提にしている。`cancel` の直後に置くと、retain より前に作られた別名が一意と判定され、共有されている配列をその場で書き換える (cp_maxflow が誤った答えを出し、テストが 14 本落ちる)。
 - **段階 2 の計測で命令数が増えたケースを、段階 4 の形で測り直す** (付録「段階 2 の LangArena の計測」)。段階 4 の結果は付録「段階 4 の LangArena の計測」にある。原因の分かっているものは次のとおり。
   - random_state (+105%)。State モナドの `fold_m` のループの本体が `bind` の続きのラムダになり、「処理してから調べる」形のループになる。最初の 1 回の処理がループの外に出て、乱数を作る関数の呼び出しが 2 か所になり、LLVM がそれを展開しない。main では `uncurry` が `fold_m(s, f, it)(state)` を一つの関数にまとめ、「調べてから処理する」形になる。段階 3 で main と同じ水準に戻り、段階 4 でも 367,940,477 で、main (367,940,476) と同じである。
   - iter_flatten (+23%)。main では `_inner_until` が別の関数として残り、内側の配列を回すループが締まったループになる。段階 2 ではすべてが一つのループに展開され、要素ごとに `flatten` の外側の状態を調べ直す。LLVM が入れ子のループを取り戻せない形で、原因の段は特定していない。段階 4 でも +23.3% である。
-  - Maze::BFS (+13%) と Compress::BWTEncode (+15%)。RC IR の borrow の振り分け (`borrow.rs` の `routing_is_safe`) は、末尾の位置で own の値を一つでも渡す呼び出しを borrow versionへ送らないので、borrow versionのループは 1 周目だけ回って own versionへ移る。段階 2 で直接呼び出しが増え、ループの外へ切り出された 1 周目と own versionの両方が内側のループの borrow versionを呼ぶので、LLVM がそれを展開しない。振り分けは #1005 で、呼び出しが貸せる引数の組み合わせごとに判定する形になった。段階 4 では、Maze::BFS は main より 33.5% 少なく、BWTEncode は main より 6.7% 多い (段階 3 の終わりと同じ値)。
-  - CLBG::Spectralnorm (+9.9%) と cp_dsegtree (+9.5%)。Fix の IR は良くなっている。前者は、`_eval_a_times_u` などが一つの関数に展開され、LLVM の SLP ベクトル化が 2 周分を組にしたもので、命令は増えるが、サイクル数は main と同じ水準である (main の 1369M に対して 1357M)。後者は cp_segtree と同じ原因で、付録「段階 4 の LangArena の計測」にある。
+  - Maze::BFS (+13%) と Compress::BWTEncode (+15%)。RC IR の borrow の振り分け (`borrow.rs` の `routing_is_safe`) は、末尾の位置で own の値を一つでも渡す呼び出しを borrow versionへ送らないので、borrow versionのループは 1 回目の反復だけ回って own versionへ移る。段階 2 で直接呼び出しが増え、ループの外へ切り出された 1 回目の反復と own versionの両方が内側のループの borrow versionを呼ぶので、LLVM がそれを展開しない。振り分けは #1005 で、呼び出しが貸せる引数の組み合わせごとに判定する形になった。段階 4 では、Maze::BFS は main より 33.5% 少なく、BWTEncode は main より 6.7% 多い (段階 3 の終わりと同じ値)。
+  - CLBG::Spectralnorm (+9.9%) と cp_dsegtree (+9.5%)。Fix の IR は良くなっている。前者は、`_eval_a_times_u` などが一つの関数に展開され、LLVM の SLP ベクトル化が 2 回の反復を組にしたもので、命令は増えるが、サイクル数は main と同じ水準である (main の 1369M に対して 1357M)。後者は cp_segtree と同じ原因で、付録「段階 4 の LangArena の計測」にある。
 - **本体のラムダ自身の集合を、シンボルのコピーの鍵 (`Component::body_params`) から外す。** 行った。推論は、グローバル関数の本体のラムダのノードに型を記録するとき、そのラムダ自身の集合 (型の最初のスロット) を記録しない。本体はそのラムダの値をどこでも作らないので、その集合は本体のコードを変えない。大域関数を K 個の別の集合に入れても、コピーは 1 個になる。
 - **段階 3 の終わりで落ちているテストを通す。** 通る。全部の引数を渡す呼び出しが、1 回目の `uncurry` で uncurried function の呼び出しになり、内側のラムダの連鎖への呼び出しにならないからである。`test_a_round_of_a_specialized_combinator_builds_no_closure` は、`test_closure_cases.rs` の `test_a_round_of_a_monadic_combinator_builds_no_closure` に名前を変えた。
 
@@ -575,9 +575,9 @@ legendre で `--langarena` を、main のバイナリ (84301fd) と段階 4 の�
 増えた 15 本の原因は次のとおり。どれも、Fix が LLVM に渡す IR は main と同じか良く、LLVM の判断で増えたものである。原因は legendre で調べた。fannkuch_scratch、Distance::NGram、levenshtein、Etc::GameOfLife は段階 4 のバイナリ (83db28f) で、ほかは段階 4 の途中の形 (1ba5f5a) で調べた。「段階 3 の終わりと同じ値」は、段階 3 の終わりとの差が 0.1% 未満のもので、段階 4 が増やしたものではない。
 
 - sort_stable (+66.8%) と Compress::BWTEncode (+6.7%): 段階 3 の終わりと同じ値。`_merge_runs` が 1 つのコピーになり、LLVM がそれを `_merge_sort_by_ranged` へ展開する。合流のループでスピルが増え、1 要素あたり 12 命令が 18 命令になる。BWTEncode のサイクル数は main より 3.7% 少ない。
-- Compress::BWTDecode (+23.0%): 段階 3 の終わりと同じ値。原因は二つある。(1) Fix が `_bucket_starts` を展開するようになり、その中のループの出口で合流ブロックができる。LLVM の SCEV が入口の `n != 0` をそこから先へ運べず、続く 2 つのループに境界検査が毎周残る。main では retain のために LLVM がループの 1 周目を loop peeling (ループの 1 周目をループの外へ切り出すこと) で切り出し、それで消えていた。(2) ソートの部分は sort_stable と同じ。
-- Base64::Encode (+17.2%): 段階 3 の終わりと同じ値。main では、`src` の retain のためにLLVM がループの 1 周目を loop peeling で切り出し、`_b64_to_u8_table` の初期化の検査がその 1 周で済んでいた。段階 4 ではborrow で受け取るので切り出さず、検査が毎周残る。
-- fannkuch_scratch (+9.8%): 段階 3 の終わりと同じ値。main では、外側のループで毎周 `perm1` の参照カウントを読む (最適化後の IR に参照カウントの `load` が 2 か所ある)。段階 4 ではこの読み出しがなく、LLVM が `perm1` の 10 個の要素をレジスタに置く。次の順列を作る回転がレジスタ間の `mov` の列になり、`scratch` へ写す部分がベクトルの 3 回の書き込みから要素ごとの 10 回の書き込みになる。サイクル数は、同じ二つのコンパイラで建て直して測ると main と同じである (636.8M と 636.9M)。
+- Compress::BWTDecode (+23.0%): 段階 3 の終わりと同じ値。原因は二つある。(1) Fix が `_bucket_starts` を展開するようになり、その中のループの出口に、分岐が合流する基本ブロックができる。LLVM の SCEV が入口の `n != 0` をそこから先へ運べず、続く 2 つのループに境界検査が反復ごとに残る。main では retain のために LLVM がループの 1 回目の反復を loop peeling (ループの 1 回目の反復をループの外へ切り出すこと) で切り出し、それで消えていた。(2) ソートの部分は sort_stable と同じ。
+- Base64::Encode (+17.2%): 段階 3 の終わりと同じ値。main では、`src` の retain のために LLVM がループの 1 回目の反復を loop peeling で切り出し、`_b64_to_u8_table` の初期化の検査がその 1 回で済んでいた。段階 4 では borrow で受け取るので切り出さず、検査が反復ごとに残る。
+- fannkuch_scratch (+9.8%): 段階 3 の終わりと同じ値。main では、外側のループで反復ごとに `perm1` の参照カウントを読む (最適化後の IR に参照カウントの `load` が 2 か所ある)。段階 4 ではこの読み出しがなく、LLVM が `perm1` の 10 個の要素をレジスタに置く。次の順列を作る回転がレジスタ間の `mov` の列になり、`scratch` へ写す部分がベクトルの 3 回の書き込みから要素ごとの 10 回の書き込みになる。サイクル数は、同じ二つのコンパイラで建て直して測ると main と同じである (636.8M と 636.9M)。
 - iter_flatten (+23.3%): 段階 3 の終わりと同じ値。定数の旗を調べる分岐 (`xor`、`test`、`je`) が LLVM の jump threading で消えず、ループに残る。
 - CLBG::Spectralnorm (+9.9%): 段階 3 の終わりと同じ値。原因は「段階 4 で行うこと」にある。
 - cp_dsegtree (+9.5%) と cp_segtree (+9.0%): 上の「指標の比」にある。cp_dsegtree は段階 3 の終わりと同じ値で、cp_segtree は段階 4 で増えた。
@@ -585,8 +585,8 @@ legendre で `--langarena` を、main のバイナリ (84301fd) と段階 4 の�
 - Brainfuck::Array (+4.5%): 段階 3 の終わりと同じ値。`_run_flat` のループが 2 か所から呼ばれる 1 つのコピーになり、LLVM が展開しないので `jumps` の長さが分からず、`jumps.@(pc)` の境界検査が残る。
 - Compress::HuffEncode (+3.8%): 段階 4 で増えた。ループの外の release の順が変わり、レジスタの割り当てが変わった。IR の release の順を入れ替える実験で確かめた。
 - Distance::NGram (+1.8%): `HashMap::insert` が展開されなくなった。main では、2 つのループの片方が参照カウントを調べる版の `insert` を呼び、もう片方が一意な表を受け取る版を呼ぶ。後者は呼び出し元が 1 か所なので、LLVM がそこへ展開する。段階 4 では、2 つのループがどちらも一意な表を受け取る版を呼ぶ。呼び出し元が 2 か所になり、LLVM はどちらにも展開しない。手元の callgrind では、`insert` の呼び出しは 1285 万回から 2556 万回になり、1 回あたりの命令は 89 から 72 に減る。
-- levenshtein (+1.6%): 段階 3 の終わりと同じ値。最適化後の IR では、内側のループの本体は main と同じ操作の列である。main は行ごとに 2 つの配列を retain し、LLVM は内側のループの 1 周目を loop peeling で切り出している。段階 4 ではこの retain がなく、切り出しもない。機械語では、ループの終わりと境界検査の比較の形が変わり、1 マスあたり 20 命令が 21 命令になる。サイクル数は main より 1.3% 少ない。
-- Etc::GameOfLife (+1.1%): 段階 3 の終わりと同じ値。最適化後の IR では、段階 4 の本体のほうが retain と release が少ない。機械語では、セルごとのループの終わりの判定の形が変わり、1 周が 94 命令から 95 命令になる。legendre の CPU にない命令を切って手元の機械 (Rocket Lake) 向けに建てると、命令数は main と同じになる。LLVM が CPU ごとに選ぶ命令の並びの違いである。
+- levenshtein (+1.6%): 段階 3 の終わりと同じ値。最適化後の IR では、内側のループの本体は main と同じ操作の列である。main は行ごとに 2 つの配列を retain し、LLVM は内側のループの 1 回目の反復を loop peeling で切り出している。段階 4 ではこの retain がなく、切り出しもない。機械語では、ループの終わりと境界検査の比較の形が変わり、1 マスあたり 20 命令が 21 命令になる。サイクル数は main より 1.3% 少ない。
+- Etc::GameOfLife (+1.1%): 段階 3 の終わりと同じ値。最適化後の IR では、段階 4 の本体のほうが retain と release が少ない。機械語では、セルごとのループの終わりの判定の形が変わり、1 回の反復が 94 命令から 95 命令になる。legendre の CPU にない命令を切って手元の機械 (Rocket Lake) 向けに建てると、命令数は main と同じになる。LLVM が CPU ごとに選ぶ命令の並びの違いである。
 
 Matmul の 4 本は main より 0.03% 多いだけだが、二重ループの内側で配列の境界検査が反復ごとに残る取り逃しが main からある (#1014)。LLVM の `IndVarSimplify::predicateLoopExits` は、範囲検査の出口を、ループの前で 1 度だけ調べる条件に置き換える。この置き換えを、出口のブロックに phi のある出口には行わないためである。
 
@@ -649,13 +649,13 @@ Matmul の 4 本は main より 0.03% 多いだけだが、二重ループの内
   - Etc::Words の残りの分と、Calculator::Interpreter の一部: `HashMap::to_iter` の `flat_map` に渡すラムダが、main では box のクロージャで、スロットごとにクロージャとキャプチャの retain と release が走る。Words では 1 スロット 25 命令が 8 命令になる。
   - cp_convolution_i64 の残りの分: `a.map(zp)` はグローバル関数を値として渡す。main は `map` を特殊化せず、要素ごとに `zp` を関数ポインタで呼ぶ。段階 4 は `map` を `zp` の集合に特殊化して展開する (-18.4M)。
 - **キャプチャを borrow で渡す (#1005)。** Maze の 3 本、Sort::Quick、Sort::Merge、cp_twosat、cp_scc、cp_bellman_ford、cp_maxflow、cp_bipartite、cp_dijkstra、Binarytrees::Arena、sort_stable_ordered、Graph::DFS の 74%、Calculator::Interpreter、Compress::LZWEncode、Distance::Jaro の #1005 の分、cp_suffix_array と cp_lcp_array の大半がこれに当たる。
-  - main の borrow version は、全部の引数を borrow で受け取る `#borrow` の 1 種類だけである。`routing_is_safe` は、末尾の位置で own の値を渡す呼び出しを borrow version へ送らないので、ループの自己末尾呼び出しは 2 周目から own version へ移る。own version はキャプチャした配列 (グラフの辺の配列など) を所有するので、外側のループが内側のループに入るたびに retain と release が走る。内側のループの関数は borrow version と own version の 2 か所から呼ばれるので、LLVM がインライン展開せず、スタックで渡す十数個の引数と sret の返り値を毎回払う。
+  - main の borrow version は、全部の引数を borrow で受け取る `#borrow` の 1 種類だけである。`routing_is_safe` は、末尾の位置で own の値を渡す呼び出しを borrow version へ送らないので、ループの自己末尾呼び出しは 2 回目の反復から own version へ移る。own version はキャプチャした配列 (グラフの辺の配列など) を所有するので、外側のループが内側のループに入るたびに retain と release が走る。内側のループの関数は borrow version と own version の 2 か所から呼ばれるので、LLVM がインライン展開せず、スタックで渡す十数個の引数と sret の返り値を毎回払う。
   - #1005 では `#borrowOOBB` のような borrow version ができる。末尾の 1 文字が引数 1 つに対応し、O は own、B は borrow で、ここでは状態が own、キャプチャが borrow である。自己末尾呼び出しは同じ borrow version にとどまり、LLVM が自己再帰をループにして、呼び出し側へインライン展開する。Maze::BFS では取り出す 1 マスあたり 171 命令が 103 命令に、cp_twosat では根ごとの 35 命令が 0 命令に、cp_bellman_ford では頂点ごとの 22 命令が 7 命令になる。
   - Calculator::Interpreter: `HashMap::_find_slot` の探索ループが、呼び出し側ごとに別の borrow version (`#borrowOB` と `#borrowBB`) になる。どちらも呼び出し側が 1 か所になり、LLVM がインライン展開する (1 回の呼び出しあたり約 31 命令減る)。
   - Compress::LZWEncode: `HashMap::_find_slot` の鍵の比較 (`Array U8` の `eq`) で、鍵を own で受けるコピーが探索ループに入り、release が 2 つの出口のそれぞれに置かれる。main は 2 つの出口を 1 つにまとめて比較の結果を持ち回すので 1 バイト 9 命令かかり、段階 4 では 6 命令になる。Etc::Words、Etc::CacheSimulation、Template::Regex の鍵の比較も同じ形である。
   - cp_suffix_array と cp_lcp_array: `_sa_is` の `induce` の中の 2 つの fold が展開され、`sum_s` と `sum_l` の複製 (memcpy) が 32 回から 16 回になる。
-  - Brainfuck::Recursion には、#1005 と lambda set のパスの両方が要る。段階 4 では、`_execute` の、`ops` の添字 `index` を進めるループが `#borrowOB` (状態は own、`ops` は borrow) の borrow version になり、body のループの 1 周ごとにあった `ops` の retain と release がなくなる (1 周 24 命令が 7 命令になり、2.9 億周)。main に #1005 だけを当てると、+41.4% になる。
-- **`sink_retains` が、毎周の retain を release と打ち消した。** Compress::HuffDecode の残りの分: ビットごとの `loop` で、main は本体のラムダのキャプチャの木 `tree` を毎周 retain し、内部ノードへ進む経路で release する。段階 4 では、`sink_retains` がこの retain を葉に着いた経路まで下ろし、内部ノードの経路では release と打ち消す。1 周は平均 5.1 命令減り、8.8 億周で差のすべてになる。Etc::CacheSimulation の残りの分の、書式のテンプレートの文字を写すループも同じ形で、1 文字 17 命令が 12 命令になる。
+  - Brainfuck::Recursion には、#1005 と lambda set のパスの両方が要る。段階 4 では、`_execute` の、`ops` の添字 `index` を進めるループが `#borrowOB` (状態は own、`ops` は borrow) の borrow version になり、body のループの 反復ごとにあった `ops` の retain と release がなくなる (1 回の反復の 24 命令が 7 命令になり、2.9 億回の反復)。main に #1005 だけを当てると、+41.4% になる。
+- **`sink_retains` が、反復ごとの retain を release と打ち消した。** Compress::HuffDecode の残りの分: ビットごとの `loop` で、main は本体のラムダのキャプチャの木 `tree` を反復ごとに retain し、内部ノードへ進む経路で release する。段階 4 では、`sink_retains` がこの retain を葉に着いた経路まで下ろし、内部ノードの経路では release と打ち消す。1 回の反復は平均 5.1 命令減り、8.8 億回の反復で差のすべてになる。Etc::CacheSimulation の残りの分の、書式のテンプレートの文字を写すループも同じ形で、1 文字 17 命令が 12 命令になる。
 - **Fix のコンパイラのインライン展開と評価の順が変わった。** `inline` の complexity はラムダの本体のノードも数えるので、ラムダをリフトした後の関数は閾値を下回り、lambda set のパスの後の `inline` が呼び出し側へ展開する。
   - cp_lib_prime_list: `calc_prime_list` が `main` に展開され、素数を数える fold の上限が定数になる。LLVM がそのループを 5 倍に unroll し、1 要素あたり 10 命令が 8 命令になる。差のすべてである。
   - cp_ldsegtree と、cp_lsegtree の一部: `_pending_above`、`LDSegtree::fold`、`_propagate_above`、`_recalc_above` が `main` に入り、それぞれ 10 万から 20 万回の呼び出しの手間がなくなる。ループの本体の命令は同じである。
@@ -663,7 +663,7 @@ Matmul の 4 本は main より 0.03% 多いだけだが、二重ループの内
   - Etc::NeuralNet の残りの分: `_feed_forward` の `net._activate_layer(net.@hidden)._activate_layer(net.@output)` で、段階 4 は `net.@output` を 1 回目の呼び出しの前に読む。そのため `net` は一意のまま渡り、Net の box と `outputs` の配列の複製がなくなる (malloc は 1 回の `train` あたり 3 回から 1 回)。読む順が変わったのは、lambda set のパスの前の `uncurry` が 2 引数の呼び出しにしたためと見ているが、パスは特定していない。
 - **LLVM の判断の差。** Graph::BFS、Graph::DFS の残りの 26%、Json::ParseDom、CSV::Parse、Etc::LogParser、cp_convolution の butterfly がこれに当たる。仕事の量は同じで、関数の境界が変わり、LLVM のレジスタの割り当て、ループの versioning、展開が変わった。Graph::BFS と Graph::DFS では、lambda set のパスで `_bfs` と `walk` の呼び出しが直接呼び出しになって呼び出し側に展開され、外側のループの退避と読み戻しが減った (Graph::BFS で頂点あたり 42 命令が 36 命令)。増えた 15 本と同じ種類の差が、減る向きに出たものである。
 
-cp_z_algorithm と cp_mincostflow は、legendre では -2.0% だが、手元でビルドすると +1.1% と +0.8% になる。z_algorithm では、内側のループに入るたびの `s` の retain と release がなくなった分 (約 -26M) を、LLVM が内側のループの 1 周目を loop peeling で切り出さなくなった分が上回る。mincostflow では、Dijkstra のループの retain と release がなくなり `BinaryHeap::push` が展開された分を、展開で増えたスピル (辺の緩和のループで 1 本あたり 12 命令が 15 命令) が上回る。`fix` はホストの CPU 向けにコードを出すので、CPU のモデルの違いで LLVM の判断が変わったものと見ているが、legendre でビルドした機械語は見ていない。
+cp_z_algorithm と cp_mincostflow は、legendre では -2.0% だが、手元でビルドすると +1.1% と +0.8% になる。z_algorithm では、内側のループに入るたびの `s` の retain と release がなくなった分 (約 -26M) を、LLVM が内側のループの 1 回目の反復を loop peeling で切り出さなくなった分が上回る。mincostflow では、Dijkstra のループの retain と release がなくなり `BinaryHeap::push` が展開された分を、展開で増えたスピル (辺の緩和のループで 1 本あたり 12 命令が 15 命令) が上回る。`fix` はホストの CPU 向けにコードを出すので、CPU のモデルの違いで LLVM の判断が変わったものと見ているが、legendre でビルドした機械語は見ていない。
 
 **段階 3 との比較。** 段階 3 にもあった 121 本のうち、1% 以上減ったものが 9 本、1% 以上増えたものが 5 本である。
 
@@ -871,7 +871,7 @@ William Brandon, Benjamin Driscoll, Frank Dai, Wilson Berkow, Mae Milano. *Bette
 
 ## 付録: 変数に付く情報で追った試作の記録
 
-試作は、ブランチ `struct-field-closure-spec` (コミットしていない作業ツリー) にある。次の変換を 2 周回した。
+試作は、ブランチ `struct-field-closure-spec` (コミットしていない作業ツリー) にある。次の変換を 2 回繰り返した。
 
 - 構造体の引数の分割
 - 引数をそのまま返す部分の削除 (互いの結果を返し合う関数の集まりを単位に)
