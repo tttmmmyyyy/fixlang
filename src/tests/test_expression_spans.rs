@@ -67,6 +67,15 @@ fn node_at_each_position(value: &ParsedValue) -> Vec<(usize, Option<EndNode>)> {
         .collect()
 }
 
+/// The positions the expression of `value` spans at which `find_node_at` finds a type.
+fn positions_finding_a_type(value: &ParsedValue) -> Vec<usize> {
+    node_at_each_position(value)
+        .into_iter()
+        .filter(|(_, node)| matches!(node, Some(EndNode::Type(_))))
+        .map(|(pos, _)| pos)
+        .collect()
+}
+
 /// Verifies that an expression built from parts spans its whole source, for each way of building
 /// one, when a parenthesized part or a closing parenthesis lies at an end of the source.
 #[test]
@@ -173,11 +182,7 @@ pub fn test_only_the_type_name_of_a_struct_finds_its_type() {
     let exprs = ["S { a : ?todo, b : *local }", "let S { a : x, b : _ } = s; x"];
     for expr in exprs {
         let value = parse_value(expr);
-        let type_positions = node_at_each_position(&value)
-            .into_iter()
-            .filter(|(_, node)| matches!(node, Some(EndNode::Type(_))))
-            .map(|(pos, _)| pos)
-            .collect::<Vec<_>>();
+        let type_positions = positions_finding_a_type(&value);
         // A position just after a name also counts as in it.
         let name_start = value.content.find("S {").unwrap();
         assert_eq!(type_positions, vec![name_start, name_start + 1], "{}", expr);
@@ -191,11 +196,7 @@ pub fn test_no_position_in_a_tuple_finds_a_type() {
     let exprs = ["(?todo, *local)", "let (x, _) = s; x", "f()"];
     for expr in exprs {
         let value = parse_value(expr);
-        let type_positions = node_at_each_position(&value)
-            .into_iter()
-            .filter(|(_, node)| matches!(node, Some(EndNode::Type(_))))
-            .map(|(pos, _)| pos)
-            .collect::<Vec<_>>();
+        let type_positions = positions_finding_a_type(&value);
         assert!(type_positions.is_empty(), "{}: {:?}", expr, type_positions);
     }
 }
