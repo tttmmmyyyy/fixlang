@@ -174,9 +174,8 @@ pub fn test_no_position_finds_a_name_the_source_never_writes() {
     );
 }
 
-/// Verifies that the positions that find the type of a struct construction or a struct pattern are
-/// those of the type name, with a hole and the operand of a `*` among the field values of the
-/// construction.
+/// Verifies that only the positions in the type name of a struct construction or a struct pattern
+/// find its type, also when a field value of the construction is a hole or the operand of a `*`.
 #[test]
 pub fn test_only_the_type_name_of_a_struct_finds_its_type() {
     let exprs = ["S { a : ?todo, b : *local }", "let S { a : x, b : _ } = s; x"];
