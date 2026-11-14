@@ -1003,7 +1003,7 @@ impl ExprNode {
             // A name starting with `#` is one the compiler generated, which the source never
             // writes. The variable a `*x` binds its result to spans `*x`, which also holds `x`, so
             // the walk goes on to `x` instead.
-            Expr::Var(v) if v.name.name.starts_with('#') => None,
+            Expr::Var(v) if v.name.is_generated() => None,
             Expr::Var(v) => Some(EndNode::Expr(v.as_ref().clone(), self.type_.clone())),
             Expr::Builtin(_) => None,
             Expr::App(func, args) => {

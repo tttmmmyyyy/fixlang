@@ -332,6 +332,12 @@ impl FullName {
         return !self.is_local();
     }
 
+    /// Whether the compiler generated this name. Such a name starts with `#`, which no name the
+    /// source writes starts with.
+    pub fn is_generated(&self) -> bool {
+        self.name.starts_with('#')
+    }
+
     /// Whether this is the binder the compiler makes for a `_` the user wrote in a pattern. Such a
     /// binder is displayed as `_`, and source refers to it nowhere.
     pub fn is_pattern_wildcard(&self) -> bool {
