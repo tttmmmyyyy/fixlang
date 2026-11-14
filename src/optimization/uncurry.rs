@@ -264,7 +264,7 @@ fn collect_abs(expr: &Arc<ExprNode>, vars_limit: usize) -> (Vec<Arc<Var>>, Arc<E
 /// arguments as the call supplies.
 ///
 /// # Arguments
-/// * `funcs` — the uncurried functions the program defines. A call is rewritten only when
+/// * `funcs` — the uncurried functions this run of `run` defines. A call is rewritten only when
 ///   the uncurried function it would name is among them.
 fn replace_closure_call_with_func_call(
     expr: &Arc<ExprNode>,
