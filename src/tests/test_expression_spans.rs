@@ -158,22 +158,26 @@ pub fn test_no_position_finds_a_name_the_source_never_writes() {
     );
 }
 
-/// Verifies that the positions in a struct construction that find its type are those of the type
-/// name, with a hole and the operand of a `*` among the field values.
+/// Verifies that the positions that find the type of a struct construction or a struct pattern are
+/// those of the type name, with a hole and the operand of a `*` among the field values of the
+/// construction.
 #[test]
-pub fn test_only_the_type_name_of_a_struct_construction_finds_its_type() {
-    let value = parse_value("S { a : ?todo, b : *local }");
-    let span = value.expr.source.clone().unwrap();
-    let type_positions = (span.start..=span.end)
-        .filter(|&pos| {
-            let pos = SourcePos {
-                input: span.input.clone(),
-                pos,
-            };
-            matches!(value.expr.find_node_at(&pos), Some(EndNode::Type(_)))
-        })
-        .collect::<Vec<_>>();
-    // A position just after a name also counts as in it.
-    let name_start = value.content.find("S {").unwrap();
-    assert_eq!(type_positions, vec![name_start, name_start + 1]);
+pub fn test_only_the_type_name_of_a_struct_finds_its_type() {
+    let exprs = ["S { a : ?todo, b : *local }", "let S { a : x, .. } = s; x"];
+    for expr in exprs {
+        let value = parse_value(expr);
+        let span = value.expr.source.clone().unwrap();
+        let type_positions = (span.start..=span.end)
+            .filter(|&pos| {
+                let pos = SourcePos {
+                    input: span.input.clone(),
+                    pos,
+                };
+                matches!(value.expr.find_node_at(&pos), Some(EndNode::Type(_)))
+            })
+            .collect::<Vec<_>>();
+        // A position just after a name also counts as in it.
+        let name_start = value.content.find("S {").unwrap();
+        assert_eq!(type_positions, vec![name_start, name_start + 1], "{}", expr);
+    }
 }
