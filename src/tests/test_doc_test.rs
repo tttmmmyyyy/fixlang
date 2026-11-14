@@ -929,9 +929,9 @@ other = 1;
     }
 }
 
-/// An expression that spans a whole Fix example, such as the bind a `*` in it makes, is reported over
-/// the lines of the example, which leave out the fences, both when the example is the expression
-/// alone and when import statements precede it.
+/// Verifies that an expression spanning a whole Fix example, such as the bind made by a `*` in it,
+/// is reported over the lines of the example without its fences, both when the example is that
+/// expression alone and when import statements precede it.
 #[test]
 fn test_an_expression_spanning_a_whole_example_is_reported_over_its_lines() {
     let lib = r#"module Lib;

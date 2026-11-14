@@ -18,8 +18,8 @@ use tempfile::TempDir;
 
 /// A global value parsed from a file of its own.
 struct ParsedValue {
-    /// The directory holding the file, which lives as long as the value is looked into, since a
-    /// position is looked up in a file that exists.
+    /// The directory holding the file. It keeps the file on disk while the value is examined,
+    /// since looking up a position resolves the path of the file, which must exist.
     _dir: TempDir,
     /// The expression the value is defined by.
     expr: Arc<ExprNode>,
@@ -101,8 +101,8 @@ pub fn test_the_value_of_a_let_spans_the_parentheses_of_a_bind_operand() {
     assert_eq!(span_text(let_value, &value.content), "*(m)");
 }
 
-/// Verifies that a position in the operand of a `*` finds the name written there, which the binds
-/// the `*` makes leave in place of the operand.
+/// Verifies that a position in the operand of a `*` finds the name written there, after the `*`
+/// has been turned into a bind.
 #[test]
 pub fn test_a_name_in_the_operand_of_a_bind_is_found_at_its_position() {
     let value = parse_value("*act");

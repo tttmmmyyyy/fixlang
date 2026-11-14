@@ -174,7 +174,7 @@ impl ParseContext {
 #[derive(Default)]
 struct DoContext {
     counter: u32,
-    /// The `*`s met in the expression being parsed, in the order they were met.
+    /// The `*`s in the expression being parsed, in the order they were pushed.
     monads: Vec<BindOperatorInfo>,
 }
 
@@ -187,12 +187,15 @@ struct BindOperatorInfo {
 }
 
 impl DoContext {
-    /// Pushes monadic value, and returns expression that represents the result of monadic action.
-    /// `monad_src` is the span of the source `monad` was parsed from.
+    /// Pushes a monadic value, and returns an expression for the result of its action.
     ///
-    /// The expression of the result spans the `*` alone. The binds put it before the operand, so a
-    /// span covering the operand would make a position in the operand find the result instead of
-    /// what is written there.
+    /// The returned expression spans the `*` alone. In the bind built from the `*`, it lies in the
+    /// function, which a search for the node at a position visits before the operand; a span
+    /// covering the operand would let it hide the operand from that search.
+    ///
+    /// # Arguments
+    /// * `monad_src` — the span of the source `monad` was parsed from, parentheses around it
+    ///   included.
     fn push_monad(
         &mut self,
         monad: Arc<ExprNode>,
