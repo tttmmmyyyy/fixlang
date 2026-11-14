@@ -537,7 +537,9 @@ fn calculate_renaming_bound_vars_avoiding(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        expr_var, var_var, Arc, ExprNode, ExprVisitor, FullName, Map, PatternNode, Substitutor,
+    };
     use crate::ast::expr::{expr_builtin, expr_let, expr_match};
     use crate::ast::types::tycon;
     use crate::fixstd::builtin::{

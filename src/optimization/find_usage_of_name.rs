@@ -1,4 +1,4 @@
-// This module provides functionality to find how a name is used in an expression.
+//! This module provides functionality to find how a name is used in an expression.
 
 use crate::ast::{
     expr::ExprNode,
@@ -7,24 +7,25 @@ use crate::ast::{
 };
 use std::sync::Arc;
 
-// A use of the name being searched for, told apart by what receives the name there.
+/// A use of the name being searched for, told apart by what receives the name there.
 pub enum UsageType {
-    // The name is used as a function and is called, with the number of arguments the call supplies.
+    /// The name is used as a function and is called, with the number of arguments the call
+    /// supplies.
     CalledAsFunction { arg_count: usize },
-    // The name is the operand a builtin operation declaring `BuiltinOp::env_operand` applies as a
-    // function.
+    /// The name is the operand a builtin operation declaring `BuiltinOp::env_operand` applies as a
+    /// function.
     EnvFunctionOperand,
-    // The name stands where none of the above receives it: an argument of a call, a field of a
-    // struct being built, the bound value of a `let`, a branch of an `if` or a `match`, an element
-    // of an array literal, under a type annotation, either side of an `eval`, or another operand of
-    // a builtin operation. What holds it there passes it on whole, so the position says nothing
-    // about the name beyond its being there.
+    /// The name stands where none of the above receives it: an argument of a call, a field of a
+    /// struct being built, the bound value of a `let`, a branch of an `if` or a `match`, an element
+    /// of an array literal, under a type annotation, either side of an `eval`, or another operand
+    /// of a builtin operation. What holds it there passes it on whole, so the position says nothing
+    /// about the name beyond its being there.
     Elsewhere,
 }
 
-// Every use of `name` in `expr`, in the order the walk meets them, one entry per place the name is
-// written. An occurrence of a local `name` standing under an inner binding of the same name is a use
-// of that binding, and stays out of the result.
+/// Every use of `name` in `expr`, in the order the walk meets them, one entry per place the name is
+/// written. An occurrence of a local `name` standing under an inner binding of the same name is a
+/// use of that binding, and stays out of the result.
 pub fn run(expr: &Arc<ExprNode>, name: &FullName) -> Vec<UsageType> {
     // The walk enters a subexpression only where `name` is free in it, so it can only look for a
     // name that free variables locate.
@@ -42,11 +43,11 @@ pub fn run(expr: &Arc<ExprNode>, name: &FullName) -> Vec<UsageType> {
     usages
 }
 
-// The walk collecting the uses of one name.
+/// The walk collecting the uses of one name.
 struct UsageFinder<'a> {
-    // The name whose uses are collected.
+    /// The name whose uses are collected.
     name: &'a FullName,
-    // The uses met so far, in the order the walk met them.
+    /// The uses met so far, in the order the walk met them.
     usages: &'a mut Vec<UsageType>,
 }
 
@@ -55,13 +56,13 @@ impl UsageFinder<'_> {
         self.usages.push(usage);
     }
 
-    // Whether an inner binding stands between here and the name being searched for, which makes an
-    // occurrence here one about something else.
+    /// Whether an inner binding stands between here and the name being searched for, which makes an
+    /// occurrence here one about something else.
     fn shadowed(&self, state: &VisitState) -> bool {
         self.name.is_local() && state.scope.has_value(&self.name.name)
     }
 
-    // Whether `expr` is the name being searched for, written there.
+    /// Whether `expr` is the name being searched for, written there.
     fn is_the_name(&self, expr: &Arc<ExprNode>) -> bool {
         expr.is_var() && &expr.get_var().name == self.name
     }
@@ -74,8 +75,8 @@ impl ExprVisitor for UsageFinder<'_> {
         expr.has_free_var(self.name)
     }
 
-    // The name standing anywhere a call below did not already take it from as its callee is held as
-    // a value there, which is what `Elsewhere` records.
+    /// The name standing anywhere a call below did not already take it from as its callee is held
+    /// as a value there, which is what `Elsewhere` records.
     fn start_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -87,8 +88,8 @@ impl ExprVisitor for UsageFinder<'_> {
         StartVisitResult::VisitChildren
     }
 
-    // A builtin operation names the values it operates on rather than holding them as
-    // subexpressions, so the walk reaches them here instead of at a `Var` of its own.
+    /// A builtin operation names the values it operates on rather than holding them as
+    /// subexpressions, so the walk reaches them here instead of at a `Var` of its own.
     fn start_visit_builtin(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -111,12 +112,12 @@ impl ExprVisitor for UsageFinder<'_> {
         StartVisitResult::VisitChildren
     }
 
-    // A call records the name once for standing as the callee.
-    //
-    // A call of `n` arguments is written as `n` nested applications, and this reads the whole nest
-    // at its outermost node, so the walk goes on into the places the nest holds rather than into the
-    // nest itself. Were the nest walked, each of its prefixes would read the same callee and record
-    // it again.
+    /// A call records the name once for standing as the callee.
+    ///
+    /// A call of `n` arguments is written as `n` nested applications, and this reads the whole nest
+    /// at its outermost node, so the walk goes on into the places the nest holds rather than into
+    /// the nest itself. Were the nest walked, each of its prefixes would read the same callee and
+    /// record it again.
     fn start_visit_app(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -142,7 +143,7 @@ impl ExprVisitor for UsageFinder<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{run, Arc, ExprNode, FullName, UsageType};
     use crate::ast::expr::{
         expr_abs, expr_app, expr_array_lit, expr_builtin, expr_eval, expr_ffi_call, expr_if,
         expr_let, expr_make_struct, expr_match, expr_tyanno, expr_var, var_var, Var,
@@ -151,8 +152,8 @@ mod tests {
     use crate::ast::types::{tycon, type_tycon};
     use crate::fixstd::builtin::MakeStructOp;
 
-    /// A call of `func` supplying `arg_count` arguments, written one argument at a time, with `name`
-    /// standing at argument index `at_index`.
+    /// A call of `func` supplying `arg_count` arguments, written one argument at a time, with
+    /// `name` standing at argument index `at_index`.
     fn call_with_name_at(
         func: &FullName,
         arg_count: usize,
