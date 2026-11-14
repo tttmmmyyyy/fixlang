@@ -30,13 +30,16 @@ use std::{mem, sync::Arc};
 /// threads.
 ///
 /// The program may be the output of an earlier run. A global that already has an uncurried function
-/// keeps the ones it has, and gets no new ones.
+/// keeps the ones it has, and gets no new ones. The calls are rewritten onto the uncurried functions
+/// this run defines only: the passes between two runs specialize each uncurried function from its
+/// own callers, as lambda set specialization does, so `g#func1` and `g#func2` of an earlier run can
+/// take different types where `g#func1(a)(b)` would become `g#func2(a, b)`.
 pub fn run(prg: &mut Program, num_threads: usize) {
     // The globals an earlier run gave uncurried functions.
     let globals_with_funcs: Set<FullName> = prg
         .symbols
         .keys()
-        .filter_map(|name| Some(split_uncurried_func_name(name)?.0))
+        .filter_map(global_of_uncurried_func)
         .collect();
 
     // Define the uncurried functions of each global that has none yet. An uncurried function gets
@@ -53,14 +56,16 @@ pub fn run(prg: &mut Program, num_threads: usize) {
             }
         },
     );
-    prg.symbols.extend(funcs_of_syms.into_iter().flatten());
-    let funcs: UncurriedFuncs = prg
-        .symbols
-        .keys()
-        .filter_map(|name| Some((name.clone(), split_uncurried_func_name(name)?)))
-        .collect();
+    let mut funcs = UncurriedFuncs::default();
+    for global_and_funcs in funcs_of_syms {
+        let global = global_and_funcs[0].0.clone();
+        for (n_args, (name, _)) in global_and_funcs.iter().enumerate().skip(1) {
+            funcs.insert(name.clone(), (global.clone(), n_args));
+        }
+        prg.symbols.extend(global_and_funcs);
+    }
 
-    // Rewrite the calls onto the uncurried functions.
+    // Rewrite the calls onto the uncurried functions this run defined.
     for_each_on_compiler_threads(prg.symbols.values_mut().collect(), num_threads, |sym| {
         let expr = replace_closure_calls_with_func_calls(sym.expr.as_ref().unwrap(), &funcs);
         sym.expr = Some(expr);
@@ -94,8 +99,8 @@ pub fn run(prg: &mut Program, num_threads: usize) {
     }
 }
 
-/// The uncurried functions of a program: the name of each, mapped to the name of the global
-/// it uncurries and the number of arguments it takes.
+/// The uncurried functions one run of `run` defines: the name of each, mapped to the name of the
+/// global it uncurries and the number of arguments it takes.
 ///
 /// # Examples
 /// `g#func2` maps to `(g, 2)`.
@@ -174,12 +179,11 @@ fn convert_to_uncurried_func_name(name: &mut Name, n_args: usize) {
     *name += &format!("{}{}", UNCURRIED_FUNC_SUFFIX, n_args);
 }
 
-/// The global and the number of arguments of the uncurried function named `name`, read off the
-/// `#func{N}` that ends the name.
+/// The global whose uncurried function is named `name`, read off the `#func{N}` that ends the name.
 ///
 /// # Examples
-/// `g#func2` gives `(g, 2)`, and `g#func2#ls0` gives `None`.
-fn split_uncurried_func_name(name: &FullName) -> Option<(FullName, usize)> {
+/// `g#func2` gives `g`, and `g#func2#ls0` gives `None`.
+fn global_of_uncurried_func(name: &FullName) -> Option<FullName> {
     let (global_name, suffix) = name.name.rsplit_once(UNCURRIED_FUNC_SUFFIX)?;
     let n_args: usize = suffix.parse().ok()?;
     let mut written = global_name.to_string();
@@ -189,7 +193,7 @@ fn split_uncurried_func_name(name: &FullName) -> Option<(FullName, usize)> {
     }
     let mut global = name.clone();
     *global.name_as_mut() = global_name.to_string();
-    Some((global, n_args))
+    Some(global)
 }
 
 /// The uncurried function taking `n_args` arguments that `expr`, the body of a global, becomes.
@@ -284,9 +288,8 @@ fn replace_closure_call_with_func_call(
                 // An uncurried function of a global, called with its arguments and then the
                 // arguments of what it returns: `g#func{N}(a1, ..., aN)(b1, ..., bM)` becomes
                 // `g#func{N+M}(a1, ..., aN, b1, ..., bM)`.
-                // The passes after the first run can copy an uncurried function under another
-                // name, as lambda set specialization does with `g#func2#ls...`. A call of such a
-                // copy finds no entry in `funcs` and stays as it is.
+                // A call of an uncurried function an earlier run defined finds no entry in
+                // `funcs`, and stays as it is.
                 let Some((global, n_args)) = funcs.get(&f_func.name) else {
                     return expr.clone();
                 };
