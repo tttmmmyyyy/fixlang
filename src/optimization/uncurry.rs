@@ -29,11 +29,12 @@ use std::{mem, sync::Arc};
 /// taking the number of arguments they supply. The symbols are rewritten on up to `num_threads`
 /// threads.
 ///
-/// The program may be the output of an earlier run. A global that already has an uncurried function
-/// keeps the ones it has, and gets no new ones. The calls are rewritten onto the uncurried functions
-/// this run defines only: the passes between two runs specialize each uncurried function from its
-/// own callers, as lambda set specialization does, so `g#func1` and `g#func2` of an earlier run can
-/// take different types where `g#func1(a)(b)` would become `g#func2(a, b)`.
+/// The program may be the output of an earlier run. A global that already has an uncurried
+/// function keeps the ones it has, and gets no new ones. The program is rewritten onto the
+/// uncurried functions this run defines only: the passes between two runs specialize each
+/// uncurried function from its own callers, as lambda set specialization does, so `g#func1` and
+/// `g#func2` of an earlier run can take different types where `g#func1(a)(b)` would become
+/// `g#func2(a, b)`.
 pub fn run(prg: &mut Program, num_threads: usize) {
     // The globals an earlier run gave uncurried functions.
     let globals_with_funcs: Set<FullName> = prg
@@ -49,20 +50,21 @@ pub fn run(prg: &mut Program, num_threads: usize) {
         syms.into_iter().collect(),
         num_threads,
         |(sym_name, sym)| {
-            if globals_with_funcs.contains(&sym_name) {
-                vec![(sym_name, sym)]
+            let sym_funcs = if globals_with_funcs.contains(&sym_name) {
+                vec![]
             } else {
-                with_uncurried_funcs(sym_name, sym)
-            }
+                uncurried_funcs_of(&sym_name, &sym)
+            };
+            (sym_name, sym, sym_funcs)
         },
     );
     let mut funcs = UncurriedFuncs::default();
-    for global_and_funcs in funcs_of_syms {
-        let global = global_and_funcs[0].0.clone();
-        for (n_args, (name, _)) in global_and_funcs.iter().enumerate().skip(1) {
-            funcs.insert(name.clone(), (global.clone(), n_args));
+    for (sym_name, sym, sym_funcs) in funcs_of_syms {
+        for (n_args, func) in sym_funcs {
+            funcs.insert(func.name.clone(), (sym_name.clone(), n_args));
+            prg.symbols.insert(func.name.clone(), func);
         }
-        prg.symbols.extend(global_and_funcs);
+        prg.symbols.insert(sym_name, sym);
     }
 
     // Rewrite the calls onto the uncurried functions this run defined.
@@ -81,7 +83,8 @@ pub fn run(prg: &mut Program, num_threads: usize) {
             .collect_app_src(usize::MAX)
             .0
             .len();
-        let Some(uncurried_value) = uncurried_symbol(&prg.symbols, exported_value, n_args) else {
+        let Some(uncurried_value) = uncurried_symbol(&prg.symbols, &funcs, exported_value, n_args)
+        else {
             continue;
         };
         export.value_name = uncurried_value.name.clone();
@@ -93,7 +96,7 @@ pub fn run(prg: &mut Program, num_threads: usize) {
     if let Some(entry_io_value) = &prg.entry_io_value {
         // The entry IO value has the unwrapped `IO` type, i.e., the `IOState -> (IOState, a)` type,
         // so it takes one argument.
-        if let Some(sym) = uncurried_symbol(&prg.symbols, entry_io_value, 1) {
+        if let Some(sym) = uncurried_symbol(&prg.symbols, &funcs, entry_io_value, 1) {
             prg.entry_io_value = Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
         }
     }
@@ -106,9 +109,10 @@ pub fn run(prg: &mut Program, num_threads: usize) {
 /// `g#func2` maps to `(g, 2)`.
 type UncurriedFuncs = Map<FullName, (FullName, usize)>;
 
-/// The symbol `sym_name`, whose definition is `sym`, followed by its uncurried functions taking one
-/// argument, two arguments, and so on, as many as its type allows.
-fn with_uncurried_funcs(sym_name: FullName, sym: Symbol) -> Vec<(FullName, Symbol)> {
+/// The uncurried functions of the symbol `sym_name`, whose definition is `sym`, each with the
+/// number of arguments it takes: one argument, two arguments, and so on, as many as its type
+/// allows.
+fn uncurried_funcs_of(sym_name: &FullName, sym: &Symbol) -> Vec<(usize, Symbol)> {
     let mut funcs = vec![];
     for n_args in 1..=FUNC_ARGS_MAX as usize {
         let Some(expr) = uncurried_func(&sym.generic_name, sym.expr.as_ref().unwrap(), n_args)
@@ -121,7 +125,7 @@ fn with_uncurried_funcs(sym_name: FullName, sym: Symbol) -> Vec<(FullName, Symbo
         let mut generic_name = sym.generic_name.clone();
         convert_to_uncurried_func_name(generic_name.name_as_mut(), n_args);
         funcs.push((
-            name.clone(),
+            n_args,
             Symbol {
                 name,
                 generic_name,
@@ -131,14 +135,15 @@ fn with_uncurried_funcs(sym_name: FullName, sym: Symbol) -> Vec<(FullName, Symbo
             },
         ));
     }
-    funcs.insert(0, (sym_name, sym));
     funcs
 }
 
 /// The uncurried symbol to use in place of `value`, an expression referring to a global value.
-/// The uncurried function taking as many arguments as possible, up to `max_args`, is chosen.
+/// The uncurried function in `funcs` taking as many arguments as possible, up to `max_args`, is
+/// chosen.
 fn uncurried_symbol<'a>(
     symbols: &'a Map<FullName, Symbol>,
+    funcs: &UncurriedFuncs,
     value: &Arc<ExprNode>,
     max_args: usize,
 ) -> Option<&'a Symbol> {
@@ -149,8 +154,8 @@ fn uncurried_symbol<'a>(
     for n_args in (1..=max_args).rev() {
         let mut name = value_name.clone();
         convert_to_uncurried_func_name(name.name_as_mut(), n_args);
-        if let Some(sym) = symbols.get(&name) {
-            return Some(sym);
+        if funcs.contains_key(&name) {
+            return symbols.get(&name);
         }
     }
     None
