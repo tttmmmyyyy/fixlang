@@ -51,8 +51,7 @@ use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
     for_each_node, is_value_used, map_children, map_continuation, FieldPath, FuncRef, Ownership,
-    OwnershipShape, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar,
-    VarPath,
+    OwnershipShape, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar, VarPath,
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
@@ -334,14 +333,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
         .iter()
         .map(|g| {
             let vars = VarTable::body_only(&g.init);
-            let init = RewriteCtx::new(&vars, &[], &[], &g.init, &mut versions).rewrite(&g.init);
-            RcGlobalInit {
-                symbol: g.symbol.clone(),
-                ty: g.ty.clone(),
-                init,
-                owns_initializer: true,
-                owns_storage: true,
-            }
+            g.with_init(RewriteCtx::new(&vars, &[], &[], &g.init, &mut versions).rewrite(&g.init))
         })
         .collect();
 
@@ -1252,38 +1244,7 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
             let k = split_body(k, type_env);
             split_rc(v, path, *state, true, k, &node.source, type_env)
         }
-        RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
-            let arms = arms
-                .iter()
-                .map(|arm| arm.with_body(split_body(&arm.body, type_env)))
-                .collect();
-            expr_node(
-                RcExpr::Let(
-                    x.clone(),
-                    RcRhs::Match(scrut.clone(), arms),
-                    split_body(k, type_env),
-                ),
-                &node.source,
-            )
-        }
-        RcExpr::Let(x, rhs, k) => expr_node(
-            RcExpr::Let(x.clone(), rhs.clone(), split_body(k, type_env)),
-            &node.source,
-        ),
-        RcExpr::Destructure(container, fields, state, k) => expr_node(
-            RcExpr::Destructure(
-                container.clone(),
-                fields.clone(),
-                *state,
-                split_body(k, type_env),
-            ),
-            &node.source,
-        ),
-        RcExpr::Eval(v, k) => expr_node(
-            RcExpr::Eval(v.clone(), split_body(k, type_env)),
-            &node.source,
-        ),
-        RcExpr::Ret(v) => expr_node(RcExpr::Ret(v.clone()), &node.source),
+        _ => map_children(node, |child| split_body(child, type_env)),
     }
 }
 
@@ -1492,13 +1453,7 @@ fn rewrite_bodies(
         .iter()
         .map(|g| {
             let vars = VarTable::body_only(&g.init);
-            RcGlobalInit {
-                symbol: g.symbol.clone(),
-                ty: g.ty.clone(),
-                init: rewrite(&vars, &g.init),
-                owns_initializer: true,
-                owns_storage: true,
-            }
+            g.with_init(rewrite(&vars, &g.init))
         })
         .collect();
     RcProgram {

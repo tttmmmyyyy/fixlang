@@ -23,10 +23,11 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, VisitState},
         type_env::TypeEnv,
     },
+    fixstd::stdlib::is_std_fix,
     misc::{map_on_compiler_threads, Map, Set},
     optimization::{
         inline_local, let_elimination::create_global_lambda_to_arity_map,
-        rename::substitute_free_names, uncurry::is_std_fix,
+        rename::substitute_free_names,
     },
     rc_ir::locality::ExtShape,
 };

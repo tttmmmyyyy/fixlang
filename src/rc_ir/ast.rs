@@ -401,6 +401,18 @@ pub struct RcGlobalInit {
 }
 
 impl RcGlobalInit {
+    /// The same global computed by `init`, which a pass over the whole program makes of this one's
+    /// initializer.
+    pub fn with_init(&self, init: RcExprNode) -> RcGlobalInit {
+        RcGlobalInit {
+            symbol: self.symbol.clone(),
+            ty: self.ty.clone(),
+            init,
+            owns_initializer: self.owns_initializer,
+            owns_storage: self.owns_storage,
+        }
+    }
+
     /// Whether the program holding this part of the global can serve a read of the value: it keeps
     /// the value itself, or it reads the storage the unit keeping it publishes.
     ///
