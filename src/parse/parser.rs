@@ -238,8 +238,8 @@ fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
 /// `pair` covers.
 ///
 /// The two spans differ for a parenthesized expression: `(e)` parses into the expression `e`, whose
-/// span leaves the parentheses out. An expression built around the operand takes its span from
-/// the source, so that it covers the parentheses.
+/// span leaves the parentheses out. An expression built around `e` takes its span from the source,
+/// which covers the parentheses.
 fn parse_with_src(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -253,6 +253,10 @@ fn parse_with_src(
 ///
 /// `combine(lhs, rhs, span)` builds the expression of an operand `lhs` joined with the expression
 /// `rhs` the operands after it make, where `span` covers the source of all of them.
+///
+/// # Examples
+/// Operands `a`, `b`, `c` give `combine(a, combine(b, c, b..c), a..c)`, where `x..y` is the span from
+/// the source of `x` to that of `y`.
 fn fold_right_with_src(
     operands: Vec<(Arc<ExprNode>, Span)>,
     combine: impl Fn(Arc<ExprNode>, Arc<ExprNode>, Span) -> Arc<ExprNode>,
@@ -1801,7 +1805,7 @@ fn parse_expr_and_then_sequence(
     Ok(expr)
 }
 
-// Parse combinator sequence, e.g., `f $ x $ y`, into each operand with the span of its source.
+/// Parses a combinator sequence, e.g., `f $ x $ y`, into each operand with the span of its source.
 fn parse_combinator_sequence(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -2225,8 +2229,8 @@ enum IndexAccessor {
     Field(FullName, Option<Span>),
 }
 
-// Parse expression with index syntax, e.g., `arr[expr][^field][^0]`, into the expression before
-// the indices with the span of its source, and the indices.
+/// Parses an expression with index syntax, e.g., `arr[expr][^field][^0]`, into the expression
+/// before the indices with the span of its source, and the indices.
 fn parse_expr_index(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -2375,6 +2379,7 @@ fn parse_expr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     Ok(expr)
 }
 
+/// Parses the parenthesized arguments of a call, e.g., `(x, y)`, each with the span of its source.
 fn parse_arg_list(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -2532,8 +2537,8 @@ fn parse_expr_let(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     Ok(parse_expr_let_recursively(pairs, ctx)?.0)
 }
 
-// Parse the expression `let {pat1} = {bound1}; let {pat2} = {bound2}; ...; {value}`, with the span of
-// its source.
+/// Parses the expression `let {pat1} = {bound1}; let {pat2} = {bound2}; ...; {value}`, with the span
+/// of its source.
 fn parse_expr_let_recursively(
     mut pairs: Pairs<Rule>,
     ctx: &mut ParseContext,

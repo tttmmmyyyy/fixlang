@@ -31,8 +31,8 @@ fn span_text(expr: &ExprNode, content: &str) -> String {
     content[span.start..span.end].to_string()
 }
 
-/// Each expression is built from parts, and has a parenthesized part or a closing parenthesis at an
-/// end of its source.
+/// Verifies that an expression built from parts spans its whole source, for each way of building
+/// one, when a parenthesized part or a closing parenthesis lies at an end of the source.
 #[test]
 pub fn test_an_expression_built_from_parts_spans_the_parentheses_at_its_ends() {
     let exprs = [
