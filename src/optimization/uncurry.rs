@@ -32,16 +32,11 @@ use std::{mem, sync::Arc};
 /// The program may be the output of an earlier run. A global that already has an uncurried function
 /// keeps the ones it has, and gets no new ones.
 pub fn run(prg: &mut Program, num_threads: usize) {
-    // The uncurried functions an earlier run defined, of the globals still in the program.
+    // The uncurried functions an earlier run defined.
     let mut funcs: UncurriedFuncs = prg
         .symbols
         .keys()
-        .filter_map(|name| {
-            let (global, n_args) = split_uncurried_func_name(name)?;
-            prg.symbols
-                .contains_key(&global)
-                .then(|| (name.clone(), (global, n_args)))
-        })
+        .filter_map(|name| Some((name.clone(), split_uncurried_func_name(name)?)))
         .collect();
     let globals_with_funcs: Set<FullName> =
         funcs.values().map(|(global, _)| global.clone()).collect();
@@ -286,9 +281,9 @@ fn replace_closure_call_with_func_call(
                 // An uncurried function of a global, called with its arguments and then the
                 // arguments of what it returns: `g#func{N}(a1, ..., aN)(b1, ..., bM)` becomes
                 // `g#func{N+M}(a1, ..., aN, b1, ..., bM)`.
-                // The passes after the first run can remove a global or copy it under another
-                // name, as they do with `Std::Debug::assert`. A call of an uncurried function of
-                // such a global is not in `funcs`, has no global to merge onto, and stays as it is.
+                // The passes after the first run can copy an uncurried function under another
+                // name, as the lambda sets do with `g#func2#ls...`. Such a copy is not in `funcs`,
+                // and a call of it stays as it is.
                 let Some((global, n_args)) = funcs.get(&f_func.name) else {
                     return expr.clone();
                 };
