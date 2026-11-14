@@ -1295,7 +1295,11 @@ impl TypeCheckContext {
                         // The variable standing for a `*x` has a name the source never writes, so
                         // the message quotes the `*x`.
                         let subject = if fullname.is_bind_result() {
-                            match ei.source.as_ref().and_then(short_span_snippet) {
+                            let src = ei
+                                .source
+                                .as_ref()
+                                .expect("the variable for the result of a `*x` spans the `*x`");
+                            match short_span_snippet(src) {
                                 Some(snippet) => format!("`{}`", snippet),
                                 None => "This expression".to_string(),
                             }
