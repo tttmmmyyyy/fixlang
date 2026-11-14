@@ -171,21 +171,44 @@ impl ParseContext {
     }
 }
 
+/// The `*`s met while an expression is parsed, which are turned into binds around it once it is
+/// parsed.
 #[derive(Default)]
 struct DoContext {
+    /// The number of `*`s pushed, which numbers the variable of the next one's result.
     counter: u32,
-    monads: Vec<BindOperatorInfo>, // (Monadic action, the result of action).
+    /// The `*`s in the expression being parsed, in the order they were pushed.
+    monads: Vec<BindOperatorInfo>,
 }
 
+/// One `*` met while an expression is parsed.
 struct BindOperatorInfo {
+    /// The span of the `*`.
     operator_src: Span,
+    /// The monadic value the `*` is written before.
     operand: Arc<ExprNode>,
+    /// The span of the source the operand was parsed from, which covers parentheses around it.
+    operand_src: Span,
+    /// The variable the result of the operand's action is bound to.
     result_var: Arc<Var>,
 }
 
 impl DoContext {
-    // Pushes monadic value, and returns expression that represents the result of monadic action.
-    fn push_monad(&mut self, monad: Arc<ExprNode>, star_src: Span) -> Arc<ExprNode> {
+    /// Pushes a monadic value, and returns an expression for the result of its action.
+    ///
+    /// The returned expression spans the `*` alone. In the bind built from the `*`, it lies in the
+    /// function, which a search for the node at a position visits before the operand; a span
+    /// covering the operand would let it hide the operand from that search.
+    ///
+    /// # Arguments
+    /// * `monad_src` — the span of the source `monad` was parsed from, parentheses around it
+    ///   included.
+    fn push_monad(
+        &mut self,
+        monad: Arc<ExprNode>,
+        monad_src: Span,
+        star_src: Span,
+    ) -> Arc<ExprNode> {
         let var_name = FullName::local(&format!("#monadic_value{}", self.counter));
         let var_var = var_var(var_name.clone());
         let var_expr = expr_var(var_name, Some(star_src.clone()));
@@ -193,41 +216,80 @@ impl DoContext {
         self.monads.push(BindOperatorInfo {
             operator_src: star_src,
             operand: monad,
+            operand_src: monad_src,
             result_var: var_var,
         });
         var_expr
     }
 
+    /// Wraps `expr` in a bind of each monadic value pushed so far, the one pushed last innermost.
+    ///
+    /// The binds stand in place of `expr`, so every expression they build spans `expr` and the
+    /// source of each operand of a `*`. A parenthesized `expr` spans the text inside its
+    /// parentheses, and so do the binds.
     fn expand_binds(&mut self, mut expr: Arc<ExprNode>) -> Arc<ExprNode> {
+        let expr_src = expr
+            .source
+            .clone()
+            .expect("an expression parsed from the source has a span");
+        let src = Some(
+            self.monads
+                .iter()
+                .fold(expr_src, |src, info| src.unite(&info.operand_src)),
+        );
         while !self.monads.is_empty() {
             let BindOperatorInfo {
                 operator_src,
                 operand: monad,
+                operand_src: _,
                 result_var: var,
             } = self.monads.pop().unwrap();
-            let bind_arg_src = expr.source.clone();
-            expr = expr_abs(vec![var], expr, bind_arg_src.clone());
+            expr = expr_abs(vec![var], expr, src.clone());
             let mut bind_function = FullName::from_strs(&[STD_NAME, MONAD_NAME], MONAD_BIND_NAME);
             bind_function.global_to_absolute();
             let bind_function = expr_var(bind_function, Some(operator_src));
-            expr = expr_app(bind_function, vec![expr], bind_arg_src.clone());
-            let src = Span::unite_opt(&bind_arg_src, &monad.source);
-            expr = expr_app(expr, vec![monad], src).set_app_order(AppSourceCodeOrderType::XDotF);
+            expr = expr_app(bind_function, vec![expr], src.clone());
+            expr = expr_app(expr, vec![monad], src.clone())
+                .set_app_order(AppSourceCodeOrderType::XDotF);
         }
         expr
     }
 }
 
-fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
-    match lhs {
-        None => rhs.clone(),
-        Some(lhs) => match rhs {
-            None => return Some(lhs.clone()),
-            Some(rhs) => {
-                return Some(Span::unite(lhs, rhs));
-            }
-        },
+/// Parses `pair` with `parser`, and returns the expression together with the span of the source
+/// `pair` covers.
+///
+/// The two spans differ for a parenthesized expression: `(e)` parses into the expression `e`, whose
+/// span leaves the parentheses out. An expression built around `e` takes its span from the source,
+/// which covers the parentheses.
+fn parse_with_src(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+    parser: impl FnOnce(Pair<Rule>, &mut ParseContext) -> Result<Arc<ExprNode>, Errors>,
+) -> Result<(Arc<ExprNode>, Span), Errors> {
+    let src = Span::from_pair(&ctx.source, &pair);
+    Ok((parser(pair, ctx)?, src))
+}
+
+/// Joins `operands`, each with the span of its source, right associatively.
+///
+/// `combine(lhs, rhs, span)` builds the expression of an operand `lhs` joined with the expression
+/// `rhs` the operands after it make, where `span` covers the source of all of them.
+///
+/// # Examples
+/// Operands `a`, `b`, `c` give `combine(a, combine(b, c, b..c), a..c)`, where `x..y` is the span from
+/// the source of `x` to that of `y`.
+fn fold_right_with_src(
+    operands: Vec<(Arc<ExprNode>, Span)>,
+    combine: impl Fn(Arc<ExprNode>, Arc<ExprNode>, Span) -> Arc<ExprNode>,
+) -> Arc<ExprNode> {
+    let mut operands = operands.into_iter().rev();
+    let (mut rhs, mut rhs_span) = operands.next().unwrap();
+    for (lhs, lhs_span) in operands {
+        rhs_span = lhs_span.unite(&rhs_span);
+        rhs = combine(lhs, rhs, rhs_span.clone());
     }
+    rhs
 }
 
 /// Saves `source` in the temporary directory under `file_name`, with a digest of the content in the
@@ -1718,6 +1780,8 @@ fn parse_expr_type_annotation(
     Ok(expr)
 }
 
+/// Parses a sequence of expressions joined by `;;`, each run after the one before it through
+/// `Std::Monad::bind`.
 fn parse_expr_and_then_sequence(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -1728,10 +1792,10 @@ fn parse_expr_and_then_sequence(
     while pairs.peek().is_some() {
         let pair = pairs.next().unwrap();
         let expr = if exprs.len() == 0 {
-            parse_expr_type_annotation(pair, ctx)?
+            parse_with_src(pair, ctx, parse_expr_type_annotation)?
         } else {
             // Right operand of `;;` is `expr_or_hole`.
-            parse_expr_or_hole_with_new_do(pair, ctx)?
+            parse_with_src(pair, ctx, parse_expr_or_hole_with_new_do)?
         };
         exprs.push(expr);
         if pairs.peek().is_some() {
@@ -1742,41 +1806,36 @@ fn parse_expr_and_then_sequence(
     }
     exprs.reverse();
     op_spans.reverse();
-    let mut expr = exprs.pop().unwrap();
+    let (mut expr, mut expr_span) = exprs.pop().unwrap();
     while exprs.len() > 0 {
-        let next_expr = exprs.pop().unwrap();
-        let next_expr_span = next_expr.source.clone();
+        let (next_expr, next_expr_span) = exprs.pop().unwrap();
         let op_span = op_spans.pop().unwrap();
         let mut bind_function = FullName::from_strs(&[STD_NAME, MONAD_NAME], MONAD_BIND_NAME);
         bind_function.global_to_absolute();
         let bind_function = expr_var(bind_function, Some(op_span.clone()));
-        let bind_next_expr_span = unite_span(&Some(op_span), &next_expr_span);
-        let lazy_next_expr = expr_abs(vec![var_local(PARAM_NAME)], next_expr, next_expr_span);
+        let bind_next_expr_span = op_span.unite(&next_expr_span);
+        let lazy_next_expr = expr_abs(vec![var_local(PARAM_NAME)], next_expr, Some(next_expr_span));
         let bind_next_expr = expr_app(
             bind_function,
             vec![lazy_next_expr],
-            bind_next_expr_span.clone(),
+            Some(bind_next_expr_span.clone()),
         )
         .set_app_order(AppSourceCodeOrderType::FX);
-        let expr_span = expr.source.clone();
-        expr = expr_app(
-            bind_next_expr,
-            vec![expr],
-            unite_span(&bind_next_expr_span, &expr_span),
-        )
-        .set_app_order(AppSourceCodeOrderType::XDotF);
+        expr_span = bind_next_expr_span.unite(&expr_span);
+        expr = expr_app(bind_next_expr, vec![expr], Some(expr_span.clone()))
+            .set_app_order(AppSourceCodeOrderType::XDotF);
     }
     Ok(expr)
 }
 
-// Parse combinator sequence, e.g., `f $ x $ y`
+/// Parses a combinator sequence, e.g., `f $ x $ y`, into each operand with the span of its source.
 fn parse_combinator_sequence(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
     inner_parser: fn(Pair<Rule>, &mut ParseContext) -> Result<Arc<ExprNode>, Errors>,
-) -> Result<Vec<Arc<ExprNode>>, Errors> {
+) -> Result<Vec<(Arc<ExprNode>, Span)>, Errors> {
     pair.into_inner()
-        .map(|pair| inner_parser(pair, ctx))
+        .map(|pair| parse_with_src(pair, ctx, inner_parser))
         .collect()
 }
 
@@ -1850,7 +1909,7 @@ fn parse_binary_operator_sequence(
     inner_parser: fn(Pair<Rule>, &mut ParseContext) -> Result<Arc<ExprNode>, Errors>,
 ) -> Result<Arc<ExprNode>, Errors> {
     let mut pairs = pair.into_inner();
-    let mut expr = inner_parser(pairs.next().unwrap(), ctx)?;
+    let (mut expr, mut expr_span) = parse_with_src(pairs.next().unwrap(), ctx, inner_parser)?;
     let mut next_operation = BinaryOpInfo::default();
     let mut next_op_span: Option<Span> = None;
     for pair in pairs {
@@ -1859,7 +1918,7 @@ fn parse_binary_operator_sequence(
             next_op_span = Some(Span::from_pair(&ctx.source, &pair));
         } else {
             let mut lhs = expr;
-            let mut rhs = inner_parser(pair, ctx)?;
+            let (mut rhs, rhs_span) = parse_with_src(pair, ctx, inner_parser)?;
             if next_operation.reverse {
                 swap(&mut lhs, &mut rhs);
             }
@@ -1871,7 +1930,8 @@ fn parse_binary_operator_sequence(
             } else {
                 AppSourceCodeOrderType::FX
             };
-            let span = unite_span(&unite_span(&next_op_span, &lhs.source), &rhs.source);
+            expr_span = expr_span.unite(&rhs_span);
+            let span = Some(expr_span.clone());
             expr = expr_app(
                 expr_app(
                     expr_var(next_operation.method_fullname(), next_op_span.clone()),
@@ -1943,46 +2003,38 @@ fn parse_expr_cmp(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     )
 }
 
-// Operator && (right-associative)
+/// Parses a sequence of operands joined by `&&`, right associative, into nested `if`s.
 fn parse_expr_and(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_and);
     let exprs = pair
         .into_inner()
-        .map(|p| parse_expr_cmp(p, ctx))
+        .map(|p| parse_with_src(p, ctx, parse_expr_cmp))
         .collect::<Result<Vec<_>, _>>()?;
-
-    fn and_boolean_exprs(ps: &[Arc<ExprNode>]) -> Arc<ExprNode> {
-        if ps.len() == 1 {
-            ps[0].clone()
-        } else {
-            let sub = and_boolean_exprs(&ps[1..]);
-            let span = unite_span(&ps[0].source, &sub.source);
-            expr_if(ps[0].clone(), sub, expr_bool_lit(false, span.clone()), span)
-        }
-    }
-
-    Ok(and_boolean_exprs(&exprs))
+    Ok(fold_right_with_src(exprs, |lhs, rhs, span| {
+        expr_if(
+            lhs,
+            rhs,
+            expr_bool_lit(false, Some(span.clone())),
+            Some(span),
+        )
+    }))
 }
 
-// Operator || (right-associative)
+/// Parses a sequence of operands joined by `||`, right associative, into nested `if`s.
 fn parse_expr_or(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_or);
     let exprs = pair
         .into_inner()
-        .map(|p| parse_expr_and(p, ctx))
+        .map(|p| parse_with_src(p, ctx, parse_expr_and))
         .collect::<Result<Vec<_>, _>>()?;
-
-    fn or_boolean_exprs(ps: &[Arc<ExprNode>]) -> Arc<ExprNode> {
-        if ps.len() == 1 {
-            ps[0].clone()
-        } else {
-            let sub = or_boolean_exprs(&ps[1..]);
-            let span = unite_span(&ps[0].source, &sub.source);
-            expr_if(ps[0].clone(), expr_bool_lit(true, span.clone()), sub, span)
-        }
-    }
-
-    Ok(or_boolean_exprs(&exprs))
+    Ok(fold_right_with_src(exprs, |lhs, rhs, span| {
+        expr_if(
+            lhs,
+            expr_bool_lit(true, Some(span.clone())),
+            rhs,
+            Some(span),
+        )
+    }))
 }
 
 // Operator +/- (left associative)
@@ -2074,13 +2126,14 @@ fn parse_expr_unary(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
                 }
             }
             _ => {
-                let mut expr = parse_expr_composition(pair, ctx)?;
+                let (mut expr, mut expr_span) = parse_with_src(pair, ctx, parse_expr_composition)?;
                 for (i, op) in ops.iter().enumerate().rev() {
                     let op_span = spans[i].clone();
+                    expr_span = op_span.unite(&expr_span);
                     expr = expr_app(
-                        expr_var(op.method_fullname(), Some(op_span.clone())),
-                        vec![expr.clone()],
-                        expr.source.as_ref().map(|s0| s0.unite(&op_span)),
+                        expr_var(op.method_fullname(), Some(op_span)),
+                        vec![expr],
+                        Some(expr_span.clone()),
                     );
                 }
                 return Ok(expr);
@@ -2090,64 +2143,47 @@ fn parse_expr_unary(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
     unreachable!()
 }
 
-// Parse right to left application sequence, e.g., `g $ f $ x`. (right-associative)
+/// Parses a right-to-left application sequence, e.g., `g $ f $ x`, right associative.
 fn parse_expr_rtl_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_rtl_app);
     let exprs = parse_combinator_sequence(pair, ctx, parse_expr_or)?;
-    let mut exprs_iter = exprs.iter().rev();
-    let mut ret = exprs_iter.next().unwrap().clone();
-    for expr in exprs_iter {
-        let span = unite_span(&expr.source, &ret.source);
-        ret = expr_app(expr.clone(), vec![ret], span);
-    }
-    Ok(ret)
+    Ok(fold_right_with_src(exprs, |f, arg, span| {
+        expr_app(f, vec![arg], Some(span))
+    }))
 }
 
-// Parse function composition operator >> and <<.
+/// Parses a sequence of functions joined by the composition operators `>>` and `<<`, left
+/// associative.
 fn parse_expr_composition(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
 ) -> Result<Arc<ExprNode>, Errors> {
-    fn unite_src_from_expr(lhs: &Arc<ExprNode>, rhs: &Arc<ExprNode>) -> Option<Span> {
-        if lhs.source.is_none() {
-            return None;
-        }
-        if rhs.source.is_none() {
-            return None;
-        }
-        Some(
-            lhs.source
-                .as_ref()
-                .unwrap()
-                .unite(rhs.source.as_ref().clone().unwrap()),
-        )
-    }
-
     assert_eq!(pair.as_rule(), Rule::expr_composition);
     let mut pairs = pair.into_inner();
-    let mut expr = parse_expr_bind(pairs.next().unwrap(), ctx)?;
+    let (mut expr, mut expr_span) = parse_with_src(pairs.next().unwrap(), ctx, parse_expr_bind)?;
     while pairs.peek().is_some() {
         let op = pairs.next().unwrap();
         assert_eq!(op.as_rule(), Rule::operator_composition);
         let op_span = Span::from_pair(&ctx.source, &op);
         let mut compose_function = FullName::from_strs(&[STD_NAME], COMPOSE_FUNCTION_NAME);
         compose_function.global_to_absolute();
-        let compose = expr_var(compose_function, Some(op_span));
-        let rhs = parse_expr_bind(pairs.next().unwrap(), ctx)?;
+        let compose = expr_var(compose_function, Some(op_span.clone()));
+        let (rhs, rhs_span) = parse_with_src(pairs.next().unwrap(), ctx, parse_expr_bind)?;
+        let lhs_span = expr_span;
+        expr_span = lhs_span.unite(&rhs_span);
         match op.as_str() {
             ">>" => {
-                let span = unite_src_from_expr(&compose, &expr);
-                expr = expr_app(compose, vec![expr], span)
+                let span = lhs_span.unite(&op_span);
+                expr = expr_app(compose, vec![expr], Some(span))
                     .set_app_order(AppSourceCodeOrderType::XDotF);
-                let span = unite_src_from_expr(&expr, &rhs);
-                expr = expr_app(expr, vec![rhs], span).set_app_order(AppSourceCodeOrderType::FX);
+                expr = expr_app(expr, vec![rhs], Some(expr_span.clone()))
+                    .set_app_order(AppSourceCodeOrderType::FX);
             }
             "<<" => {
-                let span = unite_src_from_expr(&compose, &rhs);
-                let right_expr = expr_app(compose, vec![rhs.clone()], span)
+                let span = op_span.unite(&rhs_span);
+                let right_expr = expr_app(compose, vec![rhs], Some(span))
                     .set_app_order(AppSourceCodeOrderType::XDotF);
-                let span = unite_src_from_expr(&right_expr, &rhs);
-                expr = expr_app(right_expr, vec![expr], span)
+                expr = expr_app(right_expr, vec![expr], Some(expr_span.clone()))
                     .set_app_order(AppSourceCodeOrderType::FX);
             }
             _ => {
@@ -2167,27 +2203,33 @@ fn parse_expr_bind(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
         let star_pair = pairs.next().unwrap();
         stars.push(Span::from_pair(&ctx.source, &star_pair));
     }
-    let mut expr = parse_expr_dot_sequence_of_index(pairs.next().unwrap(), ctx)?;
+    let (mut expr, mut expr_src) =
+        parse_with_src(pairs.next().unwrap(), ctx, parse_expr_dot_sequence_of_index)?;
     while !stars.is_empty() {
         let star_src = stars.pop().unwrap();
-        expr = ctx.do_context.push_monad(expr, star_src);
+        expr = ctx
+            .do_context
+            .push_monad(expr, expr_src.clone(), star_src.clone());
+        expr_src = star_src.unite(&expr_src);
     }
     Ok(expr)
 }
 
-// Parse sequence of dot application and index syntax, e.g., `a.b[c].d[e][^f]`.
-//
-// Such sequence is should be parsed left-to-right: `(((a.b)[c]).d)([e]<<[^f])` where `<<` represents lens composition.
+/// Parses a sequence of dot applications and index syntax, e.g., `a.b[c].d[e][^f]`.
+///
+/// The sequence is parsed left to right: `(((a.b)[c]).d)([e]<<[^f])`, where `<<` is lens
+/// composition.
 fn parse_expr_dot_sequence_of_index(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
 ) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_dot_seq);
-    let mut expr: Option<Arc<ExprNode>> = None;
+    // The expression the components so far make, with the span of their source.
+    let mut expr: Option<(Arc<ExprNode>, Span)> = None;
     for pair in pair.into_inner() {
-        let expr_index_src = Span::from_pair(&ctx.source, &pair);
+        let component_src = Span::from_pair(&ctx.source, &pair);
         // Parse one component of dot sequence, e.g., `a`, `b[c]`, `d[e][^f]`
-        let (x, indices) = parse_expr_index(pair, ctx)?;
+        let (x, x_src, indices) = parse_expr_index(pair, ctx)?;
         // Example1: `expr` = `Some(obj)`, `x` = `arr`, `indices` = `vec![ [i], [^field] ]`
         // In this case, we need to create expression like `(obj.arr)([i]<<[^field])` where `<<` represents lens composition.
         //
@@ -2195,19 +2237,22 @@ fn parse_expr_dot_sequence_of_index(
         // In this case, we need to create expression like `arr([i]<<[^field])
         //
         // Set `x` = `obj.x` in case of Example1.
-        let x = match expr {
-            Some(expr) => {
-                let span = unite_span(&x.source, &expr.source);
-                expr_app(x, vec![expr], span).set_app_order(AppSourceCodeOrderType::XDotF)
+        let (x, x_src) = match expr {
+            Some((expr, expr_src)) => {
+                let span = expr_src.unite(&x_src);
+                let x = expr_app(x, vec![expr], Some(span.clone()))
+                    .set_app_order(AppSourceCodeOrderType::XDotF);
+                (x, span)
             }
-            None => x,
+            None => (x, x_src),
         };
 
         // Then, construct index syntax `x([i]<<[^field])` from `x` and `indices`.
-        expr = Some(construct_expr_index(x, indices, Some(expr_index_src))?);
+        let src = x_src.unite(&component_src);
+        expr = Some((construct_expr_index(x, indices, Some(src.clone()))?, src));
     }
 
-    Ok(expr.unwrap())
+    Ok(expr.unwrap().0)
 }
 
 // `[i]` or `[^field]`
@@ -2222,19 +2267,20 @@ enum IndexAccessor {
     Field(FullName, Option<Span>),
 }
 
-// Parse expression with index syntax, e.g., `arr[expr][^field][^0]`
+/// Parses an expression with index syntax, e.g., `arr[expr][^field][^0]`, into the expression
+/// before the indices with the span of its source, and the indices.
 fn parse_expr_index(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
-) -> Result<(Arc<ExprNode>, Vec<IndexSyntax>), Errors> {
+) -> Result<(Arc<ExprNode>, Span, Vec<IndexSyntax>), Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_index);
     let mut pairs = pair.into_inner();
-    let expr = parse_expr_app(pairs.next().unwrap(), ctx)?;
+    let (expr, expr_src) = parse_with_src(pairs.next().unwrap(), ctx, parse_expr_app)?;
     let mut indices = vec![];
     for pair in pairs {
         indices.push(parse_index_syntax(pair, ctx)?);
     }
-    Ok((expr, indices))
+    Ok((expr, expr_src, indices))
 }
 
 // Given expression `x` and possibly empty list of index syntax `vec![[i], [^field]]`,
@@ -2277,7 +2323,7 @@ fn construct_expr_index(
                     vec![index_expr],
                     index.source.clone(),
                 );
-                let new_action_span = unite_span(&index.source, &action.source);
+                let new_action_span = Span::unite_present(&index.source, &action.source);
                 action = expr_app(act_func, vec![action], new_action_span);
             }
             IndexAccessor::Field(field_name, field_span) => {
@@ -2286,7 +2332,7 @@ fn construct_expr_index(
                 *act_func_name.name_as_mut() = format!("{}{}", STRUCT_ACT_SYMBOL, field_name.name);
                 let act_func = expr_var(act_func_name, field_span.clone())
                     .set_struct_act_func_in_index_syntax(true);
-                let new_action_span = unite_span(&field_span, &action.source);
+                let new_action_span = Span::unite_present(&field_span, &action.source);
                 action = expr_app(act_func, vec![action], new_action_span);
             }
         }
@@ -2341,34 +2387,45 @@ fn parse_index_syntax(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<IndexS
     })
 }
 
-// Parse application sequence, e.g., `f(x, y)`. (left-associative)
+/// Parses an application sequence, e.g., `f(x, y)`, left associative.
 fn parse_expr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_app);
     let mut pairs = pair.into_inner();
-    let head = parse_expr_nlr(pairs.next().unwrap(), ctx)?;
-    let mut args = vec![];
+    let (mut expr, mut expr_span) = parse_with_src(pairs.next().unwrap(), ctx, parse_expr_nlr)?;
     while pairs.peek().is_some() {
         // If parentheses for arguments are given,
         let pair = pairs.next().unwrap();
         let args_span = Span::from_pair(&ctx.source, &pair);
-        let mut args_local = parse_arg_list(pair, ctx)?;
-        if args_local.len() == 0 {
+        let mut args = parse_arg_list(pair, ctx)?;
+        if args.len() == 0 {
             // `f()` is interpreted as application to unit: `f $ ()`.
-            args_local.push(
-                expr_make_struct(tycon(make_tuple_name_abs(0)), vec![]).set_source(Some(args_span)),
-            )
+            args.push((
+                expr_make_struct(tycon(make_tuple_name_abs(0)), vec![])
+                    .set_source(Some(args_span.clone())),
+                args_span.clone(),
+            ))
         }
-        args.append(&mut args_local);
+        // An application to an argument other than the last of the list spans the source up to that
+        // argument, and the application to the last spans the closing parenthesis too.
+        let last = args.len() - 1;
+        for (i, (arg, arg_span)) in args.into_iter().enumerate() {
+            let arg_span = if i == last {
+                args_span.clone()
+            } else {
+                arg_span
+            };
+            expr_span = expr_span.unite(&arg_span);
+            expr = expr_app(expr, vec![arg], Some(expr_span.clone()));
+        }
     }
-    let mut ret = head;
-    for expr in args {
-        let span = unite_span(&expr.source, &ret.source);
-        ret = expr_app(ret, vec![expr.clone()], span);
-    }
-    Ok(ret)
+    Ok(expr)
 }
 
-fn parse_arg_list(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Vec<Arc<ExprNode>>, Errors> {
+/// Parses the parenthesized arguments of a call, e.g., `(x, y)`, each with the span of its source.
+fn parse_arg_list(
+    pair: Pair<Rule>,
+    ctx: &mut ParseContext,
+) -> Result<Vec<(Arc<ExprNode>, Span)>, Errors> {
     assert_eq!(pair.as_rule(), Rule::arg_list);
     parse_combinator_sequence(pair, ctx, parse_expr)
 }
@@ -2516,21 +2573,22 @@ fn parse_expr_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     })
 }
 
-// Parse the expression `let {pat1} = {bound1}; let {pat2} = {bound2}; ...; {value}`.
+/// Parses the expression `let {pat1} = {bound1}; let {pat2} = {bound2}; ...; {value}`.
 fn parse_expr_let(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     let pairs = pair.into_inner();
-    parse_expr_let_recursively(pairs, ctx)
+    Ok(parse_expr_let_recursively(pairs, ctx)?.0)
 }
 
-// Parse the expression `let {pat1} = {bound1}; let {pat2} = {bound2}; ...; {value}`.
+/// Parses the expression `let {pat1} = {bound1}; let {pat2} = {bound2}; ...; {value}`, with the span
+/// of its source.
 fn parse_expr_let_recursively(
     mut pairs: Pairs<Rule>,
     ctx: &mut ParseContext,
-) -> Result<Arc<ExprNode>, Errors> {
+) -> Result<(Arc<ExprNode>, Span), Errors> {
     let pair = pairs.next().unwrap();
     if pair.as_rule() != Rule::keyword_let {
         // `pair` is `{value}` (an `expr_or_hole`).
-        parse_expr_or_hole(pair, ctx)
+        parse_with_src(pair, ctx, parse_expr_or_hole)
     } else {
         // `pair` is `let` keyword.
         assert_eq!(pair.as_rule(), Rule::keyword_let);
@@ -2546,18 +2604,17 @@ fn parse_expr_let_recursively(
         let _semicolon = pairs.next().unwrap(); // Skip ";" or "in".
         assert_eq!(_semicolon.as_rule(), Rule::in_of_let);
 
-        // Parse the rest of the expression recursively.
-        // Here we create a new DoContext.
+        // Parse the rest of the expression recursively. Its `*`s are bound around it, apart from
+        // those of the expression the `let` is in.
         let old_doctx = replace(&mut ctx.do_context, DoContext::default());
-        let value = parse_expr_let_recursively(pairs, ctx)?;
+        let (value, value_span) = parse_expr_let_recursively(pairs, ctx)?;
         let value = ctx.do_context.expand_binds(value);
-        ctx.do_context = old_doctx; // Restore old DoContext.
+        ctx.do_context = old_doctx;
 
         // Create the let expression.
-        let span = unite_span(&value.source, &Some(let_span));
-        let expr = expr_let(pat, bound, value, span);
-        // Set the source of the expression.
-        Ok(expr)
+        let span = let_span.unite(&value_span);
+        let expr = expr_let(pat, bound, value, Some(span.clone()));
+        Ok((expr, span))
     }
 }
 
@@ -2571,6 +2628,8 @@ fn parse_expr_eval(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
     Ok(expr_eval(sub, main, Some(span)))
 }
 
+/// Parses a lambda, e.g., `|x, (y, z)| x + y`, into one abstraction per parameter. Each abstraction
+/// receives its argument as `#param` and binds the parameter's pattern to it with a `let`.
 fn parse_expr_lam(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
@@ -2579,11 +2638,12 @@ fn parse_expr_lam(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
         let pat = parse_pattern_nounion(pairs.next().unwrap(), ctx);
         pats.push(pat);
     }
-    let mut expr = parse_expr_or_hole_with_new_do(pairs.next().unwrap(), ctx)?;
-    let mut pat_body_span = expr.source.clone();
+    let (mut expr, body_span) =
+        parse_with_src(pairs.next().unwrap(), ctx, parse_expr_or_hole_with_new_do)?;
+    let mut pat_body_span = Some(body_span);
     let var = var_local(PARAM_NAME);
     for pat in pats.iter().rev() {
-        pat_body_span = Span::unite_opt(&pat_body_span, &pat.info.source);
+        pat_body_span = Span::unite_both(&pat_body_span, &pat.info.source);
         expr = expr_abs_param_src(
             vec![var.clone()],
             expr_let(
@@ -3097,7 +3157,7 @@ fn parse_type_tyapp(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     let mut ret = parse_type_nlr(pair, ctx);
     for pair in pairs {
         let arg = parse_type_nlr(pair, ctx);
-        let span = unite_span(ret.get_source(), arg.get_source());
+        let span = Span::unite_present(ret.get_source(), arg.get_source());
         ret = type_tyapp(ret, arg).set_source(span);
     }
     ret.set_source(Some(span))

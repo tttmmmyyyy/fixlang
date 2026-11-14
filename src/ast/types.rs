@@ -968,7 +968,7 @@ impl TypeNode {
                             let last_assoc_arg_src =
                                 assoc_ty_args.last().unwrap().get_source().clone();
                             let assoc_ty_span =
-                                Span::unite_opt(&assoc_ty_name_src, &last_assoc_arg_src);
+                                Span::unite_both(&assoc_ty_name_src, &last_assoc_arg_src);
                             let mut assoc_ty = type_assocty(
                                 AssocType {
                                     name: assoc_ty_name,
@@ -980,7 +980,7 @@ impl TypeNode {
                             for arg in following_args {
                                 let fun_src = assoc_ty.get_source();
                                 let arg_src = arg.get_source();
-                                let span = Span::unite_opt(fun_src, arg_src);
+                                let span = Span::unite_both(fun_src, arg_src);
                                 assoc_ty = type_tyapp(assoc_ty, arg.clone()).set_source(span);
                             }
                             return assoc_ty.resolve_namespace(ctx);
@@ -1307,7 +1307,7 @@ impl TypeNode {
                 for i in 0..ta.tyvars.len() {
                     let param = &ta.tyvars[i].name;
                     let arg = app_seq[i + 1].clone();
-                    src = Span::unite_opt(&src, arg.get_source());
+                    src = Span::unite_both(&src, arg.get_source());
                     let merge_ok = s.merge(&Substitution::single(&param, arg));
                     assert!(merge_ok);
                 }
@@ -1317,7 +1317,7 @@ impl TypeNode {
                 let mut resolved = resolved.set_source(src);
                 for i in (ta.tyvars.len() + 1)..app_seq.len() {
                     let arg = app_seq[i].clone();
-                    let src = Span::unite_opt(resolved.get_source(), arg.get_source());
+                    let src = Span::unite_both(resolved.get_source(), arg.get_source());
                     resolved = type_tyapp(resolved, arg).set_source(src);
                 }
                 return resolved.resolve_type_aliases_internal(env, type_name_path, entry_type_src);
@@ -2803,7 +2803,7 @@ impl Scheme {
         if let Err(msg) = extend_result {
             let mut span = ret.predicates[0].src.clone();
             for i in 1..ret.predicates.len() {
-                span = Span::unite_opt(&span, &ret.predicates[i].src);
+                span = Span::unite_both(&span, &ret.predicates[i].src);
             }
             return Err(Errors::from_msg_srcs(msg, &[&span]));
         }
