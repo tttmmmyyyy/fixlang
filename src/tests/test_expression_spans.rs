@@ -7,10 +7,15 @@ use crate::{
         name::FullName,
         program::SymbolExpr,
     },
+    ast::program::EndNode,
     configuration::Configuration,
-    parse::{parser::parse_source_file, sourcefile::SourceFile},
+    parse::{
+        parser::parse_source_file,
+        sourcefile::{SourceFile, SourcePos},
+    },
 };
-use std::{path::PathBuf, sync::Arc};
+use std::{fs, path::PathBuf, sync::Arc};
+use tempfile::TempDir;
 
 /// Parses `expr` as the body of a global value, and returns the expression with the source of the
 /// file it was parsed from.
@@ -78,4 +83,30 @@ pub fn test_the_value_of_a_let_spans_the_parentheses_of_a_bind_operand() {
         panic!("`v` is not a `let`");
     };
     assert_eq!(span_text(let_value, &content), "*(m)");
+}
+
+/// Verifies that a position in the operand of a `*` finds the name written there, which the binds
+/// the `*` makes leave in place of the operand.
+#[test]
+pub fn test_a_name_in_the_operand_of_a_bind_is_found_at_its_position() {
+    // A position is looked up in a file that exists.
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("main.fix");
+    let content = "module Main;\n\nv : IO () = *act;\n";
+    fs::write(&path, content).unwrap();
+    let source = SourceFile::from_file_path_and_content(path, content.to_string());
+    let program = parse_source_file(source, &Configuration::develop_mode()).unwrap();
+    let SymbolExpr::Simple(value) = &program.global_values[&FullName::from_strs(&["Main"], "v")].expr
+    else {
+        panic!("`v` is not a simple value");
+    };
+    let pos = SourcePos {
+        input: value.expr.source.as_ref().unwrap().input.clone(),
+        // The middle of the name, since a position just after a name also counts as in it.
+        pos: content.find("*act").unwrap() + 2,
+    };
+    let Some(EndNode::Expr(var, _)) = value.expr.find_node_at(&pos) else {
+        panic!("no name is found at the operand");
+    };
+    assert_eq!(var.name.name, "act");
 }
