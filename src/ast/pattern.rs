@@ -278,7 +278,8 @@ impl PatternNode {
                     }
                 }
                 // The type is written only at the type constructor name; a tuple writes no name.
-                self.info.aux_src
+                self.info
+                    .aux_src
                     .as_ref()
                     .filter(|tc_src| tc_src.includes_pos_lsp(pos))
                     .map(|_| EndNode::Type(tc.as_ref().clone()))

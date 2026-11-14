@@ -178,7 +178,10 @@ pub fn test_no_position_finds_a_name_the_source_never_writes() {
 /// find its type, also when a field value of the construction is a hole or the operand of a `*`.
 #[test]
 pub fn test_only_the_type_name_of_a_struct_finds_its_type() {
-    let exprs = ["S { a : ?todo, b : *local }", "let S { a : x, b : _ } = s; x"];
+    let exprs = [
+        "S { a : ?todo, b : *local }",
+        "let S { a : x, b : _ } = s; x",
+    ];
     for expr in exprs {
         let value = parse_value(expr);
         let type_positions = positions_finding_a_type(&value);
