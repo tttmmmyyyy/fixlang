@@ -1089,11 +1089,10 @@ impl ExprNode {
                     }
                 }
                 // The type is written only at the type constructor name; a tuple writes no name.
-                let tc_src = self.aux_src.as_ref()?;
-                if !tc_src.includes_pos_lsp(pos) {
-                    return None;
-                }
-                Some(EndNode::Type(tc.as_ref().clone()))
+                self.aux_src
+                    .as_ref()
+                    .filter(|tc_src| tc_src.includes_pos_lsp(pos))
+                    .map(|_| EndNode::Type(tc.as_ref().clone()))
             }
             Expr::ArrayLit(elems) => {
                 for elem in elems {
