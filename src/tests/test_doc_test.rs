@@ -1152,7 +1152,10 @@ fn test_examples_that_cannot_share_a_program_are_tested_alone() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         !output.status.success()
-            && stderr.matches("Expected `Std::I64`, found `Std::String`.").count() == 1
+            && stderr
+                .matches("Expected `Std::I64`, found `Std::String`.")
+                .count()
+                == 1
             && !stderr.contains("doc test"),
         "the error of the source is reported once, and no example is reported\n{}",
         streams(&output)

@@ -1790,8 +1790,7 @@ fn parse_expr_and_then_sequence(
         bind_function.global_to_absolute();
         let bind_function = expr_var(bind_function, Some(op_span.clone()));
         let bind_next_expr_span = op_span.unite(&next_expr_span);
-        let lazy_next_expr =
-            expr_abs(vec![var_local(PARAM_NAME)], next_expr, Some(next_expr_span));
+        let lazy_next_expr = expr_abs(vec![var_local(PARAM_NAME)], next_expr, Some(next_expr_span));
         let bind_next_expr = expr_app(
             bind_function,
             vec![lazy_next_expr],
@@ -1988,7 +1987,12 @@ fn parse_expr_and(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
         .map(|p| parse_with_src(p, ctx, parse_expr_cmp))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(fold_right_with_src(exprs, |lhs, rhs, span| {
-        expr_if(lhs, rhs, expr_bool_lit(false, Some(span.clone())), Some(span))
+        expr_if(
+            lhs,
+            rhs,
+            expr_bool_lit(false, Some(span.clone())),
+            Some(span),
+        )
     }))
 }
 
@@ -2000,7 +2004,12 @@ fn parse_expr_or(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNod
         .map(|p| parse_with_src(p, ctx, parse_expr_and))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(fold_right_with_src(exprs, |lhs, rhs, span| {
-        expr_if(lhs, expr_bool_lit(true, Some(span.clone())), rhs, Some(span))
+        expr_if(
+            lhs,
+            expr_bool_lit(true, Some(span.clone())),
+            rhs,
+            Some(span),
+        )
     }))
 }
 
@@ -2093,8 +2102,7 @@ fn parse_expr_unary(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
                 }
             }
             _ => {
-                let (mut expr, mut expr_span) =
-                    parse_with_src(pair, ctx, parse_expr_composition)?;
+                let (mut expr, mut expr_span) = parse_with_src(pair, ctx, parse_expr_composition)?;
                 for (i, op) in ops.iter().enumerate().rev() {
                     let op_span = spans[i].clone();
                     expr_span = op_span.unite(&expr_span);
@@ -2371,7 +2379,11 @@ fn parse_expr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
         // argument, and the application to the last spans the closing parenthesis too.
         let last = args.len() - 1;
         for (i, (arg, arg_span)) in args.into_iter().enumerate() {
-            let arg_span = if i == last { args_span.clone() } else { arg_span };
+            let arg_span = if i == last {
+                args_span.clone()
+            } else {
+                arg_span
+            };
             expr_span = expr_span.unite(&arg_span);
             expr = expr_app(expr, vec![arg], Some(expr_span.clone()));
         }
