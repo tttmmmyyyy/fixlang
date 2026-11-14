@@ -529,6 +529,45 @@ fn test_a_lambda_capturing_either_of_two_sets_of_too_many_classes_computes_both(
     test_source(&source, Configuration::develop_mode());
 }
 
+/// `g` answers with one of more lambdas than `MAX_LS_UNION_VARIANTS`, so the function it returns is
+/// a closure. One call stores `g(f)` in a struct field and applies what it reads back, and the other
+/// applies `g(f2)` at once, `f` and `f2` being different lambdas. The two calls reach two uncurried
+/// functions of `g`, each specialized to its own argument's set, and each computes its value.
+#[test]
+fn test_a_returned_closure_read_back_from_a_struct_and_one_applied_at_once_compute_both() {
+    let count = MAX_LS_UNION_VARIANTS + 1;
+    let branches: Vec<String> = (0..count)
+        .map(|i| format!("if k == {} {{ |x| x * {} + {} }} else", i, i + 2, i))
+        .collect();
+    let source = format!(
+        r#"
+    module Main;
+
+    type Holder = struct {{ fun : I64 -> I64, tag : I64 }};
+
+    g : (I64 -> I64) -> I64 -> I64;
+    g = |a| (
+        let k = a(0);
+        {} {{ |x| x - 1 }}
+    );
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let f = |y| y + n;
+        let f2 = |y| y * n + 3;
+        let p = Holder {{ fun : g(f), tag : 1 }};
+        let r1 = (p.@fun)(5);
+        let r2 = g(f2)(7);
+        assert_eq(|_|"unexpected result", (r1, r2), (16, 38));;
+        pure()
+    );
+    "#,
+        branches.join("\n        ")
+    );
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// How deep the chain of `chain_source` goes in the tests of the bound on the capture structs a
 /// value lays out in place.
 const CHAIN_DEPTH: usize = 18;
