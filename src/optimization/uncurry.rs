@@ -182,7 +182,9 @@ fn convert_to_uncurried_func_name(name: &mut Name, n_args: usize) {
 fn split_uncurried_func_name(name: &FullName) -> Option<(FullName, usize)> {
     let (global_name, suffix) = name.name.rsplit_once(UNCURRIED_FUNC_SUFFIX)?;
     let n_args: usize = suffix.parse().ok()?;
-    if n_args.to_string() != suffix {
+    let mut written = global_name.to_string();
+    convert_to_uncurried_func_name(&mut written, n_args);
+    if written != name.name {
         return None;
     }
     let mut global = name.clone();
