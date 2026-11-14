@@ -7,6 +7,7 @@
 
 use crate::{
     configuration::Configuration,
+    constants::BIND_RESULT_VAR_PREFIX,
     tests::test_util::{test_source_fail, test_source_fail_excludes},
 };
 
@@ -291,7 +292,11 @@ main : IO () = (
         Configuration::develop_mode(),
         "`*pure((1, 2, 3))` of type `(Std::I64, Std::I64, Std::I64)` does not match the expected type `(#1, #2)`.\n\n5:18-5:34 in ",
     );
-    test_source_fail_excludes(source, Configuration::develop_mode(), "#monadic_value");
+    test_source_fail_excludes(
+        source,
+        Configuration::develop_mode(),
+        BIND_RESULT_VAR_PREFIX,
+    );
 }
 
 /// The result of a `*x` too long to quote is reported as the expression the source pointer marks.
