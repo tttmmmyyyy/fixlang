@@ -175,7 +175,7 @@ fn convert_to_uncurried_func_name(name: &mut Name, n_args: usize) {
 }
 
 /// The global and the number of arguments of the uncurried function named `name`, read off the
-/// suffix `convert_to_uncurried_func_name` appends. `None` if `name` does not end with one.
+/// `#func{N}` that ends the name.
 ///
 /// # Examples
 /// `g#func2` gives `(g, 2)`, and `g#func2#ls0` gives `None`.
@@ -283,8 +283,8 @@ fn replace_closure_call_with_func_call(
                 // arguments of what it returns: `g#func{N}(a1, ..., aN)(b1, ..., bM)` becomes
                 // `g#func{N+M}(a1, ..., aN, b1, ..., bM)`.
                 // The passes after the first run can copy an uncurried function under another
-                // name, as the lambda sets do with `g#func2#ls...`. Such a copy is not in `funcs`,
-                // and a call of it stays as it is.
+                // name, as lambda set specialization does with `g#func2#ls...`. A call of such a
+                // copy finds no entry in `funcs` and stays as it is.
                 let Some((global, n_args)) = funcs.get(&f_func.name) else {
                     return expr.clone();
                 };
