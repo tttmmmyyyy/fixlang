@@ -144,7 +144,7 @@ pub fn test_no_position_finds_a_name_the_source_never_writes() {
                 pos,
             };
             match value.expr.find_node_at(&pos) {
-                Some(EndNode::Expr(var, _)) if var.name.name.starts_with('#') => {
+                Some(EndNode::Expr(var, _)) if var.name.is_generated() => {
                     Some((pos.pos, var.name.name))
                 }
                 _ => None,
