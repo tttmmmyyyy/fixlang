@@ -218,9 +218,15 @@ impl DoContext {
     /// source of each operand of a `*`. A parenthesized `expr` spans the text inside its
     /// parentheses, and so do the binds.
     fn expand_binds(&mut self, mut expr: Arc<ExprNode>) -> Arc<ExprNode> {
-        let src = self.monads.iter().fold(expr.source.clone(), |src, info| {
-            unite_span(&src, &Some(info.operand_src.clone()))
-        });
+        let expr_src = expr
+            .source
+            .clone()
+            .expect("an expression parsed from the source has a span");
+        let src = Some(
+            self.monads
+                .iter()
+                .fold(expr_src, |src, info| src.unite(&info.operand_src)),
+        );
         while !self.monads.is_empty() {
             let BindOperatorInfo {
                 operator_src,
