@@ -987,8 +987,8 @@ impl ExprNode {
     }
 
     /// What the source position `pos` points at inside this expression: the name a variable
-    /// expression writes, a field name of a struct construction, or the type a type annotation or a
-    /// struct construction writes. A field written as its name alone (`S { x }`) answers the
+    /// expression writes, a field name of a struct construction, or the type a type annotation writes
+    /// or a struct construction names at its type constructor name. A field written as its name alone (`S { x }`) answers the
     /// variable its name also writes. The walk takes the innermost expression whose span covers
     /// `pos`, so an expression written with no span answers nothing.
     pub fn find_node_at(self: &Arc<ExprNode>, pos: &SourcePos) -> Option<EndNode> {
@@ -1087,6 +1087,11 @@ impl ExprNode {
                             return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
                         }
                     }
+                }
+                // The type is written only at the type constructor name; a tuple writes no name.
+                let tc_src = self.aux_src.as_ref()?;
+                if !tc_src.includes_pos_lsp(pos) {
+                    return None;
                 }
                 Some(EndNode::Type(tc.as_ref().clone()))
             }
