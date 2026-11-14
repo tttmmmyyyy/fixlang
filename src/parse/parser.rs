@@ -174,18 +174,34 @@ impl ParseContext {
 #[derive(Default)]
 struct DoContext {
     counter: u32,
-    monads: Vec<BindOperatorInfo>, // (Monadic action, the result of action).
+    /// The `*`s in the expression being parsed, in the order they were pushed.
+    monads: Vec<BindOperatorInfo>,
 }
 
 struct BindOperatorInfo {
     operator_src: Span,
     operand: Arc<ExprNode>,
+    /// The span of the source the operand was parsed from, which covers parentheses around it.
+    operand_src: Span,
     result_var: Arc<Var>,
 }
 
 impl DoContext {
-    // Pushes monadic value, and returns expression that represents the result of monadic action.
-    fn push_monad(&mut self, monad: Arc<ExprNode>, star_src: Span) -> Arc<ExprNode> {
+    /// Pushes a monadic value, and returns an expression for the result of its action.
+    ///
+    /// The returned expression spans the `*` alone. In the bind built from the `*`, it lies in the
+    /// function, which a search for the node at a position visits before the operand; a span
+    /// covering the operand would let it hide the operand from that search.
+    ///
+    /// # Arguments
+    /// * `monad_src` — the span of the source `monad` was parsed from, parentheses around it
+    ///   included.
+    fn push_monad(
+        &mut self,
+        monad: Arc<ExprNode>,
+        monad_src: Span,
+        star_src: Span,
+    ) -> Arc<ExprNode> {
         let var_name = FullName::local(&format!("#monadic_value{}", self.counter));
         let var_var = var_var(var_name.clone());
         let var_expr = expr_var(var_name, Some(star_src.clone()));
@@ -193,6 +209,7 @@ impl DoContext {
         self.monads.push(BindOperatorInfo {
             operator_src: star_src,
             operand: monad,
+            operand_src: monad_src,
             result_var: var_var,
         });
         var_expr
@@ -200,14 +217,24 @@ impl DoContext {
 
     /// Wraps `expr` in a bind of each monadic value pushed so far, the one pushed last innermost.
     ///
-    /// `src` is the span of the source `expr` was parsed from. The operands of the `*`s lie inside
-    /// it, so every expression the binds build spans it.
-    fn expand_binds(&mut self, mut expr: Arc<ExprNode>, src: Span) -> Arc<ExprNode> {
-        let src = Some(src);
+    /// The binds stand in place of `expr`, so every expression they build spans `expr` and the
+    /// source of each operand of a `*`. A parenthesized `expr` spans the text inside its
+    /// parentheses, and so do the binds.
+    fn expand_binds(&mut self, mut expr: Arc<ExprNode>) -> Arc<ExprNode> {
+        let expr_src = expr
+            .source
+            .clone()
+            .expect("an expression parsed from the source has a span");
+        let src = Some(
+            self.monads
+                .iter()
+                .fold(expr_src, |src, info| src.unite(&info.operand_src)),
+        );
         while !self.monads.is_empty() {
             let BindOperatorInfo {
                 operator_src,
                 operand: monad,
+                operand_src: _,
                 result_var: var,
             } = self.monads.pop().unwrap();
             expr = expr_abs(vec![var], expr, src.clone());
@@ -1723,8 +1750,8 @@ fn parse_expr_or_hole_with_new_do(
     ctx: &mut ParseContext,
 ) -> Result<Arc<ExprNode>, Errors> {
     let old_doctx = replace(&mut ctx.do_context, DoContext::default());
-    let (expr, src) = parse_with_src(pair, ctx, parse_expr_or_hole)?;
-    let expr = ctx.do_context.expand_binds(expr, src);
+    let expr = parse_expr_or_hole(pair, ctx)?;
+    let expr = ctx.do_context.expand_binds(expr);
     ctx.do_context = old_doctx;
     Ok(expr)
 }
@@ -2169,10 +2196,14 @@ fn parse_expr_bind(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
         let star_pair = pairs.next().unwrap();
         stars.push(Span::from_pair(&ctx.source, &star_pair));
     }
-    let mut expr = parse_expr_dot_sequence_of_index(pairs.next().unwrap(), ctx)?;
+    let (mut expr, mut expr_src) =
+        parse_with_src(pairs.next().unwrap(), ctx, parse_expr_dot_sequence_of_index)?;
     while !stars.is_empty() {
         let star_src = stars.pop().unwrap();
-        expr = ctx.do_context.push_monad(expr, star_src);
+        expr = ctx
+            .do_context
+            .push_monad(expr, expr_src.clone(), star_src.clone());
+        expr_src = star_src.unite(&expr_src);
     }
     Ok(expr)
 }
@@ -2570,7 +2601,7 @@ fn parse_expr_let_recursively(
         // Here we create a new DoContext.
         let old_doctx = replace(&mut ctx.do_context, DoContext::default());
         let (value, value_span) = parse_expr_let_recursively(pairs, ctx)?;
-        let value = ctx.do_context.expand_binds(value, value_span.clone());
+        let value = ctx.do_context.expand_binds(value);
         ctx.do_context = old_doctx; // Restore old DoContext.
 
         // Create the let expression.

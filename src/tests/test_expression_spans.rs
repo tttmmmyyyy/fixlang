@@ -5,24 +5,45 @@ use crate::{
     ast::{
         expr::{Expr, ExprNode},
         name::FullName,
-        program::SymbolExpr,
+        program::{EndNode, SymbolExpr},
     },
     configuration::Configuration,
-    parse::{parser::parse_source_file, sourcefile::SourceFile},
+    parse::{
+        parser::parse_source_file,
+        sourcefile::{SourceFile, SourcePos},
+    },
 };
-use std::{path::PathBuf, sync::Arc};
+use std::{fs, sync::Arc};
+use tempfile::TempDir;
 
-/// Parses `expr` as the body of a global value, and returns the expression with the source of the
-/// file it was parsed from.
-fn parse_value(expr: &str) -> (Arc<ExprNode>, String) {
+/// A global value parsed from a file of its own.
+struct ParsedValue {
+    /// The directory holding the file. It keeps the file on disk while the value is examined,
+    /// since looking up a position resolves the path of the file, which must exist.
+    _dir: TempDir,
+    /// The expression the value is defined by.
+    expr: Arc<ExprNode>,
+    /// The content of the file.
+    content: String,
+}
+
+/// Parses `expr` as the body of a global value.
+fn parse_value(expr: &str) -> ParsedValue {
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("main.fix");
     let content = format!("module Main;\n\nv : I64 = {};\n", expr);
-    let source = SourceFile::from_file_path_and_content(PathBuf::from("main.fix"), content.clone());
+    fs::write(&path, &content).unwrap();
+    let source = SourceFile::from_file_path_and_content(path, content.clone());
     let program = parse_source_file(source, &Configuration::develop_mode()).unwrap();
     let name = FullName::from_strs(&["Main"], "v");
     let SymbolExpr::Simple(value) = &program.global_values[&name].expr else {
         panic!("`v` is not a simple value");
     };
-    (value.expr.clone(), content)
+    ParsedValue {
+        _dir: dir,
+        expr: value.expr.clone(),
+        content,
+    }
 }
 
 /// The text of `content` that the span of `expr` covers.
@@ -58,8 +79,8 @@ pub fn test_an_expression_built_from_parts_spans_the_parentheses_at_its_ends() {
     let wrong_spans = exprs
         .into_iter()
         .map(|expr| {
-            let (value, content) = parse_value(expr);
-            (expr, span_text(&value, &content))
+            let value = parse_value(expr);
+            (expr, span_text(&value.expr, &value.content))
         })
         .filter(|(expr, span_text)| expr != span_text)
         .collect::<Vec<_>>();
@@ -73,9 +94,39 @@ pub fn test_an_expression_built_from_parts_spans_the_parentheses_at_its_ends() {
 /// The value of a `let` that holds a `*` spans its source, the operand's parentheses included.
 #[test]
 pub fn test_the_value_of_a_let_spans_the_parentheses_of_a_bind_operand() {
-    let (value, content) = parse_value("let x = 1; *(m)");
-    let Expr::Let(_, _, let_value) = &*value.expr else {
+    let value = parse_value("let x = 1; *(m)");
+    let Expr::Let(_, _, let_value) = &*value.expr.expr else {
         panic!("`v` is not a `let`");
     };
-    assert_eq!(span_text(let_value, &content), "*(m)");
+    assert_eq!(span_text(let_value, &value.content), "*(m)");
+}
+
+/// Verifies that a position in the operand of a `*` finds the name written there, after the `*`
+/// has been turned into a bind.
+#[test]
+pub fn test_a_name_in_the_operand_of_a_bind_is_found_at_its_position() {
+    let value = parse_value("*act");
+    let pos = SourcePos {
+        input: value.expr.source.as_ref().unwrap().input.clone(),
+        // The middle of the name, since a position just after a name also counts as in it.
+        pos: value.content.find("*act").unwrap() + 2,
+    };
+    let Some(EndNode::Expr(var, _)) = value.expr.find_node_at(&pos) else {
+        panic!("no name is found at the operand");
+    };
+    assert_eq!(var.name.name, "act");
+}
+
+/// Verifies that the binds the `*`s in a parenthesized expression make span the text inside the
+/// parentheses, as the expression does, both for the body of a value and for the value of a `let`.
+#[test]
+pub fn test_the_binds_in_a_parenthesized_expression_span_the_text_inside() {
+    let value = parse_value("(*(m))");
+    assert_eq!(span_text(&value.expr, &value.content), "*(m)");
+
+    let value = parse_value("let x = 1; (*(m))");
+    let Expr::Let(_, _, let_value) = &*value.expr.expr else {
+        panic!("`v` is not a `let`");
+    };
+    assert_eq!(span_text(let_value, &value.content), "*(m)");
 }
