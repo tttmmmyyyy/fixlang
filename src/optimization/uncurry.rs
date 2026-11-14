@@ -44,7 +44,7 @@ pub fn run(prg: &mut Program, num_threads: usize) {
 
     // Define the uncurried functions of each global that has none yet. An uncurried function gets
     // none, since it takes its arguments at once already.
-    let syms = mem::replace(&mut prg.symbols, Default::default());
+    let syms = mem::take(&mut prg.symbols);
     let funcs_of_syms = map_on_compiler_threads(
         syms.into_iter().collect(),
         num_threads,
