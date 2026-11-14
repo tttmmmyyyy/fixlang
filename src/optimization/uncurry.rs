@@ -32,16 +32,15 @@ use std::{mem, sync::Arc};
 /// The program may be the output of an earlier run. A global that already has an uncurried function
 /// keeps the ones it has, and gets no new ones.
 pub fn run(prg: &mut Program, num_threads: usize) {
-    // The uncurried functions an earlier run defined.
-    let mut funcs: UncurriedFuncs = prg
+    // The globals an earlier run gave uncurried functions.
+    let globals_with_funcs: Set<FullName> = prg
         .symbols
         .keys()
-        .filter_map(|name| Some((name.clone(), split_uncurried_func_name(name)?)))
+        .filter_map(|name| Some(split_uncurried_func_name(name)?.0))
         .collect();
-    let globals_with_funcs: Set<FullName> =
-        funcs.values().map(|(global, _)| global.clone()).collect();
 
-    // Define the uncurried functions of each global that has none yet.
+    // Define the uncurried functions of each global that has none yet. An uncurried function gets
+    // none, since it takes its arguments at once already.
     let syms = mem::replace(&mut prg.symbols, Default::default());
     let funcs_of_syms = map_on_compiler_threads(
         syms.into_iter().collect(),
@@ -55,12 +54,13 @@ pub fn run(prg: &mut Program, num_threads: usize) {
         },
     );
     for global_and_funcs in funcs_of_syms {
-        let global = global_and_funcs[0].0.clone();
-        for (n_args, (name, _)) in global_and_funcs.iter().enumerate().skip(1) {
-            funcs.insert(name.clone(), (global.clone(), n_args));
-        }
         prg.symbols.extend(global_and_funcs);
     }
+    let funcs: UncurriedFuncs = prg
+        .symbols
+        .keys()
+        .filter_map(|name| Some((name.clone(), split_uncurried_func_name(name)?)))
+        .collect();
 
     // Rewrite the calls onto the uncurried functions.
     for_each_on_compiler_threads(prg.symbols.values_mut().collect(), num_threads, |sym| {
