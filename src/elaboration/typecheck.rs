@@ -1292,10 +1292,20 @@ impl TypeCheckContext {
                         let mut tvs = vec![];
                         scm.free_vars_to_vec(&mut tvs);
                         expected_type.free_vars_to_vec(&mut tvs);
+                        // The variable standing for a `*x` has a name the source never writes, so
+                        // the message quotes the `*x`.
+                        let subject = if fullname.is_bind_result() {
+                            match ei.source.as_ref().and_then(short_span_snippet) {
+                                Some(snippet) => format!("`{}`", snippet),
+                                None => "This expression".to_string(),
+                            }
+                        } else {
+                            format!("`{}`", fullname.to_string())
+                        };
                         self.create_mismatch_report(e, whole, tvs, &ei.source, |names| {
                             format!(
-                                "`{}` of type `{}` does not match the expected type `{}`.",
-                                fullname.to_string(),
+                                "{} of type `{}` does not match the expected type `{}`.",
+                                subject,
                                 names.scheme(scm),
                                 names.ty(&expected_type),
                             )

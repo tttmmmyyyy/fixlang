@@ -1003,17 +1003,12 @@ impl ExprNode {
             Expr::Var(v) => Some(EndNode::Expr(v.as_ref().clone(), self.type_.clone())),
             Expr::Builtin(_) => None,
             Expr::App(func, args) => {
-                let node = func.find_node_at(pos);
-                if node.is_some() {
-                    return node;
-                }
-                for arg in args {
-                    let node = arg.find_node_at(pos);
-                    if node.is_some() {
-                        return node;
-                    }
-                }
-                None
+                // The parts of a bind built from a `*x` overlap: its function holds the variable
+                // that spans `*x`, and its argument is `x`. The narrowest part covering `pos` holds
+                // the innermost expression there, so the parts are searched narrowest first.
+                let mut parts = std::iter::once(func).chain(args).collect::<Vec<_>>();
+                parts.sort_by_key(|part| part.source.as_ref().map(|span| span.end - span.start));
+                parts.into_iter().find_map(|part| part.find_node_at(pos))
             }
             Expr::Lam(_, body) => body.find_node_at(pos),
             Expr::Let(pat, bound, val) => {

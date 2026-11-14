@@ -7,6 +7,7 @@
 #### Language
 
 - #1022, #1025: An error that points at an expression built from parts, such as a call `f(x)` or an operation `(a) + (b)`, now covers the whole expression, including a parenthesis at either end. It used to leave out the closing parenthesis of a call and the parentheses of a parenthesized part at an end, and printed the expression as `` `f(x` `` or `` `a) + (b` ``.
+- #1017: A type error about the result of `*x` now quotes the `*x` and points at all of it, as in `` `*pure((1, 2, 3))` of type `(Std::I64, Std::I64, Std::I64)` does not match the expected type `(#1, #2)`. ``. It used to name the variable `#monadic_value0`, which the program never writes, and point at the `*` alone.
 
 ## [1.6.1] - 2026-11-13
 

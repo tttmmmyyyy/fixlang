@@ -1,4 +1,6 @@
-use crate::constants::{MODULE_SEPARATOR, NAMESPACE_SEPARATOR, PATTERN_WILDCARD_VAR_PREFIX};
+use crate::constants::{
+    BIND_RESULT_VAR_PREFIX, MODULE_SEPARATOR, NAMESPACE_SEPARATOR, PATTERN_WILDCARD_VAR_PREFIX,
+};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt::{self, Debug, Formatter};
@@ -334,6 +336,12 @@ impl FullName {
     /// binder is displayed as `_`, and source refers to it nowhere.
     pub fn is_pattern_wildcard(&self) -> bool {
         self.name.starts_with(PATTERN_WILDCARD_VAR_PREFIX)
+    }
+
+    /// Whether this is the variable the compiler makes for the result of a `*x`, which stands where
+    /// `*x` is written.
+    pub fn is_bind_result(&self) -> bool {
+        self.name.starts_with(BIND_RESULT_VAR_PREFIX)
     }
 
     /// The name as it is shown to the user, which for a pattern-wildcard binder is the `_` the user

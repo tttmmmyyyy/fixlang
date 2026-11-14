@@ -273,3 +273,41 @@ main : IO () = println(f(1).to_string);
     );
     test_source_fail_excludes(source, Configuration::develop_mode(), "#typewildcard");
 }
+
+/// The result of a `*x` that does not match the expected type is reported over the `*x`, quoting
+/// it, without the name of the variable the parser binds the result to.
+#[test]
+pub fn test_a_mismatched_result_of_a_bind_is_reported_by_its_source() {
+    let source = r##"
+module Main;
+
+main : IO () = (
+    let (a, b) = *pure((1, 2, 3));
+    println(a.to_string)
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`*pure((1, 2, 3))` of type `(Std::I64, Std::I64, Std::I64)` does not match the expected type `(#1, #2)`.\n\n5:18-5:34 in ",
+    );
+    test_source_fail_excludes(source, Configuration::develop_mode(), "#monadic_value");
+}
+
+/// The result of a `*x` too long to quote is reported as the expression the source pointer marks.
+#[test]
+pub fn test_a_mismatched_result_of_a_long_bind_is_reported_as_this_expression() {
+    let source = r##"
+module Main;
+
+main : IO () = (
+    let s : String = *pure((1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12));
+    println(s)
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": This expression of type `(Std::I64, Std::I64, Std::I64, Std::I64, Std::I64, Std::I64, Std::I64, Std::I64, Std::I64, Std::I64, Std::I64, Std::I64)` does not match the expected type `Std::String`.\n\n5:22-5:68 in ",
+    );
+}
