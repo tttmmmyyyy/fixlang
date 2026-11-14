@@ -1758,6 +1758,8 @@ fn parse_expr_type_annotation(
     Ok(expr)
 }
 
+/// Parses a sequence of expressions joined by `;;`, each run after the one before it through
+/// `Std::Monad::bind`.
 fn parse_expr_and_then_sequence(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -1979,7 +1981,7 @@ fn parse_expr_cmp(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     )
 }
 
-// Operator && (right-associative)
+/// Parses a sequence of operands joined by `&&`, right associative, into nested `if`s.
 fn parse_expr_and(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_and);
     let exprs = pair
@@ -1996,7 +1998,7 @@ fn parse_expr_and(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     }))
 }
 
-// Operator || (right-associative)
+/// Parses a sequence of operands joined by `||`, right associative, into nested `if`s.
 fn parse_expr_or(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_or);
     let exprs = pair
@@ -2119,7 +2121,7 @@ fn parse_expr_unary(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Expr
     unreachable!()
 }
 
-// Parse right to left application sequence, e.g., `g $ f $ x`. (right-associative)
+/// Parses a right-to-left application sequence, e.g., `g $ f $ x`, right associative.
 fn parse_expr_rtl_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_rtl_app);
     let exprs = parse_combinator_sequence(pair, ctx, parse_expr_or)?;
@@ -2128,7 +2130,8 @@ fn parse_expr_rtl_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<Ex
     }))
 }
 
-// Parse function composition operator >> and <<.
+/// Parses a sequence of functions joined by the composition operators `>>` and `<<`, left
+/// associative.
 fn parse_expr_composition(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -2186,9 +2189,10 @@ fn parse_expr_bind(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
     Ok(expr)
 }
 
-// Parse sequence of dot application and index syntax, e.g., `a.b[c].d[e][^f]`.
-//
-// Such sequence is should be parsed left-to-right: `(((a.b)[c]).d)([e]<<[^f])` where `<<` represents lens composition.
+/// Parses a sequence of dot applications and index syntax, e.g., `a.b[c].d[e][^f]`.
+///
+/// The sequence is parsed left to right: `(((a.b)[c]).d)([e]<<[^f])`, where `<<` is lens
+/// composition.
 fn parse_expr_dot_sequence_of_index(
     pair: Pair<Rule>,
     ctx: &mut ParseContext,
@@ -2357,7 +2361,7 @@ fn parse_index_syntax(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<IndexS
     })
 }
 
-// Parse application sequence, e.g., `f(x, y)`. (left-associative)
+/// Parses an application sequence, e.g., `f(x, y)`, left associative.
 fn parse_expr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_app);
     let mut pairs = pair.into_inner();
@@ -2543,7 +2547,7 @@ fn parse_expr_lit(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     })
 }
 
-// Parse the expression `let {pat1} = {bound1}; let {pat2} = {bound2}; ...; {value}`.
+/// Parses the expression `let {pat1} = {bound1}; let {pat2} = {bound2}; ...; {value}`.
 fn parse_expr_let(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     let pairs = pair.into_inner();
     Ok(parse_expr_let_recursively(pairs, ctx)?.0)
@@ -2598,6 +2602,8 @@ fn parse_expr_eval(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprN
     Ok(expr_eval(sub, main, Some(span)))
 }
 
+/// Parses a lambda, e.g., `|x, (y, z)| x + y`, into one abstraction per parameter. Each abstraction
+/// receives its argument as `#param` and binds the parameter's pattern to it with a `let`.
 fn parse_expr_lam(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     let span = Span::from_pair(&ctx.source, &pair);
     let mut pairs = pair.into_inner();
