@@ -6,7 +6,7 @@
 
 #### Language
 
-- #1022: An error that points at an expression built from parts, such as a call `f(x)` or an operation `(a) + (b)`, now covers the whole expression, including a parenthesis at either end. It used to leave out the closing parenthesis of a call and the parentheses of a parenthesized part at an end, and printed the expression as `` `f(x` `` or `` `a) + (b` ``.
+- #1022, #1025: An error that points at an expression built from parts, such as a call `f(x)` or an operation `(a) + (b)`, now covers the whole expression, including a parenthesis at either end. It used to leave out the closing parenthesis of a call and the parentheses of a parenthesized part at an end, and printed the expression as `` `f(x` `` or `` `a) + (b` ``.
 
 ## [1.6.1] - 2026-11-13
 
