@@ -1005,116 +1005,50 @@ impl ExprNode {
             Expr::Var(v) if v.name.is_generated() => None,
             Expr::Var(v) => Some(EndNode::Expr(v.as_ref().clone(), self.type_.clone())),
             Expr::Builtin(_) => None,
-            Expr::App(func, args) => {
-                let node = func.find_node_at(pos);
-                if node.is_some() {
-                    return node;
-                }
-                for arg in args {
-                    let node = arg.find_node_at(pos);
-                    if node.is_some() {
-                        return node;
-                    }
-                }
-                None
-            }
+            Expr::App(func, args) => std::iter::once(func)
+                .chain(args)
+                .find_map(|part| part.find_node_at(pos)),
             Expr::Lam(_, body) => body.find_node_at(pos),
-            Expr::Let(pat, bound, val) => {
-                let node = pat.find_node_at_pos(pos);
-                if node.is_some() {
-                    return node;
-                }
-                let node = bound.find_node_at(pos);
-                if node.is_some() {
-                    return node;
-                }
-                val.find_node_at(pos)
-            }
-            Expr::If(cond, then_expr, else_expr) => {
-                let node = cond.find_node_at(pos);
-                if node.is_some() {
-                    return node;
-                }
-                let node = then_expr.find_node_at(pos);
-                if node.is_some() {
-                    return node;
-                }
-                else_expr.find_node_at(pos)
-            }
-            Expr::Match(cond, pat_vals) => {
-                let node = cond.find_node_at(pos);
-                if node.is_some() {
-                    return node;
-                }
-                for (pat, val) in pat_vals {
-                    let node = pat.find_node_at_pos(pos);
-                    if node.is_some() {
-                        return node;
-                    }
-                    let node = val.find_node_at(pos);
-                    if node.is_some() {
-                        return node;
-                    }
-                }
-                None
-            }
-            Expr::TyAnno(e, ty) => {
-                let node = e.find_node_at(pos);
-                if node.is_some() {
-                    return node;
-                }
+            Expr::Let(pat, bound, val) => pat
+                .find_node_at_pos(pos)
+                .or_else(|| bound.find_node_at(pos))
+                .or_else(|| val.find_node_at(pos)),
+            Expr::If(cond, then_expr, else_expr) => cond
+                .find_node_at(pos)
+                .or_else(|| then_expr.find_node_at(pos))
+                .or_else(|| else_expr.find_node_at(pos)),
+            Expr::Match(cond, pat_vals) => cond.find_node_at(pos).or_else(|| {
+                pat_vals.iter().find_map(|(pat, val)| {
+                    pat.find_node_at_pos(pos).or_else(|| val.find_node_at(pos))
+                })
+            }),
+            Expr::TyAnno(e, ty) => e
+                .find_node_at(pos)
                 // Hovering a `_` type wildcard shows the type it was inferred to.
                 // The node's own type (`self.type_`) is the resolved
                 // annotation, so walk it alongside the syntactic `ty`.
-                if let Some(resolved) = self.type_.as_ref() {
-                    let node = ty.find_wildcard_inferred_type(resolved, pos);
-                    if node.is_some() {
-                        return node;
-                    }
-                }
-                ty.find_node_at(pos)
-            }
-            Expr::MakeStruct(tc, fields) => {
-                for (name, field_src, field_expr) in fields {
+                .or_else(|| {
+                    self.type_
+                        .as_ref()
+                        .and_then(|resolved| ty.find_wildcard_inferred_type(resolved, pos))
+                })
+                .or_else(|| ty.find_node_at(pos)),
+            Expr::MakeStruct(tc, fields) => fields
+                .iter()
+                .find_map(|(name, field_src, field_expr)| {
                     // The value comes first: a field written as its name alone gives its value the
                     // span of its name.
-                    let node = field_expr.find_node_at(pos);
-                    if node.is_some() {
-                        return node;
-                    }
-                    if let Some(field_src) = field_src {
-                        if field_src.name_src.includes_pos_lsp(pos) {
-                            return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
-                        }
-                    }
-                }
-                Some(EndNode::Type(tc.as_ref().clone()))
-            }
-            Expr::ArrayLit(elems) => {
-                for elem in elems {
-                    let node = elem.find_node_at(pos);
-                    if node.is_some() {
-                        return node;
-                    }
-                }
-                None
-            }
-            Expr::FFICall(_, _, _, _, args, _) => {
-                for (_, e) in args.iter().enumerate() {
-                    let node = e.find_node_at(pos);
-                    if node.is_some() {
-                        return node;
-                    }
-                }
-                None
-            }
-            Expr::Eval(side, main) => {
-                let node = side.find_node_at(pos);
-                if node.is_some() {
-                    return node;
-                }
-                main.find_node_at(pos)
-            }
+                    field_expr.find_node_at(pos).or_else(|| {
+                        field_src
+                            .as_ref()
+                            .filter(|field_src| field_src.name_src.includes_pos_lsp(pos))
+                            .map(|_| EndNode::Field(tc.as_ref().clone(), name.clone()))
+                    })
+                })
+                .or_else(|| Some(EndNode::Type(tc.as_ref().clone()))),
+            Expr::ArrayLit(elems) => elems.iter().find_map(|elem| elem.find_node_at(pos)),
+            Expr::FFICall(_, _, _, _, args, _) => args.iter().find_map(|e| e.find_node_at(pos)),
+            Expr::Eval(side, main) => side.find_node_at(pos).or_else(|| main.find_node_at(pos)),
         }
     }
 
