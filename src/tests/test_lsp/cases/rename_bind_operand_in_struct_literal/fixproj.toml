@@ -1,0 +1,6 @@
+[general]
+name = "rename-bind-operand-in-struct-literal"
+version = "0.1.0"
+
+[build]
+files = ["main.fix"]

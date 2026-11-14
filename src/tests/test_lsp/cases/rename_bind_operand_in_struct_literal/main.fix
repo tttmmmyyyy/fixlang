@@ -1,0 +1,12 @@
+module Main;
+
+type S = struct { x : I64, y : I64 };
+
+wrap : IO I64 -> IO S;
+wrap = |local| pure(S { x : *local, y : 2 });
+
+main : IO ();
+main = (
+    let s = *wrap(pure(1));
+    println(s.@x.to_string)
+);

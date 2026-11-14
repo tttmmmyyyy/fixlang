@@ -987,10 +987,10 @@ impl ExprNode {
     }
 
     /// What the source position `pos` points at inside this expression: the name a variable
-    /// expression writes, a field name of a struct construction, or the type a type annotation or a
-    /// struct construction writes. A field written as its name alone (`S { x }`) answers the
-    /// variable its name also writes. The walk takes the innermost expression whose span covers
-    /// `pos`, so an expression written with no span answers nothing.
+    /// expression writes, a field name of a struct construction, the type a type annotation writes,
+    /// or the type a struct construction names at its type constructor name. A field written as its
+    /// name alone (`S { x }`) answers the variable its name also writes. The walk takes the innermost
+    /// expression whose span covers `pos`, so an expression written with no span answers nothing.
     pub fn find_node_at(self: &Arc<ExprNode>, pos: &SourcePos) -> Option<EndNode> {
         if self.source.is_none() {
             return None;
@@ -1045,7 +1045,13 @@ impl ExprNode {
                             .map(|_| EndNode::Field(tc.as_ref().clone(), name.clone()))
                     })
                 })
-                .or_else(|| Some(EndNode::Type(tc.as_ref().clone()))),
+                // The type is written only at the type constructor name; a tuple writes no name.
+                .or_else(|| {
+                    self.aux_src
+                        .as_ref()
+                        .filter(|tc_src| tc_src.includes_pos_lsp(pos))
+                        .map(|_| EndNode::Type(tc.as_ref().clone()))
+                }),
             Expr::ArrayLit(elems) => elems.iter().find_map(|elem| elem.find_node_at(pos)),
             Expr::FFICall(_, _, _, _, args, _) => args.iter().find_map(|e| e.find_node_at(pos)),
             Expr::Eval(side, main) => side.find_node_at(pos).or_else(|| main.find_node_at(pos)),
