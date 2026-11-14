@@ -258,12 +258,12 @@ fn fold_right_with_src(
     combine: impl Fn(Arc<ExprNode>, Arc<ExprNode>, Span) -> Arc<ExprNode>,
 ) -> Arc<ExprNode> {
     let mut operands = operands.into_iter().rev();
-    let (mut ret, mut ret_span) = operands.next().unwrap();
+    let (mut rhs, mut rhs_span) = operands.next().unwrap();
     for (lhs, lhs_span) in operands {
-        ret_span = lhs_span.unite(&ret_span);
-        ret = combine(lhs, ret, ret_span.clone());
+        rhs_span = lhs_span.unite(&rhs_span);
+        rhs = combine(lhs, rhs, rhs_span.clone());
     }
-    ret
+    rhs
 }
 
 /// Saves `source` in the temporary directory under `file_name`, with a digest of the content in the
@@ -2185,7 +2185,7 @@ fn parse_expr_dot_sequence_of_index(
     // The expression the components so far make, with the span of their source.
     let mut expr: Option<(Arc<ExprNode>, Span)> = None;
     for pair in pair.into_inner() {
-        let index_src = Span::from_pair(&ctx.source, &pair);
+        let component_src = Span::from_pair(&ctx.source, &pair);
         // Parse one component of dot sequence, e.g., `a`, `b[c]`, `d[e][^f]`
         let (x, x_src, indices) = parse_expr_index(pair, ctx)?;
         // Example1: `expr` = `Some(obj)`, `x` = `arr`, `indices` = `vec![ [i], [^field] ]`
@@ -2206,7 +2206,7 @@ fn parse_expr_dot_sequence_of_index(
         };
 
         // Then, construct index syntax `x([i]<<[^field])` from `x` and `indices`.
-        let src = x_src.unite(&index_src);
+        let src = x_src.unite(&component_src);
         expr = Some((construct_expr_index(x, indices, Some(src.clone()))?, src));
     }
 
@@ -2349,7 +2349,7 @@ fn parse_index_syntax(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<IndexS
 fn parse_expr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNode>, Errors> {
     assert_eq!(pair.as_rule(), Rule::expr_app);
     let mut pairs = pair.into_inner();
-    let (mut ret, mut ret_span) = parse_with_src(pairs.next().unwrap(), ctx, parse_expr_nlr)?;
+    let (mut expr, mut expr_span) = parse_with_src(pairs.next().unwrap(), ctx, parse_expr_nlr)?;
     while pairs.peek().is_some() {
         // If parentheses for arguments are given,
         let pair = pairs.next().unwrap();
@@ -2368,11 +2368,11 @@ fn parse_expr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
         let last = args.len() - 1;
         for (i, (arg, arg_span)) in args.into_iter().enumerate() {
             let arg_span = if i == last { args_span.clone() } else { arg_span };
-            ret_span = ret_span.unite(&arg_span);
-            ret = expr_app(ret, vec![arg], Some(ret_span.clone()));
+            expr_span = expr_span.unite(&arg_span);
+            expr = expr_app(expr, vec![arg], Some(expr_span.clone()));
         }
     }
-    Ok(ret)
+    Ok(expr)
 }
 
 fn parse_arg_list(
