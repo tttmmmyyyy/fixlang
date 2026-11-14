@@ -53,9 +53,7 @@ pub fn run(prg: &mut Program, num_threads: usize) {
             }
         },
     );
-    for global_and_funcs in funcs_of_syms {
-        prg.symbols.extend(global_and_funcs);
-    }
+    prg.symbols.extend(funcs_of_syms.into_iter().flatten());
     let funcs: UncurriedFuncs = prg
         .symbols
         .keys()
