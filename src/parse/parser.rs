@@ -113,8 +113,7 @@ pub struct ModuleRenaming {
     pub compiled: Name,
 }
 
-// Format the fresh name `<prefix><counter>` and advance the counter. Mints the
-// distinct compiler-generated names for `_` pattern and type wildcards and for the results of `*`s.
+// Format the fresh name `<prefix><counter>` and advance the counter.
 fn next_prefixed_name(prefix: &str, counter: &mut u32) -> String {
     let name = format!("{}{}", prefix, *counter);
     *counter += 1;

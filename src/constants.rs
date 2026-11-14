@@ -472,10 +472,10 @@ pub const HOLE_NAME: &str = "#hole";
 pub const PATTERN_WILDCARD_VAR_PREFIX: &str = "#wildcard";
 
 /// Prefix of the local names the parser generates for the result of a `*x` (e.g.
-/// `#monadic_value0`). `*x` is turned into a bind whose function takes the result of `x`'s action
-/// in a variable of such a name, and that variable stands where `*x` was written; the leading `#`
-/// keeps these names disjoint from any name a user can write. A diagnostic about such a variable
-/// quotes the `*x` it stands for.
+/// `#monadic_value0`). `*x` becomes a bind whose function takes the result of `x`'s action in a
+/// variable of such a name, and that variable stands where `*x` is written. The leading `#` keeps
+/// these names disjoint from any name a user can write. A diagnostic about such a variable quotes
+/// the `*x` it stands for.
 pub const BIND_RESULT_VAR_PREFIX: &str = "#monadic_value";
 
 /// Prefix of the type-variable names the parser generates for `_` type
