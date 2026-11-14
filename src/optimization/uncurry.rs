@@ -61,10 +61,19 @@ pub fn run(prg: &mut Program, num_threads: usize) {
     let mut funcs = UncurriedFuncs::default();
     for (sym_name, sym, sym_funcs) in funcs_of_syms {
         for (n_args, func) in sym_funcs {
-            funcs.insert(func.name.clone(), (sym_name.clone(), n_args));
-            prg.symbols.insert(func.name.clone(), func);
+            let name = func.name.clone();
+            funcs.insert(name.clone(), (sym_name.clone(), n_args));
+            assert!(
+                prg.symbols.insert(name.clone(), func).is_none(),
+                "`{}` is defined twice",
+                name.to_string()
+            );
         }
-        prg.symbols.insert(sym_name, sym);
+        assert!(
+            prg.symbols.insert(sym_name.clone(), sym).is_none(),
+            "`{}` is defined twice",
+            sym_name.to_string()
+        );
     }
 
     // Rewrite the calls onto the uncurried functions this run defined.
@@ -155,7 +164,7 @@ fn uncurried_symbol<'a>(
         let mut name = value_name.clone();
         convert_to_uncurried_func_name(name.name_as_mut(), n_args);
         if funcs.contains_key(&name) {
-            return symbols.get(&name);
+            return Some(&symbols[&name]);
         }
     }
     None
