@@ -222,18 +222,6 @@ impl DoContext {
     }
 }
 
-fn unite_span(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
-    match lhs {
-        None => rhs.clone(),
-        Some(lhs) => match rhs {
-            None => return Some(lhs.clone()),
-            Some(rhs) => {
-                return Some(Span::unite(lhs, rhs));
-            }
-        },
-    }
-}
-
 /// Parses `pair` with `parser`, and returns the expression together with the span of the source
 /// `pair` covers.
 ///
@@ -2297,7 +2285,7 @@ fn construct_expr_index(
                     vec![index_expr],
                     index.source.clone(),
                 );
-                let new_action_span = unite_span(&index.source, &action.source);
+                let new_action_span = Span::unite_present(&index.source, &action.source);
                 action = expr_app(act_func, vec![action], new_action_span);
             }
             IndexAccessor::Field(field_name, field_span) => {
@@ -2306,7 +2294,7 @@ fn construct_expr_index(
                 *act_func_name.name_as_mut() = format!("{}{}", STRUCT_ACT_SYMBOL, field_name.name);
                 let act_func = expr_var(act_func_name, field_span.clone())
                     .set_struct_act_func_in_index_syntax(true);
-                let new_action_span = unite_span(&field_span, &action.source);
+                let new_action_span = Span::unite_present(&field_span, &action.source);
                 action = expr_app(act_func, vec![action], new_action_span);
             }
         }
@@ -2617,7 +2605,7 @@ fn parse_expr_lam(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
     let mut pat_body_span = Some(body_span);
     let var = var_local(PARAM_NAME);
     for pat in pats.iter().rev() {
-        pat_body_span = Span::unite_opt(&pat_body_span, &pat.info.source);
+        pat_body_span = Span::unite_both(&pat_body_span, &pat.info.source);
         expr = expr_abs_param_src(
             vec![var.clone()],
             expr_let(
@@ -3131,7 +3119,7 @@ fn parse_type_tyapp(pair: Pair<Rule>, ctx: &mut ParseContext) -> Arc<TypeNode> {
     let mut ret = parse_type_nlr(pair, ctx);
     for pair in pairs {
         let arg = parse_type_nlr(pair, ctx);
-        let span = unite_span(ret.get_source(), arg.get_source());
+        let span = Span::unite_present(ret.get_source(), arg.get_source());
         ret = type_tyapp(ret, arg).set_source(span);
     }
     ret.set_source(Some(span))

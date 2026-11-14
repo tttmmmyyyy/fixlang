@@ -462,7 +462,7 @@ impl TraitDefn {
     /// A declaration may annotate one kind, and it has to be on the trait's own type variable.
     pub fn set_trait_kind(&mut self) -> Result<(), Errors> {
         if self.kind_signs.len() >= 2 {
-            let span = Span::unite_opt(&self.kind_signs[0].source, &self.kind_signs[1].source);
+            let span = Span::unite_both(&self.kind_signs[0].source, &self.kind_signs[1].source);
             return Err(Errors::from_msg_srcs(
                 "You can specify at most one constraint of the form `{type-variable} : {kind}` as the assumption of trait definition.".to_string(),
                 &[&span],

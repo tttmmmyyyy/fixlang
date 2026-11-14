@@ -501,15 +501,18 @@ impl Span {
         }
     }
 
-    /// The smallest span covering both, where both spans are there to be united.
-    pub fn unite_opt(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
-        if lhs.is_none() {
-            return None;
+    /// The smallest span covering both spans, or `None` when either is absent.
+    pub fn unite_both(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
+        Some(lhs.as_ref()?.unite(rhs.as_ref()?))
+    }
+
+    /// The smallest span covering the spans that are present, or `None` when neither is.
+    pub fn unite_present(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
+        match (lhs, rhs) {
+            (Some(lhs), Some(rhs)) => Some(lhs.unite(rhs)),
+            (Some(span), None) | (None, Some(span)) => Some(span.clone()),
+            (None, None) => None,
         }
-        if rhs.is_none() {
-            return None;
-        }
-        Some(lhs.clone().unwrap().unite(rhs.as_ref().unwrap()))
     }
 
     /// The line this span begins on, counted from 1.
