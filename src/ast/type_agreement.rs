@@ -18,8 +18,8 @@ use std::sync::Arc;
 /// the arms of a choice, a struct and its fields. The types of builtin operations and of calls of C
 /// functions are trusted as written.
 ///
-/// A function type is read as arrows, the form it has before `uncurry` gathers parameters into a
-/// func type.
+/// A function takes an arrow type, or the func type `uncurry` gathers parameters into; an application
+/// of a function of a func type supplies all its parameters at once.
 pub fn validate_types(prg: &Program) {
     let type_env = prg.type_env();
     let check = Check {
