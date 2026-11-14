@@ -1,8 +1,7 @@
 module Main;
 
-// A closure built from the one the function was given, used both directly and through a relay. The
-// capture list of the lambda that carries `shifted` into `fold` holds `shifted`, which is itself a
-// capture list once lifted, so specializing `relay` changes the type of what that field holds.
+// A function built from the one `relay` was given, called both directly and through the lambda that
+// captures it and is handed to `fold`.
 
 // Recursive, so that they stay functions of their own rather than being expanded into their callers.
 terminal : (I64 -> I64) -> I64 -> I64;

@@ -426,26 +426,42 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 result
             }
             Expr::App(func, args) => {
-                assert_eq!(
-                    args.len(),
-                    1,
-                    "an application at this stage takes one argument"
-                );
                 let func = self.infer(func);
-                let arg = self.infer(&args[0]);
-                let param = self.layout.type_arg(&func, 0);
-                self.analysis.solver.unify(&param, &arg);
-                let ret = self.layout.type_arg(&func, 1);
+                assert!(
+                    args.len() == 1 || func.ty.is_func(),
+                    "an application of a function of an arrow type takes one argument"
+                );
+                for (i, arg) in args.iter().enumerate() {
+                    let arg = self.infer(arg);
+                    let param = self.layout.type_arg(&func, i);
+                    self.analysis.solver.unify(&param, &arg);
+                }
+                let ret = self.layout.type_arg(&func, args.len());
                 AType {
                     ty: ty.clone(),
                     slots: ret.slots,
                 }
             }
+            Expr::Lam(params, body) if ty.is_func() => {
+                let lam_ty = self.layout.fresh(&ty, &mut self.analysis.solver);
+                for (i, param) in params.iter().enumerate() {
+                    let param_ty = self.layout.type_arg(&lam_ty, i);
+                    self.record(&param_ty);
+                    self.bind(&param.name, param_ty);
+                }
+                let body = self.infer(body);
+                for param in params.iter().rev() {
+                    self.unbind(&param.name);
+                }
+                let ret = self.layout.type_arg(&lam_ty, params.len());
+                self.analysis.solver.unify(&ret, &body);
+                lam_ty
+            }
             Expr::Lam(params, body) => {
                 assert_eq!(
                     params.len(),
                     1,
-                    "a lambda at this stage takes one parameter"
+                    "a lambda of an arrow type takes one parameter"
                 );
                 let lam_ty = self.layout.fresh(&ty, &mut self.analysis.solver);
                 let lam = self.new_lambda(e, index);
@@ -567,7 +583,15 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 self.infer(main)
             }
         };
-        self.record(&result);
+        // The lambda that is the body of its symbol is the symbol's function, built nowhere as a
+        // value, so the set it is a member of takes no part in what the body does.
+        let is_body_lambda = index == 0 && e.is_lam() && !ty.is_func();
+        let slots_to_record = if is_body_lambda {
+            &result.slots[1..]
+        } else {
+            &result.slots[..]
+        };
+        self.record_vars(slots_to_record);
         self.nodes[index] = Some(NodeType {
             ty: result.clone(),
             names,

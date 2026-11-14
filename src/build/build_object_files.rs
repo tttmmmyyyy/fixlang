@@ -28,7 +28,7 @@ use crate::{
     project_fs::replace_file,
     rc_ir::{
         ast::RcProgram,
-        borrow::{borrow_ify, cancel, param_ownership_shapes, split_rc_units},
+        borrow::{borrow_ify, cancel, param_ownership_shapes, sink_retains, split_rc_units},
         codegen::keep_initializers_out_of_shared_accessors,
         dead_code_elim, locality,
         lower::lower_program,
@@ -99,10 +99,10 @@ fn lower_and_insert_rc(
 }
 
 /// Normalize reference counting to unit granularity, then — at `Max` and above — optimize: borrow
-/// read-only parameters, cancel the reference counting a borrow makes net-zero, and specialize
-/// functions by input uniqueness to elide unique checks. Borrow-ification records each version's
-/// borrowed parameters on the functions (`RcFunc::borrowed_units`), which `param_ownership_shapes`
-/// reads back as the owned complement.
+/// read-only parameters, cancel the reference counting a borrow makes net-zero, specialize functions
+/// by input uniqueness to elide unique checks, and move each remaining retain down to where each
+/// path needs it. Borrow-ification records each version's borrowed parameters on the functions
+/// (`RcFunc::borrowed_units`), which `param_ownership_shapes` reads back as the owned complement.
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,
@@ -154,6 +154,12 @@ fn optimize_rc_program(
             validate(&prog, "after locality");
             prune(&mut prog, "after dce following locality");
         }
+        // Provenance reads a retain as demoting only the variable it names, which holds where every
+        // alias of a retained value is bound after the retain. Moving a retain past where an alias is
+        // bound would leave that alias reading as unique, so the retains move once the passes
+        // deciding uniqueness from provenance have run.
+        prog = sink_retains(&prog, type_env);
+        validate(&prog, "after sink_retains");
     }
     prog
 }

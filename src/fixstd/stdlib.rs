@@ -15,9 +15,9 @@ use crate::{
         C_LONG_LONG_NAME, C_LONG_NAME, C_SHORT_NAME, C_SIZE_T_NAME, C_UNSIGNED_CHAR_NAME,
         C_UNSIGNED_INT_NAME, C_UNSIGNED_LONG_LONG_NAME, C_UNSIGNED_LONG_NAME,
         C_UNSIGNED_SHORT_NAME, DESTRUCTOR_NAME, F32_NAME, F64_NAME, FFI_NAME, HOLE_NAME, I16_NAME,
-        I32_NAME, I64_NAME, I8_NAME, IOSTATE_NAME, IO_NAME, MARK_THREADED_NAME, PTR_NAME,
-        PUNCHED_ARRAY_NAME, STD_NAME, TUPLE_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
-        WITH_RETAINED_NAME,
+        I32_NAME, I64_NAME, I8_NAME, INSTANCIATED_NAME_SEPARATOR, IOSTATE_NAME, IO_NAME,
+        MARK_THREADED_NAME, PTR_NAME, PUNCHED_ARRAY_NAME, STD_NAME, TUPLE_NAME, U16_NAME, U32_NAME,
+        U64_NAME, U8_NAME, WITH_RETAINED_NAME,
     },
     error::Errors,
     fixstd::builtin::{
@@ -56,6 +56,20 @@ use std::sync::Arc;
 /// The name of `Std::fix`, the fixed-point combinator a Fix source uses to write a local recursive
 /// function.
 pub const FIX_NAME: &str = "fix";
+
+/// Is this symbol `Std::fix` or an instance of it? `Program::determine_symbol_name` names an
+/// instance after the original, followed by the separator and the hash of the type it was
+/// instantiated at, so the separator is what tells `fix#<hash>` apart from a name that merely begins
+/// with `fix`.
+pub fn is_std_fix(name: &FullName) -> bool {
+    if name.namespace.names != [STD_NAME] {
+        return false;
+    }
+    match name.name.strip_prefix(FIX_NAME) {
+        Some(suffix) => suffix.is_empty() || suffix.starts_with(INSTANCIATED_NAME_SEPARATOR),
+        None => false,
+    }
+}
 
 /// The Fix source of the `Std` module, which `make_std_mod` parses and then extends with the
 /// definitions the compiler supplies.
@@ -1077,4 +1091,41 @@ pub fn make_tuple_traits_mod(sizes: &[u32], config: &Configuration) -> Result<Pr
 /// The module-qualified name of `Std::with_retained`.
 pub fn make_with_retained_name() -> FullName {
     FullName::from_strs(&[STD_NAME], WITH_RETAINED_NAME)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_std_fix, FullName, FIX_NAME, INSTANCIATED_NAME_SEPARATOR, STD_NAME};
+
+    /// The name a global of `namespace` called `name` carries, once instantiated at some type.
+    fn instance_of(namespace: &str, name: &str) -> FullName {
+        FullName::from_strs(
+            &[namespace],
+            &format!("{}{}0123abcd", name, INSTANCIATED_NAME_SEPARATOR),
+        )
+    }
+
+    /// A global reaches the predicate both as declared and as instantiated at a type, so both forms
+    /// have to be recognized.
+    #[test]
+    fn std_fix_and_its_instances_are_recognized() {
+        assert!(is_std_fix(&FullName::from_strs(&[STD_NAME], FIX_NAME)));
+        assert!(is_std_fix(&instance_of(STD_NAME, FIX_NAME)));
+    }
+
+    /// A name sharing `fix` as a prefix belongs to a distinct global, whose application would be
+    /// rewritten into a fixed-point computation were the predicate to accept it.
+    #[test]
+    fn a_name_that_merely_begins_with_fix_is_not_std_fix() {
+        assert!(!is_std_fix(&FullName::from_strs(&[STD_NAME], "fixup")));
+        assert!(!is_std_fix(&instance_of(STD_NAME, "fixup")));
+    }
+
+    /// A module's own `fix` is an ordinary global, so recognition demands the `Std` namespace as
+    /// well as the name.
+    #[test]
+    fn a_global_named_fix_outside_std_is_not_std_fix() {
+        assert!(!is_std_fix(&FullName::from_strs(&["Main"], FIX_NAME)));
+        assert!(!is_std_fix(&instance_of("Main", FIX_NAME)));
+    }
 }

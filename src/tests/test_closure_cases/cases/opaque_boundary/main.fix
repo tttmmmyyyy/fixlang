@@ -1,8 +1,7 @@
 module Main;
 
-// A closure that leaves through a struct field, an array element and a union payload before it is
-// called. These are the paths the pass declines to follow, so what it leaves standing at each of
-// them has to be a closure the program can still call.
+// A function that leaves through a struct field, an array element and a union payload before it is
+// called.
 
 type Holder = box struct { op : I64 -> I64, tag : I64 };
 

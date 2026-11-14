@@ -35,8 +35,14 @@
 //! value is consumed. That keeps the value `Unique` for the uniqueness analysis, the reason
 //! borrow-ification exists.
 //!
+//! `sink_retains` moves each retain `cancel` leaves down every path, to where that path consumes the
+//! reference, and deletes it with the release on a path that releases the reference. It runs after
+//! the passes that decide uniqueness from provenance, which reads a retain as demoting only the
+//! variable it names.
+//!
 //! Which construct consumes which reference, and which object a reference belongs to, is the shared
-//! model in `ownership`, so every part of this pass gives the same answer.
+//! model in `ownership`. `BodyModel` reads that model for one body, so `cancel` and `sink_retains`
+//! give the same answer.
 
 use crate::ast::name::FullName;
 use crate::ast::type_env::TypeEnv;
@@ -44,8 +50,8 @@ use crate::ast::types::{Type, TypeNode};
 use crate::misc::{grow_stack, Map, Set};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    for_each_node, is_value_used, FieldPath, FuncRef, Ownership, OwnershipShape, RcExpr,
-    RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcState, RcVar, VarPath,
+    for_each_node, is_value_used, map_children, map_continuation, FieldPath, FuncRef, Ownership,
+    OwnershipShape, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState, RcVar, VarPath,
 };
 use crate::rc_ir::leaf_map::boxed_leaf_paths;
 use crate::rc_ir::ownership::{
@@ -327,14 +333,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
         .iter()
         .map(|g| {
             let vars = VarTable::body_only(&g.init);
-            let init = RewriteCtx::new(&vars, &[], &[], &g.init, &mut versions).rewrite(&g.init);
-            RcGlobalInit {
-                symbol: g.symbol.clone(),
-                ty: g.ty.clone(),
-                init,
-                owns_initializer: true,
-                owns_storage: true,
-            }
+            g.with_init(RewriteCtx::new(&vars, &[], &[], &g.init, &mut versions).rewrite(&g.init))
         })
         .collect();
 
@@ -1245,38 +1244,7 @@ fn split_body_inner(node: &RcExprNode, type_env: &TypeEnv) -> RcExprNode {
             let k = split_body(k, type_env);
             split_rc(v, path, *state, true, k, &node.source, type_env)
         }
-        RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
-            let arms = arms
-                .iter()
-                .map(|arm| arm.with_body(split_body(&arm.body, type_env)))
-                .collect();
-            expr_node(
-                RcExpr::Let(
-                    x.clone(),
-                    RcRhs::Match(scrut.clone(), arms),
-                    split_body(k, type_env),
-                ),
-                &node.source,
-            )
-        }
-        RcExpr::Let(x, rhs, k) => expr_node(
-            RcExpr::Let(x.clone(), rhs.clone(), split_body(k, type_env)),
-            &node.source,
-        ),
-        RcExpr::Destructure(container, fields, state, k) => expr_node(
-            RcExpr::Destructure(
-                container.clone(),
-                fields.clone(),
-                *state,
-                split_body(k, type_env),
-            ),
-            &node.source,
-        ),
-        RcExpr::Eval(v, k) => expr_node(
-            RcExpr::Eval(v.clone(), split_body(k, type_env)),
-            &node.source,
-        ),
-        RcExpr::Ret(v) => expr_node(RcExpr::Ret(v.clone()), &node.source),
+        _ => map_children(node, |child| split_body(child, type_env)),
     }
 }
 
@@ -1446,12 +1414,14 @@ fn node_id(node: &RcExprNode) -> NodeId {
 /// functions own — the complement of their `RcFunc::borrowed_units`, set by borrow-ification.
 pub(crate) fn cancel(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcProgram {
     let owned_units = all_owned_units(prog, type_env);
-    let cancel_body = |vars: &VarTable, body: &RcExprNode| {
+    rewrite_bodies(prog, |vars, body| {
         let mut analysis = CancelAnalysis {
-            vars,
-            prog,
-            owned_units: &owned_units,
-            type_env,
+            model: BodyModel {
+                vars,
+                prog,
+                owned_units: &owned_units,
+                type_env,
+            },
             needed_retains: Set::default(),
             un_bump_releases: Map::default(),
             all_retains: vec![],
@@ -1459,15 +1429,22 @@ pub(crate) fn cancel(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -
         };
         analysis.walk(body, PendingRetains::default(), true);
         drop_nodes(body, &analysis.cancelled())
-    };
+    })
+}
 
+/// `prog` with every function body and global initializer replaced by what `rewrite` makes of it,
+/// given the table of the variables the body binds.
+fn rewrite_bodies(
+    prog: &RcProgram,
+    rewrite: impl Fn(&VarTable, &RcExprNode) -> RcExprNode,
+) -> RcProgram {
     let funcs = prog
         .funcs
         .values()
         .map(|f| {
             let vars = VarTable::of(f);
             let mut clone = f.clone();
-            clone.body = cancel_body(&vars, &f.body);
+            clone.body = rewrite(&vars, &f.body);
             (f.name.clone(), clone)
         })
         .collect();
@@ -1476,13 +1453,7 @@ pub(crate) fn cancel(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -
         .iter()
         .map(|g| {
             let vars = VarTable::body_only(&g.init);
-            RcGlobalInit {
-                symbol: g.symbol.clone(),
-                ty: g.ty.clone(),
-                init: cancel_body(&vars, &g.init),
-                owns_initializer: true,
-                owns_storage: true,
-            }
+            g.with_init(rewrite(&vars, &g.init))
         })
         .collect();
     RcProgram {
@@ -1492,10 +1463,11 @@ pub(crate) fn cancel(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -
     }
 }
 
-/// The forward must-analysis for one function: it decides which retain and release nodes to delete.
-struct CancelAnalysis<'a> {
-    /// This function's variables: what binds each one and its type, which decide the objects a
-    /// retain and a release act on, and so which of them pair.
+/// What the reference-count nodes and the consumes of one body act on. Every pass that deletes or
+/// moves a retain decides by these answers, so they all judge a retain alike.
+struct BodyModel<'a> {
+    /// The body's variables: what binds each one and its type, which decide the objects a retain
+    /// and a release act on, and so which of them pair.
     vars: &'a VarTable,
     /// The whole program, so a call resolves to its callee's parameters.
     prog: &'a RcProgram,
@@ -1504,19 +1476,11 @@ struct CancelAnalysis<'a> {
     owned_units: &'a Set<VarPath>,
     /// The type definitions, for resolving a value's type to its reference-counting units.
     type_env: &'a TypeEnv,
-    /// Retains that are load-bearing on some path, so they cannot be cancelled.
-    needed_retains: Set<NodeId>,
-    /// The releases each retain is un-bumped by; they are deleted together with the retain.
-    un_bump_releases: Map<NodeId, Vec<NodeId>>,
-    /// Every retain the walk saw, so the cancellable retains are those never marked needed.
-    all_retains: Vec<NodeId>,
-    /// Whether to check the walk's own invariants as it goes.
-    develop_mode: bool,
 }
 
-impl<'a> CancelAnalysis<'a> {
-    /// The references a reference-count node of this function acts on, which decide whether a
-    /// release un-bumps a retain (`ownership::acted_references`).
+impl BodyModel<'_> {
+    /// The references a reference-count node of this body acts on, which decide whether a release
+    /// un-bumps a retain (`ownership::acted_references`).
     fn acted_references(&self, v: &RcVar, path: &FieldPath) -> References {
         let references = acted_references(self.vars, self.type_env, v, path);
         // Reference counting is inserted only for a value that holds a reference, and
@@ -1534,6 +1498,87 @@ impl<'a> CancelAnalysis<'a> {
         references
     }
 
+    /// The objects a right-hand side consumes a reference of.
+    fn rhs_consumed_objects(&self, rhs: &RcRhs, result_ty: &Arc<TypeNode>) -> Vec<VarPath> {
+        let owns = |p: &RcVar, leaf: &FieldPath| {
+            self.owned_units
+                .contains(&(p.name.clone(), truncate_to_unit(&p.ty, leaf, self.type_env)))
+        };
+        let mut consumed = vec![];
+        rhs_consumes(
+            rhs,
+            result_ty,
+            self.vars,
+            self.prog,
+            self.type_env,
+            &owns,
+            &mut consumed,
+        );
+        consumed
+            .iter()
+            .flat_map(|(var, leaf)| self.leaf_objects(var, leaf))
+            .collect()
+    }
+
+    /// The objects a `Destructure` of `container` binding `fields` consumes a reference of.
+    fn destructure_consumed_objects(
+        &self,
+        container: &RcVar,
+        fields: &[(usize, RcVar)],
+    ) -> Vec<VarPath> {
+        destructure_consumes(container, fields, self.type_env)
+            .iter()
+            .flat_map(|leaf| self.leaf_objects(&container.name, leaf))
+            .collect()
+    }
+
+    /// The objects the leaf of `var` under `path` may belong to.
+    fn leaf_objects(&self, var: &FullName, path: &[usize]) -> Vec<VarPath> {
+        origin(self.vars, self.type_env, var, path)
+            .acted_on()
+            .into_iter()
+            .cloned()
+            .collect()
+    }
+
+    /// The objects a reference-count node on `(v, path)` may act on besides the ones it names: for
+    /// each boxed leaf under the path, the candidates of its origin other than the one the leaf's
+    /// reference is counted under.
+    fn other_objects(&self, v: &RcVar, path: &FieldPath) -> Vec<VarPath> {
+        let mut out = vec![];
+        for leaf in boxed_leaf_paths(&v.ty, self.type_env) {
+            if !leaf.starts_with(path) {
+                continue;
+            }
+            let where_from = origin(self.vars, self.type_env, &v.name, &leaf);
+            let identity = where_from.identity().clone();
+            out.extend(
+                where_from
+                    .candidates()
+                    .into_iter()
+                    .filter(|candidate| **candidate != identity)
+                    .cloned(),
+            );
+        }
+        out
+    }
+}
+
+/// The forward must-analysis for one function: it decides which retain and release nodes to delete.
+struct CancelAnalysis<'a> {
+    /// What the body's nodes act on.
+    model: BodyModel<'a>,
+    /// Retains that are load-bearing on some path, so they cannot be cancelled.
+    needed_retains: Set<NodeId>,
+    /// The releases each retain is un-bumped by; they are deleted together with the retain.
+    un_bump_releases: Map<NodeId, Vec<NodeId>>,
+    /// Every retain the walk saw, so the cancellable retains are those never marked needed.
+    all_retains: Vec<NodeId>,
+    /// Whether to check the walk's own invariants as it goes.
+    develop_mode: bool,
+}
+
+impl<'a> CancelAnalysis<'a> {
     /// Walk a node forward, threading the pending-retain state. `returns_from_func` marks that a terminal
     /// `Ret` here returns from the function — consuming its value and closing no bracket; inside a
     /// match arm it is false, since the arm's `Ret` flows its value to the match binding. Returns the
@@ -1560,7 +1605,7 @@ impl<'a> CancelAnalysis<'a> {
                 let retain = node_id(node);
                 self.all_retains.push(retain);
                 self.un_bump_releases.entry(retain).or_default();
-                let outstanding = self.acted_references(v, path);
+                let outstanding = self.model.acted_references(v, path);
                 pending.push(PendingRetain {
                     node: retain,
                     outstanding,
@@ -1572,9 +1617,9 @@ impl<'a> CancelAnalysis<'a> {
                 // value, so it pairs on the reference it names. On the other objects it may be, it
                 // is a drop: a retain of one of them that is still pending cannot be cancelled
                 // across it.
-                let others = self.other_objects(v, path);
+                let others = self.model.other_objects(v, path);
                 self.consume_objects(&mut pending, &others);
-                let un_bumped = self.acted_references(v, path);
+                let un_bumped = self.model.acted_references(v, path);
                 let before = self.develop_mode.then(|| pending.clone());
                 let answer = un_bump(&mut pending, &un_bumped);
                 if let Some(before) = before {
@@ -1606,13 +1651,13 @@ impl<'a> CancelAnalysis<'a> {
                 self.walk(k, merged, returns_from_func)
             }
             RcExpr::Let(x, rhs, k) => {
-                self.consume_rhs(&mut pending, rhs, &x.ty);
+                let consumed = self.model.rhs_consumed_objects(rhs, &x.ty);
+                self.consume_objects(&mut pending, &consumed);
                 self.walk(k, pending, returns_from_func)
             }
             RcExpr::Destructure(container, fields, _state, k) => {
-                for leaf in destructure_consumes(container, fields, self.type_env) {
-                    self.consume(&mut pending, &container.name, &leaf);
-                }
+                let consumed = self.model.destructure_consumed_objects(container, fields);
+                self.consume_objects(&mut pending, &consumed);
                 self.walk(k, pending, returns_from_func)
             }
             // `Eval` only observes its variable, so it is transparent to the pending-retain state
@@ -1630,46 +1675,8 @@ impl<'a> CancelAnalysis<'a> {
         }
     }
 
-    /// Mark every retain the right-hand side consumes as needed.
-    fn consume_rhs(
-        &mut self,
-        pending: &mut PendingRetains,
-        rhs: &RcRhs,
-        result_ty: &Arc<TypeNode>,
-    ) {
-        let owns = |p: &RcVar, leaf: &FieldPath| {
-            self.owned_units
-                .contains(&(p.name.clone(), truncate_to_unit(&p.ty, leaf, self.type_env)))
-        };
-        let mut consumed = vec![];
-        rhs_consumes(
-            rhs,
-            result_ty,
-            self.vars,
-            self.prog,
-            self.type_env,
-            &owns,
-            &mut consumed,
-        );
-        for (var, leaf) in consumed {
-            self.consume(pending, &var, &leaf);
-        }
-    }
-
-    /// A consume of a leaf: every retain pending on an object the leaf may belong to is
-    /// load-bearing here.
-    fn consume(&mut self, pending: &mut PendingRetains, var: &FullName, path: &[usize]) {
-        let objects: Vec<VarPath> = origin(self.vars, self.type_env, var, path)
-            .acted_on()
-            .into_iter()
-            .cloned()
-            .collect();
-        self.consume_objects(pending, &objects);
-    }
-
     /// A consume of some objects: every retain pending on one of them is load-bearing here, so it
     /// leaves the pending list without having been un-bumped.
-    ///
     fn consume_objects(&mut self, pending: &mut PendingRetains, objects: &[VarPath]) {
         pending.retain(|retain| {
             if objects
@@ -1681,28 +1688,6 @@ impl<'a> CancelAnalysis<'a> {
             }
             true
         });
-    }
-
-    /// The objects a reference-count node on `(v, path)` may act on besides the ones it names: for
-    /// each boxed leaf under the path, the candidates of its origin other than the one the leaf's
-    /// reference is counted under.
-    fn other_objects(&self, v: &RcVar, path: &FieldPath) -> Vec<VarPath> {
-        let mut out = vec![];
-        for leaf in boxed_leaf_paths(&v.ty, self.type_env) {
-            if !leaf.starts_with(path) {
-                continue;
-            }
-            let where_from = origin(self.vars, self.type_env, &v.name, &leaf);
-            let identity = where_from.identity().clone();
-            out.extend(
-                where_from
-                    .candidates()
-                    .into_iter()
-                    .filter(|candidate| **candidate != identity)
-                    .cloned(),
-            );
-        }
-        out
     }
 
     /// Merge match arms into their continuation. A retain the match was entered with continues when
@@ -1853,62 +1838,193 @@ fn drop_nodes(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
     grow_stack(|| drop_nodes_inner(node, to_delete))
 }
 
-/// One node of `drop_nodes`'s rebuild, over its rebuilt continuation.
+/// One node of `drop_nodes`'s rebuild, over its rebuilt continuation and arms.
 fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
     match node.expr.as_ref() {
-        RcExpr::Retain(v, path, state, k) => {
-            let k = drop_nodes(k, to_delete);
-            if to_delete.contains(&node_id(node)) {
-                k
-            } else {
-                expr_node(
-                    RcExpr::Retain(v.clone(), path.clone(), *state, k),
-                    &node.source,
-                )
+        RcExpr::Retain(_, _, _, k) | RcExpr::Release(_, _, _, k)
+            if to_delete.contains(&node_id(node)) =>
+        {
+            drop_nodes(k, to_delete)
+        }
+        _ => map_children(node, |child| drop_nodes(child, to_delete)),
+    }
+}
+
+// --- retain sinking ---
+
+/// Move each retain `cancel` left in place down every forward path to where that path needs the
+/// reference it adds.
+///
+/// `cancel` deletes a retain only where releases un-bump it on every path. A retain that one path
+/// consumes and another path releases stays, and the path that releases it pays for a retain and a
+/// release that do nothing. Sinking follows each path from the retain on its own. It passes the
+/// nodes that neither consume the object the retain acts on nor release it, and a match none of
+/// whose arms does either; it goes into the arms of any other match. Then, on each path:
+///
+/// - a release that un-bumps the retain is deleted, and the retain with it;
+/// - a node that consumes the object gets a copy of the retain right before it;
+/// - a `Ret` the path reaches, ending a match arm or the body, gets a copy right before it.
+///
+/// A retain moves only where it bumps one reference of one object, so a release un-bumps either all
+/// of it or none of it. What consumes, what un-bumps and which object a reference belongs to are
+/// `BodyModel`'s answers, the ones `cancel` decides by: a pair deleted on a path is a pair `cancel`
+/// would delete if that path were the only one.
+///
+/// # Examples
+/// With `f` consuming its argument, the body
+/// ```text
+/// retain x
+/// let r = match c { case 0: release x; ret y, case 1: let z = f(x); ret z }
+/// ```
+/// becomes
+/// ```text
+/// let r = match c { case 0: ret y, case 1: retain x; let z = f(x); ret z }
+/// ```
+pub(crate) fn sink_retains(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
+    let owned_units = all_owned_units(prog, type_env);
+    rewrite_bodies(prog, |vars, body| {
+        let sinker = RetainSinker {
+            model: BodyModel {
+                vars,
+                prog,
+                owned_units: &owned_units,
+                type_env,
+            },
+        };
+        sinker.rewrite(body)
+    })
+}
+
+/// The rewrite `sink_retains` makes of one body.
+struct RetainSinker<'a> {
+    /// What the body's nodes act on.
+    model: BodyModel<'a>,
+}
+
+/// A retain on its way down: the retain node, and the object it bumps one reference of.
+struct SinkingRetain<'n> {
+    retain: &'n RcExprNode,
+    object: VarPath,
+}
+
+impl SinkingRetain<'_> {
+    /// A copy of the retain placed right before `node`, which is where a path that has not
+    /// un-bumped it needs the reference.
+    ///
+    /// # Arguments
+    /// * `met_object` — whether the path met a node that consumes or releases the retain's
+    ///   object; it becomes `Sunk::met_object`.
+    fn placed_before(&self, node: &RcExprNode, met_object: bool) -> Sunk {
+        Sunk {
+            node: map_continuation(self.retain, |_| node.clone()),
+            met_object,
+        }
+    }
+}
+
+/// A node after a retain has sunk into it.
+struct Sunk {
+    /// The node, with the retain placed or deleted on each of its paths.
+    node: RcExprNode,
+    /// Whether some path through the node met a node that consumes or releases the retain's object.
+    /// Where none did, every copy of the retain stands before a `Ret`.
+    met_object: bool,
+}
+
+impl RetainSinker<'_> {
+    /// Rewrite a node, its continuation and its arms.
+    fn rewrite(&self, node: &RcExprNode) -> RcExprNode {
+        grow_stack(|| self.rewrite_inner(node))
+    }
+
+    /// One node of the rewrite. A retain sinks after what follows it has been rewritten, so the
+    /// retains below it have reached their places and the releases they paired with are gone.
+    fn rewrite_inner(&self, node: &RcExprNode) -> RcExprNode {
+        let rewritten = map_children(node, |child| self.rewrite(child));
+        let RcExpr::Retain(v, path, _, k) = rewritten.expr.as_ref() else {
+            return rewritten;
+        };
+        let references = self.model.acted_references(v, path);
+        let Some(object) = references.sole_object() else {
+            return rewritten;
+        };
+        let retain = SinkingRetain {
+            retain: &rewritten,
+            object: object.clone(),
+        };
+        self.sink(&retain, k).node
+    }
+
+    /// Sink a retain into `node`, which follows it on the path it is moving down.
+    fn sink(&self, r: &SinkingRetain, node: &RcExprNode) -> Sunk {
+        grow_stack(|| self.sink_inner(r, node))
+    }
+
+    /// One node of a retain's way down.
+    fn sink_inner(&self, r: &SinkingRetain, node: &RcExprNode) -> Sunk {
+        let consumes = |objects: Vec<VarPath>| objects.contains(&r.object);
+        match node.expr.as_ref() {
+            RcExpr::Ret(_) => r.placed_before(node, false),
+            RcExpr::Release(v, path, _, k) => {
+                // A release whose object is path-dependent is a drop of the other objects it may
+                // be.
+                if consumes(self.model.other_objects(v, path)) {
+                    return r.placed_before(node, true);
+                }
+                let un_bumped = self.model.acted_references(v, path);
+                if un_bumped.sole_object() == Some(&r.object) {
+                    return Sunk {
+                        node: k.clone(),
+                        met_object: true,
+                    };
+                }
+                // A release reaching more than the retain bumped un-bumps a reference something
+                // else added.
+                if un_bumped.names(&r.object) {
+                    return r.placed_before(node, true);
+                }
+                self.sink_past(r, node)
+            }
+            RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => {
+                let sunk: Vec<Sunk> = arms.iter().map(|arm| self.sink(r, &arm.body)).collect();
+                if !sunk.iter().any(|arm| arm.met_object) {
+                    return self.sink_past(r, node);
+                }
+                let arms = arms
+                    .iter()
+                    .zip(sunk)
+                    .map(|(arm, sunk)| arm.with_body(sunk.node))
+                    .collect();
+                Sunk {
+                    node: expr_node(
+                        RcExpr::Let(x.clone(), RcRhs::Match(scrutinee.clone(), arms), k.clone()),
+                        &node.source,
+                    ),
+                    met_object: true,
+                }
+            }
+            RcExpr::Let(x, rhs, _) if consumes(self.model.rhs_consumed_objects(rhs, &x.ty)) => {
+                r.placed_before(node, true)
+            }
+            RcExpr::Destructure(container, fields, _, _)
+                if consumes(self.model.destructure_consumed_objects(container, fields)) =>
+            {
+                r.placed_before(node, true)
+            }
+            RcExpr::Let(..) | RcExpr::Destructure(..) | RcExpr::Retain(..) | RcExpr::Eval(..) => {
+                self.sink_past(r, node)
             }
         }
-        RcExpr::Release(v, path, state, k) => {
-            let k = drop_nodes(k, to_delete);
-            if to_delete.contains(&node_id(node)) {
-                k
-            } else {
-                expr_node(
-                    RcExpr::Release(v.clone(), path.clone(), *state, k),
-                    &node.source,
-                )
-            }
-        }
-        RcExpr::Let(x, RcRhs::Match(scrut, arms), k) => {
-            let arms = arms
-                .iter()
-                .map(|arm| arm.with_body(drop_nodes(&arm.body, to_delete)))
-                .collect();
-            expr_node(
-                RcExpr::Let(
-                    x.clone(),
-                    RcRhs::Match(scrut.clone(), arms),
-                    drop_nodes(k, to_delete),
-                ),
-                &node.source,
-            )
-        }
-        RcExpr::Let(x, rhs, k) => expr_node(
-            RcExpr::Let(x.clone(), rhs.clone(), drop_nodes(k, to_delete)),
-            &node.source,
-        ),
-        RcExpr::Destructure(container, fields, state, k) => expr_node(
-            RcExpr::Destructure(
-                container.clone(),
-                fields.clone(),
-                *state,
-                drop_nodes(k, to_delete),
-            ),
-            &node.source,
-        ),
-        RcExpr::Eval(v, k) => expr_node(
-            RcExpr::Eval(v.clone(), drop_nodes(k, to_delete)),
-            &node.source,
-        ),
-        RcExpr::Ret(v) => expr_node(RcExpr::Ret(v.clone()), &node.source),
+    }
+
+    /// `node` with the retain sunk into its continuation, where every path through `node` goes on.
+    fn sink_past(&self, r: &SinkingRetain, node: &RcExprNode) -> Sunk {
+        let mut met_object = false;
+        let node = map_continuation(node, |k| {
+            let sunk = self.sink(r, k);
+            met_object = sunk.met_object;
+            sunk.node
+        });
+        Sunk { node, met_object }
     }
 }

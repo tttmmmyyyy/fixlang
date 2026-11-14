@@ -1265,6 +1265,17 @@ impl ExprNode {
         self.with_free_vars(|free_vars| free_vars.clone())
     }
 
+    /// The names free in any of `exprs`.
+    pub fn free_vars_of_all<'a>(
+        exprs: impl IntoIterator<Item = &'a Arc<ExprNode>>,
+    ) -> Set<FullName> {
+        let mut names = Set::default();
+        for expr in exprs {
+            expr.with_free_vars(|free_vars| names.extend(free_vars.iter().cloned()));
+        }
+        names
+    }
+
     /// Does the given name occur free in this expression?
     pub fn has_free_var(&self, name: &FullName) -> bool {
         self.with_free_vars(|free_vars| free_vars.contains(name))

@@ -529,6 +529,74 @@ fn test_a_lambda_capturing_either_of_two_sets_of_too_many_classes_computes_both(
     test_source(&source, Configuration::develop_mode());
 }
 
+/// A program whose `g` returns one of more lambdas than `MAX_LS_UNION_VARIANTS`, so that the
+/// function it returns is a closure. Its `main` binds `f` and `f2` to two different lambdas, then
+/// runs `calls`, which bind `r1` and `r2`, and asserts that they are 16 and 38. The field `fun` of
+/// the struct `Holder` has the type `fun_ty`.
+fn returned_closure_source(fun_ty: &str, calls: &str) -> String {
+    let branches: Vec<String> = (0..MAX_LS_UNION_VARIANTS + 1)
+        .map(|i| format!("if k == {} {{ |x| x * {} + {} }} else", i, i + 2, i))
+        .collect();
+    format!(
+        r#"
+    module Main;
+
+    type Holder = struct {{ fun : {}, tag : I64 }};
+
+    g : (I64 -> I64) -> I64 -> I64;
+    g = |a| (
+        let k = a(0);
+        {} {{ |x| x - 1 }}
+    );
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let f = |y| y + n;
+        let f2 = |y| y * n + 3;
+        {}
+        assert_eq(|_|"unexpected result", (r1, r2), (16, 38));;
+        pure()
+    );
+    "#,
+        fun_ty,
+        branches.join("\n        "),
+        calls
+    )
+}
+
+/// `g` returns one of more lambdas than `MAX_LS_UNION_VARIANTS`, so the function it returns is a
+/// closure. One call stores `g(f)` in a struct field and applies what it reads back, and the other
+/// applies `g(f2)` at once, `f` and `f2` being different lambdas. The two calls reach two uncurried
+/// functions of `g`, each specialized to the lambda set of its own argument, and each computes its
+/// value.
+#[test]
+fn test_a_returned_closure_read_back_from_a_struct_and_one_applied_at_once_compute_both() {
+    let source = returned_closure_source(
+        "I64 -> I64",
+        r#"let p = Holder { fun : g(f), tag : 1 };
+        let r1 = (p.@fun)(5);
+        let r2 = g(f2)(7);"#,
+    );
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// `g` returns one of more lambdas than `MAX_LS_UNION_VARIANTS`, so the function it returns is a
+/// closure. One call applies `g(f)` at once, and the other reads `g` itself back from a struct
+/// field and applies it to `f2`, `f` and `f2` being different lambdas. The direct call reaches the
+/// uncurried function of `g` taking two arguments, specialized to the lambda set of `f`. The call
+/// through the field reaches `g` itself. Each computes its value.
+#[test]
+fn test_a_global_read_back_from_a_struct_and_its_uncurried_call_compute_both() {
+    let source = returned_closure_source(
+        "(I64 -> I64) -> I64 -> I64",
+        r#"let r1 = g(f)(5);
+        let p = Holder { fun : g, tag : 1 };
+        let r2 = (p.@fun)(f2)(7);"#,
+    );
+    test_source(&source, Configuration::develop_mode());
+}
+
 /// How deep the chain of `chain_source` goes in the tests of the bound on the capture structs a
 /// value lays out in place.
 const CHAIN_DEPTH: usize = 18;
@@ -592,8 +660,8 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
 mod dump_tests {
     use super::{chain_source, CHAIN_DEPTH, CHAIN_OUTPUT};
     use crate::constants::{
-        LS_CAP_PREFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS,
-        MAX_LS_UNION_VARIANTS,
+        LS_CAP_PREFIX, LS_COPY_SUFFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX,
+        MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS,
     };
     use crate::misc::Set;
     use crate::tests::test_util::{
@@ -665,11 +733,18 @@ mod dump_tests {
         )
     }
 
+    /// The words of the parameter list of the function header `header`: the names of the parameters
+    /// and of the types they and their type arguments have.
+    fn parameter_tokens(header: &str) -> impl Iterator<Item = &str> {
+        parameters(header)
+            .split(|c: char| c.is_whitespace() || c == ',' || c == '(' || c == ')')
+            .filter(|token| !token.is_empty())
+    }
+
     /// The capture structs among the parameters of the function header `header`, by the name of
     /// their type.
     fn capture_struct_parameters(header: &str) -> Vec<&str> {
-        parameters(header)
-            .split(|c: char| c.is_whitespace() || c == ',' || c == '(' || c == ')')
+        parameter_tokens(header)
             .filter(|token| token.contains(LS_CAP_PREFIX))
             .collect()
     }
@@ -982,11 +1057,11 @@ mod dump_tests {
     /// What `NESTED_ITERATORS_SOURCE` prints: the sum of `3 * i + 1` over `0..9`.
     const NESTED_ITERATORS_OUTPUT: &str = "145";
 
-    /// The functions an iterator carries in its fields reach the fold through the iterator's type,
-    /// so the fold takes the capture struct of each, three with its own operation, and calls each
-    /// by name.
+    /// The functions an iterator carries in its fields reach the fold through the iterator's type:
+    /// the fold takes the capture struct of its own operation, and an iterator whose type is a copy
+    /// of `MapIterator` made for each of the two functions the chain carries. It calls each by name.
     #[test]
-    fn test_a_fold_takes_the_functions_a_chain_of_iterators_carries_as_capture_structs() {
+    fn test_a_fold_takes_the_functions_a_chain_of_iterators_carries_through_its_types() {
         let dump = build_run_and_read_rc_ir(
             NESTED_ITERATORS_SOURCE,
             "max",
@@ -994,16 +1069,26 @@ mod dump_tests {
             "a fold over two maps",
         );
         assert_calls_by_name(&dump, "Std::Iterator::fold");
-        let most = rc_ir_function_bodies(&dump, "Std::Iterator::fold")
+        let map_iterator_copy = format!("Std::Iterator::MapIterator{}", LS_COPY_SUFFIX);
+        let takes_all_three = rc_ir_function_bodies(&dump, "Std::Iterator::fold")
             .iter()
-            .map(|body| capture_struct_parameters(header(body)).len())
-            .max()
-            .unwrap();
+            .any(|body| {
+                let mut copies = parameter_tokens(header(body))
+                    .filter(|token| token.starts_with(&map_iterator_copy))
+                    .collect::<Vec<_>>();
+                copies.sort();
+                copies.dedup();
+                capture_struct_parameters(header(body)).len() == 1 && copies.len() == 2
+            });
         assert!(
-            most >= 3,
-            "the fold should take the capture structs of the two functions the chain carries and \
-             of its own operation, and the most one of its functions takes is {}",
-            most
+            takes_all_three,
+            "a fold should take the capture struct of its own operation and an iterator of two \
+             copies of `MapIterator`, one for each function the chain carries:\n{}",
+            rc_ir_function_bodies(&dump, "Std::Iterator::fold")
+                .iter()
+                .map(|body| header(body))
+                .collect::<Vec<_>>()
+                .join("\n")
         );
     }
 

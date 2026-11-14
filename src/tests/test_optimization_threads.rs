@@ -21,9 +21,8 @@ mod tests {
     }
 
     /// Optimizing on several threads leaves the same program as optimizing on one thread, for a
-    /// program that every pass running on the worker threads rewrites: globals to inline, struct
-    /// arguments to split, constructions to read, closures to specialize and lift, and functions to
-    /// uncurry.
+    /// program that every pass running on the worker threads rewrites: globals to inline, functions
+    /// to uncurry, functions taking lambdas to copy for their lambda sets, and constructions to read.
     ///
     /// A pass whose result depends on the order the threads take the symbols in fails here only on
     /// the runs where that order differs from the single thread's; each thread count is one more
@@ -33,73 +32,39 @@ mod tests {
         let source = r#"
 module Main;
 
-type Point = struct { x : I64, y : I64 };
-
 sum_by : (a -> I64) -> Array a -> I64;
 sum_by = |f, arr| arr.to_iter.fold(0, |e, acc| acc + f(e));
 
-walk0 : I64 -> Point -> I64;
-walk0 = |n, p| (
-    let Point { x : x, y : y } = p;
-    if n <= 0 { x + y * 0 };
-    walk0(n - 1, Point { x : y, y : x + 0 })
-);
+walk0 : I64 -> (I64 -> I64) -> I64 -> I64;
+walk0 = |n, f, x| if n <= 0 { f(x) } else { walk0(n - 1, f, x + 0) };
 
-walk1 : I64 -> Point -> I64;
-walk1 = |n, p| (
-    let Point { x : x, y : y } = p;
-    if n <= 0 { x + y * 1 };
-    walk1(n - 1, Point { x : y, y : x + 1 })
-);
+walk1 : I64 -> (I64 -> I64) -> I64 -> I64;
+walk1 = |n, f, x| if n <= 0 { f(x) } else { walk1(n - 1, f, x + 1) };
 
-walk2 : I64 -> Point -> I64;
-walk2 = |n, p| (
-    let Point { x : x, y : y } = p;
-    if n <= 0 { x + y * 2 };
-    walk2(n - 1, Point { x : y, y : x + 2 })
-);
+walk2 : I64 -> (I64 -> I64) -> I64 -> I64;
+walk2 = |n, f, x| if n <= 0 { f(x) } else { walk2(n - 1, f, x + 2) };
 
-walk3 : I64 -> Point -> I64;
-walk3 = |n, p| (
-    let Point { x : x, y : y } = p;
-    if n <= 0 { x + y * 3 };
-    walk3(n - 1, Point { x : y, y : x + 3 })
-);
+walk3 : I64 -> (I64 -> I64) -> I64 -> I64;
+walk3 = |n, f, x| if n <= 0 { f(x) } else { walk3(n - 1, f, x + 3) };
 
-walk4 : I64 -> Point -> I64;
-walk4 = |n, p| (
-    let Point { x : x, y : y } = p;
-    if n <= 0 { x + y * 4 };
-    walk4(n - 1, Point { x : y, y : x + 4 })
-);
+walk4 : I64 -> (I64 -> I64) -> I64 -> I64;
+walk4 = |n, f, x| if n <= 0 { f(x) } else { walk4(n - 1, f, x + 4) };
 
-walk5 : I64 -> Point -> I64;
-walk5 = |n, p| (
-    let Point { x : x, y : y } = p;
-    if n <= 0 { x + y * 5 };
-    walk5(n - 1, Point { x : y, y : x + 5 })
-);
+walk5 : I64 -> (I64 -> I64) -> I64 -> I64;
+walk5 = |n, f, x| if n <= 0 { f(x) } else { walk5(n - 1, f, x + 5) };
 
-walk6 : I64 -> Point -> I64;
-walk6 = |n, p| (
-    let Point { x : x, y : y } = p;
-    if n <= 0 { x + y * 6 };
-    walk6(n - 1, Point { x : y, y : x + 6 })
-);
+walk6 : I64 -> (I64 -> I64) -> I64 -> I64;
+walk6 = |n, f, x| if n <= 0 { f(x) } else { walk6(n - 1, f, x + 6) };
 
-walk7 : I64 -> Point -> I64;
-walk7 = |n, p| (
-    let Point { x : x, y : y } = p;
-    if n <= 0 { x + y * 7 };
-    walk7(n - 1, Point { x : y, y : x + 7 })
-);
+walk7 : I64 -> (I64 -> I64) -> I64 -> I64;
+walk7 = |n, f, x| if n <= 0 { f(x) } else { walk7(n - 1, f, x + 7) };
 
 main : IO ();
 main = (
-    let points = Iterator::range(0, 100).map(|i| Point { x : i, y : i * i }).to_array;
-    let total = points.sum_by(|p| p.@x + p.@y);
+    let points = Iterator::range(0, 100).map(|i| (i, i * i)).to_array;
+    let total = points.sum_by(|(x, y)| x + y);
     let fact = fix(|f, n| if n == 0 { 1 } else { n * f(n - 1) });
-    let walks = walk0(10, Point { x : 0, y : 2 }) + walk1(10, Point { x : 1, y : 2 }) + walk2(10, Point { x : 2, y : 2 }) + walk3(10, Point { x : 3, y : 2 }) + walk4(10, Point { x : 4, y : 2 }) + walk5(10, Point { x : 5, y : 2 }) + walk6(10, Point { x : 6, y : 2 }) + walk7(10, Point { x : 7, y : 2 });
+    let walks = walk0(10, |v| v * 1, 0) + walk1(10, |v| v * 2, 1) + walk2(10, |v| v * 3, 2) + walk3(10, |v| v * 4, 3) + walk4(10, |v| v * 5, 4) + walk5(10, |v| v * 6, 5) + walk6(10, |v| v * 7, 6) + walk7(10, |v| v * 8, 7);
     println(total.to_string + " " + fact(10).to_string + " " + walks.to_string)
 );
 "#;

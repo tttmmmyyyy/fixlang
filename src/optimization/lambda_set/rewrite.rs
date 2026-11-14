@@ -749,7 +749,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let index = walk.cursor;
         walk.cursor += 1;
         let node = &walk.nodes[index];
-        let ty = if as_body && e.is_lam() {
+        let ty = if as_body && e.is_lam() && !node.ty.ty.is_func() {
             self.rewrite_function_type(walk.instance, &node.ty)
         } else {
             self.rewrite_type(walk.instance, &node.ty)
@@ -779,6 +779,14 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 }
                 let_locals(bindings, e.set_builtin(builtin).set_type(ty))
             }
+            Expr::App(func, args) if func.type_.as_ref().unwrap().is_func() => {
+                let func = self.walk_expr(walk, func, false);
+                let args = args
+                    .iter()
+                    .map(|arg| self.walk_expr(walk, arg, false))
+                    .collect();
+                e.set_app_func(func).set_app_args(args).set_type(ty)
+            }
             Expr::App(func, args) => {
                 let func_node = &walk.nodes[walk.cursor];
                 let own = self
@@ -791,6 +799,10 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     Repr::Union(u) => self.call_union(walk, u, e, func, arg, ty),
                     Repr::Closure => e.set_app_func(func).set_app_args(vec![arg]).set_type(ty),
                 }
+            }
+            Expr::Lam(_, body) if node.ty.ty.is_func() => {
+                let body = self.walk_expr(walk, body, false);
+                e.set_lam_body(body).set_type(ty)
             }
             Expr::Lam(_, body) => {
                 let symbol = walk.symbol.as_ref().expect("a root holds no lambda");

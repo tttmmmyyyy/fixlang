@@ -3,10 +3,8 @@ module Main;
 g_val : I64;
 g_val = "abcdefg".get_size;
 
-// `step` calls itself, so `inline` leaves it and closure specialization makes a copy of it that the
-// lambda's body is put into. The lambda's body carries the names the first run of
-// `collapse_constructions` bound for the fields of the triple, and the pair built in it holds a
-// computed field that the second run binds to a name of its own.
+// `step` calls itself, so `inline` leaves it. The lambda handed to it builds a triple whose fields
+// `step` takes apart, and a pair holding a computed field.
 step : (I64 -> (Option I64, I64, I64)) -> I64 -> I64 -> I64;
 step = |f, i, acc| if i == 0 { acc } else {
     let (o, v, w) = f(i);

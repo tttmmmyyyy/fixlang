@@ -41,13 +41,13 @@ mod integration_tests {
     /// What `dyn_flatten_chain` prints: each of `0..2` twice, times ten.
     const DYN_FLATTEN_CHAIN_OUTPUT: &str = "0,0,10,10,20,20";
 
-    /// What `field_name_reused_by_later_run` prints: each of the three rounds reads the `some` its
+    /// What `union_beside_computed_field` prints: each of the three rounds reads the `some` its
     /// triple holds, `3i + (i + 7) + 7` over `i` in `1..3`.
-    const FIELD_NAME_REUSED_BY_LATER_RUN_OUTPUT: &str = "66";
+    const UNION_BESIDE_COMPUTED_FIELD_OUTPUT: &str = "66";
 
-    /// What `split_field_order` prints: `run` folds `high` into `low` three times to reach 7321, and
+    /// What `fields_out_of_order` prints: `run` folds `high` into `low` three times to reach 7321, and
     /// adds the weight of the value it was handed on each round, 3007 + 2073 + 1732.
-    const SPLIT_FIELD_ORDER_OUTPUT: &str = "14133";
+    const FIELDS_OUT_OF_ORDER_OUTPUT: &str = "14133";
 
     /// The optimization levels the answers are asserted at: one below the level the passes run at,
     /// the level they run at, and the one above it.
@@ -150,20 +150,17 @@ mod integration_tests {
 
     /// A struct argument whose pattern writes its fields in the reverse of the order they are
     /// declared, read whole besides, answers the same at every level. Both fields hold an `I64`, so
-    /// handing the fields over in the order the pattern writes them type checks, and the value is
-    /// what says the two orders were brought together — both where the fields are handed to the
-    /// function taking them one by one, and where the body that still names the struct rebuilds it.
+    /// a mix-up of the two orders type checks, and the value is what says there was none.
     #[test]
     pub fn test_a_struct_argument_taken_apart_out_of_declaration_order_answers_the_same() {
-        let (_temp_dir, project_dir) = setup_test_env("split_field_order");
+        let (_temp_dir, project_dir) = setup_test_env("fields_out_of_order");
         for opt_level in OPT_LEVELS {
-            build_project_run_and_read_rc_ir(&project_dir, opt_level, SPLIT_FIELD_ORDER_OUTPUT);
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, FIELDS_OUT_OF_ORDER_OUTPUT);
         }
     }
 
-    /// A field handed over as an argument of its own carries its name over the whole body, so a
-    /// value bound to that name before the pattern is read as the field unless every local has a
-    /// name of its own.
+    /// A value bound to a name before a pattern binds a field to the same name stays itself, and the
+    /// field read after the pattern is the field, at every level.
     #[test]
     pub fn test_a_value_named_like_a_field_before_the_pattern_stays_itself() {
         let (_temp_dir, project_dir) = setup_test_env("shadowed_field_name");
@@ -173,8 +170,8 @@ mod integration_tests {
     }
 
     /// An argument written beside the struct can name a field of the struct the call was given,
-    /// while the struct argument builds the value the call passes on. The first reaches the call
-    /// under a name of its own, so it keeps reading the value it was written against.
+    /// while the struct argument builds the value the call passes on. The first keeps reading the
+    /// value it was written against, at every level.
     #[test]
     pub fn test_an_argument_naming_a_field_reads_the_value_it_was_written_against() {
         let (_temp_dir, project_dir) = setup_test_env("field_in_another_argument");
@@ -187,28 +184,26 @@ mod integration_tests {
         }
     }
 
-    /// A struct built from a field the program names and a field it computes, where the name was
-    /// bound by an earlier run of the pass: the name bound for the computed field is one the struct
-    /// does not already read, so each field keeps the value it was written with.
+    /// A struct built on every step from fields that are names and fields that are expressions keeps
+    /// the value each field was written with, at every level.
     #[test]
-    pub fn test_a_field_named_by_an_earlier_run_keeps_its_value() {
+    pub fn test_a_struct_of_named_and_computed_fields_keeps_their_values() {
         let (_temp_dir, project_dir) = setup_test_env("dyn_flatten_chain");
         for opt_level in OPT_LEVELS {
             build_project_run_and_read_rc_ir(&project_dir, opt_level, DYN_FLATTEN_CHAIN_OUTPUT);
         }
     }
 
-    /// A name an earlier run of the pass bound to a union, read after a later run binds a field of
-    /// another struct in the same global: the name the later run chooses is one the global does not
-    /// bind yet, so the reader is given the union the name was bound to.
+    /// A union taken apart from a triple, read in a global that also builds a pair with a computed
+    /// field: the reader is given the union, at every level.
     #[test]
-    pub fn test_a_field_name_from_an_earlier_run_is_read_as_it_was_bound() {
-        let (_temp_dir, project_dir) = setup_test_env("field_name_reused_by_later_run");
+    pub fn test_a_union_taken_from_a_triple_beside_a_computed_field_is_read_as_built() {
+        let (_temp_dir, project_dir) = setup_test_env("union_beside_computed_field");
         for opt_level in OPT_LEVELS {
             build_project_run_and_read_rc_ir(
                 &project_dir,
                 opt_level,
-                FIELD_NAME_REUSED_BY_LATER_RUN_OUTPUT,
+                UNION_BESIDE_COMPUTED_FIELD_OUTPUT,
             );
         }
     }
