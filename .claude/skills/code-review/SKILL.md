@@ -51,7 +51,7 @@ What an aspect notices outside the hunks reaches the orchestrator as a finding, 
 Run these aspects in this order, each in its own subagent. The **flag-only** aspects (they leave the tree as they found it; they report findings, and `test-sufficiency` hands back test bodies and their runs with them) run first; then the **editing** aspects (they modify files, and each is committed on its own — see the Procedure):
 
 1. **no-personal-info** — scan every changed file for the user's personal data (real name, personal email, phone, address, secrets) embedded in checked-in files, and flag it. Runs first as a gate: a finding stops the review before anything is committed.
-2. **design-fit** — with the implementation now visible, re-evaluate whether the chosen design is the best fit for the change's goal; flag mismatches (this aspect never redesigns).
+2. **design-fit** — with the implementation now visible, weigh whether the goal is worth the complexity it adds, whether the change reaches the best end state for it, and whether the chosen design fights it; flag what it finds (this aspect never redesigns).
 3. **refactor-scope** — check whether the change bent itself out of shape to leave existing code untouched; flag the scars a declined refactor left behind (this aspect never refactors).
 4. **test-sufficiency** — check whether the tests cover what the implementation actually does, including cases only visible once the code exists; write the test each gap wants, run it green and red, and hand it back for the orchestrator to judge (this aspect leaves the tree as it found it).
 5. **fix-test-main-reference** — for changed Fix-source compile tests, ensure every top-level declaration introduced by the test is referenced from `main` (directly, transitively, or via `eval`); otherwise the Fix compiler can silently skip a broken definition.
@@ -136,7 +136,8 @@ Read every finding the review produced — from the flag-only aspects and from t
 
 - a contract outside this repository — a Fix standard-library signature, an LSP protocol answer, the wording of a diagnostic nothing pins;
 - a property the suite does not measure — performance, memory, concurrency, a platform this machine is not;
-- a redesign, where what the author settles is the direction rather than the risk: a rewritten pipeline, a different data structure carrying the same information, a rule imposed on the language.
+- a redesign, where what the author settles is the direction rather than the risk: a rewritten pipeline, a different data structure carrying the same information, a rule imposed on the language;
+- a goal judged not worth its cost, with the proposal to reject it, narrow it, or reach it another way. Whether a change should exist is the author's decision, so this finding heads the summary.
 
 **Refactor it, on the cleanup branch**, when it is about existing code the change did not write, did not bend around, and did not make stale — code that would want the same edit had the change never happened — and the edit preserves behavior: a rename, a move, a split, a signature every caller reaches from inside this repository, a duplicate folded into one function, a comment or doc comment. It is improvement to code that was already there, so it goes in a pull request of its own, based on the branch under review, and the diff the author reads for the change stays the change. The cleanup candidates the aspects return start in this pile. That the code already existed is what sends a finding here; it is never the reason to leave one.
 
@@ -308,17 +309,43 @@ For trait members, "outside its own declaration lines" means: outside both the `
 
 ## Aspect: design-fit
 
-Every other aspect works *within* the design the author chose — tidying the code, the imports, the comments. This one steps outside it and asks the question the author could not fully answer before writing the code: **now that the implementation exists, is this design the best fit for the goal?** Some design flaws are invisible on the whiteboard and only become legible once the code is on the page — the shape of the implementation is itself evidence about the design.
+Every other aspect works *within* the design the author chose — tidying the code, the imports, the comments. This one steps outside it and asks three questions the author could not fully answer before writing the code, in order from the largest decision to the smallest:
 
-This aspect **only flags**; it never edits or redesigns. Redesign is the author's call and out of scope for the review, so the deliverable is a clear, evidence-backed report.
+1. **Is the goal worth what it costs?** The implementation now shows what the goal costs to reach, so this is the first point at which benefit and complexity can be weighed against each other.
+2. **Is this the best end state for the goal?** The best end state is the cleanest code base that meets the goal, existing code reshaped wherever that helps — the smallness of the diff counts for nothing.
+3. **Does the implementation show the chosen design fighting the goal?** Some design flaws are invisible on the whiteboard and only become legible once the code is on the page — the shape of the implementation is itself evidence about the design.
+
+The author reads the report top-down and takes the first answer that applies: a rejected goal makes the design moot, and a better end state makes a local repair of the current one moot.
+
+This aspect **only flags**; it never edits or redesigns. Rejecting a goal and redesigning are the author's call, so the deliverable is a clear, evidence-backed report.
 
 ### First, reconstruct the goal
 
 You cannot judge fit without the goal. Before reading for design, recover what the change is *for*:
 
 - Read the commit messages between the base ref and `HEAD` (`git log <base>..HEAD`), plus any branch or PR context available.
+- Read the issues the commits and the branch name refer to (`gh issue view <n> -R tttmmmyyyy/fixlang --comments`): they say who asked for the change and what problem prompted it.
 - Read the diff itself — the tests it adds, the public surface it changes, the names it introduces.
 - State the goal in one or two sentences. If the diff plainly serves a narrower or different goal than the commit message claims, that mismatch is itself a finding.
+
+### Is the goal worth what it costs?
+
+Every mechanism a change adds is maintained for as long as it lives, and every reader of the code pays for it, so a goal earns its place by what users gain from it now. That the goal is one step of a plan, or that a design document names it as the destination, does not by itself pay for the mechanism.
+
+Lay the two sides next to each other:
+
+- **The benefit.** Who gains — which users, running into the problem how often — and how much: a crash removed, a wrong answer corrected, a number of seconds or bytes saved, a diagnostic made readable. When the change was prompted by a concrete symptom (an issue, a slow build, a failing program), check that the change actually removes that symptom: a change whose gain lands elsewhere than the symptom that motivated it is the typical over-reach.
+- **The cost.** What the change adds that the code base did not have: new types, passes, caches, file formats, configuration, invariants other code must now keep, special cases, and the lines of code they take. A mechanism that adds a second way of doing something the code base already does counts double, since both must now be kept in step.
+
+When the benefit is small against the cost, flag it, and propose one of: **reject the goal** (the change is closed), **narrow the goal** to the part that carries most of the benefit, naming what that part costs, or **reach the goal another way** that costs less. A fix for a defect a user can reach — a miscompilation, a crash, a wrong diagnostic — is worth its cost almost always; there the question is whether its cost can be smaller, which is the next question.
+
+### Is this the best end state for the goal?
+
+Draw, yourself, the end state that meets the goal most cleanly — the code base as it would look if it had been written with the goal in mind from the start, existing functions, types and modules reshaped wherever that makes the whole simpler. Then compare it with the end state the change leaves.
+
+Compare the two by what can be counted: the concepts a reader must hold (types, modes, states), the special cases, the invariants maintained by convention rather than by construction, the places one fact is stored, the code the goal needs. A comparison that comes out on a count is evidence; one that comes out on preference is not. When your end state wins on a count, flag it with both end states described and the counts side by side.
+
+`refactor-scope` looks at the same code bottom-up, from the seam between the new code and the old, for the specific scars a declined refactor leaves. This question is top-down: it starts from the goal and may arrive at a design the current one is nowhere near, such as a different data structure or a different place in the pipeline for the work to happen.
 
 ### What the implementation reveals about the design
 
@@ -334,13 +361,14 @@ Look for concrete evidence, in the code as written, that the chosen design fight
 ### Discipline
 
 - **Flag only, never redesign.** No edits.
-- **Evidence, not taste.** Raise a finding only when the *implementation* gives concrete evidence of a mismatch. "You could also structure it as X," with no evidence the current shape hurts, is noise — skip it.
-- **Name the alternative and its cost.** A finding must state: the goal, the current design, the implementation evidence, the better-fitting design you see, and — honestly — what the rework would cost. A design flag with no proposed direction is not actionable.
+- **Evidence, not taste.** Raise a finding only on evidence: the benefit and the cost laid side by side, two end states compared on a count, or a pattern in the implementation from the list above. "You could also structure it as X," with nothing measured against the current shape, is noise — skip it.
+- **The size of the rework is no argument for the current design.** A better end state is flagged however much it would take to reach. State that cost so the author can plan for it, and leave the decision to them.
+- **Name the alternative and its cost.** A finding must state: the goal, the current design, the evidence, the alternative — the rejected or narrowed goal, or the better end state — and what reaching it would cost. A flag with no proposed direction is not actionable.
 
 ### Report
 
-- **Flagged for review**: the goal as you understood it; then, per finding, the design concern, the concrete evidence in the code, and the alternative design with its rough cost.
-- If the design fits the goal well, say so in one line and flag nothing. A clean result here is the common case, not a failure to find something.
+- **Flagged for review**: the goal as you understood it; then the findings in the order of the three questions — the worth of the goal, the end state, the evidence in the implementation — each with its evidence and the alternative with its rough cost.
+- If the goal is worth its cost and the design fits it well, say so in one line and flag nothing. A clean result here is the common case, not a failure to find something.
 
 ---
 
@@ -354,7 +382,7 @@ This aspect **only flags**; it never refactors. Its findings go to the orchestra
 
 ### Distinguish from design-fit
 
-`design-fit` judges the design of the new code against the goal, taking the existing code as a fixed backdrop. This aspect questions the backdrop: the shape that fits the goal may have required changing an existing function, type, or module, and the finding is the mark that leaving it alone left on the new code.
+`design-fit` works top-down: it starts from the goal, draws the end state that meets it most cleanly, and compares whole end states. This aspect works bottom-up, from the seam between the new code and the existing code: the shape that fits the goal may have required changing an existing function, type, or module, and the finding is the specific mark that leaving it alone left on the new code.
 
 ### Scars to look for
 
