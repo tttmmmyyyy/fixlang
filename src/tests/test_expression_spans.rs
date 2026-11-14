@@ -116,3 +116,17 @@ pub fn test_a_name_in_the_operand_of_a_bind_is_found_at_its_position() {
     };
     assert_eq!(var.name.name, "act");
 }
+
+/// Verifies that the binds the `*`s in a parenthesized expression make span the text inside the
+/// parentheses, as the expression does, both for the body of a value and for the value of a `let`.
+#[test]
+pub fn test_the_binds_in_a_parenthesized_expression_span_the_text_inside() {
+    let value = parse_value("(*(m))");
+    assert_eq!(span_text(&value.expr, &value.content), "*(m)");
+
+    let value = parse_value("let x = 1; (*(m))");
+    let Expr::Let(_, _, let_value) = &*value.expr.expr else {
+        panic!("`v` is not a `let`");
+    };
+    assert_eq!(span_text(let_value, &value.content), "*(m)");
+}
