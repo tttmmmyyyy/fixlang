@@ -130,3 +130,30 @@ pub fn test_the_binds_in_a_parenthesized_expression_span_the_text_inside() {
     };
     assert_eq!(span_text(let_value, &value.content), "*(m)");
 }
+
+/// Verifies that no position in an expression holding `*`s finds a name the compiler generated,
+/// such as the variable a `*x` binds its result to, which the source never writes.
+#[test]
+pub fn test_no_position_finds_a_name_the_source_never_writes() {
+    let value = parse_value("let x = *(m); f(*(g)(x), *n)");
+    let span = value.expr.source.clone().unwrap();
+    let generated = (span.start..=span.end)
+        .filter_map(|pos| {
+            let pos = SourcePos {
+                input: span.input.clone(),
+                pos,
+            };
+            match value.expr.find_node_at(&pos) {
+                Some(EndNode::Expr(var, _)) if var.name.name.starts_with('#') => {
+                    Some((pos.pos, var.name.name))
+                }
+                _ => None,
+            }
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        generated.is_empty(),
+        "(position, name found): {:?}",
+        generated
+    );
+}
