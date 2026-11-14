@@ -83,7 +83,6 @@ impl ExprNode {
     }
 
     /// This node with `aux_src` replaced by `src`.
-    #[allow(dead_code)]
     pub fn set_aux_src(&self, src: Option<Span>) -> Arc<Self> {
         let mut ret = self.clone_all();
         ret.aux_src = src;
