@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+#### Tool
+
+- In the language server, hover and go to definition on the parentheses or a comma of a tuple, or on `()`, now answer nothing. Hover there used to show `Std::Tuple2` or `()`.
+
 ### Fixed
 
 #### Language

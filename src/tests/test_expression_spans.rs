@@ -183,3 +183,19 @@ pub fn test_only_the_type_name_of_a_struct_finds_its_type() {
         assert_eq!(type_positions, vec![name_start, name_start + 1], "{}", expr);
     }
 }
+
+/// Verifies that no position in a tuple construction or a tuple pattern finds a type, since a tuple
+/// writes no type constructor name.
+#[test]
+pub fn test_no_position_in_a_tuple_finds_a_type() {
+    let exprs = ["(?todo, *local)", "let (x, _) = s; x", "f()"];
+    for expr in exprs {
+        let value = parse_value(expr);
+        let type_positions = node_at_each_position(&value)
+            .into_iter()
+            .filter(|(_, node)| matches!(node, Some(EndNode::Type(_))))
+            .map(|(pos, _)| pos)
+            .collect::<Vec<_>>();
+        assert!(type_positions.is_empty(), "{}: {:?}", expr, type_positions);
+    }
+}
