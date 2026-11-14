@@ -929,6 +929,41 @@ other = 1;
     }
 }
 
+/// An expression that spans a whole Fix example, such as the bind a `*` in it makes, is reported over
+/// the lines of the example, which leave out the fences, both when the example is the expression
+/// alone and when import statements precede it.
+#[test]
+fn test_an_expression_spanning_a_whole_example_is_reported_over_its_lines() {
+    let lib = r#"module Lib;
+
+// ```fix
+// let x = *(1);
+// assert_eq(|_|"", value, 1)
+// ```
+value : I64;
+value = 1;
+
+// ```fix
+// import Std;
+// let y = *(1);
+// assert_eq(|_|"", other, 1)
+// ```
+other : I64;
+other = 1;
+"#;
+    let dir = project_dir(&[("lib.fix", lib)], &[]);
+    let output = fix_test(&dir, &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for position in ["4:4-5:30", "12:4-13:30"] {
+        assert!(
+            stderr.contains(&format!("`#3` is the type for this expression.\n\n{} in \"lib.fix\"", position)),
+            "the expression is reported at {}\n{}",
+            position,
+            streams(&output)
+        );
+    }
+}
+
 /// `fix docs` reads a line beginning with `#` inside a fenced code block as a line of the block, as
 /// CommonMark does: in a block of tildes, and in a block of backticks after a shorter fence it holds.
 #[test]
