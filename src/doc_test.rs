@@ -583,24 +583,23 @@ fn example_of_block(
 /// Each line of the example stays on the line of the comment it is written on, and the text the
 /// example is wrapped in is written on the lines of its fences, or into the line where its
 /// expression begins when import statements precede it, so the positions in the source are
-/// reported where they stand in the comment (see `SourceOrigin`). The wrapping text stays outside
-/// the expression, so the span of an expression the example builds covers the example's text alone.
+/// reported where they stand in the comment (see `SourceOrigin`).
 ///
 /// # Examples
 /// The example `let x = 1;` / `assert_eq(|_|"", x, 1)` of a comment in the module
 /// `Geometry` is compiled as
 /// ~~~text
-/// module DocTest; import Geometry; main : ::Std::IO () =
+/// module DocTest; import Geometry; main : ::Std::IO () = (
 /// let x = 1;
 /// assert_eq(|_|"", x, 1)
-/// ;
+/// );
 /// ~~~
 /// and the example `import Math;` / `assert_eq(|_|"", sqrt(4.0), 2.0)` as
 /// ~~~text
 /// module DocTest; import Geometry;
 /// import Math;
-/// main : ::Std::IO () = assert_eq(|_|"", sqrt(4.0), 2.0)
-/// ;
+/// main : ::Std::IO () = (assert_eq(|_|"", sqrt(4.0), 2.0)
+/// );
 /// ~~~
 fn assemble_example(
     lines: &[TextLine],
@@ -695,10 +694,10 @@ fn assemble_example(
     } else {
         format!("module {}; import {};", DOC_TEST_MODULE_NAME, module)
     };
-    let main_head = format!("{} : ::Std::IO () = ", MAIN_FUNCTION_NAME);
+    let main_head = format!("{} : ::Std::IO () = (", MAIN_FUNCTION_NAME);
     let code_text = code.join("\n");
     let Some(expression_start) = start_of_code_after_import_statements(&code_text) else {
-        return save(format!("{} {}", module_header, main_head), None, ";");
+        return save(format!("{} {}", module_header, main_head), None, ");");
     };
     if expression_start == code_text.len() {
         return Err(Errors::from_msg_srcs(
@@ -713,7 +712,7 @@ fn assemble_example(
     save(
         module_header,
         Some((expression_line, expression_start - line_start, &main_head)),
-        ";",
+        ");",
     )
 }
 
