@@ -113,7 +113,7 @@ pub struct ModuleRenaming {
     pub compiled: Name,
 }
 
-// Format the fresh name `<prefix><counter>` and advance the counter.
+/// Formats the fresh name `<prefix><counter>` and advances the counter.
 fn next_prefixed_name(prefix: &str, counter: &mut u32) -> String {
     let name = format!("{}{}", prefix, *counter);
     *counter += 1;
@@ -203,16 +203,16 @@ impl DoContext {
         &mut self,
         monad: Arc<ExprNode>,
         monad_src: Span,
-        star_src: Span,
+        operator_src: Span,
     ) -> Arc<ExprNode> {
         let var_name = FullName::local(&next_prefixed_name(
             BIND_RESULT_VAR_PREFIX,
             &mut self.counter,
         ));
         let var_var = var_var(var_name.clone());
-        let var_expr = expr_var(var_name, Some(star_src.unite(&monad_src)));
+        let var_expr = expr_var(var_name, Some(operator_src.unite(&monad_src)));
         self.monads.push(BindOperatorInfo {
-            operator_src: star_src,
+            operator_src,
             operand: monad,
             operand_src: monad_src,
             result_var: var_var,
