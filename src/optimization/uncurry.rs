@@ -17,7 +17,7 @@ use crate::{
         program::{Program, Symbol},
         types::type_func,
     },
-    constants::{FUNC_ARGS_MAX, UNCURRIED_FUNC_SUFFIX},
+    constants::{FUNC_ARGS_MAX, INSTANCIATED_NAME_SEPARATOR, UNCURRIED_FUNC_SUFFIX},
     fixstd::stdlib::is_std_fix,
     misc::{for_each_on_compiler_threads, map_on_compiler_threads, Map, Set},
     optimization::eta_expansion,
@@ -29,39 +29,31 @@ use std::{mem, sync::Arc};
 /// taking the number of arguments they supply. The symbols are rewritten on up to `num_threads`
 /// threads.
 ///
-/// The program may be the output of an earlier run. A global that already has an uncurried
-/// function keeps the ones it has, and gets no new ones. Calls are rewritten only onto the
-/// uncurried functions this run defines. The passes between two runs, such as lambda set
-/// specialization, specialize each uncurried function to its own callers, so the `g#func2` of an
-/// earlier run can take other types than a call `g#func1(a)(b)` supplies.
+/// The program may be the output of an earlier run, whose uncurried functions keep their names
+/// and their calls. Calls are rewritten only onto the uncurried functions this run defines. The
+/// passes between two runs, such as lambda set specialization, specialize each uncurried function
+/// to its own callers, so the `g#func2` of an earlier run can take other types than a call
+/// `g#func1(a)(b)` or `g(a)(b)` supplies.
 pub fn run(prg: &mut Program, num_threads: usize) {
-    // The globals an earlier run gave uncurried functions.
-    let globals_with_funcs: Set<FullName> = prg
-        .symbols
-        .keys()
-        .filter_map(global_of_uncurried_func)
-        .collect();
-
-    // Define the uncurried functions of each global that has none yet. An uncurried function gets
-    // none, since it takes its arguments at once already.
+    // Define the uncurried functions of each global. An uncurried function gets none, since it
+    // takes its arguments at once already.
     let syms = mem::take(&mut prg.symbols);
+    let mut taken_names: Set<FullName> = syms.keys().cloned().collect();
     let funcs_of_syms = map_on_compiler_threads(
         syms.into_iter().collect(),
         num_threads,
         |(sym_name, sym)| {
-            let sym_funcs = if globals_with_funcs.contains(&sym_name) {
-                vec![]
-            } else {
-                uncurried_funcs_of(&sym_name, &sym)
-            };
+            let sym_funcs = uncurried_funcs_of(&sym_name, &sym);
             (sym_name, sym, sym_funcs)
         },
     );
     let mut funcs = UncurriedFuncs::default();
     for (sym_name, sym, sym_funcs) in funcs_of_syms {
-        for (n_args, func) in sym_funcs {
+        for (n_args, mut func) in sym_funcs {
+            func.name = unused_name(&func.name, &taken_names);
+            taken_names.insert(func.name.clone());
+            funcs.insert(sym_name.clone(), n_args, func.name.clone());
             let name = func.name.clone();
-            funcs.insert(name.clone(), (sym_name.clone(), n_args));
             assert!(
                 prg.symbols.insert(name.clone(), func).is_none(),
                 "`{}` is defined twice",
@@ -110,12 +102,32 @@ pub fn run(prg: &mut Program, num_threads: usize) {
     }
 }
 
-/// The uncurried functions one run of `run` defines: the name of each, mapped to the name of the
-/// global it uncurries and the number of arguments it takes.
-///
-/// # Examples
-/// `g#func2` maps to `(g, 2)`.
-type UncurriedFuncs = Map<FullName, (FullName, usize)>;
+/// The uncurried functions one run of `run` defines.
+#[derive(Default)]
+struct UncurriedFuncs {
+    /// The name of the uncurried function of each global taking each number of arguments.
+    ///
+    /// # Examples
+    /// `(g, 2)` maps to `g#func2`.
+    of_global: Map<(FullName, usize), FullName>,
+    /// The inverse of `of_global`: the name of each uncurried function, mapped to the global it
+    /// uncurries and the number of arguments it takes.
+    global_of: Map<FullName, (FullName, usize)>,
+}
+
+impl UncurriedFuncs {
+    /// Records `func` as the uncurried function of `global` taking `n_args` arguments.
+    fn insert(&mut self, global: FullName, n_args: usize, func: FullName) {
+        self.global_of
+            .insert(func.clone(), (global.clone(), n_args));
+        self.of_global.insert((global, n_args), func);
+    }
+
+    /// The uncurried function of `global` taking `n_args` arguments.
+    fn of(&self, global: &FullName, n_args: usize) -> Option<&FullName> {
+        self.of_global.get(&(global.clone(), n_args))
+    }
+}
 
 /// The uncurried functions of the symbol `sym_name`, whose definition is `sym`, each with the
 /// number of arguments it takes: one argument, two arguments, and so on, as many as its type
@@ -159,14 +171,27 @@ fn uncurried_symbol<'a>(
     if !value.type_.as_ref().unwrap().is_arrow() {
         return None;
     }
-    for n_args in (1..=max_args).rev() {
-        let mut name = value_name.clone();
-        convert_to_uncurried_func_name(name.name_as_mut(), n_args);
-        if funcs.contains_key(&name) {
-            return Some(&symbols[&name]);
-        }
+    (1..=max_args)
+        .rev()
+        .find_map(|n_args| funcs.of(value_name, n_args))
+        .map(|name| &symbols[name])
+}
+
+/// `name`, or when `taken` has it, `name` followed by `#1`, `#2`, ..., whichever comes first that
+/// `taken` does not have. An earlier run of `run` leaves its uncurried functions under the names
+/// this run gives.
+///
+/// # Examples
+/// `g#func2` gives `g#func2#1` when `taken` has `g#func2` only.
+fn unused_name(name: &FullName, taken: &Set<FullName>) -> FullName {
+    let mut candidate = name.clone();
+    let mut index = 0;
+    while taken.contains(&candidate) {
+        index += 1;
+        candidate = name.clone();
+        *candidate.name_as_mut() += &format!("{}{}", INSTANCIATED_NAME_SEPARATOR, index);
     }
-    None
+    candidate
 }
 
 /// Rewrites `name` in place into the name carried by the uncurried function taking `n_args`
@@ -176,23 +201,6 @@ fn uncurried_symbol<'a>(
 /// `g` with 2 arguments becomes `g#func2`.
 fn convert_to_uncurried_func_name(name: &mut Name, n_args: usize) {
     *name += &format!("{}{}", UNCURRIED_FUNC_SUFFIX, n_args);
-}
-
-/// The global whose uncurried function is named `name`, read off the `#func{N}` that ends the name.
-///
-/// # Examples
-/// `g#func2` gives `g`, and `g#func2#ls0` gives `None`.
-fn global_of_uncurried_func(name: &FullName) -> Option<FullName> {
-    let (global_name, suffix) = name.name.rsplit_once(UNCURRIED_FUNC_SUFFIX)?;
-    let n_args: usize = suffix.parse().ok()?;
-    let mut written = global_name.to_string();
-    convert_to_uncurried_func_name(&mut written, n_args);
-    if written != name.name {
-        return None;
-    }
-    let mut global = name.clone();
-    *global.name_as_mut() = global_name.to_string();
-    Some(global)
 }
 
 /// The uncurried function taking `n_args` arguments that `expr`, the body of a global, becomes.
@@ -282,42 +290,41 @@ fn replace_closure_call_with_func_call(
                 // because we need to re-instantiate the caller function.
                 return expr.clone();
             }
-            let mut f_func = v.as_ref().clone();
+            let mut global = &v.name;
             if fun_ty.is_func() {
                 // An uncurried function of a global, called with its arguments and then the
                 // arguments of what it returns: `g#func{N}(a1, ..., aN)(b1, ..., bM)` becomes
                 // `g#func{N+M}(a1, ..., aN, b1, ..., bM)`.
                 // A call of an uncurried function an earlier run defined finds no entry in
                 // `funcs`, and stays as it is.
-                let Some((global, n_args)) = funcs.get(&f_func.name) else {
+                let Some((func_global, n_args)) = funcs.global_of.get(&v.name) else {
                     return expr.clone();
                 };
                 let n_args = *n_args;
                 assert!(
                     args.len() >= n_args,
                     "`{}` takes {} arguments but is applied to {}",
-                    f_func.name.to_string(),
+                    v.name.to_string(),
                     n_args,
                     args.len()
                 );
                 if args.len() == n_args {
                     return expr.clone();
                 }
-                f_func.name = global.clone();
+                global = func_global;
             }
-            convert_to_uncurried_func_name(&mut f_func.name.name, args.len());
-            if !funcs.contains_key(&f_func.name) {
+            let Some(func) = funcs.of(global, args.len()) else {
                 // The global has no uncurried function taking this many arguments, so the call
                 // stays as it is.
                 return expr.clone();
-            }
+            };
             let result_ty = expr.type_.clone().unwrap();
             let arg_tys = args
                 .iter()
                 .map(|arg| arg.type_.clone().unwrap())
                 .collect::<Vec<_>>();
             let func_ty = type_func(arg_tys, result_ty.clone());
-            let f_func = expr_var(f_func.name, None).set_type(func_ty);
+            let f_func = expr_var(func.clone(), None).set_type(func_ty);
             expr_app(f_func, args, None).set_type(result_ty)
         }
         _ => expr.clone(),

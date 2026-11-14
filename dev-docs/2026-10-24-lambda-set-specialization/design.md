@@ -313,7 +313,7 @@ dead_symbol_elimination
 
 - この位置では単相化が済み、すべてのシンボル (`Program::symbols`) が具体的な型を持ち、すべての式のノードに型が付いている。`inline` がコンビネータを利用者のコードに展開した後なので、ラムダの数が少なく、集合も小さい。RC IR では、クロージャはすでに関数ポインタと `#DynamicObject` の組で、構造体の型のレイアウトも決まっているので、型のコピーを作るには遅い。
 - 1 回目の `uncurry` は、グローバル関数 `g` ごとに、先頭の k 個の引数をまとめて受け取る uncurried function `g#func<k>` を作り、`g(a)(b)` のような呼び出しを `g#func2(a, b)` に書き換える。`g#func<k>` の型は func type `#Func<k>` である。そのため、新しいパスの位置の式には、複数の引数を持つ `Lam` (uncurried function の本体) と、複数の引数を持つ `App` (uncurried function の呼び出し) が現れる。func type の値は集合を持たず、名前で直接呼ばれる。
-- 2 回目の `uncurry` は、まだ uncurried function を持たないグローバル関数 (新しいパスが作ったコピーとリフトした関数) に uncurried function を作る。前の回の uncurried function の扱いは「段階 4 で行うこと」にある。
+- 2 回目の `uncurry` は、1 回目と同じく、func type でないグローバル関数すべてに uncurried function を作る。前の回の uncurried function の扱いは「段階 4 で行うこと」にある。
 - `inline` は、application spine (入れ子の適用を関数の側へ根からたどった道) の根のグローバル関数を、spine 上の引数がその関数の引数をすべて渡すところでだけ展開する。一部の引数だけを渡した適用は関数のクロージャを作る式で、そこに本体を置いても呼び出しは減らず、同じクロージャをラムダとして作ることになる。後段の `inline` がリフトした関数を `lam(cap)` に置くと、リフトする前のラムダに戻ってしまう。
 - 新しいパスは `Configuration::enable_lambda_set_specialization` が真のとき (`Max` 以上) に動く。旧と新を切り替える設定は作らない。比べる相手は main のバイナリである。
 
@@ -460,8 +460,8 @@ union の値の呼び出し `f(x)` は、`f` と `x` をこの順に `let` に�
 項目ごとに、段階 4 で行ったことを書く。
 
 - **`uncurry` を lambda set のパスの前でも走らせる。** 行った。`uncurry` は、lambda set のパスの前と、段階 3 までの位置 (lambda set のパスより後ろ) の 2 回走る。lambda set のパスは、func type の `Lam` と、func type の関数に複数の引数を渡す `App` を読む (`Inferencer::infer`、`Rewriter::walk_expr`)。func type の `Lam` は uncurried function の本体で、グローバル関数自身のラムダと同じく、集合の要素にならない。
-  - 2 回目の `uncurry::run` は、前の回が作った uncurried function を、シンボルの名前の末尾の `#func<n>` で見分ける (`global_of_uncurried_func`)。uncurried function を一つでも持つグローバル関数には新しく作らず、持たないものにだけ作る。
-  - 呼び出し、export、エントリポイントの IO 値は、その回が作った uncurried function にだけ書き換える。二つの回のあいだで、lambda set のパスは `g#func1` と `g#func2` を別々のシンボルとして、それぞれの呼び出し元から特殊化する。コピーが一つしか要らない成分はシンボルの名前をそのまま使うので、`g#func1` と `g#func2` は、名前が元のままでも、別のラムダのキャプチャの構造体を受け取りうる。前の回の uncurried function へ書き換えると、`g#func1(f)(5)` を `g#func2(f, 5)` にまとめたときのように、受け取る型と違うキャプチャの構造体を渡すことになり、コード生成の assert で止まる (`test_lambda_sets.rs` の `test_a_returned_closure_read_back_from_a_struct_and_one_applied_at_once_compute_both` と `test_a_global_read_back_from_a_struct_and_its_uncurried_call_compute_both`)。
+  - `uncurry::run` は、前の回があったかを見ない。func type でないグローバル関数すべてに uncurried function を作り、名前がすでにあるシンボルと重なるときは、`g#func2#1` のように `#1`、`#2`、... を足して重ならない名前にする (`unused_name`)。前の回の uncurried function は、名前も呼び出しもそのまま残る。どの呼び出しからも使われないものは、最後の `dead_symbol_elimination` が落とす。
+  - 呼び出し、export、エントリポイントの IO 値は、その回が作った uncurried function にだけ書き換える。1 回目の後に現れた `g(x)(y)` (値として渡した `g` を、後の `inline` が呼び出しの位置へ運んだもの) は、その回の時点の `g` から作った uncurried function への呼び出しになる。二つの回のあいだで、lambda set のパスは `g#func1` と `g#func2` を別々のシンボルとして、それぞれの呼び出し元から特殊化する。コピーが一つしか要らない成分はシンボルの名前をそのまま使うので、`g#func1` と `g#func2` は、名前が元のままでも、別のラムダのキャプチャの構造体を受け取りうる。前の回の uncurried function へ書き換えると、`g#func1(f)(5)` を `g#func2(f, 5)` にまとめたときのように、受け取る型と違うキャプチャの構造体を渡すことになり、コード生成の assert で止まる (`test_lambda_sets.rs` の `test_a_returned_closure_read_back_from_a_struct_and_one_applied_at_once_compute_both` と `test_a_global_read_back_from_a_struct_and_its_uncurried_call_compute_both`)。
 - **汎用のパスに、複数の引数を持つ `App` と `Lam` を扱わせる。** 行った。`application_inlining`、`pull_let`、名前の付け替え (`rename`)、`unique_local_names`、`let_elimination` の `FreeOccurrenceProbe`、`validate_types` が扱う。`collapse_constructions` は、中で走らせる `pull_let` を通して扱う。uncurried function の呼び出しは引数を書いた順に評価するので、引数を `let` に束縛するときは、前の引数の `let` を外側に置く。
 - **`split_struct_args` から `closure_specialization` までのパスを止めた形を測り、要らないものを消す。** 行った。`split_struct_args`、その後の 1 回目の `collapse_constructions`、`closure_specialization` を消した。`split_struct_args` の後の `inline` は、lambda set のパスの後の `inline` として残した。止めて測った結果は次のとおりである (LangArena の命令数、統合ブランチの先端との比較)。
   - `closure_specialization` と 1 回目の `collapse_constructions` は、何も書き換えていなかった。止めても 121 本の命令数は変わらない。
@@ -842,7 +842,6 @@ legendre で `--langarena --no-save` を、main のバイナリ (adb053e) と段
 
 - 型: `TypeNode::is_array`、`TypeNode::is_destructor_object`、`func_tycon_arity`、タプルの型の名前。どれも `own_slots` を持たない型か、スロットの集合がいつも `Dynamic` を含む型である。
 - シンボル: `uncurry` の `is_std_fix` は、`Std::fix` の名前に続く `#` でコピーを見分ける。コピーの名前は元の名前の後ろに `#ls<ハッシュ>` を足すので、この判定はそのまま成り立つ。
-- シンボル: 2 回目の `uncurry` の `global_of_uncurried_func` は、名前が `#func<n>` で終わるシンボルを、前の回が作った uncurried function と見なす。lambda set のパスがコピーした `g#func2#ls<ハッシュ>` は `#func<n>` で終わらないので、見なさない。このコピーは本体が func type なので、2 回目の `uncurry` はこれにも uncurried function を作らない。
 
 ## 付録: 退けた案
 
@@ -855,8 +854,8 @@ legendre で `--langarena --no-save` を、main のバイナリ (adb053e) と段
 - **ノードの注釈を付けた型を `Arc<ExprNode>` のポインタで引く。** 同じ部分木が二か所で共有されていると、一つのキーに二つの型が要る。
 - **名前の付いた型のコピーの代わりに、型引数を足す。** `DSegtree` の定義に型引数 `f` を足して `_op : f` とし、使う場所で `f` にキャプチャの構造体などの型を渡す形 (Rust の `DSegtree<F>` と同じ形) である。型の定義は一つのままで済むが、引数を取らずに型引数として渡された型コンストラクタ (`Foo IO` の `IO`) の位置の集合を表せない。そこでは `f` に、引数を待つ型を渡す必要がある。型のコピーは、引数を待つ型のコピーも同じ仕組みで作れるので、すべての場合を一つの仕組みで扱える。
 - **推論に型検査の単一化を使う。** このパスの位置のプログラムは型検査を通っているので、二つの注釈付きの型の単一化は、同じ位置にあるスロットの変数どうしを一つにすることに尽き、union-find で書ける。
-- **uncurried function であることを `Symbol` のフィールドに持たせ、lambda set のパスのコピーに引き継がせる。** 2 回目の `uncurry` が、名前によらずに前の回の uncurried function を見分けられる。ただし、lambda set の書き換えと `uncurry` の両方に手が入る。2 回目の `uncurry` は前の回の uncurried function へ呼び出しを書き換えないので、見分けて使うのは、uncurried function を作り直さない判定だけである。
-- **2 回目の `uncurry` で、前の回の uncurried function にも、呼び出しの引数と結果の型がそのシンボルの型と一致するときに限って書き換える。** 書き換えを型の一致で守れば正しい。その回の uncurried function にだけ書き換える今の形と比べて、LangArena で差が出るのは、RegExp の `match_any_char` と `ToString::to_string` の呼び出しがクロージャの呼び出しのまま残ることだけで、命令数は 56 本が同じ、残りも差が 0.006% 以内だった。speedtest の 71 本はバイナリが同じだった。書き換えの表に型を持たせる複雑さに見合わない。
+- **2 回目の `uncurry` が、前の回の uncurried function を名前の末尾の `#func<n>` で見分け、uncurried function を持つグローバル関数には新しく作らない。** 名前の衝突は避けられるが、2 回目が前の回の作った名前の意味に頼る。そのうえ、1 回目の後に現れた `g(x)(y)` が、どの uncurried function への呼び出しにもならず、クロージャの呼び出しのまま残る。重ならない名前で毎回作る今の形と比べて、LangArena の命令数の差は 50 本とも 0.006% 以内だった。
+- **2 回目の `uncurry` で、前の回の uncurried function にも、呼び出しの引数と結果の型がそのシンボルの型と一致するときに限って書き換える。** 書き換えを型の一致で守れば正しいが、書き換えの表に型を持たせる複雑さが要る。今の形では、2 回目が書き換える先は、その回の時点のグローバル関数から作った uncurried function なので、型はいつも合う。
 
 ## 付録: LSS の論文の要約
 
