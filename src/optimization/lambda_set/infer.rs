@@ -950,8 +950,15 @@ fn generalize(
         classes[class_of[&v] as usize] = scheme_members;
     }
     // A pinned variable gains members from the components inferred later, so it keeps a class of
-    // its own whatever members it holds now.
-    let (classes, merged) = merge_equal_classes(classes, fixed_count);
+    // its own whatever members it holds now: the pinned variables of the types, and those of the
+    // components inferred before that the members name.
+    let mut pinned_classes = vec![false; classes.len()];
+    for (v, c) in &class_of {
+        if solver.is_pinned(*v) {
+            pinned_classes[*c as usize] = true;
+        }
+    }
+    let (classes, merged) = merge_equal_classes(classes, fixed_count, &pinned_classes);
     for c in class_of.values_mut() {
         *c = merged[*c as usize];
     }
@@ -1078,7 +1085,8 @@ enum MemberLabel {
 /// `classes`, with each set of classes that unfold to the same tree made one, and the class each
 /// class became. The first `fixed_count` classes each stay a class of their own and keep their
 /// place: the parameters, which a copy gives values of its own, and the pinned variables of the
-/// types, which gain members from the components inferred later.
+/// types. A class `pinned` marks also stays a class of its own: a pinned variable gains members
+/// from the components inferred later.
 ///
 /// A symbol referring twice to one with internal classes gets two copies of them, equal but for
 /// their variables; merging them keeps a chain of such symbols from doubling its classes at each
@@ -1086,9 +1094,10 @@ enum MemberLabel {
 fn merge_equal_classes(
     classes: Vec<Vec<SchemeMember>>,
     fixed_count: usize,
+    pinned: &[bool],
 ) -> (Vec<Vec<SchemeMember>>, Vec<u32>) {
-    // The fixed classes each start in a class of their own and the other classes in one, and a
-    // Dynamic member is labelled by its reason, so that two classes are one only when their members
+    // The fixed and the pinned classes each start in a class of their own and the other classes in
+    // one, and a Dynamic member is labelled by its reason, so that two classes are one only when their members
     // name the same reasons.
     let n = classes.len();
     let mut reasons: Vec<Rc<DynamicReason>> = vec![];
@@ -1116,7 +1125,21 @@ fn merge_equal_classes(
                 .collect()
         })
         .collect();
-    let initial = (0..n).map(|c| c.min(fixed_count)).collect();
+    // The labels are numbered from 0 with none skipped: the fixed classes, then the other pinned
+    // classes, then one label for every other class.
+    let mut initial: Vec<usize> = vec![0; n];
+    let mut next = 0;
+    for c in 0..n {
+        if c < fixed_count || pinned[c] {
+            initial[c] = next;
+            next += 1;
+        }
+    }
+    for c in 0..n {
+        if !(c < fixed_count || pinned[c]) {
+            initial[c] = next;
+        }
+    }
     let (block, _) = canonical_classes(initial, &elems);
 
     // Number the blocks by their first class, so that the fixed classes keep their places.

@@ -755,6 +755,39 @@ fn test_a_global_value_in_a_group_with_a_function_taking_a_function_is_evaluated
     );
 }
 
+/// A function `z` building closures of `w` over two sets that hold the same lambda when `z` is
+/// inferred: the pinned set of the global `t`'s elements, and the set of a reference to `incr`.
+/// `main`, inferred after `z`, extends the pinned set with a lambda of its own, so the two sets
+/// differ in the end, and the copies of `w` building the two closures are given different sets.
+#[test]
+fn test_a_pinned_set_equal_to_another_when_a_function_is_inferred_and_extended_later() {
+    let source = r#"
+    module Main;
+
+    incr : I64 -> I64 = |x| if x <= 0 { 1 } else { incr(x - 1) + 1 };
+
+    t : Array (I64 -> I64) = [incr];
+
+    w : I64 -> (I64 -> I64) -> (I64 -> I64) = |d, f| (
+        if d > 0 { w(d - 1, f) } else { |x| f(x) * 2 }
+    );
+
+    z : I64 -> Array (I64 -> I64) = |n| (
+        if n > 100 { z(n - 1) } else { [w(n, incr), w(n, t.@(0))] }
+    );
+
+    main : IO () = (
+        let n = *get_args.map(|args| args.@size);
+        let u = t.push_back(|x| x - n);
+        let a = z(n).to_iter.fold(0, |f, acc| acc * 10 + f(n));
+        let b = u.to_iter.fold(0, |f, acc| acc * 10 + f(n));
+        assert_eq(|_| "", (a, b), (44, 20));;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
 /// The program of `returned_closure_source` in which one call applies `g(f)` at once, and the other
 /// reads `g` itself back from a struct field and applies it to `f2` and `7`.
 fn global_read_back_source() -> String {
