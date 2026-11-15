@@ -2,7 +2,7 @@
 
 use super::{
     concrete::{Elem, SetId, SetStore},
-    infer::Analysis,
+    infer::{slot_roots, Analysis},
     slots::SlotLayout,
     solver::{Member, Owner, SetVar, Solver},
     specialize::Specialization,
@@ -33,15 +33,12 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
         for (i, p) in params.iter().enumerate() {
             param_names.insert(*p, format!("p{}", i));
         }
-        let mut pinned: Vec<SetVar> = vec![];
-        for ty in &types {
-            for v in &ty.slots {
-                let root = solver.find(*v);
-                if !param_names.contains_key(&root) {
-                    param_names.insert(root, format!("q{}", pinned.len()));
-                    pinned.push(root);
-                }
-            }
+        let pinned: Vec<SetVar> = slot_roots(solver, &types)
+            .into_iter()
+            .filter(|v| !param_names.contains_key(v))
+            .collect();
+        for (i, v) in pinned.iter().enumerate() {
+            param_names.insert(*v, format!("q{}", i));
         }
         for (s, ty) in symbols.iter().zip(types.iter()) {
             let text = layout.annotate(ty, &mut |v| param_names[&solver.find(v)].clone());

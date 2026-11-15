@@ -838,24 +838,16 @@ fn generalize(
         .enumerate()
         .filter_map(|(i, t)| t.lam.map(|lam| (lam, i)))
         .collect();
-    let mut slot_roots: Vec<SetVar> = vec![];
-    let mut seen_slots: Set<SetVar> = Set::default();
-    for ty in &types {
-        for v in &ty.slots {
-            let root = solver.find(*v);
-            if seen_slots.insert(root) {
-                slot_roots.push(root);
-            }
-        }
-    }
+    let slot_roots = slot_roots(solver, &types);
 
     // The parameters: the variables of the types that are not pinned. A pinned variable is one
     // variable in every copy, so what its members name has to be as well: a variable of the types
     // that a pinned one reaches is pinned too.
-    let mut touched: Vec<SetVar> = types.iter().flat_map(|ty| ty.slots.iter().copied()).collect();
-    for term in &terms {
-        touched.extend(term.vars.iter().copied());
-    }
+    let touched: Vec<SetVar> = types
+        .iter()
+        .flat_map(|ty| ty.slots.iter().copied())
+        .chain(terms.iter().flat_map(|term| term.vars.iter().copied()))
+        .collect();
     let (params, param_index) = loop {
         let params: Vec<SetVar> = slot_roots
             .iter()
@@ -1026,6 +1018,21 @@ fn generalize(
         vars,
         var_index,
     }
+}
+
+/// The distinct roots of the slots of `types`, in the order they first occur there.
+pub fn slot_roots(solver: &mut Solver, types: &[AType]) -> Vec<SetVar> {
+    let mut roots: Vec<SetVar> = vec![];
+    let mut seen: Set<SetVar> = Set::default();
+    for ty in types {
+        for v in &ty.slots {
+            let root = solver.find(*v);
+            if seen.insert(root) {
+                roots.push(root);
+            }
+        }
+    }
+    roots
 }
 
 /// Every variable that `types`, `node_types` and the lambdas `lams` name, each replaced by its root
