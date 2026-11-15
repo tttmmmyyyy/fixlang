@@ -87,11 +87,6 @@ impl CaptureStruct {
         .set_type(self.ty.clone())
     }
 
-    /// The captured names paired with their types, in the order the struct holds them.
-    pub fn fields(&self) -> &[(FullName, Arc<TypeNode>)] {
-        &self.fields
-    }
-
     /// The global function a lambda is lifted to: it takes the capture struct as `param`, takes it
     /// apart into the captured names, and is then `body`, the lambda.
     ///

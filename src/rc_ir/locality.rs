@@ -1092,13 +1092,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         let init = annotate(prog, type_env, &summaries, &gate, &[], &mut clones)
             .walk(&g.init)
             .1;
-        globals.push(RcGlobalInit {
-            symbol: g.symbol.clone(),
-            ty: g.ty.clone(),
-            init,
-            owns_initializer: true,
-            owns_storage: true,
-        });
+        globals.push(g.with_init(init));
     }
 
     // Materialize every enqueued clone; each materialization may request further clones.

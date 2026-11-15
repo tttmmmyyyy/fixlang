@@ -23,10 +23,11 @@ use crate::{
         traverse::{EndVisitResult, ExprVisitor, VisitState},
         type_env::TypeEnv,
     },
+    fixstd::stdlib::is_std_fix,
     misc::{map_on_compiler_threads, Map, Set},
     optimization::{
         inline_local, let_elimination::create_global_lambda_to_arity_map,
-        rename::substitute_free_names, uncurry::is_std_fix,
+        rename::substitute_free_names,
     },
     rc_ir::locality::ExtShape,
 };
@@ -60,9 +61,9 @@ const INLINE_COST_THRESHOLD: i32 = 30;
 /// thousand renamings apiece exhausts the compiler's stack and aborts the build.
 ///
 /// The bound is on the growth of one round, so a symbol that has already grown large still takes
-/// the substitutions of the rounds that follow, a one-node alias among them, which
-/// `split_struct_args` and `closure_specialization` then read. A cycle therefore grows by at most
-/// this many nodes in each of `MAX_ROUNDS` rounds.
+/// the substitutions of the rounds that follow, a one-node alias among them, which the passes after
+/// inlining then read. A cycle therefore grows by at most this many nodes in each of `MAX_ROUNDS`
+/// rounds.
 ///
 /// It is set above what a round of a corpus program asks for. Measured over LangArena's fifty
 /// programs and the standard library, with the bound lifted so that every substitution is taken,
@@ -72,9 +73,7 @@ const INLINE_COST_THRESHOLD: i32 = 30;
 /// A program that asks for more than this in one round takes the rest in the rounds that follow,
 /// and reaches the same program where `MAX_ROUNDS` rounds are enough for it. A function of one
 /// hundred and sixty branches, each building a string the way LangArena's
-/// `Calculator::_right_hand_side` does, compiles to the same symbols as an unbounded compiler; so
-/// does one of eighty, which at a bound of ten thousand kept fifteen closures
-/// `closure_specialization` folds away here.
+/// `Calculator::_right_hand_side` does, compiles to the same symbols as an unbounded compiler.
 const MAX_NODES_SUBSTITUTED_PER_ROUND: usize = 50000;
 
 /// How many times `run` rewrites the program before it stops asking for more.

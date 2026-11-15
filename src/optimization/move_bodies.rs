@@ -145,7 +145,7 @@ mod tests {
     use crate::ast::expr::{expr_app, expr_let, expr_var, var_var, ExprNode};
     use crate::ast::name::FullName;
     use crate::ast::pattern::PatternNode;
-    use crate::constants::{CLOSURE_LAM_SUFFIX, INSTANCIATED_NAME_SEPARATOR};
+    use crate::constants::{INSTANCIATED_NAME_SEPARATOR, LS_LAM_SUFFIX};
     use crate::misc::Map;
     use std::sync::Arc;
 
@@ -155,7 +155,7 @@ mod tests {
             &["Main"],
             &format!(
                 "main{}0123abcd{}{}",
-                INSTANCIATED_NAME_SEPARATOR, CLOSURE_LAM_SUFFIX, index
+                INSTANCIATED_NAME_SEPARATOR, LS_LAM_SUFFIX, index
             ),
         )
     }

@@ -1,15 +1,14 @@
 // This module provides a transformation that makes all local names defined in an expression unique.
 // Not only avoids shadowing but also avoids collisions with names that are already out of scope.
-use std::sync::Arc;
-
 use crate::{
     ast::{
         expr::ExprNode,
         name::FullName,
-        traverse::{ExprVisitor, StartVisitResult},
+        traverse::{ExprVisitor, StartVisitResult, VisitState},
     },
     misc::{Map, Set},
 };
+use std::sync::Arc;
 
 pub fn run_on_expr(expr: &Arc<ExprNode>, mut occupied: Set<FullName>) -> Arc<ExprNode> {
     let free_vars = expr.free_vars();
@@ -60,8 +59,8 @@ impl ExprVisitor for Renamer {
     fn start_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         let mut var = expr.get_var().clone();
 
         if let Some(to) = self.map.get(&var.name) {
@@ -75,8 +74,8 @@ impl ExprVisitor for Renamer {
     fn start_visit_builtin(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         let mut builtin = expr.get_builtin().as_ref().clone();
 
         let op = &mut builtin.op;
@@ -94,14 +93,9 @@ impl ExprVisitor for Renamer {
     fn start_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         let mut params = expr.get_lam_params();
-        assert_eq!(
-            params.len(),
-            1,
-            "This function does not support multi-parameter lambdas."
-        );
         let introduced_names: Vec<FullName> = params.iter().map(|p| p.name.clone()).collect();
 
         let bak_map = self.map.clone();
@@ -133,8 +127,8 @@ impl ExprVisitor for Renamer {
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         let bound = expr.get_let_bound();
         let bound_res = self.traverse(&bound);
         let bound = bound_res.expr;
@@ -174,8 +168,8 @@ impl ExprVisitor for Renamer {
     fn start_visit_match(
         &mut self,
         expr: &Arc<ExprNode>,
-        _state: &mut crate::ast::traverse::VisitState,
-    ) -> crate::ast::traverse::StartVisitResult {
+        _state: &mut VisitState,
+    ) -> StartVisitResult {
         let cond = expr.get_match_cond();
         let cond_res = self.traverse(&cond);
         let cond = cond_res.expr;

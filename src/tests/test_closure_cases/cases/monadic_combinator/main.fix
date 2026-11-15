@@ -22,7 +22,7 @@ tick = St { _run : |s| (s, s + 1) };
 // A range that does not reach `to` runs no round.
 //
 // The combinator is larger than what the inliner substitutes at a call site, so the call to it
-// stands and the lambda `main` passes reaches closure specialization.
+// stands.
 range_fold_m : [m : Monad] (I64, I64, I64) -> a -> (I64 -> a -> m a) -> m (a, I64);
 range_fold_m = |(from, to, step), acc, body| (
     let step = if step == 0 { 1 } else { step };
@@ -40,9 +40,7 @@ range_fold_m = |(from, to, step), acc, body| (
 
 main : IO ();
 main = (
-    // The callback answers in the monad, so each round hands `bind` the action it built. The body
-    // of that callback goes into the copy of the combinator made for it, applied to the arguments
-    // the round supplies.
+    // The callback answers in the monad, so each round hands `bind` the action it built.
     let summing = range_fold_m((0, 100, 1), 0, |i, acc| let v = *tick; pure $ acc + v * i);
     let ((total, rounds), _) = summing.St::run(0);
     println((total + rounds).to_string)

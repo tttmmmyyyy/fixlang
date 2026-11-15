@@ -988,16 +988,9 @@ impl Configuration {
     /// Make a value of a newtype — an unboxed struct of exactly one field — a value of that field,
     /// so that a type written in that shape, such as `Std::IO`, a state monad or an iterator,
     /// becomes the function it wraps. The gain is that change of type: only once an expression is
-    /// typed as a closure can the inlining and the closure specialization below take hold of it, so
-    /// it runs at `Max` and above alongside them.
+    /// typed as a closure can the inlining and the lambda set specialization below take hold of it,
+    /// so it runs at `Max` and above alongside them.
     pub fn enable_unwrap_newtype_optimization(&self) -> bool {
-        self.runs_from(FixOptimizationLevel::Max)
-    }
-
-    /// Give a function that takes an unboxed struct a twin taking one argument per field of it, so
-    /// that a closure a field holds becomes an argument the stages after it can follow. Runs at
-    /// `Max` and above, where the stages that make use of it run.
-    pub fn enable_split_struct_args(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Max)
     }
 
@@ -1010,8 +1003,9 @@ impl Configuration {
     }
 
     /// Replace a destructuring that meets the construction it reads by what the construction put
-    /// there. Runs at `Max` and above: it is what carries a value through the `Option` an iterator's
-    /// `advance` builds, and closure specialization, which reads what it leaves, runs there.
+    /// there. Runs at `Max` and above, where `decapture_scope_functions` builds a tuple for a
+    /// function that a pattern then takes apart, and this pass hands the pattern the tuple's
+    /// fields.
     pub fn enable_collapse_constructions(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Max)
     }
@@ -1029,10 +1023,10 @@ impl Configuration {
         self.runs_from(FixOptimizationLevel::Max)
     }
 
-    /// Copy a function for the closure it is handed, so that the copy calls that closure's body
-    /// directly instead of reaching it through a function pointer and a capture list. Runs at `Max`
-    /// and above.
-    pub fn enable_closure_specialization(&self) -> bool {
+    /// Specialize the program by its lambda sets, so that a function value is held as what its
+    /// lambda captures and a call of it calls the lambda by name, instead of reaching the lambda
+    /// through a closure. Runs at `Max` and above.
+    pub fn enable_lambda_set_specialization(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Max)
     }
 
@@ -1046,15 +1040,16 @@ impl Configuration {
 
     /// Borrow-ification and cancellation of the RC IR: borrows a parameter a function only reads,
     /// then cancels the reference counting the borrow makes net-zero. Its full benefit relies on
-    /// closure specialization and inlining (which are also `Max`-only), and it adds compile-time
+    /// lambda set specialization and inlining (which are also `Max`-only), and it adds compile-time
     /// analysis, so it runs only at `Max` and above; `Basic` stays lighter for faster compilation.
     pub fn enable_borrow_optimization(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Max)
     }
 
     /// The RC-IR term simplifier (case-of-known-constructor, case-of-case) runs at `Max` and above.
-    /// It composes with the same closure specialization that borrow-ification needs — a specialized
-    /// loop's body is a known function whose union it can cancel — so it shares that threshold.
+    /// It composes with the same lambda set specialization that borrow-ification needs — a
+    /// specialized loop's body is a known function whose union it can cancel — so it shares that
+    /// threshold.
     pub fn enable_simplify(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Max)
     }

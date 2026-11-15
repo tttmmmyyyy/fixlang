@@ -7,7 +7,7 @@ use crate::ast::{
     pattern::{Pattern, PatternNode},
     program::Program,
     type_env::TypeEnv,
-    types::{type_arrow, TypeNode},
+    types::{type_arrow, type_func, TypeNode},
 };
 use crate::misc::Map;
 use std::sync::Arc;
@@ -18,8 +18,8 @@ use std::sync::Arc;
 /// the arms of a choice, a struct and its fields. The types of builtin operations and of calls of C
 /// functions are trusted as written.
 ///
-/// A function type is read as arrows, the form it has before `uncurry` gathers parameters into a
-/// func type.
+/// A function takes an arrow type, or the func type `uncurry` gathers parameters into; an application
+/// of a function of a func type supplies all its parameters at once.
 pub fn validate_types(prg: &Program) {
     let type_env = prg.type_env();
     let check = Check {
@@ -144,10 +144,16 @@ impl<'p> Check<'p> {
                 for arg in args {
                     self.expr(arg, at, scope);
                 }
-                let expected = args
-                    .iter()
-                    .rev()
-                    .fold(ty(e).clone(), |acc, arg| type_arrow(ty(arg).clone(), acc));
+                let expected = if ty(func).is_func() {
+                    type_func(
+                        args.iter().map(|arg| ty(arg).clone()).collect(),
+                        ty(e).clone(),
+                    )
+                } else {
+                    args.iter()
+                        .rev()
+                        .fold(ty(e).clone(), |acc, arg| type_arrow(ty(arg).clone(), acc))
+                };
                 self.same(
                     ty(func),
                     &expected,

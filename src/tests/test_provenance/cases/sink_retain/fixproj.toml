@@ -1,7 +1,6 @@
 [general]
-name = "specialized-fold"
+name = "prov-sink-retain"
 version = "0.1.0"
-fix_version = "1.1.0"
 
 [build]
 files = ["main.fix"]

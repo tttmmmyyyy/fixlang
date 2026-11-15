@@ -934,6 +934,19 @@ impl References {
     pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
+
+    /// The object these act on, where they are one reference of one object.
+    ///
+    /// # Examples
+    /// References holding one reference of `a` give `a`. One holding two of `a`, or one of `a` and
+    /// one of `b`, give `None`.
+    pub(crate) fn sole_object(&self) -> Option<&VarPath> {
+        let mut references = self.0.iter();
+        match (references.next(), references.next()) {
+            (Some((object, 1)), None) => Some(object),
+            _ => None,
+        }
+    }
 }
 
 /// The references an operation on the subtree of `v` that `path` names acts on: the reference each
@@ -1011,8 +1024,8 @@ fn subtree_type(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> Opt
 mod tests {
     use super::{
         acted_references, as_arg_projection, gather_leaves_under, held_field_type, origin,
-        origin_of_gathered, rc_units, truncate_to_unit, unit_step, Binding, Origin, UnitStep,
-        VarTable,
+        origin_of_gathered, rc_units, truncate_to_unit, unit_step, Binding, Origin, References,
+        UnitStep, VarTable,
     };
     use crate::ast::name::FullName;
     use crate::ast::type_env::TypeEnv;
@@ -1554,5 +1567,31 @@ mod tests {
                 .into_iter()
                 .collect::<Set<VarPath>>()
         );
+    }
+
+    /// References name a sole object only where they are one reference of one object: two
+    /// references of one object, references of two objects, and no reference at all name none.
+    #[test]
+    fn only_one_reference_of_one_object_names_a_sole_object() {
+        let references = |counts: &[(&str, usize)]| {
+            References(
+                counts
+                    .iter()
+                    .map(|(name, count)| (at(name), *count))
+                    .collect(),
+            )
+        };
+        assert_eq!(references(&[("a", 1)]).sole_object(), Some(&at("a")));
+        assert_eq!(
+            references(&[("a", 2)]).sole_object(),
+            None,
+            "two references of one object"
+        );
+        assert_eq!(
+            references(&[("a", 1), ("b", 1)]).sole_object(),
+            None,
+            "one reference each of two objects"
+        );
+        assert_eq!(references(&[]).sole_object(), None, "no reference");
     }
 }

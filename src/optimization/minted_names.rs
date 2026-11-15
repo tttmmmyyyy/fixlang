@@ -2,6 +2,7 @@
 
 use crate::{
     ast::{name::FullName, program::Symbol},
+    constants::INSTANCIATED_NAME_SEPARATOR,
     misc::{Map, Set},
 };
 use std::sync::Arc;
@@ -63,6 +64,22 @@ impl MintedNames {
     }
 }
 
+/// A name for a new global function: `name` itself when `existing` lacks it, and otherwise the
+/// first of `name#1`, `name#2`, ... that `existing` lacks.
+///
+/// # Examples
+/// `g#func2` gives `g#func2#1` when `existing` has `g#func2` only.
+pub fn fresh_name(name: &FullName, existing: &Set<FullName>) -> FullName {
+    let mut candidate = name.clone();
+    let mut index = 0;
+    while existing.contains(&candidate) {
+        index += 1;
+        candidate = name.clone();
+        *candidate.name_as_mut() += &format!("{}{}", INSTANCIATED_NAME_SEPARATOR, index);
+    }
+    candidate
+}
+
 /// The names of the globals `symbols` defines, for the walks over them to share.
 pub fn names_of_globals(symbols: &Map<FullName, Symbol>) -> Arc<Set<FullName>> {
     Arc::new(symbols.keys().cloned().collect())
@@ -82,7 +99,7 @@ pub fn insert_minted_symbol(symbols: &mut Map<FullName, Symbol>, sym: Symbol) {
 
 #[cfg(test)]
 mod tests {
-    use super::MintedNames;
+    use super::{fresh_name, MintedNames};
     use crate::{ast::name::FullName, misc::Set};
     use std::sync::Arc;
 
@@ -131,6 +148,27 @@ mod tests {
                     name.to_string()
                 );
             }
+        }
+    }
+
+    /// `fresh_name` keeps a name `existing` lacks, and gives a name `existing` lacks however many of
+    /// the names it tries first are taken.
+    #[test]
+    fn fresh_name_avoids_every_existing_name() {
+        let name = FullName::from_strs(&["Main"], "g#func2");
+        let mut existing: Set<FullName> = Set::default();
+        assert!(
+            fresh_name(&name, &existing) == name,
+            "a free name should be kept"
+        );
+        for _ in 0..3 {
+            let fresh = fresh_name(&name, &existing);
+            assert!(
+                !existing.contains(&fresh),
+                "`{}` is taken already",
+                fresh.to_string()
+            );
+            existing.insert(fresh);
         }
     }
 }

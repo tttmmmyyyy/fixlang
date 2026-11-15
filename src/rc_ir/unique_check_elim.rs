@@ -27,7 +27,7 @@ use crate::ast::type_env::TypeEnv;
 use crate::ast::types::TypeNode;
 use crate::misc::{grow_stack, Map, Set};
 use crate::rc_ir::ast::{
-    FuncRef, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
+    map_children, FuncRef, RcExpr, RcExprNode, RcFunc, RcGlobalInit, RcProgram, RcRhs, RcVar,
 };
 use crate::rc_ir::provenance::{
     analyze_program, leaf_is_unique, resolve, ProvenanceAnalysis, Uniqueness,
@@ -69,13 +69,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let globals: Vec<RcGlobalInit> = prog
         .globals
         .iter()
-        .map(|g| RcGlobalInit {
-            symbol: g.symbol.clone(),
-            ty: g.ty.clone(),
-            init: spec.rewrite_expr(&g.init, &[]),
-            owns_initializer: true,
-            owns_storage: true,
-        })
+        .map(|g| g.with_init(spec.rewrite_expr(&g.init, &[])))
         .collect();
 
     // Materialize every enqueued clone; each materialization may request further clones.
@@ -174,44 +168,18 @@ impl<'a> Specializer<'a> {
                     self.rewrite_expr(k, inputs),
                 )
             }
-            RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => {
-                let arms = arms
-                    .iter()
-                    .map(|arm| arm.with_body(self.rewrite_expr(&arm.body, inputs)))
-                    .collect();
-                RcExpr::Let(
-                    x.clone(),
-                    RcRhs::Match(scrutinee.clone(), arms),
-                    self.rewrite_expr(k, inputs),
-                )
-            }
             // `Var` and `Closure` need no routing (a closure's target keeps its original name, whose
             // all-`Dynamic` version is always kept), so their right-hand sides pass through unchanged.
             // Each is listed explicitly, so a new `RcRhs` that might need routing fails to compile
             // here instead of silently passing through.
-            RcExpr::Let(x, rhs @ (RcRhs::Var(_) | RcRhs::Closure(_, _)), k) => {
-                RcExpr::Let(x.clone(), rhs.clone(), self.rewrite_expr(k, inputs))
+            RcExpr::Let(_, RcRhs::Match(_, _) | RcRhs::Var(_) | RcRhs::Closure(_, _), _)
+            | RcExpr::Retain(_, _, _, _)
+            | RcExpr::Release(_, _, _, _)
+            | RcExpr::Destructure(_, _, _, _)
+            | RcExpr::Eval(_, _)
+            | RcExpr::Ret(_) => {
+                return map_children(node, |child| self.rewrite_expr(child, inputs))
             }
-            RcExpr::Retain(v, path, state, k) => RcExpr::Retain(
-                v.clone(),
-                path.clone(),
-                *state,
-                self.rewrite_expr(k, inputs),
-            ),
-            RcExpr::Release(v, path, state, k) => RcExpr::Release(
-                v.clone(),
-                path.clone(),
-                *state,
-                self.rewrite_expr(k, inputs),
-            ),
-            RcExpr::Destructure(container, fields, state, k) => RcExpr::Destructure(
-                container.clone(),
-                fields.clone(),
-                *state,
-                self.rewrite_expr(k, inputs),
-            ),
-            RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), self.rewrite_expr(k, inputs)),
-            RcExpr::Ret(v) => RcExpr::Ret(v.clone()),
         };
         RcExprNode {
             expr: Arc::new(expr),
