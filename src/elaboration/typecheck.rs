@@ -1746,8 +1746,8 @@ impl TypeCheckContext {
     /// Say where each of `tvs` came from: for every type variable the inference
     /// created whose source expression is known, a sentence naming it paired
     /// with that expression's span, to hang off an error as extra source
-    /// pointers. A type variable the program writes is named by the program
-    /// itself, so it gets no sentence. The sentences follow the order of `tvs`,
+    /// pointers. A type variable the program writes gets no sentence, since the
+    /// reader finds it in the source. The sentences follow the order of `tvs`,
     /// at most one for each variable.
     ///
     /// # Arguments
