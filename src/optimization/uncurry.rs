@@ -455,3 +455,27 @@ pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
         _ => expr.clone(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::unused_name;
+    use crate::{ast::name::FullName, misc::Set};
+
+    /// `unused_name` gives a name that `taken` does not have: `name` itself while it is free, and
+    /// one that differs from every taken name however many of the names it tries first are taken.
+    #[test]
+    fn test_unused_name_avoids_every_taken_name() {
+        let name = FullName::from_strs(&["Main"], "g#func2");
+        let mut taken: Set<FullName> = Set::default();
+        assert!(unused_name(&name, &taken) == name, "a free name should be kept");
+        for _ in 0..3 {
+            let fresh = unused_name(&name, &taken);
+            assert!(
+                !taken.contains(&fresh),
+                "`{}` is taken already",
+                fresh.to_string()
+            );
+            taken.insert(fresh);
+        }
+    }
+}

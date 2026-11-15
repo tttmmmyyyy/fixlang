@@ -588,13 +588,18 @@ fn test_a_returned_closure_read_back_from_a_struct_and_one_applied_at_once_compu
 /// through the field reaches `g` itself. Each computes its value.
 #[test]
 fn test_a_global_read_back_from_a_struct_and_its_uncurried_call_compute_both() {
-    let source = returned_closure_source(
+    test_source(&global_read_back_source(), Configuration::develop_mode());
+}
+
+/// The program of `returned_closure_source` in which one call applies `g(f)` at once, and the other
+/// reads `g` itself back from a struct field and applies it to `f2` and `7`.
+fn global_read_back_source() -> String {
+    returned_closure_source(
         "(I64 -> I64) -> I64 -> I64",
         r#"let r1 = g(f)(5);
         let p = Holder { fun : g, tag : 1 };
         let r2 = (p.@fun)(f2)(7);"#,
-    );
-    test_source(&source, Configuration::develop_mode());
+    )
 }
 
 /// How deep the chain of `chain_source` goes in the tests of the bound on the capture structs a
@@ -658,7 +663,7 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
 /// function values left as closures — so these assert against the dump.
 #[cfg(test)]
 mod dump_tests {
-    use super::{chain_source, CHAIN_DEPTH, CHAIN_OUTPUT};
+    use super::{chain_source, global_read_back_source, CHAIN_DEPTH, CHAIN_OUTPUT};
     use crate::constants::{
         LS_CAP_PREFIX, LS_COPY_SUFFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX,
         MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS,
@@ -698,6 +703,21 @@ mod dump_tests {
                 body
             );
         }
+    }
+
+    /// `main` calls `g` through no closure, both where it applies `g` to its two arguments at once
+    /// and where it applies `g`, read back from a struct field, to them. The rewrite by the lambda
+    /// sets turns the call through the field into the call `g(f2)(7)` after the first uncurrying has
+    /// run, and the second uncurrying gives `g` an uncurried function taking both arguments.
+    #[test]
+    fn test_a_call_of_a_global_read_back_from_a_struct_calls_it_by_name() {
+        let dump = build_run_and_read_rc_ir(
+            &global_read_back_source(),
+            "max",
+            "",
+            "a global read back from a struct and applied to two arguments",
+        );
+        assert_calls_by_name(&dump, "Main::main");
     }
 
     /// The function header of `body`, a function of an RC IR dump: its first line.
