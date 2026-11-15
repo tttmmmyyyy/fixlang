@@ -1,6 +1,6 @@
 # Std
 
-Defined in std-doc@1.6.1
+Defined in std-doc@1.6.2
 
 Module `Std` provides basic types, traits and values.
 

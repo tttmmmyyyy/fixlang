@@ -6,6 +6,29 @@
 
 #### Tool
 
+- #1028: In the language server, hover and go to definition on the parentheses or a comma of a tuple, or on `()`, now answer nothing. Hover there used to show `Std::Tuple2` or `()`.
+
+### Fixed
+
+#### Language
+
+- #1022, #1025: An error that points at an expression built from parts, such as a call `f(x)` or an operation `(a) + (b)`, now covers the whole expression, including a parenthesis at either end. It used to leave out the closing parenthesis of a call and the parentheses of a parenthesized part at an end, and printed the expression as `` `f(x` `` or `` `a) + (b` ``.
+- #1017, #1028: A type error about the result of `*x` now quotes the `*x` and points at all of it, as in `` `*pure((1, 2, 3))` of type `(Std::I64, Std::I64, Std::I64)` does not match the expected type `(#1, #2)`. ``. It used to name the variable `#monadic_value0`, which the program never writes, and point at the `*` alone.
+
+#### Tool
+
+- #1028: In the language server, renaming a name written after `*` in a field of a struct literal, such as `local` in `S { a : *local }`, now renames that name. It used to rename the struct `S`, and hover and go to definition there answered `S`.
+
+## [1.6.1] - 2026-11-13
+
+### Changed
+
+#### Language
+
+- #1013: A type error now opens with the two types that do not match, or the constraint that cannot be deduced, so that an editor showing the first line of a report shows the cause. A lambda's parameter pattern that does not match the parameter is reported on the pattern, with the type the lambda is expected to have, where the report used to name `#param`. Type variables the inference creates are numbered from 1 in each report, as `#1`, `#2`, ..., where they printed as `#a575`.
+
+#### Tool
+
 - #968, #972: Dependency resolution skips a version of a dependency whose `fix_version` does not accept the running compiler, and chooses the newest version that does. It used to fail as soon as it tried such a version. A version whose project file cannot be read is skipped in the same way.
 - #968, #972: When no choice of versions satisfies every version requirement, the error now explains which requirements conflict, following them from the root project through the projects that bring them in, with each requirement written as its project file writes it. A `HINT:` line follows when a version needs a newer Fix, or when one project is fetched from two sources.
 - #968, #972: `fix deps add` with no version now requires the newest tagged version that dependency resolution can use: one whose project file can be read, gives the version of its tag, and has a `fix_version` that accepts the running compiler. It used to require the newest tagged version, whatever its project file said. When no version can be used, `fix deps add` fails and says why, leaving the project file as it was.

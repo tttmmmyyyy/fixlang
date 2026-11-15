@@ -1,0 +1,10 @@
+module Main;
+
+decode : I64 -> I64 -> Array I64 = |flag, len| (
+    range(0, len).fold(([], flag), |(arr, flag)|
+        let arr = arr.push_back(flag % 3 - 1);
+        (arr, flag / 3)
+    ).@0
+);
+
+main : IO () = println(decode(5, 3).to_string);

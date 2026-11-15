@@ -209,7 +209,7 @@ main: IO () = (
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "since `Std::U64 = Std::I64` cannot be deduced",
+        "`Std::U64` and `Std::I64` do not match.",
     );
 }
 

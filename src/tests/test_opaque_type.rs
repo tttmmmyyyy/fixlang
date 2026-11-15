@@ -1887,7 +1887,7 @@ pub fn test_opaque_member_implementation_owes_the_constraint_at_its_own_type() {
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "Std::I64 = Std::Bool",
+        "`Std::I64` and `Std::Bool` do not match.",
     );
 }
 
@@ -2156,7 +2156,11 @@ pub fn test_opaque_impl_assoc_type_mismatch_global() {
         main : IO ();
         main = pure();
     "#;
-    test_source_fail(&source, Configuration::develop_mode(), "String = Std::I64");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Std::String` and `Std::I64` do not match.",
+    );
 }
 
 /// An implementation of a member declared to return an opaque type constrained by `Iterator` whose
@@ -2202,7 +2206,11 @@ pub fn test_opaque_impl_assoc_type_mismatch_method() {
         main : IO ();
         main = pure();
     "#;
-    test_source_fail(&source, Configuration::develop_mode(), "String = Std::I64");
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`Std::String` and `Std::I64` do not match.",
+    );
 }
 
 /// An opaque return type in a module whose `import Std::{...}` names one by one what it uses: the
@@ -2606,7 +2614,7 @@ pub fn test_opaque_signature_renaming_a_constraint_variable_checks_the_body() {
         test_source_fail(
             &source.replace("{tv}", name),
             Configuration::develop_mode(),
-            &format!("since `Std::I64 = {}` cannot be deduced", name),
+            &format!("`Std::I64` and `{}` do not match.", name),
         );
     }
 }

@@ -53,8 +53,8 @@ mod integration_tests {
 
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains("Type mismatch"),
-            "Error message should mention type mismatch, got: {}",
+            stderr.contains("Expected `Std::I64`, found `Std::String`."),
+            "Error message should name the two types that do not match, got: {}",
             stderr
         );
     }
@@ -152,8 +152,8 @@ mod integration_tests {
 
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains("Type mismatch"),
-            "Error message should mention type mismatch in test code, got: {}",
+            stderr.contains("Expected `Std::I64`, found `Std::String`."),
+            "Error message should name the two types that do not match in test code, got: {}",
             stderr
         );
     }

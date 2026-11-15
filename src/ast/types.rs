@@ -8,9 +8,10 @@ use crate::ast::traits::{KindSignature, TraitEnv, TraitId};
 use crate::ast::type_env::TypeEnv;
 use crate::ast::typedecl::Field;
 use crate::constants::{
-    TraverserWorkType, I128_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME, PUNCHED_TYPE_SYMBOL,
-    STD_NAME, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED, TRAVERSER_WORK_RELEASE,
-    TYPE_WILDCARD_VAR_PREFIX, U128_NAME, U16_NAME, U32_NAME, U64_NAME, U8_NAME,
+    TraverserWorkType, I128_NAME, I16_NAME, I32_NAME, I64_NAME, I8_NAME, INFERENCE_TYVAR_PREFIX,
+    PUNCHED_TYPE_SYMBOL, STD_NAME, TRAVERSER_WORK_MARK_GLOBAL, TRAVERSER_WORK_MARK_THREADED,
+    TRAVERSER_WORK_RELEASE, TYPE_WILDCARD_VAR_PREFIX, U128_NAME, U16_NAME, U32_NAME, U64_NAME,
+    U8_NAME,
 };
 use crate::elaboration::name_resolution::{NameResolutionContext, NameResolutionType};
 use crate::elaboration::typecheck::{Substitution, TypeCheckContext};
@@ -967,7 +968,7 @@ impl TypeNode {
                             let last_assoc_arg_src =
                                 assoc_ty_args.last().unwrap().get_source().clone();
                             let assoc_ty_span =
-                                Span::unite_opt(&assoc_ty_name_src, &last_assoc_arg_src);
+                                Span::unite_both(&assoc_ty_name_src, &last_assoc_arg_src);
                             let mut assoc_ty = type_assocty(
                                 AssocType {
                                     name: assoc_ty_name,
@@ -979,7 +980,7 @@ impl TypeNode {
                             for arg in following_args {
                                 let fun_src = assoc_ty.get_source();
                                 let arg_src = arg.get_source();
-                                let span = Span::unite_opt(fun_src, arg_src);
+                                let span = Span::unite_both(fun_src, arg_src);
                                 assoc_ty = type_tyapp(assoc_ty, arg.clone()).set_source(span);
                             }
                             return assoc_ty.resolve_namespace(ctx);
@@ -1306,7 +1307,7 @@ impl TypeNode {
                 for i in 0..ta.tyvars.len() {
                     let param = &ta.tyvars[i].name;
                     let arg = app_seq[i + 1].clone();
-                    src = Span::unite_opt(&src, arg.get_source());
+                    src = Span::unite_both(&src, arg.get_source());
                     let merge_ok = s.merge(&Substitution::single(&param, arg));
                     assert!(merge_ok);
                 }
@@ -1316,7 +1317,7 @@ impl TypeNode {
                 let mut resolved = resolved.set_source(src);
                 for i in (ta.tyvars.len() + 1)..app_seq.len() {
                     let arg = app_seq[i].clone();
-                    let src = Span::unite_opt(resolved.get_source(), arg.get_source());
+                    let src = Span::unite_both(resolved.get_source(), arg.get_source());
                     resolved = type_tyapp(resolved, arg).set_source(src);
                 }
                 return resolved.resolve_type_aliases_internal(env, type_name_path, entry_type_src);
@@ -2808,7 +2809,7 @@ impl Scheme {
         if let Err(msg) = extend_result {
             let mut span = ret.predicates[0].src.clone();
             for i in 1..ret.predicates.len() {
-                span = Span::unite_opt(&span, &ret.predicates[i].src);
+                span = Span::unite_both(&span, &ret.predicates[i].src);
             }
             return Err(Errors::from_msg_srcs(msg, &[&span]));
         }
@@ -2989,6 +2990,13 @@ pub fn is_opaque_tyvar(name: &str) -> bool {
 /// `TYPE_WILDCARD_VAR_PREFIX` in front of it.
 pub fn is_type_wildcard_tyvar(name: &str) -> bool {
     name.starts_with(TYPE_WILDCARD_VAR_PREFIX)
+}
+
+/// Whether a type variable name is one the inference created: `INFERENCE_TYVAR_PREFIX` followed by
+/// a number, as `#a3` is.
+pub fn is_inference_tyvar(name: &str) -> bool {
+    name.strip_prefix(INFERENCE_TYVAR_PREFIX)
+        .is_some_and(|id| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// Gives each variable of `vars` that `kind_signs` names the kind the signature gives it.
