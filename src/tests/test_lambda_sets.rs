@@ -628,6 +628,59 @@ fn test_a_global_array_of_functions_extended_in_two_places_is_evaluated_once() {
     );
 }
 
+/// A global array of functions and a recursive function taking a function, referring to each
+/// other: the array's lambda passes a lambda of its own to the function, so the function's argument
+/// shares the set of the array's elements, and `main` passing the function lambdas of its own
+/// computes them all.
+#[test]
+fn test_a_global_array_and_a_function_referring_to_each_other_compute_both() {
+    let source = r#"
+    module Main;
+
+    tbl : Array (I64 -> I64);
+    tbl = [|x| apply_first(|y| y + 1, x)];
+
+    apply_first : (I64 -> I64) -> I64 -> I64;
+    apply_first = |g, x| (
+        if x <= 0 { g(x) }
+        else if x % 2 == 0 { apply_first(g, x - 1) }
+        else { (tbl.@(0))(x - 1) }
+    );
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let a = apply_first(|z| z * 2 + n, 3);
+        let b = apply_first(|z| z * 2 + n, 0);
+        assert_eq(|_| "", a + b, 2);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// A global array of functions appended to an array of six lambdas of `main`: the set of the
+/// global's elements takes in the six, and the program calls all seven.
+#[test]
+fn test_a_global_array_of_functions_appended_to_a_longer_one_calls_them_all() {
+    let source = r#"
+    module Main;
+
+    tbl : Array (I64 -> I64);
+    tbl = [|x| x + 1];
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let fs = [|x| x + n, |x| x * n, |x| x - n, |x| x / (n + 1), |x| x % (n + 1), |x| x + 2 * n];
+        let all = fs.append(tbl);
+        assert_eq(|_| "", all.to_iter.fold(0, |f, acc| acc + f(10)), 58);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
 /// The program of `returned_closure_source` in which one call applies `g(f)` at once, and the other
 /// reads `g` itself back from a struct field and applies it to `f2` and `7`.
 fn global_read_back_source() -> String {
