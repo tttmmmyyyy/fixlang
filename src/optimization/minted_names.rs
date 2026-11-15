@@ -157,7 +157,10 @@ mod tests {
     fn fresh_name_avoids_every_existing_name() {
         let name = FullName::from_strs(&["Main"], "g#func2");
         let mut existing: Set<FullName> = Set::default();
-        assert!(fresh_name(&name, &existing) == name, "a free name should be kept");
+        assert!(
+            fresh_name(&name, &existing) == name,
+            "a free name should be kept"
+        );
         for _ in 0..3 {
             let fresh = fresh_name(&name, &existing);
             assert!(
