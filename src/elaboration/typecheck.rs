@@ -543,7 +543,7 @@ pub struct TypeCheckContext {
     /// expression whose type it is, so that a diagnostic naming the variable can point at where it
     /// arose. A type variable of a signature has no entry: a diagnostic shows it under the name the
     /// signature gives it, with no location.
-    tyvar_expr: Map<String, Span>,
+    tyvar_source: Map<String, Span>,
     /// The type scheme each name in scope stands for. These are the assumptions of the inference.
     pub scope: Scope<Arc<Scheme>>,
     /// What the inference has settled about the type variables so far.
@@ -628,7 +628,7 @@ impl TypeCheckContext {
         let assumed_eqs = trait_env.type_equalities();
         Self {
             tyvar_id: Default::default(),
-            tyvar_expr: Default::default(),
+            tyvar_source: Default::default(),
             scope: Default::default(),
             type_env,
             trait_env: Arc::new(trait_env),
@@ -660,7 +660,7 @@ impl TypeCheckContext {
             tyvar_name
         );
         if let Some(source) = source {
-            self.tyvar_expr.insert(tyvar_name, source);
+            self.tyvar_source.insert(tyvar_name, source);
         }
     }
 
@@ -930,9 +930,9 @@ impl TypeCheckContext {
     /// inference created takes the location.
     fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
         let src = self
-            .tyvar_expr
+            .tyvar_source
             .get(&tv2)
-            .or_else(|| self.tyvar_expr.get(&tv1))
+            .or_else(|| self.tyvar_source.get(&tv1))
             .cloned();
         for tv in [tv1, tv2] {
             if is_inference_tyvar(&tv) {
@@ -1775,7 +1775,7 @@ impl TypeCheckContext {
             if !seen.insert(tv.name.clone()) {
                 continue;
             }
-            if let Some(src) = self.tyvar_expr.get(&tv.name) {
+            if let Some(src) = self.tyvar_source.get(&tv.name) {
                 let name = names.name(&tv.name);
                 let prefix = if let Some(ref_no) = ref_no {
                     format!("`{}` in ({})", name, ref_no)
@@ -2505,7 +2505,7 @@ impl TypeCheckContext {
             kind_env: self.kind_env.clone(),
             // What unification writes, and the answer discards.
             substitution: Substitution::default(),
-            tyvar_expr: Map::default(),
+            tyvar_source: Map::default(),
             predicates: vec![],
             // What unification leaves alone: the large ones start empty, the
             // ones that cost a scalar or a reference count are carried.
