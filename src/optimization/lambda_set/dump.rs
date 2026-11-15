@@ -29,24 +29,24 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
         let params = component.params.clone();
         let solver = &mut analysis.solver;
         // The parameters are named `p<i>` and the pinned variables of the types `q<i>`.
-        let mut param_names: Map<SetVar, String> = Map::default();
+        let mut var_names: Map<SetVar, String> = Map::default();
         for (i, p) in params.iter().enumerate() {
-            param_names.insert(*p, format!("p{}", i));
+            var_names.insert(*p, format!("p{}", i));
         }
         let pinned: Vec<SetVar> = slot_roots(solver, &types)
             .into_iter()
-            .filter(|v| !param_names.contains_key(v))
+            .filter(|v| !var_names.contains_key(v))
             .collect();
         for (i, v) in pinned.iter().enumerate() {
-            param_names.insert(*v, format!("q{}", i));
+            var_names.insert(*v, format!("q{}", i));
         }
         for (s, ty) in symbols.iter().zip(types.iter()) {
-            let text = layout.annotate(ty, &mut |v| param_names[&solver.find(v)].clone());
+            let text = layout.annotate(ty, &mut |v| var_names[&solver.find(v)].clone());
             writeln!(out, "{} : {}", s.to_string(), text).unwrap();
         }
         for v in params.iter().chain(&pinned) {
-            let members = describe_members(solver, *v, &param_names, &lambda_names);
-            writeln!(out, "  {} = {{{}}}", param_names[v], members).unwrap();
+            let members = describe_members(solver, *v, &var_names, &lambda_names);
+            writeln!(out, "  {} = {{{}}}", var_names[v], members).unwrap();
         }
         writeln!(out).unwrap();
     }

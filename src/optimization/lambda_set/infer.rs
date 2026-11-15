@@ -843,7 +843,7 @@ fn generalize(
     // The parameters: the variables of the types that are not pinned. A pinned variable is one
     // variable in every copy, so what its members name has to be as well: a variable of the types
     // that a pinned one reaches is pinned too.
-    let touched: Vec<SetVar> = types
+    let slot_and_term_vars: Vec<SetVar> = types
         .iter()
         .flat_map(|ty| ty.slots.iter().copied())
         .chain(terms.iter().flat_map(|term| term.vars.iter().copied()))
@@ -856,7 +856,7 @@ fn generalize(
             .collect();
         let param_index: Map<SetVar, usize> =
             params.iter().enumerate().map(|(i, p)| (*p, i)).collect();
-        let pinned: Vec<SetVar> = touched
+        let pinned: Vec<SetVar> = slot_and_term_vars
             .iter()
             .copied()
             .filter(|v| solver.is_pinned(*v))
@@ -927,8 +927,8 @@ fn generalize(
         class_of.insert(*v, i as u32);
         queue.push_back(*v);
     }
-    let fixed_classes = params.len() + pinned_slots.len();
-    let mut classes: Vec<Vec<SchemeMember>> = vec![vec![]; fixed_classes];
+    let fixed_count = params.len() + pinned_slots.len();
+    let mut classes: Vec<Vec<SchemeMember>> = vec![vec![]; fixed_count];
     while let Some(v) = queue.pop_front() {
         let members = solver.members(v).to_vec();
         let mut scheme_members: Vec<SchemeMember> = vec![];
@@ -965,12 +965,12 @@ fn generalize(
     }
     // A pinned variable gains members from the components inferred later, so the members recorded
     // now do not decide which class it is.
-    let (classes, merged) = merge_equal_classes(classes, fixed_classes);
+    let (classes, merged) = merge_equal_classes(classes, fixed_count);
     for c in class_of.values_mut() {
         *c = merged[*c as usize];
     }
     let shared = shared_classes(&classes, params.len(), &class_of);
-    for c in params.len()..fixed_classes {
+    for c in params.len()..fixed_count {
         assert!(
             shared[c].is_some(),
             "a pinned variable of a component's types depends on a parameter"
