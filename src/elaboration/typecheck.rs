@@ -539,10 +539,10 @@ pub enum ConstraintInstantiationMode {
 pub struct TypeCheckContext {
     /// The number the next type variable created here is named after.
     tyvar_id: u32,
-    /// The source location of the expression whose type each type variable is, by the variable's
-    /// name, so that a diagnostic naming a type variable can point at where it arose. It holds the
-    /// type variables the inference created alone: a type variable of a signature is shown under
-    /// the name the signature gives it, with no location.
+    /// For each type variable the inference created, by name, the source location of the
+    /// expression whose type it is, so that a diagnostic naming the variable can point at where it
+    /// arose. A type variable of a signature has no entry: a diagnostic shows it under the name the
+    /// signature gives it, with no location.
     tyvar_expr: Map<String, Span>,
     /// The type scheme each name in scope stands for. These are the assumptions of the inference.
     pub scope: Scope<Arc<Scheme>>,
@@ -650,8 +650,9 @@ impl TypeCheckContext {
     }
 
     /// Records that the type of the expression at `source` is the type variable named `tyvar_name`,
-    /// which the inference created, so that a diagnostic naming that variable can point at the
-    /// expression. An expression with no source location leaves the record as it stands.
+    /// so that a diagnostic naming that variable can point at the expression. `tyvar_name` must name
+    /// a type variable the inference created. An expression with no source location leaves the
+    /// record as it stands.
     fn add_tyvar_source(&mut self, tyvar_name: Name, source: Option<Span>) {
         assert!(
             is_inference_tyvar(&tyvar_name),
@@ -925,8 +926,8 @@ impl TypeCheckContext {
     }
 
     /// Gives `tv1` and `tv2` one source location, the expression a diagnostic naming either of
-    /// them points at. Where both already carry one, `tv2`'s is the one kept. Of the two, only a
-    /// type variable the inference created takes the location.
+    /// them points at. Where both already carry one, `tv2`'s is kept. Only a type variable the
+    /// inference created takes the location.
     fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
         let src = self
             .tyvar_expr
