@@ -1786,10 +1786,9 @@ impl TypeCheckContext {
                     Some(snippet) => format!("{} is the type for `{}`.", prefix, snippet),
                     // Snippet absent — the span is multi-line, too
                     // long, or zero-width (e.g. the position between
-                    // `[` and `]` for an empty-array element). Fall
-                    // back to a self-contained sentence rather than a
-                    // dangling colon, since the source pointer
-                    // attached separately may not visually flow as a
+                    // `[` and `]` for an empty-array element). The
+                    // sentence is complete on its own, since the source
+                    // pointer attached separately may not read as a
                     // continuation of the message text.
                     None => format!("{} is the type for this expression.", prefix),
                 };
