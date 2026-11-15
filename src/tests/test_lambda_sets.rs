@@ -585,7 +585,8 @@ fn test_a_returned_closure_read_back_from_a_struct_and_one_applied_at_once_compu
 /// closure. One call applies `g(f)` at once, and the other reads `g` itself back from a struct
 /// field and applies it to `f2`, `f` and `f2` being different lambdas. The direct call reaches the
 /// uncurried function of `g` taking two arguments, specialized to the lambda set of `f`. The call
-/// through the field reaches `g` itself. Each computes its value.
+/// through the field reaches another uncurried function of `g` taking two arguments, which the
+/// second run of uncurrying defines. Each computes its value.
 #[test]
 fn test_a_global_read_back_from_a_struct_and_its_uncurried_call_compute_both() {
     test_source(&global_read_back_source(), Configuration::develop_mode());
