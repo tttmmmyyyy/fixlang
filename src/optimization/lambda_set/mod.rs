@@ -5,7 +5,9 @@
 // values flow into each other, as the type checker unifies their types, and records each lambda in
 // the variable of the place it is built at. A component of the call graph is inferred together and
 // generalized over the variables of its symbols' types, so that a function taking a function is
-// inferred once and copied for each lambda set it is given. Specialization then walks from the
+// inferred once and copied for each lambda set it is given. The variables of a global value whose
+// body is not a lambda are pinned instead: every reference shares them, so the value has one copy
+// and its body runs once. Specialization then walks from the
 // program's entry, and gives each copy the concrete lambda sets of its parameters. The program is
 // then rewritten: each copy becomes copies of the symbols, and a value whose set's elements make
 // one class, elements naming one lambda that make the same code, becomes that class's capture
