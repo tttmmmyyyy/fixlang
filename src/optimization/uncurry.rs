@@ -485,7 +485,10 @@ mod tests {
     fn test_unused_name_avoids_every_taken_name() {
         let name = FullName::from_strs(&["Main"], "g#func2");
         let mut taken: Set<FullName> = Set::default();
-        assert!(unused_name(&name, &taken) == name, "a free name should be kept");
+        assert!(
+            unused_name(&name, &taken) == name,
+            "a free name should be kept"
+        );
         for _ in 0..3 {
             let fresh = unused_name(&name, &taken);
             assert!(
