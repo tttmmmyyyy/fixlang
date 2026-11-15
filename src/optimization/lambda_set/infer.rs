@@ -92,7 +92,7 @@ pub struct Component {
     /// What a reference to a symbol of the component gets.
     pub scheme: Scheme,
     /// The parameters the bodies of the symbols depend on, in increasing order, as indices into
-    /// `params`: those the terms of the bodies reach (`reached_params`). Two copies that give these
+    /// `params`: those the terms of the bodies reach (`term_params`). Two copies that give these
     /// the same sets have the same bodies.
     pub body_params: Vec<usize>,
     /// For each symbol, in the order of `symbols`, the nodes of its body. The component of the
@@ -101,7 +101,9 @@ pub struct Component {
     /// The lambdas written in the bodies of the component.
     pub lams: Vec<LamId>,
     /// Every variable the nodes, the lambdas and the references of the component name, each a root
-    /// of the solver, and each once. A copy of the component gives each of them a set.
+    /// of the solver, and each once. A copy of the component gives each of them a set. `infer`
+    /// collects them once every component is inferred, and replaces each variable `types`,
+    /// `node_types` and the lambdas name by its root then.
     pub vars: Vec<SetVar>,
     /// The position of each variable of `vars` there.
     pub var_index: Map<SetVar, usize>,
@@ -206,9 +208,9 @@ pub fn infer(prg: &Program, layout: &SlotLayout) -> Analysis {
     }
     let root = infer_component(prg, layout, &mut analysis, vec![], roots);
     analysis.components.push(root);
-    // A component inferred later can unify a pinned variable of an earlier one, which can make
-    // another variable its root, so the variables of each component are collected again as the
-    // roots they are now.
+    // The variables of each component, as the roots they are once every component is inferred: a
+    // component inferred later can unify a pinned variable of an earlier one, which can make
+    // another variable its root.
     let Analysis {
         components,
         lambdas,
@@ -825,7 +827,7 @@ fn generalize(
     terms: Vec<Term>,
     vars_holding_current: Vec<SetVar>,
     sites: Vec<Site>,
-    mut node_types: Vec<Vec<NodeType>>,
+    node_types: Vec<Vec<NodeType>>,
 ) -> Component {
     let solver = &mut analysis.solver;
     let term_of_lam: Map<LamId, usize> = terms
@@ -836,34 +838,21 @@ fn generalize(
     let slot_roots = slot_roots(solver, &types);
 
     // The parameters: the variables of the types that are not pinned. A pinned variable is one
-    // variable in every copy, so what its members name has to be as well: a variable of the types
-    // that a pinned one reaches is pinned too.
-    let slot_and_term_vars: Vec<SetVar> = types
+    // variable in every copy, so what its members name has to be as well: whatever a pinned
+    // variable reaches is pinned too.
+    let pinned: Vec<SetVar> = types
         .iter()
         .flat_map(|ty| ty.slots.iter().copied())
         .chain(terms.iter().flat_map(|term| term.vars.iter().copied()))
+        .filter(|v| solver.is_pinned(*v))
         .collect();
-    let (params, param_index) = loop {
-        let params: Vec<SetVar> = slot_roots
-            .iter()
-            .copied()
-            .filter(|v| !solver.is_pinned(*v))
-            .collect();
-        let param_index: Map<SetVar, usize> =
-            params.iter().enumerate().map(|(i, p)| (*p, i)).collect();
-        let pinned: Vec<SetVar> = slot_and_term_vars
-            .iter()
-            .copied()
-            .filter(|v| solver.is_pinned(*v))
-            .collect();
-        let reached = reached_params(solver, &terms, &term_of_lam, &[], &pinned, &param_index);
-        if reached.is_empty() {
-            break (params, param_index);
-        }
-        for p in reached {
-            solver.pin(params[p]);
-        }
-    };
+    pin_reached(solver, &terms, &term_of_lam, &pinned);
+    let params: Vec<SetVar> = slot_roots
+        .iter()
+        .copied()
+        .filter(|v| !solver.is_pinned(*v))
+        .collect();
+    let param_index: Map<SetVar, usize> = params.iter().enumerate().map(|(i, p)| (*p, i)).collect();
     let pinned_slots: Vec<SetVar> = slot_roots
         .iter()
         .copied()
@@ -874,7 +863,7 @@ fn generalize(
     // what the bodies do.
     let mut body_params: Vec<usize> = vec![];
     for (i, term) in terms.iter().enumerate() {
-        let depends_on = reached_params(solver, &terms, &term_of_lam, &[i], &[], &param_index);
+        let depends_on = term_params(solver, &terms, &term_of_lam, i, &param_index);
         match term.lam {
             Some(lam) => analysis.lambdas[lam as usize].params = depends_on,
             None => body_params.extend(depends_on),
@@ -994,14 +983,6 @@ fn generalize(
     }
 
     let lams: Vec<LamId> = terms.iter().filter_map(|t| t.lam).collect();
-    let mut types = types;
-    let (vars, var_index) = root_vars(
-        solver,
-        &mut types,
-        &mut node_types,
-        &mut analysis.lambdas,
-        &lams,
-    );
 
     Component {
         symbols,
@@ -1016,8 +997,8 @@ fn generalize(
         body_params,
         node_types,
         lams,
-        vars,
-        var_index,
+        vars: vec![],
+        var_index: Map::default(),
     }
 }
 
@@ -1210,20 +1191,62 @@ fn shared_classes(
         .collect()
 }
 
-/// The parameters of the component that the terms `start_terms` and the variables `start_vars`
-/// reach, in order. A term is that of a lambda, or of a body, together with the terms of the
-/// lambdas inside it; it reaches a variable it holds, and whatever the members of a variable it
-/// reaches name. A parameter's members are not followed: a copy of the component gives the
-/// parameter its value. The parameters a term reaches are those the term depends on.
-fn reached_params(
+/// The parameters of the component the term `start` depends on, in order: the ones it reaches. The
+/// term is that of a lambda, or of a body, together with the terms of the lambdas inside it (see
+/// `walk_reached`). A parameter's members are not followed: a copy of the component gives the
+/// parameter its value.
+fn term_params(
+    solver: &mut Solver,
+    terms: &[Term],
+    term_of_lam: &Map<LamId, usize>,
+    start: usize,
+    param_index: &Map<SetVar, usize>,
+) -> Vec<usize> {
+    let mut found: Vec<usize> = vec![];
+    walk_reached(
+        solver,
+        terms,
+        term_of_lam,
+        &[start],
+        &[],
+        |_, root| match param_index.get(&root) {
+            Some(p) => {
+                found.push(*p);
+                false
+            }
+            None => true,
+        },
+    );
+    found.sort();
+    found
+}
+
+/// Pins every variable that the variables `vars` reach (see `walk_reached`).
+fn pin_reached(
+    solver: &mut Solver,
+    terms: &[Term],
+    term_of_lam: &Map<LamId, usize>,
+    vars: &[SetVar],
+) {
+    walk_reached(solver, terms, term_of_lam, &[], vars, |solver, root| {
+        solver.pin(root);
+        true
+    });
+}
+
+/// Visits, once each and as its root, every variable that the terms `start_terms` and the
+/// variables `start_vars` reach. A term reaches the variables it holds and the terms of the lambdas
+/// written inside it; a variable reaches what its members name: the variables a
+/// `Owner::Instance` member gives, and the term of a lambda of the component under inference.
+/// `visit` answers whether to follow the members of the variable it is given.
+fn walk_reached(
     solver: &mut Solver,
     terms: &[Term],
     term_of_lam: &Map<LamId, usize>,
     start_terms: &[usize],
     start_vars: &[SetVar],
-    param_index: &Map<SetVar, usize>,
-) -> Vec<usize> {
-    let mut found: Vec<usize> = vec![];
+    mut visit: impl FnMut(&mut Solver, SetVar) -> bool,
+) {
     let mut seen_vars: Set<SetVar> = Set::default();
     let mut seen_terms: Set<usize> = start_terms.iter().copied().collect();
     let mut term_stack: Vec<usize> = start_terms.to_vec();
@@ -1231,11 +1254,7 @@ fn reached_params(
     loop {
         if let Some(v) = var_stack.pop() {
             let root = solver.find(v);
-            if !seen_vars.insert(root) {
-                continue;
-            }
-            if let Some(p) = param_index.get(&root) {
-                found.push(*p);
+            if !seen_vars.insert(root) || !visit(solver, root) {
                 continue;
             }
             for member in solver.members(root).to_vec() {
@@ -1269,6 +1288,4 @@ fn reached_params(
             }
         }
     }
-    found.sort();
-    found
 }
