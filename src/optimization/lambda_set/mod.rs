@@ -165,16 +165,12 @@ mod tests {
             }
             let slot = self.layout.own_slots(&ty)[0];
             let root = self.analysis.solver.find(slot);
-            let p = self.analysis.components[c]
-                .params
-                .iter()
-                .position(|v| *v == root)
-                .unwrap();
+            let index = self.analysis.components[c].var_index[&root];
             self.spec
                 .instances
                 .iter()
                 .filter(|inst| inst.component == c)
-                .map(|inst| inst.args[p])
+                .map(|inst| inst.var_sets[index])
                 .collect()
         }
 
@@ -430,10 +426,11 @@ main = (
     }
 
     /// A global array of functions that one caller extends with a lambda of its own and another
-    /// passes as it is: the function taking the array is copied for each, and the set of the
-    /// elements holds the global's lambda in both, beside the caller's in the first.
+    /// passes as it is: every reference to the global shares the set of its elements, so the
+    /// function taking the array is copied once, for the set holding the global's lambda and the
+    /// caller's.
     #[test]
-    fn test_a_global_array_of_functions_extended_by_a_caller_keeps_its_own_lambda() {
+    fn test_a_global_array_of_functions_extended_by_a_caller_shares_its_set() {
         let prg = program_after_inlining(
             r#"
 module Main;
@@ -460,13 +457,7 @@ main = (
             .map(|s| sorted(inf.writers(s)))
             .collect();
         sets.sort();
-        assert_eq!(
-            sets,
-            vec![
-                vec![main_lam(), Some("table".to_string())],
-                vec![Some("table".to_string())],
-            ]
-        );
+        assert_eq!(sets, vec![vec![main_lam(), Some("table".to_string())]]);
     }
 
     /// A function field rewritten through `mod_`, which punches the field out and plugs the new

@@ -84,20 +84,22 @@ pub struct Component {
     /// The annotated type of each symbol, in the order of `symbols`, each slot a root of the
     /// solver.
     pub types: Vec<AType>,
-    /// The parameters: the distinct variables of `types`, in the order they first occur there. A
-    /// copy of the component is given by a lambda set for each.
+    /// The parameters: the distinct variables of `types` that are not pinned, in the order they
+    /// first occur there. A copy of the component is given by a lambda set for each.
     pub params: Vec<SetVar>,
     /// The references from the component to symbols of other components.
     pub sites: Vec<Site>,
     /// What a reference to a symbol of the component gets.
     pub scheme: Scheme,
     /// The parameters the bodies of the symbols depend on, in increasing order, as indices into
-    /// `params`: those the terms of the bodies reach (`term_params`). Two copies that give these
+    /// `params`: those the terms of the bodies reach (`reached_params`). Two copies that give these
     /// the same sets have the same bodies.
     pub body_params: Vec<usize>,
     /// For each symbol, in the order of `symbols`, the nodes of its body. The component of the
     /// entry has the nodes of each of its roots instead, the entry first.
     pub node_types: Vec<Vec<NodeType>>,
+    /// The lambdas written in the bodies of the component.
+    pub lams: Vec<LamId>,
     /// Every variable the nodes, the lambdas and the references of the component name, each a root
     /// of the solver, and each once. A copy of the component gives each of them a set.
     pub vars: Vec<SetVar>,
@@ -204,15 +206,52 @@ pub fn infer(prg: &Program, layout: &SlotLayout) -> Analysis {
     }
     let root = infer_component(prg, layout, &mut analysis, vec![], roots);
     analysis.components.push(root);
+    // A component inferred later can unify a pinned variable of an earlier one, which can make
+    // another variable the root standing for it.
+    let Analysis {
+        components,
+        lambdas,
+        solver,
+        ..
+    } = &mut analysis;
+    for component in components {
+        for p in &component.params {
+            assert_eq!(
+                solver.find(*p),
+                *p,
+                "a component inferred later unified a parameter of an earlier one"
+            );
+        }
+        let (vars, var_index) = root_vars(
+            solver,
+            &mut component.types,
+            &mut component.node_types,
+            lambdas,
+            &component.lams,
+        );
+        component.vars = vars;
+        component.var_index = var_index;
+    }
     analysis
 }
 
-/// The symbols of `prg` split into the strongly connected components of the call graph, each
-/// component after every one it refers to, and each in the order of the symbols' names.
+/// The symbols of `prg` that the program's entry and the values it exports reach, split into the
+/// strongly connected components of the call graph, each component after every one it refers to,
+/// and each in the order of the symbols' names.
+///
+/// A symbol nothing reaches is left out: no copy of it is made, so a lambda of it in the pinned
+/// set of a symbol it refers to would be an element no copy builds.
 fn components_callees_first(prg: &Program) -> Vec<Vec<FullName>> {
-    let mut names: Vec<FullName> = prg.symbols.keys().cloned().collect();
+    let mut reached: Set<FullName> = Set::default();
+    let mut stack = prg.root_value_names();
+    while let Some(name) = stack.pop() {
+        if reached.insert(name.clone()) {
+            stack.extend(prg.symbols[&name].expr.as_ref().unwrap().free_vars());
+        }
+    }
+    let mut names: Vec<FullName> = reached.into_iter().collect();
     names.sort();
-    let (graph, _) = call_graph_of(&prg.symbols, names);
+    let graph = call_graph_of(&prg.symbols, names);
     graph
         .components_dependencies_first()
         .into_iter()
@@ -246,6 +285,15 @@ fn infer_component(
             layout.fresh(&prg.symbols[s].ty, &mut analysis.solver)
         })
         .collect();
+    // A copy of a global value whose body is not a lambda evaluates the body again, so every
+    // reference shares the sets of its type, as ML generalizes only the bindings that are values.
+    for (s, ty) in symbols.iter().zip(&types) {
+        if !matches!(&*prg.symbols[s].expr.as_ref().unwrap().expr, Expr::Lam(..)) {
+            for v in &ty.slots {
+                analysis.solver.pin(*v);
+            }
+        }
+    }
     let mut inferencer = Inferencer {
         prg,
         layout,
@@ -785,28 +833,61 @@ fn generalize(
     mut node_types: Vec<Vec<NodeType>>,
 ) -> Component {
     let solver = &mut analysis.solver;
-    let mut params: Vec<SetVar> = vec![];
-    let mut param_index: Map<SetVar, usize> = Map::default();
-    for ty in &types {
-        for v in &ty.slots {
-            let root = solver.find(*v);
-            if !param_index.contains_key(&root) {
-                param_index.insert(root, params.len());
-                params.push(root);
-            }
-        }
-    }
-
-    // The parameters each lambda and each body depends on. The lambda that is a body depends on
-    // what the bodies do.
     let term_of_lam: Map<LamId, usize> = terms
         .iter()
         .enumerate()
         .filter_map(|(i, t)| t.lam.map(|lam| (lam, i)))
         .collect();
+    let mut slot_roots: Vec<SetVar> = vec![];
+    let mut seen_slots: Set<SetVar> = Set::default();
+    for ty in &types {
+        for v in &ty.slots {
+            let root = solver.find(*v);
+            if seen_slots.insert(root) {
+                slot_roots.push(root);
+            }
+        }
+    }
+
+    // The parameters: the variables of the types that are not pinned. A pinned variable is one
+    // variable in every copy, so what its members name has to be as well: a variable of the types
+    // that a pinned one reaches is pinned too.
+    let mut touched: Vec<SetVar> = types.iter().flat_map(|ty| ty.slots.iter().copied()).collect();
+    for term in &terms {
+        touched.extend(term.vars.iter().copied());
+    }
+    let (params, param_index) = loop {
+        let params: Vec<SetVar> = slot_roots
+            .iter()
+            .copied()
+            .filter(|v| !solver.is_pinned(*v))
+            .collect();
+        let param_index: Map<SetVar, usize> =
+            params.iter().enumerate().map(|(i, p)| (*p, i)).collect();
+        let pinned: Vec<SetVar> = touched
+            .iter()
+            .copied()
+            .filter(|v| solver.is_pinned(*v))
+            .collect();
+        let reached = reached_params(solver, &terms, &term_of_lam, &[], &pinned, &param_index);
+        if reached.is_empty() {
+            break (params, param_index);
+        }
+        for p in reached {
+            solver.pin(params[p]);
+        }
+    };
+    let pinned_slots: Vec<SetVar> = slot_roots
+        .iter()
+        .copied()
+        .filter(|v| solver.is_pinned(*v))
+        .collect();
+
+    // The parameters each lambda and each body depends on. The lambda that is a body depends on
+    // what the bodies do.
     let mut body_params: Vec<usize> = vec![];
     for (i, term) in terms.iter().enumerate() {
-        let depends_on = term_params(solver, &terms, &term_of_lam, i, &param_index);
+        let depends_on = reached_params(solver, &terms, &term_of_lam, &[i], &[], &param_index);
         match term.lam {
             Some(lam) => analysis.lambdas[lam as usize].params = depends_on,
             None => body_params.extend(depends_on),
@@ -846,14 +927,16 @@ fn generalize(
         *solver.members_mut(v) = members;
     }
 
-    // The scheme: the parameters, then every variable their members name.
+    // The scheme: the parameters, the pinned variables of the types, then every variable their
+    // members name.
     let mut class_of: Map<SetVar, u32> = Map::default();
     let mut queue: VecDeque<SetVar> = VecDeque::new();
-    for (i, p) in params.iter().enumerate() {
-        class_of.insert(*p, i as u32);
-        queue.push_back(*p);
+    for (i, v) in params.iter().chain(&pinned_slots).enumerate() {
+        class_of.insert(*v, i as u32);
+        queue.push_back(*v);
     }
-    let mut classes: Vec<Vec<SchemeMember>> = vec![vec![]; params.len()];
+    let fixed_classes = params.len() + pinned_slots.len();
+    let mut classes: Vec<Vec<SchemeMember>> = vec![vec![]; fixed_classes];
     while let Some(v) = queue.pop_front() {
         let members = solver.members(v).to_vec();
         let mut scheme_members: Vec<SchemeMember> = vec![];
@@ -888,11 +971,19 @@ fn generalize(
         }
         classes[class_of[&v] as usize] = scheme_members;
     }
-    let (classes, merged) = merge_equal_classes(classes, params.len());
+    // A pinned variable gains members from the components inferred later, so the members recorded
+    // now do not decide which class it is.
+    let (classes, merged) = merge_equal_classes(classes, fixed_classes);
     for c in class_of.values_mut() {
         *c = merged[*c as usize];
     }
     let shared = shared_classes(&classes, params.len(), &class_of);
+    for c in params.len()..fixed_classes {
+        assert!(
+            shared[c].is_some(),
+            "a pinned variable of a component's types depends on a parameter"
+        );
+    }
     let slot_classes = types
         .iter()
         .map(|ty| {
@@ -915,46 +1006,9 @@ fn generalize(
         }
     }
 
-    // Every variable the component names, as the root it is now: the components inferred later
-    // share none of them with a variable they unify.
-    let mut vars: Vec<SetVar> = vec![];
-    let mut seen: Set<SetVar> = Set::default();
-    let mut collect_roots = |solver: &mut Solver, vs: &mut [SetVar]| {
-        for v in vs {
-            *v = solver.find(*v);
-            if seen.insert(*v) {
-                vars.push(*v);
-            }
-        }
-    };
+    let lams: Vec<LamId> = terms.iter().filter_map(|t| t.lam).collect();
     let mut types = types;
-    for ty in &mut types {
-        collect_roots(solver, &mut ty.slots);
-    }
-    for nodes in &mut node_types {
-        for node in nodes {
-            collect_roots(solver, &mut node.ty.slots);
-            for name in &mut node.names {
-                if let NameRef::Global { site, ty } = name {
-                    collect_roots(solver, &mut ty.slots);
-                    if let Some(site) = site {
-                        collect_roots(solver, &mut site.args);
-                    }
-                }
-            }
-        }
-    }
-    for term in &terms {
-        if let Some(lam) = term.lam {
-            let lambda = &mut analysis.lambdas[lam as usize];
-            for (_, ty) in &mut lambda.captures {
-                collect_roots(solver, &mut ty.slots);
-            }
-            collect_roots(solver, &mut lambda.held_in_place);
-            collect_roots(solver, &mut lambda.interface);
-        }
-    }
-    let var_index = vars.iter().enumerate().map(|(i, v)| (*v, i)).collect();
+    let (vars, var_index) = root_vars(solver, &mut types, &mut node_types, &mut analysis.lambdas, &lams);
 
     Component {
         symbols,
@@ -968,9 +1022,57 @@ fn generalize(
         },
         body_params,
         node_types,
+        lams,
         vars,
         var_index,
     }
+}
+
+/// Every variable that `types`, `node_types` and the lambdas `lams` name, each replaced by its root
+/// and listed once, with the position of each in the list.
+fn root_vars(
+    solver: &mut Solver,
+    types: &mut [AType],
+    node_types: &mut [Vec<NodeType>],
+    lambdas: &mut [Lambda],
+    lams: &[LamId],
+) -> (Vec<SetVar>, Map<SetVar, usize>) {
+    let mut vars: Vec<SetVar> = vec![];
+    let mut seen: Set<SetVar> = Set::default();
+    let mut collect_roots = |solver: &mut Solver, vs: &mut [SetVar]| {
+        for v in vs {
+            *v = solver.find(*v);
+            if seen.insert(*v) {
+                vars.push(*v);
+            }
+        }
+    };
+    for ty in types {
+        collect_roots(solver, &mut ty.slots);
+    }
+    for nodes in node_types {
+        for node in nodes {
+            collect_roots(solver, &mut node.ty.slots);
+            for name in &mut node.names {
+                if let NameRef::Global { site, ty } = name {
+                    collect_roots(solver, &mut ty.slots);
+                    if let Some(site) = site {
+                        collect_roots(solver, &mut site.args);
+                    }
+                }
+            }
+        }
+    }
+    for lam in lams {
+        let lambda = &mut lambdas[*lam as usize];
+        for (_, ty) in &mut lambda.captures {
+            collect_roots(solver, &mut ty.slots);
+        }
+        collect_roots(solver, &mut lambda.held_in_place);
+        collect_roots(solver, &mut lambda.interface);
+    }
+    let var_index = vars.iter().enumerate().map(|(i, v)| (*v, i)).collect();
+    (vars, var_index)
 }
 
 /// A member of a scheme's class as `merge_equal_classes` compares it.
@@ -983,17 +1085,18 @@ enum MemberLabel {
 }
 
 /// `classes`, with each set of classes that unfold to the same tree made one, and the class each
-/// class became. The first `param_count` classes are parameters, which a copy gives values of its
-/// own, so each stays a class of its own and keeps its place.
+/// class became. The first `fixed_count` classes each stay a class of their own and keep their
+/// place: the parameters, which a copy gives values of its own, and the pinned variables of the
+/// types, which gain members from the components inferred later.
 ///
 /// A symbol referring twice to one with internal classes gets two copies of them, equal but for
 /// their variables; merging them keeps a chain of such symbols from doubling its classes at each
 /// level.
 fn merge_equal_classes(
     classes: Vec<Vec<SchemeMember>>,
-    param_count: usize,
+    fixed_count: usize,
 ) -> (Vec<Vec<SchemeMember>>, Vec<u32>) {
-    // The parameters each start in a class of their own and the other classes in one, and a
+    // The fixed classes each start in a class of their own and the other classes in one, and a
     // Dynamic member is labelled by its reason, so that two classes are one only when their members
     // name the same reasons.
     let n = classes.len();
@@ -1022,10 +1125,10 @@ fn merge_equal_classes(
                 .collect()
         })
         .collect();
-    let initial = (0..n).map(|c| c.min(param_count)).collect();
+    let initial = (0..n).map(|c| c.min(fixed_count)).collect();
     let (block, _) = canonical_classes(initial, &elems);
 
-    // Number the blocks by their first class, so that the parameters keep their places.
+    // Number the blocks by their first class, so that the fixed classes keep their places.
     let mut class_of_block: Map<usize, u32> = Map::default();
     let mut merged: Vec<u32> = vec![0; n];
     let mut kept: Vec<usize> = vec![];
@@ -1036,8 +1139,8 @@ fn merge_equal_classes(
         });
     }
     assert!(
-        (0..param_count).all(|p| merged[p] == p as u32),
-        "a parameter of a scheme merged with another class"
+        (0..fixed_count).all(|p| merged[p] == p as u32),
+        "a fixed class of a scheme merged with another class"
     );
     let classes = kept
         .iter()
@@ -1099,23 +1202,24 @@ fn shared_classes(
         .collect()
 }
 
-/// The parameters of the component the term `start` depends on, in order: the ones it reaches. The
-/// term is that of a lambda, or of a body, together with the terms of the lambdas inside it; it
-/// reaches a variable it holds, and whatever the members of a variable it reaches name. A
-/// parameter's members are not followed: a copy of the component gives the parameter its value.
-fn term_params(
+/// The parameters of the component that the terms `start_terms` and the variables `start_vars`
+/// reach, in order. A term is that of a lambda, or of a body, together with the terms of the
+/// lambdas inside it; it reaches a variable it holds, and whatever the members of a variable it
+/// reaches name. A parameter's members are not followed: a copy of the component gives the
+/// parameter its value. The parameters a term reaches are those the term depends on.
+fn reached_params(
     solver: &mut Solver,
     terms: &[Term],
     term_of_lam: &Map<LamId, usize>,
-    start: usize,
+    start_terms: &[usize],
+    start_vars: &[SetVar],
     param_index: &Map<SetVar, usize>,
 ) -> Vec<usize> {
     let mut found: Vec<usize> = vec![];
     let mut seen_vars: Set<SetVar> = Set::default();
-    let mut seen_terms: Set<usize> = Set::default();
-    let mut term_stack: Vec<usize> = vec![start];
-    let mut var_stack: Vec<SetVar> = vec![];
-    seen_terms.insert(start);
+    let mut seen_terms: Set<usize> = start_terms.iter().copied().collect();
+    let mut term_stack: Vec<usize> = start_terms.to_vec();
+    let mut var_stack: Vec<SetVar> = start_vars.to_vec();
     loop {
         if let Some(v) = var_stack.pop() {
             let root = solver.find(v);

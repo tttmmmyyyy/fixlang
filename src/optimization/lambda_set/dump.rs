@@ -27,18 +27,29 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
         let symbols = component.symbols.clone();
         let types = component.types.clone();
         let params = component.params.clone();
+        let solver = &mut analysis.solver;
+        // The parameters are named `p<i>` and the pinned variables of the types `q<i>`.
         let mut param_names: Map<SetVar, String> = Map::default();
         for (i, p) in params.iter().enumerate() {
             param_names.insert(*p, format!("p{}", i));
         }
-        let solver = &mut analysis.solver;
+        let mut pinned: Vec<SetVar> = vec![];
+        for ty in &types {
+            for v in &ty.slots {
+                let root = solver.find(*v);
+                if !param_names.contains_key(&root) {
+                    param_names.insert(root, format!("q{}", pinned.len()));
+                    pinned.push(root);
+                }
+            }
+        }
         for (s, ty) in symbols.iter().zip(types.iter()) {
             let text = layout.annotate(ty, &mut |v| param_names[&solver.find(v)].clone());
             writeln!(out, "{} : {}", s.to_string(), text).unwrap();
         }
-        for (i, p) in params.iter().enumerate() {
-            let members = describe_members(solver, *p, &param_names, &lambda_names);
-            writeln!(out, "  p{} = {{{}}}", i, members).unwrap();
+        for v in params.iter().chain(&pinned) {
+            let members = describe_members(solver, *v, &param_names, &lambda_names);
+            writeln!(out, "  {} = {{{}}}", param_names[v], members).unwrap();
         }
         writeln!(out).unwrap();
     }
@@ -55,14 +66,13 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
         }
         let symbols = component.symbols.clone();
         let types = component.types.clone();
-        let params = component.params.clone();
-        let mut param_sets: Map<SetVar, SetId> = Map::default();
-        for (i, p) in params.iter().enumerate() {
-            param_sets.insert(*p, instance.args[i]);
-        }
         let solver = &mut analysis.solver;
         for (s, ty) in symbols.iter().zip(types.iter()) {
-            let text = layout.annotate(ty, &mut |v| format!("#{}", param_sets[&solver.find(v)]));
+            let text = layout.annotate(ty, &mut |v| {
+                let id = instance.var_sets[component.var_index[&solver.find(v)]];
+                named_sets.push(id);
+                format!("#{}", id)
+            });
             writeln!(out, "copy {}: {} : {}", k, s.to_string(), text).unwrap();
         }
     }

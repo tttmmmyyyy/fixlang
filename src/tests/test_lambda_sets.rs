@@ -1,7 +1,7 @@
 use crate::{
     configuration::Configuration,
     constants::MAX_LS_UNION_VARIANTS,
-    tests::test_util::{build_within_and_run, test_source},
+    tests::test_util::{build_within_and_run, run_source_capture, test_source},
 };
 use std::time::Duration;
 
@@ -590,6 +590,42 @@ fn test_a_returned_closure_read_back_from_a_struct_and_one_applied_at_once_compu
 #[test]
 fn test_a_global_read_back_from_a_struct_and_its_uncurried_call_compute_both() {
     test_source(&global_read_back_source(), Configuration::develop_mode());
+}
+
+/// A global array of functions read as it is in one place and extended with other lambdas in two
+/// others. Every reference shares the lambda set of its elements, so the program holds one copy of
+/// the global, and its body runs once.
+#[test]
+fn test_a_global_array_of_functions_extended_in_two_places_is_evaluated_once() {
+    let source = r#"
+    module Main;
+
+    tbl : Array (I64 -> I64);
+    tbl = (
+        eval debug_eprintln("evaluating tbl");
+        let s = Iterator::range(0, 3).fold(0, |i, acc| acc + i);
+        [|x| x + s, |x| x * 2]
+    );
+
+    main : IO ();
+    main = (
+        let k = *get_args.map(|args| args.@size) + 4;
+        let a = tbl;
+        let b = tbl.push_back(|x| x - k);
+        let c = tbl.push_back(|x| x * k).push_back(|x| x / 2);
+        let (a0, a1, b2, c2, c3) = (a.@(0), a.@(1), b.@(2), c.@(2), c.@(3));
+        println((a0(1) + a1(1) + b2(1) + c2(1) + c3(10)).to_string)
+    );
+    "#;
+    let output = run_source_capture(source, Configuration::develop_mode());
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "12");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr.matches("evaluating tbl").count(),
+        1,
+        "the body of the global should run once, and the program printed:\n{}",
+        stderr
+    );
 }
 
 /// The program of `returned_closure_source` in which one call applies `g(f)` at once, and the other
