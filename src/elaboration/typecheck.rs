@@ -543,7 +543,7 @@ pub struct TypeCheckContext {
     /// name, so that a diagnostic naming a type variable can point at where it arose. It holds the
     /// type variables the inference created alone: a type variable of a signature is shown under
     /// the name the signature gives it, with no location.
-    pub tyvar_expr: Map<String, Span>,
+    tyvar_expr: Map<String, Span>,
     /// The type scheme each name in scope stands for. These are the assumptions of the inference.
     pub scope: Scope<Arc<Scheme>>,
     /// What the inference has settled about the type variables so far.
