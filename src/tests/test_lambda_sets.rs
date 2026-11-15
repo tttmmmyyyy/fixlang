@@ -681,6 +681,80 @@ fn test_a_global_array_of_functions_appended_to_a_longer_one_calls_them_all() {
     test_source(source, Configuration::develop_mode());
 }
 
+/// A global array of functions, a function it holds, and a function taking a function, the three
+/// referring to one another, where the array's body calls the function taking a function outside
+/// any of its elements. The array holds the function itself, whose copies depend on the sets every
+/// body of the group reaches, and the program computes it. It is built at `-O max`, where `h`
+/// stays a function of its own.
+#[test]
+fn test_a_global_array_holding_a_function_of_its_group_computes_it() {
+    let source = r#"
+    module Main;
+
+    tbl : Array (I64 -> I64);
+    tbl = (
+        let z = h(|y| y + 2, 1);
+        [f, |x| x + z]
+    );
+
+    f : I64 -> I64;
+    f = |x| if x <= 0 { 0 } else { (tbl.@(1))(x - 1) + 1 };
+
+    h : (I64 -> I64) -> I64 -> I64;
+    h = |k, x| if x < 0 { f(-x) } else if x > 100 { h(k, x - 1) + h(k, x - 2) } else { k(x) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let a = (tbl.@(0))(2);
+        let b = h(|y| y * 10 + n, 2);
+        println((a + b).to_string)
+    );
+    "#;
+    let printed = build_within_and_run(
+        source,
+        "max",
+        Duration::from_secs(600),
+        "a global array holding a function of its group",
+    );
+    assert_eq!(printed.trim(), "26");
+}
+
+/// A global value and a function taking a function, referring to each other, where `main` calls
+/// the function with a lambda of its own: the program holds one copy of the global, and its body
+/// runs once.
+#[test]
+fn test_a_global_value_in_a_group_with_a_function_taking_a_function_is_evaluated_once() {
+    let source = r#"
+    module Main;
+
+    g : (I64 -> I64) -> I64 -> I64;
+    g = |h, x| if x < 0 { v + h(1) } else if x == 0 { h(0) } else { g(h, x - 1) + h(x) };
+
+    v : I64;
+    v = (
+        eval debug_eprintln("evaluating v");
+        g(|y| y + 1, 2)
+    );
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let a = g(|y| y * 3 + n, -1);
+        println((a + v).to_string)
+    );
+    "#;
+    let output = run_source_capture(source, Configuration::develop_mode());
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "16");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr.matches("evaluating v").count(),
+        1,
+        "the body of the global should run once, and the program printed:\n{}",
+        stderr
+    );
+}
+
 /// The program of `returned_closure_source` in which one call applies `g(f)` at once, and the other
 /// reads `g` itself back from a struct field and applies it to `f2` and `7`.
 fn global_read_back_source() -> String {
