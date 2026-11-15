@@ -17,9 +17,10 @@ use crate::{
         type_env::TypeEnv,
         typedecl::describe_field_names,
         types::{
-            is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar, type_arrow,
-            type_from_tyvar, type_tyapp, type_tycon, AssocType, Kind, OpaqueTyConResolution,
-            Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode, MAX_TYPE_DEPTH,
+            is_inference_tyvar, is_opaque_tyvar, is_type_wildcard_tyvar, kind_star, make_tyvar,
+            type_arrow, type_from_tyvar, type_tyapp, type_tycon, AssocType, Kind,
+            OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type, TypeNode,
+            MAX_TYPE_DEPTH,
         },
     },
     constants::{
@@ -1742,10 +1743,12 @@ impl TypeCheckContext {
         Ok(())
     }
 
-    /// Say where each of `tvs` came from: for every type variable whose source
-    /// expression is known, a sentence naming it paired with that expression's
-    /// span, to hang off an error as extra source pointers. The sentences follow
-    /// the order of `tvs`, at most one for each variable.
+    /// Say where each of `tvs` came from: for every type variable the inference
+    /// created whose source expression is known, a sentence naming it paired
+    /// with that expression's span, to hang off an error as extra source
+    /// pointers. A type variable the program writes is named by the program
+    /// itself, so it gets no sentence. The sentences follow the order of `tvs`,
+    /// at most one for each variable.
     ///
     /// # Arguments
     /// * `names` — the names the error prints for the type variables.
@@ -1761,7 +1764,7 @@ impl TypeCheckContext {
         let mut seen = Set::default();
         let mut msg_srcs = vec![];
         for tv in tvs {
-            if !seen.insert(tv.name.clone()) {
+            if !is_inference_tyvar(&tv.name) || !seen.insert(tv.name.clone()) {
                 continue;
             }
             if let Some(src) = self.tyvar_expr.get(&tv.name) {
