@@ -207,7 +207,8 @@ pub fn infer(prg: &Program, layout: &SlotLayout) -> Analysis {
     let root = infer_component(prg, layout, &mut analysis, vec![], roots);
     analysis.components.push(root);
     // A component inferred later can unify a pinned variable of an earlier one, which can make
-    // another variable the root standing for it.
+    // another variable its root, so the variables of each component are collected again as the
+    // roots they are now.
     let Analysis {
         components,
         lambdas,
@@ -285,8 +286,9 @@ fn infer_component(
             layout.fresh(&prg.symbols[s].ty, &mut analysis.solver)
         })
         .collect();
-    // A copy of a global value whose body is not a lambda evaluates the body again, so every
-    // reference shares the sets of its type, as ML generalizes only the bindings that are values.
+    // A copy of a global value whose body is not a lambda would evaluate the body again, so the
+    // sets of its type are pinned and every reference shares them, as ML generalizes only the
+    // bindings that are values.
     for (s, ty) in symbols.iter().zip(&types) {
         if !matches!(&*prg.symbols[s].expr.as_ref().unwrap().expr, Expr::Lam(..)) {
             for v in &ty.slots {
@@ -963,8 +965,8 @@ fn generalize(
         }
         classes[class_of[&v] as usize] = scheme_members;
     }
-    // A pinned variable gains members from the components inferred later, so the members recorded
-    // now do not decide which class it is.
+    // A pinned variable gains members from the components inferred later, so it keeps a class of
+    // its own whatever members it holds now.
     let (classes, merged) = merge_equal_classes(classes, fixed_count);
     for c in class_of.values_mut() {
         *c = merged[*c as usize];
@@ -1035,8 +1037,8 @@ pub fn slot_roots(solver: &mut Solver, types: &[AType]) -> Vec<SetVar> {
     roots
 }
 
-/// Every variable that `types`, `node_types` and the lambdas `lams` name, each replaced by its root
-/// and listed once, with the position of each in the list.
+/// Replaces every variable that `types`, `node_types` and the lambdas `lams` name by its root, and
+/// returns those roots, each once, with the position of each in the list.
 fn root_vars(
     solver: &mut Solver,
     types: &mut [AType],
