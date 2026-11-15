@@ -722,9 +722,9 @@ namespace Array {
     // Merges the sorted runs `from[former_pos, former_end)` and `from[latter_pos, latter_end)` into
     // `into`, writing from `into_pos` on.
     //
-    // The caller must keep both runs within `from` and the `into_pos + (former_end - former_pos) +
-    // (latter_end - latter_pos)` elements written within `into`: they are read and written without
-    // checking an index against the size.
+    // The caller must ensure `[former_pos, former_end)` and `[latter_pos, latter_end)` are in range of
+    // `from`, and `[into_pos, into_pos + (former_end - former_pos) + (latter_end - latter_pos))` is in
+    // range of `into`; an out-of-range index causes undefined behavior.
     //
     // # Parameters
     // - `less_than`: A function that takes two elements and returns true if the first is
