@@ -541,8 +541,8 @@ pub struct TypeCheckContext {
     tyvar_id: u32,
     /// The source location of the expression whose type each type variable is, by the variable's
     /// name, so that a diagnostic naming a type variable can point at where it arose. It holds the
-    /// type variables the inference created alone: a type variable the program writes is found in
-    /// the source by the reader.
+    /// type variables the inference created alone: a type variable of a signature is shown under
+    /// the name the signature gives it, with no location.
     pub tyvar_expr: Map<String, Span>,
     /// The type scheme each name in scope stands for. These are the assumptions of the inference.
     pub scope: Scope<Arc<Scheme>>,
