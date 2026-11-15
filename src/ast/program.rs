@@ -634,6 +634,19 @@ impl Program {
             .collect()
     }
 
+    /// The symbols the root values reach: the root values themselves, and every symbol the body of
+    /// a reached symbol refers to.
+    pub fn reached_symbol_names(&self) -> Set<FullName> {
+        let mut reached: Set<FullName> = Set::default();
+        let mut stack = self.root_value_names();
+        while let Some(name) = stack.pop() {
+            if reached.insert(name.clone()) {
+                stack.extend(self.symbols[&name].expr.as_ref().unwrap().free_vars());
+            }
+        }
+        reached
+    }
+
     /// Whether the entity named `name` is private: its name, or the name of its namespace or module,
     /// starts with `_` (`FullName::is_private`), or it is an accessor the compiler defines for a
     /// field or a variant whose name starts with `_`.

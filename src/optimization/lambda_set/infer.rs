@@ -243,14 +243,7 @@ pub fn infer(prg: &Program, layout: &SlotLayout) -> Analysis {
 /// A symbol nothing reaches is left out: no copy of it is made, so a lambda of it in the pinned
 /// set of a symbol it refers to would be an element no copy builds.
 fn components_callees_first(prg: &Program) -> Vec<Vec<FullName>> {
-    let mut reached: Set<FullName> = Set::default();
-    let mut stack = prg.root_value_names();
-    while let Some(name) = stack.pop() {
-        if reached.insert(name.clone()) {
-            stack.extend(prg.symbols[&name].expr.as_ref().unwrap().free_vars());
-        }
-    }
-    let mut names: Vec<FullName> = reached.into_iter().collect();
+    let mut names: Vec<FullName> = prg.reached_symbol_names().into_iter().collect();
     names.sort();
     let graph = call_graph_of(&prg.symbols, names);
     graph
