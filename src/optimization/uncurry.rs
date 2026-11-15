@@ -51,9 +51,9 @@ pub fn run(prg: &mut Program, num_threads: usize) {
     for (sym_name, sym, sym_funcs) in funcs_of_syms {
         for (n_args, mut func) in sym_funcs {
             func.name = unused_name(&func.name, &taken_names);
-            taken_names.insert(func.name.clone());
-            funcs.insert(sym_name.clone(), n_args, func.name.clone());
             let name = func.name.clone();
+            taken_names.insert(name.clone());
+            funcs.insert(sym_name.clone(), n_args, name.clone());
             assert!(
                 prg.symbols.insert(name.clone(), func).is_none(),
                 "`{}` is defined twice",
@@ -118,9 +118,27 @@ struct UncurriedFuncs {
 impl UncurriedFuncs {
     /// Records `func` as the uncurried function of `global` taking `n_args` arguments.
     fn insert(&mut self, global: FullName, n_args: usize, func: FullName) {
-        self.global_of
-            .insert(func.clone(), (global.clone(), n_args));
-        self.of_global.insert((global, n_args), func);
+        assert!(
+            self.global_of
+                .insert(func.clone(), (global.clone(), n_args))
+                .is_none(),
+            "`{}` is recorded twice",
+            func.to_string()
+        );
+        assert!(
+            self.of_global
+                .insert((global.clone(), n_args), func)
+                .is_none(),
+            "`{}` has two uncurried functions taking {} arguments",
+            global.to_string(),
+            n_args
+        );
+    }
+
+    /// The global `func` uncurries and the number of arguments it takes, when `func` is an
+    /// uncurried function this run defines.
+    fn global_of(&self, func: &FullName) -> Option<&(FullName, usize)> {
+        self.global_of.get(func)
     }
 
     /// The uncurried function of `global` taking `n_args` arguments.
@@ -297,7 +315,7 @@ fn replace_closure_call_with_func_call(
                 // `g#func{N+M}(a1, ..., aN, b1, ..., bM)`.
                 // A call of an uncurried function an earlier run defined finds no entry in
                 // `funcs`, and stays as it is.
-                let Some((func_global, n_args)) = funcs.global_of.get(&v.name) else {
+                let Some((func_global, n_args)) = funcs.global_of(&v.name) else {
                     return expr.clone();
                 };
                 let n_args = *n_args;
