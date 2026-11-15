@@ -1002,7 +1002,13 @@ fn generalize(
 
     let lams: Vec<LamId> = terms.iter().filter_map(|t| t.lam).collect();
     let mut types = types;
-    let (vars, var_index) = root_vars(solver, &mut types, &mut node_types, &mut analysis.lambdas, &lams);
+    let (vars, var_index) = root_vars(
+        solver,
+        &mut types,
+        &mut node_types,
+        &mut analysis.lambdas,
+        &lams,
+    );
 
     Component {
         symbols,

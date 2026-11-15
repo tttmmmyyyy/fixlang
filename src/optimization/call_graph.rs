@@ -11,10 +11,7 @@ use crate::{
 ///
 /// The edges of a node run in the order of the nodes they reach. A name a body refers to that
 /// `names` does not list carries no edge.
-pub fn call_graph_of(
-    symbols: &Map<FullName, Symbol>,
-    names: Vec<FullName>,
-) -> Graph<FullName> {
+pub fn call_graph_of(symbols: &Map<FullName, Symbol>, names: Vec<FullName>) -> Graph<FullName> {
     let name_to_idx = names
         .iter()
         .enumerate()
