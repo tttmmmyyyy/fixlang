@@ -4,7 +4,8 @@ Uncurrying optimization
 Give each global `g : T1 -> ... -> Tn -> R` an uncurried function `g#func{k}` for each `k` up to
 `n`: a function of type `#Func{k} T1 ... Tk (T{k+1} -> ... -> R)` that takes its first `k` arguments
 at once and captures nothing. Then rewrite each call `g(a1)...(ak)` into the call
-`g#func{k}(a1, ..., ak)`.
+`g#func{k}(a1, ..., ak)`. When a symbol already has the name `g#func{k}`, as one an earlier run
+defined does, the uncurried function is named `g#func{k}#1`, `g#func{k}#2`, ... instead.
 
 Higher-order uncurrying (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) is not implemented.
 */
@@ -17,10 +18,10 @@ use crate::{
         program::{Program, Symbol},
         types::type_func,
     },
-    constants::{FUNC_ARGS_MAX, INSTANCIATED_NAME_SEPARATOR, UNCURRIED_FUNC_SUFFIX},
+    constants::{FUNC_ARGS_MAX, UNCURRIED_FUNC_SUFFIX},
     fixstd::stdlib::is_std_fix,
     misc::{for_each_on_compiler_threads, map_on_compiler_threads, Map, Set},
-    optimization::eta_expansion,
+    optimization::{eta_expansion, minted_names::fresh_name},
 };
 use std::{mem, sync::Arc};
 
@@ -30,7 +31,7 @@ use std::{mem, sync::Arc};
 /// threads.
 ///
 /// The program may be the output of an earlier run, whose uncurried functions keep their names
-/// and their calls. Calls are rewritten only onto the uncurried functions this run defines. The
+/// and their calls, so this run names its own ones apart from them (`fresh_name`). Calls are rewritten only onto the uncurried functions this run defines. The
 /// passes between two runs, such as lambda set specialization, specialize each uncurried function
 /// to its own callers, so the `g#func2` of an earlier run can take other types than a call
 /// `g#func1(a)(b)` or `g(a)(b)` supplies.
@@ -50,7 +51,7 @@ pub fn run(prg: &mut Program, num_threads: usize) {
     let mut funcs = UncurriedFuncs::default();
     for (sym_name, sym, sym_funcs) in funcs_of_syms {
         for (n_args, mut func) in sym_funcs {
-            func.name = unused_name(&func.name, &taken_names);
+            func.name = fresh_name(&func.name, &taken_names);
             let name = func.name.clone();
             taken_names.insert(name.clone());
             funcs.insert(sym_name.clone(), n_args, name.clone());
@@ -193,23 +194,6 @@ fn uncurried_symbol<'a>(
         .rev()
         .find_map(|n_args| funcs.of(value_name, n_args))
         .map(|name| &symbols[name])
-}
-
-/// `name` itself when `taken` lacks it, and otherwise the first of `name#1`, `name#2`, ... that
-/// `taken` lacks. The program an earlier run of `run` left may already hold the names this run
-/// gives.
-///
-/// # Examples
-/// `g#func2` gives `g#func2#1` when `taken` has `g#func2` only.
-fn unused_name(name: &FullName, taken: &Set<FullName>) -> FullName {
-    let mut candidate = name.clone();
-    let mut index = 0;
-    while taken.contains(&candidate) {
-        index += 1;
-        candidate = name.clone();
-        *candidate.name_as_mut() += &format!("{}{}", INSTANCIATED_NAME_SEPARATOR, index);
-    }
-    candidate
 }
 
 /// Rewrites `name` in place into the name carried by the uncurried function taking `n_args`
@@ -471,32 +455,5 @@ pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
             }
         }
         _ => expr.clone(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::unused_name;
-    use crate::{ast::name::FullName, misc::Set};
-
-    /// `unused_name` gives a name that `taken` does not have: `name` itself while it is free, and
-    /// one that differs from every taken name however many of the names it tries first are taken.
-    #[test]
-    fn test_unused_name_avoids_every_taken_name() {
-        let name = FullName::from_strs(&["Main"], "g#func2");
-        let mut taken: Set<FullName> = Set::default();
-        assert!(
-            unused_name(&name, &taken) == name,
-            "a free name should be kept"
-        );
-        for _ in 0..3 {
-            let fresh = unused_name(&name, &taken);
-            assert!(
-                !taken.contains(&fresh),
-                "`{}` is taken already",
-                fresh.to_string()
-            );
-            taken.insert(fresh);
-        }
     }
 }
