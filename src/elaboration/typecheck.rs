@@ -540,7 +540,9 @@ pub struct TypeCheckContext {
     /// The number the next type variable created here is named after.
     tyvar_id: u32,
     /// The source location of the expression whose type each type variable is, by the variable's
-    /// name, so that a diagnostic naming a type variable can point at where it arose.
+    /// name, so that a diagnostic naming a type variable can point at where it arose. It holds the
+    /// type variables the inference created alone: a type variable the program writes is found in
+    /// the source by the reader.
     pub tyvar_expr: Map<String, Span>,
     /// The type scheme each name in scope stands for. These are the assumptions of the inference.
     pub scope: Scope<Arc<Scheme>>,
@@ -648,9 +650,14 @@ impl TypeCheckContext {
     }
 
     /// Records that the type of the expression at `source` is the type variable named `tyvar_name`,
-    /// so that a diagnostic naming that variable can point at the expression. An expression with no
-    /// source location leaves the record as it stands.
+    /// which the inference created, so that a diagnostic naming that variable can point at the
+    /// expression. An expression with no source location leaves the record as it stands.
     pub fn add_tyvar_source(&mut self, tyvar_name: Name, source: Option<Span>) {
+        assert!(
+            is_inference_tyvar(&tyvar_name),
+            "source recorded for `{}`, a type variable the inference did not create",
+            tyvar_name
+        );
         if let Some(source) = source {
             self.tyvar_expr.insert(tyvar_name, source);
         }
@@ -918,17 +925,19 @@ impl TypeCheckContext {
     }
 
     /// Gives `tv1` and `tv2` one source location, the expression a diagnostic naming either of
-    /// them points at. Where both already carry one, `tv2`'s is the one kept.
+    /// them points at. Where both already carry one, `tv2`'s is the one kept. Of the two, only a
+    /// type variable the inference created takes the location.
     pub fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
-        let mut src = None;
-        if let Some(tv1_src) = self.tyvar_expr.get(&tv1) {
-            src = Some(tv1_src.clone());
+        let src = self
+            .tyvar_expr
+            .get(&tv2)
+            .or_else(|| self.tyvar_expr.get(&tv1))
+            .cloned();
+        for tv in [tv1, tv2] {
+            if is_inference_tyvar(&tv) {
+                self.add_tyvar_source(tv, src.clone());
+            }
         }
-        if let Some(tv2_src) = self.tyvar_expr.get(&tv2) {
-            src = Some(tv2_src.clone());
-        }
-        self.add_tyvar_source(tv1, src.clone());
-        self.add_tyvar_source(tv2, src);
     }
 
     /// The import statements of the module the expression being checked belongs to.
@@ -1743,12 +1752,10 @@ impl TypeCheckContext {
         Ok(())
     }
 
-    /// Say where each of `tvs` came from: for every type variable the inference
-    /// created whose source expression is known, a sentence naming it paired
-    /// with that expression's span, to hang off an error as extra source
-    /// pointers. A type variable the program writes gets no sentence, since the
-    /// reader finds it in the source. The sentences follow the order of `tvs`,
-    /// at most one for each variable.
+    /// Say where each of `tvs` came from: for every type variable whose source
+    /// expression is known, a sentence naming it paired with that expression's
+    /// span, to hang off an error as extra source pointers. The sentences follow
+    /// the order of `tvs`, at most one for each variable.
     ///
     /// # Arguments
     /// * `names` — the names the error prints for the type variables.
@@ -1764,7 +1771,7 @@ impl TypeCheckContext {
         let mut seen = Set::default();
         let mut msg_srcs = vec![];
         for tv in tvs {
-            if !is_inference_tyvar(&tv.name) || !seen.insert(tv.name.clone()) {
+            if !seen.insert(tv.name.clone()) {
                 continue;
             }
             if let Some(src) = self.tyvar_expr.get(&tv.name) {
