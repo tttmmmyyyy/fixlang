@@ -652,7 +652,7 @@ impl TypeCheckContext {
     /// Records that the type of the expression at `source` is the type variable named `tyvar_name`,
     /// which the inference created, so that a diagnostic naming that variable can point at the
     /// expression. An expression with no source location leaves the record as it stands.
-    pub fn add_tyvar_source(&mut self, tyvar_name: Name, source: Option<Span>) {
+    fn add_tyvar_source(&mut self, tyvar_name: Name, source: Option<Span>) {
         assert!(
             is_inference_tyvar(&tyvar_name),
             "source recorded for `{}`, a type variable the inference did not create",
@@ -927,7 +927,7 @@ impl TypeCheckContext {
     /// Gives `tv1` and `tv2` one source location, the expression a diagnostic naming either of
     /// them points at. Where both already carry one, `tv2`'s is the one kept. Of the two, only a
     /// type variable the inference created takes the location.
-    pub fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
+    fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
         let src = self
             .tyvar_expr
             .get(&tv2)
