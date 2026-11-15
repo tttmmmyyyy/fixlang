@@ -156,14 +156,10 @@ struct Builders(Map<(LamId, Vec<SetId>), Builder>);
 impl Builders {
     /// The builders of the elements the copies of `spec` build.
     fn new(analysis: &Analysis, spec: &Specialization) -> Self {
-        let mut lambdas_of_component: Vec<Vec<LamId>> = vec![vec![]; analysis.components.len()];
-        for (lam, lambda) in analysis.lambdas.iter().enumerate() {
-            lambdas_of_component[analysis.component_of[&lambda.symbol]].push(lam as LamId);
-        }
         let mut builders: Map<(LamId, Vec<SetId>), Builder> = Map::default();
         for (k, instance) in spec.instances.iter().enumerate() {
             let component = &analysis.components[instance.component];
-            for lam in &lambdas_of_component[instance.component] {
+            for lam in &component.lams {
                 let lambda = &analysis.lambdas[*lam as usize];
                 let args: Vec<SetId> = lambda.params.iter().map(|p| instance.args[*p]).collect();
                 let set_of = |v: &SetVar| instance.var_sets[component.var_index[v]];

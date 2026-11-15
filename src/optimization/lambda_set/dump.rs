@@ -56,7 +56,6 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
     let mut named_sets: Vec<SetId> = vec![];
     for (k, instance) in spec.instances.iter().enumerate() {
         let component = &analysis.components[instance.component];
-        named_sets.extend(instance.args.iter().copied());
         if component.symbols.is_empty() {
             writeln!(out, "copy {}: the entry and the exported values", k).unwrap();
             continue;
