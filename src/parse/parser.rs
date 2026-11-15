@@ -32,8 +32,8 @@ use crate::ast::{
 };
 use crate::configuration::{Configuration, DiagnosticsConfig, SubCommand};
 use crate::constants::{
-    COMPOSE_FUNCTION_NAME, F64_NAME, I64_NAME, INDEXABLE_TRAIT_ACT_NAME, INDEXABLE_TRAIT_NAME,
-    IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME,
+    BIND_RESULT_VAR_PREFIX, COMPOSE_FUNCTION_NAME, F64_NAME, I64_NAME, INDEXABLE_TRAIT_ACT_NAME,
+    INDEXABLE_TRAIT_NAME, IO_DATA_NAME, MODULE_SEPARATOR, MONAD_BIND_NAME, MONAD_NAME, PARAM_NAME,
     PATTERN_WILDCARD_VAR_PREFIX, STD_NAME, STRUCT_ACT_SYMBOL, TYPE_WILDCARD_VAR_PREFIX,
 };
 use crate::error::Errors;
@@ -113,8 +113,7 @@ pub struct ModuleRenaming {
     pub compiled: Name,
 }
 
-// Format the fresh name `<prefix><counter>` and advance the counter. Mints the
-// distinct compiler-generated names for `_` pattern and type wildcards.
+/// Formats the fresh name `<prefix><counter>` and advances the counter.
 fn next_prefixed_name(prefix: &str, counter: &mut u32) -> String {
     let name = format!("{}{}", prefix, *counter);
     *counter += 1;
@@ -194,11 +193,8 @@ struct BindOperatorInfo {
 }
 
 impl DoContext {
-    /// Pushes a monadic value, and returns an expression for the result of its action.
-    ///
-    /// The returned expression spans the `*` alone. In the bind built from the `*`, it lies in the
-    /// function, which a search for the node at a position visits before the operand; a span
-    /// covering the operand would let it hide the operand from that search.
+    /// Pushes a monadic value, and returns an expression for the result of its action, which
+    /// stands where the `*` and its operand are written and spans them.
     ///
     /// # Arguments
     /// * `monad_src` — the span of the source `monad` was parsed from, parentheses around it
@@ -207,14 +203,16 @@ impl DoContext {
         &mut self,
         monad: Arc<ExprNode>,
         monad_src: Span,
-        star_src: Span,
+        operator_src: Span,
     ) -> Arc<ExprNode> {
-        let var_name = FullName::local(&format!("#monadic_value{}", self.counter));
+        let var_name = FullName::local(&next_prefixed_name(
+            BIND_RESULT_VAR_PREFIX,
+            &mut self.counter,
+        ));
         let var_var = var_var(var_name.clone());
-        let var_expr = expr_var(var_name, Some(star_src.clone()));
-        self.counter += 1;
+        let var_expr = expr_var(var_name, Some(operator_src.unite(&monad_src)));
         self.monads.push(BindOperatorInfo {
-            operator_src: star_src,
+            operator_src,
             operand: monad,
             operand_src: monad_src,
             result_var: var_var,
