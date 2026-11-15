@@ -705,10 +705,10 @@ mod dump_tests {
         }
     }
 
-    /// `main` calls `g` through no closure, both where it applies `g` to its two arguments at once
-    /// and where it applies `g`, read back from a struct field, to them. The rewrite by the lambda
-    /// sets turns the call through the field into the call `g(f2)(7)` after the first uncurrying has
-    /// run, and the second uncurrying gives `g` an uncurried function taking both arguments.
+    /// Verifies that `main` calls `g` by name both where it applies `g` to its two arguments at once
+    /// and where it applies `g`, read back from a struct field, to them. Lambda set specialization
+    /// turns the call through the field into `g(f2)(7)` after the first run of uncurrying, and the
+    /// second run gives `g` an uncurried function taking both arguments.
     #[test]
     fn test_a_call_of_a_global_read_back_from_a_struct_calls_it_by_name() {
         let dump = build_run_and_read_rc_ir(

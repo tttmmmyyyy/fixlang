@@ -195,9 +195,9 @@ fn uncurried_symbol<'a>(
         .map(|name| &symbols[name])
 }
 
-/// `name`, or when `taken` has it, `name` followed by `#1`, `#2`, ..., whichever comes first that
-/// `taken` does not have. An earlier run of `run` leaves its uncurried functions under the names
-/// this run gives.
+/// `name` itself when `taken` lacks it, and otherwise the first of `name#1`, `name#2`, ... that
+/// `taken` lacks. The program an earlier run of `run` left may already hold the names this run
+/// gives.
 ///
 /// # Examples
 /// `g#func2` gives `g#func2#1` when `taken` has `g#func2` only.
