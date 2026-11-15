@@ -263,27 +263,26 @@ impl PatternNode {
                     self.info.type_.clone(),
                 ))
             }
-            Pattern::Struct(tc, field_to_pat, _) => {
-                for (name, field_src, pat) in field_to_pat {
+            Pattern::Struct(tc, field_to_pat, _) => field_to_pat
+                .iter()
+                .find_map(|(name, field_src, pat)| {
                     // The sub-pattern comes first: a field written as its name alone gives its
                     // sub-pattern the span of its name.
-                    let node = pat.find_node_at_pos(pos);
-                    if node.is_some() {
-                        return node;
-                    }
-                    if let Some(field_src) = field_src {
-                        if field_src.name_src.includes_pos_lsp(pos) {
-                            return Some(EndNode::Field(tc.as_ref().clone(), name.clone()));
-                        }
-                    }
-                }
+                    pat.find_node_at_pos(pos).or_else(|| {
+                        field_src
+                            .as_ref()
+                            .filter(|field_src| field_src.name_src.includes_pos_lsp(pos))
+                            .map(|_| EndNode::Field(tc.as_ref().clone(), name.clone()))
+                    })
+                })
                 // The type is written only at the type constructor name; a tuple writes no name.
-                self.info
-                    .aux_src
-                    .as_ref()
-                    .filter(|tc_src| tc_src.includes_pos_lsp(pos))
-                    .map(|_| EndNode::Type(tc.as_ref().clone()))
-            }
+                .or_else(|| {
+                    self.info
+                        .aux_src
+                        .as_ref()
+                        .filter(|tc_src| tc_src.includes_pos_lsp(pos))
+                        .map(|_| EndNode::Type(tc.as_ref().clone()))
+                }),
             Pattern::Union(variant, variant_src, subpat) => {
                 if let Some(variant_name_span) = variant_src {
                     if variant_name_span.includes_pos_lsp(pos) {
