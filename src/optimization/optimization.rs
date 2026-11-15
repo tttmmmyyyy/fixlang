@@ -156,10 +156,12 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| collapse_constructions::run(prg, config.num_worker_thread),
     );
 
+    // Uncurry again: the passes since the first run make global functions and calls `g(x)(y)`, and
+    // they run only with the lambda sets.
     run_pass(
         prg,
         config,
-        config.enable_uncurry_optimization(),
+        config.enable_lambda_set_specialization() && config.enable_uncurry_optimization(),
         "uncurry",
         |prg| uncurry::run(prg, config.num_worker_thread),
     );
