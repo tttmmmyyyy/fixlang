@@ -285,10 +285,10 @@ fn infer_component(
     // sets of the types of its component are pinned and every reference shares them, as ML
     // generalizes only the bindings that are values. The whole component is pinned because the
     // value's body is copied with every copy of the component, whatever the sets of its own type.
-    let holds_a_value = symbols
+    let holds_a_non_lambda_body = symbols
         .iter()
         .any(|s| !matches!(&*prg.symbols[s].expr.as_ref().unwrap().expr, Expr::Lam(..)));
-    if holds_a_value {
+    if holds_a_non_lambda_body {
         for v in types.iter().flat_map(|ty| ty.slots.iter()) {
             analysis.solver.pin(*v);
         }

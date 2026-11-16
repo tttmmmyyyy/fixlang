@@ -1711,10 +1711,10 @@ fn test_global_values_of_functions_referred_to_in_many_places_are_evaluated_once
         let p1 = pick(|x| x + 100 * n, true);
         let p2 = pick(|x| x * 3, false);
         let p3 = pick(|x| x * 5 - n, true);
-        let both = if n == 1 { tbl } else { tbl2 };
-        let both2 = if n == 2 { tbl } else { tbl2 };
-        let r1 = apply_all(both, 10);
-        let r2 = apply_all(both2, 10);
+        let chosen = if n == 1 { tbl } else { tbl2 };
+        let chosen2 = if n == 2 { tbl } else { tbl2 };
+        let r1 = apply_all(chosen, 10);
+        let r2 = apply_all(chosen2, 10);
         let r3 = apply_all(tbl.push_back(add5), 1);
         let h = if n == 1 { add5 } else { |x| x * n };
         let s2 = sv.mod_f(|f| |x| f(x) + n);
