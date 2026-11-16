@@ -3259,7 +3259,9 @@ fn make_struct_fields_in_declaration_order(
 /// The expression a type variable the inference created arose at, and how the variable relates to it.
 #[derive(Clone)]
 struct TyVarSource {
+    /// Where the expression stands in the source; a diagnostic naming the variable points here.
     span: Span,
+    /// How the variable relates to the expression.
     role: TyVarRole,
 }
 
