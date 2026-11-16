@@ -758,6 +758,37 @@ mod tests {
         ctx.shutdown();
     }
 
+    /// `[].<cursor>` — the receiver's type `Array #a` has a type variable the
+    /// elaboration leaves open, and a function over arrays still lands in
+    /// Tier 0, since its receiver position unifies with it.
+    #[test]
+    fn test_completion_dot_sort_empty_array_literal() {
+        let mut ctx = LspCompletionCtx::setup("completion-dot-sort-empty-array", &["main.fix"]);
+
+        // main.fix layout (0-indexed):
+        //   0: module Main;
+        //   1: (blank)
+        //   2: main : IO ();
+        //   3: main = (
+        //   4:     let _ = [].    <-- cursor right after the dot
+        //   5:     pure()
+        //   6: );
+        //
+        // Column 15 = byte just after `.` on `    let _ = [].`.
+        let items = ctx.complete("main.fix", 4, 15);
+
+        let sort_push_back = find_sort_text(&items, "Std::Array::push_back")
+            .expect("Std::Array::push_back should be a candidate");
+        assert!(
+            sort_push_back.starts_with("0a"),
+            "Std::Array::push_back should land in Tier 0, sub-tier `a` \
+             (InsideTyCon) for an `Array #a` receiver; got {:?}",
+            sort_push_back,
+        );
+
+        ctx.shutdown();
+    }
+
     /// `let p = Point {...}; p.<cursor>` — the auto-generated field
     /// accessor `@x` should land in Tier 0 for a `Main::Point`
     /// receiver, since `Main::Point::@x : Point -> I64` has the

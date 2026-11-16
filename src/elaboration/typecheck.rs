@@ -1,11 +1,9 @@
 use super::check_holes::collect_hole_errors;
-use crate::ast::import;
-use crate::misc::{collect_results, grow_stack, insert_to_map_vec, shorten_for_report, Map, Set};
 use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
         expr::{AppSourceCodeOrderType, Expr, ExprNode, FieldSrc},
-        import::ImportStatement,
+        import::{self, ImportStatement},
         kind_scope::KindEnv,
         name::{FullName, Name, NameSpace},
         pattern::{Pattern, PatternNode},
@@ -31,6 +29,7 @@ use crate::{
     elaboration::report_tyvar_names::ReportTyVarNames,
     error::{Error, Errors},
     fixstd::builtin::{make_array_ty, make_bool_ty, make_iostate_ty, make_tuple_ty},
+    misc::{collect_results, grow_stack, insert_to_map_vec, shorten_for_report, Map, Set},
     parse::sourcefile::Span,
 };
 use serde::{Deserialize, Serialize};
@@ -503,10 +502,14 @@ impl Substitution {
                     if assoc_ty1 != assoc_ty2 {
                         return Ok(None);
                     }
+                    assert_eq!(
+                        args1.len(),
+                        args2.len(),
+                        "one associated type applied to different numbers of arguments"
+                    );
                     let mut merged = Self::default();
-                    for i in 0..args1.len() {
-                        match Self::matching_internal(&args1[i], &args2[i], fixed_tyvars, kind_env)?
-                        {
+                    for (arg1, arg2) in args1.iter().zip(args2) {
+                        match Self::matching_internal(arg1, arg2, fixed_tyvars, kind_env)? {
                             Some(s) => {
                                 if !merged.merge(&s) {
                                     return Ok(None);
@@ -539,11 +542,10 @@ pub enum ConstraintInstantiationMode {
 pub struct TypeCheckContext {
     /// The number the next type variable created here is named after.
     tyvar_id: u32,
-    /// For each type variable the inference created, by name, the source location of the
-    /// expression whose type it is, so that a diagnostic naming the variable can point at where it
-    /// arose. A type variable of a signature has no entry: a diagnostic shows it under the name the
-    /// signature gives it, with no location.
-    tyvar_source: Map<String, Span>,
+    /// For each type variable the inference created, by name, the expression it arose at, so that a
+    /// diagnostic naming the variable can point at it. A type variable of a signature has no entry:
+    /// a diagnostic shows it under the name the signature gives it, with no location.
+    tyvar_source: Map<String, TyVarSource>,
     /// The type scheme each name in scope stands for. These are the assumptions of the inference.
     pub scope: Scope<Arc<Scheme>>,
     /// What the inference has settled about the type variables so far.
@@ -649,19 +651,31 @@ impl TypeCheckContext {
         }
     }
 
-    /// Records that the type of the expression at `source` is the type variable named `tyvar_name`,
+    /// Records that the type of the expression at `span` is the type variable named `tyvar_name`,
     /// so that a diagnostic naming that variable can point at the expression. `tyvar_name` must name
     /// a type variable the inference created. An expression with no source location leaves the
     /// record as it stands.
-    fn add_tyvar_source(&mut self, tyvar_name: Name, source: Option<Span>) {
+    fn add_tyvar_source(&mut self, tyvar_name: Name, span: Option<Span>) {
+        if let Some(span) = span {
+            self.insert_tyvar_source(
+                tyvar_name,
+                TyVarSource {
+                    span,
+                    role: TyVarRole::TypeOf,
+                },
+            );
+        }
+    }
+
+    /// Records `source` as the expression the type variable named `tyvar_name` arose at.
+    /// `tyvar_name` must name a type variable the inference created.
+    fn insert_tyvar_source(&mut self, tyvar_name: Name, source: TyVarSource) {
         assert!(
             is_inference_tyvar(&tyvar_name),
             "source recorded for `{}`, a type variable the inference did not create",
             tyvar_name
         );
-        if let Some(source) = source {
-            self.tyvar_source.insert(tyvar_name, source);
-        }
+        self.tyvar_source.insert(tyvar_name, source);
     }
 
     /// Fresh type variable wrapped as `TypeNode`, with `src` registered
@@ -925,18 +939,21 @@ impl TypeCheckContext {
         Ok((cond_tycon, cond_ti))
     }
 
-    /// Gives `tv1` and `tv2` one source location, the expression a diagnostic naming either of
-    /// them points at. Where both already carry one, `tv2`'s is kept. Only a type variable the
-    /// inference created takes the location.
+    /// Gives `tv1` and `tv2` one source: the expression a diagnostic naming either of them points
+    /// at, and how the variable relates to it. Where both already carry one, `tv2`'s is kept. Only a
+    /// type variable the inference created takes the source.
     fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
         let src = self
             .tyvar_source
             .get(&tv2)
             .or_else(|| self.tyvar_source.get(&tv1))
             .cloned();
+        let Some(src) = src else {
+            return;
+        };
         for tv in [tv1, tv2] {
             if is_inference_tyvar(&tv) {
-                self.add_tyvar_source(tv, src.clone());
+                self.insert_tyvar_source(tv, src.clone());
             }
         }
     }
@@ -1624,13 +1641,18 @@ impl TypeCheckContext {
             }
             Expr::ArrayLit(elems) => {
                 // Prepare type of element.
-                let elem_src = if elems.len() > 0 {
-                    elems[0].source.clone()
-                } else {
-                    ei.source.clone().map(|s| s.after_head_character())
-                };
                 let elem_tv = self.new_tyvar_star();
-                self.add_tyvar_source(elem_tv.name.clone(), elem_src.clone());
+                if let Some(first) = elems.first() {
+                    self.add_tyvar_source(elem_tv.name.clone(), first.source.clone());
+                } else if let Some(span) = ei.source.clone() {
+                    self.insert_tyvar_source(
+                        elem_tv.name.clone(),
+                        TyVarSource {
+                            span,
+                            role: TyVarRole::ElementTypeOf,
+                        },
+                    );
+                }
                 let elem_ty = type_from_tyvar(elem_tv);
 
                 let array_ty = type_tyapp(make_array_ty(), elem_ty.clone());
@@ -1782,17 +1804,25 @@ impl TypeCheckContext {
                 } else {
                     format!("`{}`", name)
                 };
-                let msg = match short_span_snippet(src) {
-                    Some(snippet) => format!("{} is the type for `{}`.", prefix, snippet),
-                    // Snippet absent — the span is multi-line, too
-                    // long, or zero-width (e.g. the position between
-                    // `[` and `]` for an empty-array element). The
-                    // sentence is complete on its own, since the source
-                    // pointer attached separately may not read as a
-                    // continuation of the message text.
-                    None => format!("{} is the type for this expression.", prefix),
+                // Where the span is multi-line, too long or empty, the sentence names the
+                // expression without quoting it. It is complete on its own, since the source
+                // pointer attached separately may not read as a continuation of the message text.
+                let snippet = short_span_snippet(&src.span);
+                let msg = match (&src.role, snippet) {
+                    (TyVarRole::TypeOf, Some(snippet)) => {
+                        format!("{} is the type for `{}`.", prefix, snippet)
+                    }
+                    (TyVarRole::TypeOf, None) => {
+                        format!("{} is the type for this expression.", prefix)
+                    }
+                    (TyVarRole::ElementTypeOf, Some(snippet)) => {
+                        format!("{} is the element type of `{}`.", prefix, snippet)
+                    }
+                    (TyVarRole::ElementTypeOf, None) => {
+                        format!("{} is the element type of this array.", prefix)
+                    }
                 };
-                msg_srcs.push((msg, src.clone()));
+                msg_srcs.push((msg, src.span.clone()));
             }
         }
         msg_srcs
@@ -3227,6 +3257,24 @@ fn make_struct_fields_in_declaration_order(
 
     errors.to_result()?;
     Ok(ordered)
+}
+
+/// The expression a type variable the inference created arose at, and how the variable relates to it.
+#[derive(Clone)]
+struct TyVarSource {
+    /// Where the expression stands in the source; a diagnostic naming the variable points here.
+    span: Span,
+    /// How the variable relates to the expression.
+    role: TyVarRole,
+}
+
+/// How a type variable relates to the expression it arose at.
+#[derive(Clone)]
+enum TyVarRole {
+    /// The variable is the type of the expression.
+    TypeOf,
+    /// The variable is the element type of the expression, an array literal with no element.
+    ElementTypeOf,
 }
 
 /// The trimmed source text `span` covers, where that text stands on one line and stays inside a
