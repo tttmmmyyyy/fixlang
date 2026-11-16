@@ -1444,6 +1444,48 @@ mod dump_tests {
         );
     }
 
+    /// `apply`, referring to a global array of functions, given a different lambda at each of two
+    /// calls. Recursive, so it stays a function of its own.
+    const APPLY_READING_A_GLOBAL_SOURCE: &str = r#"
+    module Main;
+
+    tbl : Array (I64 -> I64) = [|x| x + 1];
+
+    apply : (I64 -> I64) -> I64 -> I64;
+    apply = |f, x| if x > 100 { 0 } else { f(x) + (tbl.@(0))(x) + apply(f, x + 1) };
+
+    main : IO () = (
+        let n = Array::fill(1, 10).@(0);
+        println((apply(|x| x + n, 3) + apply(|x| x * 2, 3)).to_string)
+    );
+    "#;
+
+    /// What `APPLY_READING_A_GLOBAL_SOURCE` prints: the sums of `(x + 10) + (x + 1)` and of
+    /// `x * 2 + (x + 1)` over `3..100`.
+    const APPLY_READING_A_GLOBAL_OUTPUT: &str = "26411";
+
+    /// A function that refers to a global value whose body is not a lambda, but holds none in its
+    /// own component, is still copied for each lambda set it is given: each copy of `apply` takes
+    /// the set of the one lambda its call gives it, and none takes a union of the two.
+    #[test]
+    fn test_a_function_referring_to_a_pinned_global_is_copied_for_each_lambda_it_is_given() {
+        let dump = build_run_and_read_rc_ir(
+            APPLY_READING_A_GLOBAL_SOURCE,
+            "max",
+            APPLY_READING_A_GLOBAL_OUTPUT,
+            "a function referring to a global array, given two lambdas",
+        );
+        assert_calls_by_name(&dump, "Main::apply");
+        for body in rc_ir_function_bodies(&dump, "Main::apply") {
+            assert!(
+                !takes_a_union(header(&body)),
+                "each copy of `apply` should take the set of the one lambda its call gives it, \
+                 and this one takes a union:\n{}",
+                body
+            );
+        }
+    }
+
     /// An array holding two lambdas and a global function, folded over by applying each to the
     /// accumulator. The array's element set holds three classes.
     const ARRAY_SOURCE: &str = r#"
@@ -1714,6 +1756,38 @@ fn test_a_lambda_pushed_onto_a_global_array_capturing_an_argument_computes_it() 
 
     ext : (I64 -> I64) -> I64 -> Array (I64 -> I64);
     ext = |g, k| if k <= 0 { tbl.push_back(|x| g(x) * 10) } else { ext(g, k - 1) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let a = ext(|x| x + n, n);
+        let m = 7 + n;
+        let b = ext(|x| x * m, n);
+        let c = a.append(b).to_iter.map(|f| f(3)).to_array;
+        assert_eq(|_| "", c, [4, 40, 4, 240]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// A recursive function that pushes onto a global array of functions a closure that another
+/// function builds from its own argument, called by `main` with two lambdas: the set of the
+/// array's elements holds the other function's lambda, which captures the argument, so the set of
+/// the argument is one set too, holding both of `main`'s lambdas, and the program computes every
+/// element.
+#[test]
+fn test_a_closure_built_by_a_callee_pushed_onto_a_global_array_computes_it() {
+    let source = r#"
+    module Main;
+
+    tbl : Array (I64 -> I64) = [|x| x + 1];
+
+    times10 : (I64 -> I64) -> I64 -> (I64 -> I64);
+    times10 = |g, d| if d > 0 { times10(g, d - 1) } else { |x| g(x) * 10 };
+
+    ext : (I64 -> I64) -> I64 -> Array (I64 -> I64);
+    ext = |g, k| if k <= 0 { tbl.push_back(times10(g, k)) } else { ext(g, k - 1) };
 
     main : IO ();
     main = (
