@@ -936,9 +936,9 @@ impl TypeCheckContext {
         Ok((cond_tycon, cond_ti))
     }
 
-    /// Gives `tv1` and `tv2` one source location, the expression a diagnostic naming either of
-    /// them points at. Where both already carry one, `tv2`'s is kept. Only a type variable the
-    /// inference created takes the location.
+    /// Gives `tv1` and `tv2` one source: the expression a diagnostic naming either of them points
+    /// at, and how the variable relates to it. Where both already carry one, `tv2`'s is kept. Only a
+    /// type variable the inference created takes the source.
     fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
         let src = self
             .tyvar_source
