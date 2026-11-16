@@ -648,9 +648,9 @@ main = (
         source
     }
 
-    /// Along a chain of symbols each referring twice to the one below, the scheme of each stays as
-    /// small as the one below rather than doubling: global values share their pinned variables,
-    /// and a function whose internal classes depend on its parameter gets the two copies of them
+    /// Along a chain of symbols each referring twice to the one below, the scheme of each grows by
+    /// one class per level rather than doubling: global values share their pinned variables, and
+    /// a function whose internal classes depend on its parameter gets the two copies of them
     /// merged into one.
     #[test]
     fn test_a_chain_of_symbols_referring_twice_to_the_one_below_keeps_its_schemes_small() {
