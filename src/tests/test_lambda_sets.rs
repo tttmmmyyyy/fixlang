@@ -684,10 +684,10 @@ fn test_a_global_array_of_functions_appended_to_a_longer_one_calls_them_all() {
 /// A global array of functions, a function it holds, and a function taking a function, the three
 /// referring to one another, where the array's body calls the function taking a function outside
 /// any of its elements. The array holds the function itself, whose copies depend on the sets every
-/// body of the group reaches, and the program computes it. It is built at `-O max`, where `h`
+/// body of the component reaches, and the program computes it. It is built at `-O max`, where `h`
 /// stays a function of its own.
 #[test]
-fn test_a_global_array_holding_a_function_of_its_group_computes_it() {
+fn test_a_global_array_holding_a_function_of_its_component_computes_it() {
     let source = r#"
     module Main;
 
@@ -715,7 +715,7 @@ fn test_a_global_array_holding_a_function_of_its_group_computes_it() {
         source,
         "max",
         Duration::from_secs(600),
-        "a global array holding a function of its group",
+        "a global array holding a function of its component",
     );
     assert_eq!(printed.trim(), "26");
 }
@@ -724,7 +724,7 @@ fn test_a_global_array_holding_a_function_of_its_group_computes_it() {
 /// the function with a lambda of its own: the program holds one copy of the global, and its body
 /// runs once.
 #[test]
-fn test_a_global_value_in_a_group_with_a_function_taking_a_function_is_evaluated_once() {
+fn test_a_global_value_in_a_component_with_a_function_taking_a_function_is_evaluated_once() {
     let source = r#"
     module Main;
 
