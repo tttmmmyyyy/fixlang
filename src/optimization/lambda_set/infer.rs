@@ -90,7 +90,7 @@ pub struct Component {
     /// The references from the component to symbols of other components.
     pub sites: Vec<Site>,
     /// What a reference to a symbol of the component gets.
-    pub scheme: Scheme,
+    pub scheme: LambdaSetScheme,
     /// The parameters the bodies of the symbols depend on, in increasing order, as indices into
     /// `params`: those the terms of the bodies reach (`term_params`). Two copies that give these
     /// the same sets have the same bodies.
@@ -148,9 +148,9 @@ pub struct Site {
 /// no parameter, the one of the component that every reference shares. The first classes are the
 /// parameters of the component, in order, then the pinned variables of its types, which depend on
 /// no parameter, and the others are the variables their members name.
-pub struct Scheme {
+pub struct LambdaSetScheme {
     /// The members of each class.
-    pub classes: Vec<Vec<SchemeMember>>,
+    pub classes: Vec<Vec<LambdaSetSchemeMember>>,
     /// For each class that depends on no parameter, the variable of the component it stands for.
     /// What such a class holds is the same in every reference, so every reference shares that
     /// variable: copying it per reference would double the classes of a symbol that refers twice
@@ -160,9 +160,9 @@ pub struct Scheme {
     pub slot_classes: Vec<Vec<u32>>,
 }
 
-/// A member of a class of a `Scheme`.
+/// A member of a class of a `LambdaSetScheme`.
 #[derive(Clone, PartialEq)]
-pub enum SchemeMember {
+pub enum LambdaSetSchemeMember {
     /// `Member::Lam`, with the owner's variables given as classes.
     Lam { lam: LamId, args: Vec<u32> },
     /// `Member::Dynamic`.
@@ -796,7 +796,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
 }
 
 /// New variables for the classes of `scheme`, holding the members recorded for them.
-fn instantiate(scheme: &Scheme, solver: &mut Solver) -> Vec<SetVar> {
+fn instantiate(scheme: &LambdaSetScheme, solver: &mut Solver) -> Vec<SetVar> {
     let vars: Vec<SetVar> = scheme
         .shared
         .iter()
@@ -808,11 +808,11 @@ fn instantiate(scheme: &Scheme, solver: &mut Solver) -> Vec<SetVar> {
         }
         for member in members {
             let member = match member {
-                SchemeMember::Lam { lam, args } => Member::Lam {
+                LambdaSetSchemeMember::Lam { lam, args } => Member::Lam {
                     lam: *lam,
                     owner: Owner::Instance(args.iter().map(|a| vars[*a as usize]).collect()),
                 },
-                SchemeMember::Dynamic(reason) => Member::Dynamic(reason.clone()),
+                LambdaSetSchemeMember::Dynamic(reason) => Member::Dynamic(reason.clone()),
             };
             solver.add(vars[class], member);
         }
@@ -916,10 +916,10 @@ fn generalize(
         queue.push_back(*v);
     }
     let fixed_count = params.len() + pinned_slots.len();
-    let mut classes: Vec<Vec<SchemeMember>> = vec![vec![]; fixed_count];
+    let mut classes: Vec<Vec<LambdaSetSchemeMember>> = vec![vec![]; fixed_count];
     while let Some(v) = queue.pop_front() {
         let members = solver.members(v).to_vec();
-        let mut scheme_members: Vec<SchemeMember> = vec![];
+        let mut scheme_members: Vec<LambdaSetSchemeMember> = vec![];
         for member in members {
             let scheme_member = match member {
                 Member::Lam {
@@ -937,13 +937,13 @@ fn generalize(
                             })
                         })
                         .collect();
-                    SchemeMember::Lam { lam, args }
+                    LambdaSetSchemeMember::Lam { lam, args }
                 }
                 Member::Lam {
                     owner: Owner::Current,
                     ..
                 } => unreachable!("every lambda of the component has its owner given by now"),
-                Member::Dynamic(reason) => SchemeMember::Dynamic(reason),
+                Member::Dynamic(reason) => LambdaSetSchemeMember::Dynamic(reason),
             };
             if !scheme_members.contains(&scheme_member) {
                 scheme_members.push(scheme_member);
@@ -1003,7 +1003,7 @@ fn generalize(
         types,
         params,
         sites: deduped_sites,
-        scheme: Scheme {
+        scheme: LambdaSetScheme {
             classes,
             shared,
             slot_classes,
@@ -1081,9 +1081,9 @@ fn root_vars(
 /// A member of a scheme's class as `merge_equal_classes` compares it.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum MemberLabel {
-    /// A `SchemeMember::Lam` naming the lambda.
+    /// A `LambdaSetSchemeMember::Lam` naming the lambda.
     Lam(LamId),
-    /// A `SchemeMember::Dynamic`, by the position of its reason among the reasons met.
+    /// A `LambdaSetSchemeMember::Dynamic`, by the position of its reason among the reasons met.
     Dynamic(usize),
 }
 
@@ -1097,10 +1097,10 @@ enum MemberLabel {
 /// their variables; merging them keeps a chain of such symbols from doubling its classes at each
 /// level.
 fn merge_equal_classes(
-    classes: Vec<Vec<SchemeMember>>,
+    classes: Vec<Vec<LambdaSetSchemeMember>>,
     fixed_count: usize,
     pinned: &[bool],
-) -> (Vec<Vec<SchemeMember>>, Vec<u32>) {
+) -> (Vec<Vec<LambdaSetSchemeMember>>, Vec<u32>) {
     // The fixed and the pinned classes each start in a class of their own and the other classes in
     // one, and a Dynamic member is labelled by its reason, so that two classes are one only when
     // their members name the same reasons.
@@ -1112,11 +1112,11 @@ fn merge_equal_classes(
             members
                 .iter()
                 .map(|m| match m {
-                    SchemeMember::Lam { lam, args } => (
+                    LambdaSetSchemeMember::Lam { lam, args } => (
                         MemberLabel::Lam(*lam),
                         args.iter().map(|a| Child::Node(*a as usize)).collect(),
                     ),
-                    SchemeMember::Dynamic(reason) => {
+                    LambdaSetSchemeMember::Dynamic(reason) => {
                         let i = match reasons.iter().position(|r| r == reason) {
                             Some(i) => i,
                             None => {
@@ -1166,14 +1166,16 @@ fn merge_equal_classes(
     let classes = kept
         .iter()
         .map(|c| {
-            let mut members: Vec<SchemeMember> = vec![];
+            let mut members: Vec<LambdaSetSchemeMember> = vec![];
             for m in &classes[*c] {
                 let m = match m {
-                    SchemeMember::Lam { lam, args } => SchemeMember::Lam {
+                    LambdaSetSchemeMember::Lam { lam, args } => LambdaSetSchemeMember::Lam {
                         lam: *lam,
                         args: args.iter().map(|a| merged[*a as usize]).collect(),
                     },
-                    SchemeMember::Dynamic(reason) => SchemeMember::Dynamic(reason.clone()),
+                    LambdaSetSchemeMember::Dynamic(reason) => {
+                        LambdaSetSchemeMember::Dynamic(reason.clone())
+                    }
                 };
                 if !members.contains(&m) {
                     members.push(m);
@@ -1189,7 +1191,7 @@ fn merge_equal_classes(
 /// of `class_of` the class stands for when the class depends on no parameter: neither it nor any
 /// class its members name, transitively, is a parameter.
 fn shared_classes(
-    classes: &[Vec<SchemeMember>],
+    classes: &[Vec<LambdaSetSchemeMember>],
     param_count: usize,
     class_of: &Map<SetVar, u32>,
 ) -> Vec<Option<SetVar>> {
@@ -1198,7 +1200,7 @@ fn shared_classes(
     let mut named_by: Vec<Vec<usize>> = vec![vec![]; classes.len()];
     for (class, members) in classes.iter().enumerate() {
         for member in members {
-            if let SchemeMember::Lam { args, .. } = member {
+            if let LambdaSetSchemeMember::Lam { args, .. } = member {
                 for a in args {
                     named_by[*a as usize].push(class);
                 }
