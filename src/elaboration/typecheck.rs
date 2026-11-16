@@ -1,11 +1,9 @@
 use super::check_holes::collect_hole_errors;
-use crate::ast::import;
-use crate::misc::{collect_results, grow_stack, insert_to_map_vec, shorten_for_report, Map, Set};
 use crate::{
     ast::{
         equality::{Equality, EqualityScheme},
         expr::{AppSourceCodeOrderType, Expr, ExprNode, FieldSrc},
-        import::ImportStatement,
+        import::{self, ImportStatement},
         kind_scope::KindEnv,
         name::{FullName, Name, NameSpace},
         pattern::{Pattern, PatternNode},
@@ -31,6 +29,7 @@ use crate::{
     elaboration::report_tyvar_names::ReportTyVarNames,
     error::{Error, Errors},
     fixstd::builtin::{make_array_ty, make_bool_ty, make_iostate_ty, make_tuple_ty},
+    misc::{collect_results, grow_stack, insert_to_map_vec, shorten_for_report, Map, Set},
     parse::sourcefile::Span,
 };
 use serde::{Deserialize, Serialize};
@@ -503,10 +502,14 @@ impl Substitution {
                     if assoc_ty1 != assoc_ty2 {
                         return Ok(None);
                     }
+                    assert_eq!(
+                        args1.len(),
+                        args2.len(),
+                        "one associated type applied to different numbers of arguments"
+                    );
                     let mut merged = Self::default();
-                    for i in 0..args1.len() {
-                        match Self::matching_internal(&args1[i], &args2[i], fixed_tyvars, kind_env)?
-                        {
+                    for (arg1, arg2) in args1.iter().zip(args2) {
+                        match Self::matching_internal(arg1, arg2, fixed_tyvars, kind_env)? {
                             Some(s) => {
                                 if !merged.merge(&s) {
                                     return Ok(None);
