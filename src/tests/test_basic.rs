@@ -13581,6 +13581,26 @@ main = (
     );
 }
 
+/// Checks the error message for an empty array literal whose element type is unified with that of
+/// another empty literal: the type variable the message names stays the element type of a `[]`.
+#[test]
+pub fn test_indeterminate_type_variable_message_for_empty_arrays_unified() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    let x = if true { [] } else { [] };
+    pure()
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`#1` is the element type of `[]`.",
+    );
+}
+
 /// Checks that every C numeric type name parses in an `FFI_CALL` signature, including a name
 /// that begins with a shorter one, such as `CLongLong` beginning with `CLong`: the grammar has
 /// to try the longer name first. Only parsing is checked.
