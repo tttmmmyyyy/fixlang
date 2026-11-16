@@ -11,7 +11,7 @@ use crate::{
         assert_grammar_accepts, assert_grammar_rejects, emitted_llvm_ir, fix_command,
         generated_llvm_ir_modules, integer_operations_checked_config, run_source_assert_failed,
         run_source_capture, runtime_checked_config, test_files_in_directory, test_source,
-        test_source_fail, test_source_fail_excludes, test_source_with_c, EmittedIr,
+        test_source_fail, test_source_with_c, EmittedIr,
     },
 };
 use rand::{thread_rng, Rng};
@@ -13539,12 +13539,9 @@ main = (
     );
 }
 
-/// Checks the error message for `let x = [];`, whose element type is undetermined. The source
-/// of the element type is a zero-width span between the brackets, so the message has no source
-/// snippet to show.
-///
-/// The message must still end in a whole sentence, "is the type for this expression.", and must
-/// not contain "is the type for:", which would end in a colon with nothing after it.
+/// Checks the error message for `let x = [];`, whose element type is undetermined. The literal has
+/// no element to point at, so the message names the type variable as the element type of `[]` and
+/// points at the whole literal.
 #[test]
 pub fn test_indeterminate_type_variable_message_for_empty_array() {
     let source = r##"
@@ -13559,9 +13556,29 @@ main = (
     test_source_fail(
         &source,
         Configuration::develop_mode(),
-        "is the type for this expression.",
+        "`#1` is the element type of `[]`.\n\n6:13-6:15 in",
     );
-    test_source_fail_excludes(&source, Configuration::develop_mode(), "is the type for:");
+}
+
+/// Checks the error message for an empty array literal written over two lines, whose source the
+/// message cannot quote: it names the type variable as the element type of "this array".
+#[test]
+pub fn test_indeterminate_type_variable_message_for_empty_array_over_lines() {
+    let source = r##"
+module Main;
+
+main : IO ();
+main = (
+    let x = [
+    ];
+    pure()
+);
+    "##;
+    test_source_fail(
+        &source,
+        Configuration::develop_mode(),
+        "`#1` is the element type of this array.\n\n6:13-7:6 in",
+    );
 }
 
 /// Checks that every C numeric type name parses in an `FFI_CALL` signature, including a name
