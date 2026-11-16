@@ -503,10 +503,14 @@ impl Substitution {
                     if assoc_ty1 != assoc_ty2 {
                         return Ok(None);
                     }
+                    assert_eq!(
+                        args1.len(),
+                        args2.len(),
+                        "one associated type applied to different numbers of arguments"
+                    );
                     let mut merged = Self::default();
-                    for i in 0..args1.len() {
-                        match Self::matching_internal(&args1[i], &args2[i], fixed_tyvars, kind_env)?
-                        {
+                    for (arg1, arg2) in args1.iter().zip(args2) {
+                        match Self::matching_internal(arg1, arg2, fixed_tyvars, kind_env)? {
                             Some(s) => {
                                 if !merged.merge(&s) {
                                     return Ok(None);
