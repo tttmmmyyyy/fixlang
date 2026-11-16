@@ -102,8 +102,8 @@ pub struct Component {
     pub lams: Vec<LamId>,
     /// Every variable the nodes, the lambdas and the references of the component name, each a root
     /// of the solver, and each once. A copy of the component gives each of them a set. `infer`
-    /// collects them once every component is inferred, and replaces each variable `types`,
-    /// `node_types` and the lambdas name by its root then.
+    /// fills them in once every component is inferred, and then replaces each variable that
+    /// `types`, `node_types` and the lambdas name with its root.
     pub vars: Vec<SetVar>,
     /// The position of each variable of `vars` there.
     pub var_index: Map<SetVar, usize>,
@@ -1100,8 +1100,8 @@ fn merge_equal_classes(
     pinned: &[bool],
 ) -> (Vec<Vec<SchemeMember>>, Vec<u32>) {
     // The fixed and the pinned classes each start in a class of their own and the other classes in
-    // one, and a Dynamic member is labelled by its reason, so that two classes are one only when their members
-    // name the same reasons.
+    // one, and a Dynamic member is labelled by its reason, so that two classes are one only when
+    // their members name the same reasons.
     let n = classes.len();
     let mut reasons: Vec<Rc<DynamicReason>> = vec![];
     let elems: Vec<NodeElems<MemberLabel>> = classes
@@ -1221,10 +1221,10 @@ fn shared_classes(
         .collect()
 }
 
-/// The parameters of the component the term `start` depends on, in order: the ones it reaches. The
-/// term is that of a lambda, or of a body, together with the terms of the lambdas inside it (see
-/// `walk_reached`). A parameter's members are not followed: a copy of the component gives the
-/// parameter its value.
+/// The parameters of the component that the term `start` depends on, in increasing order: those it
+/// reaches. A term reaches the variables it holds and the terms of the lambdas written inside it,
+/// and a variable reaches what its members name. A parameter's members are not followed: a copy of
+/// the component gives the parameter its value.
 fn term_params(
     solver: &mut Solver,
     terms: &[Term],
@@ -1251,7 +1251,8 @@ fn term_params(
     found
 }
 
-/// Pins every variable that the variables `vars` reach (see `walk_reached`).
+/// Pins the variables `vars` and every variable they reach: a variable reaches what its members
+/// name, and a term reaches the variables it holds and the terms of the lambdas written inside it.
 fn pin_reached(
     solver: &mut Solver,
     terms: &[Term],
@@ -1266,7 +1267,7 @@ fn pin_reached(
 
 /// Visits, once each and as its root, every variable that the terms `start_terms` and the
 /// variables `start_vars` reach. A term reaches the variables it holds and the terms of the lambdas
-/// written inside it; a variable reaches what its members name: the variables a
+/// written inside it; a variable reaches what its members name: the variables an
 /// `Owner::Instance` member gives, and the term of a lambda of the component under inference.
 /// `visit` answers whether to follow the members of the variable it is given.
 fn walk_reached(
