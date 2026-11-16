@@ -1619,3 +1619,112 @@ mod dump_tests {
         );
     }
 }
+
+/// Global values of function type that are not lambdas — a partial application, a struct of
+/// functions, and two arrays an `if` in `main` chooses between — each referred to in several places
+/// that give them lambdas of their own. Each body runs once, and the program computes them all.
+#[test]
+fn test_global_values_of_functions_referred_to_in_many_places_are_evaluated_once() {
+    let source = r#"
+    module Main;
+
+    tbl : Array (I64 -> I64);
+    tbl = (
+        eval debug_eprintln("evaluating tbl");
+        [|x| x + 1, |x| x * 2]
+    );
+
+    tbl2 : Array (I64 -> I64);
+    tbl2 = (
+        eval debug_eprintln("evaluating tbl2");
+        [|x| x - 3]
+    );
+
+    adder : I64 -> I64 -> I64;
+    adder = |a, b| if a > 1000 { adder(a - 1, b) } else { a + b };
+
+    add5 : I64 -> I64;
+    add5 = (
+        eval debug_eprintln("evaluating add5");
+        adder(5)
+    );
+
+    pick : (I64 -> I64) -> Bool -> (I64 -> I64);
+    pick = |f, b| if b { f } else { tbl.@(0) };
+
+    apply_all : Array (I64 -> I64) -> I64 -> I64;
+    apply_all = |fs, x| fs.to_iter.fold(x, |f, acc| f(acc));
+
+    type S = struct { f : I64 -> I64, g : I64 -> I64 };
+
+    sv : S;
+    sv = (
+        eval debug_eprintln("evaluating sv");
+        S { f : |x| x + 7, g : add5 }
+    );
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let p1 = pick(|x| x + 100 * n, true);
+        let p2 = pick(|x| x * 3, false);
+        let p3 = pick(|x| x * 5 - n, true);
+        let both = if n == 1 { tbl } else { tbl2 };
+        let both2 = if n == 2 { tbl } else { tbl2 };
+        let r1 = apply_all(both, 10);
+        let r2 = apply_all(both2, 10);
+        let r3 = apply_all(tbl.push_back(add5), 1);
+        let h = if n == 1 { add5 } else { |x| x * n };
+        let s2 = sv.mod_f(|f| |x| f(x) + n);
+        let s3 = sv.set_g(|x| x - n);
+        let t = (s2.@f)(1) + (s2.@g)(1) + (s3.@f)(2) + (s3.@g)(2) + (sv.@g)(3);
+        println([p1(1), p2(1), p3(1), r1, r2, r3, h(4), t].to_iter.map(to_string).join(" "))
+    );
+    "#;
+    let output = run_source_capture(source, Configuration::develop_mode());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "101 2 4 22 7 9 9 33"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for name in ["tbl", "tbl2", "add5", "sv"] {
+        assert_eq!(
+            stderr
+                .lines()
+                .filter(|line| *line == format!("evaluating {}", name))
+                .count(),
+            1,
+            "the body of `{}` should run once, and the program printed:\n{}",
+            name,
+            stderr
+        );
+    }
+}
+
+/// A recursive function that pushes onto a global array of functions a lambda capturing its own
+/// argument, called by `main` with two lambdas: the set of the array's elements holds the pushed
+/// lambda, so the set of the argument it captures is one set too, holding both of `main`'s lambdas,
+/// and the program computes every element.
+#[test]
+fn test_a_lambda_pushed_onto_a_global_array_capturing_an_argument_computes_it() {
+    let source = r#"
+    module Main;
+
+    tbl : Array (I64 -> I64) = [|x| x + 1];
+
+    ext : (I64 -> I64) -> I64 -> Array (I64 -> I64);
+    ext = |g, k| if k <= 0 { tbl.push_back(|x| g(x) * 10) } else { ext(g, k - 1) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let a = ext(|x| x + n, n);
+        let m = 7 + n;
+        let b = ext(|x| x * m, n);
+        let c = a.append(b).to_iter.map(|f| f(3)).to_array;
+        assert_eq(|_| "", c, [4, 40, 4, 240]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
