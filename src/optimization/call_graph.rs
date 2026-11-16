@@ -26,7 +26,15 @@ pub fn call_graph_of(symbols: &Map<FullName, Symbol>, names: Vec<FullName>) -> G
             .unwrap()
             .free_vars()
             .iter()
-            .map(|callee| name_to_idx[callee])
+            .map(|callee| {
+                *name_to_idx.get(callee).unwrap_or_else(|| {
+                    panic!(
+                        "`{}` refers to `{}`, which `names` does not list",
+                        caller.to_string(),
+                        callee.to_string()
+                    )
+                })
+            })
             .collect();
         callees.sort();
         for callee_idx in callees {
