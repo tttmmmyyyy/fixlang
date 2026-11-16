@@ -648,12 +648,12 @@ impl TypeCheckContext {
         }
     }
 
-    /// Records that the type of the expression at `source` is the type variable named `tyvar_name`,
+    /// Records that the type of the expression at `span` is the type variable named `tyvar_name`,
     /// so that a diagnostic naming that variable can point at the expression. `tyvar_name` must name
     /// a type variable the inference created. An expression with no source location leaves the
     /// record as it stands.
-    fn add_tyvar_source(&mut self, tyvar_name: Name, source: Option<Span>) {
-        if let Some(span) = source {
+    fn add_tyvar_source(&mut self, tyvar_name: Name, span: Option<Span>) {
+        if let Some(span) = span {
             self.insert_tyvar_source(
                 tyvar_name,
                 TyVarSource {
