@@ -145,7 +145,8 @@ pub struct Site {
 
 /// What a reference to a symbol of a component gets: new variables for the classes below, holding
 /// the members recorded for them. The first classes are the parameters of the component, in order,
-/// and the others are the variables their members name.
+/// then the pinned variables of its types, which are shared, and the others are the variables their
+/// members name.
 pub struct Scheme {
     /// The members of each class.
     pub classes: Vec<Vec<SchemeMember>>,
@@ -287,7 +288,7 @@ fn infer_component(
     // value's body is copied with every copy of the component, whatever the sets of its own type.
     let holds_a_non_lambda_body = symbols
         .iter()
-        .any(|s| !matches!(&*prg.symbols[s].expr.as_ref().unwrap().expr, Expr::Lam(..)));
+        .any(|s| !prg.symbols[s].expr.as_ref().unwrap().is_lam());
     if holds_a_non_lambda_body {
         for v in types.iter().flat_map(|ty| ty.slots.iter()) {
             analysis.solver.pin(*v);
