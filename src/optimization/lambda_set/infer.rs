@@ -952,12 +952,15 @@ fn generalize(
     // A pinned variable gains members from the components inferred later, so it keeps a class of
     // its own whatever members it holds now: the pinned variables of the types, and those of the
     // components inferred before that the members name.
-    let mut pinned_classes = vec![false; classes.len()];
-    for (v, c) in &class_of {
-        if solver.is_pinned(*v) {
-            pinned_classes[*c as usize] = true;
+    let pinned_classes = {
+        let mut pinned_classes = vec![false; classes.len()];
+        for (v, c) in &class_of {
+            if solver.is_pinned(*v) {
+                pinned_classes[*c as usize] = true;
+            }
         }
-    }
+        pinned_classes
+    };
     let (classes, merged) = merge_equal_classes(classes, fixed_count, &pinned_classes);
     for c in class_of.values_mut() {
         *c = merged[*c as usize];
@@ -1127,18 +1130,20 @@ fn merge_equal_classes(
         .collect();
     // The labels are numbered from 0 with none skipped: the fixed classes, then the other pinned
     // classes, then one label for every other class.
+    assert_eq!(
+        pinned.len(),
+        n,
+        "the pinned marks do not cover the classes of the scheme"
+    );
+    let keeps_own_class = |c: usize| c < fixed_count || pinned[c];
     let mut initial: Vec<usize> = vec![0; n];
     let mut next = 0;
-    for c in 0..n {
-        if c < fixed_count || pinned[c] {
-            initial[c] = next;
-            next += 1;
-        }
+    for c in (0..n).filter(|c| keeps_own_class(*c)) {
+        initial[c] = next;
+        next += 1;
     }
-    for c in 0..n {
-        if !(c < fixed_count || pinned[c]) {
-            initial[c] = next;
-        }
+    for c in (0..n).filter(|c| !keeps_own_class(*c)) {
+        initial[c] = next;
     }
     let (block, _) = canonical_classes(initial, &elems);
 
