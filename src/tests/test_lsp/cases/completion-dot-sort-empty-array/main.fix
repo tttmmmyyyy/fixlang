@@ -1,0 +1,7 @@
+module Main;
+
+main : IO ();
+main = (
+    let _ = [].
+    pure()
+);
