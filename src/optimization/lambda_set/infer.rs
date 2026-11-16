@@ -143,10 +143,11 @@ pub struct Site {
     pub args: Vec<SetVar>,
 }
 
-/// What a reference to a symbol of a component gets: new variables for the classes below, holding
-/// the members recorded for them. The first classes are the parameters of the component, in order,
-/// then the pinned variables of its types, which are shared, and the others are the variables their
-/// members name.
+/// What a reference to a symbol of a component gets: a variable for each class below, holding the
+/// members recorded for it. The variable is new to the reference, or, for a class that depends on
+/// no parameter, the one of the component that every reference shares. The first classes are the
+/// parameters of the component, in order, then the pinned variables of its types, which depend on
+/// no parameter, and the others are the variables their members name.
 pub struct Scheme {
     /// The members of each class.
     pub classes: Vec<Vec<SchemeMember>>,
