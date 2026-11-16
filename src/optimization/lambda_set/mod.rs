@@ -648,9 +648,10 @@ main = (
         source
     }
 
-    /// Along a chain of symbols each referring twice to the one below, the scheme of each grows by
-    /// one class per level: global values share their pinned variables, and a function whose
-    /// internal classes depend on its parameter gets the two copies of them merged into one.
+    /// Along a chain of symbols each referring twice to the one below, the scheme of each stays
+    /// small: that of a global value holds its pinned variable alone, and a function whose internal
+    /// classes depend on its parameter gets the two copies of them merged into one, so that its
+    /// scheme grows by one class per level.
     #[test]
     fn test_a_chain_of_symbols_referring_twice_to_the_one_below_keeps_its_schemes_small() {
         for of_functions in [false, true] {
@@ -658,8 +659,9 @@ main = (
             let inf = Inferred::new(&prg);
             let (c, _) = inf.component_of("c12");
             let classes = inf.analysis.components[c].scheme.classes.len();
+            let limit = if of_functions { 16 } else { 1 };
             assert!(
-                classes <= 16,
+                classes <= limit,
                 "the scheme at the top of the chain of {} has {} classes",
                 if of_functions {
                     "functions"
