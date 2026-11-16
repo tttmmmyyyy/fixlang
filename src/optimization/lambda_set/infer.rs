@@ -143,21 +143,24 @@ pub struct Site {
     pub args: Vec<SetVar>,
 }
 
-/// What a reference to a symbol of a component gets: a variable for each class below, holding the
-/// members recorded for it. The variable is new to the reference, or, for a class that depends on
-/// no parameter, the one of the component that every reference shares. The first classes are the
-/// parameters of the component, in order, then the pinned variables of its types, which depend on
-/// no parameter, and the others are the variables their members name.
+/// What a reference to a symbol of a component gets: a variable for each class below. The first
+/// classes are the parameters of the component, in order, then the pinned variables of its types,
+/// and the others are the variables their members name.
 pub struct LambdaSetScheme {
-    /// The members of each class.
-    pub classes: Vec<Vec<LambdaSetSchemeMember>>,
-    /// For each class that depends on no parameter, the variable of the component it stands for.
-    /// What such a class holds is the same in every reference, so every reference shares that
-    /// variable: copying it per reference would double the classes of a symbol that refers twice
-    /// to one holding them, at each level of a chain of such symbols.
-    pub shared: Vec<Option<SetVar>>,
+    /// The classes.
+    pub classes: Vec<LambdaSetSchemeClass>,
     /// For each symbol of the component, the class of each slot of its type.
     pub slot_classes: Vec<Vec<u32>>,
+}
+
+/// A class of a `LambdaSetScheme`.
+pub enum LambdaSetSchemeClass {
+    /// A pinned variable, which every reference shares: a variable pinned for a global value, or
+    /// one that depends on no parameter and so holds the same members in every reference. Its
+    /// members are read from the solver, where the components inferred later may add to them.
+    Shared(SetVar),
+    /// A variable depending on a parameter: each reference gets a new one, holding these members.
+    Fresh(Vec<LambdaSetSchemeMember>),
 }
 
 /// A member of a class of a `LambdaSetScheme`.
@@ -795,17 +798,21 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
     }
 }
 
-/// New variables for the classes of `scheme`, holding the members recorded for them.
+/// The variables of the classes of `scheme` for a reference: the shared variables, and new ones
+/// holding the members recorded for the others.
 fn instantiate(scheme: &LambdaSetScheme, solver: &mut Solver) -> Vec<SetVar> {
     let vars: Vec<SetVar> = scheme
-        .shared
+        .classes
         .iter()
-        .map(|shared| shared.unwrap_or_else(|| solver.fresh()))
+        .map(|class| match class {
+            LambdaSetSchemeClass::Shared(v) => *v,
+            LambdaSetSchemeClass::Fresh(_) => solver.fresh(),
+        })
         .collect();
-    for (class, members) in scheme.classes.iter().enumerate() {
-        if scheme.shared[class].is_some() {
+    for (class, var) in scheme.classes.iter().zip(&vars) {
+        let LambdaSetSchemeClass::Fresh(members) = class else {
             continue;
-        }
+        };
         for member in members {
             let member = match member {
                 LambdaSetSchemeMember::Lam { lam, args } => Member::Lam {
@@ -814,7 +821,7 @@ fn instantiate(scheme: &LambdaSetScheme, solver: &mut Solver) -> Vec<SetVar> {
                 },
                 LambdaSetSchemeMember::Dynamic(reason) => Member::Dynamic(reason.clone()),
             };
-            solver.add(vars[class], member);
+            solver.add(*var, member);
         }
     }
     vars
@@ -907,20 +914,41 @@ fn generalize(
         *solver.members_mut(v) = members;
     }
 
+    // A pinned variable is one variable in every copy, so the variables its members name have to
+    // be pinned as well.
+    for v in &pinned {
+        for member in solver.members(*v).to_vec() {
+            if let Member::Lam {
+                owner: Owner::Instance(args),
+                ..
+            } = member
+            {
+                assert!(
+                    args.iter().all(|a| solver.is_pinned(*a)),
+                    "a pinned variable of a component names a variable that is not pinned"
+                );
+            }
+        }
+    }
+
     // The scheme: the parameters, the pinned variables of the types, then every variable their
-    // members name.
+    // members name. The members of a pinned variable are not read: its class is the variable.
+    let mut vars: Vec<SetVar> = vec![];
     let mut class_of: Map<SetVar, u32> = Map::default();
     let mut queue: VecDeque<SetVar> = VecDeque::new();
-    for (i, v) in params.iter().chain(&pinned_slots).enumerate() {
-        class_of.insert(*v, i as u32);
+    for v in params.iter().chain(&pinned_slots) {
+        class_of.insert(*v, vars.len() as u32);
+        vars.push(*v);
         queue.push_back(*v);
     }
-    let fixed_count = params.len() + pinned_slots.len();
-    let mut classes: Vec<Vec<LambdaSetSchemeMember>> = vec![vec![]; fixed_count];
+    let fixed_count = vars.len();
+    let mut members_of: Vec<Option<Vec<LambdaSetSchemeMember>>> = vec![None; fixed_count];
     while let Some(v) = queue.pop_front() {
-        let members = solver.members(v).to_vec();
+        if solver.is_pinned(v) {
+            continue;
+        }
         let mut scheme_members: Vec<LambdaSetSchemeMember> = vec![];
-        for member in members {
+        for member in solver.members(v).to_vec() {
             let scheme_member = match member {
                 Member::Lam {
                     lam,
@@ -932,8 +960,9 @@ fn generalize(
                             let root = solver.find(*a);
                             *class_of.entry(root).or_insert_with(|| {
                                 queue.push_back(root);
-                                classes.push(vec![]);
-                                (classes.len() - 1) as u32
+                                vars.push(root);
+                                members_of.push(None);
+                                (vars.len() - 1) as u32
                             })
                         })
                         .collect();
@@ -949,30 +978,26 @@ fn generalize(
                 scheme_members.push(scheme_member);
             }
         }
-        classes[class_of[&v] as usize] = scheme_members;
+        members_of[class_of[&v] as usize] = Some(scheme_members);
     }
-    // A pinned variable gains members from the components inferred later, so it keeps a class of
-    // its own whatever members it holds now: the pinned variables of the types, and those of the
-    // components inferred before that the members name.
-    let pinned_classes = {
-        let mut pinned_classes = vec![false; classes.len()];
-        for (v, c) in &class_of {
-            if solver.is_pinned(*v) {
-                pinned_classes[*c as usize] = true;
+    // A variable that depends on no parameter holds the same members in every reference, so it is
+    // pinned and shared too.
+    let depends = depends_on_params(&members_of, params.len());
+    let classes: Vec<LambdaSetSchemeClass> = members_of
+        .into_iter()
+        .zip(&vars)
+        .zip(depends)
+        .map(|((members, v), depends)| match members {
+            Some(members) if depends => LambdaSetSchemeClass::Fresh(members),
+            _ => {
+                solver.pin(*v);
+                LambdaSetSchemeClass::Shared(*v)
             }
-        }
-        pinned_classes
-    };
-    let (classes, merged) = merge_equal_classes(classes, fixed_count, &pinned_classes);
+        })
+        .collect();
+    let (classes, merged) = merge_equal_classes(classes, fixed_count);
     for c in class_of.values_mut() {
         *c = merged[*c as usize];
-    }
-    let shared = shared_classes(&classes, params.len(), &class_of);
-    for c in params.len()..fixed_count {
-        assert!(
-            shared[c].is_some(),
-            "a pinned variable of a component's types depends on a parameter"
-        );
     }
     let slot_classes = types
         .iter()
@@ -1005,7 +1030,6 @@ fn generalize(
         sites: deduped_sites,
         scheme: LambdaSetScheme {
             classes,
-            shared,
             slot_classes,
         },
         body_params,
@@ -1088,28 +1112,27 @@ enum MemberLabel {
 }
 
 /// `classes`, with each set of classes that unfold to the same tree made one, and the class each
-/// class became. The first `fixed_count` classes each stay a class of their own and keep their
-/// place: the parameters, which a copy gives values of its own, and the pinned variables of the
-/// types. A class `pinned` marks also stays a class of its own: a pinned variable gains members
-/// from the components inferred later.
+/// class became. The first `fixed_count` classes keep their places: the parameters, which a copy
+/// gives values of its own, and the pinned variables of the types. Each of them and each shared
+/// class stays a class of its own, a shared class being its variable.
 ///
 /// A symbol referring twice to one with internal classes gets two copies of them, equal but for
 /// their variables; merging them keeps a chain of such symbols from doubling its classes at each
 /// level.
 fn merge_equal_classes(
-    classes: Vec<Vec<LambdaSetSchemeMember>>,
+    classes: Vec<LambdaSetSchemeClass>,
     fixed_count: usize,
-    pinned: &[bool],
-) -> (Vec<Vec<LambdaSetSchemeMember>>, Vec<u32>) {
-    // The fixed and the pinned classes each start in a class of their own and the other classes in
+) -> (Vec<LambdaSetSchemeClass>, Vec<u32>) {
+    // The fixed and the shared classes each start in a class of their own and the other classes in
     // one, and a Dynamic member is labelled by its reason, so that two classes are one only when
     // their members name the same reasons.
     let n = classes.len();
     let mut reasons: Vec<Rc<DynamicReason>> = vec![];
     let elems: Vec<NodeElems<MemberLabel>> = classes
         .iter()
-        .map(|members| {
-            members
+        .map(|class| match class {
+            LambdaSetSchemeClass::Shared(_) => vec![],
+            LambdaSetSchemeClass::Fresh(members) => members
                 .iter()
                 .map(|m| match m {
                     LambdaSetSchemeMember::Lam { lam, args } => (
@@ -1127,17 +1150,13 @@ fn merge_equal_classes(
                         (MemberLabel::Dynamic(i), vec![])
                     }
                 })
-                .collect()
+                .collect(),
         })
         .collect();
-    // The labels are numbered from 0 with none skipped: the fixed classes, then the other pinned
-    // classes, then one label for every other class.
-    assert_eq!(
-        pinned.len(),
-        n,
-        "the pinned marks do not cover the classes of the scheme"
-    );
-    let keeps_own_class = |c: usize| c < fixed_count || pinned[c];
+    // The labels are numbered from 0 with none skipped: the classes kept apart, then one label for
+    // every other class.
+    let keeps_own_class =
+        |c: usize| c < fixed_count || matches!(classes[c], LambdaSetSchemeClass::Shared(_));
     let mut initial: Vec<usize> = vec![0; n];
     let mut next = 0;
     for c in (0..n).filter(|c| keeps_own_class(*c)) {
@@ -1165,41 +1184,43 @@ fn merge_equal_classes(
     );
     let classes = kept
         .iter()
-        .map(|c| {
-            let mut members: Vec<LambdaSetSchemeMember> = vec![];
-            for m in &classes[*c] {
-                let m = match m {
-                    LambdaSetSchemeMember::Lam { lam, args } => LambdaSetSchemeMember::Lam {
-                        lam: *lam,
-                        args: args.iter().map(|a| merged[*a as usize]).collect(),
-                    },
-                    LambdaSetSchemeMember::Dynamic(reason) => {
-                        LambdaSetSchemeMember::Dynamic(reason.clone())
+        .map(|c| match &classes[*c] {
+            LambdaSetSchemeClass::Shared(v) => LambdaSetSchemeClass::Shared(*v),
+            LambdaSetSchemeClass::Fresh(old) => {
+                let mut members: Vec<LambdaSetSchemeMember> = vec![];
+                for m in old {
+                    let m = match m {
+                        LambdaSetSchemeMember::Lam { lam, args } => LambdaSetSchemeMember::Lam {
+                            lam: *lam,
+                            args: args.iter().map(|a| merged[*a as usize]).collect(),
+                        },
+                        LambdaSetSchemeMember::Dynamic(reason) => {
+                            LambdaSetSchemeMember::Dynamic(reason.clone())
+                        }
+                    };
+                    if !members.contains(&m) {
+                        members.push(m);
                     }
-                };
-                if !members.contains(&m) {
-                    members.push(m);
                 }
+                LambdaSetSchemeClass::Fresh(members)
             }
-            members
         })
         .collect();
     (classes, merged)
 }
 
-/// For each class of a scheme whose first `param_count` classes are its parameters, the variable
-/// of `class_of` the class stands for when the class depends on no parameter: neither it nor any
-/// class its members name, transitively, is a parameter.
-fn shared_classes(
-    classes: &[Vec<LambdaSetSchemeMember>],
+/// For each class of a scheme whose first `param_count` classes are its parameters, whether it
+/// depends on a parameter: it or a class its members name, transitively, is one. `members_of`
+/// holds the members of each class, and nothing for a pinned variable, which depends on none.
+fn depends_on_params(
+    members_of: &[Option<Vec<LambdaSetSchemeMember>>],
     param_count: usize,
-    class_of: &Map<SetVar, u32>,
-) -> Vec<Option<SetVar>> {
+) -> Vec<bool> {
     // A class depends on a parameter when a member names a class that does, so the dependence
     // spreads backwards along the edges from a class to the classes its members name.
-    let mut named_by: Vec<Vec<usize>> = vec![vec![]; classes.len()];
-    for (class, members) in classes.iter().enumerate() {
-        for member in members {
+    let mut named_by: Vec<Vec<usize>> = vec![vec![]; members_of.len()];
+    for (class, members) in members_of.iter().enumerate() {
+        for member in members.iter().flatten() {
             if let LambdaSetSchemeMember::Lam { args, .. } = member {
                 for a in args {
                     named_by[*a as usize].push(class);
@@ -1207,7 +1228,7 @@ fn shared_classes(
             }
         }
     }
-    let mut depends = vec![false; classes.len()];
+    let mut depends = vec![false; members_of.len()];
     let mut stack: Vec<usize> = (0..param_count).collect();
     while let Some(c) = stack.pop() {
         if depends[c] {
@@ -1216,13 +1237,7 @@ fn shared_classes(
         depends[c] = true;
         stack.extend(named_by[c].iter().copied());
     }
-    let mut var_of: Vec<Option<SetVar>> = vec![None; classes.len()];
-    for (v, c) in class_of {
-        var_of[*c as usize] = Some(*v);
-    }
-    (0..classes.len())
-        .map(|c| if depends[c] { None } else { var_of[c] })
-        .collect()
+    depends
 }
 
 /// The parameters of the component that the term `start` depends on, in increasing order: those it
