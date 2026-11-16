@@ -672,4 +672,39 @@ main = (
             );
         }
     }
+
+    /// Along a chain of functions each passing `both` two results of the one below, given a
+    /// value of no function type, every class inside a scheme depends on no parameter: the scheme
+    /// shares it as its variable and stops there, so that the schemes do not grow along the chain.
+    #[test]
+    fn test_a_chain_of_functions_given_no_function_keeps_its_schemes_from_growing() {
+        let depth = 12;
+        let mut source = String::from(
+            "module Main;\n\
+             type P = box struct { run : I64 -> I64 };\n\
+             both : P -> P -> P;\n\
+             both = |a, b| if (a.@run)(0) < -1000000 { both(b, a) } \
+             else { P { run : |x| (a.@run)((b.@run)(x)) } };\n\
+             c0 : I64 -> P;\n\
+             c0 = |n| if n < -1000000 { c0(n) } else { P { run : |x| x + n } };\n",
+        );
+        for i in 1..=depth {
+            source += &format!(
+                "c{i} : I64 -> P;\n\
+                 c{i} = |n| if n < -1000000 {{ c{i}(n) }} else {{ both(c{j}(n), c{j}(n)) }};\n",
+                j = i - 1
+            );
+        }
+        source += &format!(
+            "main : IO ();\nmain = (let k = *get_args.map(|args| args.@size); \
+             println((c{depth}(k).@run)(k).to_string));\n"
+        );
+        let prg = program_of(&source);
+        let inf = Inferred::new(&prg);
+        let classes_of = |name: &str| {
+            let (c, _) = inf.component_of(name);
+            inf.analysis.components[c].scheme.classes.len()
+        };
+        assert_eq!(classes_of("c6"), classes_of("c12"));
+    }
 }

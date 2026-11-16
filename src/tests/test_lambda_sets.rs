@@ -1802,3 +1802,35 @@ fn test_a_closure_built_by_a_callee_pushed_onto_a_global_array_computes_it() {
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+/// A function passing `both` the results of two functions that each build a different lambda:
+/// `main`, reading the result, calls the lambda of `ca` in the first function `both` captures and
+/// that of `cb` in the second.
+#[test]
+fn test_two_functions_building_different_lambdas_passed_to_one_compute_each() {
+    let source = r#"
+    module Main;
+
+    type P = box struct { run : I64 -> I64 };
+
+    both : P -> P -> P;
+    both = |a, b| if (a.@run)(0) < -1000000 { both(a, b) } else { P { run : |x| (a.@run)((b.@run)(x)) } };
+
+    ca : I64 -> P;
+    ca = |n| if n < -1000000 { ca(n) } else { P { run : |x| x + n } };
+
+    cb : I64 -> P;
+    cb = |n| if n < -1000000 { cb(n) } else { P { run : |x| x * n } };
+
+    c : I64 -> P;
+    c = |n| if n < -1000000 { c(n) } else { both(ca(n), cb(n)) };
+
+    main : IO ();
+    main = (
+        let k = *get_args.map(|args| args.@size) + 2;
+        assert_eq(|_| "", (c(k).@run)(10), 10 * k + k);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
