@@ -11,6 +11,8 @@ This optimization transforms `let x = {e0} in {e1}` into `{e1}[x:={e0}]` if one 
      and the occurrence of `x` is in an application
 2-c. {e1} evaluates `x` "before any other local names", and `x` is not captured by a lambda expression in {e1}
 3. `x`  does not appear in {e1}
+4. `e0` is a builtin expression whose operation is free to duplicate (`BuiltinOp::is_free_to_duplicate`),
+   such as a number literal, and `x` is captured by a lambda expression in {e1}
 
 ## Why conditions 2-* are necessary
 
@@ -23,6 +25,16 @@ In 2-b, the name expressions partially applied to the global lambda expression w
 so their lifetimes do not extend.
 
 For the definition of "evaluates before any other local names", see the implementation of `FreeOccurrenceProbe`.
+
+## Why condition 4 is safe, and why it asks for a capture
+
+An operation free to duplicate takes no operand and answers with a scalar or with a constant in the
+program's data, so evaluating it at each occurrence of `x` instead of once extends no lifetime and
+allocates nothing. What the substitution gains is a lambda expression that no longer captures `x`,
+so condition 4 asks for one. Elsewhere it would gain nothing and undo the passes that bind an
+operand of a builtin expression, or an argument of an application, to a name: the substitution
+puts a `let` around a builtin expression whose operand it replaces, and `pull_let` moves a
+non-variable argument into a `let` again.
 
 ## Effects
 
@@ -126,6 +138,21 @@ impl<'a> ExprVisitor for LetEliminator<'a> {
         let e1 = expr.get_let_value();
         let mut probe = FreeOccurrenceProbe::new(x.clone());
         probe.traverse(&e1);
+
+        if probe.is_captured_by_lambda
+            && e0.is_builtin()
+            && e0.get_builtin().op.is_free_to_duplicate()
+        {
+            // Case 4 of the documentation at the top.
+            let op = &e0.get_builtin().op;
+            assert!(
+                op.free_vars().is_empty(),
+                "the builtin operation `{}` is free to duplicate but takes an operand",
+                op.name()
+            );
+            let expr = substitute_free_name(&e1, x, &e0);
+            return EndVisitResult::changed(expr);
+        }
 
         if probe.count == 1 && !probe.is_argument_to_builtin {
             // Case 2 of the documentation at the top.
