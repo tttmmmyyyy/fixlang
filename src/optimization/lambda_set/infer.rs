@@ -1129,9 +1129,9 @@ fn merge_equal_classes(
     classes: Vec<LambdaSetSchemeClass>,
     param_count: usize,
 ) -> (Vec<LambdaSetSchemeClass>, Vec<u32>) {
-    // The parameters and the shared classes each start in a class of their own and the other classes in
-    // one, and a Dynamic member is labelled by its reason, so that two classes are one only when
-    // their members name the same reasons.
+    // The parameters and the shared classes each start in a class of their own and the other
+    // classes in one, and a Dynamic member is labelled by its reason, so that two classes are one
+    // only when their members name the same reasons.
     let n = classes.len();
     let mut reasons: Vec<Rc<DynamicReason>> = vec![];
     let elems: Vec<NodeElems<MemberLabel>> = classes
