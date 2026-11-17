@@ -28,13 +28,15 @@ For the definition of "evaluates before any other local names", see the implemen
 
 ## Why condition 4 is safe, and why it asks for a capture
 
-An operation free to duplicate takes no operand and answers with a scalar or with a constant in the
-program's data, so evaluating it at each occurrence of `x` instead of once extends no lifetime and
-allocates nothing. What the substitution gains is a lambda expression that no longer captures `x`,
-so condition 4 asks for one. Elsewhere it would gain nothing and undo the passes that bind an
-operand of a builtin expression, or an argument of an application, to a name: the substitution
-puts a `let` around a builtin expression whose operand it replaces, and `pull_let` moves a
-non-variable argument into a `let` again.
+An operation free to duplicate takes no operand and evaluates to a scalar or to a constant in the
+program's data. Evaluating it at each occurrence of `x` therefore extends no lifetime and allocates
+nothing.
+
+The substitution pays off when a lambda expression captures `x`: the lambda then captures nothing
+for `x`, so condition 4 asks for that capture. Elsewhere the substitution gains nothing and undoes
+the passes that bind an operand of a builtin expression, or an argument of an application, to a
+name: the substitution puts a `let` around a builtin expression whose operand it replaces, and
+`pull_let` moves a non-variable argument into a `let` again.
 
 ## Effects
 
