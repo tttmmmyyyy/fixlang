@@ -915,7 +915,8 @@ fn generalize(
         *solver.members_mut(v) = members;
     }
 
-    // Every variable that the members of a pinned variable name is pinned as well.
+    // A pinned variable is one variable in every copy, so every variable its members name is pinned
+    // as well.
     let pinned_roots: Set<SetVar> = pinned.iter().map(|v| solver.find(*v)).collect();
     for v in pinned_roots {
         for member in solver.members(v).to_vec() {
@@ -983,7 +984,7 @@ fn generalize(
     }
     // A variable that depends on no parameter holds the same members in every reference, so it is
     // pinned and shared too.
-    let depends = depends_on_params(&members_of, params.len());
+    let depends = param_dependence(&members_of, params.len());
     let classes: Vec<LambdaSetSchemeClass> = members_of
         .into_iter()
         .zip(&var_of)
@@ -1217,7 +1218,7 @@ fn merge_equal_classes(
 /// For each class of a scheme whose first `param_count` classes are its parameters, whether it
 /// depends on a parameter: it or a class its members name, transitively, is one. `members_of`
 /// holds the members of each class, and nothing for a pinned variable, which depends on none.
-fn depends_on_params(
+fn param_dependence(
     members_of: &[Option<Vec<LambdaSetSchemeMember>>],
     param_count: usize,
 ) -> Vec<bool> {
