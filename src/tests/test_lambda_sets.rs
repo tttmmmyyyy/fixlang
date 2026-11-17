@@ -1803,9 +1803,9 @@ fn test_a_closure_built_by_a_callee_pushed_onto_a_global_array_computes_it() {
     test_source(source, Configuration::develop_mode());
 }
 
-/// A function passing `both` the results of two functions that each build a different lambda:
-/// `main`, reading the result, calls the lambda of `ca` in the first function `both` captures and
-/// that of `cb` in the second.
+/// Verifies that when a function passes `both` the results of two functions that build different
+/// lambdas, the function `both` returns calls the lambda of `ca` through its first capture and that
+/// of `cb` through its second.
 #[test]
 fn test_two_functions_building_different_lambdas_passed_to_one_compute_each() {
     let source = r#"

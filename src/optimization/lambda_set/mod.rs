@@ -673,9 +673,10 @@ main = (
         }
     }
 
-    /// Along a chain of functions each passing `both` two results of the one below, given a
-    /// value of no function type, every class inside a scheme depends on no parameter: the scheme
-    /// shares it as its variable and stops there, so that the schemes do not grow along the chain.
+    /// Along a chain of functions that each take an `I64` and pass two results of the one below to
+    /// `both`, no class inside a scheme depends on a parameter: the scheme holds each such class as
+    /// a shared variable without following its members, so the schemes stay the same size along
+    /// the chain.
     #[test]
     fn test_a_chain_of_functions_given_no_function_keeps_its_schemes_from_growing() {
         let depth = 12;

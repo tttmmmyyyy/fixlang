@@ -147,7 +147,8 @@ pub struct Site {
 /// classes are the parameters of the component, in order, then the pinned variables of its types,
 /// and the others are the variables their members name.
 pub struct LambdaSetScheme {
-    /// The classes.
+    /// The classes, indexed by the class numbers that `slot_classes` and the members of the
+    /// `Fresh` classes give.
     pub classes: Vec<LambdaSetSchemeClass>,
     /// For each symbol of the component, the class of each slot of its type.
     pub slot_classes: Vec<Vec<u32>>,
@@ -914,8 +915,7 @@ fn generalize(
         *solver.members_mut(v) = members;
     }
 
-    // A pinned variable is one variable in every copy, so the variables its members name have to
-    // be pinned as well.
+    // Every variable that the members of a pinned variable name is pinned as well.
     let pinned_roots: Set<SetVar> = pinned.iter().map(|v| solver.find(*v)).collect();
     for v in pinned_roots {
         for member in solver.members(v).to_vec() {
@@ -933,7 +933,8 @@ fn generalize(
     }
 
     // The scheme: the parameters, the pinned variables of the types, then every variable their
-    // members name. The members of a pinned variable are not read: its class is the variable.
+    // members name. The class of a pinned variable is the variable itself, so its members are
+    // skipped.
     let mut var_of: Vec<SetVar> = vec![];
     let mut class_of: Map<SetVar, u32> = Map::default();
     let mut queue: VecDeque<SetVar> = VecDeque::new();
@@ -1118,8 +1119,8 @@ enum MemberLabel {
 
 /// `classes`, with each set of classes that unfold to the same tree made one, and the class each
 /// class became. The first `fixed_count` classes keep their places: the parameters, which a copy
-/// gives values of its own, and the pinned variables of the types. Each of them and each shared
-/// class stays a class of its own, a shared class being its variable.
+/// gives values of its own, and the pinned variables of the types. Each of them stays a class of
+/// its own, and so does each shared class, since it stands for one variable.
 ///
 /// A symbol referring twice to one with internal classes gets two copies of them, equal but for
 /// their variables; merging them keeps a chain of such symbols from doubling its classes at each
