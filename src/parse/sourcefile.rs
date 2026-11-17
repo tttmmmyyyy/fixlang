@@ -492,15 +492,6 @@ impl Span {
         }
     }
 
-    /// The empty span just past the byte this span begins at.
-    pub fn after_head_character(&self) -> Self {
-        Self {
-            input: self.input.clone(),
-            start: self.start + 1,
-            end: self.start + 1,
-        }
-    }
-
     /// The smallest span covering both spans, or `None` when either is absent.
     pub fn unite_both(lhs: &Option<Span>, rhs: &Option<Span>) -> Option<Span> {
         Some(lhs.as_ref()?.unite(rhs.as_ref()?))

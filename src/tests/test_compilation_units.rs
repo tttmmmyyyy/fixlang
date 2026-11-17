@@ -531,7 +531,9 @@ fn test_an_edit_reshaping_a_body_regenerates_what_an_edit_of_a_literal_does() {
 }
 
 /// A project whose `main` passes `loop` a lambda too large to be inlined into the specialization of
-/// `loop` it gets. `k` is the expression `main` binds `k` to, which the lambda reads.
+/// `loop` it gets. `main` binds the name `k` to `{k} + 0`, and the lambda captures that name. The
+/// `+ 0` keeps the capture: a name bound to a number literal alone is replaced by the literal inside
+/// the lambda.
 fn write_large_loop_body_project(dir: &Path, k: &str) {
     write_project_file(dir, "compilation-units", &["main.fix"]);
     let steps: String = (0..60)
@@ -552,7 +554,7 @@ fn write_large_loop_body_project(dir: &Path, k: &str) {
 
 main : IO ();
 main = (
-    let k = {k};
+    let k = {k} + 0;
     let total = loop((0, 0), |(i, acc)|
         if i == 1000 {{ break $ acc }} else {{
             let z0 = (i * 3 + acc + k) % 1009;

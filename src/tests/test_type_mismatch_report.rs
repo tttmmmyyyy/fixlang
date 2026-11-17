@@ -256,6 +256,47 @@ main : IO () = println(h(1).to_string);
     test_source_fail_excludes(source, Configuration::develop_mode(), "`a` is the type for");
 }
 
+/// A type variable the signature writes gets no pointer to a source where a parameter pattern of
+/// another type is matched against it, while the type variables the inference created for the
+/// pattern still get theirs.
+#[test]
+pub fn test_a_type_variable_of_the_signature_is_not_located_at_a_mismatched_parameter_pattern() {
+    let source = r##"
+module Main;
+
+g : [a : ToString] a -> String;
+g = |(x, y)| x.to_string;
+
+main : IO () = println(g(1));
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`#1` is the type for `x`.",
+    );
+    test_source_fail_excludes(source, Configuration::develop_mode(), "`a` is the type for");
+}
+
+/// A type variable the signature writes gets no pointer to a source, even at the parameter whose
+/// type it is.
+#[test]
+pub fn test_a_type_variable_of_the_signature_is_not_located_at_its_parameter() {
+    let source = r##"
+module Main;
+
+g : [a : ToString] a -> String;
+g = |x| (x + x).to_string;
+
+main : IO () = println(g(1));
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        "`a : Std::Add` cannot be deduced.",
+    );
+    test_source_fail_excludes(source, Configuration::develop_mode(), "`a` is the type for");
+}
+
 /// A parameter pattern written with a type wildcard is reported without the name the parser gives
 /// the wildcard.
 #[test]
