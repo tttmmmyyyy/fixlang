@@ -943,8 +943,7 @@ fn generalize(
         var_of.push(*v);
         queue.push_back(*v);
     }
-    let fixed_count = var_of.len();
-    let mut members_of: Vec<Option<Vec<LambdaSetSchemeMember>>> = vec![None; fixed_count];
+    let mut members_of: Vec<Option<Vec<LambdaSetSchemeMember>>> = vec![None; var_of.len()];
     while let Some(v) = queue.pop_front() {
         if solver.is_pinned(v) {
             continue;
@@ -1001,7 +1000,7 @@ fn generalize(
             ),
         })
         .collect();
-    let (classes, merged) = merge_equal_classes(classes, fixed_count);
+    let (classes, merged) = merge_equal_classes(classes, params.len());
     for c in class_of.values_mut() {
         *c = merged[*c as usize];
     }
@@ -1118,18 +1117,18 @@ enum MemberLabel {
 }
 
 /// `classes`, with each set of classes that unfold to the same tree made one, and the class each
-/// class became. The first `fixed_count` classes keep their places: the parameters, which a copy
-/// gives values of its own, and the pinned variables of the types. Each of them stays a class of
-/// its own, and so does each shared class, since it stands for one variable.
+/// class became. The first `param_count` classes are the parameters, which a copy gives values of
+/// its own: each stays a class of its own and keeps its place. Each shared class stays a class of
+/// its own too, since it stands for one variable.
 ///
 /// A symbol referring twice to one with internal classes gets two copies of them, equal but for
 /// their variables; merging them keeps a chain of such symbols from doubling its classes at each
 /// level.
 fn merge_equal_classes(
     classes: Vec<LambdaSetSchemeClass>,
-    fixed_count: usize,
+    param_count: usize,
 ) -> (Vec<LambdaSetSchemeClass>, Vec<u32>) {
-    // The fixed and the shared classes each start in a class of their own and the other classes in
+    // The parameters and the shared classes each start in a class of their own and the other classes in
     // one, and a Dynamic member is labelled by its reason, so that two classes are one only when
     // their members name the same reasons.
     let n = classes.len();
@@ -1162,7 +1161,7 @@ fn merge_equal_classes(
     // The labels are numbered from 0 with none skipped: the classes kept apart, then one label for
     // every other class.
     let keeps_own_class =
-        |c: usize| c < fixed_count || matches!(classes[c], LambdaSetSchemeClass::Shared(_));
+        |c: usize| c < param_count || matches!(classes[c], LambdaSetSchemeClass::Shared(_));
     let mut initial: Vec<usize> = vec![0; n];
     let mut next = 0;
     for c in (0..n).filter(|c| keeps_own_class(*c)) {
@@ -1174,7 +1173,7 @@ fn merge_equal_classes(
     }
     let (block, _) = canonical_classes(initial, &elems);
 
-    // Number the blocks by their first class, so that the fixed classes keep their places.
+    // Number the blocks by their first class, so that the parameters keep their places.
     let mut class_of_block: Map<usize, u32> = Map::default();
     let mut merged: Vec<u32> = vec![0; n];
     let mut kept: Vec<usize> = vec![];
@@ -1185,8 +1184,8 @@ fn merge_equal_classes(
         });
     }
     assert!(
-        (0..fixed_count).all(|p| merged[p] == p as u32),
-        "a fixed class of a scheme merged with another class"
+        (0..param_count).all(|p| merged[p] == p as u32),
+        "a parameter of a scheme merged with another class"
     );
     let classes = kept
         .iter()
