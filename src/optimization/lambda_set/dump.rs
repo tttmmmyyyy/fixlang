@@ -17,7 +17,7 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
     let mut out = String::new();
     let lambda_names: Vec<String> = analysis.lambdas.iter().map(|l| l.to_string()).collect();
 
-    writeln!(out, "# Lambda set schemes").unwrap();
+    writeln!(out, "# Schemes").unwrap();
     writeln!(out).unwrap();
     for c in 0..analysis.components.len() {
         let component = &analysis.components[c];
