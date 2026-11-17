@@ -358,8 +358,8 @@ main : IO () = (
     );
 }
 
-/// An argument whose function fails to check before the argument is checked is pointed at as the
-/// expression its type variable is expected for, apart from the type the argument has.
+/// When the function of an application fails to check before its argument is checked, the type
+/// variable for the argument still points at the argument, as the type expected for it.
 #[test]
 pub fn test_an_argument_unchecked_at_the_error_is_located_as_the_expression_its_type_is_expected_for()
 {

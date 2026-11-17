@@ -653,8 +653,7 @@ impl TypeCheckContext {
 
     /// Records that the expression or pattern at `span` is checked against the type variable named
     /// `tyvar_name`, so that a diagnostic naming that variable can point at it. `tyvar_name` must name
-    /// a type variable the inference created. An expression with no source location leaves the
-    /// record as it stands.
+    /// a type variable the inference created. A `span` of `None` leaves the record as it stands.
     fn add_tyvar_source(&mut self, tyvar_name: Name, span: Option<Span>) {
         if let Some(span) = span {
             self.insert_tyvar_source(
@@ -3271,8 +3270,9 @@ struct TyVarSource {
 /// How a type variable relates to the expression it arose at.
 #[derive(Clone)]
 enum TyVarRole {
-    /// The variable is the type the expression or pattern is checked against. Checking it unifies
-    /// the variable with its own type, so an error raised before that may show the two differing.
+    /// The variable is the type the expression or pattern is checked against. The check unifies the
+    /// variable with the type of the expression or pattern, so an error raised before the check may
+    /// show that type differing from the variable.
     ExpectedTypeOf,
     /// The variable is the element type of the expression, an array literal with no element.
     ElementTypeOf,
