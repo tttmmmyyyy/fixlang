@@ -934,15 +934,15 @@ fn generalize(
 
     // The scheme: the parameters, the pinned variables of the types, then every variable their
     // members name. The members of a pinned variable are not read: its class is the variable.
-    let mut vars: Vec<SetVar> = vec![];
+    let mut var_of: Vec<SetVar> = vec![];
     let mut class_of: Map<SetVar, u32> = Map::default();
     let mut queue: VecDeque<SetVar> = VecDeque::new();
     for v in params.iter().chain(&pinned_slots) {
-        class_of.insert(*v, vars.len() as u32);
-        vars.push(*v);
+        class_of.insert(*v, var_of.len() as u32);
+        var_of.push(*v);
         queue.push_back(*v);
     }
-    let fixed_count = vars.len();
+    let fixed_count = var_of.len();
     let mut members_of: Vec<Option<Vec<LambdaSetSchemeMember>>> = vec![None; fixed_count];
     while let Some(v) = queue.pop_front() {
         if solver.is_pinned(v) {
@@ -961,9 +961,9 @@ fn generalize(
                             let root = solver.find(*a);
                             *class_of.entry(root).or_insert_with(|| {
                                 queue.push_back(root);
-                                vars.push(root);
+                                var_of.push(root);
                                 members_of.push(None);
-                                (vars.len() - 1) as u32
+                                (var_of.len() - 1) as u32
                             })
                         })
                         .collect();
@@ -986,7 +986,7 @@ fn generalize(
     let depends = depends_on_params(&members_of, params.len());
     let classes: Vec<LambdaSetSchemeClass> = members_of
         .into_iter()
-        .zip(&vars)
+        .zip(&var_of)
         .zip(depends)
         .map(|((members, v), depends)| match (members, depends) {
             (Some(members), true) => LambdaSetSchemeClass::Fresh(members),
