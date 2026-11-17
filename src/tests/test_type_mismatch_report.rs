@@ -253,11 +253,7 @@ main : IO () = println(h(1).to_string);
         Configuration::develop_mode(),
         "`Std::Option::is_some` of type `Std::Option a -> Std::Bool` does not match the expected type `Std::String`.",
     );
-    test_source_fail_excludes(
-        source,
-        Configuration::develop_mode(),
-        "`a` is the type expected for",
-    );
+    test_source_fail_excludes(source, Configuration::develop_mode(), "`a` is the ");
 }
 
 /// A type variable the signature writes gets no pointer to a source where a parameter pattern of
@@ -278,11 +274,7 @@ main : IO () = println(g(1));
         Configuration::develop_mode(),
         "`#1` is the type expected for `x`.",
     );
-    test_source_fail_excludes(
-        source,
-        Configuration::develop_mode(),
-        "`a` is the type expected for",
-    );
+    test_source_fail_excludes(source, Configuration::develop_mode(), "`a` is the ");
 }
 
 /// A type variable the signature writes gets no pointer to a source, even at the parameter whose
@@ -302,11 +294,7 @@ main : IO () = println(g(1));
         Configuration::develop_mode(),
         "`a : Std::Add` cannot be deduced.",
     );
-    test_source_fail_excludes(
-        source,
-        Configuration::develop_mode(),
-        "`a` is the type expected for",
-    );
+    test_source_fail_excludes(source, Configuration::develop_mode(), "`a` is the ");
 }
 
 /// A parameter pattern written with a type wildcard is reported without the name the parser gives
@@ -373,7 +361,7 @@ main : IO () = (
 /// When the function of an application fails to check before its argument is checked, the type
 /// variable for the argument still points at the argument, as the type expected for it.
 #[test]
-pub fn test_an_argument_unchecked_at_the_error_is_located_as_the_expression_its_type_is_expected_for(
+pub fn test_an_argument_unchecked_at_the_error_is_located_as_the_expression_its_type_variable_is_expected_for(
 ) {
     let source = r##"
 module Main;
@@ -395,9 +383,9 @@ main : IO () = println(g(1).to_string);
     );
 }
 
-/// The type of a variadic argument of `FFI_CALL` is located at that argument.
+/// The type variable for a variadic argument of `FFI_CALL` points at that argument.
 #[test]
-pub fn test_the_type_of_a_variadic_argument_of_an_ffi_call_is_located_at_the_argument() {
+pub fn test_the_type_expected_for_a_variadic_argument_of_an_ffi_call_is_located_at_the_argument() {
     let source = r##"
 module Main;
 
