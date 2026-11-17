@@ -100,6 +100,44 @@ mod tests {
         );
     }
 
+    /// Two lambdas reading a name bound to a number literal, each handed to a built-in that stores
+    /// it as a closure: `main` binds the name itself, and `_shift(1)` binds its parameter to the
+    /// literal once it is inlined.
+    const CAPTURES_A_LITERAL_SOURCE: &str = r#"
+        module Main;
+
+        _shift : I64 -> I64 -> IO I64;
+        _shift = |d| |m| pure $ m + d;
+
+        main : IO ();
+        main = (
+            let k = 2;
+            let bound_here = *Destructor::make(10, |m| pure $ m + k);
+            let bound_by_inlining = *Destructor::make(20, _shift(1));
+            println $ bound_here.borrow(|n| n).to_string + "," + bound_by_inlining.borrow(|n| n).to_string
+        );
+    "#;
+
+    /// What `CAPTURES_A_LITERAL_SOURCE` prints: the numbers the two destructors hold.
+    const CAPTURES_A_LITERAL_OUTPUT: &str = "10,20";
+
+    /// A lambda reading a name bound to a number literal stores nothing: the literal is put into the
+    /// lambda in place of the name, so the lambda captures nothing, whether the program wrote the
+    /// binding or the inlining of a partial application left it.
+    #[test]
+    fn test_a_lambda_reading_a_name_bound_to_a_literal_stores_nothing() {
+        let dump = build_run_and_read_rc_ir(
+            CAPTURES_A_LITERAL_SOURCE,
+            "max",
+            CAPTURES_A_LITERAL_OUTPUT,
+            "lambdas reading a name bound to a number literal, handed to a built-in taking a closure",
+        );
+        assert_closures_at_type_store_nothing(
+            &dump,
+            "Std::I64 -> Std::IO::IOState -> (Std::IO::IOState, Std::I64)",
+        );
+    }
+
     /// A lambda that captures a unit and reads it: the pair it answers with carries the unit it
     /// captured, so the body reaches the captured name. `Destructor::make` stores the lambda as a
     /// closure, where a built-in that applies its function takes what the lambda captures through
