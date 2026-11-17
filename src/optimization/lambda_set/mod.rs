@@ -5,14 +5,16 @@
 // values flow into each other, as the type checker unifies their types, and records each lambda in
 // the variable of the place it is built at. A component of the call graph is inferred together and
 // generalized over the variables of its symbols' types, so that a function taking a function is
-// inferred once and copied for each lambda set it is given. Specialization then walks from the
-// program's entry, and gives each copy the concrete lambda sets of its parameters. The program is
-// then rewritten: each copy becomes copies of the symbols, and a value whose set's elements make
-// one class, elements naming one lambda that make the same code, becomes that class's capture
-// struct, called by calling the lambda directly. A value whose set's elements make two or more
-// classes becomes an unboxed union of their capture structs, called by matching the variant and
-// calling its class's lambda directly. A set no capture struct or union can stand for stays a set of
-// closures (`represent::represent` lists them).
+// inferred once and copied for each lambda set it is given. The variables of a component that holds
+// a global value whose body is not a lambda are pinned instead: every reference shares them, so the
+// value has one copy and its body runs once. Specialization then walks from the program's entry,
+// and gives each copy the concrete lambda sets of its parameters. The program is then rewritten:
+// each copy becomes copies of the symbols, and a value whose set's elements make one class,
+// elements naming one lambda that make the same code, becomes that class's capture struct, called
+// by calling the lambda directly. A value whose set's elements make two or more classes becomes an
+// unboxed union of their capture structs, called by matching the variant and calling its class's
+// lambda directly. A set no capture struct or union can stand for stays a set of closures
+// (`represent::represent` lists them).
 //
 // The design is laid out in `dev-docs/2026-10-24-lambda-set-specialization/design.md`.
 
@@ -165,16 +167,12 @@ mod tests {
             }
             let slot = self.layout.own_slots(&ty)[0];
             let root = self.analysis.solver.find(slot);
-            let p = self.analysis.components[c]
-                .params
-                .iter()
-                .position(|v| *v == root)
-                .unwrap();
+            let index = self.analysis.components[c].var_index[&root];
             self.spec
                 .instances
                 .iter()
                 .filter(|inst| inst.component == c)
-                .map(|inst| inst.args[p])
+                .map(|inst| inst.var_sets[index])
                 .collect()
         }
 
@@ -430,10 +428,11 @@ main = (
     }
 
     /// A global array of functions that one caller extends with a lambda of its own and another
-    /// passes as it is: the function taking the array is copied for each, and the set of the
-    /// elements holds the global's lambda in both, beside the caller's in the first.
+    /// passes as it is: every reference to the global shares the set of its elements, so the
+    /// function taking the array is copied once, for the set holding the global's lambda and the
+    /// caller's.
     #[test]
-    fn test_a_global_array_of_functions_extended_by_a_caller_keeps_its_own_lambda() {
+    fn test_a_global_array_of_functions_extended_by_a_caller_shares_its_set() {
         let prg = program_after_inlining(
             r#"
 module Main;
@@ -460,13 +459,7 @@ main = (
             .map(|s| sorted(inf.writers(s)))
             .collect();
         sets.sort();
-        assert_eq!(
-            sets,
-            vec![
-                vec![main_lam(), Some("table".to_string())],
-                vec![Some("table".to_string())],
-            ]
-        );
+        assert_eq!(sets, vec![vec![main_lam(), Some("table".to_string())]]);
     }
 
     /// A function field rewritten through `mod_`, which punches the field out and plugs the new
@@ -655,10 +648,10 @@ main = (
         source
     }
 
-    /// A symbol referring twice to one whose scheme has internal classes gets the two copies of
-    /// them merged into one, so that along a chain of such symbols the scheme of each stays as
-    /// small as the one below rather than doubling: for global values, and for functions whose
-    /// internal classes depend on their parameter.
+    /// Along a chain of symbols each referring twice to the one below, the scheme of each stays
+    /// small: that of a global value holds its pinned variable alone, and a function whose internal
+    /// classes depend on its parameter gets the two copies of them merged into one, so that its
+    /// scheme grows by one class per level.
     #[test]
     fn test_a_chain_of_symbols_referring_twice_to_the_one_below_keeps_its_schemes_small() {
         for of_functions in [false, true] {
@@ -666,8 +659,9 @@ main = (
             let inf = Inferred::new(&prg);
             let (c, _) = inf.component_of("c12");
             let classes = inf.analysis.components[c].scheme.classes.len();
+            let limit = if of_functions { 16 } else { 1 };
             assert!(
-                classes <= 16,
+                classes <= limit,
                 "the scheme at the top of the chain of {} has {} classes",
                 if of_functions {
                     "functions"
@@ -677,5 +671,41 @@ main = (
                 classes
             );
         }
+    }
+
+    /// Along a chain of functions that each take an `I64` and pass two results of the one below to
+    /// `both`, no class inside a scheme depends on a parameter: the scheme holds each such class as
+    /// a shared variable without following its members, so the schemes stay the same size along
+    /// the chain.
+    #[test]
+    fn test_a_chain_of_functions_given_no_function_keeps_its_schemes_from_growing() {
+        let depth = 12;
+        let mut source = String::from(
+            "module Main;\n\
+             type P = box struct { run : I64 -> I64 };\n\
+             both : P -> P -> P;\n\
+             both = |a, b| if (a.@run)(0) < -1000000 { both(b, a) } \
+             else { P { run : |x| (a.@run)((b.@run)(x)) } };\n\
+             c0 : I64 -> P;\n\
+             c0 = |n| if n < -1000000 { c0(n) } else { P { run : |x| x + n } };\n",
+        );
+        for i in 1..=depth {
+            source += &format!(
+                "c{i} : I64 -> P;\n\
+                 c{i} = |n| if n < -1000000 {{ c{i}(n) }} else {{ both(c{j}(n), c{j}(n)) }};\n",
+                j = i - 1
+            );
+        }
+        source += &format!(
+            "main : IO ();\nmain = (let k = *get_args.map(|args| args.@size); \
+             println((c{depth}(k).@run)(k).to_string));\n"
+        );
+        let prg = program_of(&source);
+        let inf = Inferred::new(&prg);
+        let classes_of = |name: &str| {
+            let (c, _) = inf.component_of(name);
+            inf.analysis.components[c].scheme.classes.len()
+        };
+        assert_eq!(classes_of("c6"), classes_of("c12"));
     }
 }

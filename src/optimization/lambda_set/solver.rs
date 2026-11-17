@@ -93,6 +93,9 @@ pub struct Solver {
     size: Vec<u32>,
     /// What each root holds. A variable that is not a root holds nothing here.
     members: Vec<Vec<Member>>,
+    /// Whether each root is pinned: every reference to its component, and every copy, shares this
+    /// one variable, whose members the components inferred later may add to.
+    pinned: Vec<bool>,
     /// The symbol whose body is being inferred, recorded in the reasons for Dynamic found there.
     current_symbol: Option<FullName>,
 }
@@ -104,6 +107,7 @@ impl Solver {
             parent: vec![],
             size: vec![],
             members: vec![],
+            pinned: vec![],
             current_symbol: None,
         }
     }
@@ -124,6 +128,7 @@ impl Solver {
         self.parent.push(v);
         self.size.push(1);
         self.members.push(vec![]);
+        self.pinned.push(false);
         SetVar(v)
     }
 
@@ -158,6 +163,7 @@ impl Solver {
         self.size[keep.0 as usize] += self.size[drop.0 as usize];
         let moved = mem::take(&mut self.members[drop.0 as usize]);
         self.members[keep.0 as usize].extend(moved);
+        self.pinned[keep.0 as usize] |= self.pinned[drop.0 as usize];
     }
 
     /// Makes each slot of `a` one variable with the slot of `b` at the same position. The two are
@@ -204,6 +210,18 @@ impl Solver {
         for v in &ty.slots {
             self.make_dynamic(*v, kind.clone());
         }
+    }
+
+    /// Pins `v`, and every variable unified with it now or later.
+    pub fn pin(&mut self, v: SetVar) {
+        let root = self.find(v);
+        self.pinned[root.0 as usize] = true;
+    }
+
+    /// Whether `v` is pinned.
+    pub fn is_pinned(&mut self, v: SetVar) -> bool {
+        let root = self.find(v);
+        self.pinned[root.0 as usize]
     }
 
     /// What the root of `v` holds.

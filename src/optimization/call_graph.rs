@@ -6,16 +6,12 @@ use crate::{
     misc::Map,
 };
 
-/// The call graph of `symbols` — an edge from A to B means A's body refers to B — with a node for
-/// each of `names`, numbered in that order, together with the node each name is held at.
+/// The call graph of the symbols `names` of `symbols` — an edge from A to B means A's body refers
+/// to B — with a node for each of `names`, numbered in that order.
 ///
-/// `names` lists every key of `symbols`. The edges of a node run in the order of the nodes they
-/// reach. A name a body refers to that `names` does not list carries no edge.
-pub fn call_graph_of(
-    symbols: &Map<FullName, Symbol>,
-    names: Vec<FullName>,
-) -> (Graph<FullName>, Map<FullName, usize>) {
-    assert_eq!(names.len(), symbols.len());
+/// `names` lists every symbol the bodies of its symbols refer to. The edges of a node run in the
+/// order of the nodes they reach.
+pub fn call_graph_of(symbols: &Map<FullName, Symbol>, names: Vec<FullName>) -> Graph<FullName> {
     let name_to_idx = names
         .iter()
         .enumerate()
@@ -30,12 +26,20 @@ pub fn call_graph_of(
             .unwrap()
             .free_vars()
             .iter()
-            .filter_map(|callee| name_to_idx.get(callee).copied())
+            .map(|callee| {
+                *name_to_idx.get(callee).unwrap_or_else(|| {
+                    panic!(
+                        "`{}` refers to `{}`, which `names` does not list",
+                        caller.to_string(),
+                        callee.to_string()
+                    )
+                })
+            })
             .collect();
         callees.sort();
         for callee_idx in callees {
             graph.connect_idx(caller_idx, callee_idx);
         }
     }
-    (graph, name_to_idx)
+    graph
 }

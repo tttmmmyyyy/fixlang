@@ -2,7 +2,7 @@
 
 use super::{
     concrete::{Elem, SetId, SetStore},
-    infer::Analysis,
+    infer::{slot_roots, Analysis},
     slots::SlotLayout,
     solver::{Member, Owner, SetVar, Solver},
     specialize::Specialization,
@@ -27,18 +27,26 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
         let symbols = component.symbols.clone();
         let types = component.types.clone();
         let params = component.params.clone();
-        let mut param_names: Map<SetVar, String> = Map::default();
-        for (i, p) in params.iter().enumerate() {
-            param_names.insert(*p, format!("p{}", i));
-        }
         let solver = &mut analysis.solver;
+        // The parameters are named `p<i>` and the pinned variables of the types `q<i>`.
+        let mut var_names: Map<SetVar, String> = Map::default();
+        for (i, p) in params.iter().enumerate() {
+            var_names.insert(*p, format!("p{}", i));
+        }
+        let pinned: Vec<SetVar> = slot_roots(solver, &types)
+            .into_iter()
+            .filter(|v| !var_names.contains_key(v))
+            .collect();
+        for (i, v) in pinned.iter().enumerate() {
+            var_names.insert(*v, format!("q{}", i));
+        }
         for (s, ty) in symbols.iter().zip(types.iter()) {
-            let text = layout.annotate(ty, &mut |v| param_names[&solver.find(v)].clone());
+            let text = layout.annotate(ty, &mut |v| var_names[&solver.find(v)].clone());
             writeln!(out, "{} : {}", s.to_string(), text).unwrap();
         }
-        for (i, p) in params.iter().enumerate() {
-            let members = describe_members(solver, *p, &param_names, &lambda_names);
-            writeln!(out, "  p{} = {{{}}}", i, members).unwrap();
+        for v in params.iter().chain(&pinned) {
+            let members = describe_members(solver, *v, &var_names, &lambda_names);
+            writeln!(out, "  {} = {{{}}}", var_names[v], members).unwrap();
         }
         writeln!(out).unwrap();
     }
@@ -48,21 +56,19 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
     let mut named_sets: Vec<SetId> = vec![];
     for (k, instance) in spec.instances.iter().enumerate() {
         let component = &analysis.components[instance.component];
-        named_sets.extend(instance.args.iter().copied());
         if component.symbols.is_empty() {
             writeln!(out, "copy {}: the entry and the exported values", k).unwrap();
             continue;
         }
         let symbols = component.symbols.clone();
         let types = component.types.clone();
-        let params = component.params.clone();
-        let mut param_sets: Map<SetVar, SetId> = Map::default();
-        for (i, p) in params.iter().enumerate() {
-            param_sets.insert(*p, instance.args[i]);
-        }
         let solver = &mut analysis.solver;
         for (s, ty) in symbols.iter().zip(types.iter()) {
-            let text = layout.annotate(ty, &mut |v| format!("#{}", param_sets[&solver.find(v)]));
+            let text = layout.annotate(ty, &mut |v| {
+                let id = instance.var_sets[component.var_index[&solver.find(v)]];
+                named_sets.push(id);
+                format!("#{}", id)
+            });
             writeln!(out, "copy {}: {} : {}", k, s.to_string(), text).unwrap();
         }
     }
