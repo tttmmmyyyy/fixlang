@@ -916,8 +916,9 @@ fn generalize(
 
     // A pinned variable is one variable in every copy, so the variables its members name have to
     // be pinned as well.
-    for v in &pinned {
-        for member in solver.members(*v).to_vec() {
+    let pinned_roots: Set<SetVar> = pinned.iter().map(|v| solver.find(*v)).collect();
+    for v in pinned_roots {
+        for member in solver.members(v).to_vec() {
             if let Member::Lam {
                 owner: Owner::Instance(args),
                 ..
@@ -987,12 +988,16 @@ fn generalize(
         .into_iter()
         .zip(&vars)
         .zip(depends)
-        .map(|((members, v), depends)| match members {
-            Some(members) if depends => LambdaSetSchemeClass::Fresh(members),
-            _ => {
+        .map(|((members, v), depends)| match (members, depends) {
+            (Some(members), true) => LambdaSetSchemeClass::Fresh(members),
+            (_, false) => {
                 solver.pin(*v);
                 LambdaSetSchemeClass::Shared(*v)
             }
+            (None, true) => unreachable!(
+                "the pinned variable {:?} of a component depends on a parameter",
+                v
+            ),
         })
         .collect();
     let (classes, merged) = merge_equal_classes(classes, fixed_count);
