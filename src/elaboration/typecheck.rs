@@ -651,8 +651,8 @@ impl TypeCheckContext {
         }
     }
 
-    /// Records that the type of the expression at `span` is the type variable named `tyvar_name`,
-    /// so that a diagnostic naming that variable can point at the expression. `tyvar_name` must name
+    /// Records that the expression or pattern at `span` is checked against the type variable named
+    /// `tyvar_name`, so that a diagnostic naming that variable can point at it. `tyvar_name` must name
     /// a type variable the inference created. An expression with no source location leaves the
     /// record as it stands.
     fn add_tyvar_source(&mut self, tyvar_name: Name, span: Option<Span>) {
@@ -661,7 +661,7 @@ impl TypeCheckContext {
                 tyvar_name,
                 TyVarSource {
                     span,
-                    role: TyVarRole::TypeOf,
+                    role: TyVarRole::ExpectedTypeOf,
                 },
             );
         }
@@ -1693,7 +1693,7 @@ impl TypeCheckContext {
                         // An implicitly given parameter type (for variadic arguments).
                         assert!(*is_var_args);
                         let tv = self.new_tyvar_star();
-                        self.add_tyvar_source(tv.name.clone(), ei.source.clone());
+                        self.add_tyvar_source(tv.name.clone(), e.source.clone());
                         type_from_tyvar(tv)
                     };
                     typed_args.push(self.unify_type_of_expr(e, param_ty)?);
@@ -1809,11 +1809,11 @@ impl TypeCheckContext {
                 // pointer attached separately may not read as a continuation of the message text.
                 let snippet = short_span_snippet(&src.span);
                 let msg = match (&src.role, snippet) {
-                    (TyVarRole::TypeOf, Some(snippet)) => {
-                        format!("{} is the type for `{}`.", prefix, snippet)
+                    (TyVarRole::ExpectedTypeOf, Some(snippet)) => {
+                        format!("{} is the type expected for `{}`.", prefix, snippet)
                     }
-                    (TyVarRole::TypeOf, None) => {
-                        format!("{} is the type for this expression.", prefix)
+                    (TyVarRole::ExpectedTypeOf, None) => {
+                        format!("{} is the type expected for this expression.", prefix)
                     }
                     (TyVarRole::ElementTypeOf, Some(snippet)) => {
                         format!("{} is the element type of `{}`.", prefix, snippet)
@@ -3271,8 +3271,9 @@ struct TyVarSource {
 /// How a type variable relates to the expression it arose at.
 #[derive(Clone)]
 enum TyVarRole {
-    /// The variable is the type of the expression.
-    TypeOf,
+    /// The variable is the type the expression or pattern is checked against. Checking it unifies
+    /// the variable with its own type, so an error raised before that may show the two differing.
+    ExpectedTypeOf,
     /// The variable is the element type of the expression, an array literal with no element.
     ElementTypeOf,
 }
