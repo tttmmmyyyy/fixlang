@@ -1212,9 +1212,11 @@ mod dump_tests {
         ))
     );
 
+    // The array is built at run time, so that the loop's lambda captures it: an array literal of
+    // numbers is a constant, which the optimizer puts into the lambda instead.
     main : IO ();
     main = (
-        let values = [0, 1, 4, 9, 3, 12, 10, 10, 12, 3];
+        let values = Array::from_map(10, |i| i * i % 13);
         let total = loop((0, 0), |(i, acc)| (
             if i == 4 { break $ acc };
             continue $ (i + 1, acc + scaled_sum(i, values))
