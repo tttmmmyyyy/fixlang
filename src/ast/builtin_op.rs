@@ -58,7 +58,8 @@ pub trait BuiltinOp: DynClone + Send + Sync {
     ///
     /// A literal that evaluates to a scalar qualifies, and so does one that evaluates to an object
     /// that is a constant in the program's data, which its `result_locality` declares non-local. One
-    /// that allocates does not: a copy of it at each name is an allocation at each name.
+    /// that allocates does not: a copy of it at each name is an allocation at each name. An op that
+    /// answers true takes no operand, so that a copy of it reads no name and extends no lifetime.
     fn is_free_to_duplicate(&self) -> bool {
         false
     }
