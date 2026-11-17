@@ -93,8 +93,8 @@ pub struct Solver {
     size: Vec<u32>,
     /// What each root holds. A variable that is not a root holds nothing here.
     members: Vec<Vec<Member>>,
-    /// Whether each root is pinned: every reference to the symbols whose types name it shares this
-    /// one variable.
+    /// Whether each root is pinned: every reference to its component, and every copy, shares this
+    /// one variable, whose members the components inferred later may add to.
     pinned: Vec<bool>,
     /// The symbol whose body is being inferred, recorded in the reasons for Dynamic found there.
     current_symbol: Option<FullName>,
