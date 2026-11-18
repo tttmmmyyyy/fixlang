@@ -4,7 +4,7 @@
 // two or more represented by an unboxed union of their capture structs. A lambda of a set represented by
 // closures is lifted too, and its closure is the lifted function applied to the capture struct,
 // except for the lambda that is the body of its symbol and one whose body reads its capture whole
-// (`Lambda::is_lifted_from_closures`).
+// (`Lambda::is_lifted_in_a_set_of_closures`).
 
 use super::{
     concrete::SetId,
@@ -186,7 +186,7 @@ struct Walk<'n> {
     /// The position in `nodes` of the next node the walk meets.
     cursor: usize,
     /// The symbol the rewritten expression becomes the body of; `None` for a root.
-    owner: Option<FullName>,
+    made_symbol: Option<FullName>,
 }
 
 impl<'a, 'e> Rewriter<'a, 'e> {
@@ -508,7 +508,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         }
         let layout_tc = self.layout.layout_tycon(tc);
         let group = self.layout.group_of(tc);
-        let suffix = self.type_copy_suffix(group, own);
+        let suffix = self.declare_type_copy(group, own);
         let mut copy = Self::suffixed_tycon(&layout_tc, &suffix);
         if let Some(i) = self.punched_at.get(tc.as_ref()) {
             copy.into_punched_type_name(*i);
@@ -516,9 +516,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         Arc::new(copy)
     }
 
-    /// The suffix of the copies of the group `group` made for the representations `own` of its own
-    /// slots, declaring the copies the first time it is asked for.
-    fn type_copy_suffix(&mut self, group: usize, own: &[Repr]) -> String {
+    /// Declares the copies of the group `group` made for the representations `own` of its own
+    /// slots on the first call for them, and returns the suffix those copies are named with.
+    fn declare_type_copy(&mut self, group: usize, own: &[Repr]) -> String {
         let key = (group, own.to_vec());
         if let Some(suffix) = self.type_copy_suffixes.get(&key) {
             return suffix.clone();
@@ -666,7 +666,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 instance,
                 nodes: &component.node_types[pos],
                 cursor: 0,
-                owner: Some(name.clone()),
+                made_symbol: Some(name.clone()),
             };
             let expr = self.walk_expr(&mut walk, original.expr.as_ref().unwrap(), true);
             assert_eq!(walk.cursor, walk.nodes.len());
@@ -710,7 +710,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             instance,
             nodes,
             cursor: lambda.nodes.start + 1,
-            owner: Some(name.clone()),
+            made_symbol: Some(name.clone()),
         };
         let (params, body) = lambda.expr.destructure_lam();
         let body = self.walk_expr(&mut walk, &body, false);
@@ -773,7 +773,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     instance: 0,
                     nodes: &component.node_types[i],
                     cursor: 0,
-                    owner: None,
+                    made_symbol: None,
                 };
                 let expr = self.walk_expr(&mut walk, root, false);
                 assert_eq!(walk.cursor, walk.nodes.len());
@@ -864,7 +864,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                             self.ask_lift(c);
                             Some(self.class_value(own, c))
                         }
-                        Repr::Closure if lambda.is_lifted_from_closures() => {
+                        Repr::Closure if lambda.is_lifted_in_a_set_of_closures() => {
                             let c = self.repr.class_of(lam, &args);
                             self.ask_lift(c);
                             Some(self.closure_value(c, ty.clone()))
@@ -934,7 +934,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     })
                     .collect();
                 e.set_make_struct_fields(fields)
-                    .set_make_struct_tycon(ty.head_tycon())
+                    .set_make_struct_tycon(ty.expect_toplevel_tycon())
                     .set_type(ty)
             }
             Expr::FFICall(_, _, _, _, args, _) => {
@@ -970,11 +970,11 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     })
                     .collect();
                 pat.set_struct_field_to_pat(fields)
-                    .set_struct_tycon(ty.head_tycon())
+                    .set_struct_tycon(ty.expect_toplevel_tycon())
             }
             Pattern::Union(variant, variant_src, sub) => {
                 let sub = self.walk_pattern(walk, sub);
-                let union = ty.head_tycon();
+                let union = ty.expect_toplevel_tycon();
                 let mut node = pat.as_ref().clone();
                 node.pattern = Pattern::Union(
                     FullName::new(&union.name.to_namespace(), &variant.name),
@@ -1111,9 +1111,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             return let_local(LS_UNREAD_NAME, func, call);
         }
         self.ask_lift(c);
-        if let Some(owner) = &walk.owner {
+        if let Some(made_symbol) = &walk.made_symbol {
             self.lifted_callees
-                .entry(owner.clone())
+                .entry(made_symbol.clone())
                 .or_default()
                 .push(callee_name.clone());
         }

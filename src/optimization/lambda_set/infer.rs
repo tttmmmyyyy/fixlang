@@ -32,7 +32,7 @@ pub struct Lambda {
     ///
     /// The lambda that is the body of its symbol depends on `Component::body_params`, so that the
     /// sets a member naming it carries are the ones a copy of the component is made for.
-    pub params: Vec<usize>,
+    pub param_deps: Vec<usize>,
     /// The lambda expression.
     pub expr: Arc<ExprNode>,
     /// The nodes of the lambda expression among the `NodeType`s of its symbol: its own node, then
@@ -68,7 +68,7 @@ impl Lambda {
     /// Whether the rewrite lifts the lambda to a global function where its set is represented by
     /// closures. The lambda that is the body of its symbol is a global function already, and one
     /// whose body reads its capture whole (`CAP_NAME`) needs the closure object holding it.
-    pub fn is_lifted_from_closures(&self) -> bool {
+    pub fn is_lifted_in_a_set_of_closures(&self) -> bool {
         !self.is_body() && !self.reads_own_capture
     }
 }
@@ -672,7 +672,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 .expect("the roots of the program hold no lambda")
                 .clone(),
             index: self.lam_counter,
-            params: vec![],
+            param_deps: vec![],
             expr: expr.clone(),
             nodes: node..node,
             captures: vec![],
@@ -875,7 +875,7 @@ fn generalize(
     for (i, term) in terms.iter().enumerate() {
         let depends_on = term_params(solver, &terms, &term_of_lam, i, &param_index);
         match term.lam {
-            Some(lam) => analysis.lambdas[lam as usize].params = depends_on,
+            Some(lam) => analysis.lambdas[lam as usize].param_deps = depends_on,
             None => body_params.extend(depends_on),
         }
     }
@@ -885,7 +885,7 @@ fn generalize(
         if let Some(lam) = term.lam {
             let lambda = &mut analysis.lambdas[lam as usize];
             if lambda.is_body() {
-                lambda.params = body_params.clone();
+                lambda.param_deps = body_params.clone();
             }
         }
     }
@@ -902,7 +902,7 @@ fn generalize(
             {
                 *owner = Owner::Instance(
                     analysis.lambdas[*lam as usize]
-                        .params
+                        .param_deps
                         .iter()
                         .map(|p| params[*p])
                         .collect(),

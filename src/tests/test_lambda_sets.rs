@@ -766,7 +766,7 @@ fn test_a_global_value_in_a_component_with_a_function_taking_a_function_is_evalu
 /// `main`, inferred after `z`, extends the pinned set with a lambda of its own, so the two sets
 /// differ in the end, and the copies of `w` building the two closures are given different sets.
 #[test]
-fn test_a_pinned_set_equal_to_another_when_a_function_is_inferred_and_extended_later() {
+fn test_closures_over_a_pinned_set_and_one_it_equals_until_extended_compute_both() {
     let source = r#"
     module Main;
 

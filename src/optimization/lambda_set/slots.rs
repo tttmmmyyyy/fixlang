@@ -36,7 +36,7 @@ pub struct AType {
 struct GroupSlots {
     /// One entry per own slot of the group: the type constructor whose runtime calls the functions
     /// at that slot, if any. A value at such a slot is always a closure built at run time.
-    own_slots: Vec<Option<TyCon>>,
+    called_by_runtime: Vec<Option<TyCon>>,
     /// For each member and each of its fields, the position of the field's first own slot among
     /// the own slots of the group.
     field_offsets: Map<TyCon, Vec<usize>>,
@@ -252,28 +252,28 @@ impl<'e> SlotLayout<'e> {
         if let Some(slots) = &self.group_slots.borrow()[group] {
             return slots.clone();
         }
-        let mut own_slots = vec![];
+        let mut called_by_runtime = vec![];
         let mut field_offsets = Map::default();
         for member in &self.group_members[group] {
             let mut offsets = vec![];
             let info = self.type_env.tycon_info(member);
             for field in &info.fields {
-                offsets.push(own_slots.len());
+                offsets.push(called_by_runtime.len());
                 if !self.type_env.is_unwrapped_newtype(member) {
-                    self.push_own_slots(&field.ty, group, &mut own_slots);
+                    self.push_own_slots(&field.ty, group, &mut called_by_runtime);
                 }
             }
             field_offsets.insert(member.clone(), offsets);
         }
         for member in &self.group_members[group] {
             if DESTRUCTOR_TYPE.is(&member.name) {
-                for slot in &mut own_slots {
+                for slot in &mut called_by_runtime {
                     *slot = Some(member.clone());
                 }
             }
         }
         let slots = Arc::new(GroupSlots {
-            own_slots,
+            called_by_runtime,
             field_offsets,
         });
         self.group_slots.borrow_mut()[group] = Some(slots.clone());
@@ -307,7 +307,7 @@ impl<'e> SlotLayout<'e> {
                 } else if !self.is_group_member(tc, group) {
                     own.extend(
                         self.group_slots(self.group_of(tc))
-                            .own_slots
+                            .called_by_runtime
                             .iter()
                             .cloned(),
                     );
@@ -325,7 +325,7 @@ impl<'e> SlotLayout<'e> {
         if tc.is_arrow() {
             return 1;
         }
-        self.group_slots(self.group_of(tc)).own_slots.len()
+        self.group_slots(self.group_of(tc)).called_by_runtime.len()
     }
 
     /// The number of slots of `ty`.
@@ -333,7 +333,7 @@ impl<'e> SlotLayout<'e> {
         if let Some(count) = self.slot_counts.borrow().get(ty) {
             return *count;
         }
-        let tc = ty.head_tycon();
+        let tc = ty.expect_toplevel_tycon();
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
         let count = if !self.is_applied_to_all(&tc, args.len()) {
@@ -369,7 +369,7 @@ impl<'e> SlotLayout<'e> {
 
     /// Appends to `out` a new variable for each slot of `ty`, as `fresh` makes them.
     fn fresh_slots(&self, ty: &Arc<TypeNode>, solver: &mut Solver, out: &mut Vec<SetVar>) {
-        let tc = ty.head_tycon();
+        let tc = ty.expect_toplevel_tycon();
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
         if !self.is_applied_to_all(&tc, args.len()) {
@@ -379,7 +379,7 @@ impl<'e> SlotLayout<'e> {
         if tc.is_arrow() {
             out.push(solver.fresh());
         } else {
-            for called_by in &self.group_slots(self.group_of(&tc)).own_slots {
+            for called_by in &self.group_slots(self.group_of(&tc)).called_by_runtime {
                 let v = solver.fresh();
                 if let Some(called_by) = called_by {
                     solver.make_dynamic(v, DynamicKind::CalledByRuntime(called_by.clone()));
@@ -394,7 +394,7 @@ impl<'e> SlotLayout<'e> {
 
     /// The `i`-th type argument of `ty`, with its slots.
     pub fn type_arg(&self, ty: &AType, i: usize) -> AType {
-        let tc = ty.ty.head_tycon();
+        let tc = ty.ty.expect_toplevel_tycon();
         let spine = ty.ty.flatten_type_application();
         let args = &spine[1..];
         let mut start = self.own_slot_count(&tc);
@@ -443,7 +443,7 @@ impl<'e> SlotLayout<'e> {
         pos: &mut usize,
         fold: &mut F,
     ) -> F::Out {
-        let tc = ty.head_tycon();
+        let tc = ty.expect_toplevel_tycon();
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
         if !self.is_applied_to_all(&tc, args.len()) {
@@ -461,7 +461,7 @@ impl<'e> SlotLayout<'e> {
 
     /// The own slots of `ty`: the slots its outermost type constructor owns.
     pub fn own_slots<'a>(&self, ty: &'a AType) -> &'a [SetVar] {
-        let tc = ty.ty.head_tycon();
+        let tc = ty.ty.expect_toplevel_tycon();
         &ty.slots[..self.own_slot_count(&tc)]
     }
 
@@ -472,7 +472,7 @@ impl<'e> SlotLayout<'e> {
     /// capture structs a value of `ty` contains. `solver` gives the new variables of a place the
     /// slots of `ty` leave untracked.
     pub fn collect_held_in_place(&self, ty: &AType, solver: &mut Solver, out: &mut Vec<SetVar>) {
-        let tc = ty.ty.head_tycon();
+        let tc = ty.ty.expect_toplevel_tycon();
         assert!(
             self.is_applied_to_all(&tc, ty.ty.flatten_type_application().len() - 1),
             "the type `{}` of a held value leaves its type constructor short of arguments",
@@ -497,12 +497,12 @@ impl<'e> SlotLayout<'e> {
     /// `field_idx` 0) the element of the array `ty`, with its slots. `solver` gives the new
     /// variables of a place the slots of `ty` leave untracked.
     pub fn field(&self, ty: &AType, field_idx: usize, solver: &mut Solver) -> AType {
-        let tc = ty.ty.head_tycon();
+        let tc = ty.ty.expect_toplevel_tycon();
         let layout_tc = self.layout_tycon(&tc);
         let group = self.group_of(&tc);
         let group_slots = self.group_slots(group);
         let info = self.type_env.tycon_info(&layout_tc);
-        let own_count = group_slots.own_slots.len();
+        let own_count = group_slots.called_by_runtime.len();
         let mut env: Map<Name, Binding> = Map::default();
         for (i, tv) in info.tyvars.iter().enumerate() {
             let arg = self.type_arg(ty, i);
@@ -560,7 +560,7 @@ impl<'e> SlotLayout<'e> {
                     match binding {
                         Binding::Linked(_, slots) => out.extend(slots.iter().copied()),
                         Binding::Untracked(arg_ty) => {
-                            let untracked_tc = untracked_reason(source);
+                            let untracked_tc = untracked_tycon(source);
                             push_untracked(self.slot_count(arg_ty), &untracked_tc, solver, out);
                         }
                     }
@@ -578,7 +578,7 @@ impl<'e> SlotLayout<'e> {
                     );
                 }
                 let mut head_args: Vec<Binding> = vec![];
-                let head_tc = binding.ty().head_tycon();
+                let head_tc = binding.ty().expect_toplevel_tycon();
                 let head_spine = binding.ty().flatten_type_application();
                 for given in &head_spine[1..] {
                     head_args.push(Binding::Untracked(given.clone()));
@@ -728,7 +728,7 @@ fn push_untracked(count: usize, tc: &TyCon, solver: &mut Solver, out: &mut Vec<S
 }
 
 /// The type constructor an untracked place read under `source` is attributed to.
-fn untracked_reason(source: &OwnSource) -> TyCon {
+fn untracked_tycon(source: &OwnSource) -> TyCon {
     match source {
         OwnSource::Untracked(tc) => tc.clone(),
         OwnSource::Declared { .. } => {

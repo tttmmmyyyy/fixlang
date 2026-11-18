@@ -97,14 +97,14 @@ fn owns_a_leaf_of_unit(
 /// nothing changes. Demotion is monotone (`Borrow` to `Own` only), so it terminates.
 fn infer_ownership(
     prog: &RcProgram,
-    bodies: &Map<FuncRef, BodyFacts>,
+    bodies: &Map<FuncRef, LevellingFacts>,
     type_env: &TypeEnv,
 ) -> OwnedLeaves {
     let mut owned_leaves: Set<VarPath> = Set::default();
     loop {
         let mut changed = false;
         for func in prog.funcs.values() {
-            let BodyFacts { vars, sites } = &bodies[&func.name];
+            let LevellingFacts { vars, sites } = &bodies[&func.name];
             let mut consumed = vec![];
             collect_consumes(
                 &func.body,
@@ -257,7 +257,7 @@ fn covered_leaves(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> V
 
 /// What borrow-ification reads of one function's body, built once per function however many of its
 /// versions are rewritten.
-struct BodyFacts {
+struct LevellingFacts {
     /// The function's variables: what binds each one and its type, which decide the object a leaf
     /// belongs to.
     vars: VarTable,
@@ -284,11 +284,11 @@ impl CloneKey for BorrowKey {
 /// accordingly, and annotate every output version with the parameter units it borrows
 /// (`RcFunc::borrowed_units`).
 pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcProgram {
-    let bodies: Map<FuncRef, BodyFacts> = prog
+    let bodies: Map<FuncRef, LevellingFacts> = prog
         .funcs
         .values()
         .map(|f| {
-            let facts = BodyFacts {
+            let facts = LevellingFacts {
                 vars: VarTable::of(f),
                 sites: levelled_sites(f, type_env),
             };
@@ -382,7 +382,7 @@ struct Versions<'a> {
     /// The type definitions, for resolving a value's type to its reference-counting units.
     type_env: &'a TypeEnv,
     /// The body facts of every function of `prog`.
-    bodies: &'a Map<FuncRef, BodyFacts>,
+    bodies: &'a Map<FuncRef, LevellingFacts>,
     /// The parameter leaves the inference found every version has to own.
     owned_leaves: &'a OwnedLeaves,
     /// The functions that get a version borrowing a parameter where a call reaches one: those taking
@@ -418,7 +418,7 @@ impl Versions<'_> {
         }
         let type_env = self.type_env;
         let func = &self.prog.funcs[callee];
-        let BodyFacts { vars, sites } = &self.bodies[callee];
+        let LevellingFacts { vars, sites } = &self.bodies[callee];
         let mut owned: Set<VarPath> = Set::default();
         for (p, lent) in func.params.iter().zip(&lendable) {
             for leaf in boxed_leaf_paths(&p.ty, type_env) {

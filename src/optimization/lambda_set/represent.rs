@@ -66,13 +66,13 @@ pub struct Representation {
     of_set: Vec<Repr>,
     /// The classes of the elements the rewrite makes global functions of: the elements of each set
     /// represented by a capture struct or a union, and each element of a set of closures naming a
-    /// lambda that `Lambda::is_lifted_from_closures` holds of. The classes of the sets represented
-    /// by a capture struct come first.
+    /// lambda that `Lambda::is_lifted_in_a_set_of_closures` holds of. The classes of the sets
+    /// represented by a capture struct come first.
     pub classes: Vec<LamClass>,
     /// The unions standing for the sets represented by an unboxed union.
     pub unions: Vec<UnionRepr>,
     /// The position in `classes` of the class holding each element, by the lambda the element names
-    /// and the sets it gives the lambda's parameters (`Lambda::params`).
+    /// and the sets it gives the component parameters the lambda depends on (`Lambda::param_deps`).
     class_of_elem: Map<(LamId, Vec<SetId>), u32>,
     /// The number of classes of each lambda that has any: how many of `classes` hold the lambda.
     class_counts: Map<LamId, usize>,
@@ -84,8 +84,8 @@ impl Representation {
         self.of_set[set as usize]
     }
 
-    /// The class of the element naming `lam` and giving its parameters the sets `args`, in the
-    /// order of `Lambda::params`.
+    /// The class of the element naming `lam` and giving the component parameters `lam` depends on
+    /// the sets `args`, in the order of `Lambda::param_deps`.
     pub fn class_of(&self, lam: LamId, args: &[SetId]) -> u32 {
         *self
             .class_of_elem
@@ -137,12 +137,13 @@ impl Representation {
 /// the sets at the element's interface.
 struct Builder {
     /// The copy, as an index into `Specialization::instances`: the first copy of the lambda's
-    /// component, in the order of the copies, that gives the lambda's parameters the element's
-    /// sets.
+    /// component, in the order of the copies, that gives the component parameters the lambda
+    /// depends on the element's sets.
     instance: usize,
     /// The sets at the element's interface: those the copy gives the variables of
     /// `Lambda::interface`. For the lambda that is the body of its symbol, they are the sets the
-    /// element gives the lambda's parameters, as those are the parameters its body depends on.
+    /// element gives the component parameters the lambda depends on, which are the ones its body
+    /// depends on.
     interface: Vec<SetId>,
     /// The sets the copy gives the variables of `Lambda::held_in_place`: those whose values the
     /// element's capture struct holds in place.
@@ -150,7 +151,7 @@ struct Builder {
 }
 
 /// The `Builder` of each element naming a lambda, by the lambda and the sets the element gives the
-/// lambda's parameters (`Lambda::params`).
+/// component parameters the lambda depends on (`Lambda::param_deps`).
 struct Builders(Map<(LamId, Vec<SetId>), Builder>);
 
 impl Builders {
@@ -235,7 +236,7 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
         for (lam, args) in store.lam_elems(id as SetId) {
             let lambda = &analysis.lambdas[lam as usize];
             assert!(
-                lambda.is_body() || lambda.is_lifted_from_closures(),
+                lambda.is_body() || lambda.is_lifted_in_a_set_of_closures(),
                 "the set {} of lambdas alone holds {}, which needs the closure object holding it",
                 id,
                 lambda.to_string()
@@ -406,11 +407,11 @@ fn partition_sets(
 ///    struct of each of those classes in a variant of its own. Equal sets share the capture struct
 ///    or the union.
 ///
-/// The elements of the sets represented by closures that name a lambda fall into classes too,
-/// where `Lambda::is_lifted_from_closures` holds of the lambda: the rewrite lifts such a lambda to a
-/// global function, and the closure is that function applied to the capture struct. Elements
-/// representing the sets at the lambda's interface alike are in one class, so they share the
-/// global function and the capture struct.
+/// The elements of the sets represented by closures that name a lambda fall into classes too, where
+/// `Lambda::is_lifted_in_a_set_of_closures` holds of the lambda: the rewrite lifts such a lambda to
+/// a global function, and the closure is that function applied to the capture struct. Elements
+/// representing the sets at the lambda's interface alike are in one class, so they share the global
+/// function and the capture struct.
 pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     let store = &spec.store;
     let set_count = store.len();
@@ -553,7 +554,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
             }
             Repr::Closure => {
                 for (lam, args) in store.lam_elems(id as SetId) {
-                    if analysis.lambdas[lam as usize].is_lifted_from_closures() {
+                    if analysis.lambdas[lam as usize].is_lifted_in_a_set_of_closures() {
                         add_class(lam, args);
                     }
                 }

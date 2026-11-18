@@ -14,8 +14,8 @@ pub type SetId = u32;
 pub enum Elem {
     /// A value only a closure built at run time stands for.
     Dynamic,
-    /// The values the lambda builds in the copy of its symbol whose parameters (`Lambda::params`)
-    /// get the listed sets.
+    /// The values the lambda builds in the copy of its symbol that gives the component parameters
+    /// the lambda depends on (`Lambda::param_deps`) the listed sets.
     Lam(LamId, Vec<SetId>),
 }
 
@@ -87,7 +87,7 @@ impl SetStore {
     }
 
     /// The elements of the set `id` that name a lambda, each as the lambda and the sets it gives
-    /// the lambda's parameters, in the order of `elems`.
+    /// the component parameters the lambda depends on, in the order of `elems`.
     pub fn lam_elems(&self, id: SetId) -> impl Iterator<Item = (LamId, &[SetId])> {
         self.elems(id).iter().filter_map(|elem| match elem {
             Elem::Lam(lam, args) => Some((*lam, args.as_slice())),

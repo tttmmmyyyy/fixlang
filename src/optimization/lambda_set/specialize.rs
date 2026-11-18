@@ -25,10 +25,10 @@ impl Instance {
         self.var_sets[component.var_index[&v]]
     }
 
-    /// The sets this copy gives the parameters `lambda` depends on (`Lambda::params`), `lambda` a
-    /// lambda of the copy's component.
+    /// The sets this copy gives the parameters `lambda` depends on (`Lambda::param_deps`), `lambda`
+    /// a lambda of the copy's component.
     pub fn lambda_args(&self, lambda: &Lambda) -> Vec<SetId> {
-        lambda.params.iter().map(|p| self.args[*p]).collect()
+        lambda.param_deps.iter().map(|p| self.args[*p]).collect()
     }
 }
 

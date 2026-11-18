@@ -35,8 +35,8 @@ pub enum Owner {
     /// replaces it by `Instance` once the component is solved, with the variables the lambda's
     /// body depends on.
     Current,
-    /// The copy given by these variables, one per parameter of the lambda the member names, in the
-    /// order `Lambda::params` lists them.
+    /// The copy given by these variables, one per component parameter the lambda the member names
+    /// depends on, in the order `Lambda::param_deps` lists them.
     Instance(Vec<SetVar>),
 }
 
