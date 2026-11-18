@@ -928,6 +928,63 @@ fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_bo
     );
 }
 
+/// What `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` prints.
+const RETURNING_BRANCHING_CHAIN_OUTPUT: &str = "2175390";
+
+/// The chain of `branching_chain_source`, where each function returns the function it builds in
+/// place of calling it: `f0` returns the function it was given, so what `f{i}` returns holds the
+/// lambdas `f{i}` and every function after it in the chain build. `main` calls what `f{depth}`
+/// returns.
+fn returning_branching_chain_source(depth: usize) -> String {
+    let links: Vec<String> = (1..=depth)
+        .map(|i| {
+            format!(
+                "f{i} : (I64 -> I64) -> I64 -> (I64 -> I64);\n\
+                 f{i} = |g, x| if x % 3 == 0 {{ f{p}(|y| g(y) + {i}, x / 3) }} else {{ f{p}(|y| g(y) * {i}, x - 1) }};",
+                i = i,
+                p = i - 1
+            )
+        })
+        .collect();
+    format!(
+        "module Main;\n\
+         \n\
+         f0 : (I64 -> I64) -> I64 -> (I64 -> I64);\n\
+         f0 = |g, x| g;\n\
+         {}\n\
+         \n\
+         main : IO ();\n\
+         main = (\n\
+         \x20   let n = *(pure(100) : IO I64);\n\
+         \x20   println(f{}(|x| x + n, n)(n).to_string)\n\
+         );\n",
+        links.join("\n"),
+        depth
+    )
+}
+
+/// The chain of `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions and computes its value. The functions whose
+/// parameters are given sets represented by closures past the budget of `LS_COPIES_PER_SITE`
+/// return the lambdas they and the functions after them build.
+#[test]
+fn test_a_chain_of_functions_each_returning_the_next_with_two_lambdas_builds_in_bounded_work() {
+    let description = format!(
+        "a chain of {} functions each returning the next with two lambdas",
+        BRANCHING_CHAIN_DEPTH
+    );
+    let printed = build_within_instructions_and_run(
+        &returning_branching_chain_source(BRANCHING_CHAIN_DEPTH),
+        "max",
+        BRANCHING_CHAIN_MAX_INSTRUCTIONS,
+        &description,
+    );
+    assert_eq!(
+        printed, RETURNING_BRANCHING_CHAIN_OUTPUT,
+        "the chain computed a wrong value"
+    );
+}
+
 /// What lambda set specialization makes of a program, read off the `--emit-rc-ir` dump: a
 /// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
 /// takes as an argument. The program cannot observe either one — the answer is the same with
