@@ -905,9 +905,9 @@ fn branching_chain_source(depth: usize) -> String {
 /// them as capture structs.
 #[test]
 fn test_a_chain_of_functions_whose_calls_are_widened_past_the_limit_on_copies_computes_it() {
-    let source = branching_chain_source(8).replace(
-        "println(f8(|x| x + n, n).to_string)",
-        "assert_eq(|_| \"the chain computes its value\", f8(|x| x + n, n), 16265);; pure()",
+    let source = branching_chain_source(10).replace(
+        "println(f10(|x| x + n, n).to_string)",
+        "assert_eq(|_| \"the chain computes its value\", f10(|x| x + n, n), 128172);; pure()",
     );
     test_source(&source, Configuration::develop_mode());
 }
