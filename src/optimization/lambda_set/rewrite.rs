@@ -1142,7 +1142,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             .enumerate()
             .map(|(i, c)| {
                 let payload_ty = type_tycon(&self.capture_tycon(*c));
-                let payload = PatternNode::make_local_var(LS_PAYLOAD_NAME, payload_ty.clone());
+                let payload = PatternNode::make_local_var(&FullName::local(LS_PAYLOAD_NAME), payload_ty.clone());
                 let pat =
                     PatternNode::make_union_with_span(Self::variant_name(&tycon, i), None, payload)
                         .set_type(func.type_.clone().unwrap());
@@ -1181,7 +1181,7 @@ fn let_locals(bindings: Vec<(String, Arc<ExprNode>)>, value: Arc<ExprNode>) -> A
 
 /// `value` in the scope of a binding of the local `name` to `bound`, at the type of `bound`.
 fn let_local(name: &str, bound: Arc<ExprNode>, value: Arc<ExprNode>) -> Arc<ExprNode> {
-    let pat = PatternNode::make_local_var(name, bound.type_.clone().unwrap());
+    let pat = PatternNode::make_local_var(&FullName::local(name), bound.type_.clone().unwrap());
     expr_let_typed(pat, bound, value)
 }
 

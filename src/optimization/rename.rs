@@ -1,6 +1,6 @@
 use crate::{
     ast::{
-        expr::{expr_let_typed, expr_var, var_var, ExprNode},
+        expr::{expr_let_typed, expr_var, ExprNode},
         name::FullName,
         pattern::PatternNode,
         traverse::{EndVisitResult, ExprVisitor, StartVisitResult, VisitState},
@@ -266,8 +266,7 @@ impl ExprVisitor for Substitutor {
         // (2)
         for (fresh, bound) in bindings {
             changed = true;
-            let pat = PatternNode::make_var(var_var(fresh), None)
-                .set_type(bound.type_.as_ref().unwrap().clone());
+            let pat = PatternNode::make_local_var(&fresh, bound.type_.as_ref().unwrap().clone());
             expr = expr_let_typed(pat, bound, expr);
         }
 
@@ -537,10 +536,8 @@ fn calculate_renaming_bound_vars_avoiding(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        expr_var, var_var, Arc, ExprNode, ExprVisitor, FullName, Map, PatternNode, Substitutor,
-    };
-    use crate::ast::expr::{expr_builtin, expr_let, expr_match};
+    use super::{expr_var, Arc, ExprNode, ExprVisitor, FullName, Map, PatternNode, Substitutor};
+    use crate::ast::expr::{expr_builtin, expr_let, expr_match, var_var};
     use crate::ast::types::tycon;
     use crate::fixstd::builtin::{
         make_i64_ty, make_ptr_ty, make_tuple_name_abs, make_tuple_ty, MakeStructOp, NullPtrLitOp,

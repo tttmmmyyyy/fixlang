@@ -29,7 +29,7 @@
 
 use crate::{
     ast::{
-        expr::{expr_let_typed, expr_var, var_var, Expr, ExprNode},
+        expr::{expr_let_typed, expr_var, Expr, ExprNode},
         name::{FullName, Name},
         pattern::{Pattern, PatternNode},
         program::{Program, Symbol},
@@ -481,7 +481,7 @@ impl<'a> ExprVisitor for Collapser<'a> {
             let name = self.fresh_field_name();
             let ty = value.type_.as_ref().unwrap().clone();
             bindings.push((
-                PatternNode::make_var(var_var(name.clone()), None).set_type(ty.clone()),
+                PatternNode::make_local_var(&name, ty.clone()),
                 value.clone(),
             ));
             named = named.set_make_struct_field(field, expr_var(name, None).set_type(ty));

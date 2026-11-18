@@ -116,7 +116,7 @@ impl CaptureStruct {
             .map(|(n, t)| {
                 (
                     n.to_string(),
-                    PatternNode::make_var(var_var(n.clone()), None).set_type(t.clone()),
+                    PatternNode::make_local_var(n, t.clone()),
                 )
             })
             .collect();

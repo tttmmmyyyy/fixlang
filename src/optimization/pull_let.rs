@@ -78,7 +78,7 @@ the order the program ends up evaluating them in.
 
 use crate::{
     ast::{
-        expr::{expr_let_typed, expr_var, var_var, AppSourceCodeOrderType, Expr, ExprNode},
+        expr::{expr_let_typed, expr_var, AppSourceCodeOrderType, Expr, ExprNode},
         pattern::PatternNode,
         traverse::{ExprVisitor, StartVisitResult, VisitState},
     },
@@ -98,7 +98,7 @@ fn pull_argument_into_let(app: &Arc<ExprNode>, index: usize) -> Arc<ExprNode> {
     black_list.extend(ExprNode::free_vars_of_all(&args));
     let f_name = generate_new_names(&black_list, 1)[0].clone();
     let arg_ty = arg.type_.as_ref().unwrap();
-    let f_pat = PatternNode::make_var(var_var(f_name.clone()), None).set_type(arg_ty.clone());
+    let f_pat = PatternNode::make_local_var(&f_name, arg_ty.clone());
     args[index] = expr_var(f_name, None).set_type(arg_ty.clone());
 
     expr_let_typed(f_pat, arg, app.set_app_args(args))

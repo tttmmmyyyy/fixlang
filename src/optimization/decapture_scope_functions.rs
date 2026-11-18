@@ -220,11 +220,11 @@ impl CaptureStructMover<'_> {
             vec![
                 (
                     "0".to_string(),
-                    PatternNode::make_local_var(&env0.name, env_ty.clone()),
+                    PatternNode::make_local_var(&env0, env_ty.clone()),
                 ),
                 (
                     "1".to_string(),
-                    PatternNode::make_local_var(&cap0.name, cap_ty.clone()),
+                    PatternNode::make_local_var(&cap0, cap_ty.clone()),
                 ),
             ],
         )
@@ -235,7 +235,7 @@ impl CaptureStructMover<'_> {
             let field_name = local(&format!("_{}", i));
             param_field_pats.push((
                 i.to_string(),
-                PatternNode::make_local_var(&field_name.name, ty.clone()),
+                PatternNode::make_local_var(&field_name, ty.clone()),
             ));
             param_field_exprs.push((i.to_string(), var_expr(&field_name, ty)));
         }
@@ -269,7 +269,7 @@ impl CaptureStructMover<'_> {
         // `let c = cap; let h = |q| ..; body`, where `cap` is read where `F(cap)` read it.
         let new_func_ty = new_func.type_.as_ref().unwrap().clone();
         Some(expr_let_typed(
-            PatternNode::make_local_var(&cap_name.name, cap_ty.clone()),
+            PatternNode::make_local_var(&cap_name, cap_ty.clone()),
             cap,
             expr_let_typed(pat.set_type(new_func_ty), new_func, body),
         ))
@@ -354,7 +354,7 @@ impl ExprVisitor for OpRewriter<'_> {
         )
         .set_type(self.new_env_ty.clone());
         StartVisitResult::ReplaceAndReturn(expr_let_typed(
-            PatternNode::make_local_var(&self.new_env.name, self.new_env_ty.clone()),
+            PatternNode::make_local_var(&self.new_env, self.new_env_ty.clone()),
             env_and_cap,
             expr.set_builtin(builtin),
         ))
