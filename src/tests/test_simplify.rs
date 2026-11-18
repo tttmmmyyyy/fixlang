@@ -8,9 +8,8 @@
 /// building no union — the property these tests assert.
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{copy_dir_recursive, fix_command_at_opt_level};
-    use std::fs;
-    use std::path::{Path, PathBuf};
+    use crate::tests::test_util::{build_project_and_read_rc_ir, copy_dir_recursive};
+    use std::path::PathBuf;
     use std::process::Command;
     use tempfile::TempDir;
 
@@ -29,29 +28,6 @@ mod integration_tests {
         copy_dir_recursive(&get_test_cases_dir(), &dst).expect("Failed to copy test cases");
         let project_dir = dst.join(case);
         (temp_dir, project_dir)
-    }
-
-    /// Build the case project at `max` (where the simplifier runs) with `--emit-rc-ir all`,
-    /// returning the dumped RC IR of every module. The `range.fold` driver is a specialized
-    /// `Std::Iterator` symbol, so the whole-program dump is needed to see it. Also leaves a runnable
-    /// executable.
-    fn emit_all_rc_ir(project_dir: &Path) -> String {
-        let output = fix_command_at_opt_level("build", "max")
-            .arg("--emit-rc-ir")
-            .arg("all")
-            .current_dir(project_dir)
-            .output()
-            .expect("Failed to execute fix build --emit-rc-ir");
-
-        if !output.status.success() {
-            eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-            eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-            panic!("fix build --emit-rc-ir failed");
-        }
-
-        let dump_path = project_dir.join(".fixlang/rc_ir.post.txt");
-        fs::read_to_string(&dump_path)
-            .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
     }
 
     /// Each `fn` block of the dump whose header line contains all of `needles`: the header line
@@ -102,7 +78,7 @@ mod integration_tests {
         expected: &str,
     ) {
         let (_temp_dir, project_dir) = setup_test_env(case);
-        let dump = emit_all_rc_ir(&project_dir);
+        let dump = build_project_and_read_rc_ir(&project_dir, "all", "rc_ir.post.txt");
 
         let bodies = fn_bodies_matching(&dump, needles);
         assert!(
@@ -151,7 +127,7 @@ mod integration_tests {
     #[test]
     fn test_loop_state_cancelled() {
         let (_temp_dir, project_dir) = setup_test_env("loop_two_conditions");
-        let dump = emit_all_rc_ir(&project_dir);
+        let dump = build_project_and_read_rc_ir(&project_dir, "all", "rc_ir.post.txt");
         assert!(
             !dump.contains("LoopState"),
             "the loop state of a two-condition loop body should be cancelled, and the dump still \
