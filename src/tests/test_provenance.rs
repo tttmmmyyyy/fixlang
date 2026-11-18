@@ -352,10 +352,15 @@ mod integration_tests {
         );
     }
 
+    /// The version of `Main::tally` a dump line calls, if it calls one.
+    fn tally_version_called(line: &str) -> Option<&str> {
+        rc_ir_callee_of(line).filter(|c| c.starts_with("Main::tally"))
+    }
+
     /// Whether a dump line calls a borrowing version of `Main::tally`, whose name carries the
     /// `#borrow` tag.
     fn calls_tally_borrow_version(line: &str) -> bool {
-        rc_ir_callee_of(line).is_some_and(|c| c.starts_with("Main::tally") && c.contains("#borrow"))
+        tally_version_called(line).is_some_and(|c| c.contains("#borrow"))
     }
 
     /// How many of the `tally` calls in `main` route to a borrowing version, and how many stay on
@@ -363,7 +368,7 @@ mod integration_tests {
     fn tally_call_routing(main: &[&str]) -> (usize, usize) {
         let calls = main
             .iter()
-            .filter(|l| l.contains("= Main::tally"))
+            .filter(|l| tally_version_called(l).is_some())
             .collect::<Vec<_>>();
         let borrow_calls = calls
             .iter()
