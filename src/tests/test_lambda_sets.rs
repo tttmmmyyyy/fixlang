@@ -872,7 +872,12 @@ const BRANCHING_CHAIN_OUTPUT: &str = "1097390";
 /// `(I64 -> I64) -> I64 -> {result_ty}`, each calling the next from two places, each with a lambda of
 /// its own wrapping the function it was given, and printing `f{depth}(|x| x + n, n){result_args}`.
 /// `f0` is `|g, x| {f0_body}`.
-fn chain_of_two_lambda_calls_source(depth: usize, result_ty: &str, f0_body: &str, result_args: &str) -> String {
+fn chain_of_two_lambda_calls_source(
+    depth: usize,
+    result_ty: &str,
+    f0_body: &str,
+    result_args: &str,
+) -> String {
     let links: Vec<String> = (1..=depth)
         .map(|i| {
             format!(
