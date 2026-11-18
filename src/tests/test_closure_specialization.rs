@@ -683,16 +683,7 @@ mod integration_tests {
     pub fn test_a_copy_takes_the_body_of_the_lambda_it_calls() {
         let (_temp_dir, project_dir) = setup_test_env("inlined_body");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", INLINED_BODY_OUTPUT);
-
-        let copies = spec_copy_bodies(&dump, "Std::loop");
-        assert!(
-            !copies.is_empty(),
-            "the loop body should get a copy of `Std::loop`, but the dump names none: {:?}",
-            functions_named_with(&dump, "Std::loop")
-        );
-        for (header, body) in copies {
-            assert_holds_the_lambdas_body(header, body);
-        }
+        assert_each_copy_holds_the_lambdas_body(&dump, "Std::loop");
     }
 
     /// A loop body answering an action of a state monad is a lambda whose body is the lambda the
