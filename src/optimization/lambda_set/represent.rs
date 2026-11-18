@@ -222,7 +222,8 @@ impl Builders {
 
 /// The sets that the copies of the most copied components give to their `Component::body_params`,
 /// when the copies number more than the budget: `LS_COPY_BUDGET_BASE`, plus `LS_COPIES_PER_SITE`
-/// for each reference (`Component::sites`).
+/// for each reference (`Component::sites`) and each component on the longest chain of references
+/// from the entry's component (`longest_reference_chain`).
 ///
 /// Components are taken from the most copied, ties going to the one first in
 /// `Analysis::components`, until the copies fit the budget, counting one copy for each component
@@ -235,7 +236,8 @@ impl Builders {
 /// copy.
 fn over_copied_sets(analysis: &Analysis, spec: &Specialization) -> Vec<SetId> {
     let site_count: usize = analysis.components.iter().map(|c| c.sites.len()).sum();
-    let budget = LS_COPY_BUDGET_BASE + LS_COPIES_PER_SITE * site_count;
+    let budget =
+        LS_COPY_BUDGET_BASE + LS_COPIES_PER_SITE * site_count * longest_reference_chain(analysis);
     let mut copies = vec![0usize; analysis.components.len()];
     for instance in &spec.instances {
         copies[instance.component] += 1;
@@ -268,6 +270,30 @@ fn over_copied_sets(analysis: &Analysis, spec: &Specialization) -> Vec<SetId> {
                 .map(|p| instance.args[*p])
         })
         .collect()
+}
+
+/// How many components the longest chain of references (`Component::sites`) from the entry's
+/// component passes through, the entry's included.
+fn longest_reference_chain(analysis: &Analysis) -> usize {
+    let mut chain = vec![0usize; analysis.components.len()];
+    for (c, component) in analysis.components.iter().enumerate() {
+        let longest_below = component
+            .sites
+            .iter()
+            .map(|site| {
+                assert!(
+                    site.component < c,
+                    "the component {} refers to the component {}, which comes after it",
+                    c,
+                    site.component
+                );
+                chain[site.component]
+            })
+            .max()
+            .unwrap_or(0);
+        chain[c] = 1 + longest_below;
+    }
+    chain[analysis.entry_component()]
 }
 
 /// Whether a capture struct, or a union of capture structs, can stand for the values of each set of

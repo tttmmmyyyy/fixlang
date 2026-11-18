@@ -1038,41 +1038,57 @@ mod dump_tests {
         }
     }
 
-    /// How many places of `fan_in_source` call `h`, each with a lambda of its own.
+    /// How many places of `fan_in_source` call the chain, each with a lambda of its own.
     const FAN_IN_CALLS: usize = 40;
 
-    /// A program calling `h` from `FAN_IN_CALLS` places, each with a lambda of its own, where `h`
-    /// hands a lambda calling the one it was given to `loop`. `h` is copied once per place, and so
-    /// is `loop`, though the program refers to `loop` once.
+    /// How many functions of `fan_in_source` hand the function they were given to the next.
+    const FAN_IN_DEPTH: usize = 5;
+
+    /// A program calling a chain of functions `h{FAN_IN_DEPTH}` to `h0` from `FAN_IN_CALLS` places,
+    /// each with a lambda of its own, where each `h{i}` hands the function it was given to
+    /// `h{i - 1}` and `h0` hands a lambda calling it to `loop`. Every function of the chain is
+    /// copied once per place, and so is `loop`, though the program refers to `loop` once.
     fn fan_in_source() -> String {
+        let links: Vec<String> = (1..=FAN_IN_DEPTH)
+            .map(|i| {
+                format!(
+                    "h{i} : (I64 -> I64) -> I64 -> I64;\n\
+                     h{i} = |g, n| if n < 0 {{ h{i}(g, -n) }} else {{ h{prev}(g, n) + {i} }};\n",
+                    i = i,
+                    prev = i - 1
+                )
+            })
+            .collect();
         let calls: Vec<String> = (1..=FAN_IN_CALLS)
-            .map(|i| format!("h(|x| x + n * {}, n)", i))
+            .map(|i| format!("h{}(|x| x + n * {}, n)", FAN_IN_DEPTH, i))
             .collect();
         format!(
             "module Main;\n\
              \n\
-             h : (I64 -> I64) -> I64 -> I64;\n\
-             h = |g, n| if n < 0 {{ h(g, -n) }} else {{ loop((0, 0), |(i, s)| if i == n {{ break $ s }} else {{ continue $ (i + 1, s + g(i)) }}) }};\n\
+             h0 : (I64 -> I64) -> I64 -> I64;\n\
+             h0 = |g, n| if n < 0 {{ h0(g, -n) }} else {{ loop((0, 0), |(i, s)| if i == n {{ break $ s }} else {{ continue $ (i + 1, s + g(i)) }}) }};\n\
+             {}\
              \n\
              main : IO ();\n\
              main = (\n\
              \x20   let n = *(pure(100) : IO I64);\n\
              \x20   println(({}).to_string)\n\
              );\n",
+            links.join(""),
             calls.join(" + ")
         )
     }
 
-    /// Copies that grow linearly in the program stay within the copy budget of
-    /// `LS_COPIES_PER_SITE`: `fan_in_source` copies `h` and `loop` once per call of `h`, and every
-    /// copy of `loop` calls the lambda it was given by name.
+    /// Copies that grow with the references times the length of the chain stay within the copy
+    /// budget of `LS_COPIES_PER_SITE`: `fan_in_source` copies each function of its chain and `loop`
+    /// once per call of the chain, and every copy of `loop` calls the lambda it was given by name.
     #[test]
-    fn test_a_loop_in_a_function_called_from_many_places_calls_each_lambda_by_name() {
+    fn test_a_loop_at_the_end_of_a_chain_called_from_many_places_calls_each_lambda_by_name() {
         let dump = build_run_and_read_rc_ir(
             &fan_in_source(),
             "max",
-            "8398000",
-            "a function called from many places, handing a lambda to `loop`",
+            "8398600",
+            "a chain of functions called from many places, handing a lambda to `loop`",
         );
         assert_calls_by_name(&dump, "Std::loop");
     }
