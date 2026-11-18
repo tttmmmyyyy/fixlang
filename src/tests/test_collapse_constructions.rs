@@ -171,7 +171,10 @@ mod integration_tests {
     /// value it was written against, at every level.
     #[test]
     pub fn test_an_argument_naming_a_field_reads_the_value_it_was_written_against() {
-        assert_answers_at_every_level("field_in_another_argument", FIELD_IN_ANOTHER_ARGUMENT_OUTPUT);
+        assert_answers_at_every_level(
+            "field_in_another_argument",
+            FIELD_IN_ANOTHER_ARGUMENT_OUTPUT,
+        );
     }
 
     /// A struct built on every step from fields that are names and fields that are expressions keeps
@@ -185,6 +188,9 @@ mod integration_tests {
     /// field: the reader is given the union, at every level.
     #[test]
     pub fn test_a_union_taken_from_a_triple_beside_a_computed_field_is_read_as_built() {
-        assert_answers_at_every_level("union_beside_computed_field", UNION_BESIDE_COMPUTED_FIELD_OUTPUT);
+        assert_answers_at_every_level(
+            "union_beside_computed_field",
+            UNION_BESIDE_COMPUTED_FIELD_OUTPUT,
+        );
     }
 }

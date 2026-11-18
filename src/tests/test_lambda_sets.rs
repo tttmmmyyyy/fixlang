@@ -597,7 +597,10 @@ fn test_a_global_read_back_from_a_struct_and_its_uncurried_call_compute_both() {
 /// once.
 fn assert_prints_and_evaluates_each_once(source: &str, expected_output: &str, globals: &[&str]) {
     let output = run_source_capture(source, Configuration::develop_mode());
-    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected_output);
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        expected_output
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     for name in globals {
         let marker = format!("evaluating {}", name);

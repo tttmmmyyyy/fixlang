@@ -915,8 +915,7 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         args: &[RcVar],
         after: &After,
     ) -> (RcVar, Option<BorrowKey>) {
-        let Some(fref) =
-            specializable_callee(self.versions.prog, callee, &self.versions.borrowers)
+        let Some(fref) = specializable_callee(self.versions.prog, callee, &self.versions.borrowers)
         else {
             return (callee.clone(), None);
         };

@@ -17,7 +17,11 @@ pub fn call_graph_of(symbols: &Map<FullName, Symbol>, names: Vec<FullName>) -> G
         .enumerate()
         .map(|(idx, name)| (name.clone(), idx))
         .collect::<Map<FullName, usize>>();
-    assert_eq!(name_to_idx.len(), names.len(), "`names` lists a symbol twice");
+    assert_eq!(
+        name_to_idx.len(),
+        names.len(),
+        "`names` lists a symbol twice"
+    );
     let mut graph = Graph::new(names);
     for caller_idx in 0..graph.len() {
         let caller = graph.get(caller_idx);
