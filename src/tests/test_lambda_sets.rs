@@ -2094,3 +2094,117 @@ fn test_functions_in_two_types_referring_to_each_other_compute_them() {
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+/// How many functions of `global_struct_chain_source` take a struct holding a function and hand
+/// one to the next.
+const GLOBAL_STRUCT_CHAIN_DEPTH: usize = 11;
+
+/// A chain of functions `f{GLOBAL_STRUCT_CHAIN_DEPTH}` to `f0`, each taking its function in a
+/// struct field and calling the next from three places: two with a struct holding a lambda of its
+/// own wrapping the function it was given, and one with the global struct `gw`. `use_w` is called
+/// both with `gw` and with a struct whose function nothing passes down the chain.
+fn global_struct_chain_source() -> String {
+    let links: Vec<String> = (1..=GLOBAL_STRUCT_CHAIN_DEPTH)
+        .map(|i| {
+            format!(
+                "f{i} : W -> I64 -> I64;\n\
+                 f{i} = |w, x| if x % 3 == 0 {{ f{p}(W {{ fn : |y| (w.@fn)(y) + {i}, k : w.@k + 1 }}, x / 3) }} \
+                 else if x % 11 == 0 {{ f{p}(gw, x - 1) }} \
+                 else {{ f{p}(W {{ fn : |y| (w.@fn)(y) * {i}, k : w.@k }}, x - 1) }};\n",
+                i = i,
+                p = i - 1
+            )
+        })
+        .collect();
+    format!(
+        "module Main;\n\
+         \n\
+         type W = struct {{ fn : I64 -> I64, k : I64 }};\n\
+         \n\
+         gw : W;\n\
+         gw = W {{ fn : |x| x * 3 + 1, k : 5 }};\n\
+         \n\
+         use_w : W -> I64 -> I64;\n\
+         use_w = |w, x| if x < -100000 {{ use_w(w, x + 1) }} else {{ (w.@fn)(x) + w.@k }};\n\
+         \n\
+         f0 : W -> I64 -> I64;\n\
+         f0 = |w, x| (w.@fn)(x) + w.@k;\n\
+         {links}\
+         \n\
+         main : IO ();\n\
+         main = (\n\
+         \x20   let n = *(pure(100) : IO I64);\n\
+         \x20   let v = f{depth}(gw, n) + use_w(gw, n) + use_w(W {{ fn : |x| x - n, k : 1 }}, n)\n\
+         \x20       + f{depth}(W {{ fn : |x| x + n, k : 0 }}, n + 2);\n\
+         \x20   println(v.to_string)\n\
+         );\n",
+        links = links.join(""),
+        depth = GLOBAL_STRUCT_CHAIN_DEPTH
+    )
+}
+
+/// The copies of `global_struct_chain_source` go past the copy budget, and the sets given to the
+/// most copied functions, the set of the function of `gw` among them, are represented by
+/// closures. The two calls of `use_w` get copies representing the field differently, and the
+/// program computes its value under the development configuration.
+#[test]
+fn test_a_global_struct_of_a_function_passed_down_a_chain_past_the_copy_budget_computes_its_value()
+{
+    let output = run_source_capture(&global_struct_chain_source(), Configuration::develop_mode());
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "483");
+}
+
+/// The chain of `branching_chain_source`, where each function takes the function and the number in
+/// a tuple.
+fn tuple_branching_chain_source(depth: usize) -> String {
+    let links: Vec<String> = (1..=depth)
+        .map(|i| {
+            format!(
+                "f{i} : (I64 -> I64, I64) -> I64;\n\
+                 f{i} = |(g, x)| if x % 3 == 0 {{ f{p}((|y| g(y) + {i}, x / 3)) }} else {{ f{p}((|y| g(y) * {i}, x - 1)) }};\n",
+                i = i,
+                p = i - 1
+            )
+        })
+        .collect();
+    format!(
+        "module Main;\n\
+         \n\
+         f0 : (I64 -> I64, I64) -> I64;\n\
+         f0 = |(g, x)| g(x);\n\
+         {links}\
+         \n\
+         main : IO ();\n\
+         main = (\n\
+         \x20   let n = *(pure(100) : IO I64);\n\
+         \x20   println(f{depth}((|x| x + n, n)).to_string)\n\
+         );\n",
+        links = links.join(""),
+        depth = depth
+    )
+}
+
+/// The chains of `branching_chain_source`, `returning_branching_chain_source` and
+/// `tuple_branching_chain_source` at `BRANCHING_CHAIN_DEPTH` go past the copy budget, and each
+/// computes its value under the development configuration.
+#[test]
+fn test_chains_of_functions_each_calling_the_next_with_two_lambdas_compute_their_values_past_the_copy_budget(
+) {
+    for (source, expected) in [
+        (
+            branching_chain_source(BRANCHING_CHAIN_DEPTH),
+            BRANCHING_CHAIN_OUTPUT,
+        ),
+        (
+            returning_branching_chain_source(BRANCHING_CHAIN_DEPTH),
+            RETURNING_BRANCHING_CHAIN_OUTPUT,
+        ),
+        (
+            tuple_branching_chain_source(BRANCHING_CHAIN_DEPTH),
+            BRANCHING_CHAIN_OUTPUT,
+        ),
+    ] {
+        let output = run_source_capture(&source, Configuration::develop_mode());
+        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
+    }
+}
