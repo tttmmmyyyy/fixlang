@@ -14,6 +14,7 @@ use crate::{
         program::Program,
     },
     constants::CAP_NAME,
+    elaboration::typecheck::Scope,
     misc::{Map, Set},
     optimization::call_graph::call_graph_of,
 };
@@ -307,7 +308,7 @@ fn infer_component(
         component: id,
         symbols: &symbols,
         types: &types,
-        env: Map::default(),
+        env: Scope::default(),
         frames: vec![],
         terms: vec![],
         vars_holding_current: vec![],
@@ -379,7 +380,7 @@ struct Inferencer<'a, 'p, 'e> {
     /// component gets this type itself.
     types: &'a [AType],
     /// The annotated types of the local names in scope, the innermost binding of a name last.
-    env: Map<FullName, Vec<AType>>,
+    env: Scope<AType>,
     /// The terms enclosing the node under inference, the innermost last, as indices into `terms`:
     /// the body of the symbol, then the lambdas around the node.
     frames: Vec<usize>,
@@ -501,11 +502,11 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 for (i, param) in params.iter().enumerate() {
                     let param_ty = self.layout.type_arg(&lam_ty, i);
                     self.record(&param_ty);
-                    self.bind(&param.name, param_ty);
+                    self.env.push(&param.name.name, param_ty);
                 }
                 let body = self.infer(body);
                 for param in params.iter().rev() {
-                    self.unbind(&param.name);
+                    self.env.pop(&param.name.name);
                 }
                 let ret = self.layout.type_arg(&lam_ty, params.len());
                 self.analysis.solver.unify(&ret, &body);
@@ -557,9 +558,9 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 self.frames.push(term);
                 let param = self.layout.type_arg(&lam_ty, 0);
                 self.record(&param);
-                self.bind(&params[0].name, param);
+                self.env.push(&params[0].name.name, param);
                 let body = self.infer(body);
-                self.unbind(&params[0].name);
+                self.env.pop(&params[0].name.name);
                 self.frames.pop();
                 self.analysis.lambdas[lam as usize].nodes.end = self.nodes.len();
                 let ret = self.layout.type_arg(&lam_ty, 1);
@@ -571,7 +572,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 let names = self.bind_pattern(pat, &bound);
                 let val = self.infer(val);
                 for name in names.iter().rev() {
-                    self.unbind(name);
+                    self.env.pop(&name.name);
                 }
                 val
             }
@@ -590,7 +591,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                     let val = self.infer(val);
                     self.analysis.solver.unify(&result, &val);
                     for name in names.iter().rev() {
-                        self.unbind(name);
+                        self.env.pop(&name.name);
                     }
                 }
                 result
@@ -705,10 +706,8 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
     /// The annotated type of the local name `name` where it is read.
     fn local(&self, name: &FullName) -> AType {
         self.env
-            .get(name)
-            .and_then(|tys| tys.last())
+            .get_local(&name.name)
             .unwrap_or_else(|| panic!("the local name `{}` is unbound", name.to_string()))
-            .clone()
     }
 
     /// The annotated type of a reference to the name `name`, and what the name stands for.
@@ -751,16 +750,6 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         )
     }
 
-    /// Brings the local name `name` into scope, at the annotated type `ty`.
-    fn bind(&mut self, name: &FullName, ty: AType) {
-        self.env.entry(name.clone()).or_default().push(ty);
-    }
-
-    /// Takes the innermost binding of the local name `name` out of scope.
-    fn unbind(&mut self, name: &FullName) {
-        self.env.get_mut(name).unwrap().pop();
-    }
-
     /// Brings the names `pat` binds into scope, where `pat` takes apart a value of the annotated
     /// type `ty`. Returns the names, in the order they were bound.
     fn bind_pattern(&mut self, pat: &Arc<PatternNode>, ty: &AType) -> Vec<FullName> {
@@ -778,7 +767,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         }));
         match &pat.pattern {
             Pattern::Var(v, _) => {
-                self.bind(&v.name, ty.clone());
+                self.env.push(&v.name.name, ty.clone());
                 names.push(v.name.clone());
             }
             Pattern::Struct(_, fields, _) => {

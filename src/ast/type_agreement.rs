@@ -3,13 +3,12 @@
 
 use crate::ast::{
     expr::{Expr, ExprNode},
-    name::FullName,
     pattern::{Pattern, PatternNode},
     program::Program,
     type_env::TypeEnv,
     types::{type_arrow, type_func, TypeNode},
 };
-use crate::misc::Map;
+use crate::elaboration::typecheck::Scope;
 use std::sync::Arc;
 
 /// Panics, naming the symbol and the node, where two types given to meeting places of
@@ -54,40 +53,6 @@ struct Check<'p> {
     type_env: &'p TypeEnv,
 }
 
-/// The locals in scope at a node, each with the type its binder gives it.
-#[derive(Default)]
-struct Scope {
-    /// The types the binders in scope give each name, the innermost last.
-    types: Map<FullName, Vec<Arc<TypeNode>>>,
-    /// The names bound, in the order they were bound.
-    bound: Vec<FullName>,
-}
-
-impl Scope {
-    /// The number of bindings in scope, which `unbind_to` returns to.
-    fn depth(&self) -> usize {
-        self.bound.len()
-    }
-
-    /// Brings `name` into scope with the type `ty`, over any binding of it already in scope.
-    fn bind(&mut self, name: &FullName, ty: &Arc<TypeNode>) {
-        self.types.entry(name.clone()).or_default().push(ty.clone());
-        self.bound.push(name.clone());
-    }
-
-    /// Takes out of scope the bindings made since the scope had `depth` of them.
-    fn unbind_to(&mut self, depth: usize) {
-        for name in self.bound.drain(depth..) {
-            self.types.get_mut(&name).unwrap().pop();
-        }
-    }
-
-    /// The type the innermost binder in scope gives `name`.
-    fn type_of(&self, name: &FullName) -> Option<&Arc<TypeNode>> {
-        self.types.get(name).and_then(|tys| tys.last())
-    }
-}
-
 /// The type of the node `e`.
 fn ty(e: &ExprNode) -> &Arc<TypeNode> {
     e.type_.as_ref().unwrap()
@@ -110,18 +75,18 @@ impl<'p> Check<'p> {
 
     /// Checks the node `e` of `at` and the nodes under it, `scope` holding the locals in scope at
     /// `e`.
-    fn expr(&self, e: &Arc<ExprNode>, at: &str, scope: &mut Scope) {
+    fn expr(&self, e: &Arc<ExprNode>, at: &str, scope: &mut Scope<Arc<TypeNode>>) {
         match &*e.expr {
             Expr::Var(v) => {
                 if v.name.is_local() {
-                    let bound_ty = scope.type_of(&v.name).unwrap_or_else(|| {
+                    let bound_ty = scope.get_local(&v.name.name).unwrap_or_else(|| {
                         panic!(
                             "in `{}`, the local `{}` is read where nothing binds it",
                             at,
                             v.name.to_string()
                         )
                     });
-                    self.same(bound_ty, ty(e), at, e, "a local's type and its reference's");
+                    self.same(&bound_ty, ty(e), at, e, "a local's type and its reference's");
                 } else {
                     let symbol = self.prg.symbols.get(&v.name).unwrap_or_else(|| {
                         panic!(
@@ -170,7 +135,6 @@ impl<'p> Check<'p> {
                 );
             }
             Expr::Lam(params, body) => {
-                let depth = scope.depth();
                 let param_tys = ty(e).get_lambda_srcs();
                 assert_eq!(
                     params.len(),
@@ -180,10 +144,12 @@ impl<'p> Check<'p> {
                     e.expr.stringify().to_string()
                 );
                 for (param, param_ty) in params.iter().zip(param_tys) {
-                    scope.bind(&param.name, &param_ty);
+                    scope.push(&param.name.name, param_ty);
                 }
                 self.expr(body, at, scope);
-                scope.unbind_to(depth);
+                for param in params {
+                    scope.pop(&param.name.name);
+                }
                 self.same(
                     &ty(e).get_lambda_dst(),
                     ty(body),
@@ -194,10 +160,9 @@ impl<'p> Check<'p> {
             }
             Expr::Let(pat, bound, val) => {
                 self.expr(bound, at, scope);
-                let depth = scope.depth();
                 self.pattern(pat, ty(bound), at, e, scope);
                 self.expr(val, at, scope);
-                scope.unbind_to(depth);
+                Self::unbind(pat, scope);
                 self.same(ty(e), ty(val), at, e, "a let's type and its value's");
             }
             Expr::If(cond, then_expr, else_expr) => {
@@ -222,10 +187,9 @@ impl<'p> Check<'p> {
             Expr::Match(cond, arms) => {
                 self.expr(cond, at, scope);
                 for (pat, val) in arms {
-                    let depth = scope.depth();
                     self.pattern(pat, ty(cond), at, e, scope);
                     self.expr(val, at, scope);
-                    scope.unbind_to(depth);
+                    Self::unbind(pat, scope);
                     self.same(ty(e), ty(val), at, e, "a match's type and an arm's");
                 }
             }
@@ -307,7 +271,7 @@ impl<'p> Check<'p> {
         matched: &Arc<TypeNode>,
         at: &str,
         e: &ExprNode,
-        scope: &mut Scope,
+        scope: &mut Scope<Arc<TypeNode>>,
     ) {
         let pat_ty = pat.info.type_.as_ref().unwrap();
         self.same(
@@ -319,7 +283,7 @@ impl<'p> Check<'p> {
         );
         match &pat.pattern {
             Pattern::Var(var, anno) => {
-                scope.bind(&var.name, pat_ty);
+                scope.push(&var.name.name, pat_ty.clone());
                 if let Some(anno) = anno {
                     self.same(
                         anno,
@@ -356,6 +320,13 @@ impl<'p> Check<'p> {
                 let i = pat_ty.field_index(self.type_env, &variant.name).unwrap();
                 self.pattern(sub, &pat_ty.field_types(self.type_env)[i], at, e, scope);
             }
+        }
+    }
+
+    /// Takes out of `scope` the locals that `pattern` added for `pat`.
+    fn unbind(pat: &PatternNode, scope: &mut Scope<Arc<TypeNode>>) {
+        for var in pat.pattern.vars() {
+            scope.pop(&var.name);
         }
     }
 }
