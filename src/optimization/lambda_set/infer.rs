@@ -212,8 +212,8 @@ pub fn infer(prg: &Program, layout: &SlotLayout) -> Analysis {
     for export in &prg.export_statements {
         roots.push((export.value_expr.clone().unwrap(), DynamicKind::Export));
     }
-    let root = infer_component(prg, layout, &mut analysis, vec![], roots);
-    analysis.components.push(root);
+    let entry_component = infer_component(prg, layout, &mut analysis, vec![], roots);
+    analysis.components.push(entry_component);
     // The variables of each component, as the roots they are once every component is inferred: a
     // component inferred later can unify a pinned variable of an earlier one, which can make
     // another variable its root.
@@ -1318,12 +1318,12 @@ fn walk_reached(
                         ..
                     } => var_stack.extend(args),
                     Member::Lam {
-                        lam: other,
+                        lam,
                         owner: Owner::Current,
                     } => {
-                        let other = term_of_lam[&other];
-                        if seen_terms.insert(other) {
-                            term_stack.push(other);
+                        let term = term_of_lam[&lam];
+                        if seen_terms.insert(term) {
+                            term_stack.push(term);
                         }
                     }
                     Member::Dynamic(_) => {}

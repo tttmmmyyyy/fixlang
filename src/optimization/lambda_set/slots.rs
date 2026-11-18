@@ -549,8 +549,8 @@ impl<'e> SlotLayout<'e> {
                     match binding {
                         Binding::Linked(_, slots) => out.extend(slots.iter().copied()),
                         Binding::Untracked(arg_ty) => {
-                            let reason = untracked_reason(source);
-                            push_untracked(self.slot_count(arg_ty), &reason, solver, out);
+                            let untracked_tc = untracked_reason(source);
+                            push_untracked(self.slot_count(arg_ty), &untracked_tc, solver, out);
                         }
                     }
                     return;
@@ -588,8 +588,8 @@ impl<'e> SlotLayout<'e> {
                         let range = self.declared_own_range(tc, *group, own.len(), cursor);
                         out.extend(own[range].iter().copied());
                     }
-                    OwnSource::Untracked(reason) => {
-                        push_untracked(self.own_slot_count(tc), reason, solver, out);
+                    OwnSource::Untracked(untracked_tc) => {
+                        push_untracked(self.own_slot_count(tc), untracked_tc, solver, out);
                     }
                 }
                 for arg in args {
@@ -703,11 +703,11 @@ impl SlotFold<SetVar> for Annotate<'_> {
 }
 
 /// Appends to `out` `count` new variables, each made Dynamic as a place inside a type argument of
-/// `reason`.
-fn push_untracked(count: usize, reason: &TyCon, solver: &mut Solver, out: &mut Vec<SetVar>) {
+/// `tc`.
+fn push_untracked(count: usize, tc: &TyCon, solver: &mut Solver, out: &mut Vec<SetVar>) {
     for _ in 0..count {
         let v = solver.fresh();
-        solver.make_dynamic(v, DynamicKind::TypeConstructorArgument(reason.clone()));
+        solver.make_dynamic(v, DynamicKind::TypeConstructorArgument(tc.clone()));
         out.push(v);
     }
 }

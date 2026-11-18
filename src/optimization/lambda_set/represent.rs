@@ -701,11 +701,11 @@ impl NameGraph<'_> {
                 let class = &self.classes[node];
                 text.push_str(&self.analysis.lambdas[class.lam as usize].to_string());
                 text.push('(');
-                for (i, arg) in class.interface_reprs.iter().enumerate() {
+                for (i, repr) in class.interface_reprs.iter().enumerate() {
                     if i > 0 {
                         text.push(',');
                     }
-                    match self.node_of(arg) {
+                    match self.node_of(repr) {
                         None => text.push('c'),
                         Some(child) => write_child(child, written, text),
                     }

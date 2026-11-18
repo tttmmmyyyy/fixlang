@@ -94,7 +94,7 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
 fn describe_members(
     solver: &mut Solver,
     v: SetVar,
-    param_names: &Map<SetVar, String>,
+    var_names: &Map<SetVar, String>,
     lambda_names: &[String],
 ) -> String {
     let members = solver.members(v).to_vec();
@@ -110,7 +110,7 @@ fn describe_members(
                     .iter()
                     .map(|a| {
                         let root = solver.find(*a);
-                        param_names
+                        var_names
                             .get(&root)
                             .cloned()
                             .unwrap_or_else(|| format!("v{}", root.index()))
