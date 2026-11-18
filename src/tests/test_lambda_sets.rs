@@ -2,7 +2,7 @@ use crate::{
     configuration::Configuration,
     constants::MAX_LS_UNION_VARIANTS,
     tests::test_util::{
-        build_counting_instructions_and_run, build_within_and_run, run_source_capture, test_source,
+        build_within_and_run, build_within_instructions_and_run, run_source_capture, test_source,
     },
 };
 use std::time::Duration;
@@ -869,8 +869,9 @@ const BRANCHING_CHAIN_DEPTH: usize = 14;
 const BRANCHING_CHAIN_OUTPUT: &str = "1097390";
 
 /// A program calling down a chain of functions `f{depth}` to `f0`, each calling the next from two
-/// places, each with a lambda of its own wrapping the function it was given. Each copy of `f{i}`
-/// asks for two copies of `f{i - 1}`, one per lambda, so the copies double at each step.
+/// places, each with a lambda of its own wrapping the function it was given, and printing what the
+/// chain computes. Each copy of `f{i}` asks for two copies of `f{i - 1}`, one per lambda, so the
+/// copies double at each step.
 fn branching_chain_source(depth: usize) -> String {
     let links: Vec<String> = (1..=depth)
         .map(|i| {
@@ -899,27 +900,15 @@ fn branching_chain_source(depth: usize) -> String {
     )
 }
 
-/// A chain of `branching_chain_source` deep enough that the calls of its innermost functions are
-/// widened past the limit of `LS_COPIES_PER_REFERENCE` copies computes what the chain computes: the
-/// widened copies take the functions they are given as closures, alongside the copies that take
-/// them as capture structs.
-#[test]
-fn test_a_chain_of_functions_whose_calls_are_widened_past_the_limit_on_copies_computes_it() {
-    let source = branching_chain_source(10).replace(
-        "println(f10(|x| x + n, n).to_string)",
-        "assert_eq(|_| \"the chain computes its value\", f10(|x| x + n, n), 128172);; pure()",
-    );
-    test_source(&source, Configuration::develop_mode());
-}
-
-/// About three times what the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes with the limit of
-/// `LS_COPIES_PER_REFERENCE` (19 billion on x86-64), and a fifth of what it executes with every
-/// copy made (286 billion).
+/// About three times what the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes
+/// with the budget of `LS_COPIES_PER_SITE` (16 billion on x86-64), and a fifth of what it executes
+/// with every copy made (286 billion).
 const BRANCHING_CHAIN_MAX_INSTRUCTIONS: u64 = 50_000_000_000;
 
-/// The chain of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than `BRANCHING_CHAIN_MAX_INSTRUCTIONS`
-/// instructions. The calls of a function past the limit of `LS_COPIES_PER_REFERENCE` copies are
-/// widened to one copy taking closures, so each function of the chain has a bounded number of copies.
+/// The chain of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions. Its copies go past the budget of
+/// `LS_COPIES_PER_SITE`, and the sets given to the most copied functions are represented by
+/// closures, which makes each of those functions one copy in the rewritten program.
 /// Where the machine does not let the test count instructions, the test checks the answer alone.
 #[test]
 fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_bounded_work() {
@@ -927,29 +916,16 @@ fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_bo
         "a chain of {} functions each calling the next with two lambdas",
         BRANCHING_CHAIN_DEPTH
     );
-    let (printed, instructions) = build_counting_instructions_and_run(
+    let printed = build_within_instructions_and_run(
         &branching_chain_source(BRANCHING_CHAIN_DEPTH),
         "max",
+        BRANCHING_CHAIN_MAX_INSTRUCTIONS,
         &description,
     );
     assert_eq!(
         printed, BRANCHING_CHAIN_OUTPUT,
         "the chain computed a wrong value"
     );
-    match instructions {
-        Some(instructions) => assert!(
-            instructions < BRANCHING_CHAIN_MAX_INSTRUCTIONS,
-            "compiling {} executed {} instructions, beyond the bound of {}",
-            description,
-            instructions,
-            BRANCHING_CHAIN_MAX_INSTRUCTIONS
-        ),
-        None => eprintln!(
-            "compiling {}: this machine does not let the test count instructions, so the bound \
-             went unchecked",
-            description
-        ),
-    }
 }
 
 /// What lambda set specialization makes of a program, read off the `--emit-rc-ir` dump: a
@@ -1037,9 +1013,9 @@ mod dump_tests {
         )
     }
 
-    /// The copies of a component called from many copies of its callers stay within the limit on
-    /// copies, which waits for the program to make more copies than its references allow: every
-    /// copy of `loop` in `fan_in_source` calls the lambda it was given by name.
+    /// The copies of a component called from many copies of its callers stay within the budget of
+    /// `LS_COPIES_PER_SITE`, which only a growth beyond linear in the program goes past: every copy
+    /// of `loop` in `fan_in_source` calls the lambda it was given by name.
     #[test]
     fn test_a_loop_in_a_function_called_from_many_places_calls_each_lambda_by_name() {
         let dump = build_run_and_read_rc_ir(

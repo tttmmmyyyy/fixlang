@@ -235,22 +235,21 @@ pub const MAX_LS_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 6;
 /// once those passes take linear time, up to `MAX_UNION_VARIANTS`.
 pub const MAX_LS_UNION_VARIANTS: usize = 32;
 const _: () = assert!(MAX_LS_UNION_VARIANTS <= MAX_UNION_VARIANTS);
-/// How many copies of components lambda set specialization makes per reference to a component
-/// (`Component::sites`), beyond `LS_COPY_LIMIT_BASE`: once the program has made that many over all
-/// its references, each component is limited to that many over the references to it. A later call
-/// of a component past its limit is given `Elem::Dynamic` for every parameter, which makes it one
-/// more copy at most, and the sets the call passes are represented by closures.
+/// How many copies of components the rewrite of lambda set specialization makes per reference a
+/// component makes to another (`Component::sites`), beyond `LS_COPY_BUDGET_BASE`. Past the budget,
+/// the sets the most copied components are given are represented by closures, and the rewrite makes
+/// one copy of each of those components.
 ///
 /// A component is copied once per distinct way it is called, and a function calling the next of a
 /// chain from two places, each with a lambda of its own wrapping the function it was given, asks
-/// for twice as many copies of the next as it has of itself: without the limit, the copies grow
-/// exponentially in the length of the chain. The copies of a component called from many copies of
-/// its callers outgrow its references too, so the limit of each component waits for the limit of
-/// the program, which only a growth beyond linear in the program reaches.
-pub const LS_COPIES_PER_REFERENCE: usize = 4;
-/// The copies lambda set specialization makes, in the program and in each component, before
-/// `LS_COPIES_PER_REFERENCE` limits them.
-pub const LS_COPY_LIMIT_BASE: usize = 16;
+/// for twice as many copies of the next as it has of itself: the copies grow exponentially in the
+/// length of the chain. A program without such a chain stays well within the budget, as the copies
+/// of its callees grow with the copies of its callers alone. The budget bounds the copies the
+/// rewrite makes, and `specialize` still lists every way a component is asked for.
+pub const LS_COPIES_PER_SITE: usize = 4;
+/// The copies of components the rewrite of lambda set specialization makes in any program before
+/// `LS_COPIES_PER_SITE` bounds them.
+pub const LS_COPY_BUDGET_BASE: usize = 64;
 /// The index of the function pointer among a closure's fields.
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 /// The index, among a closure's fields, of the pointer to the captured values the function is

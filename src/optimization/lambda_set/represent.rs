@@ -8,7 +8,10 @@ use super::{
     specialize::Specialization,
 };
 use crate::{
-    constants::{LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS},
+    constants::{
+        LS_COPIES_PER_SITE, LS_COPY_BUDGET_BASE, LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS,
+        MAX_LS_UNION_VARIANTS,
+    },
     graph::Graph,
     hash::md5_hex,
     misc::{Map, Set},
@@ -216,9 +219,47 @@ impl Builders {
     }
 }
 
+/// The sets the copies of the most copied components give their `Component::body_params`, when the
+/// copies are more than the budget of `LS_COPY_BUDGET_BASE` and `LS_COPIES_PER_SITE` per reference.
+/// The components are taken from the most copied, the first in `Analysis::components` among equals,
+/// until the copies the others have, with one for each component taken, fit the budget, or no copied
+/// component is left.
+///
+/// The rewrite makes one copy of a component per representation of the sets of its
+/// `Component::body_params`, so a component whose sets are all represented by closures has one.
+fn over_copied_sets(analysis: &Analysis, spec: &Specialization) -> Vec<SetId> {
+    let sites: usize = analysis.components.iter().map(|c| c.sites.len()).sum();
+    let budget = LS_COPY_BUDGET_BASE + LS_COPIES_PER_SITE * sites;
+    let mut copies = vec![0usize; analysis.components.len()];
+    for instance in &spec.instances {
+        copies[instance.component] += 1;
+    }
+    let mut by_copies: Vec<usize> = (0..copies.len()).collect();
+    by_copies.sort_by_key(|c| (std::cmp::Reverse(copies[*c]), *c));
+    let mut total = spec.instances.len();
+    let mut taken: Set<usize> = Set::default();
+    for c in by_copies {
+        if total <= budget || copies[c] == 0 {
+            break;
+        }
+        total -= copies[c] - 1;
+        taken.insert(c);
+    }
+    spec.instances
+        .iter()
+        .filter(|instance| taken.contains(&instance.component))
+        .flat_map(|instance| {
+            analysis.components[instance.component]
+                .body_params
+                .iter()
+                .map(|p| instance.args[*p])
+        })
+        .collect()
+}
+
 /// Whether a capture struct, or a union of capture structs, can stand for the values of each set of
-/// `spec`: the set is not empty and holds lambdas alone, it is not passed at a call widened past the
-/// limit on copies (`Specialization::widened_sets`), and its layout does not hold itself, as
+/// `spec`: the set is not empty and holds lambdas alone, it is not given to the copies of a
+/// component copied past the budget (`over_copied_sets`), and its layout does not hold itself, as
 /// `represent` describes.
 fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builders) -> Vec<bool> {
     let store = &spec.store;
@@ -229,8 +270,8 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
             !elems.is_empty() && elems.iter().all(|elem| matches!(elem, Elem::Lam(..)))
         })
         .collect();
-    for id in &spec.widened_sets {
-        unboxable[*id as usize] = false;
+    for id in over_copied_sets(analysis, spec) {
+        unboxable[id as usize] = false;
     }
     let mut holds = Graph::new((0..set_count).collect::<Vec<usize>>());
     for id in 0..set_count {
@@ -393,9 +434,9 @@ fn partition_sets(
 /// The representation is decided in three steps.
 ///
 /// 1. A set whose values neither a capture struct nor a union of capture structs can stand for is
-///    represented by closures: an empty set, a set holding `Elem::Dynamic`, a set passed at a call
-///    widened past the limit on copies (`Specialization::widened_sets`), and a set whose layout
-///    holds itself. The layout of a set holds itself when the capture structs of its elements hold
+///    represented by closures: an empty set, a set holding `Elem::Dynamic`, a set given to the
+///    copies of a component copied past the budget of `LS_COPIES_PER_SITE` (`over_copied_sets`),
+///    and a set whose layout holds itself. The layout of a set holds itself when the capture structs of its elements hold
 ///    in place, through unboxed fields, a set that in turn holds this one in place. Such a layout
 ///    would have no size, as an unboxed type reaching itself has none.
 ///    So is a set step 2 finds too large for a capture struct or a union (`too_large_sets`): its
