@@ -542,9 +542,9 @@ pub enum ConstraintInstantiationMode {
 pub struct TypeCheckContext {
     /// The number the next type variable created here is named after.
     tyvar_id: u32,
-    /// For each type variable the inference created, by name, the expression or pattern it arose at,
-    /// so that a diagnostic naming the variable can point at it. A type variable of a signature has no
-    /// entry: a diagnostic shows it under the name the signature gives it, with no location.
+    /// For each type variable the inference created, by name, the expression or pattern it arose
+    /// at, so that a diagnostic naming the variable can point at it. A type variable of a signature
+    /// has no entry: a diagnostic shows it under the name the signature gives it, with no location.
     tyvar_source: Map<String, TyVarSource>,
     /// The type scheme each name in scope stands for. These are the assumptions of the inference.
     pub scope: Scope<Arc<Scheme>>,
@@ -652,8 +652,9 @@ impl TypeCheckContext {
     }
 
     /// Records that the expression or pattern at `span` is checked against the type variable named
-    /// `tyvar_name`, so that a diagnostic naming that variable can point at it. `tyvar_name` must name
-    /// a type variable the inference created. A `span` of `None` leaves the record as it stands.
+    /// `tyvar_name`, so that a diagnostic naming that variable can point at it. `tyvar_name` must
+    /// name a type variable the inference created. A `span` of `None` leaves the record as it
+    /// stands.
     fn add_tyvar_source(&mut self, tyvar_name: Name, span: Option<Span>) {
         if let Some(span) = span {
             self.insert_tyvar_source(
@@ -938,9 +939,9 @@ impl TypeCheckContext {
         Ok((cond_tycon, cond_ti))
     }
 
-    /// Gives `tv1` and `tv2` one source: the expression or pattern a diagnostic naming either of them
-    /// points at, and how the variable relates to it. Where both already carry one, `tv2`'s is kept.
-    /// Only a type variable the inference created takes the source.
+    /// Gives `tv1` and `tv2` one source: the expression or pattern a diagnostic naming either of
+    /// them points at, and how the variable relates to it. Where both already carry one, `tv2`'s is
+    /// kept. Only a type variable the inference created takes the source.
     fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
         let src = self
             .tyvar_source
@@ -3262,8 +3263,8 @@ fn make_struct_fields_in_declaration_order(
 /// relates to it.
 #[derive(Clone)]
 struct TyVarSource {
-    /// Where the expression or pattern stands in the source; a diagnostic naming the variable points
-    /// here.
+    /// Where the expression or pattern stands in the source; a diagnostic naming the variable
+    /// points here.
     span: Span,
     /// How the variable relates to the expression or pattern.
     role: TyVarRole,
@@ -3273,9 +3274,9 @@ struct TyVarSource {
 #[derive(Clone)]
 enum TyVarRole {
     /// The variable is the type expected for the expression or pattern: the type it is checked
-    /// against, or, for a variable pattern with no annotation, the type the variable takes. The check
-    /// unifies the variable with the type the expression or pattern has, so an error raised before
-    /// the check may show that type differing from the variable.
+    /// against, or, for a variable pattern with no annotation, the type the variable takes. The
+    /// check unifies the variable with the type the expression or pattern has, so an error raised
+    /// before the check may show that type differing from the variable.
     ExpectedTypeOf,
     /// The variable is the element type of the expression, an array literal with no element.
     ElementTypeOf,
