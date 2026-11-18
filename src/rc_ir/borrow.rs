@@ -59,7 +59,7 @@ use crate::rc_ir::ownership::{
     rc_units, rhs_consumes, truncate_to_unit, unit_step, units_under, AliasStep, References,
     UnitStep, VarTable,
 };
-use crate::rc_ir::specialization::{specializable_callee, CloneKey, CloneRegistry};
+use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneKey, CloneRegistry};
 use std::sync::Arc;
 
 /// The parameter leaves borrow inference found `Own`, keyed by the parameter variable's name and the
@@ -664,19 +664,8 @@ fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
                 .extend(closure_targets.iter().cloned());
         }
     }
-    // Least fixed point over that graph: a caller of an observing function reaches the op.
-    loop {
-        let mut grew = false;
-        for (fref, cs) in &callees {
-            if !observing.contains(fref) && cs.iter().any(|c| observing.contains(c)) {
-                observing.insert(fref.clone());
-                grew = true;
-            }
-        }
-        if !grew {
-            return observing;
-        }
-    }
+    // A caller of an observing function reaches the op.
+    callers_of(observing, &callees)
 }
 
 /// The ownership shape of a value of type `ty`, with `ownership_of` deciding each of its
