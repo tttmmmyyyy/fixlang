@@ -605,15 +605,21 @@ impl Program {
         None
     }
 
-    /// The expressions the entry point and the exported functions were instantiated as.
+    /// The expressions the entry point and the exported functions were instantiated as: the entry
+    /// point's first, if the program has one, then one for each export statement, in order.
+    ///
+    /// Panics where an export statement has not been instantiated yet.
     pub fn root_value_exprs(&self) -> Vec<&Arc<ExprNode>> {
         self.entry_io_value
             .iter()
-            .chain(
-                self.export_statements
-                    .iter()
-                    .filter_map(|stmt| stmt.value_expr.as_ref()),
-            )
+            .chain(self.export_statements.iter().map(|stmt| {
+                stmt.value_expr.as_ref().unwrap_or_else(|| {
+                    panic!(
+                        "the exported value `{}` is read before it is instantiated",
+                        stmt.value_name.to_string()
+                    )
+                })
+            }))
             .collect()
     }
 
