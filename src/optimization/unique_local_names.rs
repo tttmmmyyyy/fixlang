@@ -1,5 +1,6 @@
-// This module provides a transformation that makes all local names defined in an expression unique.
-// Not only avoids shadowing but also avoids collisions with names that are already out of scope.
+//! This module provides a transformation that makes all local names defined in an expression unique.
+//! Not only avoids shadowing but also avoids collisions with names that are already out of scope.
+
 use crate::{
     ast::{
         expr::ExprNode,
@@ -10,6 +11,9 @@ use crate::{
 };
 use std::sync::Arc;
 
+/// `expr` with every local name it binds renamed apart: no two bindings of the result bind one name,
+/// and none binds a name of `occupied` or a free variable of `expr`. A binding whose name is free of
+/// those keeps it; the others get fresh names `#v{n}`.
 pub fn run_on_expr(expr: &Arc<ExprNode>, mut occupied: Set<FullName>) -> Arc<ExprNode> {
     let free_vars = expr.free_vars();
     occupied.extend(free_vars.iter().cloned());
@@ -21,16 +25,22 @@ pub fn run_on_expr(expr: &Arc<ExprNode>, mut occupied: Set<FullName>) -> Arc<Exp
     renamer.traverse(expr).expr
 }
 
+/// The traversal of `run_on_expr`, renaming each binding as it enters its scope.
 struct Renamer {
-    // The renaming map
+    /// The name each local name in scope is renamed to. A name absent from the map keeps its name.
     map: Map<FullName, FullName>,
-    // The set of names that are already used.
+    /// The names already used: those `run_on_expr` was told to avoid, the free variables of the
+    /// expression, and every name a binding visited so far binds.
     occupied: Set<FullName>,
-    // The counter to determine the next name.
+    /// The number of the next fresh name `#v{n}` to try. Every `#v{k}` with `k` below it is in
+    /// `occupied`.
     name_no: usize,
 }
 
 impl Renamer {
+    /// The renaming of `local_names`, the names one binding introduces: each name already in
+    /// `occupied` goes to a fresh name, and the others keep their names. Every name the binding ends
+    /// up binding is added to `occupied`.
     fn create_rename_of_local_names(
         &mut self,
         local_names: &Vec<FullName>,
