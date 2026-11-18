@@ -116,6 +116,9 @@ mod integration_tests {
     /// What `curried_loop_body` prints: the counter added up from 3 while it stays below 10.
     const CURRIED_LOOP_BODY_OUTPUT: &str = "42";
 
+    /// What `overapplied_body` prints: `3 * i + i` added up for `i` from 4 down to 1.
+    const OVERAPPLIED_BODY_OUTPUT: &str = "40";
+
     /// What `borrowed_capture` prints: `scaled_sum` over the array for the keys 0 to 3.
     const BORROWED_CAPTURE_OUTPUT: &str = "111";
 
@@ -690,6 +693,28 @@ mod integration_tests {
             !copies.is_empty(),
             "the loop body should get a copy of `Std::loop_m`, but the dump names none: {:?}",
             functions_named_with(&dump, "Std::loop_m")
+        );
+        for (header, body) in copies {
+            assert_holds_the_lambdas_body(header, body);
+        }
+    }
+
+    /// A lambda answering with a function it does not write as a lambda is lifted to a function
+    /// taking fewer parameters than the copy that calls it supplies: the copy of `sum_applied_twice`
+    /// calls it with the counter, and applies what it answers to the counter again. The copy is still
+    /// the only symbol naming it, so the body goes into the copy, applied to the argument past its
+    /// last parameter.
+    #[test]
+    pub fn test_a_copy_takes_the_body_of_the_lambda_it_calls_past_its_last_parameter() {
+        let (_temp_dir, project_dir) = setup_test_env("overapplied_body");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", OVERAPPLIED_BODY_OUTPUT);
+
+        let copies = spec_copy_bodies(&dump, "Main::sum_applied_twice#");
+        assert!(
+            !copies.is_empty(),
+            "`sum_applied_twice` should get a copy for the lambda it is given, but the dump names \
+             none: {:?}",
+            functions_named_with(&dump, "Main::")
         );
         for (header, body) in copies {
             assert_holds_the_lambdas_body(header, body);

@@ -1,0 +1,22 @@
+module Main;
+
+// A function of `y`: the identity where `x` is negative, `x + y` up to 1000, and the same function of
+// `x - 1000` above it. It recurses, so the inliner leaves it as a function of its own, and a lambda
+// calling it answers with a function without writing a lambda of its own.
+adder : I64 -> I64 -> I64;
+adder = |x| if x < 0 { |y| y } else if x > 1000 { adder(x - 1000) } else { |y| x + y };
+
+// Adds up `op(i)(i)` for `i` from `n` down to 1. It recurses, so the inliner leaves it as a function
+// of its own, and the copy made for the lambda it is given calls that lambda with one argument more
+// than the lambda takes.
+sum_applied_twice : (I64 -> I64 -> I64) -> I64 -> I64;
+sum_applied_twice = |op, n| (
+    if n <= 0 { 0 };
+    op(n)(n) + sum_applied_twice(op, n - 1)
+);
+
+main : IO ();
+main = (
+    let k = 3;
+    println $ sum_applied_twice(|x| adder(x * k), 4).to_string
+);
