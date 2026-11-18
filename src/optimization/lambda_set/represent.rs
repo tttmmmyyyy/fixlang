@@ -450,9 +450,8 @@ fn partition_sets(
 ///    represented by closures: an empty set, a set holding `Elem::Dynamic`, a set given to the
 ///    copies of a component copied past the copy budget (`over_copied_sets`), and a set whose
 ///    layout holds itself. The layout of a set holds itself when the capture structs of its elements
-///    hold
-///    in place, through unboxed fields, a set that in turn holds this one in place. Such a layout
-///    would have no size, as an unboxed type reaching itself has none.
+///    hold in place, through unboxed fields, a set that in turn holds this one in place. Such a
+///    layout would have no size, as an unboxed type reaching itself has none.
 ///    So is a set step 2 finds too large for a capture struct or a union (`too_large_sets`): its
 ///    elements make more classes than `MAX_LS_UNION_VARIANTS`, or its values would lay out more
 ///    capture structs in place than `MAX_LS_IN_PLACE_CAPTURE_STRUCTS`. Step 2 is then taken again with
