@@ -281,10 +281,13 @@ impl<'e> SlotLayout<'e> {
     }
 
     /// Appends to `own` an entry for each own slot that the declared field type `ty` of a member of
-    /// `group` gives the group, in the order `walk_declared` reads them.
+    /// `group` gives the group.
     ///
-    /// Must stay in sync with `walk_declared` on the order a declared type is read in, and with
-    /// `collect_owning_tycons` on which type constructors own slots.
+    /// Reads `ty` in the order `walk_declared` and `Rewriter::rewrite_declared` read a declared
+    /// type, which the three must share: the own slots of a type constructor applied to all its
+    /// arguments, then those of each argument from the first, and none under a type constructor
+    /// applied to fewer.
+    /// Must stay in sync with `collect_owning_tycons` on which type constructors own slots.
     fn push_own_slots(&self, ty: &Arc<TypeNode>, group: usize, own: &mut Vec<Option<TyCon>>) {
         let spine = ty.flatten_type_application();
         let args = &spine[1..];
@@ -536,7 +539,10 @@ impl<'e> SlotLayout<'e> {
     /// Appends to `out` the slots of the declared type `ty` read at the instance `env` binds its
     /// type variables to: the slots of the type `TypeNode::field_types` gives for it there.
     ///
-    /// Must stay in sync with `push_own_slots` on the order a declared type is read in.
+    /// Reads `ty` in the order `push_own_slots` and `Rewriter::rewrite_declared` read a declared
+    /// type, which the three must share: the own slots of a type constructor applied to all its
+    /// arguments, then those of each argument from the first, and none under a type constructor
+    /// applied to fewer.
     fn walk_declared(
         &self,
         ty: &Arc<TypeNode>,

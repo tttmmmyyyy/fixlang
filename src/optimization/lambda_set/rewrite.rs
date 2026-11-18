@@ -601,7 +601,12 @@ impl<'a, 'e> Rewriter<'a, 'e> {
 
     /// The declared field type `ty` of a member of the group `group`, whose own slots are
     /// represented by `own`, the next of them at `cursor`. The type variables of the declaration
-    /// stay; the slots are read in the order `SlotLayout::walk_declared` reads them.
+    /// stay.
+    ///
+    /// Reads `ty` in the order `SlotLayout::push_own_slots` and `SlotLayout::walk_declared` read a
+    /// declared type, which the three must share: the own slots of a type constructor applied to
+    /// all its arguments, then those of each argument from the first, and none under a type
+    /// constructor applied to fewer.
     fn rewrite_declared(
         &mut self,
         ty: &Arc<TypeNode>,
