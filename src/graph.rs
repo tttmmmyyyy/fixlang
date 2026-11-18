@@ -138,7 +138,7 @@ impl<T> Graph<T> {
     /// The returned `scc_ids` satisfies:
     /// - `scc_ids[i] == scc_ids[j]` if and only if nodes `i` and `j` are in the same SCC.
     /// - If there is a path from `i` to `j`, then `scc_ids[i] <= scc_ids[j]`.
-    pub fn compute_sccs(&self) -> Vec<usize> {
+    fn compute_sccs(&self) -> Vec<usize> {
         let num_nodes = self.elems.len();
         if num_nodes == 0 {
             return Vec::new();
