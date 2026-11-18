@@ -100,8 +100,8 @@ pub struct RcFunc {
     ///
     /// The empty default is correct at every stage — before borrow-ification every parameter is owned
     /// (the discipline `insert_rc` establishes), and a version that owns everything borrows nothing.
-    /// `cancel` and the RC IR dump read the owned complement (via `all_owned_units`) for each call's
-    /// consume sites and each parameter's ownership shape.
+    /// `cancel`, `sink_retains` and the RC IR dump read the owned complement (via
+    /// `all_owned_units`) for each call's consume sites and each parameter's ownership shape.
     #[serde(serialize_with = "serialize_sorted_var_paths")]
     pub borrowed_units: Set<VarPath>,
     /// Whether the back end is asked to inline every call of this function. Code generation writes
