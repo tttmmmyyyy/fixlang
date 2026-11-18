@@ -6,7 +6,10 @@ use super::{
     infer::{Analysis, Component, Lambda},
     solver::{Member, Owner, SetVar, Solver},
 };
-use crate::misc::Map;
+use crate::{
+    constants::{LS_COPIES_PER_REFERENCE, LS_COPY_LIMIT_BASE},
+    misc::{Map, Set},
+};
 use std::collections::VecDeque;
 
 /// A copy of a component: the concrete lambda set given to each of its parameters.
@@ -38,23 +41,41 @@ pub struct Specialization {
     pub store: SetStore,
     /// The copies, in the order they were first asked for: the copy of the entry's component first.
     pub instances: Vec<Instance>,
-    /// The index into `instances` of each copy, by its component and the sets of its parameters:
-    /// the copy whose `component` and `args` these are.
+    /// The copy a call of a component goes to, by the component and the sets the call gives its
+    /// parameters: the copy whose `component` and `args` these are, or, for a call widened past the
+    /// limit on copies, the copy giving every parameter the set of `Elem::Dynamic` alone.
     pub instance_of: Map<(usize, Vec<SetId>), usize>,
+    /// The sets passed at the calls widened past the limit on copies, which are represented by
+    /// closures, as the copy the call goes to takes closures.
+    pub widened_sets: Set<SetId>,
 }
 
 /// The copies `analysis` asks for, starting from the component of the entry: each copy asks for a
 /// copy of every component it refers to, given by the sets its reference gives the parameters
-/// there. The copies of a component are as many as the distinct ways it is asked for. The
+/// there. The copies of a component are as many as the distinct ways it is asked for, up to
+/// `LS_COPY_LIMIT_BASE` and `LS_COPIES_PER_REFERENCE` per reference to it. A way asked for past that
+/// is widened: it goes to the copy giving every parameter the set of `Elem::Dynamic` alone. The
 /// components refer to one another without a cycle, so the walk ends.
 ///
 /// Each copy is given the set of every variable of its component, which is what types its nodes.
 pub fn specialize(analysis: &mut Analysis) -> Specialization {
     let mut store = SetStore::new();
+    let dynamic = store.intern(vec![vec![PendingElem::Dynamic]])[0];
+    let mut references = vec![0usize; analysis.components.len()];
+    for site in analysis.components.iter().flat_map(|c| &c.sites) {
+        references[site.component] += 1;
+    }
     let mut copies = Copies {
         instances: vec![],
         instance_of: Map::default(),
         queue: VecDeque::new(),
+        limits: references
+            .iter()
+            .map(|n| LS_COPY_LIMIT_BASE + LS_COPIES_PER_REFERENCE * n)
+            .collect(),
+        counts: vec![0; analysis.components.len()],
+        dynamic,
+        widened_sets: Set::default(),
     };
     copies.request(analysis.entry_component(), vec![]);
     let param_indices: Vec<Map<SetVar, usize>> = analysis
@@ -107,6 +128,7 @@ pub fn specialize(analysis: &mut Analysis) -> Specialization {
         store,
         instances: copies.instances,
         instance_of: copies.instance_of,
+        widened_sets: copies.widened_sets,
     }
 }
 
@@ -114,27 +136,53 @@ pub fn specialize(analysis: &mut Analysis) -> Specialization {
 struct Copies {
     /// The copies, in the order they were first asked for.
     instances: Vec<Instance>,
-    /// The index into `instances` of each copy, by its component and the sets of its parameters.
+    /// The copy each call goes to, as `Specialization::instance_of` holds it.
     instance_of: Map<(usize, Vec<SetId>), usize>,
     /// The copies whose references are still to be followed, as indices into `instances`.
     queue: VecDeque<usize>,
+    /// How many copies of each component are made before a call of it is widened.
+    limits: Vec<usize>,
+    /// How many copies of each component are made.
+    counts: Vec<usize>,
+    /// The set of `Elem::Dynamic` alone, which a widened call gives every parameter.
+    dynamic: SetId,
+    /// The sets passed at the widened calls.
+    widened_sets: Set<SetId>,
 }
 
 impl Copies {
     /// Asks for the copy of `component` given by `args`, adding it the first time it is asked for.
+    /// Past the limit on the copies of `component`, the call is widened instead: it goes to the copy
+    /// giving every parameter the set of `Elem::Dynamic` alone, and `args` are recorded as widened.
     fn request(&mut self, component: usize, args: Vec<SetId>) {
-        let key = (component, args);
-        if self.instance_of.contains_key(&key) {
+        if self.instance_of.contains_key(&(component, args.clone())) {
             return;
         }
+        if self.counts[component] < self.limits[component] {
+            self.add(component, args);
+            return;
+        }
+        let widened = vec![self.dynamic; args.len()];
+        let id = match self.instance_of.get(&(component, widened.clone())) {
+            Some(id) => *id,
+            None => self.add(component, widened),
+        };
+        self.widened_sets.extend(args.iter().copied());
+        self.instance_of.insert((component, args), id);
+    }
+
+    /// Adds the copy of `component` given by `args`, to be followed, and returns its index.
+    fn add(&mut self, component: usize, args: Vec<SetId>) -> usize {
         let id = self.instances.len();
-        self.instance_of.insert(key.clone(), id);
+        self.instance_of.insert((component, args.clone()), id);
         self.instances.push(Instance {
-            component: key.0,
-            args: key.1,
+            component,
+            args,
             var_sets: vec![],
         });
+        self.counts[component] += 1;
         self.queue.push_back(id);
+        id
     }
 }
 

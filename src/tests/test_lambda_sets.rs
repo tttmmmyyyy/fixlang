@@ -899,14 +899,14 @@ fn branching_chain_source() -> String {
     )
 }
 
-/// About three times what the build of `branching_chain_source()` executes with the budget of
-/// `LS_COPIES_PER_SITE` (16 billion on x86-64), and a fifth of what it executes with every copy
-/// kept (286 billion).
+/// About three times what the build of `branching_chain_source()` executes with the limit of
+/// `LS_COPIES_PER_REFERENCE` (17 billion on x86-64), and a fifth of what it executes with every
+/// copy made (286 billion).
 const BRANCHING_CHAIN_MAX_INSTRUCTIONS: u64 = 50_000_000_000;
 
 /// The chain of `branching_chain_source` builds in fewer than `BRANCHING_CHAIN_MAX_INSTRUCTIONS`
-/// instructions. Its copies outgrow the budget of `LS_COPIES_PER_SITE`, and the sets given to the
-/// most copied functions are represented by closures, which makes each of those functions one copy.
+/// instructions. The calls of a function past the limit of `LS_COPIES_PER_REFERENCE` copies are
+/// widened to one copy taking closures, so each function of the chain has a bounded number of copies.
 /// Where the machine does not let the test count instructions, the test checks the answer alone.
 #[test]
 fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_bounded_work() {
