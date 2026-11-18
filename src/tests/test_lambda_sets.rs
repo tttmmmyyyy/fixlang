@@ -1012,6 +1012,45 @@ mod dump_tests {
         }
     }
 
+    /// How many places of `fan_in_source` call `h`, each with a lambda of its own.
+    const FAN_IN_CALLS: usize = 40;
+
+    /// A program calling `h` from `FAN_IN_CALLS` places, each with a lambda of its own, where `h`
+    /// hands a lambda calling the one it was given to `loop`. `h` is copied once per place, and so
+    /// is `loop`, though the program refers to `loop` once.
+    fn fan_in_source() -> String {
+        let calls: Vec<String> = (1..=FAN_IN_CALLS)
+            .map(|i| format!("h(|x| x + n * {}, n)", i))
+            .collect();
+        format!(
+            "module Main;\n\
+             \n\
+             h : (I64 -> I64) -> I64 -> I64;\n\
+             h = |g, n| if n < 0 {{ h(g, -n) }} else {{ loop((0, 0), |(i, s)| if i == n {{ break $ s }} else {{ continue $ (i + 1, s + g(i)) }}) }};\n\
+             \n\
+             main : IO ();\n\
+             main = (\n\
+             \x20   let n = *(pure(100) : IO I64);\n\
+             \x20   println(({}).to_string)\n\
+             );\n",
+            calls.join(" + ")
+        )
+    }
+
+    /// The copies of a component called from many copies of its callers stay within the limit on
+    /// copies, which waits for the program to make more copies than its references allow: every
+    /// copy of `loop` in `fan_in_source` calls the lambda it was given by name.
+    #[test]
+    fn test_a_loop_in_a_function_called_from_many_places_calls_each_lambda_by_name() {
+        let dump = build_run_and_read_rc_ir(
+            &fan_in_source(),
+            "max",
+            "8398000",
+            "a function called from many places, handing a lambda to `loop`",
+        );
+        assert_calls_by_name(&dump, "Std::loop");
+    }
+
     /// Verifies that `main` calls `g` by name both where it applies `g` to its two arguments at once
     /// and where it applies `g`, read back from a struct field, to them. Lambda set specialization
     /// turns the call through the field into `g(f2)(7)` after the first run of uncurrying, and the

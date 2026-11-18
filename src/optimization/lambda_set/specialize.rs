@@ -52,9 +52,10 @@ pub struct Specialization {
 
 /// The copies `analysis` asks for, starting from the component of the entry: each copy asks for a
 /// copy of every component it refers to, given by the sets its reference gives the parameters
-/// there. The copies of a component are as many as the distinct ways it is asked for, up to
-/// `LS_COPY_LIMIT_BASE` and `LS_COPIES_PER_REFERENCE` per reference to it. A way asked for past that
-/// is widened: it goes to the copy giving every parameter the set of `Elem::Dynamic` alone. The
+/// there. The copies of a component are as many as the distinct ways it is asked for, until the
+/// program has `LS_COPY_LIMIT_BASE` and `LS_COPIES_PER_REFERENCE` per reference over all its
+/// references, and the component as many over the references to it. A way asked for past both is
+/// widened: it goes to the copy giving every parameter the set of `Elem::Dynamic` alone. The
 /// components refer to one another without a cycle, so the walk ends.
 ///
 /// Each copy is given the set of every variable of its component, which is what types its nodes.
@@ -69,10 +70,8 @@ pub fn specialize(analysis: &mut Analysis) -> Specialization {
         instances: vec![],
         instance_of: Map::default(),
         queue: VecDeque::new(),
-        limits: references
-            .iter()
-            .map(|n| LS_COPY_LIMIT_BASE + LS_COPIES_PER_REFERENCE * n)
-            .collect(),
+        limit: copy_limit(references.iter().sum()),
+        limits: references.iter().map(|n| copy_limit(*n)).collect(),
         counts: vec![0; analysis.components.len()],
         dynamic,
         widened_sets: Set::default(),
@@ -132,6 +131,12 @@ pub fn specialize(analysis: &mut Analysis) -> Specialization {
     }
 }
 
+/// How many copies `LS_COPY_LIMIT_BASE` and `LS_COPIES_PER_REFERENCE` allow over `references`
+/// references.
+fn copy_limit(references: usize) -> usize {
+    LS_COPY_LIMIT_BASE + LS_COPIES_PER_REFERENCE * references
+}
+
 /// The copies found so far, and those of them whose references are still to be followed.
 struct Copies {
     /// The copies, in the order they were first asked for.
@@ -140,7 +145,10 @@ struct Copies {
     instance_of: Map<(usize, Vec<SetId>), usize>,
     /// The copies whose references are still to be followed, as indices into `instances`.
     queue: VecDeque<usize>,
-    /// How many copies of each component are made before a call of it is widened.
+    /// How many copies the program makes before the limits of its components apply.
+    limit: usize,
+    /// How many copies of each component are made, once the program has made `limit`, before a call
+    /// of it is widened.
     limits: Vec<usize>,
     /// How many copies of each component are made.
     counts: Vec<usize>,
@@ -152,13 +160,14 @@ struct Copies {
 
 impl Copies {
     /// Asks for the copy of `component` given by `args`, adding it the first time it is asked for.
-    /// Past the limit on the copies of `component`, the call is widened instead: it goes to the copy
+    /// Past the limit on the copies of the program and that on the copies of `component`, the call
+    /// is widened instead: it goes to the copy
     /// giving every parameter the set of `Elem::Dynamic` alone, and `args` are recorded as widened.
     fn request(&mut self, component: usize, args: Vec<SetId>) {
         if self.instance_of.contains_key(&(component, args.clone())) {
             return;
         }
-        if self.counts[component] < self.limits[component] {
+        if self.instances.len() < self.limit || self.counts[component] < self.limits[component] {
             self.add(component, args);
             return;
         }
