@@ -543,8 +543,8 @@ pub struct TypeCheckContext {
     /// The number the next type variable created here is named after.
     tyvar_id: u32,
     /// For each type variable the inference created, by name, the expression or pattern it arose at,
-    /// so that a diagnostic naming the variable can point at it. A type variable of a signature has no entry:
-    /// a diagnostic shows it under the name the signature gives it, with no location.
+    /// so that a diagnostic naming the variable can point at it. A type variable of a signature has no
+    /// entry: a diagnostic shows it under the name the signature gives it, with no location.
     tyvar_source: Map<String, TyVarSource>,
     /// The type scheme each name in scope stands for. These are the assumptions of the inference.
     pub scope: Scope<Arc<Scheme>>,
@@ -939,8 +939,8 @@ impl TypeCheckContext {
     }
 
     /// Gives `tv1` and `tv2` one source: the expression or pattern a diagnostic naming either of them
-    /// points at, and how the variable relates to it. Where both already carry one, `tv2`'s is kept. Only a
-    /// type variable the inference created takes the source.
+    /// points at, and how the variable relates to it. Where both already carry one, `tv2`'s is kept.
+    /// Only a type variable the inference created takes the source.
     fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
         let src = self
             .tyvar_source
