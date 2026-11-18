@@ -25,7 +25,7 @@ use crate::{
         program::{Program, Symbol},
         typedecl::Field,
         types::{
-            apply_type_args, kind_star, type_arrow, type_tycon, TyCon, TyConInfo, TyConVariant,
+            apply_tycon_args, apply_type_args, kind_star, type_arrow, type_tycon, TyCon, TyConInfo, TyConVariant,
             Type, TypeNode,
         },
     },
@@ -639,7 +639,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                     };
                 }
                 let head = self.tycon_copy(tc, &tc_own);
-                apply_type_args(type_tycon(&head), &new_args)
+                apply_tycon_args(&head, &new_args)
             }
             _ => panic!(
                 "the declared type `{}` has an unexpected head",
@@ -1230,6 +1230,6 @@ impl SlotFold<SetId> for TypeRewrite<'_, '_, '_> {
         if Arc::ptr_eq(&head, tc) && unchanged {
             return ty.clone();
         }
-        apply_type_args(type_tycon(&head), &folded)
+        apply_tycon_args(&head, &folded)
     }
 }

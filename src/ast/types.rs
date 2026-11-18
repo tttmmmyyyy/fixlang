@@ -292,7 +292,7 @@ impl TyCon {
             new_tyvars.push(type_from_tyvar(tv));
         }
 
-        apply_type_args(type_tycon(&Arc::new(self.clone())), &new_tyvars)
+        apply_tycon_args(&Arc::new(self.clone()), &new_tyvars)
     }
 
     /// Whether this is the unit type `()`, i.e. the tuple of no element.
@@ -2208,10 +2208,18 @@ pub fn tycon(name: FullName) -> Arc<TyCon> {
     Arc::new(TyCon { name })
 }
 
+/// `tycon` applied to the given type arguments, in order.
+///
+/// # Examples
+/// `apply_tycon_args(Array, [I64])` is `Array I64`, and `apply_tycon_args(Array, [])` is `Array`.
+pub fn apply_tycon_args(tycon: &Arc<TyCon>, args: &[Arc<TypeNode>]) -> Arc<TypeNode> {
+    apply_type_args(type_tycon(tycon), args)
+}
+
 /// `head` applied to the given type arguments, in order.
 ///
 /// # Examples
-/// `apply_type_args(Array, [I64])` is `Array I64`, and `apply_type_args(Array, [])` is `Array`.
+/// `apply_type_args(m, [I64])` is `m I64` for the type variable `m`.
 pub fn apply_type_args(head: Arc<TypeNode>, args: &[Arc<TypeNode>]) -> Arc<TypeNode> {
     args.iter()
         .fold(head, |applied, arg| type_tyapp(applied, arg.clone()))
