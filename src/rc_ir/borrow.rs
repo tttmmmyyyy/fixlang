@@ -2003,7 +2003,12 @@ impl RetainSinker<'_> {
     }
 
     /// `node` with the retain sunk into its continuation, where every path through `node` goes on.
+    /// `node` is no `Ret`, which has no continuation.
     fn sink_past(&self, r: &SinkingRetain, node: &RcExprNode) -> Sunk {
+        assert!(
+            !matches!(node.expr.as_ref(), RcExpr::Ret(_)),
+            "a retain sinks past a `Ret`"
+        );
         let mut met_object = false;
         let node = map_continuation(node, |k| {
             let sunk = self.sink(r, k);
