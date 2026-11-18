@@ -61,7 +61,6 @@ If eta expansion is applied to `fix` and it is transformed to `|f||x||p| LLVM[fi
 */
 
 use std::sync::Arc;
-
 use crate::{
     ast::{
         expr::{expr_abs_typed, expr_app_typed, expr_var, var_var, ExprNode},
