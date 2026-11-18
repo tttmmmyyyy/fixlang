@@ -904,7 +904,7 @@ fn reaches_a_direct_call(
     find_usage_of_name::run(body, name)
         .into_iter()
         .any(|usage| match usage {
-            UsageType::CalledAsFunction { .. } => true,
+            UsageType::CalledAsFunction => true,
             // A call whose callee is an expression rather than a name is one no copy can be made
             // of, so nothing arrives at a way in through it.
             UsageType::FunctionArgument(func, idx) => func

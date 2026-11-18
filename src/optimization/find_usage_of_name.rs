@@ -13,8 +13,8 @@ pub enum UsageType {
     // and is `None` where the callee is an expression rather than a name; the second is the index of
     // the argument the name was passed as.
     FunctionArgument(Option<FullName>, usize),
-    // The name is used as a function and is called, with the number of arguments the call supplies.
-    CalledAsFunction { arg_count: usize },
+    // The name is used as a function and is called.
+    CalledAsFunction,
     // The name is stored into a field of a struct being built. The first component names the type
     // constructor of that struct, and the second the position of the field among the fields the
     // type constructor declares.
@@ -135,9 +135,7 @@ impl ExprVisitor for UsageFinder<'_> {
         }
         let (fun, args) = expr.destructure_app();
         if self.is_the_name(&fun) {
-            self.add_usage(UsageType::CalledAsFunction {
-                arg_count: args.len(),
-            });
+            self.add_usage(UsageType::CalledAsFunction);
         } else {
             self.visit_expr(&fun, state);
         }
@@ -362,9 +360,9 @@ mod tests {
         assert!(
             matches!(
                 callee_usages.as_slice(),
-                [UsageType::CalledAsFunction { arg_count: n }] if *n == arg_count
+                [UsageType::CalledAsFunction]
             ),
-            "a callee is recorded once for the whole call, with the arguments it supplies"
+            "a callee is recorded once for the whole call"
         );
         let struct_ty = tycon(FullName::from_strs(&["Main"], "T"));
         let held = FullName::from_strs(&["Main"], "x");
