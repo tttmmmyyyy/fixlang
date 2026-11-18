@@ -26,8 +26,8 @@ use std::sync::Arc;
 ///
 /// # Arguments
 /// * `callees_by_caller` - for each symbol, the global lambdas whose bodies are to be put where it
-///   calls them. A global that is no lambda is a value the program computes once, and its body put
-///   at a call would be computed at each call, so listing one is a bug of the caller.
+///   calls them. Listing a global that is not a lambda is a bug of the caller: such a global is a
+///   value the program computes once, and putting its body at a call would compute it at each call.
 pub fn move_bodies_into_callers(
     symbols: &mut Map<FullName, Symbol>,
     callees_by_caller: &Map<FullName, Vec<FullName>>,
@@ -111,7 +111,8 @@ pub fn move_bodies_into_callers(
 /// a value leaves the function itself standing there, which is a body that has to stay. A call
 /// supplying fewer arguments than the parameters the nested lambdas of the body declare leaves the
 /// rest of them as a lambda in the caller, holding what the partial application would hold; one
-/// supplying more applies what the body answers with. Either way the body is in one place.
+/// supplying more applies what the body returns to the remaining arguments. Either way the body is in
+/// one place.
 ///
 /// # Arguments
 /// * `caller_expr` - the body of the caller, in which the uses of `callee` are counted.
@@ -179,7 +180,7 @@ mod tests {
 
     /// A caller naming the lambda as the callee of one call is the shape the body moves at, however
     /// many arguments the call supplies: the parameters a short call leaves over stand as a lambda in
-    /// the caller, and the arguments past the last parameter apply what the body answers with.
+    /// the caller, and the arguments past the last parameter are applied to what the body returns.
     #[test]
     fn one_call_moves_the_body() {
         let lambda = lifted(0);

@@ -1,6 +1,6 @@
 module Main;
 
-// A state monad: a computation that reads a counter, answers a value and hands the counter on.
+// A state monad: a computation that reads a counter, returns a value and hands the counter on.
 type St a = unbox struct { _run : I64 -> (a, I64) };
 
 namespace St {
@@ -16,9 +16,9 @@ impl St : Monad {
 // Adds the counter to `total` once per round, moving the counter on by one, until the counter
 // reaches `limit`.
 //
-// The loop body answers its action right away, so its lambda and the one the action holds are
+// The loop body returns its action directly, so its lambda and the one the action holds are
 // written one inside the other. The copy of `Std::loop_m` made for the body calls it with the
-// accumulator alone, and applies what it answers to the counter.
+// accumulator alone, and applies what it returns to the counter.
 //
 // # Parameters
 // * `limit` - The counter at which the rounds stop.

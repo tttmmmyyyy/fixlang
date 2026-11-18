@@ -686,10 +686,10 @@ mod integration_tests {
         assert_each_copy_holds_the_lambdas_body(&dump, "Std::loop");
     }
 
-    /// A loop body answering an action of a state monad is a lambda whose body is the lambda the
+    /// A loop body returning an action of a state monad is a lambda whose body is the lambda the
     /// action holds, so the function it is lifted to takes one parameter more than the copy of
-    /// `Std::loop_m` supplies: the copy calls it with the accumulator, and applies what it answers to
-    /// the counter. The copy is still the only symbol naming it, so the body goes into the copy.
+    /// `Std::loop_m` passes it: the copy calls it with the accumulator, and applies what it returns
+    /// to the counter. The copy is still the only symbol naming it, so the body goes into the copy.
     #[test]
     pub fn test_a_copy_takes_the_body_of_the_lambda_it_calls_short_of_an_argument() {
         let (_temp_dir, project_dir) = setup_test_env("curried_loop_body");
@@ -697,9 +697,9 @@ mod integration_tests {
         assert_each_copy_holds_the_lambdas_body(&dump, "Std::loop_m");
     }
 
-    /// A lambda answering with a function it does not write as a lambda is lifted to a function
-    /// taking fewer parameters than the copy that calls it supplies: the copy of `sum_applied_twice`
-    /// calls it with the counter, and applies what it answers to the counter again. The copy is still
+    /// A lambda returning a function it does not write as a lambda is lifted to a function taking
+    /// fewer parameters than the copy calling it passes: the copy of `sum_applied_twice` calls it
+    /// with the counter, and applies what it returns to the counter again. The copy is still
     /// the only symbol naming it, so the body goes into the copy, applied to the argument past its
     /// last parameter.
     #[test]

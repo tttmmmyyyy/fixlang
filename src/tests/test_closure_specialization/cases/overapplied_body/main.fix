@@ -2,7 +2,7 @@ module Main;
 
 // A function of `y`: the identity where `x` is negative, `x + y` up to 1000, and the same function of
 // `x - 1000` above it. It recurses, so the inliner leaves it as a function of its own, and a lambda
-// calling it answers with a function without writing a lambda of its own.
+// calling it returns a function without writing a lambda of its own.
 adder : I64 -> I64 -> I64;
 adder = |x| if x < 0 { |y| y } else if x > 1000 { adder(x - 1000) } else { |y| x + y };
 
