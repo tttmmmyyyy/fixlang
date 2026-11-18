@@ -398,12 +398,21 @@ impl<'a> ExprVisitor for Collapser<'a> {
             return StartVisitResult::VisitChildren;
         }
 
-        // Each field the pattern reads is bound to the name the construction put there.
+        // Each field the pattern reads is bound to the name the construction put there. A
+        // construction sets every field of its struct, so each field the pattern reads has one.
         let mut collapsed = expr.get_let_value();
         for (field, _, field_pat) in field_to_pat.iter().rev() {
-            let Some((_, held)) = fields.iter().find(|(name, _)| name == field) else {
-                return StartVisitResult::VisitChildren;
-            };
+            let (_, held) = fields
+                .iter()
+                .find(|(name, _)| name == field)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "a pattern of `{}` reads the field `{}`, which its construction does not \
+                         set",
+                        tycon.to_string(),
+                        field
+                    )
+                });
             let ty = field_pat.info.type_.as_ref().unwrap().clone();
             collapsed = expr_let_typed(
                 field_pat.clone(),
