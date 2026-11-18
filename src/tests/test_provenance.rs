@@ -9,8 +9,8 @@
 mod integration_tests {
     use crate::constants::LS_CAP_PREFIX;
     use crate::tests::test_util::{
-        build_project_and_read_rc_ir, build_project_run_and_read_rc_ir, setup_case_projects,
-        rc_ir_callee_of, rc_ir_function_bodies,
+        build_project_and_read_rc_ir, build_project_run_and_read_rc_ir, rc_ir_callee_of,
+        rc_ir_function_bodies, setup_case_projects,
     };
     use std::path::Path;
 

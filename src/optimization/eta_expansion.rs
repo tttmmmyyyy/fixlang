@@ -60,7 +60,6 @@ If eta expansion is applied to `fix` and it is transformed to `|f||x||p| LLVM[fi
 
 */
 
-use std::sync::Arc;
 use crate::{
     ast::{
         expr::{expr_abs_typed, expr_app_typed, expr_var_typed, var_var, ExprNode},
@@ -69,6 +68,7 @@ use crate::{
     misc::Map,
     optimization::{application_inlining, let_elimination},
 };
+use std::sync::Arc;
 
 // Perform eta expansion to take `n` arguments.
 //

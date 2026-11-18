@@ -1118,7 +1118,10 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 .push(callee_name.clone());
         }
         let cap_ty = func.type_.clone().unwrap();
-        let callee = expr_var_typed(callee_name, type_arrow(cap_ty, type_arrow(arg_ty, ty.clone())));
+        let callee = expr_var_typed(
+            callee_name,
+            type_arrow(cap_ty, type_arrow(arg_ty, ty.clone())),
+        );
         let partial = expr_app_typed(callee, vec![func]);
         e.set_app_func(partial).set_app_args(vec![arg]).set_type(ty)
     }

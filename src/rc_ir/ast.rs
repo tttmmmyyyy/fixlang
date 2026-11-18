@@ -551,14 +551,17 @@ pub(crate) fn map_children(
     mut f: impl FnMut(&RcExprNode) -> RcExprNode,
 ) -> RcExprNode {
     let node = match node.expr.as_ref() {
-        RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => RcExprNode::new(RcExpr::Let(
+        RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => RcExprNode::new(
+            RcExpr::Let(
                 x.clone(),
                 RcRhs::Match(
                     scrutinee.clone(),
                     arms.iter().map(|arm| arm.with_body(f(&arm.body))).collect(),
                 ),
                 k.clone(),
-            ), node.source.clone()),
+            ),
+            node.source.clone(),
+        ),
         _ => node.clone(),
     };
     map_continuation(&node, f)

@@ -38,8 +38,8 @@ use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp};
 use crate::misc::{grow_stack, Map};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    continuation_of, count_value_uses, map_children, map_continuation, MatchArm, RcExpr, RcExprNode, RcProgram,
-    RcRhs, RcVar,
+    continuation_of, count_value_uses, map_children, map_continuation, MatchArm, RcExpr,
+    RcExprNode, RcProgram, RcRhs, RcVar,
 };
 use crate::rc_ir::rename::{clone_fresh, copy_suffix, substitute_expr};
 use std::sync::Arc;

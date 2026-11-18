@@ -34,7 +34,8 @@ fn body_mentioning(mentions: &[FullName]) -> RcExprNode {
     let last = FullName::local(&format!("v{}", mentions.len()));
     let mut body = RcExprNode::new(RcExpr::Ret(var(last)), None);
     for (i, mentioned) in mentions.iter().enumerate().rev() {
-        body = RcExprNode::new(RcExpr::Let(
+        body = RcExprNode::new(
+            RcExpr::Let(
                 var(FullName::local(&format!("v{}", i + 1))),
                 RcRhs::Closure(
                     FuncRef {
@@ -43,7 +44,9 @@ fn body_mentioning(mentions: &[FullName]) -> RcExprNode {
                     vec![],
                 ),
                 body,
-            ), None);
+            ),
+            None,
+        );
     }
     body
 }

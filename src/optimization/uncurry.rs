@@ -88,8 +88,10 @@ pub fn run(prg: &mut Program, num_threads: usize) {
             continue;
         };
         export.value_name = uncurried_value.name.clone();
-        export.value_expr =
-            Some(expr_var_typed(uncurried_value.name.clone(), uncurried_value.ty.clone()));
+        export.value_expr = Some(expr_var_typed(
+            uncurried_value.name.clone(),
+            uncurried_value.ty.clone(),
+        ));
     }
 
     // Replace entry IO value so that it uses an uncurried function.

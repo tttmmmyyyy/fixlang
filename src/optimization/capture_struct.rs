@@ -4,8 +4,8 @@
 use crate::{
     ast::{
         expr::{
-            expr_abs, expr_abs_typed, expr_let_typed, expr_make_struct, expr_var_typed, var_var, Expr,
-            ExprNode,
+            expr_abs, expr_abs_typed, expr_let_typed, expr_make_struct, expr_var_typed, var_var,
+            Expr, ExprNode,
         },
         name::FullName,
         pattern::PatternNode,

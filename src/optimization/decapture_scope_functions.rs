@@ -62,8 +62,8 @@ use crate::{
     ast::{
         builtin_op::BuiltinOpExpr,
         expr::{
-            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var_typed, var_local,
-            ExprNode,
+            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var_typed,
+            var_local, ExprNode,
         },
         name::FullName,
         pattern::PatternNode,
@@ -230,14 +230,20 @@ impl CaptureStructMover<'_> {
         )
         .set_type(new_env_ty);
         let mut param_field_pats = vec![("0".to_string(), env_pat)];
-        let mut param_field_exprs = vec![("0".to_string(), expr_var_typed(env0.clone(), env_ty.clone()))];
+        let mut param_field_exprs = vec![(
+            "0".to_string(),
+            expr_var_typed(env0.clone(), env_ty.clone()),
+        )];
         for (i, ty) in param_field_tys.iter().enumerate().skip(1) {
             let field_name = local(&format!("_{}", i));
             param_field_pats.push((
                 i.to_string(),
                 PatternNode::make_local_var(&field_name, ty.clone()),
             ));
-            param_field_exprs.push((i.to_string(), expr_var_typed(field_name.clone(), ty.clone())));
+            param_field_exprs.push((
+                i.to_string(),
+                expr_var_typed(field_name.clone(), ty.clone()),
+            ));
         }
         let new_param = local("_arg");
         let call = expr_app_typed(
@@ -343,7 +349,10 @@ impl ExprVisitor for OpRewriter<'_> {
         let env_and_cap = expr_make_struct(
             tycon(make_tuple_name_abs(2)),
             vec![
-                ("0".to_string(), expr_var_typed(old_env.clone(), self.env_ty.clone())),
+                (
+                    "0".to_string(),
+                    expr_var_typed(old_env.clone(), self.env_ty.clone()),
+                ),
                 ("1".to_string(), self.cap.clone()),
             ],
         )

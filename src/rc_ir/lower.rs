@@ -232,14 +232,16 @@ impl<'a> Lowerer<'a> {
             .into_iter()
             .rev()
             .fold(terminal, |cont, binding| match binding {
-                PendingBinding::Let(var, rhs, source) => RcExprNode::new(RcExpr::Let(var, rhs, cont), source),
-                PendingBinding::Destructure(container, fields, source) => RcExprNode::new(RcExpr::Destructure(
-                        container,
-                        fields,
-                        RcState::Unknown,
-                        cont,
-                    ), source),
-                PendingBinding::Eval(var, source) => RcExprNode::new(RcExpr::Eval(var, cont), source),
+                PendingBinding::Let(var, rhs, source) => {
+                    RcExprNode::new(RcExpr::Let(var, rhs, cont), source)
+                }
+                PendingBinding::Destructure(container, fields, source) => RcExprNode::new(
+                    RcExpr::Destructure(container, fields, RcState::Unknown, cont),
+                    source,
+                ),
+                PendingBinding::Eval(var, source) => {
+                    RcExprNode::new(RcExpr::Eval(var, cont), source)
+                }
             })
     }
 

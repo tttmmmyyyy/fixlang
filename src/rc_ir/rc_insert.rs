@@ -267,12 +267,10 @@ impl<'a> RcInserter<'a> {
         }
         let cont = build_releases(dead, cont);
 
-        let node = RcExprNode::new(RcExpr::Destructure(
-                container.clone(),
-                fields.clone(),
-                RcState::Unknown,
-                cont,
-            ), source);
+        let node = RcExprNode::new(
+            RcExpr::Destructure(container.clone(), fields.clone(), RcState::Unknown, cont),
+            source,
+        );
         // Retain the container before the destructure iff it is used afterward, so both the extracted
         // fields and the later use are covered.
         let node = self.retain_if_live(&container, &live_cont, node);
@@ -374,11 +372,10 @@ impl<'a> RcInserter<'a> {
             cont
         };
 
-        let node = RcExprNode::new(RcExpr::Let(
-                x.clone(),
-                RcRhs::Match(scrut.clone(), new_arms),
-                cont,
-            ), source);
+        let node = RcExprNode::new(
+            RcExpr::Let(x.clone(), RcRhs::Match(scrut.clone(), new_arms), cont),
+            source,
+        );
         // The scrutinee is owned, and the match consumes it at an arm's head, so a use of it inside an
         // arm body is a use after that consumption just as a use after the match is: retain it when
         // either occurs. One reference covers both — an arm that uses the scrutinee consumes the extra
