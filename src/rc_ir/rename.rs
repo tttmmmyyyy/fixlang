@@ -46,7 +46,7 @@ pub(crate) fn copy_suffix(tag: &str, distinguisher: &str) -> String {
 /// Clone a function's parameters, capture, and body, giving every bound variable (parameters,
 /// capture, `let` bindings, destructure fields, match-arm payloads) its name followed by `suffix`,
 /// and rewriting every occurrence. Returns the renamed pieces together with the binder renaming, which
-/// callers use to remap side tables and to route recursive references.
+/// callers use to remap side tables.
 pub(crate) fn fresh_rename_function(
     params: &[RcVar],
     cap: &Option<RcVar>,
