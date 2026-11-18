@@ -70,7 +70,6 @@ mod tests {
     use crate::fixstd::builtin::MakeStructOp;
     use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState};
     use crate::rc_ir::test_program::{func, global, global_name, prog, var};
-    use std::sync::Arc;
 
     /// The names of `prog`'s functions, sorted, so that a comparison does not read the order the
     /// function table happens to hold them in.
@@ -224,10 +223,7 @@ mod tests {
     fn test_every_mention_site_is_followed() {
         /// A node standing for `expr`, which no source spells out.
         fn node(expr: RcExpr) -> RcExprNode {
-            RcExprNode {
-                expr: Arc::new(expr),
-                source: None,
-            }
+            RcExprNode::new(expr, None)
         }
 
         let names: Vec<FullName> = [

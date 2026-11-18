@@ -301,13 +301,13 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
         new_arms_size,
         "the rewrite left arms of a size other than the one measured before building them"
     );
-    Some(node_of(
+    Some(RcExprNode::new(
         RcExpr::Let(
             m.clone(),
             RcRhs::Match(inner_scrut.clone(), new_arms),
             k2.clone(),
         ),
-        &node.source,
+        node.source.clone(),
     ))
 }
 
@@ -409,10 +409,10 @@ fn replace_tail_union_of_match(
 /// `let x = match scrut { arms }; ret x` — the shape a `match` takes where it stands in tail
 /// position.
 fn tail_match(x: RcVar, scrut: &RcVar, arms: Vec<MatchArm>, source: &Option<Span>) -> RcExprNode {
-    let ret = node_of(RcExpr::Ret(x.clone()), source);
-    node_of(
+    let ret = RcExprNode::new(RcExpr::Ret(x.clone()), source.clone());
+    RcExprNode::new(
         RcExpr::Let(x, RcRhs::Match(scrut.clone(), arms), ret),
-        source,
+        source.clone(),
     )
 }
 
@@ -446,13 +446,4 @@ fn single_subst(from: &FullName, to: &FullName) -> Map<FullName, FullName> {
     let mut subst: Map<FullName, FullName> = Map::default();
     subst.insert(from.clone(), to.clone());
     subst
-}
-
-/// A node holding `expr` and reporting `source` as the place it comes from. A rewritten node carries
-/// the span of the node it replaces, so the simplified body still points into the source program.
-fn node_of(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
-    RcExprNode {
-        expr: Arc::new(expr),
-        source: source.clone(),
-    }
 }

@@ -603,10 +603,7 @@ mod tests {
 
     /// An expression node carrying no source span, so a failure message quotes no code.
     fn node(expr: RcExpr) -> RcExprNode {
-        RcExprNode {
-            expr: Arc::new(expr),
-            source: None,
-        }
+        RcExprNode::new(expr, None)
     }
 
     /// A program with no functions and no globals, for a check that names none of its own.

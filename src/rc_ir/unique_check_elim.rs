@@ -181,10 +181,7 @@ impl<'a> Specializer<'a> {
                 return map_children(node, |child| self.rewrite_expr(child, inputs))
             }
         };
-        RcExprNode {
-            expr: Arc::new(expr),
-            source: node.source.clone(),
-        }
+        RcExprNode::new(expr, node.source.clone())
     }
 
     /// Route a direct call: retarget the callee to the clone for the argument uniqueness this call

@@ -8,7 +8,6 @@
 use crate::ast::name::FullName;
 use crate::misc::{grow_stack, Map};
 use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcRhs, RcVar};
-use std::sync::Arc;
 
 /// The suffix a copy's names take: `#`, the tag of the pass that makes the copy, and
 /// `distinguisher`, which tells the copy apart from the pass's other copies of the same code.
@@ -177,10 +176,7 @@ fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> R
         RcExpr::Eval(v, k) => RcExpr::Eval(rename_var(v, renaming), rename_expr(k, renaming)),
         RcExpr::Ret(v) => RcExpr::Ret(rename_var(v, renaming)),
     };
-    RcExprNode {
-        expr: Arc::new(expr),
-        source: node.source.clone(),
-    }
+    RcExprNode::new(expr, node.source.clone())
 }
 
 /// A right-hand side with every variable occurrence (including `Builtin` operand names) rewritten

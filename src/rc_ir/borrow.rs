@@ -871,9 +871,9 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
                     "a call in tail position was routed to a version that leaves a release after it"
                 );
                 let k = prepend_rc(rc_after, true, self.rewrite_in(k, enclosing));
-                let app = expr_node(
+                let app = RcExprNode::new(
                     RcExpr::Let(x.clone(), RcRhs::App(callee, args.clone()), k),
-                    &node.source,
+                    node.source.clone(),
                 );
                 prepend_rc(rc_before, false, app)
             }
@@ -883,13 +883,13 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
                     .iter()
                     .map(|arm| arm.with_body(self.rewrite_in(&arm.body, Some(&after_arms))))
                     .collect();
-                expr_node(
+                RcExprNode::new(
                     RcExpr::Let(
                         x.clone(),
                         RcRhs::Match(scrut.clone(), arms),
                         self.rewrite_in(k, enclosing),
                     ),
-                    &node.source,
+                    node.source.clone(),
                 )
             }
             RcExpr::Retain(v, path, state, k) => {
@@ -1164,14 +1164,6 @@ impl After<'_> {
     }
 }
 
-/// An expression node with the given source span.
-fn expr_node(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
-    RcExprNode {
-        expr: Arc::new(expr),
-        source: source.clone(),
-    }
-}
-
 /// A `Release` (when `is_release`) or `Retain` of `var` at `path` wrapping continuation `k`.
 fn rc_node(
     is_release: bool,
@@ -1186,7 +1178,7 @@ fn rc_node(
     } else {
         RcExpr::Retain(var, path, state, k)
     };
-    expr_node(expr, source)
+    RcExprNode::new(expr, source.clone())
 }
 
 /// Wrap a continuation in a `Retain` (or `Release`) of each given unit.
@@ -1981,9 +1973,9 @@ impl RetainSinker<'_> {
                     .map(|(arm, sunk)| arm.with_body(sunk.node))
                     .collect();
                 Sunk {
-                    node: expr_node(
+                    node: RcExprNode::new(
                         RcExpr::Let(x.clone(), RcRhs::Match(scrutinee.clone(), arms), k.clone()),
-                        &node.source,
+                        node.source.clone(),
                     ),
                     met_object: true,
                 }

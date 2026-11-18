@@ -136,6 +136,16 @@ pub struct RcExprNode {
     pub source: Option<Span>,
 }
 
+impl RcExprNode {
+    /// A node standing for `expr`, written at `source`.
+    pub fn new(expr: RcExpr, source: Option<Span>) -> Self {
+        RcExprNode {
+            expr: Arc::new(expr),
+            source,
+        }
+    }
+}
+
 /// The statement-nested form: `Let`, `Retain`, and `Release` each carry a continuation, and `Ret`
 /// is the only terminator.
 #[derive(Clone, Serialize)]
@@ -518,10 +528,7 @@ pub(crate) fn map_continuation(
         RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), f(k)),
         RcExpr::Ret(_) => return node.clone(),
     };
-    RcExprNode {
-        expr: Arc::new(expr),
-        source: node.source.clone(),
-    }
+    RcExprNode::new(expr, node.source.clone())
 }
 
 /// `node` with each node right under it replaced by what `f` makes of it: the body of each arm of
@@ -531,17 +538,14 @@ pub(crate) fn map_children(
     mut f: impl FnMut(&RcExprNode) -> RcExprNode,
 ) -> RcExprNode {
     let node = match node.expr.as_ref() {
-        RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => RcExprNode {
-            expr: Arc::new(RcExpr::Let(
+        RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => RcExprNode::new(RcExpr::Let(
                 x.clone(),
                 RcRhs::Match(
                     scrutinee.clone(),
                     arms.iter().map(|arm| arm.with_body(f(&arm.body))).collect(),
                 ),
                 k.clone(),
-            )),
-            source: node.source.clone(),
-        },
+            ), node.source.clone()),
         _ => node.clone(),
     };
     map_continuation(&node, f)
