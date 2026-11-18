@@ -356,11 +356,10 @@ main = eval to_abs(-3_I32); pure();
 
         let name = prg
             .symbols
-            .keys()
-            .find(|s| {
-                s.namespace.to_string() == "Main" && s.name.split('#').next() == Some("to_abs")
-            })
+            .values()
+            .find(|s| s.generic_name.is(&["Main"], "to_abs"))
             .unwrap()
+            .name
             .clone();
         let symbol = prg.symbols.get_mut(&name).unwrap();
         let lam = symbol.expr.clone().unwrap();

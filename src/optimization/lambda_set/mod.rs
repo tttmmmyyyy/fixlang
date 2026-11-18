@@ -130,15 +130,15 @@ mod tests {
             }
         }
 
-        /// The component of the one symbol of `Main` named `name`, and its position there.
+        /// The component of the one symbol instantiating the global value `name` of `Main`, and
+        /// its position there.
         fn component_of(&self, name: &str) -> (usize, usize) {
             let found: Vec<_> = self
                 .prg
                 .symbols
-                .keys()
-                .filter(|s| {
-                    s.namespace.to_string() == "Main" && s.name.split('#').next() == Some(name)
-                })
+                .values()
+                .filter(|s| s.generic_name.is(&["Main"], name))
+                .map(|s| &s.name)
                 .collect();
             assert_eq!(
                 found.len(),
@@ -181,8 +181,8 @@ mod tests {
                 .collect()
         }
 
-        /// The elements of `set`, each lambda as the name of the symbol it is written in, and
-        /// Dynamic as `None`.
+        /// The elements of `set`, each lambda as the unqualified name of the global value whose
+        /// symbol it is written in, and Dynamic as `None`.
         fn writers(&self, set: SetId) -> Vec<Option<String>> {
             self.spec
                 .store
@@ -190,15 +190,10 @@ mod tests {
                 .iter()
                 .map(|e| match e {
                     Elem::Dynamic => None,
-                    Elem::Lam(lam, _) => Some(
-                        self.analysis.lambdas[*lam as usize]
-                            .symbol
-                            .name
-                            .split('#')
-                            .next()
-                            .unwrap()
-                            .to_string(),
-                    ),
+                    Elem::Lam(lam, _) => {
+                        let symbol = &self.analysis.lambdas[*lam as usize].symbol;
+                        Some(self.prg.symbols[symbol].generic_name.name.clone())
+                    }
                 })
                 .collect()
         }
