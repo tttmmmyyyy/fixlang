@@ -230,8 +230,8 @@ impl Builders {
 /// The rewrite makes one copy of a component per representation of the sets of its
 /// `Component::body_params`, so a component whose sets are all represented by closures has one.
 fn over_copied_sets(analysis: &Analysis, spec: &Specialization) -> Vec<SetId> {
-    let sites: usize = analysis.components.iter().map(|c| c.sites.len()).sum();
-    let budget = LS_COPY_BUDGET_BASE + LS_COPIES_PER_SITE * sites;
+    let site_count: usize = analysis.components.iter().map(|c| c.sites.len()).sum();
+    let budget = LS_COPY_BUDGET_BASE + LS_COPIES_PER_SITE * site_count;
     let mut copies = vec![0usize; analysis.components.len()];
     for instance in &spec.instances {
         copies[instance.component] += 1;

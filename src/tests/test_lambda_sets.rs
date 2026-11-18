@@ -869,38 +869,38 @@ const BRANCHING_CHAIN_DEPTH: usize = 14;
 const BRANCHING_CHAIN_OUTPUT: &str = "1097390";
 
 /// A program calling down a chain of functions `f{depth}` to `f0` of the type
-/// `(I64 -> I64) -> I64 -> {result}`, each calling the next from two places, each with a lambda of
-/// its own wrapping the function it was given, and printing `f{depth}(|x| x + n, n){applied}`.
+/// `(I64 -> I64) -> I64 -> {result_ty}`, each calling the next from two places, each with a lambda of
+/// its own wrapping the function it was given, and printing `f{depth}(|x| x + n, n){result_args}`.
 /// `f0` is `|g, x| {f0_body}`.
-fn chain_of_two_lambda_calls_source(depth: usize, result: &str, f0_body: &str, applied: &str) -> String {
+fn chain_of_two_lambda_calls_source(depth: usize, result_ty: &str, f0_body: &str, result_args: &str) -> String {
     let links: Vec<String> = (1..=depth)
         .map(|i| {
             format!(
-                "f{i} : (I64 -> I64) -> I64 -> {result};\n\
+                "f{i} : (I64 -> I64) -> I64 -> {result_ty};\n\
                  f{i} = |g, x| if x % 3 == 0 {{ f{p}(|y| g(y) + {i}, x / 3) }} else {{ f{p}(|y| g(y) * {i}, x - 1) }};",
                 i = i,
                 p = i - 1,
-                result = result
+                result_ty = result_ty
             )
         })
         .collect();
     format!(
         "module Main;\n\
          \n\
-         f0 : (I64 -> I64) -> I64 -> {result};\n\
+         f0 : (I64 -> I64) -> I64 -> {result_ty};\n\
          f0 = |g, x| {f0_body};\n\
          {links}\n\
          \n\
          main : IO ();\n\
          main = (\n\
          \x20   let n = *(pure(100) : IO I64);\n\
-         \x20   println(f{depth}(|x| x + n, n){applied}.to_string)\n\
+         \x20   println(f{depth}(|x| x + n, n){result_args}.to_string)\n\
          );\n",
-        result = result,
+        result_ty = result_ty,
         f0_body = f0_body,
         links = links.join("\n"),
         depth = depth,
-        applied = applied
+        result_args = result_args
     )
 }
 
