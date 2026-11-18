@@ -1836,3 +1836,93 @@ fn test_two_functions_building_different_lambdas_passed_to_one_compute_each() {
     "#;
     test_source(source, Configuration::develop_mode());
 }
+
+/// Arrays of functions moved by the builtins that carry an element without calling it — a swap, a
+/// copy into a subarray, the element `act` reads, and the element `mod` punches out and plugs
+/// back — and a function value returned by `unsafe_is_unique`: each keeps the lambdas it was given,
+/// and the recursive function they reach calls them all.
+#[test]
+fn test_functions_carried_through_the_builtins_moving_them_compute_them() {
+    let source = r#"
+    module Main;
+
+    type BF = box struct { f : I64 -> I64 };
+
+    call_all : I64 -> Array (I64 -> I64) -> I64 -> I64;
+    call_all = |d, fs, x| if d > 0 { call_all(d - 1, fs, x) } else { fs.to_iter.fold(0, |f, acc| acc * 100 + f(x)) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let swapped = call_all(n, [|x| x + 10 + n, |x| x + 20].swap(0, 1), 1);
+        let sub = call_all(n, [|x| x + 60 + n, |x| x + 70].get_sub(1, 2), 1);
+        let acted = call_all(n, [|x| x + 11 + n].act(0, |q| Option::some(|x| q(x) + 1)).as_some, 1);
+        let modded = call_all(n, [|x| x + 12 + n].mod(0, |q| |x| q(x) * 2), 1);
+        let (_, bf) = (BF { f : |x| x + 9 + n }).unsafe_is_unique;
+        let unique_checked = (bf.@f)(1);
+        assert_eq(|_| "", [swapped, sub, acted, modded, unique_checked], [2111 + n, 71, 13 + n, 26 + 2 * n, 10 + n]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// A function given a value of a type whose field applies a type constructor argument: once to a
+/// struct declaring a function field, once to a tuple type applied to a function type but not to
+/// its second argument. The field's function reaches the function through a type the slots of the
+/// field do not track, and the function calls it.
+#[test]
+fn test_a_function_in_a_type_given_as_a_type_constructor_argument_computes_it() {
+    let source = r#"
+    module Main;
+
+    type [f : * -> *] W f = box struct { x : f I64 };
+    type Fn a = box struct { g : a -> a, v : a };
+
+    use_fn : I64 -> W Fn -> I64;
+    use_fn = |d, w| if d > 0 { use_fn(d - 1, w) } else { (w.@x.@g)(w.@x.@v) };
+
+    use_tup : I64 -> W (Tuple2 (I64 -> I64)) -> I64;
+    use_tup = |d, w| if d > 0 { use_tup(d - 1, w) } else { (w.@x.@0)(w.@x.@1) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        assert_eq(|_| "through a struct", use_fn(n, W { x : Fn { g : |x| x * 10 + n, v : 4 } }), 40 + n);;
+        assert_eq(|_| "through a tuple", use_tup(n, W { x : (|x| x * 100 + n, 5) }), 500 + n);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Two types referring to each other, each declaring a function field, walked by a recursive
+/// function: the copies of the two types share the sets of their fields, and the walk calls the
+/// function of each field it reaches.
+#[test]
+fn test_functions_in_two_types_referring_to_each_other_compute_them() {
+    let source = r#"
+    module Main;
+
+    type Chain = box union { end : I64 -> I64, link : Link };
+    type Link = box struct { step : I64 -> I64, rest : Chain };
+
+    eval_chain : I64 -> Chain -> I64 -> I64;
+    eval_chain = |d, c, x| if d > 100 { eval_chain(d - 1, c, x) } else {
+        match c {
+            end(f) => f(x),
+            link(l) => eval_chain(d, l.@rest, (l.@step)(x))
+        }
+    };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let c = Chain::link(Link { step : |x| x * 2 + n, rest : Chain::link(Link { step : |x| x + 3, rest : Chain::end(|x| x - n) }) });
+        let c2 = if n > 5 { c } else { Chain::end(|x| x * 100) };
+        assert_eq(|_| "", [eval_chain(n, c, 5), eval_chain(n, c2, 5)], [13, 500]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
