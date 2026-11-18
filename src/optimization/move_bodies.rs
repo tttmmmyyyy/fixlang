@@ -313,11 +313,11 @@ mod tests {
     /// stands rather than at each call.
     #[test]
     fn a_global_that_is_no_lambda_keeps_its_body() {
-        let lambda = lifted(0);
-        let naming_symbol_counts = [(lambda.clone(), 1)].into_iter().collect();
+        let global = lifted(0);
+        let naming_symbol_counts = [(global.clone(), 1)].into_iter().collect();
         assert!(!is_moved_by_placing(
-            &lambda,
-            &call(&lambda, 2),
+            &global,
+            &call(&global, 2),
             &naming_symbol_counts,
             &Map::default()
         ));
