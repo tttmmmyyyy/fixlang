@@ -587,8 +587,8 @@ fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
     let mut closure_targets: Set<FuncRef> = Set::default();
     let mut calls_indirectly: Set<FuncRef> = Set::default();
     // One body's contribution. `owner` is the function the body belongs to, and `None` for a global
-    // initializer — an initializer gets no borrow version, so nothing is recorded against it, but the
-    // closures it builds are ones an indirect call anywhere can arrive at.
+    // initializer — an initializer gets no borrowing version, so nothing is recorded against it,
+    // but the closures it builds are ones an indirect call anywhere can arrive at.
     let mut scan = |body: &RcExprNode, owner: Option<&FuncRef>| {
         let mut cs = vec![];
         for_each_node(body, &mut |node| {

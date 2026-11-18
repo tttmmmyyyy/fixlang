@@ -1,8 +1,8 @@
 //! Dead-code elimination over the RC IR: drop every function and global the program cannot reach.
 //!
 //! Lowering and the passes over the RC IR mint functions of their own — a lifted lambda body, a
-//! borrow version, a version specialized on the uniqueness or locality of its inputs — and each one
-//! that supersedes another leaves that other behind with no caller. Code generation writes out
+//! borrowing version, a version specialized on the uniqueness or locality of its inputs — and each
+//! one that supersedes another leaves that other behind with no caller. Code generation writes out
 //! whatever the program holds, so a function left behind is LLVM IR built and verified for code no
 //! execution reaches. The back end drops it in turn, but only once its own dead-code elimination
 //! runs, which is after that IR has been built, verified and read.

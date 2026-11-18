@@ -21,7 +21,7 @@ mod borrow_tail_call_tests {
         let source = r#"
             module Main;
 
-            // Only reads `a`: its tail call is routed to the borrow version.
+            // Only reads `a`: its tail call is routed to a version borrowing `a`.
             loop_sum : I64 -> I64 -> Array I64 -> I64;
             loop_sum = |n, acc, a| (
                 if n == 0 { acc };
