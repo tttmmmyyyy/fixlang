@@ -110,7 +110,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    // Check if the expression is a function application.
+    /// Whether the expression is a function application.
     pub fn is_app(&self) -> bool {
         matches!(self.expr.as_ref(), Expr::App(_, _))
     }
@@ -232,6 +232,7 @@ impl ExprNode {
         self.set_app_func(func)
     }
 
+    /// The function an application applies. Panics on an expression that is not an application.
     pub fn get_app_func(&self) -> Arc<ExprNode> {
         match &*self.expr {
             Expr::App(func, _) => func.clone(),
@@ -241,6 +242,7 @@ impl ExprNode {
         }
     }
 
+    /// The arguments an application passes. Panics on an expression that is not an application.
     pub fn get_app_args(&self) -> Vec<Arc<ExprNode>> {
         match &*self.expr {
             Expr::App(_, args) => args.clone(),
@@ -309,6 +311,7 @@ impl ExprNode {
         arity
     }
 
+    /// This lambda with `params` as its parameters. Panics on an expression that is not a lambda.
     pub fn set_lam_params(&self, params: Vec<Arc<Var>>) -> Arc<Self> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
@@ -506,7 +509,7 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    // Set the value of let expression, and update the type of the let expression to the type of the value.
+    /// This `let` with `value` as its value, typed at the type of `value`.
     pub fn set_let_value_typed(&self, value: Arc<ExprNode>) -> Arc<Self> {
         let value_ty = value.type_.as_ref().unwrap().clone();
         self.set_let_value(value).set_type(value_ty)
@@ -551,6 +554,8 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    /// This `if` with `then` and `else_` as its branches. Panics on an expression that is not an
+    /// `if`.
     pub fn set_if_then_else(&self, then: Arc<ExprNode>, else_: Arc<ExprNode>) -> Arc<ExprNode> {
         let mut ret = self.clone_except_fvs();
         match &*self.expr {
@@ -564,6 +569,8 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    /// This `if` with `then` and `else_` as its branches, typed at their type. Panics when the two
+    /// branches differ in type.
     pub fn set_if_then_else_typed(
         &self,
         then: Arc<ExprNode>,
@@ -622,6 +629,8 @@ impl ExprNode {
         Arc::new(ret)
     }
 
+    /// This `match` with `pat_vals` as its arms, typed at the type of their values. Panics when
+    /// `pat_vals` is empty or the values differ in type.
     pub fn set_match_pat_vals_typed(
         &self,
         pat_vals: Vec<(Arc<PatternNode>, Arc<ExprNode>)>,
@@ -1459,16 +1468,10 @@ impl Expr {
             Expr::Var(v) => Text::from_string(v.name.to_string()),
             Expr::Builtin(b) => Text::from_string(b.op.name()),
             Expr::App(_, _) => {
-                // Stringify the funciton.
                 let (fun, args) = Arc::new(self.clone())
                     .into_expr_node(None)
                     .destructure_app();
-                let brace_fun = match *(fun.expr) {
-                    Expr::Var(_) => false,
-                    Expr::Builtin(_) => false,
-                    Expr::App(_, _) => false,
-                    _ => true,
-                };
+                let brace_fun = !matches!(*fun.expr, Expr::Var(_) | Expr::Builtin(_));
                 let mut fun = fun.expr.stringify();
                 if brace_fun {
                     fun = fun.brace()
