@@ -222,8 +222,10 @@ impl Builders {
 /// The sets the copies of the most copied components give their `Component::body_params`, when the
 /// copies are more than the budget of `LS_COPY_BUDGET_BASE` and `LS_COPIES_PER_SITE` per reference.
 /// The components are taken from the most copied, the first in `Analysis::components` among equals,
-/// until the copies the others have, with one for each component taken, fit the budget, or no copied
-/// component is left.
+/// until the copies the others have, with one for each component taken, fit the budget. They come to
+/// fit before a component copied once is taken: every copied component but the entry's is referred
+/// to by a reference (`Component::sites`) of another, so one copy of each copied component is fewer
+/// than the budget.
 ///
 /// The rewrite makes one copy of a component per representation of the sets of its
 /// `Component::body_params`, so a component whose sets are all represented by closures has one.
@@ -239,9 +241,16 @@ fn over_copied_sets(analysis: &Analysis, spec: &Specialization) -> Vec<SetId> {
     let mut total = spec.instances.len();
     let mut taken: Set<usize> = Set::default();
     for c in by_copies {
-        if total <= budget || copies[c] == 0 {
+        if total <= budget {
             break;
         }
+        assert!(
+            copies[c] > 1,
+            "the {} copies are past the budget of {} once every component copied more than once \
+             is taken",
+            total,
+            budget
+        );
         total -= copies[c] - 1;
         taken.insert(c);
     }

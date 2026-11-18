@@ -868,36 +868,48 @@ const BRANCHING_CHAIN_DEPTH: usize = 14;
 /// What `branching_chain_source(BRANCHING_CHAIN_DEPTH)` prints.
 const BRANCHING_CHAIN_OUTPUT: &str = "1097390";
 
-/// A program calling down a chain of functions `f{depth}` to `f0`, each calling the next from two
-/// places, each with a lambda of its own wrapping the function it was given, and printing what the
-/// chain computes. Each copy of `f{i}` asks for two copies of `f{i - 1}`, one per lambda, so the
-/// copies double at each step.
-fn branching_chain_source(depth: usize) -> String {
+/// A program calling down a chain of functions `f{depth}` to `f0` of the type
+/// `(I64 -> I64) -> I64 -> {result}`, each calling the next from two places, each with a lambda of
+/// its own wrapping the function it was given, and printing `f{depth}(|x| x + n, n){applied}`.
+/// `f0` is `|g, x| {f0_body}`.
+fn chain_of_two_lambda_calls_source(depth: usize, result: &str, f0_body: &str, applied: &str) -> String {
     let links: Vec<String> = (1..=depth)
         .map(|i| {
             format!(
-                "f{i} : (I64 -> I64) -> I64 -> I64;\n\
+                "f{i} : (I64 -> I64) -> I64 -> {result};\n\
                  f{i} = |g, x| if x % 3 == 0 {{ f{p}(|y| g(y) + {i}, x / 3) }} else {{ f{p}(|y| g(y) * {i}, x - 1) }};",
                 i = i,
-                p = i - 1
+                p = i - 1,
+                result = result
             )
         })
         .collect();
     format!(
         "module Main;\n\
          \n\
-         f0 : (I64 -> I64) -> I64 -> I64;\n\
-         f0 = |g, x| g(x);\n\
-         {}\n\
+         f0 : (I64 -> I64) -> I64 -> {result};\n\
+         f0 = |g, x| {f0_body};\n\
+         {links}\n\
          \n\
          main : IO ();\n\
          main = (\n\
          \x20   let n = *(pure(100) : IO I64);\n\
-         \x20   println(f{}(|x| x + n, n).to_string)\n\
+         \x20   println(f{depth}(|x| x + n, n){applied}.to_string)\n\
          );\n",
-        links.join("\n"),
-        depth
+        result = result,
+        f0_body = f0_body,
+        links = links.join("\n"),
+        depth = depth,
+        applied = applied
     )
+}
+
+/// A program calling down a chain of functions `f{depth}` to `f0`, each calling the next from two
+/// places, each with a lambda of its own wrapping the function it was given, and printing what the
+/// chain computes. Each copy of `f{i}` asks for two copies of `f{i - 1}`, one per lambda, so the
+/// copies double at each step.
+fn branching_chain_source(depth: usize) -> String {
+    chain_of_two_lambda_calls_source(depth, "I64", "g(x)", "")
 }
 
 /// About three times what the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes
@@ -936,31 +948,7 @@ const RETURNING_BRANCHING_CHAIN_OUTPUT: &str = "2175390";
 /// lambdas `f{i}` and every function after it in the chain build. `main` calls what `f{depth}`
 /// returns.
 fn returning_branching_chain_source(depth: usize) -> String {
-    let links: Vec<String> = (1..=depth)
-        .map(|i| {
-            format!(
-                "f{i} : (I64 -> I64) -> I64 -> (I64 -> I64);\n\
-                 f{i} = |g, x| if x % 3 == 0 {{ f{p}(|y| g(y) + {i}, x / 3) }} else {{ f{p}(|y| g(y) * {i}, x - 1) }};",
-                i = i,
-                p = i - 1
-            )
-        })
-        .collect();
-    format!(
-        "module Main;\n\
-         \n\
-         f0 : (I64 -> I64) -> I64 -> (I64 -> I64);\n\
-         f0 = |g, x| g;\n\
-         {}\n\
-         \n\
-         main : IO ();\n\
-         main = (\n\
-         \x20   let n = *(pure(100) : IO I64);\n\
-         \x20   println(f{}(|x| x + n, n)(n).to_string)\n\
-         );\n",
-        links.join("\n"),
-        depth
-    )
+    chain_of_two_lambda_calls_source(depth, "(I64 -> I64)", "g", "(n)")
 }
 
 /// The chain of `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
