@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 /// Put the body of each function `callees_by_caller` lists for a symbol where that symbol calls it,
 /// where that moves the body: the symbol is the only one naming the function, and names it once, as
-/// the callee of a call supplying every argument. Then reduce the application the body is left in.
+/// the callee of a call. Then reduce the application the body is left in.
 ///
 /// A body goes in one level deep: every body is read as it stands before any of them is put
 /// anywhere, and the calls a placed body makes are left as calls. What the program grows by is
@@ -56,8 +56,8 @@ pub fn move_bodies_into_callers(
         }
     }
 
-    // How many parameters each global function takes, which says whether a call supplies an
-    // argument for all of them.
+    // How many parameters each global function takes. A global it answers for is a lambda, whose body
+    // runs at each call wherever it stands.
     let arity_map = create_global_lambda_to_arity_map(symbols);
 
     let rewritten_callers = map_on_compiler_threads(
@@ -65,8 +65,8 @@ pub fn move_bodies_into_callers(
         num_threads,
         |(caller, callees)| {
             // The body goes in where that is a move rather than a copy: the caller is the only
-            // symbol naming the function, and it names it as the callee of one saturated call, so
-            // the body ends up in one place and the function itself falls to dead-symbol
+            // symbol naming the function, and it names it as the callee of one call, so the body
+            // ends up in one place and the function itself falls to dead-symbol
             // elimination. Where the function is named anywhere else, or called more than once,
             // placing the body would duplicate it, and how much duplication is worth its gain is the
             // judgement `inline` makes.
@@ -82,7 +82,7 @@ pub fn move_bodies_into_callers(
                 return None;
             }
             // The function is named by the call alone, so putting the body where its name stands
-            // leaves the body applied to the arguments the call supplies.
+            // leaves the body applied to the arguments the call supplies, however many they are.
             let mut sym = symbols[caller].clone();
             sym.expr = Some(substitute_free_names(caller_expr, moved_bodies));
             // Reduce what the substitution left: a lambda applied to the arguments the call
@@ -98,18 +98,24 @@ pub fn move_bodies_into_callers(
 }
 
 /// Whether putting `callee`'s body where `caller_expr` writes its name moves the body rather than
-/// copying it: the caller whose body is `caller_expr` is the only symbol naming `callee`, it writes
-/// the name once, and that one place is the callee of a call supplying every argument.
+/// copying it: `callee` is a global lambda, the caller whose body is `caller_expr` is the only symbol
+/// naming it, it writes the name once, and that one place is the callee of a call.
 ///
 /// The body goes into every place the name is written, so one place is what makes putting it there a
-/// move. What that one place is decides the rest: a name passed as an argument, captured, held as a
-/// value, or called with fewer arguments than the function takes leaves a closure where it stands,
-/// which is a body that has to stay.
+/// move. What that one place is decides the rest: a name passed as an argument, captured, or held as
+/// a value leaves the function itself standing there, which is a body that has to stay. A call
+/// supplying fewer arguments than the parameters the nested lambdas of the body declare leaves the
+/// rest of them as a lambda in the caller, holding what the partial application would hold; one
+/// supplying more applies what the body answers with. Either way the body is in one place.
+///
+/// A global that is no lambda is a value the program computes once, and its body put at a call
+/// would be computed at each call, so it stays where it is.
 ///
 /// # Arguments
 /// * `caller_expr` - the body of the caller, in which the uses of `callee` are counted.
 /// * `naming_symbol_counts` - how many symbols of the program name each global.
-/// * `arity_map` - how many parameters each global lambda takes.
+/// * `arity_map` - how many parameters each global lambda takes, which says which globals are
+///   lambdas.
 fn is_moved_by_placing(
     callee: &FullName,
     caller_expr: &Arc<ExprNode>,
@@ -125,16 +131,15 @@ fn is_moved_by_placing(
     if naming_symbol_count != 1 {
         return false;
     }
-    let arity = match arity_map.get(callee) {
-        Some(arity) => *arity,
-        None => return false,
-    };
+    if !arity_map.contains_key(callee) {
+        return false;
+    }
     // The walk records one use per place the name is written, so the caller writes the callee's
-    // name once, and writes it as the callee of a call supplying every parameter, exactly when this
-    // is the whole of what it says about the name.
+    // name once, and writes it as the callee of a call, exactly when this is the whole of what it
+    // says about the name.
     matches!(
         find_usage_of_name::run(caller_expr, callee).as_slice(),
-        [UsageType::CalledAsFunction { arg_count }] if *arg_count == arity
+        [UsageType::CalledAsFunction { .. }]
     )
 }
 
@@ -212,13 +217,13 @@ mod tests {
         ));
     }
 
-    /// A call supplying fewer arguments than the lambda takes leaves a closure where the name stood,
-    /// so the body stays where it is.
+    /// A call supplying fewer arguments than the lambda takes still names it in one place, so the
+    /// body moves, and the parameters left over stand as a lambda in the caller.
     #[test]
-    fn a_call_short_of_an_argument_keeps_the_body() {
+    fn a_call_short_of_an_argument_moves_the_body() {
         let lambda = lifted(0);
         let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 3);
-        assert!(!is_moved_by_placing(
+        assert!(is_moved_by_placing(
             &lambda,
             &call(&lambda, 2),
             &naming_symbol_counts,
@@ -226,12 +231,13 @@ mod tests {
         ));
     }
 
-    /// A call supplying more arguments than the lambda takes calls what the lambda returns.
+    /// A call supplying more arguments than the lambda takes still names it in one place, so the
+    /// body moves, applied to the arguments past its last parameter.
     #[test]
-    fn a_call_past_the_last_parameter_keeps_the_body() {
+    fn a_call_past_the_last_parameter_moves_the_body() {
         let lambda = lifted(0);
         let (naming_symbol_counts, arity_map) = tables(&lambda, 1, 2);
-        assert!(!is_moved_by_placing(
+        assert!(is_moved_by_placing(
             &lambda,
             &call(&lambda, 3),
             &naming_symbol_counts,
@@ -303,9 +309,10 @@ mod tests {
         ));
     }
 
-    /// A lambda the arity table does not answer for is one the rule cannot judge.
+    /// A global the arity table does not answer for is no lambda, and is computed once where it
+    /// stands rather than at each call.
     #[test]
-    fn a_lambda_the_arity_table_does_not_answer_for_keeps_its_body() {
+    fn a_global_that_is_no_lambda_keeps_its_body() {
         let lambda = lifted(0);
         let naming_symbol_counts = [(lambda.clone(), 1)].into_iter().collect();
         assert!(!is_moved_by_placing(

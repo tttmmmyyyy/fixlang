@@ -113,6 +113,9 @@ mod integration_tests {
     /// What `inlined_body` prints: the first element of the array at or above 5 sits at index 3.
     const INLINED_BODY_OUTPUT: &str = "3";
 
+    /// What `curried_loop_body` prints: the counter added up from 3 while it stays below 10.
+    const CURRIED_LOOP_BODY_OUTPUT: &str = "42";
+
     /// What `borrowed_capture` prints: `scaled_sum` over the array for the keys 0 to 3.
     const BORROWED_CAPTURE_OUTPUT: &str = "111";
 
@@ -667,6 +670,26 @@ mod integration_tests {
             !copies.is_empty(),
             "the loop body should get a copy of `Std::loop`, but the dump names none: {:?}",
             functions_named_with(&dump, "Std::loop")
+        );
+        for (header, body) in copies {
+            assert_holds_the_lambdas_body(header, body);
+        }
+    }
+
+    /// A loop body answering an action of a state monad is a lambda whose body is the lambda the
+    /// action holds, so the function it is lifted to takes one parameter more than the copy of
+    /// `Std::loop_m` supplies: the copy calls it with the accumulator, and applies what it answers to
+    /// the counter. The copy is still the only symbol naming it, so the body goes into the copy.
+    #[test]
+    pub fn test_a_copy_takes_the_body_of_the_lambda_it_calls_short_of_an_argument() {
+        let (_temp_dir, project_dir) = setup_test_env("curried_loop_body");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", CURRIED_LOOP_BODY_OUTPUT);
+
+        let copies = spec_copy_bodies(&dump, "Std::loop_m");
+        assert!(
+            !copies.is_empty(),
+            "the loop body should get a copy of `Std::loop_m`, but the dump names none: {:?}",
+            functions_named_with(&dump, "Std::loop_m")
         );
         for (header, body) in copies {
             assert_holds_the_lambdas_body(header, body);
