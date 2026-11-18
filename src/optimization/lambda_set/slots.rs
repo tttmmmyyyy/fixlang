@@ -136,7 +136,15 @@ impl<'e> SlotLayout<'e> {
     /// Whether `tc` applied to `arg_count` arguments is applied to all it takes, which is when it
     /// owns slots.
     pub(super) fn is_applied_to_all(&self, tc: &TyCon, arg_count: usize) -> bool {
-        arg_count >= self.arity(tc)
+        let arity = self.arity(tc);
+        assert!(
+            arg_count <= arity,
+            "`{}`, which takes {} type arguments, is applied to {}",
+            tc.to_string(),
+            arity,
+            arg_count
+        );
+        arg_count == arity
     }
 
     /// Whether `tc`, occurring applied to all its arguments in a declared field type of a member of

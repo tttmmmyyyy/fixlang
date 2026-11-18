@@ -293,16 +293,17 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
 
-    // The func types `#Func{n}`.
+    // The func types `#Func{n}`, each applied to the types of its `n` arguments and then to the type
+    // of its result (`type_func`).
     for arity in 1..=FUNC_ARGS_MAX {
         ret.insert(
             make_func_tycon(arity),
             TyConInfo {
                 punched_from: None,
-                kind: make_kind_fun(arity),
+                kind: make_kind_fun(arity + 1),
                 variant: TyConVariant::Primitive,
                 is_unbox: true,
-                tyvars: (0..arity)
+                tyvars: (0..=arity)
                     .map(|i| make_tyvar(&format!("a{}", i), &kind_star()))
                     .collect(),
                 fields: vec![],
