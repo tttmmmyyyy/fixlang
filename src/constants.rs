@@ -235,6 +235,19 @@ pub const MAX_LS_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 6;
 /// once those passes take linear time, up to `MAX_UNION_VARIANTS`.
 pub const MAX_LS_UNION_VARIANTS: usize = 32;
 const _: () = assert!(MAX_LS_UNION_VARIANTS <= MAX_UNION_VARIANTS);
+/// How many copies of components lambda set specialization makes per reference a component makes
+/// to another (`Component::sites`), beyond `LS_COPY_BUDGET_BASE`. Past the budget, the sets the most
+/// copied components are given are represented by closures, and their copies become one.
+///
+/// A component is copied once per distinct way it is called, and a function calling the next of a
+/// chain from two places, each with a lambda of its own wrapping the function it was given, asks
+/// for twice as many copies of the next as it has of itself: the copies grow exponentially in the
+/// length of the chain. Programs without such a chain make about one copy per reference, as each
+/// reference asks for one copy of its callee from each copy of its caller.
+pub const LS_COPIES_PER_SITE: usize = 4;
+/// The copies of components lambda set specialization makes in any program before
+/// `LS_COPIES_PER_SITE` bounds them.
+pub const LS_COPY_BUDGET_BASE: usize = 64;
 /// The index of the function pointer among a closure's fields.
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
 /// The index, among a closure's fields, of the pointer to the captured values the function is

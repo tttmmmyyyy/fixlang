@@ -860,6 +860,64 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
     assert_eq!(printed, CHAIN_OUTPUT, "the chain computed a wrong value");
 }
 
+/// How many functions the chain of `branching_chain_source` calls through.
+const BRANCHING_CHAIN_DEPTH: usize = 14;
+
+/// What `branching_chain_source()` prints.
+const BRANCHING_CHAIN_OUTPUT: &str = "1097390";
+
+/// A program calling down a chain of functions `f{BRANCHING_CHAIN_DEPTH}` to `f0`, each calling the
+/// next from two places, each with a lambda of its own wrapping the function it was given. Each copy
+/// of `f{i}` asks for two copies of `f{i - 1}`, one per lambda, so the copies double at each step.
+fn branching_chain_source() -> String {
+    let links: Vec<String> = (1..=BRANCHING_CHAIN_DEPTH)
+        .map(|i| {
+            format!(
+                "f{i} : (I64 -> I64) -> I64 -> I64;\n\
+                 f{i} = |g, x| if x % 3 == 0 {{ f{p}(|y| g(y) + {i}, x / 3) }} else {{ f{p}(|y| g(y) * {i}, x - 1) }};",
+                i = i,
+                p = i - 1
+            )
+        })
+        .collect();
+    format!(
+        "module Main;\n\
+         \n\
+         f0 : (I64 -> I64) -> I64 -> I64;\n\
+         f0 = |g, x| g(x);\n\
+         {}\n\
+         \n\
+         main : IO ();\n\
+         main = (\n\
+         \x20   let n = *(pure(100) : IO I64);\n\
+         \x20   println(f{}(|x| x + n, n).to_string)\n\
+         );\n",
+        links.join("\n"),
+        BRANCHING_CHAIN_DEPTH
+    )
+}
+
+/// The chain of `branching_chain_source` builds well within a deadline. Its copies outgrow the
+/// budget of `LS_COPIES_PER_SITE`, and the sets given to the most copied functions are represented
+/// by closures, which makes each of those functions one copy; with every copy kept, the build would
+/// take far longer.
+#[test]
+fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_time() {
+    let printed = build_within_and_run(
+        &branching_chain_source(),
+        "max",
+        Duration::from_secs(40),
+        &format!(
+            "a chain of {} functions each calling the next with two lambdas",
+            BRANCHING_CHAIN_DEPTH
+        ),
+    );
+    assert_eq!(
+        printed, BRANCHING_CHAIN_OUTPUT,
+        "the chain computed a wrong value"
+    );
+}
+
 /// What lambda set specialization makes of a program, read off the `--emit-rc-ir` dump: a
 /// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
 /// takes as an argument. The program cannot observe either one — the answer is the same with
