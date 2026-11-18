@@ -2,7 +2,7 @@ use crate::ast::{
     builtin_op::{clone_path_rc_targets, unique_check_on_boxed_leaf, BuiltinOp, EnvOperand},
     expr::{
         expr_abs, expr_abs_many, expr_app, expr_builtin, expr_if, expr_let, expr_make_struct,
-        expr_var, var_local, AppSourceCodeOrderType, ExprNode,
+        expr_tyanno, expr_var, var_local, AppSourceCodeOrderType, ExprNode,
     },
     name::{FullName, Name},
     pattern::PatternNode,
@@ -1214,14 +1214,15 @@ pub fn expr_nullptr_lit(source: Option<Span>) -> Arc<ExprNode> {
     .global_to_absolute()
 }
 
+/// The literal `true` or `false`: the `Bool` union's constructor applied to `()`, annotated with
+/// `Bool`. The annotation is checked first, so a literal used where another type is expected is
+/// reported as a `Bool` found there, the way a number literal is. Every name is absolute, so the
+/// literal resolves without an `import` at the use site.
 pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
-    // Desugar `true` / `false` to the `Bool` union's constructors, referenced by absolute path
-    // so the desugaring resolves without an `import` at the use site.
-    let mut ctor =
-        FullName::from_strs(&[STD_NAME, BOOL_NAME], if val { "_true" } else { "_false" });
-    ctor.set_absolute();
-    let unit = expr_make_struct(tycon(make_tuple_name_abs(0)), vec![]);
-    expr_app(expr_var(ctor, source.clone()), vec![unit], source)
+    let ctor = FullName::from_strs(&[STD_NAME, BOOL_NAME], if val { "_true" } else { "_false" });
+    let unit = expr_make_struct(tycon(make_tuple_name(0)), vec![]);
+    let value = expr_app(expr_var(ctor, source.clone()), vec![unit], source.clone());
+    expr_tyanno(value, make_bool_ty(), source).global_to_absolute()
 }
 
 /// An `Array` of `elements`, whose storage is a constant in the program's data. Arrays of equal
