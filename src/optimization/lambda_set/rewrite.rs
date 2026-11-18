@@ -60,9 +60,12 @@ impl Rewritten {
     pub fn apply(self, prg: &mut Program, num_threads: usize) {
         prg.symbols = self.symbols;
         prg.type_env.add_tycons(self.tycons);
-        if let Some(entry) = self.entry {
-            prg.entry_io_value = Some(entry);
-        }
+        assert_eq!(
+            prg.entry_io_value.is_some(),
+            self.entry.is_some(),
+            "the rewrite gives the entry a value where the program has none, or none where it has one"
+        );
+        prg.entry_io_value = self.entry;
         assert_eq!(
             prg.export_statements.len(),
             self.exports.len(),
@@ -97,10 +100,10 @@ pub fn rewrite(
     for copy in 0..rw.copies.len() {
         rw.make_copy(copy);
     }
+    let (entry, exports) = rw.rewrite_roots();
     while let Some(c) = rw.lift_queue.pop_front() {
         rw.make_lifted(c);
     }
-    let (entry, exports) = rw.rewrite_roots();
     rw.declare_named_tycons();
     Rewritten {
         symbols: rw.symbols,
@@ -288,8 +291,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
     /// The set the copy `instance` gives the variable `v` of its component.
     fn set_of(&self, instance: usize, v: SetVar) -> SetId {
         let instance = &self.spec.instances[instance];
-        let component = &self.analysis.components[instance.component];
-        instance.var_sets[component.var_index[&v]]
+        instance.set_of(&self.analysis.components[instance.component], v)
     }
 
     /// The sets the copy `instance` gives the slots of `ty`.
@@ -366,8 +368,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             .map(|(name, ty)| (name.clone(), self.rewrite_type(instance, ty)))
             .collect();
         let cap = CaptureStruct::new(LS_CAP_PREFIX, &self.callee_name(c), &fields);
-        self.new_tycons
-            .insert(cap.tycon.as_ref().clone(), cap.tycon_info.clone());
+        self.insert_tycon(cap.tycon.as_ref().clone(), cap.tycon_info.clone());
         self.capture_structs.insert(c, cap.clone());
         cap
     }
@@ -383,6 +384,13 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             namespace,
             &format!("{}@{}", LS_UNION_PREFIX, union.hash),
         )))
+    }
+
+    /// The type constructor named as `tc` with `suffix` appended to its name.
+    fn suffixed_tycon(tc: &TyCon, suffix: &str) -> TyCon {
+        let mut name = tc.name.clone();
+        name.name += suffix;
+        TyCon::new(name)
     }
 
     /// The name of the variant `i` of the union of type constructor `union`.
@@ -406,7 +414,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 Field::make(Self::variant_name(&tycon, i).name, payload, None)
             })
             .collect();
-        self.new_tycons.insert(
+        self.insert_tycon(
             tycon.as_ref().clone(),
             TyConInfo {
                 punched_from: None,
@@ -491,9 +499,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let layout_tc = self.layout.layout_tycon(tc);
         let group = self.layout.group_of(tc);
         let suffix = self.type_copy_suffix(group, own);
-        let mut name = layout_tc.name.clone();
-        name.name += &suffix;
-        let mut copy = TyCon::new(name);
+        let mut copy = Self::suffixed_tycon(&layout_tc, &suffix);
         if let Some(i) = self.punched_at.get(tc.as_ref()) {
             copy.into_punched_type_name(*i);
         }
@@ -543,10 +549,8 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 field.ty = self.rewrite_declared(&field.ty, group, own, &mut cursor);
                 next_offset = cursor;
             }
-            let mut name = member.name.clone();
-            name.name += suffix;
-            let copy = TyCon::new(name);
-            self.new_tycons.insert(
+            let copy = Self::suffixed_tycon(member, suffix);
+            self.insert_tycon(
                 copy.clone(),
                 TyConInfo {
                     fields: fields.clone(),
@@ -556,12 +560,19 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             for (punched, i) in self.punched_of.get(member).cloned().unwrap_or_default() {
                 let punched_info = type_env.tycon_info(&punched);
                 let mut punched_fields = fields.clone();
+                assert_eq!(
+                    punched_fields.len(),
+                    punched_info.fields.len(),
+                    "the punched struct `{}` declares other fields than `{}`",
+                    punched.to_string(),
+                    member.to_string()
+                );
                 for (field, punched_field) in punched_fields.iter_mut().zip(&punched_info.fields) {
                     field.is_punched = punched_field.is_punched;
                 }
                 let mut punched_copy = copy.clone();
                 punched_copy.into_punched_type_name(i);
-                self.new_tycons.insert(
+                self.insert_tycon(
                     punched_copy,
                     TyConInfo {
                         fields: punched_fields,
@@ -665,6 +676,11 @@ impl<'a, 'e> Rewriter<'a, 'e> {
     fn make_lifted(&mut self, c: u32) {
         let class = &self.repr.classes[c as usize];
         let lambda = &self.analysis.lambdas[class.lam as usize];
+        assert!(
+            !lambda.is_body(),
+            "{} is lifted, though it is the body of its symbol",
+            lambda.to_string()
+        );
         let instance = class.instance;
         let component = &self.analysis.components[self.analysis.component_of[&lambda.symbol]];
         let pos = component
@@ -709,6 +725,16 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             self.symbols.insert(name.clone(), symbol).is_none(),
             "two symbols of the rewritten program are named `{}`",
             name.to_string()
+        );
+    }
+
+    /// Adds the type constructor `tc`, declared by `info`, to the type constructors made.
+    fn insert_tycon(&mut self, tc: TyCon, info: TyConInfo) {
+        let name = tc.to_string();
+        assert!(
+            self.new_tycons.insert(tc, info).is_none(),
+            "two type constructors of the rewritten program are named `{}`",
+            name
         );
     }
 
@@ -766,6 +792,11 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 let mut builtin = b.as_ref().clone();
                 let mut bindings: Vec<(String, Arc<ExprNode>)> = vec![];
                 let operands = builtin.op.free_vars_mut();
+                assert_eq!(
+                    operands.len(),
+                    node.names.len(),
+                    "a builtin's operands and the names its node records differ in number"
+                );
                 for (i, (operand, name_ref)) in operands.into_iter().zip(&node.names).enumerate() {
                     if let NameRef::Local = name_ref {
                         continue;
@@ -811,9 +842,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 assert_eq!(lambda.is_body(), as_body);
                 if !as_body {
                     let own = self.repr.of(self.set_of(walk.instance, node.ty.slots[0]));
-                    let instance = &self.spec.instances[walk.instance];
-                    let args: Vec<SetId> =
-                        lambda.params.iter().map(|p| instance.args[*p]).collect();
+                    let args = self.spec.instances[walk.instance].lambda_args(lambda);
                     let value = match own {
                         Repr::Single(_) | Repr::Union(_) => {
                             let c = self.repr.class_of(lam, &args);
@@ -968,11 +997,8 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let copy = self.copy_of_instance[target];
         let sets = self.sets_of(walk.instance, ty);
         if let Some(lam) = self.body_lambda.get(name) {
-            let args: Vec<SetId> = self.analysis.lambdas[*lam as usize]
-                .params
-                .iter()
-                .map(|p| self.spec.instances[target].args[*p])
-                .collect();
+            let args =
+                self.spec.instances[target].lambda_args(&self.analysis.lambdas[*lam as usize]);
             let own = self.repr.of(sets[0]);
             if own != Repr::Closure {
                 let c = self.repr.class_of(*lam, &args);

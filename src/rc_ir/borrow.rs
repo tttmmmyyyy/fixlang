@@ -59,7 +59,7 @@ use crate::rc_ir::ownership::{
     rc_units, rhs_consumes, truncate_to_unit, unit_step, units_under, AliasStep, References,
     UnitStep, VarTable,
 };
-use crate::rc_ir::specialization::{CloneKey, CloneRegistry};
+use crate::rc_ir::specialization::{specializable_callee, CloneKey, CloneRegistry};
 use std::sync::Arc;
 
 /// The parameter leaves borrow inference found `Own`, keyed by the parameter variable's name and the
@@ -892,30 +892,15 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
                     &node.source,
                 )
             }
-            RcExpr::Let(x, rhs, k) => expr_node(
-                RcExpr::Let(x.clone(), rhs.clone(), self.rewrite_in(k, enclosing)),
-                &node.source,
-            ),
             RcExpr::Retain(v, path, state, k) => {
                 self.rewrite_rc(v, path, *state, false, k, enclosing, &node.source)
             }
             RcExpr::Release(v, path, state, k) => {
                 self.rewrite_rc(v, path, *state, true, k, enclosing, &node.source)
             }
-            RcExpr::Destructure(container, fields, state, k) => expr_node(
-                RcExpr::Destructure(
-                    container.clone(),
-                    fields.clone(),
-                    *state,
-                    self.rewrite_in(k, enclosing),
-                ),
-                &node.source,
-            ),
-            RcExpr::Eval(v, k) => expr_node(
-                RcExpr::Eval(v.clone(), self.rewrite_in(k, enclosing)),
-                &node.source,
-            ),
-            RcExpr::Ret(v) => expr_node(RcExpr::Ret(v.clone()), &node.source),
+            RcExpr::Let(..) | RcExpr::Destructure(..) | RcExpr::Eval(..) | RcExpr::Ret(..) => {
+                map_continuation(node, |k| self.rewrite_in(k, enclosing))
+            }
         }
     }
 
@@ -930,12 +915,11 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         args: &[RcVar],
         after: &After,
     ) -> (RcVar, Option<BorrowKey>) {
-        let fref = FuncRef {
-            name: callee.name.clone(),
-        };
-        if !self.versions.borrowers.contains(&fref) {
+        let Some(fref) =
+            specializable_callee(self.versions.prog, callee, &self.versions.borrowers)
+        else {
             return (callee.clone(), None);
-        }
+        };
         let lendable = self.lendable(&fref, args, after);
         match self.versions.request(&fref, lendable) {
             Some((version, key)) => {

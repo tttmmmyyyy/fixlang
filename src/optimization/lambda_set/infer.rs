@@ -891,28 +891,26 @@ fn generalize(
             }
         }
     }
-    for v in vars_holding_current {
-        let members = mem::take(solver.members_mut(v));
-        let members = members
-            .into_iter()
-            .map(|m| match m {
-                Member::Lam {
-                    lam,
-                    owner: Owner::Current,
-                } => Member::Lam {
-                    lam,
-                    owner: Owner::Instance(
-                        analysis.lambdas[lam as usize]
-                            .params
-                            .iter()
-                            .map(|p| params[*p])
-                            .collect(),
-                    ),
-                },
-                m => m,
-            })
-            .collect();
-        *solver.members_mut(v) = members;
+    let roots_holding_current: Set<SetVar> = vars_holding_current
+        .iter()
+        .map(|v| solver.find(*v))
+        .collect();
+    for v in roots_holding_current {
+        for member in solver.members_mut(v) {
+            if let Member::Lam {
+                lam,
+                owner: owner @ Owner::Current,
+            } = member
+            {
+                *owner = Owner::Instance(
+                    analysis.lambdas[*lam as usize]
+                        .params
+                        .iter()
+                        .map(|p| params[*p])
+                        .collect(),
+                );
+            }
+        }
     }
 
     // A pinned variable is one variable in every copy, so every variable its members name is pinned

@@ -161,8 +161,8 @@ impl Builders {
             let component = &analysis.components[instance.component];
             for lam in &component.lams {
                 let lambda = &analysis.lambdas[*lam as usize];
-                let args: Vec<SetId> = lambda.params.iter().map(|p| instance.args[*p]).collect();
-                let set_of = |v: &SetVar| instance.var_sets[component.var_index[v]];
+                let args = instance.lambda_args(lambda);
+                let set_of = |v: &SetVar| instance.set_of(component, *v);
                 let interface: Vec<SetId> = if lambda.is_body() {
                     args.clone()
                 } else {

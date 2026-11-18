@@ -363,11 +363,12 @@ mod tests {
     /// the environment `()`, so the function takes `(((), c), ...)`, where `c` is the capture struct
     /// of the lambda the function was lifted from.
     fn closures_taking_a_capture_struct_through_the_environment(dump: &str) -> Vec<&str> {
+        let capture_struct = format!("{}@", LS_CAP_PREFIX);
         dump.lines()
             .filter(|line| {
                 line.contains("= closure ")
                     && line.contains(" : (((), ")
-                    && line.contains(&format!("{}@", LS_CAP_PREFIX))
+                    && line.contains(&capture_struct)
             })
             .collect()
     }

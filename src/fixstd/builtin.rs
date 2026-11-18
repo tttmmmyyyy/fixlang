@@ -3432,7 +3432,7 @@ impl BuiltinOp for ArrayAppendValueCapacityUncheckedOp {
         let arr = flow.operand(0);
         flow.same(&arr, &flow.result());
         let elem = flow.type_arg(&arr, 0);
-        flow.same(&elem, &flow.operand(1));
+        flow.same(&elem, &flow.operand(APPEND_VALUE_ELEMENT_ARG));
     }
 
     fn unique_check_operand(
@@ -3964,7 +3964,7 @@ impl BuiltinOp for ArrayAppendCapacityUncheckedOp {
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
         let dst = flow.operand(0);
         flow.same(&dst, &flow.result());
-        flow.same(&dst, &flow.operand(1));
+        flow.same(&dst, &flow.operand(APPEND_SRC_ARG));
     }
 
     fn unique_check_operand(
@@ -4139,7 +4139,7 @@ impl BuiltinOp for ArrayCopyCapacityBoundsUncheckedOp {
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
         let dst = flow.operand(0);
         flow.same(&dst, &flow.result());
-        flow.same(&dst, &flow.operand(1));
+        flow.same(&dst, &flow.operand(COPY_SRC_ARG));
     }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
@@ -4611,7 +4611,7 @@ impl BuiltinOp for ArraySetOp {
 
     /// The value becomes an element of the array that comes back.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
-        let arr = flow.operand(0);
+        let arr = flow.operand(ARRAY_SET_ARRAY_ARG);
         flow.same(&arr, &flow.result());
         let elem = flow.type_arg(&arr, 0);
         flow.same(&elem, &flow.operand(2));
@@ -4986,10 +4986,10 @@ impl BuiltinOp for ArrayPunchOp {
         let arr = flow.operand(0);
         let elem = flow.type_arg(&arr, 0);
         let result = flow.result();
-        let punched = flow.field(&result, 0);
+        let punched = flow.field(&result, PUNCH_RESULT_ARRAY_FIELD);
         let punched_elem = flow.type_arg(&punched, 0);
         flow.same(&punched_elem, &elem);
-        let moved = flow.field(&result, 1);
+        let moved = flow.field(&result, PUNCH_RESULT_ELEMENT_FIELD);
         flow.same(&moved, &elem);
     }
 
@@ -6270,7 +6270,7 @@ impl BuiltinOp for StructPunchOp {
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
         let s = flow.operand(0);
         let result = flow.result();
-        let punched = flow.field(&result, 1);
+        let punched = flow.field(&result, PUNCHED_STRUCT_FIELD);
         flow.same(&punched, &s);
         let moved = flow.field(&result, 0);
         let field = flow.field(&s, self.field_idx);
@@ -8653,7 +8653,7 @@ impl BuiltinOp for IsUniqueOp {
     /// The value comes back unchanged beside the flag.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
         let result = flow.result();
-        let value = flow.field(&result, 1);
+        let value = flow.field(&result, IS_UNIQUE_VALUE_FIELD);
         flow.same(&value, &flow.operand(0));
     }
 
@@ -8852,7 +8852,7 @@ impl BuiltinOp for ArrayIsStorageUniqueOp {
     /// The array comes back unchanged beside the flag.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
         let result = flow.result();
-        let arr = flow.field(&result, 1);
+        let arr = flow.field(&result, IS_UNIQUE_VALUE_FIELD);
         flow.same(&arr, &flow.operand(0));
     }
 

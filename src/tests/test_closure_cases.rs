@@ -31,6 +31,18 @@ mod integration_tests {
         setup_case_projects("src/tests/test_closure_cases/cases", case)
     }
 
+    /// The optimization levels the answers are asserted at.
+    const OPT_LEVELS: [&str; 3] = ["basic", "max", "experimental"];
+
+    /// Builds `case` at every level of `OPT_LEVELS`, and checks that it answers `expected_output` at
+    /// each.
+    fn assert_answers_at_every_level(case: &str, expected_output: &str) {
+        let (_temp_dir, project_dir) = setup_test_env(case);
+        for opt_level in OPT_LEVELS {
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, expected_output);
+        }
+    }
+
     /// The names of the functions in `dump` whose name contains `name_part`.
     ///
     /// A lambda inside a function is dumped under the enclosing function's name followed by
@@ -45,17 +57,11 @@ mod integration_tests {
             .collect()
     }
 
-    /// The names in `text` carrying all of `needles`, deduplicated. A name stands wherever the
-    /// program mentions it — a function's own line, a call, or the type of a capture list named
-    /// after the copy that receives it.
-    fn names_in<'a>(text: &'a str, needles: &[&str]) -> Vec<&'a str> {
-        let mut names = text
-            .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':' || c == '#' || c == '@'))
-            .filter(|token| needles.iter().all(|needle| token.contains(needle)))
-            .collect::<Vec<_>>();
-        names.sort();
-        names.dedup();
-        names
+    /// The names in `text`. A name stands wherever the program mentions it — a function's own line,
+    /// a call, or the type of a capture list named after the copy that receives it.
+    fn names_in(text: &str) -> impl Iterator<Item = &str> {
+        text.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':' || c == '#' || c == '@'))
+            .filter(|token| !token.is_empty())
     }
 
     /// Every function `dump` names, as the line naming it and the body under it.
@@ -105,7 +111,7 @@ mod integration_tests {
         let mut reached: Set<&'a str> = roots.iter().copied().collect();
         let mut queue = roots;
         while let Some(name) = queue.pop() {
-            for token in names_in(bodies[name], &[]) {
+            for token in names_in(bodies[name]) {
                 if bodies.contains_key(token) && reached.insert(token) {
                     queue.push(token);
                 }
@@ -120,30 +126,21 @@ mod integration_tests {
     /// it is called answers the same at every level.
     #[test]
     pub fn test_a_function_called_out_of_a_struct_an_array_and_a_union_answers_the_same() {
-        let (_temp_dir, project_dir) = setup_test_env("opaque_boundary");
-        for opt_level in ["basic", "max", "experimental"] {
-            build_project_run_and_read_rc_ir(&project_dir, opt_level, OPAQUE_BOUNDARY_OUTPUT);
-        }
+        assert_answers_at_every_level("opaque_boundary", OPAQUE_BOUNDARY_OUTPUT);
     }
 
     /// A function a lambda captures, called there, handed to a function that calls it, and handed to
     /// a function that puts it into an array, answers the same at every level.
     #[test]
     pub fn test_a_captured_function_called_three_ways_answers_the_same() {
-        let (_temp_dir, project_dir) = setup_test_env("mixed_capture_field");
-        for opt_level in ["basic", "max", "experimental"] {
-            build_project_run_and_read_rc_ir(&project_dir, opt_level, MIXED_CAPTURE_FIELD_OUTPUT);
-        }
+        assert_answers_at_every_level("mixed_capture_field", MIXED_CAPTURE_FIELD_OUTPUT);
     }
 
     /// A function built from the one a function was given, called directly and through a lambda
     /// that captures it and is handed to `fold`, answers the same at every level.
     #[test]
     pub fn test_a_function_built_from_the_one_given_answers_the_same() {
-        let (_temp_dir, project_dir) = setup_test_env("derived_closure");
-        for opt_level in ["basic", "max", "experimental"] {
-            build_project_run_and_read_rc_ir(&project_dir, opt_level, DERIVED_CLOSURE_OUTPUT);
-        }
+        assert_answers_at_every_level("derived_closure", DERIVED_CLOSURE_OUTPUT);
     }
 
     /// A round of a combinator that answers in a monad builds no closure. The combinator calls the

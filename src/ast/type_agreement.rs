@@ -150,9 +150,15 @@ impl<'p> Check<'p> {
                         ty(e).clone(),
                     )
                 } else {
-                    args.iter()
-                        .rev()
-                        .fold(ty(e).clone(), |acc, arg| type_arrow(ty(arg).clone(), acc))
+                    assert_eq!(
+                        args.len(),
+                        1,
+                        "in `{}`, a function of an arrow type is applied to {} arguments at once, at `{}`",
+                        at,
+                        args.len(),
+                        e.expr.stringify().to_string()
+                    );
+                    type_arrow(ty(&args[0]).clone(), ty(e).clone())
                 };
                 self.same(
                     ty(func),
@@ -240,6 +246,12 @@ impl<'p> Check<'p> {
                 );
             }
             Expr::ArrayLit(elems) => {
+                assert!(
+                    ty(e).is_array(),
+                    "in `{}`, an array literal has the type `{}`",
+                    at,
+                    ty(e).to_string()
+                );
                 let elem_ty = ty(e).collect_type_arguments()[0].clone();
                 for elem in elems {
                     self.expr(elem, at, scope);

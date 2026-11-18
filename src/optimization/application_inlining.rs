@@ -50,7 +50,7 @@ use super::rename::{
 };
 use crate::ast::{
     expr::{
-        expr_eval_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var, var_var,
+        expr_eval_typed, expr_if_typed, expr_let_typed, expr_match_typed, expr_var,
         AppSourceCodeOrderType, Expr, ExprNode,
     },
     name::FullName,
@@ -123,7 +123,7 @@ impl PushedArg {
                 let ty = arg.type_.as_ref().unwrap().clone();
                 let name = generate_new_names(&black_list, 1)[0].clone();
                 black_list.insert(name.clone());
-                let pat = PatternNode::make_var(var_var(name.clone()), None).set_type(ty.clone());
+                let pat = PatternNode::make_local_var(&name.name, ty.clone());
                 PushedArg {
                     value: expr_var(name, None).set_type(ty),
                     binding: Some((pat, arg.clone())),

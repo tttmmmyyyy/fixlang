@@ -321,7 +321,7 @@ impl<'e> SlotLayout<'e> {
     }
 
     /// The number of slots of `ty`.
-    pub fn slot_count(&self, ty: &Arc<TypeNode>) -> usize {
+    fn slot_count(&self, ty: &Arc<TypeNode>) -> usize {
         if let Some(count) = self.slot_counts.borrow().get(ty) {
             return *count;
         }
@@ -559,6 +559,13 @@ impl<'e> SlotLayout<'e> {
                 // constructor given without its arguments, and the type argument it was given to
                 // owns none of its slots. The arguments here are written in the declaration, so
                 // they are read as it reads them, each once and in order.
+                if let Binding::Linked(_, slots) = binding {
+                    assert!(
+                        slots.is_empty(),
+                        "the type variable `{}`, applied to arguments, stands for a type with slots",
+                        tv.name
+                    );
+                }
                 let mut head_args: Vec<Binding> = vec![];
                 let head_tc = binding.ty().head_tycon();
                 let head_spine = binding.ty().flatten_type_application();

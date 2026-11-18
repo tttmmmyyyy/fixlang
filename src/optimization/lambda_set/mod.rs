@@ -549,7 +549,6 @@ main = (
         let p_slots: Vec<usize> = inf
             .layout
             .own_slots(&p_ty)
-            .to_vec()
             .iter()
             .map(|v| {
                 let root = inf.analysis.solver.find(*v);

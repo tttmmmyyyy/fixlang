@@ -413,15 +413,8 @@ pub fn build_project_and_read_rc_ir(project_dir: &Path, filter: &str, dump_file:
         .output()
         .expect("Failed to execute fix build --emit-rc-ir");
 
-    if !output.status.success() {
-        eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-        eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-        panic!("fix build --emit-rc-ir failed");
-    }
-
-    let dump_path = project_dir.join(".fixlang").join(dump_file);
-    fs::read_to_string(&dump_path)
-        .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
+    assert_succeeded(&output, "fix build --emit-rc-ir should succeed.");
+    read_rc_ir_dump_file(project_dir, dump_file)
 }
 
 /// Builds the project in `project_dir` at `opt_level` with the RC IR dumped, runs the program, and
@@ -443,12 +436,9 @@ pub fn build_project_run_and_read_rc_ir(
         .current_dir(project_dir)
         .output()
         .expect("Failed to execute fix build");
-    assert!(
-        build.status.success(),
-        "the build should succeed at -O {}.\nstdout: {}\nstderr: {}",
-        opt_level,
-        String::from_utf8_lossy(&build.stdout),
-        String::from_utf8_lossy(&build.stderr),
+    assert_succeeded(
+        &build,
+        &format!("the build should succeed at -O {}.", opt_level),
     );
 
     let run = Command::new(project_dir.join("a.out"))
@@ -474,7 +464,12 @@ pub fn build_project_run_and_read_rc_ir(
 
 /// The RC IR of every module, read out of the dump a build with `--emit-rc-ir all` left in `dir`.
 pub fn read_rc_ir_dump(dir: &Path) -> String {
-    let dump_path = dir.join(".fixlang/rc_ir.post.txt");
+    read_rc_ir_dump_file(dir, "rc_ir.post.txt")
+}
+
+/// The dump `dump_file` that a build with `--emit-rc-ir` left under `.fixlang/` in `dir`.
+fn read_rc_ir_dump_file(dir: &Path, dump_file: &str) -> String {
+    let dump_path = dir.join(".fixlang").join(dump_file);
     fs::read_to_string(&dump_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
 }

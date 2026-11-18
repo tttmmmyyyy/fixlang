@@ -7,6 +7,7 @@
 
 #[cfg(test)]
 mod integration_tests {
+    use crate::constants::LS_CAP_PREFIX;
     use crate::tests::test_util::{
         build_project_and_read_rc_ir, build_project_run_and_read_rc_ir, copy_dir_recursive,
         rc_ir_callee_of, rc_ir_function_bodies,
@@ -327,9 +328,10 @@ mod integration_tests {
                 blocks.last_mut().unwrap().push(l);
             }
         }
+        let call = format!("= {}", callee);
         blocks
             .into_iter()
-            .find(|block| block.iter().any(|l| l.contains(&format!("= {}", callee))))
+            .find(|block| block.iter().any(|l| l.contains(&call)))
             .unwrap_or_else(|| {
                 panic!(
                     "neither `main` nor a function lifted out of it calls `{}`:\n{}",
@@ -373,7 +375,7 @@ mod integration_tests {
     /// Assert how the `tally` calls in `main` of the test project `case` route: `expected` is the
     /// number routed to the borrow version and the number left on the owning one, and `what` states
     /// the expectation in the message.
-    fn assert_tally_routing(case: &str, expected: (usize, usize), what: &str) {
+    fn assert_tally_routing(case: &str, expected: (usize, usize), what: &str) -> String {
         let (_temp_dir, project_dir) = setup_test_env(case);
         let dump = emit_main_rc_ir(&project_dir);
         let main = main_block(&dump, "Main::tally");
@@ -384,6 +386,7 @@ mod integration_tests {
             what,
             main.join("\n")
         );
+        dump
     }
 
     /// Verifies which functions get a borrow version and what it buys: a function that only reads
@@ -445,27 +448,15 @@ mod integration_tests {
     /// release.
     #[test]
     fn test_routing_by_last_use() {
-        let (_temp_dir, project_dir) = setup_test_env("routing_last_use");
-        let dump = emit_main_rc_ir(&project_dir);
-
-        let main = main_block(&dump, "Main::tally");
-        let (borrow_calls, own_calls) = tally_call_routing(&main);
-
         // The array read again after its call is owned but not at its last use, so routing to the
         // borrow version removes a retain — that call goes to the borrow version. The array not used
         // after its call is at its last use, so borrowing it would remove no retain and only delay
         // its release — that call stays on the own version.
-        assert_eq!(
-            borrow_calls,
-            1,
-            "the non-last-use call should route to the borrow version:\n{}",
-            main.join("\n")
-        );
-        assert_eq!(
-            own_calls,
-            1,
-            "the last-use call should stay on the own version:\n{}",
-            main.join("\n")
+        assert_tally_routing(
+            "routing_last_use",
+            (1, 1),
+            "the non-last-use call should route to the borrow version, and the last-use call \
+             should stay on the own version",
         );
     }
 
@@ -541,14 +532,10 @@ mod integration_tests {
     /// borrowed, so the caller makes no retain for it.
     #[test]
     fn test_routing_owns_a_last_use_beside_a_borrow() {
-        let (_temp_dir, project_dir) = setup_test_env("routing_last_use_beside_a_borrow");
-        let dump = emit_main_rc_ir(&project_dir);
-        let main = main_block(&dump, "Main::tally");
-        assert_eq!(
-            tally_call_routing(&main),
+        let dump = assert_tally_routing(
+            "routing_last_use_beside_a_borrow",
             (1, 0),
-            "the call should route to a borrowing version:\n{}",
-            main.join("\n")
+            "the call should route to a borrowing version",
         );
         let tally_sig = sig_line(&dump, "fn Main::tally", |n| n.contains("#borrow"));
         assert!(
@@ -710,7 +697,8 @@ mod integration_tests {
     /// The first argument variable of a call on a dump line.
     fn call_first_arg(line: &str) -> &str {
         let (_, args) = line
-            .split_once('(')
+            .split_once(" = ")
+            .and_then(|(_, rhs)| rhs.split_once('('))
             .unwrap_or_else(|| panic!("the line carries no call:\n{}", line));
         args.split([',', ')']).next().unwrap().trim()
     }
@@ -1126,7 +1114,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_test_env("sink_retain");
         let dump = build_project_run_and_read_rc_ir(&project_dir, "max", "7");
 
-        let function = rc_ir_function_bodies(&dump, "LsCap@walk")
+        let function = rc_ir_function_bodies(&dump, &format!("{}@walk", LS_CAP_PREFIX))
             .into_iter()
             .find(|function| function.starts_with("fn Std::loop#"))
             .unwrap_or_else(|| panic!("no copy of `loop` runs the body of `walk`:\n{}", dump));

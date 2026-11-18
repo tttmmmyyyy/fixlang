@@ -9,6 +9,13 @@ use std::{mem, rc::Rc};
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct SetVar(u32);
 
+impl SetVar {
+    /// The index of the variable, which a dump writes it by.
+    pub fn index(self) -> u32 {
+        self.0
+    }
+}
+
 /// A lambda of the program, as its index into `Analysis::lambdas`.
 pub type LamId = u32;
 
@@ -234,10 +241,5 @@ impl Solver {
     pub fn members_mut(&mut self, v: SetVar) -> &mut Vec<Member> {
         let root = self.find(v);
         &mut self.members[root.0 as usize]
-    }
-
-    /// The index of `v`, which a dump writes it by.
-    pub fn index(v: SetVar) -> u32 {
-        v.0
     }
 }

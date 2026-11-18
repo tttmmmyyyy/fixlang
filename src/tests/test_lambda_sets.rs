@@ -592,6 +592,25 @@ fn test_a_global_read_back_from_a_struct_and_its_uncurried_call_compute_both() {
     test_source(&global_read_back_source(), Configuration::develop_mode());
 }
 
+/// Runs `source` under the development configuration, and asserts that it prints `expected_output`
+/// and that the body of each global of `globals`, which prints `evaluating <name>` on stderr, runs
+/// once.
+fn assert_prints_and_evaluates_each_once(source: &str, expected_output: &str, globals: &[&str]) {
+    let output = run_source_capture(source, Configuration::develop_mode());
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected_output);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for name in globals {
+        let marker = format!("evaluating {}", name);
+        assert_eq!(
+            stderr.lines().filter(|line| *line == marker).count(),
+            1,
+            "the body of `{}` should run once, and the program printed:\n{}",
+            name,
+            stderr
+        );
+    }
+}
+
 /// A global array of functions read as it is in one place and extended with other lambdas in two
 /// others. Every reference shares the lambda set of its elements, so the program holds one copy of
 /// the global, and its body runs once.
@@ -617,15 +636,7 @@ fn test_a_global_array_of_functions_extended_in_two_places_is_evaluated_once() {
         println((a0(1) + a1(1) + b2(1) + c2(1) + c3(10)).to_string)
     );
     "#;
-    let output = run_source_capture(source, Configuration::develop_mode());
-    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "12");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(
-        stderr.matches("evaluating tbl").count(),
-        1,
-        "the body of the global should run once, and the program printed:\n{}",
-        stderr
-    );
+    assert_prints_and_evaluates_each_once(source, "12", &["tbl"]);
 }
 
 /// A global array of functions and a recursive function taking a function, referring to each
@@ -717,7 +728,7 @@ fn test_a_global_array_holding_a_function_of_its_component_computes_it() {
         Duration::from_secs(600),
         "a global array holding a function of its component",
     );
-    assert_eq!(printed.trim(), "26");
+    assert_eq!(printed, "26");
 }
 
 /// A global value and a function taking a function, referring to each other, where `main` calls
@@ -744,15 +755,7 @@ fn test_a_global_value_in_a_component_with_a_function_taking_a_function_is_evalu
         println((a + v).to_string)
     );
     "#;
-    let output = run_source_capture(source, Configuration::develop_mode());
-    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "16");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(
-        stderr.matches("evaluating v").count(),
-        1,
-        "the body of the global should run once, and the program printed:\n{}",
-        stderr
-    );
+    assert_prints_and_evaluates_each_once(source, "16", &["v"]);
 }
 
 /// A function `z` building closures of `w` over two sets that hold the same lambda when `z` is
@@ -875,23 +878,35 @@ mod dump_tests {
     /// carries no `#`, which every local name of the dump does.
     fn closure_calls(body: &str) -> Vec<&str> {
         body.lines()
-            .filter_map(|line| line.split_once("] = "))
-            .filter_map(|(_, rhs)| rhs.split_once('('))
-            .map(|(callee, _)| callee)
+            .filter_map(rc_ir_callee_of)
             .filter(|callee| callee.contains('#') && !callee.contains("::"))
             .collect()
     }
 
-    /// Asserts that `dump` holds functions named with `name_part`, and that none of them builds a
-    /// closure or calls one: every function value they call is called by name.
-    fn assert_calls_by_name(dump: &str, name_part: &str) {
+    /// Whether some function of `dump` named with `name_part` calls a function value through a
+    /// closure.
+    fn calls_through_a_closure(dump: &str, name_part: &str) -> bool {
+        rc_ir_function_bodies(dump, name_part)
+            .iter()
+            .any(|body| !closure_calls(body).is_empty())
+    }
+
+    /// The functions of `dump` named with `name_part`, as `rc_ir_function_bodies` gives them. Fails
+    /// the test when there are none.
+    fn function_bodies_named(dump: &str, name_part: &str) -> Vec<String> {
         let bodies = rc_ir_function_bodies(dump, name_part);
         assert!(
             !bodies.is_empty(),
             "the dump should hold functions named with `{}`, and it holds none",
             name_part
         );
-        for body in bodies {
+        bodies
+    }
+
+    /// Asserts that `dump` holds functions named with `name_part`, and that none of them builds a
+    /// closure or calls one: every function value they call is called by name.
+    fn assert_calls_by_name(dump: &str, name_part: &str) {
+        for body in function_bodies_named(dump, name_part) {
             assert!(
                 !body.contains("= closure ") && closure_calls(&body).is_empty(),
                 "every function named with `{}` should call the function values it calls by \
@@ -990,9 +1005,7 @@ mod dump_tests {
         let dump =
             build_run_and_read_rc_ir(FOLD_SOURCE, "basic", FOLD_OUTPUT, "a fold given a lambda");
         assert!(
-            rc_ir_function_bodies(&dump, "Std::Iterator::fold")
-                .iter()
-                .any(|body| !closure_calls(body).is_empty()),
+            calls_through_a_closure(&dump, "Std::Iterator::fold"),
             "at `basic` the fold should call its lambda through a closure"
         );
     }
@@ -1375,12 +1388,7 @@ mod dump_tests {
             TWO_ALIKE_ELEMENTS_OUTPUT,
             "a lambda capturing a function built from one of two alike functions",
         );
-        let bodies = rc_ir_function_bodies(&dump, "Main::mk");
-        assert!(
-            !bodies.is_empty(),
-            "the dump should hold functions named with `Main::mk`, and it holds none"
-        );
-        for body in bodies {
+        for body in function_bodies_named(&dump, "Main::mk") {
             assert!(
                 !body.contains("= closure "),
                 "`mk` should build `g` as a capture struct, and this function builds a closure:\n{}",
@@ -1439,9 +1447,7 @@ mod dump_tests {
             "a function given one of two lambdas",
         );
         assert!(
-            rc_ir_function_bodies(&dump, "Main::apply")
-                .iter()
-                .any(|body| !closure_calls(body).is_empty()),
+            calls_through_a_closure(&dump, "Main::apply"),
             "at `basic` `apply` should call its function through a closure"
         );
     }
@@ -1608,9 +1614,7 @@ mod dump_tests {
             "no union should stand for the lambdas"
         );
         assert!(
-            rc_ir_function_bodies(&dump, "Std::Iterator::fold")
-                .iter()
-                .any(|body| !closure_calls(body).is_empty()),
+            calls_through_a_closure(&dump, "Std::Iterator::fold"),
             "the fold should call the lambdas through closures"
         );
     }
@@ -1725,24 +1729,11 @@ fn test_global_values_of_functions_referred_to_in_many_places_are_evaluated_once
         println([p1(1), p2(1), p3(1), r1, r2, r3, h(4), t].to_iter.map(to_string).join(" "))
     );
     "#;
-    let output = run_source_capture(source, Configuration::develop_mode());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout).trim(),
-        "101 2 4 22 7 9 9 33"
+    assert_prints_and_evaluates_each_once(
+        source,
+        "101 2 4 22 7 9 9 33",
+        &["tbl", "tbl2", "add5", "sv"],
     );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    for name in ["tbl", "tbl2", "add5", "sv"] {
-        assert_eq!(
-            stderr
-                .lines()
-                .filter(|line| *line == format!("evaluating {}", name))
-                .count(),
-            1,
-            "the body of `{}` should run once, and the program printed:\n{}",
-            name,
-            stderr
-        );
-    }
 }
 
 /// A recursive function that pushes onto a global array of functions a lambda capturing its own
