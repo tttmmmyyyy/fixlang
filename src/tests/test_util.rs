@@ -480,6 +480,12 @@ fn read_rc_ir_dump_file(dir: &Path, dump_file: &str) -> String {
 /// A dump names a function with `fn ` and a global with `global `, and the last function of a dump
 /// is followed by the globals, so both open a new item and both end the one before.
 pub fn rc_ir_function_bodies(dump: &str, name_part: &str) -> Vec<String> {
+    rc_ir_function_bodies_naming_all(dump, &[name_part])
+}
+
+/// Every function of an RC IR dump whose signature line contains each of `name_parts`, delimited
+/// as `rc_ir_function_bodies` delimits it.
+pub fn rc_ir_function_bodies_naming_all(dump: &str, name_parts: &[&str]) -> Vec<String> {
     let mut bodies = vec![];
     let mut current_body: Option<Vec<&str>> = None;
     for line in dump.lines() {
@@ -487,7 +493,9 @@ pub fn rc_ir_function_bodies(dump: &str, name_part: &str) -> Vec<String> {
             if let Some(body) = current_body.take() {
                 bodies.push(body.join("\n"));
             }
-            current_body = (line.starts_with("fn ") && line.contains(name_part)).then(Vec::new);
+            current_body = (line.starts_with("fn ")
+                && name_parts.iter().all(|part| line.contains(part)))
+            .then(Vec::new);
         }
         if let Some(body) = current_body.as_mut() {
             body.push(line);

@@ -8,36 +8,13 @@
 /// building no union — the property these tests assert.
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{build_project_and_read_rc_ir, setup_case_projects};
+    use crate::tests::test_util::{
+        build_project_and_read_rc_ir, rc_ir_function_bodies_naming_all, setup_case_projects,
+    };
     use std::process::Command;
 
     /// The directory holding this module's case projects.
     const CASES: &str = "src/tests/test_simplify/cases";
-
-    /// Each `fn` block of the dump whose header line contains all of `needles`: the header line
-    /// itself and every line up to the next `fn` header.
-    fn fn_bodies_matching(dump: &str, needles: &[&str]) -> Vec<String> {
-        let mut bodies = Vec::new();
-        let mut current_body: Option<String> = None;
-        for line in dump.lines() {
-            if line.starts_with("fn ") {
-                if let Some(body) = current_body.take() {
-                    bodies.push(body);
-                }
-                if needles.iter().all(|n| line.contains(n)) {
-                    current_body = Some(String::new());
-                }
-            }
-            if let Some(body) = current_body.as_mut() {
-                body.push_str(line);
-                body.push('\n');
-            }
-        }
-        if let Some(body) = current_body.take() {
-            bodies.push(body);
-        }
-        bodies
-    }
 
     /// The header needles of the fold that `to_array` runs over `range(0, 10).map(f)`, the one
     /// function of a case whose answer is an `Array I64`. The call `map` makes to `f` is inlined
@@ -64,7 +41,7 @@ mod integration_tests {
         let (_temp_dir, project_dir) = setup_case_projects(CASES, case);
         let dump = build_project_and_read_rc_ir(&project_dir, "all", "rc_ir.post.txt");
 
-        let bodies = fn_bodies_matching(&dump, needles);
+        let bodies = rc_ir_function_bodies_naming_all(&dump, needles);
         assert!(
             !bodies.is_empty(),
             "no {} in the RC IR dump:\n{}",
