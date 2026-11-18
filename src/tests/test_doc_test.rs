@@ -957,7 +957,7 @@ other = 1;
     for position in ["4:4-5:30", "12:4-13:30"] {
         assert!(
             stderr.contains(&format!(
-                "`#3` is the type for this expression.\n\n{} in \"lib.fix\"",
+                "`#3` is the type expected for this expression.\n\n{} in \"lib.fix\"",
                 position
             )),
             "the expression is reported at {}\n{}",

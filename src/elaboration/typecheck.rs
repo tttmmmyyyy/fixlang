@@ -542,9 +542,9 @@ pub enum ConstraintInstantiationMode {
 pub struct TypeCheckContext {
     /// The number the next type variable created here is named after.
     tyvar_id: u32,
-    /// For each type variable the inference created, by name, the expression it arose at, so that a
-    /// diagnostic naming the variable can point at it. A type variable of a signature has no entry:
-    /// a diagnostic shows it under the name the signature gives it, with no location.
+    /// For each type variable the inference created, by name, the expression or pattern it arose
+    /// at, so that a diagnostic naming the variable can point at it. A type variable of a signature
+    /// has no entry: a diagnostic shows it under the name the signature gives it, with no location.
     tyvar_source: Map<String, TyVarSource>,
     /// The type scheme each name in scope stands for. These are the assumptions of the inference.
     pub scope: Scope<Arc<Scheme>>,
@@ -651,23 +651,23 @@ impl TypeCheckContext {
         }
     }
 
-    /// Records that the type of the expression at `span` is the type variable named `tyvar_name`,
-    /// so that a diagnostic naming that variable can point at the expression. `tyvar_name` must name
-    /// a type variable the inference created. An expression with no source location leaves the
-    /// record as it stands.
+    /// Records that the expression or pattern at `span` is checked against the type variable named
+    /// `tyvar_name`, so that a diagnostic naming that variable can point at it. `tyvar_name` must
+    /// name a type variable the inference created. A `span` of `None` leaves the record as it
+    /// stands.
     fn add_tyvar_source(&mut self, tyvar_name: Name, span: Option<Span>) {
         if let Some(span) = span {
             self.insert_tyvar_source(
                 tyvar_name,
                 TyVarSource {
                     span,
-                    role: TyVarRole::TypeOf,
+                    role: TyVarRole::ExpectedTypeOf,
                 },
             );
         }
     }
 
-    /// Records `source` as the expression the type variable named `tyvar_name` arose at.
+    /// Records `source` as the expression or pattern the type variable named `tyvar_name` arose at.
     /// `tyvar_name` must name a type variable the inference created.
     fn insert_tyvar_source(&mut self, tyvar_name: Name, source: TyVarSource) {
         assert!(
@@ -939,9 +939,9 @@ impl TypeCheckContext {
         Ok((cond_tycon, cond_ti))
     }
 
-    /// Gives `tv1` and `tv2` one source: the expression a diagnostic naming either of them points
-    /// at, and how the variable relates to it. Where both already carry one, `tv2`'s is kept. Only a
-    /// type variable the inference created takes the source.
+    /// Gives `tv1` and `tv2` one source: the expression or pattern a diagnostic naming either of
+    /// them points at, and how the variable relates to it. Where both already carry one, `tv2`'s is
+    /// kept. Only a type variable the inference created takes the source.
     fn unify_tyvar_source(&mut self, tv1: Name, tv2: Name) {
         let src = self
             .tyvar_source
@@ -1693,7 +1693,7 @@ impl TypeCheckContext {
                         // An implicitly given parameter type (for variadic arguments).
                         assert!(*is_var_args);
                         let tv = self.new_tyvar_star();
-                        self.add_tyvar_source(tv.name.clone(), ei.source.clone());
+                        self.add_tyvar_source(tv.name.clone(), e.source.clone());
                         type_from_tyvar(tv)
                     };
                     typed_args.push(self.unify_type_of_expr(e, param_ty)?);
@@ -1809,11 +1809,11 @@ impl TypeCheckContext {
                 // pointer attached separately may not read as a continuation of the message text.
                 let snippet = short_span_snippet(&src.span);
                 let msg = match (&src.role, snippet) {
-                    (TyVarRole::TypeOf, Some(snippet)) => {
-                        format!("{} is the type for `{}`.", prefix, snippet)
+                    (TyVarRole::ExpectedTypeOf, Some(snippet)) => {
+                        format!("{} is the type expected for `{}`.", prefix, snippet)
                     }
-                    (TyVarRole::TypeOf, None) => {
-                        format!("{} is the type for this expression.", prefix)
+                    (TyVarRole::ExpectedTypeOf, None) => {
+                        format!("{} is the type expected for this expression.", prefix)
                     }
                     (TyVarRole::ElementTypeOf, Some(snippet)) => {
                         format!("{} is the element type of `{}`.", prefix, snippet)
@@ -3259,20 +3259,25 @@ fn make_struct_fields_in_declaration_order(
     Ok(ordered)
 }
 
-/// The expression a type variable the inference created arose at, and how the variable relates to it.
+/// The expression or pattern a type variable the inference created arose at, and how the variable
+/// relates to it.
 #[derive(Clone)]
 struct TyVarSource {
-    /// Where the expression stands in the source; a diagnostic naming the variable points here.
+    /// Where the expression or pattern stands in the source; a diagnostic naming the variable
+    /// points here.
     span: Span,
-    /// How the variable relates to the expression.
+    /// How the variable relates to the expression or pattern.
     role: TyVarRole,
 }
 
-/// How a type variable relates to the expression it arose at.
+/// How a type variable relates to the expression or pattern it arose at.
 #[derive(Clone)]
 enum TyVarRole {
-    /// The variable is the type of the expression.
-    TypeOf,
+    /// The variable is the type expected for the expression or pattern: the type it is checked
+    /// against, or, for a variable pattern with no annotation, the type the variable takes. The
+    /// check unifies the variable with the type the expression or pattern has, so an error raised
+    /// before the check may show that type differing from the variable.
+    ExpectedTypeOf,
     /// The variable is the element type of the expression, an array literal with no element.
     ElementTypeOf,
 }
