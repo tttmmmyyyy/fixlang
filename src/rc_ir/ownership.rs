@@ -1231,7 +1231,7 @@ mod tests {
     /// out with.
     ///
     /// `unit_step` states the capture's index and the closure's field count apart from the layout
-    /// `ty_to_object_ty` gives, and `param_ownership_shape` builds a table of that width indexed by
+    /// `ty_to_object_ty` gives, and `borrow::ownership_shape` builds a table of that width indexed by
     /// field index. A closure that grew a field would leave the count behind, and the capture would
     /// be recorded at a field index that is no longer the capture's.
     #[test]
