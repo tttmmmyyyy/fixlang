@@ -80,11 +80,11 @@ use crate::{
 use std::sync::Arc;
 
 /// Moves the capture list of every function given to an op declaring `BuiltinOp::env_operand` into the
-/// op's environment operand, where the function is a global function applied to its capture list,
-/// bound by `let` and used nowhere else. The bodies of the global functions those functions now
+/// op's environment operand, where the function is a global lambda applied to its capture list,
+/// bound by `let` and used nowhere else. The bodies of the global lambdas those functions now
 /// call are then put in place of the calls, on up to `num_threads` threads.
 pub fn run(prg: &mut Program, num_threads: usize) {
-    // For each symbol, the global functions the functions it gives to ops now call.
+    // For each symbol, the global lambdas the functions it gives to ops now call.
     let mut callees_by_caller: Map<FullName, Vec<FullName>> = Map::default();
     for (name, sym) in &mut prg.symbols {
         let expr = sym.expr.as_ref().unwrap();
@@ -148,7 +148,7 @@ struct CaptureListMover<'a> {
     type_env: &'a TypeEnv,
     /// The number of bindings rewritten so far, which tells apart the names each rewrite introduces.
     counter: u32,
-    /// The global functions the rewritten bindings call, in the order they were rewritten.
+    /// The global lambdas the rewritten bindings call, in the order they were rewritten.
     callees: Vec<FullName>,
 }
 

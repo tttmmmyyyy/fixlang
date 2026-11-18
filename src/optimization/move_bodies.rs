@@ -1,4 +1,4 @@
-// Putting the body of a global function where a caller calls it, at the calls where that moves the
+// Putting the body of a global lambda where a caller calls it, at the calls where that moves the
 // body rather than copying it.
 
 use super::{
@@ -55,7 +55,7 @@ pub fn move_bodies_into_callers(
         })
         .collect::<Map<FullName, Arc<ExprNode>>>();
 
-    // How many symbols name each global. A function named by one symbol alone is one whose body has
+    // How many symbols name each global. A lambda named by one symbol alone is one whose body has
     // nowhere else to be, so putting it there moves it rather than copying it.
     let mut naming_symbol_counts: Map<FullName, usize> = Map::default();
     for sym in symbols.values() {
@@ -72,9 +72,9 @@ pub fn move_bodies_into_callers(
         num_threads,
         |(caller, callees)| {
             // The body goes in where that is a move rather than a copy: the caller is the only
-            // symbol naming the function, and it names it as the callee of one call, so the body
-            // ends up in one place and the function itself falls to dead-symbol
-            // elimination. Where the function is named anywhere else, or called more than once,
+            // symbol naming the lambda, and it names it as the callee of one call, so the body
+            // ends up in one place and the lambda itself falls to dead-symbol
+            // elimination. Where the lambda is named anywhere else, or called more than once,
             // placing the body would duplicate it, and how much duplication is worth its gain is the
             // judgement `inline` makes.
             let caller_expr = symbols[caller].expr.as_ref().unwrap();
@@ -86,7 +86,7 @@ pub fn move_bodies_into_callers(
             if moved_bodies.is_empty() {
                 return None;
             }
-            // The function is named by the call alone, so putting the body where its name stands
+            // The lambda is named by the call alone, so putting the body where its name stands
             // leaves the body applied to the arguments the call supplies, however many they are.
             let mut sym = symbols[caller].clone();
             sym.expr = Some(substitute_free_names(caller_expr, moved_bodies));
