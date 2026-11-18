@@ -38,7 +38,7 @@ use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp};
 use crate::misc::{grow_stack, Map};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    count_value_uses, map_children, map_continuation, MatchArm, RcExpr, RcExprNode, RcProgram,
+    continuation_of, count_value_uses, map_children, map_continuation, MatchArm, RcExpr, RcExprNode, RcProgram,
     RcRhs, RcVar,
 };
 use crate::rc_ir::rename::{clone_fresh, copy_suffix, substitute_expr};
@@ -426,19 +426,6 @@ fn replace_tail(node: &RcExprNode, f: &mut dyn FnMut(&RcVar) -> RcExprNode) -> R
         RcExpr::Ret(r) => f(r),
         _ => map_continuation(node, |k| replace_tail(k, f)),
     })
-}
-
-/// What `node` evaluates after its own step. A `ret` ends the chain and has none, so a caller answers
-/// for that case before asking.
-fn continuation_of(node: &RcExprNode) -> &RcExprNode {
-    match node.expr.as_ref() {
-        RcExpr::Ret(v) => unreachable!("`ret {}` ends the chain", v.name.to_string()),
-        RcExpr::Let(_, _, k)
-        | RcExpr::Destructure(_, _, _, k)
-        | RcExpr::Eval(_, k)
-        | RcExpr::Retain(_, _, _, k)
-        | RcExpr::Release(_, _, _, k) => k,
-    }
 }
 
 /// A one-entry substitution map.

@@ -510,6 +510,19 @@ fn for_each_node_inner(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
     }
 }
 
+/// What `node` evaluates after its own step. A `ret` ends the chain and has none, so a caller answers
+/// for that case before asking.
+pub(crate) fn continuation_of(node: &RcExprNode) -> &RcExprNode {
+    match node.expr.as_ref() {
+        RcExpr::Ret(v) => unreachable!("`ret {}` ends the chain", v.name.to_string()),
+        RcExpr::Let(_, _, k)
+        | RcExpr::Destructure(_, _, _, k)
+        | RcExpr::Eval(_, k)
+        | RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k) => k,
+    }
+}
+
 /// `node` with its continuation replaced by what `f` makes of it. A `Ret` has no continuation and
 /// comes back as it is.
 pub(crate) fn map_continuation(
