@@ -1313,7 +1313,7 @@ fn un_bump(pending: &mut PendingRetains, un_bumped: &References) -> UnBump {
     UnBump::InBracket(retain)
 }
 
-/// What `un_bump` did to `pending`, read back from its answer (P17).
+/// Panics unless `answer`, the answer of `un_bump`, describes what the call did to `pending`.
 ///
 /// The answer is what the walk acts on -- `InBracket` records the release as one that closes its
 /// retain, and the other two mark retains needed -- so an answer that does not describe what the
