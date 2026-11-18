@@ -30,9 +30,9 @@ let env1 = (env, c);
 op(.., h, env1, ..)
 ```
 
-where `(env, r_1, ..., r_k)` is the tuple the op applies `h` to, and `F` is a global lambda: every
-such op is given, as its function, the lambda that the builtin building it writes around the
-function the user passed, and `closure_specialization` lifts that lambda to `F`.
+where `(env, r_1, ..., r_k)` is the tuple the op applies `h` to, and `F` is a global lambda: the
+builtin that builds such an op wraps the function the user passed in a lambda and gives the op that
+lambda, and `closure_specialization` lifts it to `F`.
 
 A binding is rewritten when the name it binds is used once, as the function operand of such an op.
 Rewriting the binding changes the type of the name, which a use anywhere else would not accept. The
