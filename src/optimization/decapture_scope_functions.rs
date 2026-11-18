@@ -62,7 +62,7 @@ use crate::{
     ast::{
         builtin_op::BuiltinOpExpr,
         expr::{
-            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_local,
+            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var_typed, var_local,
             ExprNode,
         },
         name::FullName,
@@ -201,7 +201,7 @@ impl CaptureStructMover<'_> {
         let new_env_ty = make_tuple_ty(vec![env_ty.clone(), cap_ty.clone()]);
         let mut op_rewriter = OpRewriter {
             function: &name,
-            cap: var_expr(&cap_name, &cap_ty),
+            cap: expr_var_typed(cap_name.clone(), cap_ty.clone()),
             new_env: local("_op_env"),
             new_env_ty: new_env_ty.clone(),
             env_ty: env_ty.clone(),
@@ -230,18 +230,18 @@ impl CaptureStructMover<'_> {
         )
         .set_type(new_env_ty);
         let mut param_field_pats = vec![("0".to_string(), env_pat)];
-        let mut param_field_exprs = vec![("0".to_string(), var_expr(&env0, &env_ty))];
+        let mut param_field_exprs = vec![("0".to_string(), expr_var_typed(env0.clone(), env_ty.clone()))];
         for (i, ty) in param_field_tys.iter().enumerate().skip(1) {
             let field_name = local(&format!("_{}", i));
             param_field_pats.push((
                 i.to_string(),
                 PatternNode::make_local_var(&field_name, ty.clone()),
             ));
-            param_field_exprs.push((i.to_string(), var_expr(&field_name, ty)));
+            param_field_exprs.push((i.to_string(), expr_var_typed(field_name.clone(), ty.clone())));
         }
         let new_param = local("_arg");
         let call = expr_app_typed(
-            expr_app_typed(func, vec![var_expr(&cap0, &cap_ty)]),
+            expr_app_typed(func, vec![expr_var_typed(cap0.clone(), cap_ty.clone())]),
             vec![expr_make_struct(param_tycon.clone(), param_field_exprs).set_type(param_ty)],
         );
         let new_func = expr_abs_typed(
@@ -250,7 +250,7 @@ impl CaptureStructMover<'_> {
             expr_let_typed(
                 PatternNode::make_struct(param_tycon, param_field_pats)
                     .set_type(new_param_ty.clone()),
-                var_expr(&new_param, &new_param_ty),
+                expr_var_typed(new_param.clone(), new_param_ty.clone()),
                 call,
             ),
         );
@@ -274,11 +274,6 @@ impl CaptureStructMover<'_> {
             expr_let_typed(pat.set_type(new_func_ty), new_func, body),
         ))
     }
-}
-
-/// The name `name` read at type `ty`.
-fn var_expr(name: &FullName, ty: &Arc<TypeNode>) -> Arc<ExprNode> {
-    expr_var(name.clone(), None).set_type(ty.clone())
 }
 
 impl ExprVisitor for CaptureStructMover<'_> {
@@ -348,7 +343,7 @@ impl ExprVisitor for OpRewriter<'_> {
         let env_and_cap = expr_make_struct(
             tycon(make_tuple_name_abs(2)),
             vec![
-                ("0".to_string(), var_expr(&old_env, &self.env_ty)),
+                ("0".to_string(), expr_var_typed(old_env.clone(), self.env_ty.clone())),
                 ("1".to_string(), self.cap.clone()),
             ],
         )

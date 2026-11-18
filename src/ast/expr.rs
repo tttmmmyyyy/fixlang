@@ -1684,6 +1684,11 @@ pub fn expr_var(name: FullName, src: Option<Span>) -> Arc<ExprNode> {
     Arc::new(Expr::Var(var_var(name))).into_expr_node(src)
 }
 
+/// The expression reading `name` at the type `ty`, with no source span.
+pub fn expr_var_typed(name: FullName, ty: Arc<TypeNode>) -> Arc<ExprNode> {
+    expr_var(name, None).set_type(ty)
+}
+
 /// The absolute `FullName` of the internal `Std::#hole` builtin.
 pub fn hole_full_name() -> FullName {
     let mut name = FullName::from_strs(&[STD_NAME], HOLE_NAME);

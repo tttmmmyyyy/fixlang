@@ -63,7 +63,7 @@ If eta expansion is applied to `fix` and it is transformed to `|f||x||p| LLVM[fi
 use std::sync::Arc;
 use crate::{
     ast::{
-        expr::{expr_abs_typed, expr_app_typed, expr_var, var_var, ExprNode},
+        expr::{expr_abs_typed, expr_app_typed, expr_var_typed, var_var, ExprNode},
         name::FullName,
     },
     misc::Map,
@@ -95,7 +95,7 @@ pub fn run_on_expr(expr: Arc<ExprNode>, n: usize) -> Option<Arc<ExprNode>> {
         let var_ty = doms_tys[i].clone();
 
         // Create the variable expression of the additional parameter.
-        let var = expr_var(param.clone(), None).set_type(var_ty);
+        let var = expr_var_typed(param.clone(), var_ty);
 
         // Create the application expression `{body}({var})`.
         body = expr_app_typed(body, vec![var]);

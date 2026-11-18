@@ -4,7 +4,7 @@
 use crate::{
     ast::{
         expr::{
-            expr_abs, expr_abs_typed, expr_let_typed, expr_make_struct, expr_var, var_var, Expr,
+            expr_abs, expr_abs_typed, expr_let_typed, expr_make_struct, expr_var_typed, var_var, Expr,
             ExprNode,
         },
         name::FullName,
@@ -84,7 +84,7 @@ impl CaptureStruct {
             self.tycon.clone(),
             self.fields
                 .iter()
-                .map(|(n, t)| (n.to_string(), expr_var(n.clone(), None).set_type(t.clone())))
+                .map(|(n, t)| (n.to_string(), expr_var_typed(n.clone(), t.clone())))
                 .collect(),
         )
         .set_type(self.ty.clone())
@@ -98,7 +98,7 @@ impl CaptureStruct {
     pub fn lifted_function(&self, param: &FullName, body: Arc<ExprNode>) -> Arc<ExprNode> {
         let unpacked = expr_let_typed(
             self.pattern(),
-            expr_var(param.clone(), None).set_type(self.ty.clone()),
+            expr_var_typed(param.clone(), self.ty.clone()),
             body,
         );
         internalize_let_to_var_at_head(&expr_abs_typed(
