@@ -6,8 +6,8 @@ and the mutating ones behind `mutate_elements` and `mutate_boxed` — are builti
 `BuiltinOp::env_operand`. Such an op applies one of its operands, a function, to a tuple whose first
 field is another of its operands, the environment.
 
-`closure_specialization` lifts every lambda to a global function taking its capture list as the
-first argument, so the function such an op is given is that global function applied to a capture
+`closure_specialization` lifts every lambda to a global lambda taking its capture list as the
+first argument, so the function such an op is given is that global lambda applied to a capture
 list: a closure holding the capture list, built on the heap on every call. This pass moves the
 capture list into the environment instead, so that the function the op is given captures nothing.
 
@@ -47,7 +47,7 @@ where it is built, and `collapse_constructions`, run after this pass, reads the 
 ## Relations to other optimizations
 
 * It runs after `closure_specialization`, which is what turns the function every such op is given
-  into a global function applied to its capture list. Running after it also leaves a lambda given to
+  into a global lambda applied to its capture list. Running after it also leaves a lambda given to
   such an op capturing what it captures while specialization reads it, so a function whose parameter
   the lambda calls is specialized on the closure that parameter receives, as it would be for any
   other lambda calling it.

@@ -19,7 +19,7 @@ use std::sync::Arc;
 ///
 /// A body goes in one level deep: every body is read as it stands before any of them is put
 /// anywhere, and the calls a placed body makes are left as calls. What the program grows by is
-/// therefore bounded by the bodies listed, and a function that reaches itself through the bodies it
+/// therefore bounded by the bodies listed, and a lambda that reaches itself through the bodies it
 /// receives is placed once.
 ///
 /// The callers are rewritten independently of one another, on up to `num_threads` threads.
@@ -108,7 +108,7 @@ pub fn move_bodies_into_callers(
 ///
 /// The body goes into every place the name is written, so one place is what makes putting it there a
 /// move. What that one place is decides the rest: a name passed as an argument, captured, or held as
-/// a value leaves the function itself standing there, which is a body that has to stay. A call
+/// a value leaves the lambda itself standing there, which is a body that has to stay. A call
 /// supplying fewer arguments than the parameters the nested lambdas of the body declare leaves the
 /// rest of them as a lambda in the caller, holding what the partial application would hold; one
 /// supplying more applies what the body returns to the remaining arguments. Either way the body is in
@@ -151,7 +151,7 @@ mod tests {
     use crate::misc::Map;
     use std::sync::Arc;
 
-    /// The name of the global function the `index`-th lambda of `Main::main` was lifted to.
+    /// The name of the global lambda the `index`-th lambda of `Main::main` was lifted to.
     fn lifted(index: u32) -> FullName {
         FullName::from_strs(
             &["Main"],
