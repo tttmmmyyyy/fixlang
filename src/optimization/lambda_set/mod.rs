@@ -8,13 +8,14 @@
 // inferred once and copied for each lambda set it is given. The variables of a component that holds
 // a global value whose body is not a lambda are pinned instead: every reference shares them, so the
 // value has one copy and its body runs once. Specialization then walks from the program's entry,
-// and gives each copy the concrete lambda sets of its parameters. The program is then rewritten:
-// each copy becomes copies of the symbols, and a value whose set's elements make one class,
-// elements naming one lambda that make the same code, becomes that class's capture struct, called
-// by calling the lambda directly. A value whose set's elements make two or more classes becomes an
-// unboxed union of their capture structs, called by matching the variant and calling its class's
-// lambda directly. A set no capture struct or union can stand for stays a set of closures
-// (`represent::represent` lists them).
+// and gives each copy the concrete lambda sets of its parameters. The program is then rewritten.
+// Each copy of a component becomes a copy of each of its symbols. The elements of a set fall into
+// classes, a class being the elements that name one lambda and make the same code. A value whose
+// set has one class becomes that class's capture struct, and a call of it calls the lambda
+// directly. A value whose set has two or more classes becomes an unboxed union of their capture
+// structs, and a call of it matches the variant and calls that class's lambda directly. A set that
+// no capture struct or union can stand for stays a set of closures (`represent::represent` lists
+// them).
 //
 // The design is laid out in `dev-docs/2026-10-24-lambda-set-specialization/design.md`.
 
@@ -105,9 +106,13 @@ mod tests {
 
     /// The lambda sets of a program and the copies they ask for.
     struct Inferred<'p> {
+        /// The program inferred.
         prg: &'p Program,
+        /// The slots of the types of `prg`.
         layout: SlotLayout<'p>,
+        /// The lambda sets of `prg`.
         analysis: Analysis,
+        /// The copies `prg` needs.
         spec: Specialization,
     }
 

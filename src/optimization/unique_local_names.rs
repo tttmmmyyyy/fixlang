@@ -56,6 +56,7 @@ impl Renamer {
 }
 
 impl ExprVisitor for Renamer {
+    /// Writes the name a local variable is renamed to in scope.
     fn start_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -71,6 +72,7 @@ impl ExprVisitor for Renamer {
         StartVisitResult::ReplaceAndReturn(expr)
     }
 
+    /// Writes the names the builtin operation reads as they are renamed in scope.
     fn start_visit_builtin(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -90,6 +92,8 @@ impl ExprVisitor for Renamer {
         StartVisitResult::ReplaceAndReturn(expr)
     }
 
+    /// Gives each parameter a name no other binding of the expression uses, and renames the body
+    /// to match.
     fn start_visit_lam(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -124,6 +128,8 @@ impl ExprVisitor for Renamer {
         StartVisitResult::ReplaceAndReturn(expr)
     }
 
+    /// Gives each name the pattern binds a name no other binding of the expression uses, and renames
+    /// the value to match. The bound expression is renamed in the scope outside the `let`.
     fn start_visit_let(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -165,6 +171,8 @@ impl ExprVisitor for Renamer {
         StartVisitResult::ReplaceAndReturn(expr)
     }
 
+    /// Gives each name an arm's pattern binds a name no other binding of the expression uses, and
+    /// renames the arm's value to match.
     fn start_visit_match(
         &mut self,
         expr: &Arc<ExprNode>,

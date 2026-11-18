@@ -98,7 +98,7 @@ pub struct Solver {
     parent: Vec<u32>,
     /// The number of variables in the tree of each root, which decides which root a union keeps.
     size: Vec<u32>,
-    /// What each root holds. A variable that is not a root holds nothing here.
+    /// What each root holds. The entry of a variable that is not a root is empty.
     members: Vec<Vec<Member>>,
     /// Whether each root is pinned: every reference to its component, and every copy, shares this
     /// one variable, whose members the components inferred later may add to.
@@ -195,7 +195,7 @@ impl Solver {
     }
 
     /// Records that the values at `v` are closures built at run time, for the reason `kind`, found
-    /// in the current symbol. A reason the variable already holds is not recorded twice.
+    /// in the current symbol. Each reason is recorded once per variable.
     pub fn make_dynamic(&mut self, v: SetVar, kind: DynamicKind) {
         let reason = DynamicReason {
             kind,

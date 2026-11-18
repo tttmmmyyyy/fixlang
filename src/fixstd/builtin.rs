@@ -8244,7 +8244,7 @@ impl BuiltinOp for UndefinedInternalOp {
         vec![&mut self.msg_name]
     }
 
-    /// The op returns no value.
+    /// The op halts the program, so no value comes out of it.
     fn lambda_set_flow(&self, _flow: &mut BuiltinFlow) {}
 
     fn result_prov(

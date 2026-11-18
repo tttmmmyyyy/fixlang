@@ -3,8 +3,8 @@
 
 `Pull let` transformation. It floats a `let` outward, out of the bound expression of another `let`
 and out of the function position of an application, and it binds an argument that is not a variable
-to a `let` of its own. `collapse_constructions` runs it between its rounds, which brings a
-construction that sits under `let`s out to the chain of `let`s its reader stands in.
+to a `let` of its own. This brings a construction that sits under `let`s out to the chain of `let`s
+its reader stands in, where `collapse_constructions` can read it.
 
 # Transformation
 

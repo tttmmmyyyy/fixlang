@@ -1,4 +1,4 @@
-//! This module provides functionality to find how a name is used in an expression.
+//! Finds how a name is used in an expression.
 
 use crate::ast::{
     expr::ExprNode,
@@ -75,8 +75,8 @@ impl ExprVisitor for UsageFinder<'_> {
         expr.has_free_var(self.name)
     }
 
-    /// The name standing anywhere a call below did not already take it from as its callee is held
-    /// as a value there, which is what `Elsewhere` records.
+    /// Records `Elsewhere` for the name standing anywhere other than as the callee of a call, since
+    /// it is held as a value there.
     fn start_visit_var(
         &mut self,
         expr: &Arc<ExprNode>,
@@ -112,7 +112,7 @@ impl ExprVisitor for UsageFinder<'_> {
         StartVisitResult::VisitChildren
     }
 
-    /// A call records the name once for standing as the callee.
+    /// Records the name once where it stands as the callee of a call.
     ///
     /// A call of `n` arguments is written as `n` nested applications, and this reads the whole nest
     /// at its outermost node, so the walk goes on into the places the nest holds rather than into
@@ -316,8 +316,8 @@ mod tests {
         }
     }
 
-    /// A call takes the name from the callee position, and records it there once for the whole
-    /// call, with the arguments the call supplies.
+    /// A name standing as the callee of a call is recorded once for the whole call, with the number
+    /// of arguments the call supplies.
     #[test]
     fn a_call_records_its_callee_once() {
         let func = FullName::from_strs(&["Main"], "f");

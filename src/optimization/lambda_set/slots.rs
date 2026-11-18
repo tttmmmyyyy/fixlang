@@ -37,7 +37,8 @@ struct GroupSlots {
     /// One entry per own slot of the group: the type constructor whose runtime calls the functions
     /// at that slot, if any. A value at such a slot is always a closure built at run time.
     own_slots: Vec<Option<TyCon>>,
-    /// For each member and each of its fields, the own slot the field's first own slot is.
+    /// For each member and each of its fields, the position of the field's first own slot among
+    /// the own slots of the group.
     field_offsets: Map<TyCon, Vec<usize>>,
 }
 
@@ -46,7 +47,7 @@ struct GroupSlots {
 enum Binding {
     /// A type whose slots are the given variables.
     Linked(Arc<TypeNode>, Vec<SetVar>),
-    /// A type none of whose slots are tracked: each read of one gets new variables, made Dynamic.
+    /// A type whose slots are untracked: each read of it gets new variables, made Dynamic.
     Untracked(Arc<TypeNode>),
 }
 
@@ -65,8 +66,11 @@ enum OwnSource<'a> {
     /// slots are `own`. An occurrence of a member of the group stands for `own` as a whole; any
     /// other one takes the next own slots from `cursor` on.
     Declared {
+        /// The group whose member's field is being read.
         group: usize,
+        /// The own slots of the instance being read.
         own: &'a [SetVar],
+        /// The position in `own` of the next own slot to hand out.
         cursor: usize,
     },
     /// The declaration is that of a newtype expanded at an argument a type constructor was given
@@ -77,6 +81,7 @@ enum OwnSource<'a> {
 
 /// The slots of the types of one program, and the annotated types built over them.
 pub struct SlotLayout<'e> {
+    /// The type environment declaring the types whose slots are laid out.
     type_env: &'e TypeEnv,
     /// The group of each type constructor, by its layout constructor (`layout_tycon`).
     group_by_layout_tycon: Map<TyCon, usize>,
@@ -671,10 +676,14 @@ struct Annotate<'s> {
 impl SlotFold<SetVar> for Annotate<'_> {
     type Out = String;
 
+    /// `ty` as `TypeNode::to_string` writes it.
     fn short(&mut self, ty: &Arc<TypeNode>) -> String {
         ty.to_string()
     }
 
+    /// `tc` followed by the text of its own slots, if any, in angle brackets, and then by its
+    /// arguments, with an argument containing a space in parentheses. A function is written
+    /// `(a -[s]-> b)`.
     fn applied(
         &mut self,
         _ty: &Arc<TypeNode>,

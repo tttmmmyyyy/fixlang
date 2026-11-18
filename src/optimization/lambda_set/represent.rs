@@ -389,8 +389,8 @@ fn partition_sets(
 ///
 /// 1. A set whose values neither a capture struct nor a union of capture structs can stand for is
 ///    represented by closures: an empty set, a set holding `Elem::Dynamic`, and a set whose layout
-///    holds itself, where the capture structs of its elements hold in place, through the unboxed
-///    fields of the values they capture, a set that holds in place this one again. Such a layout
+///    holds itself. The layout of a set holds itself when the capture structs of its elements hold
+///    in place, through unboxed fields, a set that in turn holds this one in place. Such a layout
 ///    would have no size, as an unboxed type reaching itself has none.
 ///    So is a set step 2 finds too large for a capture struct or a union (`too_large_sets`): its
 ///    elements make more classes than `MAX_LS_UNION_VARIANTS`, or its values would lay out more
@@ -638,8 +638,8 @@ fn name_classes_and_unions(
     );
 }
 
-/// The classes and the unions `name_classes_and_unions` writes, as the nodes of one graph: the classes first,
-/// by their positions in `classes`, then the unions, by their positions in `unions` after them.
+/// The classes and the unions `name_classes_and_unions` writes, as the nodes of one graph: the
+/// classes first, by their positions in `classes`, then the unions, by their positions in `unions`.
 struct NameGraph<'n> {
     /// The lambda sets inferred for the program, whose lambdas the texts name.
     analysis: &'n Analysis,

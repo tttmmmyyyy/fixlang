@@ -58,7 +58,7 @@ mod integration_tests {
     }
 
     /// The names in `text`. A name stands wherever the program mentions it — a function's own line,
-    /// a call, or the type of a capture list named after the copy that receives it.
+    /// a call, or the type of a capture struct named after the copy that receives it.
     fn names_in(text: &str) -> impl Iterator<Item = &str> {
         text.split(|c: char| !(c.is_alphanumeric() || c == '_' || c == ':' || c == '#' || c == '@'))
             .filter(|token| !token.is_empty())

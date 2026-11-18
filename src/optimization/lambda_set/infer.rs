@@ -102,8 +102,8 @@ pub struct Component {
     pub lams: Vec<LamId>,
     /// Every variable the nodes, the lambdas and the references of the component name, each a root
     /// of the solver, and each once. A copy of the component gives each of them a set. `infer`
-    /// fills them in once every component is inferred, and then replaces each variable that
-    /// `types`, `node_types` and the lambdas name with its root.
+    /// fills this list once every component is inferred, and replaces each variable that `types`,
+    /// `node_types` and the lambdas name with its root.
     pub vars: Vec<SetVar>,
     /// The position of each variable of `vars` there.
     pub var_index: Map<SetVar, usize>,
@@ -127,9 +127,10 @@ pub struct NodeType {
 pub enum NameRef {
     /// A local name.
     Local,
-    /// A symbol: one of the component the node is in where `site` is `None`, whose copy the copy
-    /// the node is in refers to, and one of another component otherwise, at the copy the
-    /// reference gives. `ty` is the annotated type the reference has.
+    /// A symbol. Where `site` is `None`, the symbol is in the node's own component, and the
+    /// reference is to the copy of the component the node is in. Otherwise the symbol is in
+    /// another component, and `site` gives the copy referred to. `ty` is the annotated type of the
+    /// reference.
     Global { site: Option<Site>, ty: AType },
 }
 
@@ -679,6 +680,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
     /// The annotated type of the name `name` read by a builtin operation, recorded in the term of
     /// the innermost lambda or body: a name read only by a builtin is still part of what the lambda
     /// captures.
+    ///
     /// `CAP_NAME` is the capture of the innermost lambda, which only a closure object holds, so
     /// that lambda's set is Dynamic.
     fn operand(&mut self, name: &FullName) -> (AType, NameRef) {
@@ -767,7 +769,8 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         names
     }
 
-    /// `bind_pattern`, appending the names to `names`.
+    /// Brings the names `pat` binds into scope and appends them to `names`, recording a node for
+    /// each node of `pat`.
     fn bind_pattern_into(&mut self, pat: &Arc<PatternNode>, ty: &AType, names: &mut Vec<FullName>) {
         self.nodes.push(Some(NodeType {
             ty: ty.clone(),
@@ -1157,8 +1160,8 @@ fn merge_equal_classes(
                 .collect(),
         })
         .collect();
-    // The labels are numbered from 0 with none skipped: the classes kept apart, then one label for
-    // every other class.
+    // The starting classes are numbered from 0 with none skipped: one number for each class kept
+    // apart, then one number shared by every other class.
     let keeps_own_class =
         |c: usize| c < param_count || matches!(classes[c], LambdaSetSchemeClass::Shared(_));
     let mut initial: Vec<usize> = vec![0; n];
@@ -1246,8 +1249,8 @@ fn param_dependence(
 
 /// The parameters of the component that the term `start` depends on, in increasing order: those it
 /// reaches. A term reaches the variables it holds and the terms of the lambdas written inside it,
-/// and a variable reaches what its members name. A parameter's members are not followed: a copy of
-/// the component gives the parameter its value.
+/// and a variable reaches what its members name. The walk stops at a parameter, since a copy of the
+/// component gives the parameter its value.
 fn term_params(
     solver: &mut Solver,
     terms: &[Term],

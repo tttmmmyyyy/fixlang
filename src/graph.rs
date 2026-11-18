@@ -290,7 +290,8 @@ mod tests {
         assert_eq!(scc_ids, vec![0, 0]);
     }
 
-    /// `compute_sccs` on a graph of four SCCs, some of which reach others.
+    /// `compute_sccs` groups the nodes of a graph of four SCCs, some reaching others, and gives an SCC
+    /// an id no larger than that of any SCC it reaches.
     #[test]
     fn test_scc_complex_graph() {
         let graph = Graph::new_with_edges(

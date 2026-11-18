@@ -372,9 +372,9 @@ mod integration_tests {
         (borrow_calls, calls.len() - borrow_calls)
     }
 
-    /// Assert how the `tally` calls in `main` of the test project `case` route: `expected` is the
-    /// number routed to the borrow version and the number left on the owning one, and `what` states
-    /// the expectation in the message.
+    /// Assert how the `tally` calls in `main` of the test project `case` route, and return the dump
+    /// of `Main`: `expected` is the number routed to a borrowing version and the number left on the
+    /// owning one, and `what` states the expectation in the message.
     fn assert_tally_routing(case: &str, expected: (usize, usize), what: &str) -> String {
         let (_temp_dir, project_dir) = setup_test_env(case);
         let dump = emit_main_rc_ir(&project_dir);
@@ -1107,8 +1107,8 @@ mod integration_tests {
     /// Verifies that a retain only one path of a loop body needs is moved onto that path. The body
     /// takes its captures apart at the top, so the tree it captured is retained there for the
     /// capture handed on to the next iteration; the path that starts again from the root hands that
-    /// reference on, and the paths that stop or go on down release it. On those paths the retain and
-    /// the release do nothing between them, and they go together.
+    /// reference on, and the paths that stop or go on down release it. On those paths nothing stands
+    /// between the retain and the release, so the two cancel.
     #[test]
     fn test_retain_sinks_to_the_path_consuming_it() {
         let (_temp_dir, project_dir) = setup_test_env("sink_retain");

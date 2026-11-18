@@ -1,5 +1,5 @@
-// A check that the types of a program agree with one another where its expressions meet, for a pass
-// rewriting the types of a program to run on what it wrote.
+// A check that the types of a program agree where its expressions meet. A pass that rewrites the
+// types of a program runs it on its output.
 
 use crate::ast::{
     expr::{Expr, ExprNode},
@@ -94,7 +94,8 @@ fn ty(e: &ExprNode) -> &Arc<TypeNode> {
 }
 
 impl<'p> Check<'p> {
-    /// Panics unless `a` and `b` are one type, the two types `what` names at the node `e` of `at`.
+    /// Panics unless `a` and `b` are the same type. `what` names the two types in the message, and
+    /// `e` is the node of the symbol `at` where they meet.
     fn same(&self, a: &Arc<TypeNode>, b: &Arc<TypeNode>, at: &str, e: &ExprNode, what: &str) {
         assert!(
             a == b,

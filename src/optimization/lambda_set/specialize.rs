@@ -36,7 +36,7 @@ impl Instance {
 pub struct Specialization {
     /// The concrete sets the copies name.
     pub store: SetStore,
-    /// The copies, in the order they were first asked for: the copy of the root first.
+    /// The copies, in the order they were first asked for: the copy of the entry's component first.
     pub instances: Vec<Instance>,
     /// The index into `instances` of each copy, by its component and the sets of its parameters:
     /// the copy whose `component` and `args` these are.

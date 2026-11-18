@@ -401,8 +401,7 @@ pub struct RcGlobalInit {
 }
 
 impl RcGlobalInit {
-    /// The same global computed by `init`, which a pass over the whole program makes of this one's
-    /// initializer.
+    /// This global with `init` as its initializer, every other field kept.
     pub fn with_init(&self, init: RcExprNode) -> RcGlobalInit {
         RcGlobalInit {
             symbol: self.symbol.clone(),

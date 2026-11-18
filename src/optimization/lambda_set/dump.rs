@@ -90,7 +90,12 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
 }
 
 /// The members of the variable `v`, each lambda with the variables its owner is given by, and
-/// each `Member::Dynamic` with its reason.
+/// each `Member::Dynamic` with its reason. A variable without a name in `var_names` is written
+/// `v<index>`.
+///
+/// # Examples
+/// A variable holding a lambda of `Main::f` whose owner is given `p0`, and a Dynamic member, reads
+/// as `Main::f@lam1[p0], Dynamic (<reason>)`.
 fn describe_members(
     solver: &mut Solver,
     v: SetVar,
@@ -131,7 +136,11 @@ fn describe_members(
     texts.join(", ")
 }
 
-/// The elements of the set `id`.
+/// The elements of the set `id`, each lambda with the sets its owner is given.
+///
+/// # Examples
+/// A set holding a lambda of `Main::f` whose owner is given the set `#2`, and Dynamic, reads as
+/// `Main::f@lam1[#2], Dynamic`.
 fn describe_set(store: &SetStore, id: SetId, lambda_names: &[String]) -> String {
     store
         .elems(id)

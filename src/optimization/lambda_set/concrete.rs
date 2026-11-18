@@ -14,8 +14,8 @@ pub type SetId = u32;
 pub enum Elem {
     /// A value only a closure built at run time stands for.
     Dynamic,
-    /// The values the lambda builds in the copy of its symbol that the sets give its parameters
-    /// (`Lambda::params`).
+    /// The values the lambda builds in the copy of its symbol whose parameters (`Lambda::params`)
+    /// get the listed sets.
     Lam(LamId, Vec<SetId>),
 }
 
@@ -40,9 +40,8 @@ pub enum PendingElem {
 ///
 /// A set may contain itself through the parameters of a lambda in it, as the set of a function
 /// whose lambda captures a function of that set does. Such a set is an infinite tree, held as a
-/// cycle. Two sets are the same set when the trees they unfold to are the same, and the store holds
-/// no two such: a set is held once however it is written, which is what lets a copy of a symbol be
-/// keyed on the sets it is given.
+/// cycle. Two sets are the same set when they unfold to the same tree. The store holds each set
+/// once, however it is written, so a copy of a symbol can be keyed on the sets it is given.
 pub struct SetStore {
     /// The elements of each set, sorted.
     sets: Vec<Vec<Elem>>,
@@ -64,10 +63,11 @@ enum Node {
     Known(SetId),
 }
 
-/// The sets a set lying on a cycle reaches, written so that two sets reaching the same trees are
-/// written alike: the classes `canonical_classes` numbers them into, each by its sorted elements,
-/// whose label is the lambda, `None` for `Elem::Dynamic`. The set itself is one of the classes, so
-/// the classes and the class of the set are the tree it unfolds to.
+/// The sets that a set lying on a cycle reaches, written alike for two sets that reach the same
+/// trees. Each entry is a class of equal sets, in the order `canonical_classes` numbers them, given
+/// as its sorted elements; an element's label is its lambda, or `None` for `Elem::Dynamic`. The set
+/// itself is one of the classes, so the classes and the class of the set give the tree it unfolds
+/// to.
 type CycleClasses = Vec<Vec<ElemKey<Option<LamId>>>>;
 
 impl SetStore {

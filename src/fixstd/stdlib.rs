@@ -57,10 +57,9 @@ use std::sync::Arc;
 /// function.
 pub const FIX_NAME: &str = "fix";
 
-/// Is this symbol `Std::fix` or an instance of it? `Program::determine_symbol_name` names an
-/// instance after the original, followed by the separator and the hash of the type it was
-/// instantiated at, so the separator is what tells `fix#<hash>` apart from a name that merely begins
-/// with `fix`.
+/// Is this symbol `Std::fix` or an instance of it? An instance is named after the original,
+/// followed by `INSTANCIATED_NAME_SEPARATOR` and the hash of the type it is instantiated at, so the
+/// separator is what tells `fix#<hash>` apart from a name that only begins with `fix`.
 pub fn is_std_fix(name: &FullName) -> bool {
     if name.namespace.names != [STD_NAME] {
         return false;
@@ -1113,15 +1112,15 @@ mod tests {
         assert!(is_std_fix(&instance_of(STD_NAME, FIX_NAME)));
     }
 
-    /// A name sharing `fix` as a prefix belongs to a distinct global, whose application would be
-    /// rewritten into a fixed-point computation were the predicate to accept it.
+    /// A name that begins with `fix` belongs to another global, which the predicate rejects:
+    /// accepting it would turn that global's applications into a fixed-point computation.
     #[test]
     fn a_name_that_merely_begins_with_fix_is_not_std_fix() {
         assert!(!is_std_fix(&FullName::from_strs(&[STD_NAME], "fixup")));
         assert!(!is_std_fix(&instance_of(STD_NAME, "fixup")));
     }
 
-    /// A module's own `fix` is an ordinary global, so recognition demands the `Std` namespace as
+    /// A module's own `fix` is an ordinary global, so the predicate requires the `Std` namespace as
     /// well as the name.
     #[test]
     fn a_global_named_fix_outside_std_is_not_std_fix() {

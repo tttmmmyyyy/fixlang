@@ -49,8 +49,8 @@ pub struct Rewritten {
     entry: Option<Arc<ExprNode>>,
     /// The rewritten value of each export statement, in order.
     exports: Vec<Arc<ExprNode>>,
-    /// For each symbol, the lifted lambdas it calls, whose bodies `move_bodies_into_callers` may
-    /// put where it calls them.
+    /// For each symbol, the lifted lambdas it calls. `apply` may put the body of each where the
+    /// symbol calls it.
     lifted_callees: Map<FullName, Vec<FullName>>,
 }
 
@@ -141,7 +141,8 @@ struct Rewriter<'a, 'e> {
     copies: Vec<SymbolCopy>,
     /// The copy each copy of a component is made into, as an index into `copies`.
     copy_of_instance: Vec<usize>,
-    /// The copy of each component made for the representations of its body parameters.
+    /// The copy of each component made for the representations of its `Component::body_params`,
+    /// as an index into `copies`.
     copy_of_body_reprs: Map<(usize, Vec<Repr>), usize>,
     /// The lambda each symbol whose body is a lambda has as its body.
     body_lambda: Map<FullName, LamId>,
@@ -308,9 +309,10 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         name
     }
 
-    /// The copy of the component of the class `c`'s lambda that the class stands for, where the
-    /// lambda is the body of its symbol: the copy made for the representations the class gives
-    /// the body parameters, which are the sets at the lambda's interface.
+    /// The copy, as an index into `copies`, whose symbol a value of the class `c` is called
+    /// through, where the class's lambda is the body of its symbol: the copy of the lambda's
+    /// component made for the representations of the sets at the lambda's interface
+    /// (`LamClass::interface_reprs`).
     fn body_copy_of_class(&self, c: u32) -> usize {
         let class = &self.repr.classes[c as usize];
         let lambda = &self.analysis.lambdas[class.lam as usize];
@@ -319,7 +321,12 @@ impl<'a, 'e> Rewriter<'a, 'e> {
     }
 
     /// The name of the global function a value of the class `c` is called through, where the
-    /// class's lambda is not the body of its symbol.
+    /// class's lambda is not the body of its symbol. The class's hash is appended where the lambda
+    /// has more than one class.
+    ///
+    /// # Examples
+    /// The lambda `Main::f@lam2` of one class is lifted as `Main::f#ls_lam2`, and one of two
+    /// classes as `Main::f#ls_lam2#<hash>`.
     fn lifted_name(&self, c: u32) -> FullName {
         let class = &self.repr.classes[c as usize];
         let lambda = &self.analysis.lambdas[class.lam as usize];
@@ -386,7 +393,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         )))
     }
 
-    /// The type constructor named as `tc` with `suffix` appended to its name.
+    /// `tc` with `suffix` appended to its name.
     fn suffixed_tycon(tc: &TyCon, suffix: &str) -> TyCon {
         let mut name = tc.name.clone();
         name.name += suffix;
@@ -394,6 +401,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
     }
 
     /// The name of the variant `i` of the union of type constructor `union`.
+    ///
+    /// # Examples
+    /// The variant 0 of `Main::#LsUnion@<hash>` is named `Main::#LsUnion@<hash>::v0`.
     fn variant_name(union: &TyCon, i: usize) -> FullName {
         FullName::new(
             &union.name.to_namespace(),
@@ -670,9 +680,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         }
     }
 
-    /// Makes the lifted function of the class `c`: it takes the capture struct, takes it apart into
-    /// the names the lambda captures, and is then the lambda, rewritten with the sets of the copy
-    /// standing for the class.
+    /// Makes the lifted function of the class `c`: a function of the capture struct that takes it
+    /// apart into the names the lambda captures and returns the lambda, rewritten with the sets of
+    /// the copy standing for the class.
     fn make_lifted(&mut self, c: u32) {
         let class = &self.repr.classes[c as usize];
         let lambda = &self.analysis.lambdas[class.lam as usize];
@@ -1011,8 +1021,8 @@ impl<'a, 'e> Rewriter<'a, 'e> {
     }
 
     /// The value a lambda of the class `c` builds for a set represented by `own`: the class's capture
-    /// struct, or the variant of the union holding it. `own` represents a set by a capture struct
-    /// or a union, and the class is that capture struct's or a member of that union.
+    /// struct, or the variant of the union holding it. `own` is `Repr::Single(c)`, or a
+    /// `Repr::Union` that has `c` as a member.
     fn class_value(&mut self, own: Repr, c: u32) -> Arc<ExprNode> {
         match own {
             Repr::Single(class) => {
@@ -1109,9 +1119,9 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         e.set_app_func(partial).set_app_args(vec![arg]).set_type(ty)
     }
 
-    /// The application `e` of `func`, a value of the union `u`, to `arg`, of type `ty`: a match of
-    /// the variant `func` holds, each arm calling directly the function its class's values are
-    /// called through. The function and the argument are bound first, in that order, so that each is
+    /// The application `e` of `func`, a value of the union `u`, to `arg`, of type `ty`: a match on
+    /// the variant of `func`, each arm a direct call of the function its class's values are called
+    /// through. The function and the argument are bound first, in that order, so that each is
     /// evaluated once and where the call evaluates it.
     fn call_union(
         &mut self,
@@ -1177,7 +1187,7 @@ fn let_local(name: &str, bound: Arc<ExprNode>, value: Arc<ExprNode>) -> Arc<Expr
 
 /// The fold rewriting a type at the sets of its slots (`Rewriter::rewrite_type_at`).
 struct TypeRewrite<'w, 'a, 'e> {
-    /// The rewrite the types are made in.
+    /// The rewriter, which declares the type constructors the rewritten types name.
     rw: &'w mut Rewriter<'a, 'e>,
     /// The type being rewritten, where it stays a function whatever its own set is represented by.
     root: Option<Arc<TypeNode>>,
@@ -1186,10 +1196,14 @@ struct TypeRewrite<'w, 'a, 'e> {
 impl SlotFold<SetId> for TypeRewrite<'_, '_, '_> {
     type Out = Arc<TypeNode>;
 
+    /// `ty` as it is: it owns no slot.
     fn short(&mut self, ty: &Arc<TypeNode>) -> Arc<TypeNode> {
         ty.clone()
     }
 
+    /// `ty` with its head replaced by the type constructor standing for it at the representations
+    /// of `own`, and its arguments by `folded`. A function type whose own set is represented by a
+    /// capture struct or a union becomes that type constructor, except where it is `root`.
     fn applied(
         &mut self,
         ty: &Arc<TypeNode>,

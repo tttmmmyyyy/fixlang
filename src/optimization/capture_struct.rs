@@ -87,8 +87,8 @@ impl CaptureStruct {
         .set_type(self.ty.clone())
     }
 
-    /// The global function a lambda is lifted to: it takes the capture struct as `param`, takes it
-    /// apart into the captured names, and is then `body`, the lambda.
+    /// The global function a lambda is lifted to: it takes the capture struct as `param`, binds the
+    /// captured names to its fields, and evaluates to `body`, the lambda.
     ///
     /// # Examples
     /// For a struct capturing `n`, `body` `|x| x + n` gives `|param| |x| let Cap { n } = param; x + n`.

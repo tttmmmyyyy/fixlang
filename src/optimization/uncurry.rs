@@ -4,8 +4,8 @@ Uncurrying optimization
 Give each global `g : T1 -> ... -> Tn -> R` an uncurried function `g#func{k}` for each `k` up to
 `n`: a function of type `#Func{k} T1 ... Tk (T{k+1} -> ... -> R)` that takes its first `k` arguments
 at once and captures nothing. Then rewrite each call `g(a1)...(ak)` into the call
-`g#func{k}(a1, ..., ak)`. When a symbol already has the name `g#func{k}`, as one an earlier run
-defined does, the uncurried function is named `g#func{k}#1`, `g#func{k}#2`, ... instead.
+`g#func{k}(a1, ..., ak)`. When the program already has a symbol named `g#func{k}`, such as one an
+earlier run defined, the uncurried function is named `g#func{k}#1`, `g#func{k}#2`, ... instead.
 
 Higher-order uncurrying (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) is not implemented.
 */
@@ -30,11 +30,11 @@ use std::{mem, sync::Arc};
 /// taking the number of arguments they supply. The symbols are rewritten on up to `num_threads`
 /// threads.
 ///
-/// The program may be the output of an earlier run, whose uncurried functions keep their names
-/// and their calls, so this run names its own ones apart from them (`fresh_name`). Calls are rewritten only onto the uncurried functions this run defines. The
-/// passes between two runs, such as lambda set specialization, specialize each uncurried function
-/// to its own callers, so the `g#func2` of an earlier run can take other types than a call
-/// `g#func1(a)(b)` or `g(a)(b)` supplies.
+/// The program may be the output of an earlier run. The uncurried functions of that run keep their
+/// names and their calls, and this run gives its own ones fresh names (`fresh_name`). It rewrites
+/// calls only onto the functions it defines: the passes between two runs, such as lambda set
+/// specialization, specialize each uncurried function to its own callers, so the `g#func2` of an
+/// earlier run can take other types than a call `g#func1(a)(b)` or `g(a)(b)` supplies.
 pub fn run(prg: &mut Program, num_threads: usize) {
     // Define the uncurried functions of each global. An uncurried function gets none, since it
     // takes its arguments at once already.

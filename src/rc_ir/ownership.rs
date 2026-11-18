@@ -395,8 +395,8 @@ pub(crate) fn alias_step(
 /// recorded and would read the value as one produced here — its own to release, when it may be an
 /// operand's. The leaves beneath decide instead. A leaf recorded as `⊥` belongs to a variant the
 /// value does not have and holds no reference, so it names no object and is passed over; a leaf the
-/// op produces names this value itself. A leaf that records several sources
-/// holds one per path it can be reached by, and each of them names an object.
+/// op produces names this value itself. A leaf that records several sources holds one per path it
+/// can be reached by, and each of them names an object.
 ///
 /// # Arguments
 /// * `decl` - the provenance the op declares for its result.

@@ -6,11 +6,11 @@ and the mutating ones behind `mutate_elements` and `mutate_boxed` — are builti
 `BuiltinOp::env_operand`. Such an op applies one of its operands, a function, to a tuple whose first
 field is another of its operands, the environment.
 
-The rewrite by the lambda sets lifts a lambda whose set is represented by closures to a global
-function taking its capture struct as the first argument, and the function such an op is given has
-such a set, so it is that global function applied to a capture struct: a closure holding the capture
-struct, built on the heap on every call. This pass moves the capture struct into the environment
-instead, so that the function the op is given captures nothing.
+Lambda set specialization (`lambda_set`) lifts a lambda whose set it represents by closures to a
+global function taking its capture struct as the first argument. The function given to such an op
+has a set of this kind, so it is that global function applied to a capture struct: a closure holding
+the capture struct, built on the heap on every call. This pass moves the capture struct into the
+environment instead, so that the function the op is given captures nothing.
 
 ```
 let h = F(cap);
@@ -45,9 +45,9 @@ where it is built, and `collapse_constructions`, run after this pass, reads the 
 
 ## Relations to other optimizations
 
-* It runs after the rewrite by the lambda sets, which is what turns the function every such op is
-  given into a global function applied to its capture struct. Running after it also leaves a lambda
-  given to such an op capturing what it captures while the lambda sets are inferred, so a function
+* It runs after lambda set specialization, which is what turns the function every such op is given
+  into a global function applied to its capture struct. Running after it also leaves a lambda given
+  to such an op capturing what it captures while the lambda sets are inferred, so a function
   whose parameter the lambda calls is specialized on the function that parameter receives, as it
   would be for any other lambda calling it.
 * It runs above `collapse_constructions`, which reads the tuple built for `F` into the pattern that

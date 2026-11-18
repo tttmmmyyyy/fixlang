@@ -9,8 +9,8 @@ use crate::{
 /// The call graph of the symbols `names` of `symbols` — an edge from A to B means A's body refers
 /// to B — with a node for each of `names`, numbered in that order.
 ///
-/// `names` lists every symbol the bodies of its symbols refer to. The edges of a node run in the
-/// order of the nodes they reach.
+/// `names` must list every symbol that the bodies of the listed symbols refer to. The edges of a
+/// node run in the order of the nodes they reach.
 pub fn call_graph_of(symbols: &Map<FullName, Symbol>, names: Vec<FullName>) -> Graph<FullName> {
     let name_to_idx = names
         .iter()

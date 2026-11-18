@@ -160,8 +160,8 @@ fn levelled_sites(func: &RcFunc, type_env: &TypeEnv) -> Vec<(RcVar, FieldPath)> 
     sites
 }
 
-/// Own, for each of `sites`, every parameter leaf its candidate objects reach where the version owns
-/// any of them, answering whether any leaf became owned.
+/// For each of `sites`, own every parameter leaf its candidate objects reach where the version owns
+/// any of them. Returns whether any leaf became owned.
 fn level_sites(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -943,10 +943,10 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     ///   Its object then lives through the rest of the callee, where a value read out of it is
     ///   shared, so an update of that value copies it.
     ///
-    /// The units of the first two kinds are lendable, and those of the third are not. Which lendable
-    /// units the callee can borrow is `Versions::levelled_key`'s to decide. A call in tail position
-    /// passes only values at their last use, so it lends no owned value, and no release is left
-    /// after a tail call.
+    /// The units of the first two kinds are lendable, and those of the third are not.
+    /// `Versions::levelled_key` decides which lendable units the callee can borrow. A call in tail
+    /// position passes only values at their last use, so it lends no owned value, and no release is
+    /// left after a tail call.
     fn lendable(&self, callee: &FuncRef, args: &[RcVar], after: &After) -> BorrowKey {
         let params = &self.versions.prog.funcs[callee].params;
         // A function a call names directly takes no capture here (`Versions::borrowers`), so the call
@@ -1887,7 +1887,9 @@ struct RetainSinker<'a> {
 
 /// A retain on its way down: the retain node, and the object it bumps one reference of.
 struct SinkingRetain<'n> {
+    /// The retain node, whose copies are placed where a path needs the reference.
     retain: &'n RcExprNode,
+    /// The object the retain bumps one reference of.
     object: VarPath,
 }
 

@@ -7,8 +7,8 @@ use std::time::Duration;
 
 // Programs whose function values take the paths the lambda set inference follows: through a
 // recursion, into a value that captures a value of its own set, through a `fix` left as a closure,
-// and through the fields and the state of a loop. Each runs under the development configuration,
-// so the inference runs on it and the result is checked under valgrind.
+// and through the fields and the state of a loop. Most run under the development configuration,
+// where the inference runs and valgrind checks the result.
 
 /// A recursion that passes itself a lambda wrapping the function it was given: the lambda at depth
 /// `n` captures the one at depth `n - 1`.
@@ -857,7 +857,7 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
     assert_eq!(printed, CHAIN_OUTPUT, "the chain computed a wrong value");
 }
 
-/// What the rewrite by the lambda sets makes of a program, read off the `--emit-rc-ir` dump: a
+/// What lambda set specialization makes of a program, read off the `--emit-rc-ir` dump: a
 /// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
 /// takes as an argument. The program cannot observe either one — the answer is the same with
 /// function values left as closures — so these assert against the dump.
@@ -995,7 +995,8 @@ mod dump_tests {
     const FOLD_OUTPUT: &str = "135";
 
     /// A function given a lambda calls it by name. At `basic`, where the rewrite does not run, the
-    /// same fold calls the lambda through a closure, which is what says the assertion can see one.
+    /// same fold calls the lambda through a closure, which shows that the assertion can detect a
+    /// call through a closure.
     #[test]
     fn test_a_function_given_a_lambda_calls_it_by_name() {
         let dump =
@@ -1243,7 +1244,7 @@ mod dump_tests {
 
     /// A loop body that hands a value it captured to a call goes into the copy of `Std::loop` made
     /// for it like any other. The array then reaches the call as an argument of that copy, and the
-    /// call goes to the callee's borrow version, so the round counts no reference for it.
+    /// call goes to the callee's borrow version, so the copy retains no reference to the array.
     #[test]
     fn test_a_loop_handing_its_captured_array_to_a_call_counts_no_reference() {
         let dump = build_run_and_read_rc_ir(
@@ -1326,7 +1327,7 @@ mod dump_tests {
 
     /// The functions the chain of iterators carries have their bodies put where the fold calls
     /// them: none stands as a function of its own. Each is lifted out of `main`, takes an `I64` and
-    /// answers one, which tells it from the IO plumbing lifted out of `main` as well.
+    /// returns one, which distinguishes it from the IO plumbing also lifted out of `main`.
     #[test]
     fn test_the_functions_a_chain_of_iterators_carries_leave_no_function_of_their_own() {
         let dump = build_run_and_read_rc_ir(
@@ -1397,8 +1398,8 @@ mod dump_tests {
         }
     }
 
-    /// Whether the function header `header` takes a value of a union that the rewrite represents a
-    /// set of two or more classes by.
+    /// Whether the function header `header` takes a value of a union, which is how the rewrite
+    /// represents a set of two or more classes.
     fn takes_a_union(header: &str) -> bool {
         parameters(header).contains(LS_UNION_PREFIX)
     }
@@ -1472,9 +1473,9 @@ mod dump_tests {
     /// `x * 2 + (x + 1)` over `3..100`.
     const APPLY_READING_A_GLOBAL_OUTPUT: &str = "26411";
 
-    /// A function that refers to a global value whose body is not a lambda, but holds none in its
-    /// own component, is still copied for each lambda set it is given: each copy of `apply` takes
-    /// the set of the one lambda its call gives it, and none takes a union of the two.
+    /// A function that refers to a global value whose body is not a lambda, where no such global
+    /// lies in the function's own component, is copied for each lambda set it is given: each copy of
+    /// `apply` takes the set of the one lambda its call gives it, and none takes a union of the two.
     #[test]
     fn test_a_function_referring_to_a_pinned_global_is_copied_for_each_lambda_it_is_given() {
         let dump = build_run_and_read_rc_ir(
@@ -1586,7 +1587,7 @@ mod dump_tests {
 
     /// A set of as many classes as `MAX_LS_UNION_VARIANTS` is represented by a union, and one of a
     /// class more by closures: the fold over that many lambdas takes their union, and the fold over
-    /// one lambda more calls them through closures, answering the same.
+    /// one lambda more calls them through closures, and both print the expected sum.
     #[test]
     fn test_a_set_of_too_many_classes_is_a_set_of_closures() {
         let source = many_lambdas_source(MAX_LS_UNION_VARIANTS);

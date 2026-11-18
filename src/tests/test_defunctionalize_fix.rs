@@ -591,9 +591,9 @@ fn test_fix_self_escape_and_boxed_captures_are_memory_safe() {
     test_source(source, Configuration::develop_mode());
 }
 
-// A function handed to a callee also reaches the capture list this pass mints. `middle` holds both
-// ends: it hands `op` to `terminal`, which calls it, and stores `op` into the capture list of its own
-// `fix` body.
+/// A function handed to a callee also reaches the capture struct this pass mints. `middle` holds
+/// both ends: it hands `op` to `terminal`, which calls it, and stores `op` into the capture struct of
+/// its own `fix` body.
 #[test]
 fn test_a_function_handed_to_a_callee_and_captured_by_a_fix_body_computes_both() {
     let source = r#"

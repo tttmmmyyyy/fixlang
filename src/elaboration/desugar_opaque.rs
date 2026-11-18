@@ -410,7 +410,7 @@ impl Program {
         // is a cycle when that resolution's concrete type is written in terms of itself.
         let graph = Graph::new_with_edges(resolutions, edges);
         let mut errors = Errors::empty();
-        // The cycles are reported each before the cycles it reaches.
+        // Each cycle is reported before the cycles it reaches.
         for component in graph.components_dependencies_first().iter().rev() {
             if graph.is_cycle(component) {
                 errors.append(opaque_cycle_error(&graph, component));
