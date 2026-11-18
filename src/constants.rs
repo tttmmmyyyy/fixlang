@@ -235,20 +235,20 @@ pub const MAX_LS_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 6;
 /// once those passes take linear time, up to `MAX_UNION_VARIANTS`.
 pub const MAX_LS_UNION_VARIANTS: usize = 32;
 const _: () = assert!(MAX_LS_UNION_VARIANTS <= MAX_UNION_VARIANTS);
-/// How many copies of components the rewrite of lambda set specialization makes per reference a
-/// component makes to another (`Component::sites`), beyond `LS_COPY_BUDGET_BASE`. Past the budget,
-/// the sets the most copied components are given are represented by closures, and the rewrite makes
-/// one copy of each of those components.
+/// How many copies of components lambda set specialization lists (`specialize`) per reference a
+/// component makes to another (`Component::sites`), beyond `LS_COPY_BUDGET_BASE`, before it bounds
+/// the copies the rewrite makes. Past the budget, the sets the most copied components are given are
+/// represented by closures, and the rewrite makes one copy of each of those components.
 ///
 /// A component is copied once per distinct way it is called, and a function calling the next of a
 /// chain from two places, each with a lambda of its own wrapping the function it was given, asks
 /// for twice as many copies of the next as it has of itself: the copies grow exponentially in the
 /// length of the chain. A program without such a chain stays well within the budget, as the copies
-/// of its callees grow with the copies of its callers alone. The budget bounds the copies the
-/// rewrite makes, and `specialize` still lists every way a component is asked for.
+/// of its callees grow with the copies of its callers alone. The list itself stays as long as the
+/// ways the components are asked for.
 pub const LS_COPIES_PER_SITE: usize = 4;
-/// The copies of components the rewrite of lambda set specialization makes in any program before
-/// `LS_COPIES_PER_SITE` bounds them.
+/// The copies of components lambda set specialization lists in any program before
+/// `LS_COPIES_PER_SITE` takes effect.
 pub const LS_COPY_BUDGET_BASE: usize = 64;
 /// The index of the function pointer among a closure's fields.
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;
