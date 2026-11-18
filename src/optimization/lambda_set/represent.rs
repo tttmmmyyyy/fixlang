@@ -16,6 +16,7 @@ use crate::{
     hash::md5_hex,
     misc::{Map, Set},
 };
+use std::cmp::Reverse;
 
 /// How the values of a concrete set are represented.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -237,7 +238,7 @@ fn over_copied_sets(analysis: &Analysis, spec: &Specialization) -> Vec<SetId> {
         copies[instance.component] += 1;
     }
     let mut by_copies: Vec<usize> = (0..copies.len()).collect();
-    by_copies.sort_by_key(|c| (std::cmp::Reverse(copies[*c]), *c));
+    by_copies.sort_by_key(|c| (Reverse(copies[*c]), *c));
     let mut total = spec.instances.len();
     let mut taken: Set<usize> = Set::default();
     for c in by_copies {
