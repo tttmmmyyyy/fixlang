@@ -30,7 +30,9 @@ let env1 = (env, c);
 op(.., h, env1, ..)
 ```
 
-where `(env, r_1, ..., r_k)` is the tuple the op applies `h` to, and `F` is a global function.
+where `(env, r_1, ..., r_k)` is the tuple the op applies `h` to, and `F` is a global lambda: every
+such op is given, as its function, the lambda that the builtin building it writes around the
+function the user passed, and `closure_specialization` lifts that lambda to `F`.
 
 A binding is rewritten when the name it binds is used once, as the function operand of such an op.
 Rewriting the binding changes the type of the name, which a use anywhere else would not accept. The
@@ -152,7 +154,7 @@ struct CaptureListMover<'a> {
 
 impl CaptureListMover<'_> {
     /// `expr` rewritten as the module comment describes, where it is `let h = F(cap); body`, `F` is
-    /// a global function, and `h` is used once in `body`, as the function operand of an op declaring
+    /// a global lambda, and `h` is used once in `body`, as the function operand of an op declaring
     /// `BuiltinOp::env_operand`.
     fn rewrite(&mut self, expr: &Arc<ExprNode>) -> Option<Arc<ExprNode>> {
         let pat = expr.get_let_pat();
