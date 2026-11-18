@@ -281,11 +281,11 @@ pub fn build_object_files<'c>(
     optimization::run(&mut program, &config);
 
     // The layout validation before code generation runs on the program as elaboration left it, and
-    // the optimizations that follow mint types of their own — a capture list, a punched type, the
-    // pair a newtype opens into. Those reach code generation without having been validated, so in
-    // development mode the program is validated again here, where the types are the ones code
-    // generation will actually lay out. A report at this point names a type the compiler built, so
-    // only a development build runs it.
+    // the optimizations that follow mint types of their own — the capture struct `#LsCap` and the
+    // union `#LsUnion` of a lambda set, a punched type, the pair a newtype opens into. Those reach
+    // code generation without having been validated, so in development mode the program is
+    // validated again here, where the types are the ones code generation will actually lay out. A
+    // report at this point names a type the compiler built, so only a development build runs it.
     if config.develop_mode {
         program.validate_layouts()?;
     }
