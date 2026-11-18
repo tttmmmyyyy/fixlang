@@ -865,14 +865,14 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
 /// How many functions the chain of `branching_chain_source` calls through.
 const BRANCHING_CHAIN_DEPTH: usize = 14;
 
-/// What `branching_chain_source()` prints.
+/// What `branching_chain_source(BRANCHING_CHAIN_DEPTH)` prints.
 const BRANCHING_CHAIN_OUTPUT: &str = "1097390";
 
-/// A program calling down a chain of functions `f{BRANCHING_CHAIN_DEPTH}` to `f0`, each calling the
-/// next from two places, each with a lambda of its own wrapping the function it was given. Each copy
-/// of `f{i}` asks for two copies of `f{i - 1}`, one per lambda, so the copies double at each step.
-fn branching_chain_source() -> String {
-    let links: Vec<String> = (1..=BRANCHING_CHAIN_DEPTH)
+/// A program calling down a chain of functions `f{depth}` to `f0`, each calling the next from two
+/// places, each with a lambda of its own wrapping the function it was given. Each copy of `f{i}`
+/// asks for two copies of `f{i - 1}`, one per lambda, so the copies double at each step.
+fn branching_chain_source(depth: usize) -> String {
+    let links: Vec<String> = (1..=depth)
         .map(|i| {
             format!(
                 "f{i} : (I64 -> I64) -> I64 -> I64;\n\
@@ -895,16 +895,29 @@ fn branching_chain_source() -> String {
          \x20   println(f{}(|x| x + n, n).to_string)\n\
          );\n",
         links.join("\n"),
-        BRANCHING_CHAIN_DEPTH
+        depth
     )
 }
 
-/// About three times what the build of `branching_chain_source()` executes with the limit of
+/// A chain of `branching_chain_source` deep enough that the calls of its innermost functions are
+/// widened past the limit of `LS_COPIES_PER_REFERENCE` copies computes what the chain computes: the
+/// widened copies take the functions they are given as closures, alongside the copies that take
+/// them as capture structs.
+#[test]
+fn test_a_chain_of_functions_whose_calls_are_widened_past_the_limit_on_copies_computes_it() {
+    let source = branching_chain_source(8).replace(
+        "println(f8(|x| x + n, n).to_string)",
+        "assert_eq(|_| \"the chain computes its value\", f8(|x| x + n, n), 16265);; pure()",
+    );
+    test_source(&source, Configuration::develop_mode());
+}
+
+/// About three times what the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes with the limit of
 /// `LS_COPIES_PER_REFERENCE` (17 billion on x86-64), and a fifth of what it executes with every
 /// copy made (286 billion).
 const BRANCHING_CHAIN_MAX_INSTRUCTIONS: u64 = 50_000_000_000;
 
-/// The chain of `branching_chain_source` builds in fewer than `BRANCHING_CHAIN_MAX_INSTRUCTIONS`
+/// The chain of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than `BRANCHING_CHAIN_MAX_INSTRUCTIONS`
 /// instructions. The calls of a function past the limit of `LS_COPIES_PER_REFERENCE` copies are
 /// widened to one copy taking closures, so each function of the chain has a bounded number of copies.
 /// Where the machine does not let the test count instructions, the test checks the answer alone.
@@ -914,8 +927,11 @@ fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_bo
         "a chain of {} functions each calling the next with two lambdas",
         BRANCHING_CHAIN_DEPTH
     );
-    let (printed, instructions) =
-        build_counting_instructions_and_run(&branching_chain_source(), "max", &description);
+    let (printed, instructions) = build_counting_instructions_and_run(
+        &branching_chain_source(BRANCHING_CHAIN_DEPTH),
+        "max",
+        &description,
+    );
     assert_eq!(
         printed, BRANCHING_CHAIN_OUTPUT,
         "the chain computed a wrong value"
