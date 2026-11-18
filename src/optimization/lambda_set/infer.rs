@@ -410,6 +410,12 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
     }
 
     /// Records `vars`, met inside the innermost lambda or body, as part of its term.
+    ///
+    /// Outside every lambda and body, which is where the roots of the entry component are read,
+    /// `vars` are recorded nowhere. A term's variables decide what its lambda or body depends on and
+    /// what is pinned with it, and the entry component has neither: a root is a name of a global,
+    /// so it writes no lambda, and the component holds no symbol. The roots' own types are made
+    /// Dynamic instead.
     fn record_vars(&mut self, vars: &[SetVar]) {
         if let Some(frame) = self.frames.last() {
             self.terms[*frame].vars.extend(vars.iter().copied());
