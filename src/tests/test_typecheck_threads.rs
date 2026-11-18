@@ -3,18 +3,12 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::configuration::{Configuration, SubCommand};
-    use crate::elaboration::elaborate_via_config;
-    use crate::error::panic_if_err;
-    use crate::misc::save_temporary_source;
+    use crate::elaboration::{configuration_of_source, elaborate_via_config};
 
     /// The errors `source` fails to type-check with, as the compiler renders them, with the values
     /// checked on `num_threads` threads.
     fn type_errors(source: &str, num_threads: usize) -> String {
-        let mut config = panic_if_err(Configuration::release_mode(SubCommand::Build));
-        config.num_worker_thread = num_threads;
-        let saved_source = panic_if_err(save_temporary_source(source, "typecheck_threads"));
-        config.add_user_source_file(saved_source.file_path);
+        let config = configuration_of_source(source, "typecheck_threads", num_threads);
         match elaborate_via_config(&config) {
             Ok(_) => panic!("the program type-checks"),
             Err(errors) => errors.to_string(),
