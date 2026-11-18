@@ -113,12 +113,7 @@ impl CaptureStruct {
         let field_pats = self
             .fields
             .iter()
-            .map(|(n, t)| {
-                (
-                    n.to_string(),
-                    PatternNode::make_local_var(n, t.clone()),
-                )
-            })
+            .map(|(n, t)| (n.to_string(), PatternNode::make_local_var(n, t.clone())))
             .collect();
         PatternNode::make_struct(self.tycon.clone(), field_pats).set_type(self.ty.clone())
     }

@@ -25,8 +25,8 @@ use crate::{
         program::{Program, Symbol},
         typedecl::Field,
         types::{
-            apply_tycon_args, apply_type_args, kind_star, type_arrow, type_tycon, TyCon, TyConInfo, TyConVariant,
-            Type, TypeNode,
+            apply_tycon_args, apply_type_args, kind_star, type_arrow, type_tycon, TyCon, TyConInfo,
+            TyConVariant, Type, TypeNode,
         },
     },
     constants::{
@@ -1147,7 +1147,10 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             .enumerate()
             .map(|(i, c)| {
                 let payload_ty = type_tycon(&self.capture_tycon(*c));
-                let payload = PatternNode::make_local_var(&FullName::local(LS_PAYLOAD_NAME), payload_ty.clone());
+                let payload = PatternNode::make_local_var(
+                    &FullName::local(LS_PAYLOAD_NAME),
+                    payload_ty.clone(),
+                );
                 let pat =
                     PatternNode::make_union_with_span(Self::variant_name(&tycon, i), None, payload)
                         .set_type(func.type_.clone().unwrap());

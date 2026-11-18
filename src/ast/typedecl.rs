@@ -3,8 +3,8 @@ use crate::ast::name::{FullName, Name};
 use crate::ast::program::EndNode;
 use crate::ast::type_env::TypeEnv;
 use crate::ast::types::{
-    apply_tycon_args, kind_arrow, kind_star, type_from_tyvar, Kind, TyAliasInfo, TyCon,
-    TyConInfo, TyConVariant, TyVar, TypeNode,
+    apply_tycon_args, kind_arrow, kind_star, type_from_tyvar, Kind, TyAliasInfo, TyCon, TyConInfo,
+    TyConVariant, TyVar, TypeNode,
 };
 use crate::elaboration::name_resolution::NameResolutionContext;
 use crate::error::Errors;

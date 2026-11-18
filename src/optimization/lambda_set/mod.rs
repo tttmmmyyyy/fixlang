@@ -364,7 +364,12 @@ main = println("exported");
             let sets = inf.sets_at(name, &path);
             assert!(!sets.is_empty());
             for s in sets {
-                assert!(inf.writing_symbols(s).contains(&None), "{} {:?}", name, path);
+                assert!(
+                    inf.writing_symbols(s).contains(&None),
+                    "{} {:?}",
+                    name,
+                    path
+                );
             }
         }
     }

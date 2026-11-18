@@ -59,9 +59,9 @@ use crate::ast::program::{
 };
 use crate::ast::qual_pred::{QualPred, QualPredScheme};
 use crate::ast::types::{
-    apply_tycon_args, apply_type_args, is_opaque_tyvar, kind_arrow, make_tyvar, tycon, type_arrow, type_from_tyvar,
-    Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant, TyVar, Type,
-    TypeNode,
+    apply_tycon_args, apply_type_args, is_opaque_tyvar, kind_arrow, make_tyvar, tycon, type_arrow,
+    type_from_tyvar, Kind, OpaqueTyConResolution, Scheme, TyCon, TyConInfo, TyConVariant, TyVar,
+    Type, TypeNode,
 };
 use crate::configuration::Configuration;
 use crate::constants::{WRAP_OPAQUE_FUNC_NAME, WRAP_OPAQUE_TYVAR_PREFIX};

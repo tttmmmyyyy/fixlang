@@ -184,7 +184,8 @@ impl<'a> ExprUnwrapper<'a> {
     fn is_local_of_unwrapped_newtype(&self, var_name: &FullName, state: &VisitState) -> bool {
         assert!(var_name.is_local());
         let ty = state.scope.get_local(&var_name.name).unwrap().unwrap();
-        self.type_env.is_unwrapped_newtype(ty.expect_toplevel_tycon().as_ref())
+        self.type_env
+            .is_unwrapped_newtype(ty.expect_toplevel_tycon().as_ref())
     }
 }
 

@@ -86,7 +86,13 @@ impl<'p> Check<'p> {
                             v.name.to_string()
                         )
                     });
-                    self.same(&bound_ty, ty(e), at, e, "a local's type and its reference's");
+                    self.same(
+                        &bound_ty,
+                        ty(e),
+                        at,
+                        e,
+                        "a local's type and its reference's",
+                    );
                 } else {
                     let symbol = self.prg.symbols.get(&v.name).unwrap_or_else(|| {
                         panic!(
