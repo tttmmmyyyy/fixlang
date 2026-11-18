@@ -452,11 +452,8 @@ fn rhs_operands(rhs: &RcRhs, type_env: &TypeEnv) -> Vec<(RcVar, Ownership)> {
             args.iter()
                 .enumerate()
                 .map(|(i, a)| {
-                    let ownership = if op.borrows_operand(i, &arg_tys, type_env) {
-                        Ownership::Borrow
-                    } else {
-                        Ownership::Own
-                    };
+                    let ownership =
+                        Ownership::owned_if(!op.borrows_operand(i, &arg_tys, type_env));
                     (a.clone(), ownership)
                 })
                 .collect()
