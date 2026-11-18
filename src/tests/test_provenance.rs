@@ -9,29 +9,13 @@
 mod integration_tests {
     use crate::constants::LS_CAP_PREFIX;
     use crate::tests::test_util::{
-        build_project_and_read_rc_ir, build_project_run_and_read_rc_ir, copy_dir_recursive,
+        build_project_and_read_rc_ir, build_project_run_and_read_rc_ir, setup_case_projects,
         rc_ir_callee_of, rc_ir_function_bodies,
     };
-    use std::path::{Path, PathBuf};
-    use tempfile::TempDir;
+    use std::path::Path;
 
-    /// The directory in the source tree holding the case projects these tests build.
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_provenance/cases");
-        path
-    }
-
-    /// Copy the test cases into a temporary directory of this test's own, so that parallel test
-    /// runs stay out of each other's way, and return that directory together with the directory of
-    /// the case project named by `case`.
-    fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let dst = temp_dir.path().to_path_buf();
-        copy_dir_recursive(&get_test_cases_dir(), &dst).expect("Failed to copy test cases");
-        let project_dir = dst.join(case);
-        (temp_dir, project_dir)
-    }
+    /// The directory holding this module's case projects.
+    const CASES: &str = "src/tests/test_provenance/cases";
 
     /// Build the case project with `--emit-rc-ir Main` and return the dumped RC IR of the `Main`
     /// module. The build works at the `max` optimization level: the borrow versions and the routing
@@ -190,7 +174,7 @@ mod integration_tests {
     /// field carrying the container's leaf through would make the read's borrow unsound.
     #[test]
     fn test_provenance_dump_field_of_boxed_struct() {
-        let (_temp_dir, project_dir) = setup_test_env("boxed_struct_field");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "boxed_struct_field");
         let dump = emit_main_rc_ir(&project_dir);
 
         assert_binding_prov(&dump, "field", "[unknown]");
@@ -201,7 +185,7 @@ mod integration_tests {
     /// nowhere and released once, at its last use.
     #[test]
     fn test_provenance_dump_field_read_borrows_the_container() {
-        let (_temp_dir, project_dir) = setup_test_env("boxed_struct_field");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "boxed_struct_field");
         let dump = emit_main_rc_ir(&project_dir);
 
         let container = var_bound_as(&dump, "h");
@@ -219,7 +203,7 @@ mod integration_tests {
     /// carries each component's own judgement.
     #[test]
     fn test_provenance_dump_basic() {
-        let (_temp_dir, project_dir) = setup_test_env("basic");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "basic");
         let dump = emit_main_rc_ir(&project_dir);
 
         // `Array::fill` and an array literal produce a fresh array.
@@ -250,7 +234,7 @@ mod integration_tests {
     /// call.
     #[test]
     fn test_provenance_interprocedural_composition() {
-        let (_temp_dir, project_dir) = setup_test_env("interproc");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "interproc");
         let dump = emit_main_rc_ir(&project_dir);
 
         // `echo_arr` returns its array argument unchanged, so its effect — computed to a fixed point
@@ -381,7 +365,7 @@ mod integration_tests {
     /// of `Main`: `expected` is the number routed to a borrowing version and the number left on the
     /// owning one, and `what` states the expectation in the message.
     fn assert_tally_routing(case: &str, expected: (usize, usize), what: &str) -> String {
-        let (_temp_dir, project_dir) = setup_test_env(case);
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, case);
         let dump = emit_main_rc_ir(&project_dir);
         let main = main_block(&dump, "Main::tally");
         assert_eq!(
@@ -401,7 +385,7 @@ mod integration_tests {
     /// absent from the dump, which is taken after dead-code elimination.
     #[test]
     fn test_borrow_rewrite() {
-        let (_temp_dir, project_dir) = setup_test_env("ownership");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "ownership");
         let dump = emit_main_rc_ir(&project_dir);
 
         // `tally` only reads its array, so it gets a borrowing clone (`#borrow`) whose array
@@ -556,7 +540,7 @@ mod integration_tests {
     /// call at `key`'s last use reaches one borrowing `rows` and owning `key`.
     #[test]
     fn test_routing_gives_each_lent_set_its_own_version() {
-        let (_temp_dir, project_dir) = setup_test_env("routing_two_calls_two_versions");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "routing_two_calls_two_versions");
         let dump = emit_main_rc_ir(&project_dir);
         let main = main_block(&dump, "Main::tally");
         let callees: Vec<&str> = main
@@ -632,7 +616,7 @@ mod integration_tests {
     /// owning version, since the object that leaf refers to ends there either way.
     #[test]
     fn test_routing_by_the_objects_lifetime() {
-        let (_temp_dir, project_dir) = setup_test_env("routing_aggregate");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "routing_aggregate");
         let dump = emit_main_rc_ir(&project_dir);
 
         let main = main_block(&dump, "Main::tally");
@@ -663,7 +647,7 @@ mod integration_tests {
     /// reference-counting unit, both naming the same variable at its own field path.
     #[test]
     fn test_split_rc_into_units() {
-        let (_temp_dir, project_dir) = setup_test_env("multiunit");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "multiunit");
         let dump = emit_main_rc_ir(&project_dir);
 
         let main = main_block(&dump, "Main::hand_back");
@@ -713,7 +697,7 @@ mod integration_tests {
     /// stays `fresh` for the operation following the call.
     #[test]
     fn test_cancel_removes_net_zero_bracket() {
-        let (_temp_dir, project_dir) = setup_test_env("ownership");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "ownership");
         let dump = emit_main_rc_ir(&project_dir);
 
         let main = main_block(&dump, "Main::tally");
@@ -749,7 +733,7 @@ mod integration_tests {
     /// releasing the union would free an array its caller still holds.
     #[test]
     fn test_borrow_union_no_double_release() {
-        let (_temp_dir, project_dir) = setup_test_env("union");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "union");
         let dump = emit_main_rc_ir(&project_dir);
 
         // `via_union` reads its array `p` (directly and through `some(p)`), so it has a borrow version
@@ -781,7 +765,7 @@ mod integration_tests {
     /// while an operation on a value read out of a boxed container keeps one.
     #[test]
     fn test_unique_check_elim_local_fresh() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "unique_elim");
         let dump = emit_main_rc_ir(&project_dir);
 
         // A guard that aborts rather than producing a value says nothing about the value it guards,
@@ -862,7 +846,7 @@ mod integration_tests {
     /// re-check a value nothing had shared.
     #[test]
     fn test_unique_check_elim_after_copy() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_after_copy");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "unique_elim_after_copy");
         let dump = emit_main_rc_ir(&project_dir);
 
         // The copy writes into the array it just allocated for the result, so its own check goes.
@@ -891,7 +875,7 @@ mod integration_tests {
     /// elimination is sound for values other threads can reach only as long as this holds.
     #[test]
     fn test_published_value_keeps_its_check() {
-        let (_temp_dir, project_dir) = setup_test_env("mark_threaded");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "mark_threaded");
         let dump = emit_main_rc_ir(&project_dir);
 
         assert_prov_of(&dump, "mark_threaded(", "[unknown]");
@@ -914,7 +898,7 @@ mod integration_tests {
     /// that each drops its own check on a value proven unique, and that the value each returns,
     /// bound as `mutated` and `mutated_io`, is `fresh`.
     fn assert_writes_through_lent_pointer_are_unique(case: &str) {
-        let (_temp_dir, project_dir) = setup_test_env(case);
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, case);
         let dump = emit_main_rc_ir(&project_dir);
 
         // The value each write hands back is uniquely owned, which is what lets the write that
@@ -956,7 +940,7 @@ mod integration_tests {
     /// value to pay for the borrow, so a value still read afterwards is retained nowhere.
     #[test]
     fn test_borrow_boxed_retains_nothing() {
-        let (_temp_dir, project_dir) = setup_test_env("borrow_boxed");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "borrow_boxed");
         let dump = emit_main_rc_ir(&project_dir);
 
         let rec = var_bound_as(&dump, "rec");
@@ -982,7 +966,7 @@ mod integration_tests {
     /// see. The elimination is sound for globals only as long as this holds.
     #[test]
     fn test_global_value_keeps_its_check() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_global");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "unique_elim_global");
         let dump = emit_main_rc_ir(&project_dir);
 
         assert!(
@@ -1001,7 +985,7 @@ mod integration_tests {
     /// lets its check be dropped, so a loop over such a struct re-checks nothing.
     #[test]
     fn test_unique_check_elim_through_struct_field() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_struct_field");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "unique_elim_struct_field");
         let dump = emit_all_rc_ir(&project_dir);
 
         // The loop updates the array through a field of an unboxed struct. Taking that struct apart
@@ -1026,7 +1010,7 @@ mod integration_tests {
     /// sharing, so its update would keep its check.
     #[test]
     fn test_unique_check_elim_after_field_read() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_read_field");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "unique_elim_read_field");
         let dump = emit_main_rc_ir(&project_dir);
 
         for function in ["add_edges_by_getter", "add_edges_by_pattern"] {
@@ -1067,7 +1051,7 @@ mod integration_tests {
     /// that fresh clone, which writes in place.
     #[test]
     fn test_unique_check_elim_shared_loop_entry() {
-        let (_temp_dir, project_dir) = setup_test_env("unique_elim_shared_loop");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "unique_elim_shared_loop");
         let dump = emit_all_rc_ir(&project_dir);
 
         // Specialization clones the loop body per input uniqueness, so a loop entered with a shared
@@ -1116,7 +1100,7 @@ mod integration_tests {
     /// between the retain and the release, so the two cancel.
     #[test]
     fn test_retain_sinks_to_the_path_consuming_it() {
-        let (_temp_dir, project_dir) = setup_test_env("sink_retain");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "sink_retain");
         let dump = build_project_run_and_read_rc_ir(&project_dir, "max", "7");
 
         let function = rc_ir_function_bodies(&dump, &format!("{}@walk", LS_CAP_PREFIX))

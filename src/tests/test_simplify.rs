@@ -8,27 +8,11 @@
 /// building no union — the property these tests assert.
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{build_project_and_read_rc_ir, copy_dir_recursive};
-    use std::path::PathBuf;
+    use crate::tests::test_util::{build_project_and_read_rc_ir, setup_case_projects};
     use std::process::Command;
-    use tempfile::TempDir;
 
-    /// The directory holding the case projects, `src/tests/test_simplify/cases` in the source tree.
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_simplify/cases");
-        path
-    }
-
-    /// Copy the test cases into a fresh temporary directory so parallel test runs do not conflict,
-    /// and return the directory of the named case project.
-    fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let dst = temp_dir.path().to_path_buf();
-        copy_dir_recursive(&get_test_cases_dir(), &dst).expect("Failed to copy test cases");
-        let project_dir = dst.join(case);
-        (temp_dir, project_dir)
-    }
+    /// The directory holding this module's case projects.
+    const CASES: &str = "src/tests/test_simplify/cases";
 
     /// Each `fn` block of the dump whose header line contains all of `needles`: the header line
     /// itself and every line up to the next `fn` header.
@@ -77,7 +61,7 @@ mod integration_tests {
         held_nodes: &[&str],
         expected: &str,
     ) {
-        let (_temp_dir, project_dir) = setup_test_env(case);
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, case);
         let dump = build_project_and_read_rc_ir(&project_dir, "all", "rc_ir.post.txt");
 
         let bodies = fn_bodies_matching(&dump, needles);
@@ -126,7 +110,7 @@ mod integration_tests {
     /// one, and the move is all-or-nothing.
     #[test]
     fn test_loop_state_cancelled() {
-        let (_temp_dir, project_dir) = setup_test_env("loop_two_conditions");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "loop_two_conditions");
         let dump = build_project_and_read_rc_ir(&project_dir, "all", "rc_ir.post.txt");
         assert!(
             !dump.contains("LoopState"),

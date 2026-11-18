@@ -16,25 +16,11 @@
 
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{build_project_and_read_rc_ir, copy_dir_recursive};
-    use std::path::{Path, PathBuf};
-    use tempfile::TempDir;
+    use crate::tests::test_util::{build_project_and_read_rc_ir, setup_case_projects};
+    use std::path::Path;
 
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_locality/cases");
-        path
-    }
-
-    // Copy the test cases into a fresh temporary directory so parallel test runs do not conflict,
-    // and return the directory of the named case project.
-    fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let dst = temp_dir.path().to_path_buf();
-        copy_dir_recursive(&get_test_cases_dir(), &dst).expect("Failed to copy test cases");
-        let project_dir = dst.join(case);
-        (temp_dir, project_dir)
-    }
+    /// The directory holding this module's case projects.
+    const CASES: &str = "src/tests/test_locality/cases";
 
     /// Build the case project with `--emit-rc-ir Main` and return the dumped RC IR of the `Main`
     /// module. The build works at the `max` optimization level, the only one the locality pass runs
@@ -217,7 +203,7 @@ mod integration_tests {
     /// the two doors a program can walk through without naming a global.
     #[test]
     fn test_locality_doors() {
-        let (_temp_dir, project_dir) = setup_test_env("doors");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "doors");
         let dump = emit_main_rc_ir(&project_dir);
 
         // An array of numbers built here reaches nothing but its own storage.
@@ -274,7 +260,7 @@ mod integration_tests {
     /// so the pair turns on the container's locality alone.
     #[test]
     fn test_locality_of_a_read_out_of_a_boxed_container() {
-        let (_temp_dir, project_dir) = setup_test_env("containers");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "containers");
         let dump = emit_main_rc_ir(&project_dir);
 
         let local_pair = binding_vars(&dump, "local_pair");
@@ -297,7 +283,7 @@ mod integration_tests {
     /// the only place a wrong answer here shows up.
     #[test]
     fn test_locality_of_a_take_out_of_a_boxed_container() {
-        let (_temp_dir, project_dir) = setup_test_env("containers");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "containers");
         let dump = emit_main_rc_ir(&project_dir);
 
         let local_pair = binding_vars(&dump, "local_pair");
@@ -315,7 +301,7 @@ mod integration_tests {
     /// as well.
     #[test]
     fn test_a_value_taken_out_of_a_global_is_global() {
-        let (_temp_dir, project_dir) = setup_test_env("containers");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "containers");
         let dump = emit_main_rc_ir(&project_dir);
 
         // `destructure_field_vars` takes the container's whole name, hash included.
@@ -362,7 +348,7 @@ mod integration_tests {
     /// it afterwards is not. A payload of scalars reaches nothing and keeps both facts.
     #[test]
     fn test_locality_of_an_array_written_through_a_raw_pointer() {
-        let (_temp_dir, project_dir) = setup_test_env("containers");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "containers");
         let dump = emit_main_rc_ir(&project_dir);
 
         // The array comes back force-uniqued, so its own reference count is counted directly.
@@ -383,7 +369,7 @@ mod integration_tests {
     /// itself was built by the program.
     #[test]
     fn test_locality_of_a_read_out_of_an_unboxed_struct() {
-        let (_temp_dir, project_dir) = setup_test_env("unbox_struct");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "unbox_struct");
         let dump = emit_main_rc_ir(&project_dir);
 
         let dropped: Vec<String> = vars_of_type(&dump, "Main::Both")
@@ -456,7 +442,7 @@ mod integration_tests {
     /// for every caller reaching the callee through it.
     #[test]
     fn test_a_function_is_cloned_per_input_locality() {
-        let (_temp_dir, project_dir) = setup_test_env("clones");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "clones");
         let dump = emit_main_rc_ir(&project_dir);
 
         // Three localities reach them: built here elements and all, built here holding the global,
@@ -483,7 +469,7 @@ mod integration_tests {
     /// and therefore keeps every dispatch it had.
     #[test]
     fn test_the_clones_of_one_function_are_bounded() {
-        let (_temp_dir, project_dir) = setup_test_env("clone_budget");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "clone_budget");
         let dump = emit_main_rc_ir(&project_dir);
 
         let names = clone_names(&dump, "Main::work");
@@ -501,7 +487,7 @@ mod integration_tests {
     /// than per leaf could not express.
     #[test]
     fn test_the_leaves_of_one_argument_are_keyed_apart() {
-        let (_temp_dir, project_dir) = setup_test_env("shapes");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "shapes");
         let dump = emit_main_rc_ir(&project_dir);
 
         let releases: Vec<&str> = dump
@@ -532,7 +518,7 @@ mod integration_tests {
     /// a local binding is what stands between the pass and a global counted as local.
     #[test]
     fn test_release_of_a_global_is_dropped() {
-        let (_temp_dir, project_dir) = setup_test_env("global_release");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "global_release");
         let dump = emit_main_rc_ir(&project_dir);
 
         let named_global: Vec<&str> = dump
