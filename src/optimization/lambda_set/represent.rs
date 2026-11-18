@@ -220,16 +220,19 @@ impl Builders {
     }
 }
 
-/// The sets the copies of the most copied components give their `Component::body_params`, when the
-/// copies are more than the budget of `LS_COPY_BUDGET_BASE` and `LS_COPIES_PER_SITE` per reference.
-/// The components are taken from the most copied, the first in `Analysis::components` among equals,
-/// until the copies the others have, with one for each component taken, fit the budget. They come to
-/// fit before a component copied once is taken: every copied component but the entry's is referred
-/// to by a reference (`Component::sites`) of another, so one copy of each copied component is fewer
-/// than the budget.
+/// The sets that the copies of the most copied components give to their `Component::body_params`,
+/// when the copies number more than the budget: `LS_COPY_BUDGET_BASE`, plus `LS_COPIES_PER_SITE`
+/// for each reference (`Component::sites`).
 ///
-/// The rewrite makes one copy of a component per representation of the sets of its
-/// `Component::body_params`, so a component whose sets are all represented by closures has one.
+/// Components are taken from the most copied, ties going to the one first in
+/// `Analysis::components`, until the copies fit the budget, counting one copy for each component
+/// taken. They fit before any component copied once is taken: every copied component other than
+/// the entry's is referred to by a reference of another component, so one copy of each copied
+/// component is fewer than the budget.
+///
+/// The rewrite makes one copy of a component for each representation of the sets of its
+/// `Component::body_params`, so a component whose sets are all represented by closures gets one
+/// copy.
 fn over_copied_sets(analysis: &Analysis, spec: &Specialization) -> Vec<SetId> {
     let site_count: usize = analysis.components.iter().map(|c| c.sites.len()).sum();
     let budget = LS_COPY_BUDGET_BASE + LS_COPIES_PER_SITE * site_count;
@@ -445,8 +448,9 @@ fn partition_sets(
 ///
 /// 1. A set whose values neither a capture struct nor a union of capture structs can stand for is
 ///    represented by closures: an empty set, a set holding `Elem::Dynamic`, a set given to the
-///    copies of a component copied past the budget of `LS_COPIES_PER_SITE` (`over_copied_sets`),
-///    and a set whose layout holds itself. The layout of a set holds itself when the capture structs of its elements hold
+///    copies of a component copied past the copy budget (`over_copied_sets`), and a set whose
+///    layout holds itself. The layout of a set holds itself when the capture structs of its elements
+///    hold
 ///    in place, through unboxed fields, a set that in turn holds this one in place. Such a layout
 ///    would have no size, as an unboxed type reaching itself has none.
 ///    So is a set step 2 finds too large for a capture struct or a union (`too_large_sets`): its

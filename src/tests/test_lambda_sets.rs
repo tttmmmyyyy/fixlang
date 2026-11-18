@@ -952,9 +952,9 @@ fn returning_branching_chain_source(depth: usize) -> String {
 }
 
 /// The chain of `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
-/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions and computes its value. The functions whose
-/// parameters are given sets represented by closures past the budget of `LS_COPIES_PER_SITE`
-/// return the lambdas they and the functions after them build.
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions and computes its value. Past the copy budget of
+/// `LS_COPIES_PER_SITE`, the parameters of the most copied functions are given sets represented by
+/// closures, while each function returns the lambdas it and the later functions of the chain build.
 #[test]
 fn test_a_chain_of_functions_each_returning_the_next_with_two_lambdas_builds_in_bounded_work() {
     let description = format!(
@@ -1058,9 +1058,9 @@ mod dump_tests {
         )
     }
 
-    /// The copies of a component called from many copies of its callers stay within the budget of
-    /// `LS_COPIES_PER_SITE`, which only a growth beyond linear in the program goes past: every copy
-    /// of `loop` in `fan_in_source` calls the lambda it was given by name.
+    /// Copies that grow linearly in the program stay within the copy budget of
+    /// `LS_COPIES_PER_SITE`: `fan_in_source` copies `h` and `loop` once per call of `h`, and every
+    /// copy of `loop` calls the lambda it was given by name.
     #[test]
     fn test_a_loop_in_a_function_called_from_many_places_calls_each_lambda_by_name() {
         let dump = build_run_and_read_rc_ir(
