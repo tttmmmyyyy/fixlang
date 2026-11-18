@@ -175,7 +175,9 @@ mod tests {
     /// The table the placement rule reads: `lambda` is named by `naming_symbol_count` symbols of the
     /// program.
     fn naming_symbol_counts(lambda: &FullName, naming_symbol_count: usize) -> Map<FullName, usize> {
-        [(lambda.clone(), naming_symbol_count)].into_iter().collect()
+        [(lambda.clone(), naming_symbol_count)]
+            .into_iter()
+            .collect()
     }
 
     /// A caller naming the lambda as the callee of one call is the shape the body moves at, however

@@ -358,10 +358,7 @@ mod tests {
         let call = call_with_name_at(&func, arg_count, 1, &FullName::from_strs(&["Main"], "x"));
         let callee_usages = run(&call, &func);
         assert!(
-            matches!(
-                callee_usages.as_slice(),
-                [UsageType::CalledAsFunction]
-            ),
+            matches!(callee_usages.as_slice(), [UsageType::CalledAsFunction]),
             "a callee is recorded once for the whole call"
         );
         let struct_ty = tycon(FullName::from_strs(&["Main"], "T"));
