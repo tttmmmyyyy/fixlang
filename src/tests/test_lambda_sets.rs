@@ -1,7 +1,9 @@
 use crate::{
     configuration::Configuration,
     constants::MAX_LS_UNION_VARIANTS,
-    tests::test_util::{build_within_and_run, run_source_capture, test_source},
+    tests::test_util::{
+        build_counting_instructions_and_run, build_within_and_run, run_source_capture, test_source,
+    },
 };
 use std::time::Duration;
 
@@ -897,25 +899,41 @@ fn branching_chain_source() -> String {
     )
 }
 
-/// The chain of `branching_chain_source` builds well within a deadline. Its copies outgrow the
-/// budget of `LS_COPIES_PER_SITE`, and the sets given to the most copied functions are represented
-/// by closures, which makes each of those functions one copy; with every copy kept, the build would
-/// take far longer.
+/// About three times what the build of `branching_chain_source()` executes with the budget of
+/// `LS_COPIES_PER_SITE` (16 billion on x86-64), and a fifth of what it executes with every copy
+/// kept (286 billion).
+const BRANCHING_CHAIN_MAX_INSTRUCTIONS: u64 = 50_000_000_000;
+
+/// The chain of `branching_chain_source` builds in fewer than `BRANCHING_CHAIN_MAX_INSTRUCTIONS`
+/// instructions. Its copies outgrow the budget of `LS_COPIES_PER_SITE`, and the sets given to the
+/// most copied functions are represented by closures, which makes each of those functions one copy.
+/// Where the machine does not let the test count instructions, the test checks the answer alone.
 #[test]
-fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_time() {
-    let printed = build_within_and_run(
-        &branching_chain_source(),
-        "max",
-        Duration::from_secs(40),
-        &format!(
-            "a chain of {} functions each calling the next with two lambdas",
-            BRANCHING_CHAIN_DEPTH
-        ),
+fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_bounded_work() {
+    let description = format!(
+        "a chain of {} functions each calling the next with two lambdas",
+        BRANCHING_CHAIN_DEPTH
     );
+    let (printed, instructions) =
+        build_counting_instructions_and_run(&branching_chain_source(), "max", &description);
     assert_eq!(
         printed, BRANCHING_CHAIN_OUTPUT,
         "the chain computed a wrong value"
     );
+    match instructions {
+        Some(instructions) => assert!(
+            instructions < BRANCHING_CHAIN_MAX_INSTRUCTIONS,
+            "compiling {} executed {} instructions, beyond the bound of {}",
+            description,
+            instructions,
+            BRANCHING_CHAIN_MAX_INSTRUCTIONS
+        ),
+        None => eprintln!(
+            "compiling {}: this machine does not let the test count instructions, so the bound \
+             went unchecked",
+            description
+        ),
+    }
 }
 
 /// What lambda set specialization makes of a program, read off the `--emit-rc-ir` dump: a
