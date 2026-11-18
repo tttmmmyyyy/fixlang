@@ -301,6 +301,22 @@ mod integration_tests {
         );
     }
 
+    /// Asserts that `dump` names a copy of the function named by `func_prefix`, and that each such
+    /// copy holds the body of the lambda it is specialized on.
+    fn assert_each_copy_holds_the_lambdas_body(dump: &str, func_prefix: &str) {
+        let copies = spec_copy_bodies(dump, func_prefix);
+        assert!(
+            !copies.is_empty(),
+            "`{}` should get a copy for the lambda it is given, but the dump names none. The copies \
+             it names: {:?}",
+            func_prefix,
+            functions_named_with(dump, CLOSURE_SPEC_SUFFIX)
+        );
+        for (header, body) in copies {
+            assert_holds_the_lambdas_body(header, body);
+        }
+    }
+
     /// The largest number of distinct copies of the function named by `callee_prefix` that any one
     /// body in `dump` calls by name.
     ///
@@ -687,16 +703,7 @@ mod integration_tests {
     pub fn test_a_copy_takes_the_body_of_the_lambda_it_calls_short_of_an_argument() {
         let (_temp_dir, project_dir) = setup_test_env("curried_loop_body");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", CURRIED_LOOP_BODY_OUTPUT);
-
-        let copies = spec_copy_bodies(&dump, "Std::loop_m");
-        assert!(
-            !copies.is_empty(),
-            "the loop body should get a copy of `Std::loop_m`, but the dump names none: {:?}",
-            functions_named_with(&dump, "Std::loop_m")
-        );
-        for (header, body) in copies {
-            assert_holds_the_lambdas_body(header, body);
-        }
+        assert_each_copy_holds_the_lambdas_body(&dump, "Std::loop_m");
     }
 
     /// A lambda answering with a function it does not write as a lambda is lifted to a function
@@ -708,17 +715,7 @@ mod integration_tests {
     pub fn test_a_copy_takes_the_body_of_the_lambda_it_calls_past_its_last_parameter() {
         let (_temp_dir, project_dir) = setup_test_env("overapplied_body");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", OVERAPPLIED_BODY_OUTPUT);
-
-        let copies = spec_copy_bodies(&dump, "Main::sum_applied_twice#");
-        assert!(
-            !copies.is_empty(),
-            "`sum_applied_twice` should get a copy for the lambda it is given, but the dump names \
-             none: {:?}",
-            functions_named_with(&dump, "Main::")
-        );
-        for (header, body) in copies {
-            assert_holds_the_lambdas_body(header, body);
-        }
+        assert_each_copy_holds_the_lambdas_body(&dump, "Main::sum_applied_twice#");
     }
 
     /// A body goes into a copy where that moves it, and nowhere else. Two copies name the lambda
