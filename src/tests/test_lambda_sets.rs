@@ -913,7 +913,7 @@ fn test_a_chain_of_functions_whose_calls_are_widened_past_the_limit_on_copies_co
 }
 
 /// About three times what the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes with the limit of
-/// `LS_COPIES_PER_REFERENCE` (17 billion on x86-64), and a fifth of what it executes with every
+/// `LS_COPIES_PER_REFERENCE` (19 billion on x86-64), and a fifth of what it executes with every
 /// copy made (286 billion).
 const BRANCHING_CHAIN_MAX_INSTRUCTIONS: u64 = 50_000_000_000;
 
