@@ -6,8 +6,8 @@ and the mutating ones behind `mutate_elements` and `mutate_boxed` — are builti
 `BuiltinOp::env_operand`. Such an op applies one of its operands, a function, to a tuple whose first
 field is another of its operands, the environment.
 
-`closure_specialization` lifts every lambda to a global function taking its capture list as the
-first argument, so the function such an op is given is that global function applied to a capture
+`closure_specialization` lifts every lambda to a global lambda taking its capture list as the
+first argument, so the function such an op is given is that global lambda applied to a capture
 list: a closure holding the capture list, built on the heap on every call. This pass moves the
 capture list into the environment instead, so that the function the op is given captures nothing.
 
@@ -30,7 +30,9 @@ let env1 = (env, c);
 op(.., h, env1, ..)
 ```
 
-where `(env, r_1, ..., r_k)` is the tuple the op applies `h` to, and `F` is a global function.
+where `(env, r_1, ..., r_k)` is the tuple the op applies `h` to, and `F` is a global lambda: the
+builtin that builds such an op wraps the function the user passed in a lambda and gives the op that
+lambda, and `closure_specialization` lifts it to `F`.
 
 A binding is rewritten when the name it binds is used once, as the function operand of such an op.
 Rewriting the binding changes the type of the name, which a use anywhere else would not accept. The
@@ -45,7 +47,7 @@ where it is built, and `collapse_constructions`, run after this pass, reads the 
 ## Relations to other optimizations
 
 * It runs after `closure_specialization`, which is what turns the function every such op is given
-  into a global function applied to its capture list. Running after it also leaves a lambda given to
+  into a global lambda applied to its capture list. Running after it also leaves a lambda given to
   such an op capturing what it captures while specialization reads it, so a function whose parameter
   the lambda calls is specialized on the closure that parameter receives, as it would be for any
   other lambda calling it.
@@ -78,11 +80,11 @@ use crate::{
 use std::sync::Arc;
 
 /// Moves the capture list of every function given to an op declaring `BuiltinOp::env_operand` into the
-/// op's environment operand, where the function is a global function applied to its capture list,
-/// bound by `let` and used nowhere else. The bodies of the global functions those functions now
+/// op's environment operand, where the function is a global lambda applied to its capture list,
+/// bound by `let` and used nowhere else. The bodies of the global lambdas those functions now
 /// call are then put in place of the calls, on up to `num_threads` threads.
 pub fn run(prg: &mut Program, num_threads: usize) {
-    // For each symbol, the global functions the functions it gives to ops now call.
+    // For each symbol, the global lambdas the functions it gives to ops now call.
     let mut callees_by_caller: Map<FullName, Vec<FullName>> = Map::default();
     for (name, sym) in &mut prg.symbols {
         let expr = sym.expr.as_ref().unwrap();
@@ -146,13 +148,13 @@ struct CaptureListMover<'a> {
     type_env: &'a TypeEnv,
     /// The number of bindings rewritten so far, which tells apart the names each rewrite introduces.
     counter: u32,
-    /// The global functions the rewritten bindings call, in the order they were rewritten.
+    /// The global lambdas the rewritten bindings call, in the order they were rewritten.
     callees: Vec<FullName>,
 }
 
 impl CaptureListMover<'_> {
     /// `expr` rewritten as the module comment describes, where it is `let h = F(cap); body`, `F` is
-    /// a global function, and `h` is used once in `body`, as the function operand of an op declaring
+    /// a global lambda, and `h` is used once in `body`, as the function operand of an op declaring
     /// `BuiltinOp::env_operand`.
     fn rewrite(&mut self, expr: &Arc<ExprNode>) -> Option<Arc<ExprNode>> {
         let pat = expr.get_let_pat();

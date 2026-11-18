@@ -113,6 +113,12 @@ mod integration_tests {
     /// What `inlined_body` prints: the first element of the array at or above 5 sits at index 3.
     const INLINED_BODY_OUTPUT: &str = "3";
 
+    /// What `curried_loop_body` prints: the counter added up from 3 while it stays below 10.
+    const CURRIED_LOOP_BODY_OUTPUT: &str = "42";
+
+    /// What `overapplied_body` prints: `3 * i + i` added up for `i` from 4 down to 1.
+    const OVERAPPLIED_BODY_OUTPUT: &str = "40";
+
     /// What `borrowed_capture` prints: `scaled_sum` over the array for the keys 0 to 3.
     const BORROWED_CAPTURE_OUTPUT: &str = "111";
 
@@ -293,6 +299,22 @@ mod integration_tests {
             func_name(header),
             called_lambdas
         );
+    }
+
+    /// Asserts that `dump` names a copy of the function named by `func_prefix`, and that each such
+    /// copy holds the body of the lambda it is specialized on.
+    fn assert_each_copy_holds_the_lambdas_body(dump: &str, func_prefix: &str) {
+        let copies = spec_copy_bodies(dump, func_prefix);
+        assert!(
+            !copies.is_empty(),
+            "`{}` should get a copy for the lambda it is given, but the dump names none. The copies \
+             it names: {:?}",
+            func_prefix,
+            functions_named_with(dump, CLOSURE_SPEC_SUFFIX)
+        );
+        for (header, body) in copies {
+            assert_holds_the_lambdas_body(header, body);
+        }
     }
 
     /// The largest number of distinct copies of the function named by `callee_prefix` that any one
@@ -661,16 +683,30 @@ mod integration_tests {
     pub fn test_a_copy_takes_the_body_of_the_lambda_it_calls() {
         let (_temp_dir, project_dir) = setup_test_env("inlined_body");
         let dump = build_run_and_read_rc_ir(&project_dir, "max", INLINED_BODY_OUTPUT);
+        assert_each_copy_holds_the_lambdas_body(&dump, "Std::loop");
+    }
 
-        let copies = spec_copy_bodies(&dump, "Std::loop");
-        assert!(
-            !copies.is_empty(),
-            "the loop body should get a copy of `Std::loop`, but the dump names none: {:?}",
-            functions_named_with(&dump, "Std::loop")
-        );
-        for (header, body) in copies {
-            assert_holds_the_lambdas_body(header, body);
-        }
+    /// A loop body returning an action of a state monad is a lambda whose body is the lambda the
+    /// action holds, so the function it is lifted to takes one parameter more than the copy of
+    /// `Std::loop_m` passes it: the copy calls it with the accumulator, and applies what it returns
+    /// to the counter. The copy is still the only symbol naming it, so the body goes into the copy.
+    #[test]
+    pub fn test_a_copy_takes_the_body_of_the_lambda_it_calls_short_of_an_argument() {
+        let (_temp_dir, project_dir) = setup_test_env("curried_loop_body");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", CURRIED_LOOP_BODY_OUTPUT);
+        assert_each_copy_holds_the_lambdas_body(&dump, "Std::loop_m");
+    }
+
+    /// A lambda returning a function it does not write as a lambda is lifted to a function taking
+    /// fewer parameters than the copy calling it passes: the copy of `sum_applied_twice` calls it
+    /// with the counter, and applies what it returns to the counter again. The copy is still
+    /// the only symbol naming it, so the body goes into the copy, applied to the argument past its
+    /// last parameter.
+    #[test]
+    pub fn test_a_copy_takes_the_body_of_the_lambda_it_calls_past_its_last_parameter() {
+        let (_temp_dir, project_dir) = setup_test_env("overapplied_body");
+        let dump = build_run_and_read_rc_ir(&project_dir, "max", OVERAPPLIED_BODY_OUTPUT);
+        assert_each_copy_holds_the_lambdas_body(&dump, "Main::sum_applied_twice#");
     }
 
     /// A body goes into a copy where that moves it, and nowhere else. Two copies name the lambda
