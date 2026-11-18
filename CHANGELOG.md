@@ -16,7 +16,7 @@
 - #1017, #1028: A type error about the result of `*x` now quotes the `*x` and points at all of it, as in `` `*pure((1, 2, 3))` of type `(Std::I64, Std::I64, Std::I64)` does not match the expected type `(#1, #2)`. ``. It used to name the variable `#monadic_value0`, which the program never writes, and point at the `*` alone.
 - #1020, #1030: A type error now points a type variable at an expression only when the compiler named the variable, such as `#1`, and leaves out a variable the program writes, such as `a` in a signature. For a lambda `|(x, y)| ...` whose parameter has the type `a`, it used to say `` `a` is the type for `(x, y)`. ``, although the type of `(x, y)` is `(#1, #2)`.
 - #1019, #1035: For the element type of an empty array literal `[]`, a type error now says `` `#1` is the element type of `[]`. `` and points at the whole literal, where it said `` `#1` is the type for this expression. `` and pointed at the `]`.
-- #1032: A type error now says `` `#1` is the type expected for `x`. `` where it said `` `#1` is the type for `x`. ``. An error raised before `x` is checked, such as one about the function `x` is passed to, can show `x` with a type other than `#1`. For a variadic argument of `FFI_CALL`, the sentence now points at that argument, where it pointed at the whole `FFI_CALL[...]`.
+- #1032, #1040: A type error now says `` `#1` is the type expected for `x`. `` where it said `` `#1` is the type for `x`. ``. An error raised before `x` is checked, such as one about the function `x` is passed to, can show `x` with a type other than `#1`. For a variadic argument of `FFI_CALL`, the sentence now points at that argument, where it pointed at the whole `FFI_CALL[...]`.
 
 #### Tool
 
