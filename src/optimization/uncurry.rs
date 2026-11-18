@@ -10,10 +10,9 @@ earlier run defined, the uncurried function is named `g#func{k}#1`, `g#func{k}#2
 Higher-order uncurrying (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) is not implemented.
 */
 
-use super::rename::rename_lam_param_avoiding;
 use crate::{
     ast::{
-        expr::{expr_abs, expr_app, expr_let_typed, expr_var, Expr, ExprNode, Var},
+        expr::{expr_abs, expr_app, expr_var, Expr, ExprNode, Var},
         name::{FullName, Name},
         program::{Program, Symbol},
         types::type_func,
@@ -398,62 +397,5 @@ fn replace_closure_calls_with_func_calls(
         Expr::Eval(side, main) => expr
             .set_eval_side(replace_closure_calls_with_func_calls(side, funcs))
             .set_eval_main(replace_closure_calls_with_func_calls(main, funcs)),
-    }
-}
-
-/// Convert `let a = x in |b| y` to `|b| let a = x in y` if `x` is a variable expression.
-fn internalize_let_to_var_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
-    // Check if the expression is in the form of `let a = x in |b| y`.
-    if !expr.is_let() {
-        return expr.clone();
-    }
-    let lam = expr.get_let_value();
-    if !lam.is_lam() {
-        return expr.clone();
-    }
-    let pat_a = expr.get_let_pat();
-    let bound_x = expr.get_let_bound();
-    if !bound_x.is_var() {
-        return expr.clone();
-    }
-
-    // Rename the parameter of the lambda so that it is not contained in `FV(bound_x) + FV(pat_a)`.
-    let mut black_list = pat_a.pattern.vars();
-    black_list.extend(&mut bound_x.free_vars().into_iter());
-    let lam = rename_lam_param_avoiding(&black_list, lam);
-
-    // Construct the expression.
-    let params_b = lam.get_lam_params();
-    let body_y = lam.get_lam_body();
-    let new_expr = expr_let_typed(pat_a.clone(), bound_x.clone(), body_y.clone());
-    let new_expr = expr_abs(params_b, new_expr, None);
-    new_expr.set_type(expr.type_.clone().unwrap())
-}
-
-/// Rewrites the head of `expr` to begin with as many nested lambdas as possible, by moving each
-/// `let` binding of a variable that stands between them inside the lambdas that follow it.
-pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
-    match &*expr.expr {
-        Expr::Lam(_, body) => {
-            let body = internalize_let_to_var_at_head(body);
-            expr.set_lam_body(body)
-        }
-        Expr::Let(_, _, val) => {
-            // Before applying `internalize_let_to_var_one` into the whole let expression,
-            // apply it to the value of the let expression.
-            // This increases the chance of applying `internalize_let_to_var_one` by changing the value to a lambda expression.
-            let val = internalize_let_to_var_at_head(val);
-            let expr = expr.set_let_value_typed(val);
-
-            // Apply `internalize_let_to_var_one` to the whole let expression.
-            let expr = internalize_let_to_var_one(&expr);
-
-            // If the whole expression changed into a lambda expression, apply `internalize_let_to_var_at_head` again.
-            match &*expr.expr {
-                Expr::Lam(_, _) => internalize_let_to_var_at_head(&expr),
-                _ => expr,
-            }
-        }
-        _ => expr.clone(),
     }
 }
