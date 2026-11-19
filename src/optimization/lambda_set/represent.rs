@@ -8,7 +8,9 @@ use super::{
     specialize::Specialization,
 };
 use crate::{
-    constants::{LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS},
+    constants::{
+        LS_COPY_BUDGET_BASE, LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS,
+    },
     graph::Graph,
     hash::md5_hex,
     misc::{Map, Set},
@@ -216,8 +218,71 @@ impl Builders {
     }
 }
 
+/// The sets that the copies of each component copied past its budget give to its
+/// `Component::body_params`. The budget of a component is `LS_COPY_BUDGET_BASE` copies plus one for
+/// each reference on the way to it from the entry (`count_reaching_references`).
+///
+/// The rewrite makes one copy of a component for each representation of the sets of its
+/// `Component::body_params`, so a component whose sets are all represented by closures gets one
+/// copy.
+fn over_copied_sets(analysis: &Analysis, spec: &Specialization) -> Vec<SetId> {
+    let mut copies = vec![0usize; analysis.components.len()];
+    for instance in &spec.instances {
+        copies[instance.component] += 1;
+    }
+    let reaching = count_reaching_references(analysis);
+    spec.instances
+        .iter()
+        .filter(|instance| {
+            copies[instance.component] > LS_COPY_BUDGET_BASE + reaching[instance.component]
+        })
+        .flat_map(|instance| {
+            analysis.components[instance.component]
+                .body_params
+                .iter()
+                .map(|p| instance.args[*p])
+        })
+        .collect()
+}
+
+/// For each component, how many references (`Component::sites`) lie on a chain of references from
+/// the entry's component to it.
+fn count_reaching_references(analysis: &Analysis) -> Vec<usize> {
+    let count = analysis.components.len();
+    let mut reached_from: Vec<Set<usize>> = vec![Set::default(); count];
+    for c in (0..count).rev() {
+        let mut above = reached_from[c].clone();
+        above.insert(c);
+        for site in &analysis.components[c].sites {
+            assert!(
+                site.component < c,
+                "the component {} refers to the component {}, which comes after it",
+                c,
+                site.component
+            );
+            reached_from[site.component].extend(above.iter().copied());
+        }
+    }
+    reached_from
+        .iter()
+        .enumerate()
+        .map(|(c, from)| {
+            from.iter()
+                .map(|a| {
+                    analysis.components[*a]
+                        .sites
+                        .iter()
+                        .filter(|site| site.component == c || from.contains(&site.component))
+                        .count()
+                })
+                .sum()
+        })
+        .collect()
+}
+
 /// Whether a capture struct, or a union of capture structs, can stand for the values of each set of
-/// `spec`: the set is not empty and holds lambdas alone, and its layout does not hold itself, as
+/// `spec`: the set is not empty and holds lambdas alone, it is not given to the copies of a
+/// component copied past the budget (`over_copied_sets`), and its layout does not hold itself, as
 /// `represent` describes.
 fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builders) -> Vec<bool> {
     let store = &spec.store;
@@ -228,6 +293,9 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
             !elems.is_empty() && elems.iter().all(|elem| matches!(elem, Elem::Lam(..)))
         })
         .collect();
+    for id in over_copied_sets(analysis, spec) {
+        unboxable[id as usize] = false;
+    }
     let mut holds = Graph::new((0..set_count).collect::<Vec<usize>>());
     for id in 0..set_count {
         if !unboxable[id] {
@@ -389,10 +457,11 @@ fn partition_sets(
 /// The representation is decided in three steps.
 ///
 /// 1. A set whose values neither a capture struct nor a union of capture structs can stand for is
-///    represented by closures: an empty set, a set holding `Elem::Dynamic`, and a set whose layout
-///    holds itself. The layout of a set holds itself when the capture structs of its elements hold
-///    in place, through unboxed fields, a set that in turn holds this one in place. Such a layout
-///    would have no size, as an unboxed type reaching itself has none.
+///    represented by closures: an empty set, a set holding `Elem::Dynamic`, a set given to the
+///    copies of a component copied past the copy budget (`over_copied_sets`), and a set whose
+///    layout holds itself. The layout of a set holds itself when the capture structs of its elements
+///    hold in place, through unboxed fields, a set that in turn holds this one in place. Such a
+///    layout would have no size, as an unboxed type reaching itself has none.
 ///    So is a set step 2 finds too large for a capture struct or a union (`too_large_sets`): its
 ///    elements make more classes than `MAX_LS_UNION_VARIANTS`, or its values would lay out more
 ///    capture structs in place than `MAX_LS_IN_PLACE_CAPTURE_STRUCTS`. Step 2 is then taken again with

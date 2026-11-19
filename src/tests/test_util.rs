@@ -323,23 +323,39 @@ pub fn build_within_and_run(
     run_program(&program_path, description)
 }
 
-/// Builds `source` at `opt_level`, runs the program, and returns what it printed on stdout with the
-/// surrounding whitespace removed, together with the instructions the build executed, as
-/// `build_program_counting_instructions` counts them.
+/// Builds `source` at `opt_level` in fewer than `max_instructions` instructions, as
+/// `build_program_counting_instructions` counts them, runs the program, and returns what it printed
+/// on stdout with the surrounding whitespace removed. Where the machine does not let the test count
+/// instructions, the bound goes unchecked, and the test says so on stderr.
 ///
-/// Use this for a test whose subject is how much work a build does: the test bounds the count.
+/// Use this for a test whose subject is how much work a build does.
 ///
 /// # Arguments
 /// * `description` — what is being compiled, as a phrase that reads after "compiling": it is what
 ///   a failure names, e.g. "a chain of 2400 `let`s".
-pub fn build_counting_instructions_and_run(
+pub fn build_within_instructions_and_run(
     source: &str,
     opt_level: &str,
+    max_instructions: u64,
     description: &str,
-) -> (String, Option<u64>) {
+) -> String {
     let (_temp_dir, program_path, instructions) =
         build_program_counting_instructions(source, opt_level, description);
-    (run_program(&program_path, description), instructions)
+    match instructions {
+        Some(instructions) => assert!(
+            instructions < max_instructions,
+            "compiling {} executed {} instructions, beyond the bound of {}",
+            description,
+            instructions,
+            max_instructions
+        ),
+        None => eprintln!(
+            "compiling {}: this machine does not let the test count instructions, so the bound \
+             went unchecked",
+            description
+        ),
+    }
+    run_program(&program_path, description)
 }
 
 /// Runs the program at `program_path`, compiled from what `description` names, and returns what it
@@ -1033,6 +1049,13 @@ pub fn test_sources(sources: &[&str], config: Configuration) {
 /// program cannot be spawned. Use this to assert on the program's stdout / stderr.
 pub fn run_source_capture(source: &str, config: Configuration) -> Output {
     panic_if_err(run_source(source, config)).unwrap()
+}
+
+/// Compiles `source` under `config`, runs it, and asserts that what it prints on stdout, with the
+/// surrounding whitespace removed, is `expected`.
+pub fn assert_source_prints(source: &str, config: Configuration, expected: &str) {
+    let output = run_source_capture(source, config);
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
 }
 
 /// Verify that the parser rejects `source` (parse-level rejection: the

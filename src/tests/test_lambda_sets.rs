@@ -1,7 +1,10 @@
 use crate::{
     configuration::Configuration,
     constants::MAX_LS_UNION_VARIANTS,
-    tests::test_util::{build_within_and_run, run_source_capture, test_source},
+    tests::test_util::{
+        assert_source_prints, build_within_and_run, build_within_instructions_and_run,
+        run_source_capture, test_source,
+    },
 };
 use std::time::Duration;
 
@@ -860,6 +863,165 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
     assert_eq!(printed, CHAIN_OUTPUT, "the chain computed a wrong value");
 }
 
+/// How many functions the chain of `branching_chain_source` calls through.
+const BRANCHING_CHAIN_DEPTH: usize = 14;
+
+/// What `branching_chain_source(BRANCHING_CHAIN_DEPTH)` prints.
+const BRANCHING_CHAIN_OUTPUT: &str = "1097390";
+
+/// How the functions of `chain_of_two_lambda_calls_source` take the function and the number.
+#[derive(Clone, Copy)]
+enum ChainArgs {
+    /// As two arguments: `f(g, x)`.
+    Curried,
+    /// As one tuple: `f((g, x))`.
+    Tupled,
+}
+
+impl ChainArgs {
+    /// The type of a function of the chain returning `result_ty`.
+    fn func_ty(self, result_ty: &str) -> String {
+        match self {
+            ChainArgs::Curried => format!("(I64 -> I64) -> I64 -> {}", result_ty),
+            ChainArgs::Tupled => format!("(I64 -> I64, I64) -> {}", result_ty),
+        }
+    }
+
+    /// The parameters `g` and `x` of a lambda defining a function of the chain.
+    fn params(self) -> &'static str {
+        match self {
+            ChainArgs::Curried => "|g, x|",
+            ChainArgs::Tupled => "|(g, x)|",
+        }
+    }
+
+    /// The call of `func` with the function `g` and the number `x`.
+    fn call(self, func: &str, g: &str, x: &str) -> String {
+        match self {
+            ChainArgs::Curried => format!("{}({}, {})", func, g, x),
+            ChainArgs::Tupled => format!("{}(({}, {}))", func, g, x),
+        }
+    }
+}
+
+/// A program calling down a chain of functions `f{depth}` to `f0`, which return `result_ty` and
+/// take their arguments as `arg_form` says. Each function calls the next from two places, each with
+/// a lambda of its own wrapping the function it was given, and `f0` returns `f0_body`. `main` prints
+/// what `f{depth}` returns for `|x| x + n` and `n`, applied to `result_args`.
+fn chain_of_two_lambda_calls_source(
+    depth: usize,
+    arg_form: ChainArgs,
+    result_ty: &str,
+    f0_body: &str,
+    result_args: &str,
+) -> String {
+    let func_ty = arg_form.func_ty(result_ty);
+    let params = arg_form.params();
+    let links: Vec<String> = (1..=depth)
+        .map(|i| {
+            let next = format!("f{}", i - 1);
+            format!(
+                "f{i} : {func_ty};\n\
+                 f{i} = {params} if x % 3 == 0 {{ {plus} }} else {{ {times} }};",
+                i = i,
+                func_ty = func_ty,
+                params = params,
+                plus = arg_form.call(&next, &format!("|y| g(y) + {}", i), "x / 3"),
+                times = arg_form.call(&next, &format!("|y| g(y) * {}", i), "x - 1"),
+            )
+        })
+        .collect();
+    format!(
+        "module Main;\n\
+         \n\
+         f0 : {func_ty};\n\
+         f0 = {params} {f0_body};\n\
+         {links}\n\
+         \n\
+         main : IO ();\n\
+         main = (\n\
+         \x20   let n = *(pure(100) : IO I64);\n\
+         \x20   println({call}{result_args}.to_string)\n\
+         );\n",
+        func_ty = func_ty,
+        params = params,
+        f0_body = f0_body,
+        links = links.join("\n"),
+        call = arg_form.call(&format!("f{}", depth), "|x| x + n", "n"),
+        result_args = result_args
+    )
+}
+
+/// A program calling down a chain of functions `f{depth}` to `f0`, each calling the next from two
+/// places, each with a lambda of its own wrapping the function it was given, and printing what the
+/// chain computes. Each copy of `f{i}` asks for two copies of `f{i - 1}`, one per lambda, so the
+/// copies double at each step.
+fn branching_chain_source(depth: usize) -> String {
+    chain_of_two_lambda_calls_source(depth, ChainArgs::Curried, "I64", "g(x)", "")
+}
+
+/// About five times what the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes
+/// with the copy budget (`LS_COPY_BUDGET_BASE`) applied (11 billion on x86-64), and a fifth of what
+/// it executes with every copy made (286 billion).
+const BRANCHING_CHAIN_MAX_INSTRUCTIONS: u64 = 50_000_000_000;
+
+/// The chain of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions. The copies of the functions far down the chain
+/// go past the copy budget (`LS_COPY_BUDGET_BASE`), and the sets given to those functions are
+/// represented by closures, which makes each of them one copy in the rewritten program.
+/// Where the machine does not let the test count instructions, the test checks the answer alone.
+#[test]
+fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_bounded_work() {
+    let description = format!(
+        "a chain of {} functions each calling the next with two lambdas",
+        BRANCHING_CHAIN_DEPTH
+    );
+    let printed = build_within_instructions_and_run(
+        &branching_chain_source(BRANCHING_CHAIN_DEPTH),
+        "max",
+        BRANCHING_CHAIN_MAX_INSTRUCTIONS,
+        &description,
+    );
+    assert_eq!(
+        printed, BRANCHING_CHAIN_OUTPUT,
+        "the chain computed a wrong value"
+    );
+}
+
+/// What `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` prints.
+const RETURNING_BRANCHING_CHAIN_OUTPUT: &str = "2175390";
+
+/// The chain of `branching_chain_source`, where each function returns the function it builds in
+/// place of calling it: `f0` returns the function it was given, so what `f{i}` returns holds the
+/// lambdas `f{i}` and every function after it in the chain build. `main` calls what `f{depth}`
+/// returns.
+fn returning_branching_chain_source(depth: usize) -> String {
+    chain_of_two_lambda_calls_source(depth, ChainArgs::Curried, "(I64 -> I64)", "g", "(n)")
+}
+
+/// The chain of `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions and computes its value. Past the copy budget
+/// (`LS_COPY_BUDGET_BASE`), the parameters of the functions far down the chain are given sets
+/// represented by closures, while each function returns the lambdas it and the later functions of
+/// the chain build.
+#[test]
+fn test_a_chain_of_functions_each_returning_the_next_with_two_lambdas_builds_in_bounded_work() {
+    let description = format!(
+        "a chain of {} functions each returning the next with two lambdas",
+        BRANCHING_CHAIN_DEPTH
+    );
+    let printed = build_within_instructions_and_run(
+        &returning_branching_chain_source(BRANCHING_CHAIN_DEPTH),
+        "max",
+        BRANCHING_CHAIN_MAX_INSTRUCTIONS,
+        &description,
+    );
+    assert_eq!(
+        printed, RETURNING_BRANCHING_CHAIN_OUTPUT,
+        "the chain computed a wrong value"
+    );
+}
+
 /// What lambda set specialization makes of a program, read off the `--emit-rc-ir` dump: a
 /// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
 /// takes as an argument. The program cannot observe either one — the answer is the same with
@@ -868,7 +1030,7 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
 mod dump_tests {
     use super::{chain_source, global_read_back_source, CHAIN_DEPTH, CHAIN_OUTPUT};
     use crate::constants::{
-        LS_CAP_PREFIX, LS_COPY_SUFFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX,
+        LS_CAP_PREFIX, LS_COPY_BUDGET_BASE, LS_COPY_SUFFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX,
         MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS,
     };
     use crate::misc::Set;
@@ -918,6 +1080,130 @@ mod dump_tests {
                 body
             );
         }
+    }
+
+    /// How many places of `fan_in_source` call the chain, each with a lambda of its own: more than
+    /// `LS_COPY_BUDGET_BASE`, so that the chain stays within its copy budget only by the references
+    /// on the way to it.
+    const FAN_IN_CALLS: usize = 80;
+    const _: () = assert!(FAN_IN_CALLS > LS_COPY_BUDGET_BASE);
+
+    /// How many functions of `fan_in_source` hand the function they were given to the next.
+    const FAN_IN_DEPTH: usize = 5;
+
+    /// A program calling a chain of functions `h{FAN_IN_DEPTH}` to `h0` from `FAN_IN_CALLS` places,
+    /// each with a lambda of its own, where each `h{i}` hands the function it was given to
+    /// `h{i - 1}` and `h0` hands a lambda calling it to `loop`. Every function of the chain is
+    /// copied once per place, and so is `loop`, though the program refers to `loop` once.
+    fn fan_in_source() -> String {
+        let links: Vec<String> = (1..=FAN_IN_DEPTH)
+            .map(|i| {
+                format!(
+                    "h{i} : (I64 -> I64) -> I64 -> I64;\n\
+                     h{i} = |g, n| if n < 0 {{ h{i}(g, -n) }} else {{ h{next}(g, n) + {i} }};\n",
+                    i = i,
+                    next = i - 1
+                )
+            })
+            .collect();
+        let calls: Vec<String> = (1..=FAN_IN_CALLS)
+            .map(|i| format!("h{}(|x| x + n * {}, n)", FAN_IN_DEPTH, i))
+            .collect();
+        format!(
+            "module Main;\n\
+             \n\
+             h0 : (I64 -> I64) -> I64 -> I64;\n\
+             h0 = |g, n| if n < 0 {{ h0(g, -n) }} else {{ loop((0, 0), |(i, s)| if i == n {{ break $ s }} else {{ continue $ (i + 1, s + g(i)) }}) }};\n\
+             {}\
+             \n\
+             main : IO ();\n\
+             main = (\n\
+             \x20   let n = *(pure(100) : IO I64);\n\
+             \x20   println(({}).to_string)\n\
+             );\n",
+            links.join(""),
+            calls.join(" + ")
+        )
+    }
+
+    /// Copies that grow with the references on the way to a function stay within the copy budget
+    /// (`LS_COPY_BUDGET_BASE`): `fan_in_source` copies each function of its chain and `loop` once per
+    /// call of the chain, and every copy of `loop` calls the lambda it was given by name.
+    #[test]
+    fn test_a_loop_at_the_end_of_a_chain_called_from_many_places_calls_each_lambda_by_name() {
+        let dump = build_run_and_read_rc_ir(
+            &fan_in_source(),
+            "max",
+            "32797200",
+            "a chain of functions called from many places, handing a lambda to `loop`",
+        );
+        assert_calls_by_name(&dump, "Std::loop");
+    }
+
+    /// How many places of `fan_out_under_a_hub_source` call `a`, and how many places of `a` call
+    /// `b`, each with a lambda of its own.
+    const FAN_OUT_CALLS: usize = 10;
+
+    /// How many places of `fan_out_under_a_hub_source` call `u`, each with a lambda of its own.
+    const HUB_CALLS: usize = 30;
+
+    /// A program whose `main` calls `a` from `FAN_OUT_CALLS` places and `u` from `HUB_CALLS`
+    /// places, each with a lambda of its own, where `a` calls `b` from `FAN_OUT_CALLS` places, each
+    /// with a lambda of its own wrapping the function it was given. `b` is copied
+    /// `FAN_OUT_CALLS * FAN_OUT_CALLS` times, and `u` once per place.
+    fn fan_out_under_a_hub_source() -> String {
+        let b_calls: Vec<String> = (1..=FAN_OUT_CALLS)
+            .map(|k| format!("b(|y| g(y) + {}, x)", k))
+            .collect();
+        let a_calls: Vec<String> = (1..=FAN_OUT_CALLS)
+            .map(|i| format!("a(|x| x + n * {}, n)", i))
+            .collect();
+        let u_calls: Vec<String> = (1..=HUB_CALLS)
+            .map(|k| format!("u(|x| x + {}, n)", k))
+            .collect();
+        format!(
+            "module Main;\n\
+             \n\
+             b : (I64 -> I64) -> I64 -> I64;\n\
+             b = |g, x| if x < 0 {{ b(g, -x) }} else {{ g(x) }};\n\
+             \n\
+             a : (I64 -> I64) -> I64 -> I64;\n\
+             a = |g, x| {};\n\
+             \n\
+             u : (I64 -> I64) -> I64 -> I64;\n\
+             u = |g, x| if x < 0 {{ u(g, -x) }} else {{ g(x) }};\n\
+             \n\
+             main : IO ();\n\
+             main = (\n\
+             \x20   let n = *(pure(100) : IO I64);\n\
+             \x20   println(({} + {}).to_string)\n\
+             );\n",
+            b_calls.join(" + "),
+            a_calls.join(" + "),
+            u_calls.join(" + ")
+        )
+    }
+
+    /// The budget of a component counts only the references on the way to it: in
+    /// `fan_out_under_a_hub_source`, the `FAN_OUT_CALLS * FAN_OUT_CALLS` copies of `b` go past
+    /// `LS_COPY_BUDGET_BASE` plus the `2 * FAN_OUT_CALLS` references from `main` to `a` and from
+    /// `a` to `b`, so `b` calls the function it was given through a closure, though the
+    /// `HUB_CALLS` references from `main` to `u` would cover them. `u`, copied once per reference
+    /// to it, calls each of its lambdas by name.
+    #[test]
+    fn test_references_of_a_hub_to_other_parts_leave_a_fan_out_past_its_copy_budget() {
+        let dump = build_run_and_read_rc_ir(
+            &fan_out_under_a_hub_source(),
+            "max",
+            "69015",
+            "a fan-out of two steps under a `main` calling another function from many places",
+        );
+        assert!(
+            calls_through_a_closure(&dump, "Main::b"),
+            "`b` is copied past its budget, and should call the function it was given through a \
+             closure"
+        );
+        assert_calls_by_name(&dump, "Main::u");
     }
 
     /// Verifies that `main` calls `g` by name both where it applies `g` to its two arguments at once
@@ -1920,4 +2206,96 @@ fn test_functions_in_two_types_referring_to_each_other_compute_them() {
     );
     "#;
     test_source(source, Configuration::develop_mode());
+}
+
+/// How many functions of `global_struct_chain_source` take a struct holding a function and hand
+/// one to the next.
+const GLOBAL_STRUCT_CHAIN_DEPTH: usize = 11;
+
+/// A chain of functions `f{GLOBAL_STRUCT_CHAIN_DEPTH}` to `f0`, each taking its function in a
+/// struct field and calling the next from three places: two with a struct holding a lambda of its
+/// own wrapping the function it was given, and one with the global struct `gw`. `use_w` is called
+/// both with `gw` and with a struct whose function nothing passes down the chain.
+fn global_struct_chain_source() -> String {
+    let links: Vec<String> = (1..=GLOBAL_STRUCT_CHAIN_DEPTH)
+        .map(|i| {
+            format!(
+                "f{i} : W -> I64 -> I64;\n\
+                 f{i} = |w, x| if x % 3 == 0 {{ f{p}(W {{ fn : |y| (w.@fn)(y) + {i}, k : w.@k + 1 }}, x / 3) }} \
+                 else if x % 11 == 0 {{ f{p}(gw, x - 1) }} \
+                 else {{ f{p}(W {{ fn : |y| (w.@fn)(y) * {i}, k : w.@k }}, x - 1) }};\n",
+                i = i,
+                p = i - 1
+            )
+        })
+        .collect();
+    format!(
+        "module Main;\n\
+         \n\
+         type W = struct {{ fn : I64 -> I64, k : I64 }};\n\
+         \n\
+         gw : W;\n\
+         gw = W {{ fn : |x| x * 3 + 1, k : 5 }};\n\
+         \n\
+         use_w : W -> I64 -> I64;\n\
+         use_w = |w, x| if x < -100000 {{ use_w(w, x + 1) }} else {{ (w.@fn)(x) + w.@k }};\n\
+         \n\
+         f0 : W -> I64 -> I64;\n\
+         f0 = |w, x| (w.@fn)(x) + w.@k;\n\
+         {links}\
+         \n\
+         main : IO ();\n\
+         main = (\n\
+         \x20   let n = *(pure(100) : IO I64);\n\
+         \x20   let v = f{depth}(gw, n) + use_w(gw, n) + use_w(W {{ fn : |x| x - n, k : 1 }}, n)\n\
+         \x20       + f{depth}(W {{ fn : |x| x + n, k : 0 }}, n + 2);\n\
+         \x20   println(v.to_string)\n\
+         );\n",
+        links = links.join(""),
+        depth = GLOBAL_STRUCT_CHAIN_DEPTH
+    )
+}
+
+/// The copies of the functions far down `global_struct_chain_source` go past the copy budget, and
+/// the sets given to those functions, the set of the function of `gw` among them, are represented
+/// by closures. The two calls of `use_w` get copies representing the field differently, and the
+/// program computes its value under the development configuration.
+#[test]
+fn test_a_global_struct_of_a_function_passed_down_a_chain_past_the_copy_budget_computes_its_value()
+{
+    assert_source_prints(
+        &global_struct_chain_source(),
+        Configuration::develop_mode(),
+        "483",
+    );
+}
+
+/// The chain of `branching_chain_source`, where each function takes the function and the number in
+/// a tuple.
+fn tuple_branching_chain_source(depth: usize) -> String {
+    chain_of_two_lambda_calls_source(depth, ChainArgs::Tupled, "I64", "g(x)", "")
+}
+
+/// The chains of `branching_chain_source`, `returning_branching_chain_source` and
+/// `tuple_branching_chain_source` at `BRANCHING_CHAIN_DEPTH` go past the copy budget, and each
+/// computes its value under the development configuration.
+#[test]
+fn test_chains_of_functions_each_calling_the_next_with_two_lambdas_compute_their_values_past_the_copy_budget(
+) {
+    for (source, expected) in [
+        (
+            branching_chain_source(BRANCHING_CHAIN_DEPTH),
+            BRANCHING_CHAIN_OUTPUT,
+        ),
+        (
+            returning_branching_chain_source(BRANCHING_CHAIN_DEPTH),
+            RETURNING_BRANCHING_CHAIN_OUTPUT,
+        ),
+        (
+            tuple_branching_chain_source(BRANCHING_CHAIN_DEPTH),
+            BRANCHING_CHAIN_OUTPUT,
+        ),
+    ] {
+        assert_source_prints(&source, Configuration::develop_mode(), expected);
+    }
 }
