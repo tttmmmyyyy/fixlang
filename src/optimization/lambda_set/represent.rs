@@ -220,7 +220,7 @@ impl Builders {
 
 /// The sets that the copies of each component copied past its budget give to its
 /// `Component::body_params`. The budget of a component is `LS_COPY_BUDGET_BASE` copies plus one for
-/// each reference made by the components it is reached from (`reaching_references`).
+/// each reference on the way to it from the entry (`reaching_references`).
 ///
 /// The rewrite makes one copy of a component for each representation of the sets of its
 /// `Component::body_params`, so a component whose sets are all represented by closures gets one
@@ -245,9 +245,8 @@ fn over_copied_sets(analysis: &Analysis, spec: &Specialization) -> Vec<SetId> {
         .collect()
 }
 
-/// For each component, how many references (`Component::sites`) the components it is reached from
-/// make: the components on a chain of references from the entry's component to it, itself left
-/// out.
+/// For each component, how many references (`Component::sites`) lie on a chain of references from
+/// the entry's component to it.
 fn reaching_references(analysis: &Analysis) -> Vec<usize> {
     let count = analysis.components.len();
     let mut reached_from: Vec<Set<usize>> = vec![Set::default(); count];
@@ -266,9 +265,16 @@ fn reaching_references(analysis: &Analysis) -> Vec<usize> {
     }
     reached_from
         .iter()
-        .map(|from| {
+        .enumerate()
+        .map(|(c, from)| {
             from.iter()
-                .map(|c| analysis.components[*c].sites.len())
+                .map(|a| {
+                    analysis.components[*a]
+                        .sites
+                        .iter()
+                        .filter(|site| site.component == c || from.contains(&site.component))
+                        .count()
+                })
                 .sum()
         })
         .collect()
