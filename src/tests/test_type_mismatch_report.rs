@@ -141,7 +141,7 @@ main : IO () = (
 /// A boolean literal used where another type is expected is reported as a `Std::Bool` at the
 /// literal, the way a number literal is.
 #[test]
-pub fn test_a_mismatch_of_a_boolean_literal_is_one_sentence_on_bool() {
+pub fn test_a_mismatched_boolean_literal_is_one_sentence_finding_bool_at_the_literal() {
     let source = r##"
 module Main;
 
