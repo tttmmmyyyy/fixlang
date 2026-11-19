@@ -9,9 +9,8 @@ use std::sync::Arc;
 
 /// A use of the name being searched for, told apart by what receives the name there.
 pub enum UsageType {
-    /// The name is used as a function and is called, with the number of arguments the call
-    /// supplies.
-    CalledAsFunction { arg_count: usize },
+    /// The name is used as a function and is called.
+    CalledAsFunction,
     /// The name is the operand a builtin operation declaring `BuiltinOp::env_operand` applies as a
     /// function.
     EnvFunctionOperand,
@@ -128,9 +127,7 @@ impl ExprVisitor for UsageFinder<'_> {
         }
         let (fun, args) = expr.destructure_app();
         if self.is_the_name(&fun) {
-            self.add_usage(UsageType::CalledAsFunction {
-                arg_count: args.len(),
-            });
+            self.add_usage(UsageType::CalledAsFunction);
         } else {
             self.visit_expr(&fun, state);
         }
@@ -316,19 +313,15 @@ mod tests {
         }
     }
 
-    /// A name standing as the callee of a call is recorded once for the whole call, with the number
-    /// of arguments the call supplies.
+    /// A name standing as the callee of a call is recorded once for the whole call.
     #[test]
     fn a_call_records_its_callee_once() {
         let func = FullName::from_strs(&["Main"], "f");
         let arg_count = 4;
         let call = call_with_name_at(&func, arg_count, 1, &FullName::from_strs(&["Main"], "x"));
         assert!(
-            matches!(
-                run(&call, &func).as_slice(),
-                [UsageType::CalledAsFunction { arg_count: n }] if *n == arg_count
-            ),
-            "a callee is recorded once for the whole call, with the arguments it supplies"
+            matches!(run(&call, &func).as_slice(), [UsageType::CalledAsFunction]),
+            "a callee is recorded once for the whole call"
         );
     }
 }
