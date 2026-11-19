@@ -917,8 +917,8 @@ fn branching_chain_source(depth: usize) -> String {
     chain_of_two_lambda_calls_source(depth, "I64", "g(x)", "")
 }
 
-/// About three times what the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes
-/// with the copy budget of `LS_COPY_BUDGET_BASE` (16 billion on x86-64), and a fifth of what it executes
+/// About five times what the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes
+/// with the copy budget of `LS_COPY_BUDGET_BASE` (11 billion on x86-64), and a fifth of what it executes
 /// with every copy made (286 billion).
 const BRANCHING_CHAIN_MAX_INSTRUCTIONS: u64 = 50_000_000_000;
 
