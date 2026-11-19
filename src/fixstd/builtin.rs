@@ -967,6 +967,12 @@ pub fn make_unit_ty() -> Arc<TypeNode> {
     make_tuple_ty(vec![])
 }
 
+/// The unit value `()`, the tuple of no fields. Its type constructor is named by absolute path, so
+/// it resolves without an `import`.
+pub fn expr_unit() -> Arc<ExprNode> {
+    expr_make_struct(tycon(make_tuple_name_abs(0)), vec![])
+}
+
 /// The type `Std::Lazy`, of kind `* -> *`. `Lazy a` is an alias of `() -> a`, a computation that
 /// gives an `a` when it is called.
 pub fn make_lazy_ty() -> Arc<TypeNode> {
@@ -1223,8 +1229,11 @@ pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
         &BOOL_TYPE.to_fullname().to_namespace(),
         if val { "_true" } else { "_false" },
     );
-    let unit = expr_make_struct(tycon(make_tuple_name(0)), vec![]);
-    let value = expr_app(expr_var(ctor, source.clone()), vec![unit], source.clone());
+    let value = expr_app(
+        expr_var(ctor, source.clone()),
+        vec![expr_unit()],
+        source.clone(),
+    );
     expr_tyanno(value, make_bool_ty(), source).global_to_absolute()
 }
 
@@ -8380,7 +8389,7 @@ fn with_empty_env(
         g,
         expr_let(
             PatternNode::make_var(var_local(ENV_NAME), None),
-            expr_make_struct(tycon(make_tuple_name_abs(0)), vec![]),
+            expr_unit(),
             make_op(FullName::local(G_NAME), FullName::local(ENV_NAME)),
             None,
         ),

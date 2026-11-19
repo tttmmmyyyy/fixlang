@@ -39,10 +39,10 @@ use crate::constants::{
 use crate::error::Errors;
 use crate::ffi::unsupported_128_bit_integer_msg;
 use crate::fixstd::builtin::{
-    expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, floating_literal_value,
-    integral_literal_value, make_f64_ty, make_i64_ty, make_io_tycon, make_numeric_ty,
-    make_string_lit, make_tuple_name_abs, make_u8_ty, ADD_TRAIT_ADD_NAME, ADD_TRAIT_NAME,
-    DIVIDE_TRAIT_DIVIDE_NAME, DIVIDE_TRAIT_NAME, EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME,
+    expr_bool_lit, expr_float_lit, expr_int_lit, expr_nullptr_lit, expr_unit,
+    floating_literal_value, integral_literal_value, make_f64_ty, make_i64_ty, make_io_tycon,
+    make_numeric_ty, make_string_lit, make_tuple_name_abs, make_u8_ty, ADD_TRAIT_ADD_NAME,
+    ADD_TRAIT_NAME, DIVIDE_TRAIT_DIVIDE_NAME, DIVIDE_TRAIT_NAME, EQ_TRAIT_EQ_NAME, EQ_TRAIT_NAME,
     LESS_THAN_OR_EQUAL_TO_TRAIT_NAME, LESS_THAN_OR_EQUAL_TO_TRAIT_OP_NAME, LESS_THAN_TRAIT_LT_NAME,
     LESS_THAN_TRAIT_NAME, MULTIPLY_TRAIT_MULTIPLY_NAME, MULTIPLY_TRAIT_NAME, NEGATE_TRAIT_NAME,
     NEGATE_TRAIT_NEGATE_NAME, NOT_TRAIT_NAME, NOT_TRAIT_OP_NAME, REMAINDER_TRAIT_NAME,
@@ -2398,8 +2398,7 @@ fn parse_expr_app(pair: Pair<Rule>, ctx: &mut ParseContext) -> Result<Arc<ExprNo
         if args.len() == 0 {
             // `f()` is interpreted as application to unit: `f $ ()`.
             args.push((
-                expr_make_struct(tycon(make_tuple_name_abs(0)), vec![])
-                    .set_source(Some(args_span.clone())),
+                expr_unit().set_source(Some(args_span.clone())),
                 args_span.clone(),
             ))
         }
