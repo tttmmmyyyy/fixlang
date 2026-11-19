@@ -138,8 +138,8 @@ main : IO () = (
     );
 }
 
-/// A boolean literal whose type mismatches the expected one is reported as the `Bool` it is, the way
-/// a number literal is, and at the literal.
+/// A boolean literal used where another type is expected is reported as a `Std::Bool` at the
+/// literal, the way a number literal is.
 #[test]
 pub fn test_a_mismatch_of_a_boolean_literal_is_one_sentence_on_bool() {
     let source = r##"

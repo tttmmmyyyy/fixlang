@@ -17,7 +17,7 @@
 - #1020, #1030: A type error now points a type variable at an expression only when the compiler named the variable, such as `#1`, and leaves out a variable the program writes, such as `a` in a signature. For a lambda `|(x, y)| ...` whose parameter has the type `a`, it used to say `` `a` is the type for `(x, y)`. ``, although the type of `(x, y)` is `(#1, #2)`.
 - #1019, #1035: For the element type of an empty array literal `[]`, a type error now says `` `#1` is the element type of `[]`. `` and points at the whole literal, where it said `` `#1` is the type for this expression. `` and pointed at the `]`.
 - #1032, #1040: A type error now says `` `#1` is the type expected for `x`. `` where it said `` `#1` is the type for `x`. ``. An error raised before `x` is checked, such as one about the function `x` is passed to, can show `x` with a type other than `#1`. For a variadic argument of `FFI_CALL`, the sentence now points at that argument, where it pointed at the whole `FFI_CALL[...]`.
-- #1012: A type error about `true` or `false` used where another type is expected now reads like one about a number literal, as in ``Expected `Std::I64`, found `Std::Bool`.``. It used to name the constructor `Std::Bool::_true` with the type `() -> Std::Bool`.
+- #1012: A type error about `true` or `false` used where another type is expected now names the type `Std::Bool`, as it does for a number literal: ``Expected `Std::I64`, found `Std::Bool`.``. It used to name the constructor `Std::Bool::_true` with the type `() -> Std::Bool`.
 
 #### Tool
 

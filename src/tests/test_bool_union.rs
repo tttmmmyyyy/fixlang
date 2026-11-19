@@ -32,8 +32,8 @@ main = (
         test_source(source, Configuration::develop_mode());
     }
 
-    // `true` and `false` are the `Std::Bool` values even where the module declares its own
-    // `Std::Bool` with the same variants.
+    /// `true` and `false` are the `Std::Bool` values even where the module declares its own
+    /// `Std::Bool` with the same variants.
     #[test]
     pub fn test_bool_literal_beside_a_user_type_named_std_bool() {
         let source = r#"

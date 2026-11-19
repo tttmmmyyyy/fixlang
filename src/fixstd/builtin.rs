@@ -1214,10 +1214,10 @@ pub fn expr_nullptr_lit(source: Option<Span>) -> Arc<ExprNode> {
     .global_to_absolute()
 }
 
-/// The literal `true` or `false`: the `Bool` union's constructor applied to `()`, annotated with
-/// `Bool`. The annotation is checked first, so a literal used where another type is expected is
-/// reported as a `Bool` found there, the way a number literal is. Every name is absolute, so the
-/// literal resolves without an `import` at the use site.
+/// Builds the literal `true` or `false`: the `Bool` union's constructor applied to `()`, annotated
+/// with `Bool`. The annotation is checked against the expected type first, so a literal used where
+/// another type is expected is reported as a `Bool`, the way a number literal is. Every name is
+/// absolute, so the literal resolves without an `import` at the use site.
 pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
     let ctor = FullName::new(
         &BOOL_TYPE.to_fullname().to_namespace(),
