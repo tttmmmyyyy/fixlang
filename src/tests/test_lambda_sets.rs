@@ -904,10 +904,10 @@ impl ChainArgs {
     }
 }
 
-/// A program calling down a chain of functions `f{depth}` to `f0` returning `result_ty`, taking
-/// their arguments as `arg_form` says, each calling the next from two places, each with a lambda of
-/// its own wrapping the function it was given, and printing what calling `f{depth}` with
-/// `|x| x + n` and `n` returns, applied to `result_args`. `f0` returns `f0_body`.
+/// A program calling down a chain of functions `f{depth}` to `f0`, which return `result_ty` and
+/// take their arguments as `arg_form` says. Each function calls the next from two places, each with
+/// a lambda of its own wrapping the function it was given, and `f0` returns `f0_body`. `main` prints
+/// what `f{depth}` returns for `|x| x + n` and `n`, applied to `result_args`.
 fn chain_of_two_lambda_calls_source(
     depth: usize,
     arg_form: ChainArgs,
@@ -961,13 +961,13 @@ fn branching_chain_source(depth: usize) -> String {
 }
 
 /// About five times what the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes
-/// with the copy budget of `LS_COPY_BUDGET_BASE` (11 billion on x86-64), and a fifth of what it executes
-/// with every copy made (286 billion).
+/// with the copy budget (`LS_COPY_BUDGET_BASE`) applied (11 billion on x86-64), and a fifth of what
+/// it executes with every copy made (286 billion).
 const BRANCHING_CHAIN_MAX_INSTRUCTIONS: u64 = 50_000_000_000;
 
 /// The chain of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
 /// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions. The copies of the functions far down the chain
-/// go past the copy budget of `LS_COPY_BUDGET_BASE`, and the sets given to those functions are
+/// go past the copy budget (`LS_COPY_BUDGET_BASE`), and the sets given to those functions are
 /// represented by closures, which makes each of them one copy in the rewritten program.
 /// Where the machine does not let the test count instructions, the test checks the answer alone.
 #[test]
@@ -1000,8 +1000,8 @@ fn returning_branching_chain_source(depth: usize) -> String {
 }
 
 /// The chain of `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
-/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions and computes its value. Past the copy budget of
-/// `LS_COPY_BUDGET_BASE`, the parameters of the functions far down the chain are given sets
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions and computes its value. Past the copy budget
+/// (`LS_COPY_BUDGET_BASE`), the parameters of the functions far down the chain are given sets
 /// represented by closures, while each function returns the lambdas it and the later functions of
 /// the chain build.
 #[test]
@@ -1126,8 +1126,8 @@ mod dump_tests {
         )
     }
 
-    /// Copies that grow with the references made above a function stay within the copy budget of
-    /// `LS_COPY_BUDGET_BASE`: `fan_in_source` copies each function of its chain and `loop` once per
+    /// Copies that grow with the references on the way to a function stay within the copy budget
+    /// (`LS_COPY_BUDGET_BASE`): `fan_in_source` copies each function of its chain and `loop` once per
     /// call of the chain, and every copy of `loop` calls the lambda it was given by name.
     #[test]
     fn test_a_loop_at_the_end_of_a_chain_called_from_many_places_calls_each_lambda_by_name() {
