@@ -905,18 +905,18 @@ impl ChainArgs {
 }
 
 /// A program calling down a chain of functions `f{depth}` to `f0` returning `result_ty`, taking
-/// their arguments as `args` says, each calling the next from two places, each with a lambda of its
-/// own wrapping the function it was given, and printing what calling `f{depth}` with `|x| x + n`
-/// and `n` returns, applied to `result_args`. `f0` returns `f0_body`.
+/// their arguments as `arg_form` says, each calling the next from two places, each with a lambda of
+/// its own wrapping the function it was given, and printing what calling `f{depth}` with
+/// `|x| x + n` and `n` returns, applied to `result_args`. `f0` returns `f0_body`.
 fn chain_of_two_lambda_calls_source(
     depth: usize,
-    args: ChainArgs,
+    arg_form: ChainArgs,
     result_ty: &str,
     f0_body: &str,
     result_args: &str,
 ) -> String {
-    let func_ty = args.func_ty(result_ty);
-    let params = args.params();
+    let func_ty = arg_form.func_ty(result_ty);
+    let params = arg_form.params();
     let links: Vec<String> = (1..=depth)
         .map(|i| {
             let next = format!("f{}", i - 1);
@@ -926,8 +926,8 @@ fn chain_of_two_lambda_calls_source(
                 i = i,
                 func_ty = func_ty,
                 params = params,
-                plus = args.call(&next, &format!("|y| g(y) + {}", i), "x / 3"),
-                times = args.call(&next, &format!("|y| g(y) * {}", i), "x - 1"),
+                plus = arg_form.call(&next, &format!("|y| g(y) + {}", i), "x / 3"),
+                times = arg_form.call(&next, &format!("|y| g(y) * {}", i), "x - 1"),
             )
         })
         .collect();
@@ -947,7 +947,7 @@ fn chain_of_two_lambda_calls_source(
         params = params,
         f0_body = f0_body,
         links = links.join("\n"),
-        call = args.call(&format!("f{}", depth), "|x| x + n", "n"),
+        call = arg_form.call(&format!("f{}", depth), "|x| x + n", "n"),
         result_args = result_args
     )
 }
@@ -1100,9 +1100,9 @@ mod dump_tests {
             .map(|i| {
                 format!(
                     "h{i} : (I64 -> I64) -> I64 -> I64;\n\
-                     h{i} = |g, n| if n < 0 {{ h{i}(g, -n) }} else {{ h{prev}(g, n) + {i} }};\n",
+                     h{i} = |g, n| if n < 0 {{ h{i}(g, -n) }} else {{ h{next}(g, n) + {i} }};\n",
                     i = i,
-                    prev = i - 1
+                    next = i - 1
                 )
             })
             .collect();
