@@ -868,43 +868,85 @@ const BRANCHING_CHAIN_DEPTH: usize = 14;
 /// What `branching_chain_source(BRANCHING_CHAIN_DEPTH)` prints.
 const BRANCHING_CHAIN_OUTPUT: &str = "1097390";
 
-/// A program calling down a chain of functions `f{depth}` to `f0` of the type
-/// `(I64 -> I64) -> I64 -> {result_ty}`, each calling the next from two places, each with a lambda of
-/// its own wrapping the function it was given, and printing `f{depth}(|x| x + n, n){result_args}`.
-/// `f0` is `|g, x| {f0_body}`.
+/// How the functions of `chain_of_two_lambda_calls_source` take the function and the number.
+#[derive(Clone, Copy)]
+enum ChainArgs {
+    /// As two arguments: `f(g, x)`.
+    Curried,
+    /// As one tuple: `f((g, x))`.
+    Tupled,
+}
+
+impl ChainArgs {
+    /// The type of a function of the chain returning `result_ty`.
+    fn func_ty(self, result_ty: &str) -> String {
+        match self {
+            ChainArgs::Curried => format!("(I64 -> I64) -> I64 -> {}", result_ty),
+            ChainArgs::Tupled => format!("(I64 -> I64, I64) -> {}", result_ty),
+        }
+    }
+
+    /// The parameters `g` and `x` of a lambda defining a function of the chain.
+    fn params(self) -> &'static str {
+        match self {
+            ChainArgs::Curried => "|g, x|",
+            ChainArgs::Tupled => "|(g, x)|",
+        }
+    }
+
+    /// The call of `func` with the function `g` and the number `x`.
+    fn call(self, func: &str, g: &str, x: &str) -> String {
+        match self {
+            ChainArgs::Curried => format!("{}({}, {})", func, g, x),
+            ChainArgs::Tupled => format!("{}(({}, {}))", func, g, x),
+        }
+    }
+}
+
+/// A program calling down a chain of functions `f{depth}` to `f0` returning `result_ty`, taking
+/// their arguments as `args` says, each calling the next from two places, each with a lambda of its
+/// own wrapping the function it was given, and printing what calling `f{depth}` with `|x| x + n`
+/// and `n` returns, applied to `result_args`. `f0` returns `f0_body`.
 fn chain_of_two_lambda_calls_source(
     depth: usize,
+    args: ChainArgs,
     result_ty: &str,
     f0_body: &str,
     result_args: &str,
 ) -> String {
+    let func_ty = args.func_ty(result_ty);
+    let params = args.params();
     let links: Vec<String> = (1..=depth)
         .map(|i| {
+            let next = format!("f{}", i - 1);
             format!(
-                "f{i} : (I64 -> I64) -> I64 -> {result_ty};\n\
-                 f{i} = |g, x| if x % 3 == 0 {{ f{p}(|y| g(y) + {i}, x / 3) }} else {{ f{p}(|y| g(y) * {i}, x - 1) }};",
+                "f{i} : {func_ty};\n\
+                 f{i} = {params} if x % 3 == 0 {{ {plus} }} else {{ {times} }};",
                 i = i,
-                p = i - 1,
-                result_ty = result_ty
+                func_ty = func_ty,
+                params = params,
+                plus = args.call(&next, &format!("|y| g(y) + {}", i), "x / 3"),
+                times = args.call(&next, &format!("|y| g(y) * {}", i), "x - 1"),
             )
         })
         .collect();
     format!(
         "module Main;\n\
          \n\
-         f0 : (I64 -> I64) -> I64 -> {result_ty};\n\
-         f0 = |g, x| {f0_body};\n\
+         f0 : {func_ty};\n\
+         f0 = {params} {f0_body};\n\
          {links}\n\
          \n\
          main : IO ();\n\
          main = (\n\
          \x20   let n = *(pure(100) : IO I64);\n\
-         \x20   println(f{depth}(|x| x + n, n){result_args}.to_string)\n\
+         \x20   println({call}{result_args}.to_string)\n\
          );\n",
-        result_ty = result_ty,
+        func_ty = func_ty,
+        params = params,
         f0_body = f0_body,
         links = links.join("\n"),
-        depth = depth,
+        call = args.call(&format!("f{}", depth), "|x| x + n", "n"),
         result_args = result_args
     )
 }
@@ -914,7 +956,7 @@ fn chain_of_two_lambda_calls_source(
 /// chain computes. Each copy of `f{i}` asks for two copies of `f{i - 1}`, one per lambda, so the
 /// copies double at each step.
 fn branching_chain_source(depth: usize) -> String {
-    chain_of_two_lambda_calls_source(depth, "I64", "g(x)", "")
+    chain_of_two_lambda_calls_source(depth, ChainArgs::Curried, "I64", "g(x)", "")
 }
 
 /// About five times what the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes
@@ -953,7 +995,7 @@ const RETURNING_BRANCHING_CHAIN_OUTPUT: &str = "2175390";
 /// lambdas `f{i}` and every function after it in the chain build. `main` calls what `f{depth}`
 /// returns.
 fn returning_branching_chain_source(depth: usize) -> String {
-    chain_of_two_lambda_calls_source(depth, "(I64 -> I64)", "g", "(n)")
+    chain_of_two_lambda_calls_source(depth, ChainArgs::Curried, "(I64 -> I64)", "g", "(n)")
 }
 
 /// The chain of `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
@@ -2158,31 +2200,7 @@ fn test_a_global_struct_of_a_function_passed_down_a_chain_past_the_copy_budget_c
 /// The chain of `branching_chain_source`, where each function takes the function and the number in
 /// a tuple.
 fn tuple_branching_chain_source(depth: usize) -> String {
-    let links: Vec<String> = (1..=depth)
-        .map(|i| {
-            format!(
-                "f{i} : (I64 -> I64, I64) -> I64;\n\
-                 f{i} = |(g, x)| if x % 3 == 0 {{ f{p}((|y| g(y) + {i}, x / 3)) }} else {{ f{p}((|y| g(y) * {i}, x - 1)) }};\n",
-                i = i,
-                p = i - 1
-            )
-        })
-        .collect();
-    format!(
-        "module Main;\n\
-         \n\
-         f0 : (I64 -> I64, I64) -> I64;\n\
-         f0 = |(g, x)| g(x);\n\
-         {links}\
-         \n\
-         main : IO ();\n\
-         main = (\n\
-         \x20   let n = *(pure(100) : IO I64);\n\
-         \x20   println(f{depth}((|x| x + n, n)).to_string)\n\
-         );\n",
-        links = links.join(""),
-        depth = depth
-    )
+    chain_of_two_lambda_calls_source(depth, ChainArgs::Tupled, "I64", "g(x)", "")
 }
 
 /// The chains of `branching_chain_source`, `returning_branching_chain_source` and
