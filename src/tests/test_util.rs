@@ -323,23 +323,39 @@ pub fn build_within_and_run(
     run_program(&program_path, description)
 }
 
-/// Builds `source` at `opt_level`, runs the program, and returns what it printed on stdout with the
-/// surrounding whitespace removed, together with the instructions the build executed, as
-/// `build_program_counting_instructions` counts them.
+/// Builds `source` at `opt_level` in fewer than `max_instructions` instructions, as
+/// `build_program_counting_instructions` counts them, runs the program, and returns what it printed
+/// on stdout with the surrounding whitespace removed. Where the machine does not let the test count
+/// instructions, the bound goes unchecked, and the test says so on stderr.
 ///
-/// Use this for a test whose subject is how much work a build does: the test bounds the count.
+/// Use this for a test whose subject is how much work a build does.
 ///
 /// # Arguments
 /// * `description` — what is being compiled, as a phrase that reads after "compiling": it is what
 ///   a failure names, e.g. "a chain of 2400 `let`s".
-pub fn build_counting_instructions_and_run(
+pub fn build_within_instructions_and_run(
     source: &str,
     opt_level: &str,
+    max_instructions: u64,
     description: &str,
-) -> (String, Option<u64>) {
+) -> String {
     let (_temp_dir, program_path, instructions) =
         build_program_counting_instructions(source, opt_level, description);
-    (run_program(&program_path, description), instructions)
+    match instructions {
+        Some(instructions) => assert!(
+            instructions < max_instructions,
+            "compiling {} executed {} instructions, beyond the bound of {}",
+            description,
+            instructions,
+            max_instructions
+        ),
+        None => eprintln!(
+            "compiling {}: this machine does not let the test count instructions, so the bound \
+             went unchecked",
+            description
+        ),
+    }
+    run_program(&program_path, description)
 }
 
 /// Runs the program at `program_path`, compiled from what `description` names, and returns what it
@@ -413,15 +429,8 @@ pub fn build_project_and_read_rc_ir(project_dir: &Path, filter: &str, dump_file:
         .output()
         .expect("Failed to execute fix build --emit-rc-ir");
 
-    if !output.status.success() {
-        eprintln!("stdout: {}", String::from_utf8_lossy(&output.stdout));
-        eprintln!("stderr: {}", String::from_utf8_lossy(&output.stderr));
-        panic!("fix build --emit-rc-ir failed");
-    }
-
-    let dump_path = project_dir.join(".fixlang").join(dump_file);
-    fs::read_to_string(&dump_path)
-        .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
+    assert_succeeded(&output, "fix build --emit-rc-ir should succeed.");
+    read_rc_ir_dump_file(project_dir, dump_file)
 }
 
 /// Builds the project in `project_dir` at `opt_level` with the RC IR dumped, runs the program, and
@@ -443,12 +452,9 @@ pub fn build_project_run_and_read_rc_ir(
         .current_dir(project_dir)
         .output()
         .expect("Failed to execute fix build");
-    assert!(
-        build.status.success(),
-        "the build should succeed at -O {}.\nstdout: {}\nstderr: {}",
-        opt_level,
-        String::from_utf8_lossy(&build.stdout),
-        String::from_utf8_lossy(&build.stderr),
+    assert_succeeded(
+        &build,
+        &format!("the build should succeed at -O {}.", opt_level),
     );
 
     let run = Command::new(project_dir.join("a.out"))
@@ -474,7 +480,12 @@ pub fn build_project_run_and_read_rc_ir(
 
 /// The RC IR of every module, read out of the dump a build with `--emit-rc-ir all` left in `dir`.
 pub fn read_rc_ir_dump(dir: &Path) -> String {
-    let dump_path = dir.join(".fixlang/rc_ir.post.txt");
+    read_rc_ir_dump_file(dir, "rc_ir.post.txt")
+}
+
+/// The dump `dump_file` that a build with `--emit-rc-ir` left under `.fixlang/` in `dir`.
+fn read_rc_ir_dump_file(dir: &Path, dump_file: &str) -> String {
+    let dump_path = dir.join(".fixlang").join(dump_file);
     fs::read_to_string(&dump_path)
         .unwrap_or_else(|e| panic!("failed to read {}: {}", dump_path.display(), e))
 }
@@ -485,6 +496,12 @@ pub fn read_rc_ir_dump(dir: &Path) -> String {
 /// A dump names a function with `fn ` and a global with `global `, and the last function of a dump
 /// is followed by the globals, so both open a new item and both end the one before.
 pub fn rc_ir_function_bodies(dump: &str, name_part: &str) -> Vec<String> {
+    rc_ir_function_bodies_naming_all(dump, &[name_part])
+}
+
+/// Every function of an RC IR dump whose signature line contains each of `name_parts`, delimited
+/// as `rc_ir_function_bodies` delimits it.
+pub fn rc_ir_function_bodies_naming_all(dump: &str, name_parts: &[&str]) -> Vec<String> {
     let mut bodies = vec![];
     let mut current_body: Option<Vec<&str>> = None;
     for line in dump.lines() {
@@ -492,7 +509,9 @@ pub fn rc_ir_function_bodies(dump: &str, name_part: &str) -> Vec<String> {
             if let Some(body) = current_body.take() {
                 bodies.push(body.join("\n"));
             }
-            current_body = (line.starts_with("fn ") && line.contains(name_part)).then(Vec::new);
+            current_body = (line.starts_with("fn ")
+                && name_parts.iter().all(|part| line.contains(part)))
+            .then(Vec::new);
         }
         if let Some(body) = current_body.as_mut() {
             body.push(line);
@@ -1030,6 +1049,13 @@ pub fn test_sources(sources: &[&str], config: Configuration) {
 /// program cannot be spawned. Use this to assert on the program's stdout / stderr.
 pub fn run_source_capture(source: &str, config: Configuration) -> Output {
     panic_if_err(run_source(source, config)).unwrap()
+}
+
+/// Compiles `source` under `config`, runs it, and asserts that what it prints on stdout, with the
+/// surrounding whitespace removed, is `expected`.
+pub fn assert_source_prints(source: &str, config: Configuration, expected: &str) {
+    let output = run_source_capture(source, config);
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
 }
 
 /// Verify that the parser rejects `source` (parse-level rejection: the

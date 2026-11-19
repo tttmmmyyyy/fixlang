@@ -124,8 +124,8 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         },
     );
 
-    // Inline again, which puts the lambdas the lambda sets lift to global functions into the
-    // places that call them by name.
+    // Inline again: lambda set specialization lifts lambdas to global functions, and this puts them
+    // into the places that call them by name.
     run_pass(
         prg,
         config,
@@ -136,8 +136,8 @@ pub fn run(prg: &mut Program, config: &Configuration) {
 
     // Move the capture struct of the function given to a scope op such as
     // `Std::Array::borrow_elements` into the op's environment operand, so that the function captures
-    // nothing. It runs after the rewrite by the lambda sets, which leaves every such function a
-    // global function applied to its capture struct.
+    // nothing. It runs after lambda set specialization, which leaves every such function a global
+    // function applied to its capture struct.
     run_pass(
         prg,
         config,
@@ -156,8 +156,8 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| collapse_constructions::run(prg, config.num_worker_thread),
     );
 
-    // Uncurry again: the passes since the first run make global functions and calls `g(x)(y)`, and
-    // they run only with the lambda sets.
+    // Uncurry again, since the passes after the first run make new global functions and calls
+    // `g(x)(y)`. Those passes run only with lambda set specialization, and so does this one.
     run_pass(
         prg,
         config,
@@ -166,10 +166,10 @@ pub fn run(prg: &mut Program, config: &Configuration) {
         |prg| uncurry::run(prg, config.num_worker_thread),
     );
 
-    // Inline the local functions once more. Inlining the lambdas the lambda sets lift puts the body
-    // of the function a caller passed into the caller, so a body answering with a lambda leaves an
-    // application whose function is an `if`, or a name bound to one, and the lambda of the branch
-    // taken is built at run time.
+    // Inline the local functions once more. Inlining a lambda that lambda set specialization lifted
+    // puts the body of the function a caller passed into the caller, so a body answering with a
+    // lambda leaves an application whose function is an `if`, or a name bound to one, and the
+    // lambda of the branch taken is built at run time.
     //
     // It runs below uncurrying because that is what brings the application and the `if` into one
     // scope: above it, the application sits inside a lambda the `if` is outside of. Uncurrying's eta

@@ -8,13 +8,14 @@
 // inferred once and copied for each lambda set it is given. The variables of a component that holds
 // a global value whose body is not a lambda are pinned instead: every reference shares them, so the
 // value has one copy and its body runs once. Specialization then walks from the program's entry,
-// and gives each copy the concrete lambda sets of its parameters. The program is then rewritten:
-// each copy becomes copies of the symbols, and a value whose set's elements make one class,
-// elements naming one lambda that make the same code, becomes that class's capture struct, called
-// by calling the lambda directly. A value whose set's elements make two or more classes becomes an
-// unboxed union of their capture structs, called by matching the variant and calling its class's
-// lambda directly. A set no capture struct or union can stand for stays a set of closures
-// (`represent::represent` lists them).
+// and gives each copy the concrete lambda sets of its parameters. The program is then rewritten.
+// Each copy of a component becomes a copy of each of its symbols. The elements of a set fall into
+// classes, a class being the elements that name one lambda and make the same code. A value whose
+// set has one class becomes that class's capture struct, and a call of it calls the lambda
+// directly. A value whose set has two or more classes becomes an unboxed union of their capture
+// structs, and a call of it matches the variant and calls that class's lambda directly. A set that
+// no capture struct or union can stand for stays a set of closures (`represent::represent` lists
+// them).
 //
 // The design is laid out in `dev-docs/2026-10-24-lambda-set-specialization/design.md`.
 
@@ -105,9 +106,13 @@ mod tests {
 
     /// The lambda sets of a program and the copies they ask for.
     struct Inferred<'p> {
+        /// The program inferred.
         prg: &'p Program,
+        /// The slots of the types of `prg`.
         layout: SlotLayout<'p>,
+        /// The lambda sets of `prg`.
         analysis: Analysis,
+        /// The copies `prg` needs.
         spec: Specialization,
     }
 
@@ -125,15 +130,15 @@ mod tests {
             }
         }
 
-        /// The component of the one symbol of `Main` named `name`, and its position there.
+        /// The component of the one symbol instantiating the global value `name` of `Main`, and
+        /// its position there.
         fn component_of(&self, name: &str) -> (usize, usize) {
             let found: Vec<_> = self
                 .prg
                 .symbols
-                .keys()
-                .filter(|s| {
-                    s.namespace.to_string() == "Main" && s.name.split('#').next() == Some(name)
-                })
+                .values()
+                .filter(|s| s.generic_name.is(&["Main"], name))
+                .map(|s| &s.name)
                 .collect();
             assert_eq!(
                 found.len(),
@@ -176,24 +181,19 @@ mod tests {
                 .collect()
         }
 
-        /// The elements of `set`, each lambda as the name of the symbol it is written in, and
-        /// Dynamic as `None`.
-        fn writers(&self, set: SetId) -> Vec<Option<String>> {
+        /// The elements of `set`, each lambda as the unqualified name of the global value whose
+        /// symbol it is written in, and Dynamic as `None`.
+        fn writing_symbols(&self, set: SetId) -> Vec<Option<String>> {
             self.spec
                 .store
                 .elems(set)
                 .iter()
                 .map(|e| match e {
                     Elem::Dynamic => None,
-                    Elem::Lam(lam, _) => Some(
-                        self.analysis.lambdas[*lam as usize]
-                            .symbol
-                            .name
-                            .split('#')
-                            .next()
-                            .unwrap()
-                            .to_string(),
-                    ),
+                    Elem::Lam(lam, _) => {
+                        let symbol = &self.analysis.lambdas[*lam as usize].symbol;
+                        Some(self.prg.symbols[symbol].generic_name.name.clone())
+                    }
                 })
                 .collect()
         }
@@ -205,7 +205,7 @@ mod tests {
         v
     }
 
-    /// What `Inferred::writers` gives a lambda written in `main`.
+    /// What `Inferred::writing_symbols` gives a lambda written in `main`.
     fn main_lam() -> Option<String> {
         Some("main".to_string())
     }
@@ -235,7 +235,7 @@ main = (
         assert_eq!(sets.len(), 2);
         assert_ne!(sets[0], sets[1]);
         for s in &sets {
-            assert_eq!(inf.writers(*s), vec![main_lam()]);
+            assert_eq!(inf.writing_symbols(*s), vec![main_lam()]);
         }
     }
 
@@ -263,7 +263,7 @@ main = (
         assert_eq!(sets.len(), 1);
         let s = sets[0];
         assert_eq!(
-            sorted(inf.writers(s)),
+            sorted(inf.writing_symbols(s)),
             vec![main_lam(), Some("rec".to_string())]
         );
         let holds_itself = inf.spec.store.lam_elems(s).any(|(lam, args)| {
@@ -302,7 +302,7 @@ main = (
         assert_eq!(sets.len(), 1);
         let s = sets[0];
         assert_eq!(
-            inf.writers(s),
+            inf.writing_symbols(s),
             vec![
                 Some("compose_all".to_string()),
                 Some("compose_all".to_string())
@@ -338,7 +338,7 @@ main = (
         let mut inf = Inferred::new(&prg);
         let sets = inf.sets_at("run_fixed", &[0]);
         assert_eq!(sets.len(), 1);
-        assert_eq!(sorted(inf.writers(sets[0])), vec![None, main_lam()]);
+        assert_eq!(sorted(inf.writing_symbols(sets[0])), vec![None, main_lam()]);
     }
 
     /// The runtime runs the entry `IO` value, and C code calls an exported function through each
@@ -364,7 +364,12 @@ main = println("exported");
             let sets = inf.sets_at(name, &path);
             assert!(!sets.is_empty());
             for s in sets {
-                assert!(inf.writers(s).contains(&None), "{} {:?}", name, path);
+                assert!(
+                    inf.writing_symbols(s).contains(&None),
+                    "{} {:?}",
+                    name,
+                    path
+                );
             }
         }
     }
@@ -395,7 +400,7 @@ main = (
         let mut inf = Inferred::new(&prg);
         let sets = inf.sets_at("use_seg", &[0]);
         assert_eq!(sets.len(), 1);
-        assert_eq!(inf.writers(sets[0]), vec![main_lam()]);
+        assert_eq!(inf.writing_symbols(sets[0]), vec![main_lam()]);
     }
 
     /// A type taking a type constructor without its arguments, given `Array`, tracks the function a
@@ -424,7 +429,7 @@ main = (
         let mut inf = Inferred::new(&prg);
         let sets = inf.sets_at("call_rose", &[0]);
         assert_eq!(sets.len(), 1);
-        assert_eq!(inf.writers(sets[0]), vec![main_lam(), main_lam()]);
+        assert_eq!(inf.writing_symbols(sets[0]), vec![main_lam(), main_lam()]);
     }
 
     /// A global array of functions that one caller extends with a lambda of its own and another
@@ -456,7 +461,7 @@ main = (
         let mut sets: Vec<Vec<Option<String>>> = inf
             .sets_at("run_all", &[1, 0, 0])
             .into_iter()
-            .map(|s| sorted(inf.writers(s)))
+            .map(|s| sorted(inf.writing_symbols(s)))
             .collect();
         sets.sort();
         assert_eq!(sets, vec![vec![main_lam(), Some("table".to_string())]]);
@@ -487,7 +492,7 @@ main = (
         let mut inf = Inferred::new(&prg);
         let sets = inf.sets_at("use_seg", &[1, 0]);
         assert_eq!(sets.len(), 1);
-        assert_eq!(inf.writers(sets[0]), vec![main_lam(), main_lam()]);
+        assert_eq!(inf.writing_symbols(sets[0]), vec![main_lam(), main_lam()]);
     }
 
     /// An element of an array of functions rewritten through `Array::mod`, which punches the
@@ -514,7 +519,7 @@ main = (
         let mut inf = Inferred::new(&prg);
         let sets = inf.sets_at("run_first", &[1, 0, 0]);
         assert_eq!(sets.len(), 1);
-        assert_eq!(inf.writers(sets[0]), vec![main_lam(), main_lam()]);
+        assert_eq!(inf.writing_symbols(sets[0]), vec![main_lam(), main_lam()]);
     }
 
     /// A lambda capturing a struct depends on every set the struct's type carries, the sets of the
@@ -549,7 +554,6 @@ main = (
         let p_slots: Vec<usize> = inf
             .layout
             .own_slots(&p_ty)
-            .to_vec()
             .iter()
             .map(|v| {
                 let root = inf.analysis.solver.find(*v);
@@ -569,9 +573,9 @@ main = (
             .unwrap();
         for p in p_slots {
             assert!(
-                inner.params.contains(&p),
+                inner.param_deps.contains(&p),
                 "the lambda capturing `p` depends on {:?}, missing parameter {}",
-                inner.params,
+                inner.param_deps,
                 p
             );
         }

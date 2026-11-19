@@ -14,6 +14,7 @@ use crate::{
         program::Program,
     },
     constants::CAP_NAME,
+    elaboration::typecheck::Scope,
     misc::{Map, Set},
     optimization::call_graph::call_graph_of,
 };
@@ -31,7 +32,7 @@ pub struct Lambda {
     ///
     /// The lambda that is the body of its symbol depends on `Component::body_params`, so that the
     /// sets a member naming it carries are the ones a copy of the component is made for.
-    pub params: Vec<usize>,
+    pub param_deps: Vec<usize>,
     /// The lambda expression.
     pub expr: Arc<ExprNode>,
     /// The nodes of the lambda expression among the `NodeType`s of its symbol: its own node, then
@@ -67,7 +68,7 @@ impl Lambda {
     /// Whether the rewrite lifts the lambda to a global function where its set is represented by
     /// closures. The lambda that is the body of its symbol is a global function already, and one
     /// whose body reads its capture whole (`CAP_NAME`) needs the closure object holding it.
-    pub fn is_lifted_from_closures(&self) -> bool {
+    pub fn is_lifted_in_a_set_of_closures(&self) -> bool {
         !self.is_body() && !self.reads_own_capture
     }
 }
@@ -102,8 +103,8 @@ pub struct Component {
     pub lams: Vec<LamId>,
     /// Every variable the nodes, the lambdas and the references of the component name, each a root
     /// of the solver, and each once. A copy of the component gives each of them a set. `infer`
-    /// fills them in once every component is inferred, and then replaces each variable that
-    /// `types`, `node_types` and the lambdas name with its root.
+    /// fills this list once every component is inferred, and replaces each variable that `types`,
+    /// `node_types` and the lambdas name with its root.
     pub vars: Vec<SetVar>,
     /// The position of each variable of `vars` there.
     pub var_index: Map<SetVar, usize>,
@@ -127,9 +128,10 @@ pub struct NodeType {
 pub enum NameRef {
     /// A local name.
     Local,
-    /// A symbol: one of the component the node is in where `site` is `None`, whose copy the copy
-    /// the node is in refers to, and one of another component otherwise, at the copy the
-    /// reference gives. `ty` is the annotated type the reference has.
+    /// A symbol. Where `site` is `None`, the symbol is in the node's own component, and the
+    /// reference is to the copy of the component the node is in. Otherwise the symbol is in
+    /// another component, and `site` gives the copy referred to. `ty` is the annotated type of the
+    /// reference.
     Global { site: Option<Site>, ty: AType },
 }
 
@@ -212,8 +214,8 @@ pub fn infer(prg: &Program, layout: &SlotLayout) -> Analysis {
     for export in &prg.export_statements {
         roots.push((export.value_expr.clone().unwrap(), DynamicKind::Export));
     }
-    let root = infer_component(prg, layout, &mut analysis, vec![], roots);
-    analysis.components.push(root);
+    let entry_component = infer_component(prg, layout, &mut analysis, vec![], roots);
+    analysis.components.push(entry_component);
     // The variables of each component, as the roots they are once every component is inferred: a
     // component inferred later can unify a pinned variable of an earlier one, which can make
     // another variable its root.
@@ -306,7 +308,7 @@ fn infer_component(
         component: id,
         symbols: &symbols,
         types: &types,
-        env: Map::default(),
+        env: Scope::default(),
         frames: vec![],
         terms: vec![],
         vars_holding_current: vec![],
@@ -378,7 +380,7 @@ struct Inferencer<'a, 'p, 'e> {
     /// component gets this type itself.
     types: &'a [AType],
     /// The annotated types of the local names in scope, the innermost binding of a name last.
-    env: Map<FullName, Vec<AType>>,
+    env: Scope<AType>,
     /// The terms enclosing the node under inference, the innermost last, as indices into `terms`:
     /// the body of the symbol, then the lambdas around the node.
     frames: Vec<usize>,
@@ -408,6 +410,12 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
     }
 
     /// Records `vars`, met inside the innermost lambda or body, as part of its term.
+    ///
+    /// Outside every lambda and body, which is where the roots of the entry component are read,
+    /// `vars` are recorded nowhere. A term's variables decide what its lambda or body depends on and
+    /// what is pinned with it, and the entry component has neither: a root is a name of a global,
+    /// so it writes no lambda, and the component holds no symbol. The roots' own types are made
+    /// Dynamic instead.
     fn record_vars(&mut self, vars: &[SetVar]) {
         if let Some(frame) = self.frames.last() {
             self.terms[*frame].vars.extend(vars.iter().copied());
@@ -500,11 +508,11 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 for (i, param) in params.iter().enumerate() {
                     let param_ty = self.layout.type_arg(&lam_ty, i);
                     self.record(&param_ty);
-                    self.bind(&param.name, param_ty);
+                    self.env.push(&param.name.name, param_ty);
                 }
                 let body = self.infer(body);
                 for param in params.iter().rev() {
-                    self.unbind(&param.name);
+                    self.env.pop(&param.name.name);
                 }
                 let ret = self.layout.type_arg(&lam_ty, params.len());
                 self.analysis.solver.unify(&ret, &body);
@@ -556,9 +564,9 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 self.frames.push(term);
                 let param = self.layout.type_arg(&lam_ty, 0);
                 self.record(&param);
-                self.bind(&params[0].name, param);
+                self.env.push(&params[0].name.name, param);
                 let body = self.infer(body);
-                self.unbind(&params[0].name);
+                self.env.pop(&params[0].name.name);
                 self.frames.pop();
                 self.analysis.lambdas[lam as usize].nodes.end = self.nodes.len();
                 let ret = self.layout.type_arg(&lam_ty, 1);
@@ -570,7 +578,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 let names = self.bind_pattern(pat, &bound);
                 let val = self.infer(val);
                 for name in names.iter().rev() {
-                    self.unbind(name);
+                    self.env.pop(&name.name);
                 }
                 val
             }
@@ -589,7 +597,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                     let val = self.infer(val);
                     self.analysis.solver.unify(&result, &val);
                     for name in names.iter().rev() {
-                        self.unbind(name);
+                        self.env.pop(&name.name);
                     }
                 }
                 result
@@ -664,7 +672,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
                 .expect("the roots of the program hold no lambda")
                 .clone(),
             index: self.lam_counter,
-            params: vec![],
+            param_deps: vec![],
             expr: expr.clone(),
             nodes: node..node,
             captures: vec![],
@@ -679,6 +687,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
     /// The annotated type of the name `name` read by a builtin operation, recorded in the term of
     /// the innermost lambda or body: a name read only by a builtin is still part of what the lambda
     /// captures.
+    ///
     /// `CAP_NAME` is the capture of the innermost lambda, which only a closure object holds, so
     /// that lambda's set is Dynamic.
     fn operand(&mut self, name: &FullName) -> (AType, NameRef) {
@@ -703,10 +712,8 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
     /// The annotated type of the local name `name` where it is read.
     fn local(&self, name: &FullName) -> AType {
         self.env
-            .get(name)
-            .and_then(|tys| tys.last())
+            .get_local(&name.name)
             .unwrap_or_else(|| panic!("the local name `{}` is unbound", name.to_string()))
-            .clone()
     }
 
     /// The annotated type of a reference to the name `name`, and what the name stands for.
@@ -749,16 +756,6 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         )
     }
 
-    /// Brings the local name `name` into scope, at the annotated type `ty`.
-    fn bind(&mut self, name: &FullName, ty: AType) {
-        self.env.entry(name.clone()).or_default().push(ty);
-    }
-
-    /// Takes the innermost binding of the local name `name` out of scope.
-    fn unbind(&mut self, name: &FullName) {
-        self.env.get_mut(name).unwrap().pop();
-    }
-
     /// Brings the names `pat` binds into scope, where `pat` takes apart a value of the annotated
     /// type `ty`. Returns the names, in the order they were bound.
     fn bind_pattern(&mut self, pat: &Arc<PatternNode>, ty: &AType) -> Vec<FullName> {
@@ -767,7 +764,8 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         names
     }
 
-    /// `bind_pattern`, appending the names to `names`.
+    /// Brings the names `pat` binds into scope and appends them to `names`, recording a node for
+    /// each node of `pat`.
     fn bind_pattern_into(&mut self, pat: &Arc<PatternNode>, ty: &AType, names: &mut Vec<FullName>) {
         self.nodes.push(Some(NodeType {
             ty: ty.clone(),
@@ -775,7 +773,7 @@ impl<'a, 'p, 'e> Inferencer<'a, 'p, 'e> {
         }));
         match &pat.pattern {
             Pattern::Var(v, _) => {
-                self.bind(&v.name, ty.clone());
+                self.env.push(&v.name.name, ty.clone());
                 names.push(v.name.clone());
             }
             Pattern::Struct(_, fields, _) => {
@@ -877,7 +875,7 @@ fn generalize(
     for (i, term) in terms.iter().enumerate() {
         let depends_on = term_params(solver, &terms, &term_of_lam, i, &param_index);
         match term.lam {
-            Some(lam) => analysis.lambdas[lam as usize].params = depends_on,
+            Some(lam) => analysis.lambdas[lam as usize].param_deps = depends_on,
             None => body_params.extend(depends_on),
         }
     }
@@ -887,32 +885,30 @@ fn generalize(
         if let Some(lam) = term.lam {
             let lambda = &mut analysis.lambdas[lam as usize];
             if lambda.is_body() {
-                lambda.params = body_params.clone();
+                lambda.param_deps = body_params.clone();
             }
         }
     }
-    for v in vars_holding_current {
-        let members = mem::take(solver.members_mut(v));
-        let members = members
-            .into_iter()
-            .map(|m| match m {
-                Member::Lam {
-                    lam,
-                    owner: Owner::Current,
-                } => Member::Lam {
-                    lam,
-                    owner: Owner::Instance(
-                        analysis.lambdas[lam as usize]
-                            .params
-                            .iter()
-                            .map(|p| params[*p])
-                            .collect(),
-                    ),
-                },
-                m => m,
-            })
-            .collect();
-        *solver.members_mut(v) = members;
+    let roots_holding_current: Set<SetVar> = vars_holding_current
+        .iter()
+        .map(|v| solver.find(*v))
+        .collect();
+    for v in roots_holding_current {
+        for member in solver.members_mut(v) {
+            if let Member::Lam {
+                lam,
+                owner: owner @ Owner::Current,
+            } = member
+            {
+                *owner = Owner::Instance(
+                    analysis.lambdas[*lam as usize]
+                        .param_deps
+                        .iter()
+                        .map(|p| params[*p])
+                        .collect(),
+                );
+            }
+        }
     }
 
     // A pinned variable is one variable in every copy, so every variable its members name is pinned
@@ -1159,8 +1155,8 @@ fn merge_equal_classes(
                 .collect(),
         })
         .collect();
-    // The labels are numbered from 0 with none skipped: the classes kept apart, then one label for
-    // every other class.
+    // The starting classes are numbered from 0 with none skipped: one number for each class kept
+    // apart, then one number shared by every other class.
     let keeps_own_class =
         |c: usize| c < param_count || matches!(classes[c], LambdaSetSchemeClass::Shared(_));
     let mut initial: Vec<usize> = vec![0; n];
@@ -1248,8 +1244,8 @@ fn param_dependence(
 
 /// The parameters of the component that the term `start` depends on, in increasing order: those it
 /// reaches. A term reaches the variables it holds and the terms of the lambdas written inside it,
-/// and a variable reaches what its members name. A parameter's members are not followed: a copy of
-/// the component gives the parameter its value.
+/// and a variable reaches what its members name. The walk stops at a parameter, since a copy of the
+/// component gives the parameter its value.
 fn term_params(
     solver: &mut Solver,
     terms: &[Term],
@@ -1320,12 +1316,12 @@ fn walk_reached(
                         ..
                     } => var_stack.extend(args),
                     Member::Lam {
-                        lam: other,
+                        lam,
                         owner: Owner::Current,
                     } => {
-                        let other = term_of_lam[&other];
-                        if seen_terms.insert(other) {
-                            term_stack.push(other);
+                        let term = term_of_lam[&lam];
+                        if seen_terms.insert(term) {
+                            term_stack.push(term);
                         }
                     }
                     Member::Dynamic(_) => {}

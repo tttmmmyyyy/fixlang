@@ -395,8 +395,8 @@ pub(crate) fn alias_step(
 /// recorded and would read the value as one produced here — its own to release, when it may be an
 /// operand's. The leaves beneath decide instead. A leaf recorded as `⊥` belongs to a variant the
 /// value does not have and holds no reference, so it names no object and is passed over; a leaf the
-/// op produces names this value itself. A leaf that records several sources
-/// holds one per path it can be reached by, and each of them names an object.
+/// op produces names this value itself. A leaf that records several sources holds one per path it
+/// can be reached by, and each of them names an object.
 ///
 /// # Arguments
 /// * `decl` - the provenance the op declares for its result.
@@ -1231,7 +1231,7 @@ mod tests {
     /// out with.
     ///
     /// `unit_step` states the capture's index and the closure's field count apart from the layout
-    /// `ty_to_object_ty` gives, and `param_ownership_shape` builds a table of that width indexed by
+    /// `ty_to_object_ty` gives, and `borrow::ownership_shape` builds a table of that width indexed by
     /// field index. A closure that grew a field would leave the count behind, and the capture would
     /// be recorded at a field index that is no longer the capture's.
     #[test]

@@ -27,7 +27,7 @@
 
 use crate::{
     ast::{
-        expr::{expr_app_typed, expr_var, Expr, ExprNode},
+        expr::{expr_app_typed, expr_var_typed, Expr, ExprNode},
         name::FullName,
         program::{Program, Symbol},
         traverse::{ExprVisitor, StartVisitResult, VisitState},
@@ -250,11 +250,10 @@ impl FixDefunctionalizer {
             .unwrap();
 
         // The recursive value `G(cap)`, of type `a -> b`.
-        let g_ref =
-            expr_var(func_name.clone(), None).set_type(type_arrow(cap.ty.clone(), ab_ty.clone()));
+        let g_ref = expr_var_typed(func_name.clone(), type_arrow(cap.ty.clone(), ab_ty.clone()));
         let self_replacement = expr_app_typed(
             g_ref.clone(),
-            vec![expr_var(cap_param_name.clone(), None).set_type(cap.ty.clone())],
+            vec![expr_var_typed(cap_param_name.clone(), cap.ty.clone())],
         );
 
         // `body[self := G(cap)]`: capture-avoiding, and it leaves shadowed occurrences of `self`

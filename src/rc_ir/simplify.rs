@@ -38,8 +38,8 @@ use crate::fixstd::builtin::{MakeStructOp, MakeUnionOp};
 use crate::misc::{grow_stack, Map};
 use crate::parse::sourcefile::Span;
 use crate::rc_ir::ast::{
-    count_value_uses, map_children, map_continuation, MatchArm, RcExpr, RcExprNode, RcProgram,
-    RcRhs, RcVar,
+    continuation_of, count_value_uses, map_children, map_continuation, MatchArm, RcExpr,
+    RcExprNode, RcProgram, RcRhs, RcVar,
 };
 use crate::rc_ir::rename::{clone_fresh, copy_suffix, substitute_expr};
 use std::sync::Arc;
@@ -301,13 +301,13 @@ fn case_of_case(node: &RcExprNode, counter: &mut u64) -> Option<RcExprNode> {
         new_arms_size,
         "the rewrite left arms of a size other than the one measured before building them"
     );
-    Some(node_of(
+    Some(RcExprNode::new(
         RcExpr::Let(
             m.clone(),
             RcRhs::Match(inner_scrut.clone(), new_arms),
             k2.clone(),
         ),
-        &node.source,
+        node.source.clone(),
     ))
 }
 
@@ -409,10 +409,10 @@ fn replace_tail_union_of_match(
 /// `let x = match scrut { arms }; ret x` — the shape a `match` takes where it stands in tail
 /// position.
 fn tail_match(x: RcVar, scrut: &RcVar, arms: Vec<MatchArm>, source: &Option<Span>) -> RcExprNode {
-    let ret = node_of(RcExpr::Ret(x.clone()), source);
-    node_of(
+    let ret = RcExprNode::new(RcExpr::Ret(x.clone()), source.clone());
+    RcExprNode::new(
         RcExpr::Let(x, RcRhs::Match(scrut.clone(), arms), ret),
-        source,
+        source.clone(),
     )
 }
 
@@ -428,31 +428,9 @@ fn replace_tail(node: &RcExprNode, f: &mut dyn FnMut(&RcVar) -> RcExprNode) -> R
     })
 }
 
-/// What `node` evaluates after its own step. A `ret` ends the chain and has none, so a caller answers
-/// for that case before asking.
-fn continuation_of(node: &RcExprNode) -> &RcExprNode {
-    match node.expr.as_ref() {
-        RcExpr::Ret(v) => unreachable!("`ret {}` ends the chain", v.name.to_string()),
-        RcExpr::Let(_, _, k)
-        | RcExpr::Destructure(_, _, _, k)
-        | RcExpr::Eval(_, k)
-        | RcExpr::Retain(_, _, _, k)
-        | RcExpr::Release(_, _, _, k) => k,
-    }
-}
-
 /// A one-entry substitution map.
 fn single_subst(from: &FullName, to: &FullName) -> Map<FullName, FullName> {
     let mut subst: Map<FullName, FullName> = Map::default();
     subst.insert(from.clone(), to.clone());
     subst
-}
-
-/// A node holding `expr` and reporting `source` as the place it comes from. A rewritten node carries
-/// the span of the node it replaces, so the simplified body still points into the source program.
-fn node_of(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
-    RcExprNode {
-        expr: Arc::new(expr),
-        source: source.clone(),
-    }
 }

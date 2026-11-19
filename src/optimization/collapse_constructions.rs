@@ -29,7 +29,7 @@
 
 use crate::{
     ast::{
-        expr::{expr_let_typed, expr_var, var_var, Expr, ExprNode},
+        expr::{expr_let_typed, expr_var_typed, Expr, ExprNode},
         name::{FullName, Name},
         pattern::{Pattern, PatternNode},
         program::{Program, Symbol},
@@ -287,7 +287,7 @@ impl<'a> Collapser<'a> {
                 let ty = sub.info.type_.as_ref().unwrap().clone();
                 expr_let_typed(
                     sub.clone(),
-                    expr_var(payload.clone(), None).set_type(ty),
+                    expr_var_typed(payload.clone(), ty),
                     body.clone(),
                 )
             }
@@ -398,16 +398,25 @@ impl<'a> ExprVisitor for Collapser<'a> {
             return StartVisitResult::VisitChildren;
         }
 
-        // Each field the pattern reads is bound to the name the construction put there.
+        // Each field the pattern reads is bound to the name the construction put there. A
+        // construction sets every field of its struct, so each field the pattern reads has one.
         let mut collapsed = expr.get_let_value();
         for (field, _, field_pat) in field_to_pat.iter().rev() {
-            let Some((_, held)) = fields.iter().find(|(name, _)| name == field) else {
-                return StartVisitResult::VisitChildren;
-            };
+            let (_, held) = fields
+                .iter()
+                .find(|(name, _)| name == field)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "a pattern of `{}` reads the field `{}`, which its construction does not \
+                         set",
+                        tycon.to_string(),
+                        field
+                    )
+                });
             let ty = field_pat.info.type_.as_ref().unwrap().clone();
             collapsed = expr_let_typed(
                 field_pat.clone(),
-                expr_var(held.clone(), None).set_type(ty),
+                expr_var_typed(held.clone(), ty),
                 collapsed,
             );
         }
@@ -481,10 +490,10 @@ impl<'a> ExprVisitor for Collapser<'a> {
             let name = self.fresh_field_name();
             let ty = value.type_.as_ref().unwrap().clone();
             bindings.push((
-                PatternNode::make_var(var_var(name.clone()), None).set_type(ty.clone()),
+                PatternNode::make_local_var(&name, ty.clone()),
                 value.clone(),
             ));
-            named = named.set_make_struct_field(field, expr_var(name, None).set_type(ty));
+            named = named.set_make_struct_field(field, expr_var_typed(name, ty));
         }
         let under_bindings = bindings
             .into_iter()

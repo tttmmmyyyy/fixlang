@@ -59,6 +59,15 @@ mod integration_tests {
         setup_case_projects("src/tests/test_collapse_constructions/cases", case)
     }
 
+    /// Builds `case` at every level of `OPT_LEVELS`, and checks that it answers `expected_output` at
+    /// each.
+    fn assert_answers_at_every_level(case: &str, expected_output: &str) {
+        let (_temp_dir, project_dir) = setup_test_env(case);
+        for opt_level in OPT_LEVELS {
+            build_project_run_and_read_rc_ir(&project_dir, opt_level, expected_output);
+        }
+    }
+
     /// The functions of `dump` whose name says they are an iterator's `advance`.
     ///
     /// An `advance` that walks past elements by calling itself is a body `inline` never moves, so the
@@ -130,10 +139,7 @@ mod integration_tests {
     /// outer one carries and the value the inner one carries, both named after the same field.
     #[test]
     pub fn test_a_chain_of_two_iterators_of_one_type_answers_the_same() {
-        let (_temp_dir, project_dir) = setup_test_env("nested_iterators");
-        for opt_level in OPT_LEVELS {
-            build_project_run_and_read_rc_ir(&project_dir, opt_level, NESTED_ITERATORS_OUTPUT);
-        }
+        assert_answers_at_every_level("nested_iterators", NESTED_ITERATORS_OUTPUT);
     }
 
     /// A struct built out of expressions and taken apart, a union each branch of an `if` builds a
@@ -142,10 +148,7 @@ mod integration_tests {
     /// rewrites do not run at.
     #[test]
     pub fn test_a_construction_read_where_it_is_built_answers_the_same() {
-        let (_temp_dir, project_dir) = setup_test_env("read_constructions");
-        for opt_level in OPT_LEVELS {
-            build_project_run_and_read_rc_ir(&project_dir, opt_level, READ_CONSTRUCTIONS_OUTPUT);
-        }
+        assert_answers_at_every_level("read_constructions", READ_CONSTRUCTIONS_OUTPUT);
     }
 
     /// A struct argument whose pattern writes its fields in the reverse of the order they are
@@ -153,20 +156,14 @@ mod integration_tests {
     /// a mix-up of the two orders type checks, and the value is what says there was none.
     #[test]
     pub fn test_a_struct_argument_taken_apart_out_of_declaration_order_answers_the_same() {
-        let (_temp_dir, project_dir) = setup_test_env("fields_out_of_order");
-        for opt_level in OPT_LEVELS {
-            build_project_run_and_read_rc_ir(&project_dir, opt_level, FIELDS_OUT_OF_ORDER_OUTPUT);
-        }
+        assert_answers_at_every_level("fields_out_of_order", FIELDS_OUT_OF_ORDER_OUTPUT);
     }
 
     /// A value bound to a name before a pattern binds a field to the same name stays itself, and the
     /// field read after the pattern is the field, at every level.
     #[test]
     pub fn test_a_value_named_like_a_field_before_the_pattern_stays_itself() {
-        let (_temp_dir, project_dir) = setup_test_env("shadowed_field_name");
-        for opt_level in OPT_LEVELS {
-            build_project_run_and_read_rc_ir(&project_dir, opt_level, SHADOWED_FIELD_NAME_OUTPUT);
-        }
+        assert_answers_at_every_level("shadowed_field_name", SHADOWED_FIELD_NAME_OUTPUT);
     }
 
     /// An argument written beside the struct can name a field of the struct the call was given,
@@ -174,37 +171,26 @@ mod integration_tests {
     /// value it was written against, at every level.
     #[test]
     pub fn test_an_argument_naming_a_field_reads_the_value_it_was_written_against() {
-        let (_temp_dir, project_dir) = setup_test_env("field_in_another_argument");
-        for opt_level in OPT_LEVELS {
-            build_project_run_and_read_rc_ir(
-                &project_dir,
-                opt_level,
-                FIELD_IN_ANOTHER_ARGUMENT_OUTPUT,
-            );
-        }
+        assert_answers_at_every_level(
+            "field_in_another_argument",
+            FIELD_IN_ANOTHER_ARGUMENT_OUTPUT,
+        );
     }
 
     /// A struct built on every step from fields that are names and fields that are expressions keeps
     /// the value each field was written with, at every level.
     #[test]
     pub fn test_a_struct_of_named_and_computed_fields_keeps_their_values() {
-        let (_temp_dir, project_dir) = setup_test_env("dyn_flatten_chain");
-        for opt_level in OPT_LEVELS {
-            build_project_run_and_read_rc_ir(&project_dir, opt_level, DYN_FLATTEN_CHAIN_OUTPUT);
-        }
+        assert_answers_at_every_level("dyn_flatten_chain", DYN_FLATTEN_CHAIN_OUTPUT);
     }
 
     /// A union taken apart from a triple, read in a global that also builds a pair with a computed
     /// field: the reader is given the union, at every level.
     #[test]
     pub fn test_a_union_taken_from_a_triple_beside_a_computed_field_is_read_as_built() {
-        let (_temp_dir, project_dir) = setup_test_env("union_beside_computed_field");
-        for opt_level in OPT_LEVELS {
-            build_project_run_and_read_rc_ir(
-                &project_dir,
-                opt_level,
-                UNION_BESIDE_COMPUTED_FIELD_OUTPUT,
-            );
-        }
+        assert_answers_at_every_level(
+            "union_beside_computed_field",
+            UNION_BESIDE_COMPUTED_FIELD_OUTPUT,
+        );
     }
 }

@@ -3,7 +3,7 @@
 
 use super::{
     concrete::{PendingElem, Ref, SetId, SetStore},
-    infer::Analysis,
+    infer::{Analysis, Component, Lambda},
     solver::{Member, Owner, SetVar, Solver},
 };
 use crate::misc::Map;
@@ -19,11 +19,24 @@ pub struct Instance {
     pub var_sets: Vec<SetId>,
 }
 
+impl Instance {
+    /// The set this copy gives the variable `v` of `component`, the copy's component.
+    pub fn set_of(&self, component: &Component, v: SetVar) -> SetId {
+        self.var_sets[component.var_index[&v]]
+    }
+
+    /// The sets this copy gives the parameters `lambda` depends on (`Lambda::param_deps`), `lambda`
+    /// a lambda of the copy's component.
+    pub fn lambda_args(&self, lambda: &Lambda) -> Vec<SetId> {
+        lambda.param_deps.iter().map(|p| self.args[*p]).collect()
+    }
+}
+
 /// The copies a program needs, found from its entry and the values it exports.
 pub struct Specialization {
     /// The concrete sets the copies name.
     pub store: SetStore,
-    /// The copies, in the order they were first asked for: the copy of the root first.
+    /// The copies, in the order they were first asked for: the copy of the entry's component first.
     pub instances: Vec<Instance>,
     /// The index into `instances` of each copy, by its component and the sets of its parameters:
     /// the copy whose `component` and `args` these are.

@@ -594,10 +594,7 @@ impl<'a> Walk<'a> {
     fn rebuild(&self, node: &RcExprNode, build: impl FnOnce() -> RcExpr) -> RcExprNode {
         match self.mode {
             Mode::Survey { .. } => node.clone(),
-            Mode::Clone { .. } => RcExprNode {
-                expr: Arc::new(build()),
-                source: node.source.clone(),
-            },
+            Mode::Clone { .. } => RcExprNode::new(build(), node.source.clone()),
         }
     }
 

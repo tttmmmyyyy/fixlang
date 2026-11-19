@@ -100,8 +100,8 @@ pub struct RcFunc {
     ///
     /// The empty default is correct at every stage — before borrow-ification every parameter is owned
     /// (the discipline `insert_rc` establishes), and a version that owns everything borrows nothing.
-    /// `cancel` and the RC IR dump read the owned complement (via `all_owned_units`) for each call's
-    /// consume sites and each parameter's ownership shape.
+    /// `cancel`, `sink_retains` and the RC IR dump read the owned complement (via
+    /// `all_owned_units`) for each call's consume sites and each parameter's ownership shape.
     #[serde(serialize_with = "serialize_sorted_var_paths")]
     pub borrowed_units: Set<VarPath>,
     /// Whether the back end is asked to inline every call of this function. Code generation writes
@@ -134,6 +134,16 @@ pub struct RcExprNode {
     /// the serialized form; see `divide_program::debug_information_digest`.
     #[serde(skip)]
     pub source: Option<Span>,
+}
+
+impl RcExprNode {
+    /// A node standing for `expr`, written at `source`.
+    pub fn new(expr: RcExpr, source: Option<Span>) -> Self {
+        RcExprNode {
+            expr: Arc::new(expr),
+            source,
+        }
+    }
 }
 
 /// The statement-nested form: `Let`, `Retain`, and `Release` each carry a continuation, and `Ret`
@@ -401,8 +411,7 @@ pub struct RcGlobalInit {
 }
 
 impl RcGlobalInit {
-    /// The same global computed by `init`, which a pass over the whole program makes of this one's
-    /// initializer.
+    /// This global with `init` as its initializer, every other field kept.
     pub fn with_init(&self, init: RcExprNode) -> RcGlobalInit {
         RcGlobalInit {
             symbol: self.symbol.clone(),
@@ -501,6 +510,19 @@ fn for_each_node_inner(node: &RcExprNode, visit: &mut impl FnMut(&RcExprNode)) {
     }
 }
 
+/// What `node` evaluates after its own step. A `ret` ends the chain and has none, so a caller answers
+/// for that case before asking.
+pub(crate) fn continuation_of(node: &RcExprNode) -> &RcExprNode {
+    match node.expr.as_ref() {
+        RcExpr::Ret(v) => unreachable!("`ret {}` ends the chain", v.name.to_string()),
+        RcExpr::Let(_, _, k)
+        | RcExpr::Destructure(_, _, _, k)
+        | RcExpr::Eval(_, k)
+        | RcExpr::Retain(_, _, _, k)
+        | RcExpr::Release(_, _, _, k) => k,
+    }
+}
+
 /// `node` with its continuation replaced by what `f` makes of it. A `Ret` has no continuation and
 /// comes back as it is.
 pub(crate) fn map_continuation(
@@ -519,10 +541,7 @@ pub(crate) fn map_continuation(
         RcExpr::Eval(v, k) => RcExpr::Eval(v.clone(), f(k)),
         RcExpr::Ret(_) => return node.clone(),
     };
-    RcExprNode {
-        expr: Arc::new(expr),
-        source: node.source.clone(),
-    }
+    RcExprNode::new(expr, node.source.clone())
 }
 
 /// `node` with each node right under it replaced by what `f` makes of it: the body of each arm of
@@ -532,17 +551,17 @@ pub(crate) fn map_children(
     mut f: impl FnMut(&RcExprNode) -> RcExprNode,
 ) -> RcExprNode {
     let node = match node.expr.as_ref() {
-        RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => RcExprNode {
-            expr: Arc::new(RcExpr::Let(
+        RcExpr::Let(x, RcRhs::Match(scrutinee, arms), k) => RcExprNode::new(
+            RcExpr::Let(
                 x.clone(),
                 RcRhs::Match(
                     scrutinee.clone(),
                     arms.iter().map(|arm| arm.with_body(f(&arm.body))).collect(),
                 ),
                 k.clone(),
-            )),
-            source: node.source.clone(),
-        },
+            ),
+            node.source.clone(),
+        ),
         _ => node.clone(),
     };
     map_continuation(&node, f)

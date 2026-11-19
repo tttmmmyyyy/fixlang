@@ -6,11 +6,11 @@ and the mutating ones behind `mutate_elements` and `mutate_boxed` — are builti
 `BuiltinOp::env_operand`. Such an op applies one of its operands, a function, to a tuple whose first
 field is another of its operands, the environment.
 
-The rewrite by the lambda sets lifts a lambda whose set is represented by closures to a global
-function taking its capture struct as the first argument, and the function such an op is given has
-such a set, so it is that global function applied to a capture struct: a closure holding the capture
-struct, built on the heap on every call. This pass moves the capture struct into the environment
-instead, so that the function the op is given captures nothing.
+Lambda set specialization (`lambda_set`) lifts a lambda whose set it represents by closures to a
+global function taking its capture struct as the first argument. The function given to such an op
+has a set of this kind, so it is that global function applied to a capture struct: a closure holding
+the capture struct, built on the heap on every call. This pass moves the capture struct into the
+environment instead, so that the function the op is given captures nothing.
 
 ```
 let h = F(cap);
@@ -45,9 +45,9 @@ where it is built, and `collapse_constructions`, run after this pass, reads the 
 
 ## Relations to other optimizations
 
-* It runs after the rewrite by the lambda sets, which is what turns the function every such op is
-  given into a global function applied to its capture struct. Running after it also leaves a lambda
-  given to such an op capturing what it captures while the lambda sets are inferred, so a function
+* It runs after lambda set specialization, which is what turns the function every such op is given
+  into a global function applied to its capture struct. Running after it also leaves a lambda given
+  to such an op capturing what it captures while the lambda sets are inferred, so a function
   whose parameter the lambda calls is specialized on the function that parameter receives, as it
   would be for any other lambda calling it.
 * It runs above `collapse_constructions`, which reads the tuple built for `F` into the pattern that
@@ -62,8 +62,8 @@ use crate::{
     ast::{
         builtin_op::BuiltinOpExpr,
         expr::{
-            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var, var_local,
-            ExprNode,
+            expr_abs_typed, expr_app_typed, expr_let_typed, expr_make_struct, expr_var_typed,
+            var_local, ExprNode,
         },
         name::FullName,
         pattern::PatternNode,
@@ -201,7 +201,7 @@ impl CaptureStructMover<'_> {
         let new_env_ty = make_tuple_ty(vec![env_ty.clone(), cap_ty.clone()]);
         let mut op_rewriter = OpRewriter {
             function: &name,
-            cap: var_expr(&cap_name, &cap_ty),
+            cap: expr_var_typed(cap_name.clone(), cap_ty.clone()),
             new_env: local("_op_env"),
             new_env_ty: new_env_ty.clone(),
             env_ty: env_ty.clone(),
@@ -220,28 +220,34 @@ impl CaptureStructMover<'_> {
             vec![
                 (
                     "0".to_string(),
-                    PatternNode::make_local_var(&env0.name, env_ty.clone()),
+                    PatternNode::make_local_var(&env0, env_ty.clone()),
                 ),
                 (
                     "1".to_string(),
-                    PatternNode::make_local_var(&cap0.name, cap_ty.clone()),
+                    PatternNode::make_local_var(&cap0, cap_ty.clone()),
                 ),
             ],
         )
         .set_type(new_env_ty);
         let mut param_field_pats = vec![("0".to_string(), env_pat)];
-        let mut param_field_exprs = vec![("0".to_string(), var_expr(&env0, &env_ty))];
+        let mut param_field_exprs = vec![(
+            "0".to_string(),
+            expr_var_typed(env0.clone(), env_ty.clone()),
+        )];
         for (i, ty) in param_field_tys.iter().enumerate().skip(1) {
             let field_name = local(&format!("_{}", i));
             param_field_pats.push((
                 i.to_string(),
-                PatternNode::make_local_var(&field_name.name, ty.clone()),
+                PatternNode::make_local_var(&field_name, ty.clone()),
             ));
-            param_field_exprs.push((i.to_string(), var_expr(&field_name, ty)));
+            param_field_exprs.push((
+                i.to_string(),
+                expr_var_typed(field_name.clone(), ty.clone()),
+            ));
         }
         let new_param = local("_arg");
         let call = expr_app_typed(
-            expr_app_typed(func, vec![var_expr(&cap0, &cap_ty)]),
+            expr_app_typed(func, vec![expr_var_typed(cap0.clone(), cap_ty.clone())]),
             vec![expr_make_struct(param_tycon.clone(), param_field_exprs).set_type(param_ty)],
         );
         let new_func = expr_abs_typed(
@@ -250,7 +256,7 @@ impl CaptureStructMover<'_> {
             expr_let_typed(
                 PatternNode::make_struct(param_tycon, param_field_pats)
                     .set_type(new_param_ty.clone()),
-                var_expr(&new_param, &new_param_ty),
+                expr_var_typed(new_param.clone(), new_param_ty.clone()),
                 call,
             ),
         );
@@ -269,16 +275,11 @@ impl CaptureStructMover<'_> {
         // `let c = cap; let h = |q| ..; body`, where `cap` is read where `F(cap)` read it.
         let new_func_ty = new_func.type_.as_ref().unwrap().clone();
         Some(expr_let_typed(
-            PatternNode::make_local_var(&cap_name.name, cap_ty.clone()),
+            PatternNode::make_local_var(&cap_name, cap_ty.clone()),
             cap,
             expr_let_typed(pat.set_type(new_func_ty), new_func, body),
         ))
     }
-}
-
-/// The name `name` read at type `ty`.
-fn var_expr(name: &FullName, ty: &Arc<TypeNode>) -> Arc<ExprNode> {
-    expr_var(name.clone(), None).set_type(ty.clone())
 }
 
 impl ExprVisitor for CaptureStructMover<'_> {
@@ -348,13 +349,16 @@ impl ExprVisitor for OpRewriter<'_> {
         let env_and_cap = expr_make_struct(
             tycon(make_tuple_name_abs(2)),
             vec![
-                ("0".to_string(), var_expr(&old_env, &self.env_ty)),
+                (
+                    "0".to_string(),
+                    expr_var_typed(old_env.clone(), self.env_ty.clone()),
+                ),
                 ("1".to_string(), self.cap.clone()),
             ],
         )
         .set_type(self.new_env_ty.clone());
         StartVisitResult::ReplaceAndReturn(expr_let_typed(
-            PatternNode::make_local_var(&self.new_env.name, self.new_env_ty.clone()),
+            PatternNode::make_local_var(&self.new_env, self.new_env_ty.clone()),
             env_and_cap,
             expr.set_builtin(builtin),
         ))

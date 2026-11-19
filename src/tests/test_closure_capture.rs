@@ -228,9 +228,9 @@ mod tests {
     /// A captured `IOState` is left out of the closure and made where it is read.
     ///
     /// The level is `none` because that is where a closure meets an `IOState` as a captured value of
-    /// its own: the rewrite by the lambda sets, which runs from `-O max` up, gathers a lambda's
-    /// captures into one capture struct, and that struct occupies storage as soon as one of the values
-    /// in it does.
+    /// its own: lambda set specialization, which runs from `-O max` up, gathers a lambda's captures
+    /// into one capture struct, and that struct occupies storage as soon as one of the values in it
+    /// does.
     #[test]
     fn test_an_iostate_capture_is_left_out_of_the_closure() {
         let dump = build_run_and_read_rc_ir(
@@ -363,11 +363,12 @@ mod tests {
     /// the environment `()`, so the function takes `(((), c), ...)`, where `c` is the capture struct
     /// of the lambda the function was lifted from.
     fn closures_taking_a_capture_struct_through_the_environment(dump: &str) -> Vec<&str> {
+        let capture_struct = format!("{}@", LS_CAP_PREFIX);
         dump.lines()
             .filter(|line| {
                 line.contains("= closure ")
                     && line.contains(" : (((), ")
-                    && line.contains(&format!("{}@", LS_CAP_PREFIX))
+                    && line.contains(&capture_struct)
             })
             .collect()
     }

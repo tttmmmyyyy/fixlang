@@ -9,6 +9,13 @@ use std::{mem, rc::Rc};
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct SetVar(u32);
 
+impl SetVar {
+    /// The index of the variable, which a dump writes it by.
+    pub fn index(self) -> u32 {
+        self.0
+    }
+}
+
 /// A lambda of the program, as its index into `Analysis::lambdas`.
 pub type LamId = u32;
 
@@ -28,8 +35,8 @@ pub enum Owner {
     /// replaces it by `Instance` once the component is solved, with the variables the lambda's
     /// body depends on.
     Current,
-    /// The copy given by these variables, one per parameter of the lambda the member names, in the
-    /// order `Lambda::params` lists them.
+    /// The copy given by these variables, one per component parameter the lambda the member names
+    /// depends on, in the order `Lambda::param_deps` lists them.
     Instance(Vec<SetVar>),
 }
 
@@ -91,7 +98,7 @@ pub struct Solver {
     parent: Vec<u32>,
     /// The number of variables in the tree of each root, which decides which root a union keeps.
     size: Vec<u32>,
-    /// What each root holds. A variable that is not a root holds nothing here.
+    /// What each root holds. The entry of a variable that is not a root is empty.
     members: Vec<Vec<Member>>,
     /// Whether each root is pinned: every reference to its component, and every copy, shares this
     /// one variable, whose members the components inferred later may add to.
@@ -188,7 +195,7 @@ impl Solver {
     }
 
     /// Records that the values at `v` are closures built at run time, for the reason `kind`, found
-    /// in the current symbol. A reason the variable already holds is not recorded twice.
+    /// in the current symbol. Each reason is recorded once per variable.
     pub fn make_dynamic(&mut self, v: SetVar, kind: DynamicKind) {
         let reason = DynamicReason {
             kind,
@@ -234,10 +241,5 @@ impl Solver {
     pub fn members_mut(&mut self, v: SetVar) -> &mut Vec<Member> {
         let root = self.find(v);
         &mut self.members[root.0 as usize]
-    }
-
-    /// The index of `v`, which a dump writes it by.
-    pub fn index(v: SetVar) -> u32 {
-        v.0
     }
 }

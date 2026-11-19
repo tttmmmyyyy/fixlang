@@ -1,6 +1,5 @@
-use std::{collections::VecDeque, hash::Hash};
-
 use crate::misc::{Map, Set};
+use std::{collections::VecDeque, hash::Hash};
 
 /// A directed graph whose nodes are the indices `0..len()`, each holding an element of type `T`.
 pub struct Graph<T> {
@@ -138,7 +137,7 @@ impl<T> Graph<T> {
     /// The returned `scc_ids` satisfies:
     /// - `scc_ids[i] == scc_ids[j]` if and only if nodes `i` and `j` are in the same SCC.
     /// - If there is a path from `i` to `j`, then `scc_ids[i] <= scc_ids[j]`.
-    pub fn compute_sccs(&self) -> Vec<usize> {
+    fn compute_sccs(&self) -> Vec<usize> {
         let num_nodes = self.elems.len();
         if num_nodes == 0 {
             return Vec::new();
@@ -241,7 +240,7 @@ impl<T> Graph<T> {
 /// Tests of `Graph`.
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::Graph;
 
     /// `compute_sccs` of the empty graph is empty.
     #[test]
@@ -290,7 +289,8 @@ mod tests {
         assert_eq!(scc_ids, vec![0, 0]);
     }
 
-    /// `compute_sccs` on a graph of four SCCs, some of which reach others.
+    /// `compute_sccs` groups the nodes of a graph of four SCCs, some reaching others, and gives an SCC
+    /// an id no larger than that of any SCC it reaches.
     #[test]
     fn test_scc_complex_graph() {
         let graph = Graph::new_with_edges(

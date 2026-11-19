@@ -232,23 +232,16 @@ impl<'a> Lowerer<'a> {
             .into_iter()
             .rev()
             .fold(terminal, |cont, binding| match binding {
-                PendingBinding::Let(var, rhs, source) => RcExprNode {
-                    expr: Arc::new(RcExpr::Let(var, rhs, cont)),
+                PendingBinding::Let(var, rhs, source) => {
+                    RcExprNode::new(RcExpr::Let(var, rhs, cont), source)
+                }
+                PendingBinding::Destructure(container, fields, source) => RcExprNode::new(
+                    RcExpr::Destructure(container, fields, RcState::Unknown, cont),
                     source,
-                },
-                PendingBinding::Destructure(container, fields, source) => RcExprNode {
-                    expr: Arc::new(RcExpr::Destructure(
-                        container,
-                        fields,
-                        RcState::Unknown,
-                        cont,
-                    )),
-                    source,
-                },
-                PendingBinding::Eval(var, source) => RcExprNode {
-                    expr: Arc::new(RcExpr::Eval(var, cont)),
-                    source,
-                },
+                ),
+                PendingBinding::Eval(var, source) => {
+                    RcExprNode::new(RcExpr::Eval(var, cont), source)
+                }
             })
     }
 
@@ -256,10 +249,7 @@ impl<'a> Lowerer<'a> {
     /// from, so a return is shown at the value it returns.
     fn ret_node(var: RcVar) -> RcExprNode {
         let source = var.source.clone();
-        RcExprNode {
-            expr: Arc::new(RcExpr::Ret(var)),
-            source,
-        }
+        RcExprNode::new(RcExpr::Ret(var), source)
     }
 
     // --- symbols ---

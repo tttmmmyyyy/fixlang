@@ -470,11 +470,12 @@ impl InlineCost {
     /// Whether the symbol's expression may be substituted where a call supplying `arg_count`
     /// arguments names the symbol at the root of its application spine.
     ///
-    /// What may be is a lambda the call supplies every parameter of. A call supplying fewer builds
-    /// a closure of the symbol, and a copy of the body there builds the same closure as a lambda,
-    /// which takes away no call. A body that calls itself is left alone, since substituting it
-    /// leaves the call it makes to itself; so is `Std::fix`, whose defunctionalization matches the
-    /// shape it is written in. What is left is judged by size, against `INLINE_COST_THRESHOLD`.
+    /// Only a lambda may be, and only at a call supplying every parameter it takes. A call supplying
+    /// fewer builds a closure of the symbol, and a copy of the body there builds the same closure
+    /// as a lambda, which takes away no call. A body that calls itself is left alone, since
+    /// substituting it leaves the call it makes to itself; so is `Std::fix`, whose
+    /// defunctionalization matches the shape it is written in. What is left is judged by size,
+    /// against `INLINE_COST_THRESHOLD`.
     fn may_be_inlined_at_call_site(&self, arg_count: usize) -> bool {
         if !self.lambda_arity.is_some_and(|arity| arg_count >= arity) {
             return false;

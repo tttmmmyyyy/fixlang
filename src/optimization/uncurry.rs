@@ -4,16 +4,15 @@ Uncurrying optimization
 Give each global `g : T1 -> ... -> Tn -> R` an uncurried function `g#func{k}` for each `k` up to
 `n`: a function of type `#Func{k} T1 ... Tk (T{k+1} -> ... -> R)` that takes its first `k` arguments
 at once and captures nothing. Then rewrite each call `g(a1)...(ak)` into the call
-`g#func{k}(a1, ..., ak)`. When a symbol already has the name `g#func{k}`, as one an earlier run
-defined does, the uncurried function is named `g#func{k}#1`, `g#func{k}#2`, ... instead.
+`g#func{k}(a1, ..., ak)`. When the program already has a symbol named `g#func{k}`, such as one an
+earlier run defined, the uncurried function is named `g#func{k}#1`, `g#func{k}#2`, ... instead.
 
 Higher-order uncurrying (https://xavierleroy.org/publi/higher-order-uncurrying.pdf) is not implemented.
 */
 
-use super::rename::rename_lam_param_avoiding;
 use crate::{
     ast::{
-        expr::{expr_abs, expr_app, expr_let_typed, expr_var, Expr, ExprNode, Var},
+        expr::{expr_abs, expr_app, expr_var_typed, Expr, ExprNode, Var},
         name::{FullName, Name},
         program::{Program, Symbol},
         types::type_func,
@@ -30,11 +29,11 @@ use std::{mem, sync::Arc};
 /// taking the number of arguments they supply. The symbols are rewritten on up to `num_threads`
 /// threads.
 ///
-/// The program may be the output of an earlier run, whose uncurried functions keep their names
-/// and their calls, so this run names its own ones apart from them (`fresh_name`). Calls are rewritten only onto the uncurried functions this run defines. The
-/// passes between two runs, such as lambda set specialization, specialize each uncurried function
-/// to its own callers, so the `g#func2` of an earlier run can take other types than a call
-/// `g#func1(a)(b)` or `g(a)(b)` supplies.
+/// The program may be the output of an earlier run. The uncurried functions of that run keep their
+/// names and their calls, and this run gives its own ones fresh names (`fresh_name`). It rewrites
+/// calls only onto the functions it defines: the passes between two runs, such as lambda set
+/// specialization, specialize each uncurried function to its own callers, so the `g#func2` of an
+/// earlier run can take other types than a call `g#func1(a)(b)` or `g(a)(b)` supplies.
 pub fn run(prg: &mut Program, num_threads: usize) {
     // Define the uncurried functions of each global. An uncurried function gets none, since it
     // takes its arguments at once already.
@@ -89,8 +88,10 @@ pub fn run(prg: &mut Program, num_threads: usize) {
             continue;
         };
         export.value_name = uncurried_value.name.clone();
-        export.value_expr =
-            Some(expr_var(uncurried_value.name.clone(), None).set_type(uncurried_value.ty.clone()));
+        export.value_expr = Some(expr_var_typed(
+            uncurried_value.name.clone(),
+            uncurried_value.ty.clone(),
+        ));
     }
 
     // Replace entry IO value so that it uses an uncurried function.
@@ -98,7 +99,7 @@ pub fn run(prg: &mut Program, num_threads: usize) {
         // The entry IO value has the unwrapped `IO` type, i.e., the `IOState -> (IOState, a)` type,
         // so it takes one argument.
         if let Some(sym) = uncurried_symbol(&prg.symbols, &funcs, entry_io_value, 1) {
-            prg.entry_io_value = Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
+            prg.entry_io_value = Some(expr_var_typed(sym.name.clone(), sym.ty.clone()));
         }
     }
 }
@@ -326,7 +327,7 @@ fn replace_closure_call_with_func_call(
                 .map(|arg| arg.type_.clone().unwrap())
                 .collect::<Vec<_>>();
             let func_ty = type_func(arg_tys, result_ty.clone());
-            let f_func = expr_var(func.clone(), None).set_type(func_ty);
+            let f_func = expr_var_typed(func.clone(), func_ty);
             expr_app(f_func, args, None).set_type(result_ty)
         }
         _ => expr.clone(),
@@ -398,62 +399,5 @@ fn replace_closure_calls_with_func_calls(
         Expr::Eval(side, main) => expr
             .set_eval_side(replace_closure_calls_with_func_calls(side, funcs))
             .set_eval_main(replace_closure_calls_with_func_calls(main, funcs)),
-    }
-}
-
-/// Convert `let a = x in |b| y` to `|b| let a = x in y` if `x` is a variable expression.
-fn internalize_let_to_var_one(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
-    // Check if the expression is in the form of `let a = x in |b| y`.
-    if !expr.is_let() {
-        return expr.clone();
-    }
-    let lam = expr.get_let_value();
-    if !lam.is_lam() {
-        return expr.clone();
-    }
-    let pat_a = expr.get_let_pat();
-    let bound_x = expr.get_let_bound();
-    if !bound_x.is_var() {
-        return expr.clone();
-    }
-
-    // Rename the parameter of the lambda so that it is not contained in `FV(bound_x) + FV(pat_a)`.
-    let mut black_list = pat_a.pattern.vars();
-    black_list.extend(&mut bound_x.free_vars().into_iter());
-    let lam = rename_lam_param_avoiding(&black_list, lam);
-
-    // Construct the expression.
-    let params_b = lam.get_lam_params();
-    let body_y = lam.get_lam_body();
-    let new_expr = expr_let_typed(pat_a.clone(), bound_x.clone(), body_y.clone());
-    let new_expr = expr_abs(params_b, new_expr, None);
-    new_expr.set_type(expr.type_.clone().unwrap())
-}
-
-/// Rewrites the head of `expr` to begin with as many nested lambdas as possible, by moving each
-/// `let` binding of a variable that stands between them inside the lambdas that follow it.
-pub fn internalize_let_to_var_at_head(expr: &Arc<ExprNode>) -> Arc<ExprNode> {
-    match &*expr.expr {
-        Expr::Lam(_, body) => {
-            let body = internalize_let_to_var_at_head(body);
-            expr.set_lam_body(body)
-        }
-        Expr::Let(_, _, val) => {
-            // Before applying `internalize_let_to_var_one` into the whole let expression,
-            // apply it to the value of the let expression.
-            // This increases the chance of applying `internalize_let_to_var_one` by changing the value to a lambda expression.
-            let val = internalize_let_to_var_at_head(val);
-            let expr = expr.set_let_value_typed(val);
-
-            // Apply `internalize_let_to_var_one` to the whole let expression.
-            let expr = internalize_let_to_var_one(&expr);
-
-            // If the whole expression changed into a lambda expression, apply `internalize_let_to_var_at_head` again.
-            match &*expr.expr {
-                Expr::Lam(_, _) => internalize_let_to_var_at_head(&expr),
-                _ => expr,
-            }
-        }
-        _ => expr.clone(),
     }
 }

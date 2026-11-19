@@ -8,7 +8,9 @@ use super::{
     specialize::Specialization,
 };
 use crate::{
-    constants::{LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS},
+    constants::{
+        LS_COPY_BUDGET_BASE, LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS,
+    },
     graph::Graph,
     hash::md5_hex,
     misc::{Map, Set},
@@ -66,13 +68,13 @@ pub struct Representation {
     of_set: Vec<Repr>,
     /// The classes of the elements the rewrite makes global functions of: the elements of each set
     /// represented by a capture struct or a union, and each element of a set of closures naming a
-    /// lambda that `Lambda::is_lifted_from_closures` holds of. The classes of the sets represented
-    /// by a capture struct come first.
+    /// lambda that `Lambda::is_lifted_in_a_set_of_closures` holds of. The classes of the sets
+    /// represented by a capture struct come first.
     pub classes: Vec<LamClass>,
     /// The unions standing for the sets represented by an unboxed union.
     pub unions: Vec<UnionRepr>,
     /// The position in `classes` of the class holding each element, by the lambda the element names
-    /// and the sets it gives the lambda's parameters (`Lambda::params`).
+    /// and the sets it gives the component parameters the lambda depends on (`Lambda::param_deps`).
     class_of_elem: Map<(LamId, Vec<SetId>), u32>,
     /// The number of classes of each lambda that has any: how many of `classes` hold the lambda.
     class_counts: Map<LamId, usize>,
@@ -84,8 +86,8 @@ impl Representation {
         self.of_set[set as usize]
     }
 
-    /// The class of the element naming `lam` and giving its parameters the sets `args`, in the
-    /// order of `Lambda::params`.
+    /// The class of the element naming `lam` and giving the component parameters `lam` depends on
+    /// the sets `args`, in the order of `Lambda::param_deps`.
     pub fn class_of(&self, lam: LamId, args: &[SetId]) -> u32 {
         *self
             .class_of_elem
@@ -137,12 +139,13 @@ impl Representation {
 /// the sets at the element's interface.
 struct Builder {
     /// The copy, as an index into `Specialization::instances`: the first copy of the lambda's
-    /// component, in the order of the copies, that gives the lambda's parameters the element's
-    /// sets.
+    /// component, in the order of the copies, that gives the component parameters the lambda
+    /// depends on the element's sets.
     instance: usize,
     /// The sets at the element's interface: those the copy gives the variables of
     /// `Lambda::interface`. For the lambda that is the body of its symbol, they are the sets the
-    /// element gives the lambda's parameters, as those are the parameters its body depends on.
+    /// element gives the component parameters the lambda depends on, which are the ones its body
+    /// depends on.
     interface: Vec<SetId>,
     /// The sets the copy gives the variables of `Lambda::held_in_place`: those whose values the
     /// element's capture struct holds in place.
@@ -150,7 +153,7 @@ struct Builder {
 }
 
 /// The `Builder` of each element naming a lambda, by the lambda and the sets the element gives the
-/// lambda's parameters (`Lambda::params`).
+/// component parameters the lambda depends on (`Lambda::param_deps`).
 struct Builders(Map<(LamId, Vec<SetId>), Builder>);
 
 impl Builders {
@@ -161,8 +164,8 @@ impl Builders {
             let component = &analysis.components[instance.component];
             for lam in &component.lams {
                 let lambda = &analysis.lambdas[*lam as usize];
-                let args: Vec<SetId> = lambda.params.iter().map(|p| instance.args[*p]).collect();
-                let set_of = |v: &SetVar| instance.var_sets[component.var_index[v]];
+                let args = instance.lambda_args(lambda);
+                let set_of = |v: &SetVar| instance.set_of(component, *v);
                 let interface: Vec<SetId> = if lambda.is_body() {
                     args.clone()
                 } else {
@@ -215,8 +218,71 @@ impl Builders {
     }
 }
 
+/// The sets that the copies of each component copied past its budget give to its
+/// `Component::body_params`. The budget of a component is `LS_COPY_BUDGET_BASE` copies plus one for
+/// each reference on the way to it from the entry (`count_reaching_references`).
+///
+/// The rewrite makes one copy of a component for each representation of the sets of its
+/// `Component::body_params`, so a component whose sets are all represented by closures gets one
+/// copy.
+fn over_copied_sets(analysis: &Analysis, spec: &Specialization) -> Vec<SetId> {
+    let mut copies = vec![0usize; analysis.components.len()];
+    for instance in &spec.instances {
+        copies[instance.component] += 1;
+    }
+    let reaching = count_reaching_references(analysis);
+    spec.instances
+        .iter()
+        .filter(|instance| {
+            copies[instance.component] > LS_COPY_BUDGET_BASE + reaching[instance.component]
+        })
+        .flat_map(|instance| {
+            analysis.components[instance.component]
+                .body_params
+                .iter()
+                .map(|p| instance.args[*p])
+        })
+        .collect()
+}
+
+/// For each component, how many references (`Component::sites`) lie on a chain of references from
+/// the entry's component to it.
+fn count_reaching_references(analysis: &Analysis) -> Vec<usize> {
+    let count = analysis.components.len();
+    let mut reached_from: Vec<Set<usize>> = vec![Set::default(); count];
+    for c in (0..count).rev() {
+        let mut above = reached_from[c].clone();
+        above.insert(c);
+        for site in &analysis.components[c].sites {
+            assert!(
+                site.component < c,
+                "the component {} refers to the component {}, which comes after it",
+                c,
+                site.component
+            );
+            reached_from[site.component].extend(above.iter().copied());
+        }
+    }
+    reached_from
+        .iter()
+        .enumerate()
+        .map(|(c, from)| {
+            from.iter()
+                .map(|a| {
+                    analysis.components[*a]
+                        .sites
+                        .iter()
+                        .filter(|site| site.component == c || from.contains(&site.component))
+                        .count()
+                })
+                .sum()
+        })
+        .collect()
+}
+
 /// Whether a capture struct, or a union of capture structs, can stand for the values of each set of
-/// `spec`: the set is not empty and holds lambdas alone, and its layout does not hold itself, as
+/// `spec`: the set is not empty and holds lambdas alone, it is not given to the copies of a
+/// component copied past the budget (`over_copied_sets`), and its layout does not hold itself, as
 /// `represent` describes.
 fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builders) -> Vec<bool> {
     let store = &spec.store;
@@ -227,6 +293,9 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
             !elems.is_empty() && elems.iter().all(|elem| matches!(elem, Elem::Lam(..)))
         })
         .collect();
+    for id in over_copied_sets(analysis, spec) {
+        unboxable[id as usize] = false;
+    }
     let mut holds = Graph::new((0..set_count).collect::<Vec<usize>>());
     for id in 0..set_count {
         if !unboxable[id] {
@@ -235,7 +304,7 @@ fn unboxable_sets(analysis: &Analysis, spec: &Specialization, builders: &Builder
         for (lam, args) in store.lam_elems(id as SetId) {
             let lambda = &analysis.lambdas[lam as usize];
             assert!(
-                lambda.is_body() || lambda.is_lifted_from_closures(),
+                lambda.is_body() || lambda.is_lifted_in_a_set_of_closures(),
                 "the set {} of lambdas alone holds {}, which needs the closure object holding it",
                 id,
                 lambda.to_string()
@@ -388,10 +457,11 @@ fn partition_sets(
 /// The representation is decided in three steps.
 ///
 /// 1. A set whose values neither a capture struct nor a union of capture structs can stand for is
-///    represented by closures: an empty set, a set holding `Elem::Dynamic`, and a set whose layout
-///    holds itself, where the capture structs of its elements hold in place, through the unboxed
-///    fields of the values they capture, a set that holds in place this one again. Such a layout
-///    would have no size, as an unboxed type reaching itself has none.
+///    represented by closures: an empty set, a set holding `Elem::Dynamic`, a set given to the
+///    copies of a component copied past the copy budget (`over_copied_sets`), and a set whose
+///    layout holds itself. The layout of a set holds itself when the capture structs of its elements
+///    hold in place, through unboxed fields, a set that in turn holds this one in place. Such a
+///    layout would have no size, as an unboxed type reaching itself has none.
 ///    So is a set step 2 finds too large for a capture struct or a union (`too_large_sets`): its
 ///    elements make more classes than `MAX_LS_UNION_VARIANTS`, or its values would lay out more
 ///    capture structs in place than `MAX_LS_IN_PLACE_CAPTURE_STRUCTS`. Step 2 is then taken again with
@@ -406,11 +476,11 @@ fn partition_sets(
 ///    struct of each of those classes in a variant of its own. Equal sets share the capture struct
 ///    or the union.
 ///
-/// The elements of the sets represented by closures that name a lambda fall into classes too,
-/// where `Lambda::is_lifted_from_closures` holds of the lambda: the rewrite lifts such a lambda to a
-/// global function, and the closure is that function applied to the capture struct. Elements
-/// representing the sets at the lambda's interface alike are in one class, so they share the
-/// global function and the capture struct.
+/// The elements of the sets represented by closures that name a lambda fall into classes too, where
+/// `Lambda::is_lifted_in_a_set_of_closures` holds of the lambda: the rewrite lifts such a lambda to
+/// a global function, and the closure is that function applied to the capture struct. Elements
+/// representing the sets at the lambda's interface alike are in one class, so they share the global
+/// function and the capture struct.
 pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
     let store = &spec.store;
     let set_count = store.len();
@@ -553,7 +623,7 @@ pub fn represent(analysis: &Analysis, spec: &Specialization) -> Representation {
             }
             Repr::Closure => {
                 for (lam, args) in store.lam_elems(id as SetId) {
-                    if analysis.lambdas[lam as usize].is_lifted_from_closures() {
+                    if analysis.lambdas[lam as usize].is_lifted_in_a_set_of_closures() {
                         add_class(lam, args);
                     }
                 }
@@ -638,8 +708,8 @@ fn name_classes_and_unions(
     );
 }
 
-/// The classes and the unions `name_classes_and_unions` writes, as the nodes of one graph: the classes first,
-/// by their positions in `classes`, then the unions, by their positions in `unions` after them.
+/// The classes and the unions `name_classes_and_unions` writes, as the nodes of one graph: the
+/// classes first, by their positions in `classes`, then the unions, by their positions in `unions`.
 struct NameGraph<'n> {
     /// The lambda sets inferred for the program, whose lambdas the texts name.
     analysis: &'n Analysis,
@@ -701,11 +771,11 @@ impl NameGraph<'_> {
                 let class = &self.classes[node];
                 text.push_str(&self.analysis.lambdas[class.lam as usize].to_string());
                 text.push('(');
-                for (i, arg) in class.interface_reprs.iter().enumerate() {
+                for (i, repr) in class.interface_reprs.iter().enumerate() {
                     if i > 0 {
                         text.push(',');
                     }
-                    match self.node_of(arg) {
+                    match self.node_of(repr) {
                         None => text.push('c'),
                         Some(child) => write_child(child, written, text),
                     }

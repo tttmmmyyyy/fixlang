@@ -1,8 +1,8 @@
 //! Dead-code elimination over the RC IR: drop every function and global the program cannot reach.
 //!
 //! Lowering and the passes over the RC IR mint functions of their own — a lifted lambda body, a
-//! borrow version, a version specialized on the uniqueness or locality of its inputs — and each one
-//! that supersedes another leaves that other behind with no caller. Code generation writes out
+//! borrowing version, a version specialized on the uniqueness or locality of its inputs — and each
+//! one that supersedes another leaves that other behind with no caller. Code generation writes out
 //! whatever the program holds, so a function left behind is LLVM IR built and verified for code no
 //! execution reaches. The back end drops it in turn, but only once its own dead-code elimination
 //! runs, which is after that IR has been built, verified and read.
@@ -70,7 +70,6 @@ mod tests {
     use crate::fixstd::builtin::MakeStructOp;
     use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcFunc, RcProgram, RcRhs, RcState};
     use crate::rc_ir::test_program::{func, global, global_name, prog, var};
-    use std::sync::Arc;
 
     /// The names of `prog`'s functions, sorted, so that a comparison does not read the order the
     /// function table happens to hold them in.
@@ -224,10 +223,7 @@ mod tests {
     fn test_every_mention_site_is_followed() {
         /// A node standing for `expr`, which no source spells out.
         fn node(expr: RcExpr) -> RcExprNode {
-            RcExprNode {
-                expr: Arc::new(expr),
-                source: None,
-            }
+            RcExprNode::new(expr, None)
         }
 
         let names: Vec<FullName> = [

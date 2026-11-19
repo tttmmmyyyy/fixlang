@@ -996,8 +996,8 @@ impl Configuration {
 
     /// Move the capture struct of the function given to an op applying it with an environment into
     /// that environment, so that the function needs no closure object. Runs at `Max` and above,
-    /// where the rewrite by the lambda sets runs: it is what makes every such function a global
-    /// function applied to its capture struct, which is the shape this pass rewrites.
+    /// where lambda set specialization runs: it is what makes every such function a global function
+    /// applied to its capture struct, which is the shape this pass rewrites.
     pub fn enable_decapture_scope_functions(&self) -> bool {
         self.runs_from(FixOptimizationLevel::Max)
     }
@@ -1364,7 +1364,8 @@ impl Configuration {
     }
 
     /// The `valgrind` invocation to run a built program under, set up for the tool selected in this
-    /// configuration and for the errors the Fix runtime's memory management can produce.
+    /// configuration and for the errors the Fix runtime's memory management can produce. Called
+    /// where this configuration selects a tool.
     fn valgrind_command(&self) -> Result<Command, Errors> {
         // Check if valgrind is installed
         let which_output = Command::new("which").arg("valgrind").output();
@@ -1384,9 +1385,7 @@ impl Configuration {
 
         match self.valgrind_tool {
             ValgrindTool::None => {
-                return Err(Errors::from_msg(
-                    "Valgrind tool is not specified.".to_string(),
-                ));
+                unreachable!("a program is run under valgrind with no valgrind tool selected")
             }
             ValgrindTool::MemCheck => {
                 // Check memory leaks.

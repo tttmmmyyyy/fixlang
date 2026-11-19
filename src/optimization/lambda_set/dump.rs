@@ -19,32 +19,28 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
 
     writeln!(out, "# Schemes").unwrap();
     writeln!(out).unwrap();
-    for c in 0..analysis.components.len() {
-        let component = &analysis.components[c];
+    for component in &analysis.components {
         if component.symbols.is_empty() {
             continue;
         }
-        let symbols = component.symbols.clone();
-        let types = component.types.clone();
-        let params = component.params.clone();
         let solver = &mut analysis.solver;
         // The parameters are named `p<i>` and the pinned variables of the types `q<i>`.
         let mut var_names: Map<SetVar, String> = Map::default();
-        for (i, p) in params.iter().enumerate() {
+        for (i, p) in component.params.iter().enumerate() {
             var_names.insert(*p, format!("p{}", i));
         }
-        let pinned: Vec<SetVar> = slot_roots(solver, &types)
+        let pinned: Vec<SetVar> = slot_roots(solver, &component.types)
             .into_iter()
             .filter(|v| !var_names.contains_key(v))
             .collect();
         for (i, v) in pinned.iter().enumerate() {
             var_names.insert(*v, format!("q{}", i));
         }
-        for (s, ty) in symbols.iter().zip(types.iter()) {
+        for (s, ty) in component.symbols.iter().zip(&component.types) {
             let text = layout.annotate(ty, &mut |v| var_names[&solver.find(v)].clone());
             writeln!(out, "{} : {}", s.to_string(), text).unwrap();
         }
-        for v in params.iter().chain(&pinned) {
+        for v in component.params.iter().chain(&pinned) {
             let members = describe_members(solver, *v, &var_names, &lambda_names);
             writeln!(out, "  {} = {{{}}}", var_names[v], members).unwrap();
         }
@@ -60,12 +56,10 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
             writeln!(out, "copy {}: the entry and the exported values", k).unwrap();
             continue;
         }
-        let symbols = component.symbols.clone();
-        let types = component.types.clone();
         let solver = &mut analysis.solver;
-        for (s, ty) in symbols.iter().zip(types.iter()) {
+        for (s, ty) in component.symbols.iter().zip(&component.types) {
             let text = layout.annotate(ty, &mut |v| {
-                let id = instance.var_sets[component.var_index[&solver.find(v)]];
+                let id = instance.set_of(component, solver.find(v));
                 named_sets.push(id);
                 format!("#{}", id)
             });
@@ -96,15 +90,21 @@ pub fn render(analysis: &mut Analysis, spec: &Specialization, layout: &SlotLayou
 }
 
 /// The members of the variable `v`, each lambda with the variables its owner is given by, and
-/// each `Member::Dynamic` with its reason.
+/// each `Member::Dynamic` with its reason. A variable without a name in `var_names` is written
+/// `v<index>`.
+///
+/// # Examples
+/// A variable holding a lambda of `Main::f` whose owner is given `p0`, and a Dynamic member, reads
+/// as `Main::f@lam1[p0], Dynamic (<reason>)`.
 fn describe_members(
     solver: &mut Solver,
     v: SetVar,
-    param_names: &Map<SetVar, String>,
+    var_names: &Map<SetVar, String>,
     lambda_names: &[String],
 ) -> String {
     let members = solver.members(v).to_vec();
     let mut texts: Vec<String> = vec![];
+    let mut seen: Set<String> = Set::default();
     for member in members {
         let text = match member {
             Member::Lam {
@@ -115,10 +115,10 @@ fn describe_members(
                     .iter()
                     .map(|a| {
                         let root = solver.find(*a);
-                        param_names
+                        var_names
                             .get(&root)
                             .cloned()
-                            .unwrap_or_else(|| format!("v{}", Solver::index(root)))
+                            .unwrap_or_else(|| format!("v{}", root.index()))
                     })
                     .collect();
                 format!("{}[{}]", lambda_names[lam as usize], args.join(", "))
@@ -129,14 +129,18 @@ fn describe_members(
             } => format!("{}[current]", lambda_names[lam as usize]),
             Member::Dynamic(reason) => format!("Dynamic ({})", reason.to_string()),
         };
-        if !texts.contains(&text) {
+        if seen.insert(text.clone()) {
             texts.push(text);
         }
     }
     texts.join(", ")
 }
 
-/// The elements of the set `id`.
+/// The elements of the set `id`, each lambda with the sets its owner is given.
+///
+/// # Examples
+/// A set holding a lambda of `Main::f` whose owner is given the set `#2`, and Dynamic, reads as
+/// `Main::f@lam1[#2], Dynamic`.
 fn describe_set(store: &SetStore, id: SetId, lambda_names: &[String]) -> String {
     store
         .elems(id)

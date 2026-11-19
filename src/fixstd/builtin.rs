@@ -12,7 +12,7 @@ use crate::ast::{
     type_env::TypeEnv,
     typedecl::{Field, Struct, TypeDeclValue, TypeDefn},
     types::{
-        apply_type_args, kind_arrow, kind_star, make_tyvar, tycon, type_arrow, type_from_tyvar,
+        apply_tycon_args, kind_arrow, kind_star, make_tyvar, tycon, type_arrow, type_from_tyvar,
         type_tyapp, type_tycon, type_tyvar, type_tyvar_star, Kind, Scheme, TyCon, TyConInfo,
         TyConVariant, TypeNode,
     },
@@ -293,16 +293,17 @@ pub fn bulitin_tycons() -> Map<TyCon, TyConInfo> {
         },
     );
 
-    // The func types `#Func{n}`.
+    // The func types `#Func{n}`, each applied to the types of its `n` arguments and then to the type
+    // of its result (`type_func`).
     for arity in 1..=FUNC_ARGS_MAX {
         ret.insert(
             make_func_tycon(arity),
             TyConInfo {
                 punched_from: None,
-                kind: make_kind_fun(arity),
+                kind: make_kind_fun(arity + 1),
                 variant: TyConVariant::Primitive,
                 is_unbox: true,
-                tyvars: (0..arity)
+                tyvars: (0..=arity)
                     .map(|i| make_tyvar(&format!("a{}", i), &kind_star()))
                     .collect(),
                 fields: vec![],
@@ -948,10 +949,7 @@ pub fn make_dynamic_object_ty() -> Arc<TypeNode> {
 /// The tuple type whose fields are `tys` in that order, such as `Std::Tuple2 I64 Bool`. An empty
 /// `tys` gives the unit type.
 pub fn make_tuple_ty(tys: Vec<Arc<TypeNode>>) -> Arc<TypeNode> {
-    apply_type_args(
-        type_tycon(&tycon(make_tuple_name_abs(tys.len() as u32))),
-        &tys,
-    )
+    apply_tycon_args(&tycon(make_tuple_name_abs(tys.len() as u32)), &tys)
 }
 
 /// The name of the tuple type of `size` fields: `Std::Tuple3` for `3`.
@@ -1890,8 +1888,8 @@ fn build_float_to_int_range_check<'c, 'm>(
 
     let reported_conversion = format!(
         "{} to {}",
-        from_ty.head_tycon().name.name,
-        to_ty.head_tycon().name.name
+        from_ty.expect_toplevel_tycon().name.name,
+        to_ty.expect_toplevel_tycon().name.name
     );
     let reported_conversion_ptr = gc
         .add_global_string(&reported_conversion)
@@ -3432,7 +3430,7 @@ impl BuiltinOp for ArrayAppendValueCapacityUncheckedOp {
         let arr = flow.operand(0);
         flow.same(&arr, &flow.result());
         let elem = flow.type_arg(&arr, 0);
-        flow.same(&elem, &flow.operand(1));
+        flow.same(&elem, &flow.operand(APPEND_VALUE_ELEMENT_ARG));
     }
 
     fn unique_check_operand(
@@ -3964,7 +3962,7 @@ impl BuiltinOp for ArrayAppendCapacityUncheckedOp {
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
         let dst = flow.operand(0);
         flow.same(&dst, &flow.result());
-        flow.same(&dst, &flow.operand(1));
+        flow.same(&dst, &flow.operand(APPEND_SRC_ARG));
     }
 
     fn unique_check_operand(
@@ -4139,7 +4137,7 @@ impl BuiltinOp for ArrayCopyCapacityBoundsUncheckedOp {
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
         let dst = flow.operand(0);
         flow.same(&dst, &flow.result());
-        flow.same(&dst, &flow.operand(1));
+        flow.same(&dst, &flow.operand(COPY_SRC_ARG));
     }
 
     fn borrows_operand(&self, i: usize, _arg_tys: &[Arc<TypeNode>], _type_env: &TypeEnv) -> bool {
@@ -4611,7 +4609,7 @@ impl BuiltinOp for ArraySetOp {
 
     /// The value becomes an element of the array that comes back.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
-        let arr = flow.operand(0);
+        let arr = flow.operand(ARRAY_SET_ARRAY_ARG);
         flow.same(&arr, &flow.result());
         let elem = flow.type_arg(&arr, 0);
         flow.same(&elem, &flow.operand(2));
@@ -4986,10 +4984,10 @@ impl BuiltinOp for ArrayPunchOp {
         let arr = flow.operand(0);
         let elem = flow.type_arg(&arr, 0);
         let result = flow.result();
-        let punched = flow.field(&result, 0);
+        let punched = flow.field(&result, PUNCH_RESULT_ARRAY_FIELD);
         let punched_elem = flow.type_arg(&punched, 0);
         flow.same(&punched_elem, &elem);
-        let moved = flow.field(&result, 1);
+        let moved = flow.field(&result, PUNCH_RESULT_ELEMENT_FIELD);
         flow.same(&moved, &elem);
     }
 
@@ -6270,7 +6268,7 @@ impl BuiltinOp for StructPunchOp {
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
         let s = flow.operand(0);
         let result = flow.result();
-        let punched = flow.field(&result, 1);
+        let punched = flow.field(&result, PUNCHED_STRUCT_FIELD);
         flow.same(&punched, &s);
         let moved = flow.field(&result, 0);
         let field = flow.field(&s, self.field_idx);
@@ -7413,7 +7411,6 @@ fn make_struct_union_unique<'c, 'm>(
 pub struct StructSetOp {
     pub value_name: FullName,
     pub struct_name: FullName,
-    field_count: u32,
     field_idx: u32,
     /// When true, clone the struct first if it is shared, so the write lands in a uniquely owned
     /// struct. Set false only where the struct is statically known to be unique.
@@ -7561,7 +7558,6 @@ pub fn struct_set(
 
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
-    let field_count = definition.fields().len() as u32;
 
     let str_ty = definition.applied_type();
     let expr = expr_abs(
@@ -7573,7 +7569,6 @@ pub fn struct_set(
                     assume_local: false,
                     value_name: FullName::local(VALUE_NAME),
                     struct_name: FullName::local(STRUCT_NAME),
-                    field_count,
                     field_idx,
                     force_unique: true,
                 }),
@@ -8244,7 +8239,7 @@ impl BuiltinOp for UndefinedInternalOp {
         vec![&mut self.msg_name]
     }
 
-    /// The op returns no value.
+    /// The op halts the program, so no value comes out of it.
     fn lambda_set_flow(&self, _flow: &mut BuiltinFlow) {}
 
     fn result_prov(
@@ -8306,11 +8301,8 @@ pub fn undefined_internal_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The builtin operation of `Std::#hole`. Code generation
-/// should be unreachable in practice because elaboration rejects any
-/// program containing a hole; the body still emits an `unreachable`
-/// instruction defensively so the LLVM module stays well-formed if
-/// the diagnostic is somehow bypassed.
+/// The builtin operation of `Std::#hole`. Elaboration rejects any program containing a hole, so code
+/// generation never reaches this operation, and it panics if it does.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct HoleOp {}
 
@@ -8487,7 +8479,7 @@ fn apply_with_env<'c, 'm>(
 /// ```
 ///
 /// where `op`, built by `make_op` from the names of `g` and `env`, applies `g` to `(env, a_1, ...,
-/// a_n)`. At `-O max`, `decapture_scope_functions` later moves the capture list of `g`, which
+/// a_n)`. At `-O max`, `decapture_scope_functions` later moves the capture struct of `g`, which
 /// holds `f`, into `env`.
 fn with_empty_env(
     f_name: &str,
@@ -8653,7 +8645,7 @@ impl BuiltinOp for IsUniqueOp {
     /// The value comes back unchanged beside the flag.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
         let result = flow.result();
-        let value = flow.field(&result, 1);
+        let value = flow.field(&result, IS_UNIQUE_VALUE_FIELD);
         flow.same(&value, &flow.operand(0));
     }
 
@@ -8852,7 +8844,7 @@ impl BuiltinOp for ArrayIsStorageUniqueOp {
     /// The array comes back unchanged beside the flag.
     fn lambda_set_flow(&self, flow: &mut BuiltinFlow) {
         let result = flow.result();
-        let arr = flow.field(&result, 1);
+        let arr = flow.field(&result, IS_UNIQUE_VALUE_FIELD);
         flow.same(&arr, &flow.operand(0));
     }
 
@@ -10042,7 +10034,7 @@ pub fn destructor_make() -> (Arc<ExprNode>, Arc<Scheme>) {
 
 // Run either an IO or an IOState runner based on the type of the given value.
 pub fn run_io_or_ios_runner<'b, 'm, 'c>(gc: &mut Generator<'c, 'm>, io: &Object<'c>) -> Object<'c> {
-    if io.ty.head_tycon().is_io() {
+    if io.ty.expect_toplevel_tycon().is_io() {
         return run_io(gc, io);
     }
     // The other value run here is the runner an `IO` holds, which `run_ios_runner` applies to an
@@ -10933,7 +10925,7 @@ fn build_integer_arithmetic<'c, 'm>(
     }
     // Only a signed type has a range an operation can leave: an unsigned one is taken modulo two
     // to its width, so every result is a value of the type.
-    let is_signed = ty.head_tycon().is_signed_integer();
+    let is_signed = ty.expect_toplevel_tycon().is_signed_integer();
     if is_signed && gc.config.checks_integer_operations() {
         if operation.is_division() {
             // A division carries no intrinsic reporting the overflow, so the check stands in front
@@ -11061,7 +11053,7 @@ fn build_abort_on_integer_operation<'c, 'm>(
     operands: &[IntValue<'c>],
     bb_name: &str,
 ) {
-    let reported_operation = format!("{} {}", ty.head_tycon().name.name, operation);
+    let reported_operation = format!("{} {}", ty.expect_toplevel_tycon().name.name, operation);
     let reported_operation_ptr = gc.add_global_string(&reported_operation).as_pointer_value();
     let i64_ty = gc.context.i64_type();
     let i128_ty = gc.context.i128_type();

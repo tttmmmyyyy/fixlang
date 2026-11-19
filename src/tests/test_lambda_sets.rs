@@ -1,14 +1,17 @@
 use crate::{
     configuration::Configuration,
     constants::MAX_LS_UNION_VARIANTS,
-    tests::test_util::{build_within_and_run, run_source_capture, test_source},
+    tests::test_util::{
+        assert_source_prints, build_within_and_run, build_within_instructions_and_run,
+        run_source_capture, test_source,
+    },
 };
 use std::time::Duration;
 
 // Programs whose function values take the paths the lambda set inference follows: through a
 // recursion, into a value that captures a value of its own set, through a `fix` left as a closure,
-// and through the fields and the state of a loop. Each runs under the development configuration,
-// so the inference runs on it and the result is checked under valgrind.
+// and through the fields and the state of a loop. Most run under the development configuration,
+// where the inference runs and valgrind checks the result.
 
 /// A recursion that passes itself a lambda wrapping the function it was given: the lambda at depth
 /// `n` captures the one at depth `n - 1`.
@@ -592,6 +595,28 @@ fn test_a_global_read_back_from_a_struct_and_its_uncurried_call_compute_both() {
     test_source(&global_read_back_source(), Configuration::develop_mode());
 }
 
+/// Runs `source` under the development configuration, and asserts that it prints `expected_output`
+/// and that the body of each global of `globals`, which prints `evaluating <name>` on stderr, runs
+/// once.
+fn assert_prints_and_evaluates_each_once(source: &str, expected_output: &str, globals: &[&str]) {
+    let output = run_source_capture(source, Configuration::develop_mode());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        expected_output
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    for name in globals {
+        let marker = format!("evaluating {}", name);
+        assert_eq!(
+            stderr.lines().filter(|line| *line == marker).count(),
+            1,
+            "the body of `{}` should run once, and the program printed:\n{}",
+            name,
+            stderr
+        );
+    }
+}
+
 /// A global array of functions read as it is in one place and extended with other lambdas in two
 /// others. Every reference shares the lambda set of its elements, so the program holds one copy of
 /// the global, and its body runs once.
@@ -617,15 +642,7 @@ fn test_a_global_array_of_functions_extended_in_two_places_is_evaluated_once() {
         println((a0(1) + a1(1) + b2(1) + c2(1) + c3(10)).to_string)
     );
     "#;
-    let output = run_source_capture(source, Configuration::develop_mode());
-    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "12");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(
-        stderr.matches("evaluating tbl").count(),
-        1,
-        "the body of the global should run once, and the program printed:\n{}",
-        stderr
-    );
+    assert_prints_and_evaluates_each_once(source, "12", &["tbl"]);
 }
 
 /// A global array of functions and a recursive function taking a function, referring to each
@@ -717,7 +734,7 @@ fn test_a_global_array_holding_a_function_of_its_component_computes_it() {
         Duration::from_secs(600),
         "a global array holding a function of its component",
     );
-    assert_eq!(printed.trim(), "26");
+    assert_eq!(printed, "26");
 }
 
 /// A global value and a function taking a function, referring to each other, where `main` calls
@@ -744,15 +761,7 @@ fn test_a_global_value_in_a_component_with_a_function_taking_a_function_is_evalu
         println((a + v).to_string)
     );
     "#;
-    let output = run_source_capture(source, Configuration::develop_mode());
-    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "16");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert_eq!(
-        stderr.matches("evaluating v").count(),
-        1,
-        "the body of the global should run once, and the program printed:\n{}",
-        stderr
-    );
+    assert_prints_and_evaluates_each_once(source, "16", &["v"]);
 }
 
 /// A function `z` building closures of `w` over two sets that hold the same lambda when `z` is
@@ -760,7 +769,7 @@ fn test_a_global_value_in_a_component_with_a_function_taking_a_function_is_evalu
 /// `main`, inferred after `z`, extends the pinned set with a lambda of its own, so the two sets
 /// differ in the end, and the copies of `w` building the two closures are given different sets.
 #[test]
-fn test_a_pinned_set_equal_to_another_when_a_function_is_inferred_and_extended_later() {
+fn test_closures_over_a_pinned_set_and_one_it_equals_until_extended_compute_both() {
     let source = r#"
     module Main;
 
@@ -854,7 +863,166 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
     assert_eq!(printed, CHAIN_OUTPUT, "the chain computed a wrong value");
 }
 
-/// What the rewrite by the lambda sets makes of a program, read off the `--emit-rc-ir` dump: a
+/// How many functions the chain of `branching_chain_source` calls through.
+const BRANCHING_CHAIN_DEPTH: usize = 14;
+
+/// What `branching_chain_source(BRANCHING_CHAIN_DEPTH)` prints.
+const BRANCHING_CHAIN_OUTPUT: &str = "1097390";
+
+/// How the functions of `chain_of_two_lambda_calls_source` take the function and the number.
+#[derive(Clone, Copy)]
+enum ChainArgs {
+    /// As two arguments: `f(g, x)`.
+    Curried,
+    /// As one tuple: `f((g, x))`.
+    Tupled,
+}
+
+impl ChainArgs {
+    /// The type of a function of the chain returning `result_ty`.
+    fn func_ty(self, result_ty: &str) -> String {
+        match self {
+            ChainArgs::Curried => format!("(I64 -> I64) -> I64 -> {}", result_ty),
+            ChainArgs::Tupled => format!("(I64 -> I64, I64) -> {}", result_ty),
+        }
+    }
+
+    /// The parameters `g` and `x` of a lambda defining a function of the chain.
+    fn params(self) -> &'static str {
+        match self {
+            ChainArgs::Curried => "|g, x|",
+            ChainArgs::Tupled => "|(g, x)|",
+        }
+    }
+
+    /// The call of `func` with the function `g` and the number `x`.
+    fn call(self, func: &str, g: &str, x: &str) -> String {
+        match self {
+            ChainArgs::Curried => format!("{}({}, {})", func, g, x),
+            ChainArgs::Tupled => format!("{}(({}, {}))", func, g, x),
+        }
+    }
+}
+
+/// A program calling down a chain of functions `f{depth}` to `f0`, which return `result_ty` and
+/// take their arguments as `arg_form` says. Each function calls the next from two places, each with
+/// a lambda of its own wrapping the function it was given, and `f0` returns `f0_body`. `main` prints
+/// what `f{depth}` returns for `|x| x + n` and `n`, applied to `result_args`.
+fn chain_of_two_lambda_calls_source(
+    depth: usize,
+    arg_form: ChainArgs,
+    result_ty: &str,
+    f0_body: &str,
+    result_args: &str,
+) -> String {
+    let func_ty = arg_form.func_ty(result_ty);
+    let params = arg_form.params();
+    let links: Vec<String> = (1..=depth)
+        .map(|i| {
+            let next = format!("f{}", i - 1);
+            format!(
+                "f{i} : {func_ty};\n\
+                 f{i} = {params} if x % 3 == 0 {{ {plus} }} else {{ {times} }};",
+                i = i,
+                func_ty = func_ty,
+                params = params,
+                plus = arg_form.call(&next, &format!("|y| g(y) + {}", i), "x / 3"),
+                times = arg_form.call(&next, &format!("|y| g(y) * {}", i), "x - 1"),
+            )
+        })
+        .collect();
+    format!(
+        "module Main;\n\
+         \n\
+         f0 : {func_ty};\n\
+         f0 = {params} {f0_body};\n\
+         {links}\n\
+         \n\
+         main : IO ();\n\
+         main = (\n\
+         \x20   let n = *(pure(100) : IO I64);\n\
+         \x20   println({call}{result_args}.to_string)\n\
+         );\n",
+        func_ty = func_ty,
+        params = params,
+        f0_body = f0_body,
+        links = links.join("\n"),
+        call = arg_form.call(&format!("f{}", depth), "|x| x + n", "n"),
+        result_args = result_args
+    )
+}
+
+/// A program calling down a chain of functions `f{depth}` to `f0`, each calling the next from two
+/// places, each with a lambda of its own wrapping the function it was given, and printing what the
+/// chain computes. Each copy of `f{i}` asks for two copies of `f{i - 1}`, one per lambda, so the
+/// copies double at each step.
+fn branching_chain_source(depth: usize) -> String {
+    chain_of_two_lambda_calls_source(depth, ChainArgs::Curried, "I64", "g(x)", "")
+}
+
+/// About five times what the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes
+/// with the copy budget (`LS_COPY_BUDGET_BASE`) applied (11 billion on x86-64), and a fifth of what
+/// it executes with every copy made (286 billion).
+const BRANCHING_CHAIN_MAX_INSTRUCTIONS: u64 = 50_000_000_000;
+
+/// The chain of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions. The copies of the functions far down the chain
+/// go past the copy budget (`LS_COPY_BUDGET_BASE`), and the sets given to those functions are
+/// represented by closures, which makes each of them one copy in the rewritten program.
+/// Where the machine does not let the test count instructions, the test checks the answer alone.
+#[test]
+fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_bounded_work() {
+    let description = format!(
+        "a chain of {} functions each calling the next with two lambdas",
+        BRANCHING_CHAIN_DEPTH
+    );
+    let printed = build_within_instructions_and_run(
+        &branching_chain_source(BRANCHING_CHAIN_DEPTH),
+        "max",
+        BRANCHING_CHAIN_MAX_INSTRUCTIONS,
+        &description,
+    );
+    assert_eq!(
+        printed, BRANCHING_CHAIN_OUTPUT,
+        "the chain computed a wrong value"
+    );
+}
+
+/// What `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` prints.
+const RETURNING_BRANCHING_CHAIN_OUTPUT: &str = "2175390";
+
+/// The chain of `branching_chain_source`, where each function returns the function it builds in
+/// place of calling it: `f0` returns the function it was given, so what `f{i}` returns holds the
+/// lambdas `f{i}` and every function after it in the chain build. `main` calls what `f{depth}`
+/// returns.
+fn returning_branching_chain_source(depth: usize) -> String {
+    chain_of_two_lambda_calls_source(depth, ChainArgs::Curried, "(I64 -> I64)", "g", "(n)")
+}
+
+/// The chain of `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions and computes its value. Past the copy budget
+/// (`LS_COPY_BUDGET_BASE`), the parameters of the functions far down the chain are given sets
+/// represented by closures, while each function returns the lambdas it and the later functions of
+/// the chain build.
+#[test]
+fn test_a_chain_of_functions_each_returning_the_next_with_two_lambdas_builds_in_bounded_work() {
+    let description = format!(
+        "a chain of {} functions each returning the next with two lambdas",
+        BRANCHING_CHAIN_DEPTH
+    );
+    let printed = build_within_instructions_and_run(
+        &returning_branching_chain_source(BRANCHING_CHAIN_DEPTH),
+        "max",
+        BRANCHING_CHAIN_MAX_INSTRUCTIONS,
+        &description,
+    );
+    assert_eq!(
+        printed, RETURNING_BRANCHING_CHAIN_OUTPUT,
+        "the chain computed a wrong value"
+    );
+}
+
+/// What lambda set specialization makes of a program, read off the `--emit-rc-ir` dump: a
 /// function given a lambda calls it by name, and the lambda's capture becomes a struct the function
 /// takes as an argument. The program cannot observe either one — the answer is the same with
 /// function values left as closures — so these assert against the dump.
@@ -862,7 +1030,7 @@ fn test_a_chain_of_unions_each_capturing_the_one_before_builds_in_time() {
 mod dump_tests {
     use super::{chain_source, global_read_back_source, CHAIN_DEPTH, CHAIN_OUTPUT};
     use crate::constants::{
-        LS_CAP_PREFIX, LS_COPY_SUFFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX,
+        LS_CAP_PREFIX, LS_COPY_BUDGET_BASE, LS_COPY_SUFFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX,
         MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS,
     };
     use crate::misc::Set;
@@ -875,23 +1043,35 @@ mod dump_tests {
     /// carries no `#`, which every local name of the dump does.
     fn closure_calls(body: &str) -> Vec<&str> {
         body.lines()
-            .filter_map(|line| line.split_once("] = "))
-            .filter_map(|(_, rhs)| rhs.split_once('('))
-            .map(|(callee, _)| callee)
+            .filter_map(rc_ir_callee_of)
             .filter(|callee| callee.contains('#') && !callee.contains("::"))
             .collect()
     }
 
-    /// Asserts that `dump` holds functions named with `name_part`, and that none of them builds a
-    /// closure or calls one: every function value they call is called by name.
-    fn assert_calls_by_name(dump: &str, name_part: &str) {
+    /// Whether some function of `dump` named with `name_part` calls a function value through a
+    /// closure.
+    fn calls_through_a_closure(dump: &str, name_part: &str) -> bool {
+        rc_ir_function_bodies(dump, name_part)
+            .iter()
+            .any(|body| !closure_calls(body).is_empty())
+    }
+
+    /// The functions of `dump` named with `name_part`, as `rc_ir_function_bodies` gives them. Fails
+    /// the test when there are none.
+    fn function_bodies_named(dump: &str, name_part: &str) -> Vec<String> {
         let bodies = rc_ir_function_bodies(dump, name_part);
         assert!(
             !bodies.is_empty(),
             "the dump should hold functions named with `{}`, and it holds none",
             name_part
         );
-        for body in bodies {
+        bodies
+    }
+
+    /// Asserts that `dump` holds functions named with `name_part`, and that none of them builds a
+    /// closure or calls one: every function value they call is called by name.
+    fn assert_calls_by_name(dump: &str, name_part: &str) {
+        for body in function_bodies_named(dump, name_part) {
             assert!(
                 !body.contains("= closure ") && closure_calls(&body).is_empty(),
                 "every function named with `{}` should call the function values it calls by \
@@ -900,6 +1080,130 @@ mod dump_tests {
                 body
             );
         }
+    }
+
+    /// How many places of `fan_in_source` call the chain, each with a lambda of its own: more than
+    /// `LS_COPY_BUDGET_BASE`, so that the chain stays within its copy budget only by the references
+    /// on the way to it.
+    const FAN_IN_CALLS: usize = 80;
+    const _: () = assert!(FAN_IN_CALLS > LS_COPY_BUDGET_BASE);
+
+    /// How many functions of `fan_in_source` hand the function they were given to the next.
+    const FAN_IN_DEPTH: usize = 5;
+
+    /// A program calling a chain of functions `h{FAN_IN_DEPTH}` to `h0` from `FAN_IN_CALLS` places,
+    /// each with a lambda of its own, where each `h{i}` hands the function it was given to
+    /// `h{i - 1}` and `h0` hands a lambda calling it to `loop`. Every function of the chain is
+    /// copied once per place, and so is `loop`, though the program refers to `loop` once.
+    fn fan_in_source() -> String {
+        let links: Vec<String> = (1..=FAN_IN_DEPTH)
+            .map(|i| {
+                format!(
+                    "h{i} : (I64 -> I64) -> I64 -> I64;\n\
+                     h{i} = |g, n| if n < 0 {{ h{i}(g, -n) }} else {{ h{next}(g, n) + {i} }};\n",
+                    i = i,
+                    next = i - 1
+                )
+            })
+            .collect();
+        let calls: Vec<String> = (1..=FAN_IN_CALLS)
+            .map(|i| format!("h{}(|x| x + n * {}, n)", FAN_IN_DEPTH, i))
+            .collect();
+        format!(
+            "module Main;\n\
+             \n\
+             h0 : (I64 -> I64) -> I64 -> I64;\n\
+             h0 = |g, n| if n < 0 {{ h0(g, -n) }} else {{ loop((0, 0), |(i, s)| if i == n {{ break $ s }} else {{ continue $ (i + 1, s + g(i)) }}) }};\n\
+             {}\
+             \n\
+             main : IO ();\n\
+             main = (\n\
+             \x20   let n = *(pure(100) : IO I64);\n\
+             \x20   println(({}).to_string)\n\
+             );\n",
+            links.join(""),
+            calls.join(" + ")
+        )
+    }
+
+    /// Copies that grow with the references on the way to a function stay within the copy budget
+    /// (`LS_COPY_BUDGET_BASE`): `fan_in_source` copies each function of its chain and `loop` once per
+    /// call of the chain, and every copy of `loop` calls the lambda it was given by name.
+    #[test]
+    fn test_a_loop_at_the_end_of_a_chain_called_from_many_places_calls_each_lambda_by_name() {
+        let dump = build_run_and_read_rc_ir(
+            &fan_in_source(),
+            "max",
+            "32797200",
+            "a chain of functions called from many places, handing a lambda to `loop`",
+        );
+        assert_calls_by_name(&dump, "Std::loop");
+    }
+
+    /// How many places of `fan_out_under_a_hub_source` call `a`, and how many places of `a` call
+    /// `b`, each with a lambda of its own.
+    const FAN_OUT_CALLS: usize = 10;
+
+    /// How many places of `fan_out_under_a_hub_source` call `u`, each with a lambda of its own.
+    const HUB_CALLS: usize = 30;
+
+    /// A program whose `main` calls `a` from `FAN_OUT_CALLS` places and `u` from `HUB_CALLS`
+    /// places, each with a lambda of its own, where `a` calls `b` from `FAN_OUT_CALLS` places, each
+    /// with a lambda of its own wrapping the function it was given. `b` is copied
+    /// `FAN_OUT_CALLS * FAN_OUT_CALLS` times, and `u` once per place.
+    fn fan_out_under_a_hub_source() -> String {
+        let b_calls: Vec<String> = (1..=FAN_OUT_CALLS)
+            .map(|k| format!("b(|y| g(y) + {}, x)", k))
+            .collect();
+        let a_calls: Vec<String> = (1..=FAN_OUT_CALLS)
+            .map(|i| format!("a(|x| x + n * {}, n)", i))
+            .collect();
+        let u_calls: Vec<String> = (1..=HUB_CALLS)
+            .map(|k| format!("u(|x| x + {}, n)", k))
+            .collect();
+        format!(
+            "module Main;\n\
+             \n\
+             b : (I64 -> I64) -> I64 -> I64;\n\
+             b = |g, x| if x < 0 {{ b(g, -x) }} else {{ g(x) }};\n\
+             \n\
+             a : (I64 -> I64) -> I64 -> I64;\n\
+             a = |g, x| {};\n\
+             \n\
+             u : (I64 -> I64) -> I64 -> I64;\n\
+             u = |g, x| if x < 0 {{ u(g, -x) }} else {{ g(x) }};\n\
+             \n\
+             main : IO ();\n\
+             main = (\n\
+             \x20   let n = *(pure(100) : IO I64);\n\
+             \x20   println(({} + {}).to_string)\n\
+             );\n",
+            b_calls.join(" + "),
+            a_calls.join(" + "),
+            u_calls.join(" + ")
+        )
+    }
+
+    /// The budget of a component counts only the references on the way to it: in
+    /// `fan_out_under_a_hub_source`, the `FAN_OUT_CALLS * FAN_OUT_CALLS` copies of `b` go past
+    /// `LS_COPY_BUDGET_BASE` plus the `2 * FAN_OUT_CALLS` references from `main` to `a` and from
+    /// `a` to `b`, so `b` calls the function it was given through a closure, though the
+    /// `HUB_CALLS` references from `main` to `u` would cover them. `u`, copied once per reference
+    /// to it, calls each of its lambdas by name.
+    #[test]
+    fn test_references_of_a_hub_to_other_parts_leave_a_fan_out_past_its_copy_budget() {
+        let dump = build_run_and_read_rc_ir(
+            &fan_out_under_a_hub_source(),
+            "max",
+            "69015",
+            "a fan-out of two steps under a `main` calling another function from many places",
+        );
+        assert!(
+            calls_through_a_closure(&dump, "Main::b"),
+            "`b` is copied past its budget, and should call the function it was given through a \
+             closure"
+        );
+        assert_calls_by_name(&dump, "Main::u");
     }
 
     /// Verifies that `main` calls `g` by name both where it applies `g` to its two arguments at once
@@ -980,7 +1284,8 @@ mod dump_tests {
     const FOLD_OUTPUT: &str = "135";
 
     /// A function given a lambda calls it by name. At `basic`, where the rewrite does not run, the
-    /// same fold calls the lambda through a closure, which is what says the assertion can see one.
+    /// same fold calls the lambda through a closure, which shows that the assertion can detect a
+    /// call through a closure.
     #[test]
     fn test_a_function_given_a_lambda_calls_it_by_name() {
         let dump =
@@ -990,9 +1295,7 @@ mod dump_tests {
         let dump =
             build_run_and_read_rc_ir(FOLD_SOURCE, "basic", FOLD_OUTPUT, "a fold given a lambda");
         assert!(
-            rc_ir_function_bodies(&dump, "Std::Iterator::fold")
-                .iter()
-                .any(|body| !closure_calls(body).is_empty()),
+            calls_through_a_closure(&dump, "Std::Iterator::fold"),
             "at `basic` the fold should call its lambda through a closure"
         );
     }
@@ -1230,7 +1533,7 @@ mod dump_tests {
 
     /// A loop body that hands a value it captured to a call goes into the copy of `Std::loop` made
     /// for it like any other. The array then reaches the call as an argument of that copy, and the
-    /// call goes to the callee's borrow version, so the round counts no reference for it.
+    /// call goes to the callee's borrow version, so the copy retains no reference to the array.
     #[test]
     fn test_a_loop_handing_its_captured_array_to_a_call_counts_no_reference() {
         let dump = build_run_and_read_rc_ir(
@@ -1313,7 +1616,7 @@ mod dump_tests {
 
     /// The functions the chain of iterators carries have their bodies put where the fold calls
     /// them: none stands as a function of its own. Each is lifted out of `main`, takes an `I64` and
-    /// answers one, which tells it from the IO plumbing lifted out of `main` as well.
+    /// returns one, which distinguishes it from the IO plumbing also lifted out of `main`.
     #[test]
     fn test_the_functions_a_chain_of_iterators_carries_leave_no_function_of_their_own() {
         let dump = build_run_and_read_rc_ir(
@@ -1375,12 +1678,7 @@ mod dump_tests {
             TWO_ALIKE_ELEMENTS_OUTPUT,
             "a lambda capturing a function built from one of two alike functions",
         );
-        let bodies = rc_ir_function_bodies(&dump, "Main::mk");
-        assert!(
-            !bodies.is_empty(),
-            "the dump should hold functions named with `Main::mk`, and it holds none"
-        );
-        for body in bodies {
+        for body in function_bodies_named(&dump, "Main::mk") {
             assert!(
                 !body.contains("= closure "),
                 "`mk` should build `g` as a capture struct, and this function builds a closure:\n{}",
@@ -1389,8 +1687,8 @@ mod dump_tests {
         }
     }
 
-    /// Whether the function header `header` takes a value of a union that the rewrite represents a
-    /// set of two or more classes by.
+    /// Whether the function header `header` takes a value of a union, which is how the rewrite
+    /// represents a set of two or more classes.
     fn takes_a_union(header: &str) -> bool {
         parameters(header).contains(LS_UNION_PREFIX)
     }
@@ -1439,9 +1737,7 @@ mod dump_tests {
             "a function given one of two lambdas",
         );
         assert!(
-            rc_ir_function_bodies(&dump, "Main::apply")
-                .iter()
-                .any(|body| !closure_calls(body).is_empty()),
+            calls_through_a_closure(&dump, "Main::apply"),
             "at `basic` `apply` should call its function through a closure"
         );
     }
@@ -1466,9 +1762,9 @@ mod dump_tests {
     /// `x * 2 + (x + 1)` over `3..100`.
     const APPLY_READING_A_GLOBAL_OUTPUT: &str = "26411";
 
-    /// A function that refers to a global value whose body is not a lambda, but holds none in its
-    /// own component, is still copied for each lambda set it is given: each copy of `apply` takes
-    /// the set of the one lambda its call gives it, and none takes a union of the two.
+    /// A function that refers to a global value whose body is not a lambda, where no such global
+    /// lies in the function's own component, is copied for each lambda set it is given: each copy of
+    /// `apply` takes the set of the one lambda its call gives it, and none takes a union of the two.
     #[test]
     fn test_a_function_referring_to_a_pinned_global_is_copied_for_each_lambda_it_is_given() {
         let dump = build_run_and_read_rc_ir(
@@ -1580,7 +1876,7 @@ mod dump_tests {
 
     /// A set of as many classes as `MAX_LS_UNION_VARIANTS` is represented by a union, and one of a
     /// class more by closures: the fold over that many lambdas takes their union, and the fold over
-    /// one lambda more calls them through closures, answering the same.
+    /// one lambda more calls them through closures, and both print the expected sum.
     #[test]
     fn test_a_set_of_too_many_classes_is_a_set_of_closures() {
         let source = many_lambdas_source(MAX_LS_UNION_VARIANTS);
@@ -1608,9 +1904,7 @@ mod dump_tests {
             "no union should stand for the lambdas"
         );
         assert!(
-            rc_ir_function_bodies(&dump, "Std::Iterator::fold")
-                .iter()
-                .any(|body| !closure_calls(body).is_empty()),
+            calls_through_a_closure(&dump, "Std::Iterator::fold"),
             "the fold should call the lambdas through closures"
         );
     }
@@ -1725,24 +2019,11 @@ fn test_global_values_of_functions_referred_to_in_many_places_are_evaluated_once
         println([p1(1), p2(1), p3(1), r1, r2, r3, h(4), t].to_iter.map(to_string).join(" "))
     );
     "#;
-    let output = run_source_capture(source, Configuration::develop_mode());
-    assert_eq!(
-        String::from_utf8_lossy(&output.stdout).trim(),
-        "101 2 4 22 7 9 9 33"
+    assert_prints_and_evaluates_each_once(
+        source,
+        "101 2 4 22 7 9 9 33",
+        &["tbl", "tbl2", "add5", "sv"],
     );
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    for name in ["tbl", "tbl2", "add5", "sv"] {
-        assert_eq!(
-            stderr
-                .lines()
-                .filter(|line| *line == format!("evaluating {}", name))
-                .count(),
-            1,
-            "the body of `{}` should run once, and the program printed:\n{}",
-            name,
-            stderr
-        );
-    }
 }
 
 /// A recursive function that pushes onto a global array of functions a lambda capturing its own
@@ -1835,4 +2116,186 @@ fn test_two_functions_building_different_lambdas_passed_to_one_compute_each() {
     );
     "#;
     test_source(source, Configuration::develop_mode());
+}
+
+/// Arrays of functions moved by the builtins that carry an element without calling it — a swap, a
+/// copy into a subarray, the element `act` reads, and the element `mod` punches out and plugs
+/// back — and a function value returned by `unsafe_is_unique`: each keeps the lambdas it was given,
+/// and the recursive function they reach calls them all.
+#[test]
+fn test_functions_carried_through_the_builtins_moving_them_compute_them() {
+    let source = r#"
+    module Main;
+
+    type BF = box struct { f : I64 -> I64 };
+
+    call_all : I64 -> Array (I64 -> I64) -> I64 -> I64;
+    call_all = |d, fs, x| if d > 0 { call_all(d - 1, fs, x) } else { fs.to_iter.fold(0, |f, acc| acc * 100 + f(x)) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let swapped = call_all(n, [|x| x + 10 + n, |x| x + 20].swap(0, 1), 1);
+        let sub = call_all(n, [|x| x + 60 + n, |x| x + 70].get_sub(1, 2), 1);
+        let acted = call_all(n, [|x| x + 11 + n].act(0, |q| Option::some(|x| q(x) + 1)).as_some, 1);
+        let modded = call_all(n, [|x| x + 12 + n].mod(0, |q| |x| q(x) * 2), 1);
+        let (_, bf) = (BF { f : |x| x + 9 + n }).unsafe_is_unique;
+        let unique_checked = (bf.@f)(1);
+        assert_eq(|_| "", [swapped, sub, acted, modded, unique_checked], [2111 + n, 71, 13 + n, 26 + 2 * n, 10 + n]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// A function given a value of a type whose field applies a type constructor argument: once to a
+/// struct declaring a function field, once to a tuple type applied to a function type but not to
+/// its second argument. The field's function reaches the function through a type the slots of the
+/// field do not track, and the function calls it.
+#[test]
+fn test_a_function_in_a_type_given_as_a_type_constructor_argument_computes_it() {
+    let source = r#"
+    module Main;
+
+    type [f : * -> *] W f = box struct { x : f I64 };
+    type Fn a = box struct { g : a -> a, v : a };
+
+    use_fn : I64 -> W Fn -> I64;
+    use_fn = |d, w| if d > 0 { use_fn(d - 1, w) } else { (w.@x.@g)(w.@x.@v) };
+
+    use_tup : I64 -> W (Tuple2 (I64 -> I64)) -> I64;
+    use_tup = |d, w| if d > 0 { use_tup(d - 1, w) } else { (w.@x.@0)(w.@x.@1) };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        assert_eq(|_| "through a struct", use_fn(n, W { x : Fn { g : |x| x * 10 + n, v : 4 } }), 40 + n);;
+        assert_eq(|_| "through a tuple", use_tup(n, W { x : (|x| x * 100 + n, 5) }), 500 + n);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// Two types referring to each other, each declaring a function field, walked by a recursive
+/// function: the copies of the two types share the sets of their fields, and the walk calls the
+/// function of each field it reaches.
+#[test]
+fn test_functions_in_two_types_referring_to_each_other_compute_them() {
+    let source = r#"
+    module Main;
+
+    type Chain = box union { end : I64 -> I64, link : Link };
+    type Link = box struct { step : I64 -> I64, rest : Chain };
+
+    eval_chain : I64 -> Chain -> I64 -> I64;
+    eval_chain = |d, c, x| if d > 100 { eval_chain(d - 1, c, x) } else {
+        match c {
+            end(f) => f(x),
+            link(l) => eval_chain(d, l.@rest, (l.@step)(x))
+        }
+    };
+
+    main : IO ();
+    main = (
+        let n = *get_args.map(|args| args.@size);
+        let c = Chain::link(Link { step : |x| x * 2 + n, rest : Chain::link(Link { step : |x| x + 3, rest : Chain::end(|x| x - n) }) });
+        let c2 = if n > 5 { c } else { Chain::end(|x| x * 100) };
+        assert_eq(|_| "", [eval_chain(n, c, 5), eval_chain(n, c2, 5)], [13, 500]);;
+        pure()
+    );
+    "#;
+    test_source(source, Configuration::develop_mode());
+}
+
+/// How many functions of `global_struct_chain_source` take a struct holding a function and hand
+/// one to the next.
+const GLOBAL_STRUCT_CHAIN_DEPTH: usize = 11;
+
+/// A chain of functions `f{GLOBAL_STRUCT_CHAIN_DEPTH}` to `f0`, each taking its function in a
+/// struct field and calling the next from three places: two with a struct holding a lambda of its
+/// own wrapping the function it was given, and one with the global struct `gw`. `use_w` is called
+/// both with `gw` and with a struct whose function nothing passes down the chain.
+fn global_struct_chain_source() -> String {
+    let links: Vec<String> = (1..=GLOBAL_STRUCT_CHAIN_DEPTH)
+        .map(|i| {
+            format!(
+                "f{i} : W -> I64 -> I64;\n\
+                 f{i} = |w, x| if x % 3 == 0 {{ f{p}(W {{ fn : |y| (w.@fn)(y) + {i}, k : w.@k + 1 }}, x / 3) }} \
+                 else if x % 11 == 0 {{ f{p}(gw, x - 1) }} \
+                 else {{ f{p}(W {{ fn : |y| (w.@fn)(y) * {i}, k : w.@k }}, x - 1) }};\n",
+                i = i,
+                p = i - 1
+            )
+        })
+        .collect();
+    format!(
+        "module Main;\n\
+         \n\
+         type W = struct {{ fn : I64 -> I64, k : I64 }};\n\
+         \n\
+         gw : W;\n\
+         gw = W {{ fn : |x| x * 3 + 1, k : 5 }};\n\
+         \n\
+         use_w : W -> I64 -> I64;\n\
+         use_w = |w, x| if x < -100000 {{ use_w(w, x + 1) }} else {{ (w.@fn)(x) + w.@k }};\n\
+         \n\
+         f0 : W -> I64 -> I64;\n\
+         f0 = |w, x| (w.@fn)(x) + w.@k;\n\
+         {links}\
+         \n\
+         main : IO ();\n\
+         main = (\n\
+         \x20   let n = *(pure(100) : IO I64);\n\
+         \x20   let v = f{depth}(gw, n) + use_w(gw, n) + use_w(W {{ fn : |x| x - n, k : 1 }}, n)\n\
+         \x20       + f{depth}(W {{ fn : |x| x + n, k : 0 }}, n + 2);\n\
+         \x20   println(v.to_string)\n\
+         );\n",
+        links = links.join(""),
+        depth = GLOBAL_STRUCT_CHAIN_DEPTH
+    )
+}
+
+/// The copies of the functions far down `global_struct_chain_source` go past the copy budget, and
+/// the sets given to those functions, the set of the function of `gw` among them, are represented
+/// by closures. The two calls of `use_w` get copies representing the field differently, and the
+/// program computes its value under the development configuration.
+#[test]
+fn test_a_global_struct_of_a_function_passed_down_a_chain_past_the_copy_budget_computes_its_value()
+{
+    assert_source_prints(
+        &global_struct_chain_source(),
+        Configuration::develop_mode(),
+        "483",
+    );
+}
+
+/// The chain of `branching_chain_source`, where each function takes the function and the number in
+/// a tuple.
+fn tuple_branching_chain_source(depth: usize) -> String {
+    chain_of_two_lambda_calls_source(depth, ChainArgs::Tupled, "I64", "g(x)", "")
+}
+
+/// The chains of `branching_chain_source`, `returning_branching_chain_source` and
+/// `tuple_branching_chain_source` at `BRANCHING_CHAIN_DEPTH` go past the copy budget, and each
+/// computes its value under the development configuration.
+#[test]
+fn test_chains_of_functions_each_calling_the_next_with_two_lambdas_compute_their_values_past_the_copy_budget(
+) {
+    for (source, expected) in [
+        (
+            branching_chain_source(BRANCHING_CHAIN_DEPTH),
+            BRANCHING_CHAIN_OUTPUT,
+        ),
+        (
+            returning_branching_chain_source(BRANCHING_CHAIN_DEPTH),
+            RETURNING_BRANCHING_CHAIN_OUTPUT,
+        ),
+        (
+            tuple_branching_chain_source(BRANCHING_CHAIN_DEPTH),
+            BRANCHING_CHAIN_OUTPUT,
+        ),
+    ] {
+        assert_source_prints(&source, Configuration::develop_mode(), expected);
+    }
 }

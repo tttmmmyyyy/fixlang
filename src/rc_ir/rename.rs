@@ -8,7 +8,6 @@
 use crate::ast::name::FullName;
 use crate::misc::{grow_stack, Map};
 use crate::rc_ir::ast::{MatchArm, RcExpr, RcExprNode, RcRhs, RcVar};
-use std::sync::Arc;
 
 /// The suffix a copy's names take: `#`, the tag of the pass that makes the copy, and
 /// `distinguisher`, which tells the copy apart from the pass's other copies of the same code.
@@ -47,7 +46,7 @@ pub(crate) fn copy_suffix(tag: &str, distinguisher: &str) -> String {
 /// Clone a function's parameters, capture, and body, giving every bound variable (parameters,
 /// capture, `let` bindings, destructure fields, match-arm payloads) its name followed by `suffix`,
 /// and rewriting every occurrence. Returns the renamed pieces together with the binder renaming, which
-/// callers use to remap side tables and to route recursive references.
+/// callers use to remap side tables.
 pub(crate) fn fresh_rename_function(
     params: &[RcVar],
     cap: &Option<RcVar>,
@@ -177,10 +176,7 @@ fn rename_expr_inner(node: &RcExprNode, renaming: &Map<FullName, FullName>) -> R
         RcExpr::Eval(v, k) => RcExpr::Eval(rename_var(v, renaming), rename_expr(k, renaming)),
         RcExpr::Ret(v) => RcExpr::Ret(rename_var(v, renaming)),
     };
-    RcExprNode {
-        expr: Arc::new(expr),
-        source: node.source.clone(),
-    }
+    RcExprNode::new(expr, node.source.clone())
 }
 
 /// A right-hand side with every variable occurrence (including `Builtin` operand names) rewritten

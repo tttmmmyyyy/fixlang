@@ -59,7 +59,7 @@ use crate::rc_ir::ownership::{
     rc_units, rhs_consumes, truncate_to_unit, unit_step, units_under, AliasStep, References,
     UnitStep, VarTable,
 };
-use crate::rc_ir::specialization::{CloneKey, CloneRegistry};
+use crate::rc_ir::specialization::{callers_of, specializable_callee, CloneKey, CloneRegistry};
 use std::sync::Arc;
 
 /// The parameter leaves borrow inference found `Own`, keyed by the parameter variable's name and the
@@ -97,14 +97,14 @@ fn owns_a_leaf_of_unit(
 /// nothing changes. Demotion is monotone (`Borrow` to `Own` only), so it terminates.
 fn infer_ownership(
     prog: &RcProgram,
-    bodies: &Map<FuncRef, BodyFacts>,
+    bodies: &Map<FuncRef, LevellingFacts>,
     type_env: &TypeEnv,
 ) -> OwnedLeaves {
     let mut owned_leaves: Set<VarPath> = Set::default();
     loop {
         let mut changed = false;
         for func in prog.funcs.values() {
-            let BodyFacts { vars, sites } = &bodies[&func.name];
+            let LevellingFacts { vars, sites } = &bodies[&func.name];
             let mut consumed = vec![];
             collect_consumes(
                 &func.body,
@@ -160,8 +160,8 @@ fn levelled_sites(func: &RcFunc, type_env: &TypeEnv) -> Vec<(RcVar, FieldPath)> 
     sites
 }
 
-/// Own, for each of `sites`, every parameter leaf its candidate objects reach where the version owns
-/// any of them, answering whether any leaf became owned.
+/// For each of `sites`, own every parameter leaf its candidate objects reach where the version owns
+/// any of them. Returns whether any leaf became owned.
 fn level_sites(
     vars: &VarTable,
     type_env: &TypeEnv,
@@ -257,7 +257,7 @@ fn covered_leaves(ty: &Arc<TypeNode>, path: &FieldPath, type_env: &TypeEnv) -> V
 
 /// What borrow-ification reads of one function's body, built once per function however many of its
 /// versions are rewritten.
-struct BodyFacts {
+struct LevellingFacts {
     /// The function's variables: what binds each one and its type, which decide the object a leaf
     /// belongs to.
     vars: VarTable,
@@ -284,11 +284,11 @@ impl CloneKey for BorrowKey {
 /// accordingly, and annotate every output version with the parameter units it borrows
 /// (`RcFunc::borrowed_units`).
 pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: bool) -> RcProgram {
-    let bodies: Map<FuncRef, BodyFacts> = prog
+    let bodies: Map<FuncRef, LevellingFacts> = prog
         .funcs
         .values()
         .map(|f| {
-            let facts = BodyFacts {
+            let facts = LevellingFacts {
                 vars: VarTable::of(f),
                 sites: levelled_sites(f, type_env),
             };
@@ -382,7 +382,7 @@ struct Versions<'a> {
     /// The type definitions, for resolving a value's type to its reference-counting units.
     type_env: &'a TypeEnv,
     /// The body facts of every function of `prog`.
-    bodies: &'a Map<FuncRef, BodyFacts>,
+    bodies: &'a Map<FuncRef, LevellingFacts>,
     /// The parameter leaves the inference found every version has to own.
     owned_leaves: &'a OwnedLeaves,
     /// The functions that get a version borrowing a parameter where a call reaches one: those taking
@@ -418,7 +418,7 @@ impl Versions<'_> {
         }
         let type_env = self.type_env;
         let func = &self.prog.funcs[callee];
-        let BodyFacts { vars, sites } = &self.bodies[callee];
+        let LevellingFacts { vars, sites } = &self.bodies[callee];
         let mut owned: Set<VarPath> = Set::default();
         for (p, lent) in func.params.iter().zip(&lendable) {
             for leaf in boxed_leaf_paths(&p.ty, type_env) {
@@ -587,8 +587,8 @@ fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
     let mut closure_targets: Set<FuncRef> = Set::default();
     let mut calls_indirectly: Set<FuncRef> = Set::default();
     // One body's contribution. `owner` is the function the body belongs to, and `None` for a global
-    // initializer — an initializer gets no borrow version, so nothing is recorded against it, but the
-    // closures it builds are ones an indirect call anywhere can arrive at.
+    // initializer — an initializer gets no borrowing version, so nothing is recorded against it,
+    // but the closures it builds are ones an indirect call anywhere can arrive at.
     let mut scan = |body: &RcExprNode, owner: Option<&FuncRef>| {
         let mut cs = vec![];
         for_each_node(body, &mut |node| {
@@ -664,19 +664,8 @@ fn funcs_observing_uniqueness(prog: &RcProgram) -> Set<FuncRef> {
                 .extend(closure_targets.iter().cloned());
         }
     }
-    // Least fixed point over that graph: a caller of an observing function reaches the op.
-    loop {
-        let mut grew = false;
-        for (fref, cs) in &callees {
-            if !observing.contains(fref) && cs.iter().any(|c| observing.contains(c)) {
-                observing.insert(fref.clone());
-                grew = true;
-            }
-        }
-        if !grew {
-            return observing;
-        }
-    }
+    // A caller of an observing function reaches the op.
+    callers_of(observing, &callees)
 }
 
 /// The ownership shape of a value of type `ty`, with `ownership_of` deciding each of its
@@ -871,9 +860,9 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
                     "a call in tail position was routed to a version that leaves a release after it"
                 );
                 let k = prepend_rc(rc_after, true, self.rewrite_in(k, enclosing));
-                let app = expr_node(
+                let app = RcExprNode::new(
                     RcExpr::Let(x.clone(), RcRhs::App(callee, args.clone()), k),
-                    &node.source,
+                    node.source.clone(),
                 );
                 prepend_rc(rc_before, false, app)
             }
@@ -883,39 +872,24 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
                     .iter()
                     .map(|arm| arm.with_body(self.rewrite_in(&arm.body, Some(&after_arms))))
                     .collect();
-                expr_node(
+                RcExprNode::new(
                     RcExpr::Let(
                         x.clone(),
                         RcRhs::Match(scrut.clone(), arms),
                         self.rewrite_in(k, enclosing),
                     ),
-                    &node.source,
+                    node.source.clone(),
                 )
             }
-            RcExpr::Let(x, rhs, k) => expr_node(
-                RcExpr::Let(x.clone(), rhs.clone(), self.rewrite_in(k, enclosing)),
-                &node.source,
-            ),
             RcExpr::Retain(v, path, state, k) => {
                 self.rewrite_rc(v, path, *state, false, k, enclosing, &node.source)
             }
             RcExpr::Release(v, path, state, k) => {
                 self.rewrite_rc(v, path, *state, true, k, enclosing, &node.source)
             }
-            RcExpr::Destructure(container, fields, state, k) => expr_node(
-                RcExpr::Destructure(
-                    container.clone(),
-                    fields.clone(),
-                    *state,
-                    self.rewrite_in(k, enclosing),
-                ),
-                &node.source,
-            ),
-            RcExpr::Eval(v, k) => expr_node(
-                RcExpr::Eval(v.clone(), self.rewrite_in(k, enclosing)),
-                &node.source,
-            ),
-            RcExpr::Ret(v) => expr_node(RcExpr::Ret(v.clone()), &node.source),
+            RcExpr::Let(..) | RcExpr::Destructure(..) | RcExpr::Eval(..) | RcExpr::Ret(..) => {
+                map_continuation(node, |k| self.rewrite_in(k, enclosing))
+            }
         }
     }
 
@@ -930,12 +904,10 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
         args: &[RcVar],
         after: &After,
     ) -> (RcVar, Option<BorrowKey>) {
-        let fref = FuncRef {
-            name: callee.name.clone(),
-        };
-        if !self.versions.borrowers.contains(&fref) {
+        let Some(fref) = specializable_callee(self.versions.prog, callee, &self.versions.borrowers)
+        else {
             return (callee.clone(), None);
-        }
+        };
         let lendable = self.lendable(&fref, args, after);
         match self.versions.request(&fref, lendable) {
             Some((version, key)) => {
@@ -959,10 +931,10 @@ impl<'a, 'v> RewriteCtx<'a, 'v> {
     ///   Its object then lives through the rest of the callee, where a value read out of it is
     ///   shared, so an update of that value copies it.
     ///
-    /// The units of the first two kinds are lendable, and those of the third are not. Which lendable
-    /// units the callee can borrow is `Versions::levelled_key`'s to decide. A call in tail position
-    /// passes only values at their last use, so it lends no owned value, and no release is left
-    /// after a tail call.
+    /// The units of the first two kinds are lendable, and those of the third are not.
+    /// `Versions::levelled_key` decides which lendable units the callee can borrow. A call in tail
+    /// position passes only values at their last use, so it lends no owned value, and no release is
+    /// left after a tail call.
     fn lendable(&self, callee: &FuncRef, args: &[RcVar], after: &After) -> BorrowKey {
         let params = &self.versions.prog.funcs[callee].params;
         // A function a call names directly takes no capture here (`Versions::borrowers`), so the call
@@ -1181,14 +1153,6 @@ impl After<'_> {
     }
 }
 
-/// An expression node with the given source span.
-fn expr_node(expr: RcExpr, source: &Option<Span>) -> RcExprNode {
-    RcExprNode {
-        expr: Arc::new(expr),
-        source: source.clone(),
-    }
-}
-
 /// A `Release` (when `is_release`) or `Retain` of `var` at `path` wrapping continuation `k`.
 fn rc_node(
     is_release: bool,
@@ -1203,7 +1167,7 @@ fn rc_node(
     } else {
         RcExpr::Retain(var, path, state, k)
     };
-    expr_node(expr, source)
+    RcExprNode::new(expr, source.clone())
 }
 
 /// Wrap a continuation in a `Retain` (or `Release`) of each given unit.
@@ -1330,7 +1294,7 @@ fn un_bump(pending: &mut PendingRetains, un_bumped: &References) -> UnBump {
     UnBump::InBracket(retain)
 }
 
-/// What `un_bump` did to `pending`, read back from its answer (P17).
+/// Panics unless `answer`, the answer of `un_bump`, describes what the call did to `pending`.
 ///
 /// The answer is what the walk acts on -- `InBracket` records the release as one that closes its
 /// retain, and the other two mark retains needed -- so an answer that does not describe what the
@@ -1903,7 +1867,9 @@ struct RetainSinker<'a> {
 
 /// A retain on its way down: the retain node, and the object it bumps one reference of.
 struct SinkingRetain<'n> {
+    /// The retain node, whose copies are placed where a path needs the reference.
     retain: &'n RcExprNode,
+    /// The object the retain bumps one reference of.
     object: VarPath,
 }
 
@@ -1996,9 +1962,9 @@ impl RetainSinker<'_> {
                     .map(|(arm, sunk)| arm.with_body(sunk.node))
                     .collect();
                 Sunk {
-                    node: expr_node(
+                    node: RcExprNode::new(
                         RcExpr::Let(x.clone(), RcRhs::Match(scrutinee.clone(), arms), k.clone()),
-                        &node.source,
+                        node.source.clone(),
                     ),
                     met_object: true,
                 }
@@ -2018,7 +1984,12 @@ impl RetainSinker<'_> {
     }
 
     /// `node` with the retain sunk into its continuation, where every path through `node` goes on.
+    /// `node` is no `Ret`, which has no continuation.
     fn sink_past(&self, r: &SinkingRetain, node: &RcExprNode) -> Sunk {
+        assert!(
+            !matches!(node.expr.as_ref(), RcExpr::Ret(_)),
+            "a retain sinks past a `Ret`"
+        );
         let mut met_object = false;
         let node = map_continuation(node, |k| {
             let sunk = self.sink(r, k);

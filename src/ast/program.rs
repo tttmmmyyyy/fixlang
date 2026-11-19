@@ -1,7 +1,7 @@
 use crate::ast::deprecation::{DeprecationInfo, DeprecationStatement};
 use crate::ast::equality::Equality;
 use crate::ast::export_statement::{ExportStatement, ExportedFunctionType, IOType};
-use crate::ast::expr::{expr_var, Expr, ExprNode, Var};
+use crate::ast::expr::{expr_var_typed, Expr, ExprNode, Var};
 use crate::ast::import::{is_accessible, ImportItem, ImportStatement};
 use crate::ast::kind_scope::KindEnv;
 use crate::ast::name::{is_private_name, FullName, Name, NameSpace};
@@ -605,15 +605,21 @@ impl Program {
         None
     }
 
-    /// The expressions the entry point and the exported functions were instantiated as.
+    /// The expressions the entry point and the exported functions were instantiated as: the entry
+    /// point's first, if the program has one, then one for each export statement, in order.
+    ///
+    /// Panics where an export statement has not been instantiated yet.
     pub fn root_value_exprs(&self) -> Vec<&Arc<ExprNode>> {
         self.entry_io_value
             .iter()
-            .chain(
-                self.export_statements
-                    .iter()
-                    .filter_map(|stmt| stmt.value_expr.as_ref()),
-            )
+            .chain(self.export_statements.iter().map(|stmt| {
+                stmt.value_expr.as_ref().unwrap_or_else(|| {
+                    panic!(
+                        "the exported value `{}` is read before it is instantiated",
+                        stmt.value_name.to_string()
+                    )
+                })
+            }))
             .collect()
     }
 
@@ -1669,7 +1675,7 @@ impl Program {
         };
         let symbol_name = self.require_instantiation(&value_name, &required_ty)?;
         self.instantiate_symbols(tc)?;
-        let expr = expr_var(symbol_name, None).set_type(required_ty);
+        let expr = expr_var_typed(symbol_name, required_ty);
         Ok((expr, exported_ty))
     }
 

@@ -8,7 +8,7 @@ use super::concrete::SetId;
 pub enum Child {
     /// Another node, by its position.
     Node(usize),
-    /// A set held outside the graph, which is equal to no node and to no set but itself.
+    /// A set held outside the graph, which is equal only to itself.
     Fixed(SetId),
 }
 
@@ -37,8 +37,8 @@ pub type ElemKey<L> = (L, Vec<ChildKey>);
 /// reaching equal sets of trees get the same numbers, however they are positioned.
 ///
 /// # Arguments
-/// * `initial` - the class each node starts in, numbered from 0 with no number skipped, by what the
-///   nodes are rather than where they are positioned.
+/// * `initial` - the class each node starts in, numbered from 0 with no number skipped. It is chosen
+///   from what each node is, so it stays the same wherever the node is positioned.
 pub fn canonical_classes<L: Ord + Clone>(
     initial: Vec<usize>,
     elems: &[NodeElems<L>],

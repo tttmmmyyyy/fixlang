@@ -200,8 +200,8 @@ struct Validator<'a, 'b> {
     /// The names bound to a value made by `NoStorageValueOp`. A value of a type that occupies no
     /// storage holds no boxed value, since a pointer takes storage, so no reference count acts on
     /// one. `lower_lam` leaves such a capture out of the closure on that ground, and this is where
-    /// the ground is checked: the passes that run between the stages this validator is called at —
-    /// reference-count insertion, `borrow_ify`, `cancel` — must place no node on one.
+    /// the ground is checked: every pass that runs between the stages this validator is called at
+    /// must place no node on one.
     made_without_storage: Set<FullName>,
     /// The names currently in scope, which a use must resolve to.
     scope: Set<FullName>,
@@ -603,10 +603,7 @@ mod tests {
 
     /// An expression node carrying no source span, so a failure message quotes no code.
     fn node(expr: RcExpr) -> RcExprNode {
-        RcExprNode {
-            expr: Arc::new(expr),
-            source: None,
-        }
+        RcExprNode::new(expr, None)
     }
 
     /// A program with no functions and no globals, for a check that names none of its own.

@@ -13,9 +13,13 @@ use super::{
 /// (`make_own_dynamic`, `make_all_dynamic`). A place the rule says nothing about holds nothing the
 /// operation put there, which is right for an operation that moves no function into it.
 pub struct BuiltinFlow<'a, 'e> {
+    /// The slots of the program's types.
     layout: &'a SlotLayout<'e>,
+    /// The lambda set variables the rule makes equal or Dynamic.
     solver: &'a mut Solver,
+    /// The annotated type of each operand, in the order `BuiltinOp::free_vars` lists them.
     operands: Vec<AType>,
+    /// The annotated type of the result.
     result: AType,
     /// The name of the operation, recorded in the places it makes Dynamic.
     op_name: String,
@@ -40,12 +44,12 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
         }
     }
 
-    /// The `i`-th operand, in the order `BuiltinOp::free_vars` lists them.
+    /// The annotated type of the `i`-th operand, in the order `BuiltinOp::free_vars` lists them.
     pub fn operand(&self, i: usize) -> AType {
         self.operands[i].clone()
     }
 
-    /// The result.
+    /// The annotated type of the result.
     pub fn result(&self) -> AType {
         self.result.clone()
     }
@@ -76,8 +80,8 @@ impl<'a, 'e> BuiltinFlow<'a, 'e> {
         }
     }
 
-    /// Whether an own slot of some operand holds `Member::Dynamic`, as the rule of an operation
-    /// that applies a function operand makes the own slot of that operand.
+    /// Whether an own slot of some operand holds `Member::Dynamic`. The rule of an operation that
+    /// applies a function operand makes the own slot of that operand Dynamic.
     pub fn has_dynamic_operand_own_slot(&mut self) -> bool {
         self.operands.iter().any(|operand| {
             self.layout.own_slots(operand).iter().any(|v| {
