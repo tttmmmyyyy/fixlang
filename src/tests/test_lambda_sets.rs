@@ -1029,7 +1029,7 @@ fn test_a_chain_of_functions_each_returning_the_next_with_two_lambdas_builds_in_
 mod dump_tests {
     use super::{chain_source, global_read_back_source, CHAIN_DEPTH, CHAIN_OUTPUT};
     use crate::constants::{
-        LS_CAP_PREFIX, LS_COPY_SUFFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX,
+        LS_CAP_PREFIX, LS_COPY_BUDGET_BASE, LS_COPY_SUFFIX, LS_LAM_SUFFIX, LS_UNION_PREFIX,
         MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS,
     };
     use crate::misc::Set;
@@ -1081,8 +1081,11 @@ mod dump_tests {
         }
     }
 
-    /// How many places of `fan_in_source` call the chain, each with a lambda of its own.
-    const FAN_IN_CALLS: usize = 40;
+    /// How many places of `fan_in_source` call the chain, each with a lambda of its own: more than
+    /// `LS_COPY_BUDGET_BASE`, so that the chain stays within its copy budget only by the references
+    /// on the way to it.
+    const FAN_IN_CALLS: usize = 80;
+    const _: () = assert!(FAN_IN_CALLS > LS_COPY_BUDGET_BASE);
 
     /// How many functions of `fan_in_source` hand the function they were given to the next.
     const FAN_IN_DEPTH: usize = 5;
@@ -1130,10 +1133,76 @@ mod dump_tests {
         let dump = build_run_and_read_rc_ir(
             &fan_in_source(),
             "max",
-            "8398600",
+            "32797200",
             "a chain of functions called from many places, handing a lambda to `loop`",
         );
         assert_calls_by_name(&dump, "Std::loop");
+    }
+
+    /// How many places of `fan_out_under_a_hub_source` call `a`, and how many places of `a` call
+    /// `b`, each with a lambda of its own.
+    const FAN_OUT_CALLS: usize = 10;
+
+    /// How many places of `fan_out_under_a_hub_source` call `u`, each with a lambda of its own.
+    const HUB_CALLS: usize = 30;
+
+    /// A program whose `main` calls `a` from `FAN_OUT_CALLS` places and `u` from `HUB_CALLS`
+    /// places, each with a lambda of its own, where `a` calls `b` from `FAN_OUT_CALLS` places, each
+    /// with a lambda of its own wrapping the function it was given. `b` is copied
+    /// `FAN_OUT_CALLS * FAN_OUT_CALLS` times, and `u` once per place.
+    fn fan_out_under_a_hub_source() -> String {
+        let b_calls: Vec<String> = (1..=FAN_OUT_CALLS)
+            .map(|k| format!("b(|y| g(y) + {}, x)", k))
+            .collect();
+        let a_calls: Vec<String> = (1..=FAN_OUT_CALLS)
+            .map(|i| format!("a(|x| x + n * {}, n)", i))
+            .collect();
+        let u_calls: Vec<String> = (1..=HUB_CALLS)
+            .map(|k| format!("u(|x| x + {}, n)", k))
+            .collect();
+        format!(
+            "module Main;\n\
+             \n\
+             b : (I64 -> I64) -> I64 -> I64;\n\
+             b = |g, x| if x < 0 {{ b(g, -x) }} else {{ g(x) }};\n\
+             \n\
+             a : (I64 -> I64) -> I64 -> I64;\n\
+             a = |g, x| {};\n\
+             \n\
+             u : (I64 -> I64) -> I64 -> I64;\n\
+             u = |g, x| if x < 0 {{ u(g, -x) }} else {{ g(x) }};\n\
+             \n\
+             main : IO ();\n\
+             main = (\n\
+             \x20   let n = *(pure(100) : IO I64);\n\
+             \x20   println(({} + {}).to_string)\n\
+             );\n",
+            b_calls.join(" + "),
+            a_calls.join(" + "),
+            u_calls.join(" + ")
+        )
+    }
+
+    /// The budget of a component counts only the references on the way to it: in
+    /// `fan_out_under_a_hub_source`, the `FAN_OUT_CALLS * FAN_OUT_CALLS` copies of `b` go past
+    /// `LS_COPY_BUDGET_BASE` plus the `2 * FAN_OUT_CALLS` references from `main` to `a` and from
+    /// `a` to `b`, so `b` calls the function it was given through a closure, though the
+    /// `HUB_CALLS` references from `main` to `u` would cover them. `u`, copied once per reference
+    /// to it, calls each of its lambdas by name.
+    #[test]
+    fn test_references_of_a_hub_to_other_parts_leave_a_fan_out_past_its_copy_budget() {
+        let dump = build_run_and_read_rc_ir(
+            &fan_out_under_a_hub_source(),
+            "max",
+            "69015",
+            "a fan-out of two steps under a `main` calling another function from many places",
+        );
+        assert!(
+            calls_through_a_closure(&dump, "Main::b"),
+            "`b` is copied past its budget, and should call the function it was given through a \
+             closure"
+        );
+        assert_calls_by_name(&dump, "Main::u");
     }
 
     /// Verifies that `main` calls `g` by name both where it applies `g` to its two arguments at once
