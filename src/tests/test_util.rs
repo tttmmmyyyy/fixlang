@@ -1043,6 +1043,13 @@ pub fn run_source_capture(source: &str, config: Configuration) -> Output {
     panic_if_err(run_source(source, config)).unwrap()
 }
 
+/// Compiles `source` under `config`, runs it, and asserts that what it prints on stdout, with the
+/// surrounding whitespace removed, is `expected`.
+pub fn assert_source_prints(source: &str, config: Configuration, expected: &str) {
+    let output = run_source_capture(source, config);
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
+}
+
 /// Verify that the parser rejects `source` (parse-level rejection: the
 /// pest grammar, and the names it rejects right after the parse). Use
 /// this for negative tests that want to assert "the parser rejects this

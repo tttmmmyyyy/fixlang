@@ -2,7 +2,8 @@ use crate::{
     configuration::Configuration,
     constants::MAX_LS_UNION_VARIANTS,
     tests::test_util::{
-        build_within_and_run, build_within_instructions_and_run, run_source_capture, test_source,
+        assert_source_prints, build_within_and_run, build_within_instructions_and_run,
+        run_source_capture, test_source,
     },
 };
 use std::time::Duration;
@@ -2262,8 +2263,11 @@ fn global_struct_chain_source() -> String {
 #[test]
 fn test_a_global_struct_of_a_function_passed_down_a_chain_past_the_copy_budget_computes_its_value()
 {
-    let output = run_source_capture(&global_struct_chain_source(), Configuration::develop_mode());
-    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "483");
+    assert_source_prints(
+        &global_struct_chain_source(),
+        Configuration::develop_mode(),
+        "483",
+    );
 }
 
 /// The chain of `branching_chain_source`, where each function takes the function and the number in
@@ -2292,7 +2296,6 @@ fn test_chains_of_functions_each_calling_the_next_with_two_lambdas_compute_their
             BRANCHING_CHAIN_OUTPUT,
         ),
     ] {
-        let output = run_source_capture(&source, Configuration::develop_mode());
-        assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), expected);
+        assert_source_prints(&source, Configuration::develop_mode(), expected);
     }
 }
