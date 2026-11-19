@@ -918,14 +918,14 @@ fn branching_chain_source(depth: usize) -> String {
 }
 
 /// About three times what the build of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` executes
-/// with the budget of `LS_COPIES_PER_SITE` (16 billion on x86-64), and a fifth of what it executes
+/// with the copy budget of `LS_COPY_BUDGET_BASE` (16 billion on x86-64), and a fifth of what it executes
 /// with every copy made (286 billion).
 const BRANCHING_CHAIN_MAX_INSTRUCTIONS: u64 = 50_000_000_000;
 
 /// The chain of `branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
-/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions. Its copies go past the budget of
-/// `LS_COPIES_PER_SITE`, and the sets given to the most copied functions are represented by
-/// closures, which makes each of those functions one copy in the rewritten program.
+/// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions. The copies of the functions far down the chain
+/// go past the copy budget of `LS_COPY_BUDGET_BASE`, and the sets given to those functions are
+/// represented by closures, which makes each of them one copy in the rewritten program.
 /// Where the machine does not let the test count instructions, the test checks the answer alone.
 #[test]
 fn test_a_chain_of_functions_each_calling_the_next_with_two_lambdas_builds_in_bounded_work() {
@@ -958,8 +958,9 @@ fn returning_branching_chain_source(depth: usize) -> String {
 
 /// The chain of `returning_branching_chain_source(BRANCHING_CHAIN_DEPTH)` builds in fewer than
 /// `BRANCHING_CHAIN_MAX_INSTRUCTIONS` instructions and computes its value. Past the copy budget of
-/// `LS_COPIES_PER_SITE`, the parameters of the most copied functions are given sets represented by
-/// closures, while each function returns the lambdas it and the later functions of the chain build.
+/// `LS_COPY_BUDGET_BASE`, the parameters of the functions far down the chain are given sets
+/// represented by closures, while each function returns the lambdas it and the later functions of
+/// the chain build.
 #[test]
 fn test_a_chain_of_functions_each_returning_the_next_with_two_lambdas_builds_in_bounded_work() {
     let description = format!(
@@ -1079,9 +1080,9 @@ mod dump_tests {
         )
     }
 
-    /// Copies that grow with the references times the length of the chain stay within the copy
-    /// budget of `LS_COPIES_PER_SITE`: `fan_in_source` copies each function of its chain and `loop`
-    /// once per call of the chain, and every copy of `loop` calls the lambda it was given by name.
+    /// Copies that grow with the references made above a function stay within the copy budget of
+    /// `LS_COPY_BUDGET_BASE`: `fan_in_source` copies each function of its chain and `loop` once per
+    /// call of the chain, and every copy of `loop` calls the lambda it was given by name.
     #[test]
     fn test_a_loop_at_the_end_of_a_chain_called_from_many_places_calls_each_lambda_by_name() {
         let dump = build_run_and_read_rc_ir(
@@ -2143,9 +2144,9 @@ fn global_struct_chain_source() -> String {
     )
 }
 
-/// The copies of `global_struct_chain_source` go past the copy budget, and the sets given to the
-/// most copied functions, the set of the function of `gw` among them, are represented by
-/// closures. The two calls of `use_w` get copies representing the field differently, and the
+/// The copies of the functions far down `global_struct_chain_source` go past the copy budget, and
+/// the sets given to those functions, the set of the function of `gw` among them, are represented
+/// by closures. The two calls of `use_w` get copies representing the field differently, and the
 /// program computes its value under the development configuration.
 #[test]
 fn test_a_global_struct_of_a_function_passed_down_a_chain_past_the_copy_budget_computes_its_value()

@@ -235,23 +235,21 @@ pub const MAX_LS_IN_PLACE_CAPTURE_STRUCTS: u64 = 1 << 6;
 /// once those passes take linear time, up to `MAX_UNION_VARIANTS`.
 pub const MAX_LS_UNION_VARIANTS: usize = 32;
 const _: () = assert!(MAX_LS_UNION_VARIANTS <= MAX_UNION_VARIANTS);
-/// How many copies of components lambda set specialization may list (`specialize`) for each
-/// reference from one component to another (`Component::sites`) and each component on the longest
-/// chain of references from the entry, on top of `LS_COPY_BUDGET_BASE`. Past this budget, the sets
-/// given to the most copied components are represented by closures, and the rewrite makes one copy
-/// of each of those components.
+/// How many copies of a component lambda set specialization may list (`specialize`) on top of one
+/// for each reference (`Component::sites`) made by the components it is reached from: its callers,
+/// their callers, and so on up to the entry. Past this budget, the sets the copies of the component
+/// give to its `Component::body_params` are represented by closures, and the rewrite makes one copy
+/// of it.
 ///
 /// A component is copied once per distinct way it is called. A chain of functions each handing the
 /// function it was given to the next, called from many places with a lambda of its own each, copies
-/// every function of the chain once per place: the copies grow with the references times the length
-/// of the chain, and stay within the budget. A function that calls the next function of a chain
-/// from two places, each with a lambda of its own wrapping the function it was given, needs twice as
-/// many copies of the next function as of itself, so the copies grow exponentially in the length of
-/// the chain and go past the budget. The budget bounds the copies the rewrite makes; `specialize`
-/// still lists every copy.
-pub const LS_COPIES_PER_SITE: usize = 1;
-/// The part of the lambda set specialization copy budget that every program gets, whatever its
-/// references; `LS_COPIES_PER_SITE` adds to it.
+/// every function of the chain once per place, and each place is a reference made by a component
+/// the chain is reached from: the copies stay within the budget. A function that calls the next
+/// function of a chain from two places, each with a lambda of its own wrapping the function it was
+/// given, needs twice as many copies of the next function as of itself. The copies of a function
+/// far down such a chain grow exponentially in the length of the chain above it, while the
+/// references made above it grow linearly, so they go past the budget. The budget bounds the copies
+/// the rewrite makes; `specialize` still lists every copy.
 pub const LS_COPY_BUDGET_BASE: usize = 64;
 /// The index of the function pointer among a closure's fields.
 pub const CLOSURE_FUNPTR_IDX: u32 = 0;

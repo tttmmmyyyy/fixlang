@@ -9,14 +9,12 @@ use super::{
 };
 use crate::{
     constants::{
-        LS_COPIES_PER_SITE, LS_COPY_BUDGET_BASE, LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS,
-        MAX_LS_UNION_VARIANTS,
+        LS_COPY_BUDGET_BASE, LS_COPY_SUFFIX, MAX_LS_IN_PLACE_CAPTURE_STRUCTS, MAX_LS_UNION_VARIANTS,
     },
     graph::Graph,
     hash::md5_hex,
     misc::{Map, Set},
 };
-use std::cmp::Reverse;
 
 /// How the values of a concrete set are represented.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -220,49 +218,24 @@ impl Builders {
     }
 }
 
-/// The sets that the copies of the most copied components give to their `Component::body_params`,
-/// when the copies number more than the budget: `LS_COPY_BUDGET_BASE`, plus `LS_COPIES_PER_SITE`
-/// for each reference (`Component::sites`) and each component on the longest chain of references
-/// from the entry's component (`longest_reference_chain`).
-///
-/// Components are taken from the most copied, ties going to the one first in
-/// `Analysis::components`, until the copies fit the budget, counting one copy for each component
-/// taken. They fit before any component copied once is taken: every copied component other than
-/// the entry's is referred to by a reference of another component, so one copy of each copied
-/// component is fewer than the budget.
+/// The sets that the copies of each component copied past its budget give to its
+/// `Component::body_params`. The budget of a component is `LS_COPY_BUDGET_BASE` copies plus one for
+/// each reference made by the components it is reached from (`reaching_references`).
 ///
 /// The rewrite makes one copy of a component for each representation of the sets of its
 /// `Component::body_params`, so a component whose sets are all represented by closures gets one
 /// copy.
 fn over_copied_sets(analysis: &Analysis, spec: &Specialization) -> Vec<SetId> {
-    let site_count: usize = analysis.components.iter().map(|c| c.sites.len()).sum();
-    let budget =
-        LS_COPY_BUDGET_BASE + LS_COPIES_PER_SITE * site_count * longest_reference_chain(analysis);
     let mut copies = vec![0usize; analysis.components.len()];
     for instance in &spec.instances {
         copies[instance.component] += 1;
     }
-    let mut by_copies: Vec<usize> = (0..copies.len()).collect();
-    by_copies.sort_by_key(|c| (Reverse(copies[*c]), *c));
-    let mut total = spec.instances.len();
-    let mut taken: Set<usize> = Set::default();
-    for c in by_copies {
-        if total <= budget {
-            break;
-        }
-        assert!(
-            copies[c] > 1,
-            "the {} copies are past the budget of {} once every component copied more than once \
-             is taken",
-            total,
-            budget
-        );
-        total -= copies[c] - 1;
-        taken.insert(c);
-    }
+    let references = reaching_references(analysis);
     spec.instances
         .iter()
-        .filter(|instance| taken.contains(&instance.component))
+        .filter(|instance| {
+            copies[instance.component] > LS_COPY_BUDGET_BASE + references[instance.component]
+        })
         .flat_map(|instance| {
             analysis.components[instance.component]
                 .body_params
@@ -272,28 +245,33 @@ fn over_copied_sets(analysis: &Analysis, spec: &Specialization) -> Vec<SetId> {
         .collect()
 }
 
-/// How many components the longest chain of references (`Component::sites`) from the entry's
-/// component passes through, the entry's included.
-fn longest_reference_chain(analysis: &Analysis) -> usize {
-    let mut chain = vec![0usize; analysis.components.len()];
-    for (c, component) in analysis.components.iter().enumerate() {
-        let longest_below = component
-            .sites
-            .iter()
-            .map(|site| {
-                assert!(
-                    site.component < c,
-                    "the component {} refers to the component {}, which comes after it",
-                    c,
-                    site.component
-                );
-                chain[site.component]
-            })
-            .max()
-            .unwrap_or(0);
-        chain[c] = 1 + longest_below;
+/// For each component, how many references (`Component::sites`) the components it is reached from
+/// make: the components on a chain of references from the entry's component to it, itself left
+/// out.
+fn reaching_references(analysis: &Analysis) -> Vec<usize> {
+    let count = analysis.components.len();
+    let mut reached_from: Vec<Set<usize>> = vec![Set::default(); count];
+    for c in (0..count).rev() {
+        let mut above = reached_from[c].clone();
+        above.insert(c);
+        for site in &analysis.components[c].sites {
+            assert!(
+                site.component < c,
+                "the component {} refers to the component {}, which comes after it",
+                c,
+                site.component
+            );
+            reached_from[site.component].extend(above.iter().copied());
+        }
     }
-    chain[analysis.entry_component()]
+    reached_from
+        .iter()
+        .map(|from| {
+            from.iter()
+                .map(|c| analysis.components[*c].sites.len())
+                .sum()
+        })
+        .collect()
 }
 
 /// Whether a capture struct, or a union of capture structs, can stand for the values of each set of
