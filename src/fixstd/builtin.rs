@@ -1219,7 +1219,10 @@ pub fn expr_nullptr_lit(source: Option<Span>) -> Arc<ExprNode> {
 /// reported as a `Bool` found there, the way a number literal is. Every name is absolute, so the
 /// literal resolves without an `import` at the use site.
 pub fn expr_bool_lit(val: bool, source: Option<Span>) -> Arc<ExprNode> {
-    let ctor = FullName::from_strs(&[STD_NAME, BOOL_NAME], if val { "_true" } else { "_false" });
+    let ctor = FullName::new(
+        &BOOL_TYPE.to_fullname().to_namespace(),
+        if val { "_true" } else { "_false" },
+    );
     let unit = expr_make_struct(tycon(make_tuple_name(0)), vec![]);
     let value = expr_app(expr_var(ctor, source.clone()), vec![unit], source.clone());
     expr_tyanno(value, make_bool_ty(), source).global_to_absolute()
