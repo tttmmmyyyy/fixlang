@@ -29,7 +29,7 @@
 
 use crate::{
     ast::{
-        expr::{expr_let_typed, expr_var, Expr, ExprNode},
+        expr::{expr_let_typed, expr_var_typed, Expr, ExprNode},
         name::{FullName, Name},
         pattern::{Pattern, PatternNode},
         program::{Program, Symbol},
@@ -287,7 +287,7 @@ impl<'a> Collapser<'a> {
                 let ty = sub.info.type_.as_ref().unwrap().clone();
                 expr_let_typed(
                     sub.clone(),
-                    expr_var(payload.clone(), None).set_type(ty),
+                    expr_var_typed(payload.clone(), ty),
                     body.clone(),
                 )
             }
@@ -416,7 +416,7 @@ impl<'a> ExprVisitor for Collapser<'a> {
             let ty = field_pat.info.type_.as_ref().unwrap().clone();
             collapsed = expr_let_typed(
                 field_pat.clone(),
-                expr_var(held.clone(), None).set_type(ty),
+                expr_var_typed(held.clone(), ty),
                 collapsed,
             );
         }
@@ -493,7 +493,7 @@ impl<'a> ExprVisitor for Collapser<'a> {
                 PatternNode::make_local_var(&name, ty.clone()),
                 value.clone(),
             ));
-            named = named.set_make_struct_field(field, expr_var(name, None).set_type(ty));
+            named = named.set_make_struct_field(field, expr_var_typed(name, ty));
         }
         let under_bindings = bindings
             .into_iter()

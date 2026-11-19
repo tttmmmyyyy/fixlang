@@ -1,6 +1,5 @@
-use std::{collections::VecDeque, hash::Hash};
-
 use crate::misc::{Map, Set};
+use std::{collections::VecDeque, hash::Hash};
 
 /// A directed graph whose nodes are the indices `0..len()`, each holding an element of type `T`.
 pub struct Graph<T> {
@@ -241,7 +240,7 @@ impl<T> Graph<T> {
 /// Tests of `Graph`.
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::Graph;
 
     /// `compute_sccs` of the empty graph is empty.
     #[test]

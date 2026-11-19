@@ -18,7 +18,7 @@ use crate::{
     ast::{
         expr::{
             expr_abs_typed, expr_app_typed, expr_builtin, expr_let_typed, expr_match_typed,
-            expr_var, Expr, ExprNode,
+            expr_var_typed, Expr, ExprNode,
         },
         name::FullName,
         pattern::{Pattern, PatternNode},
@@ -1022,7 +1022,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
             }
         }
         let ty = self.rewrite_type_at(&ty.ty, &sets, false);
-        expr_var(self.copy_name(name, copy), None).set_type(ty)
+        expr_var_typed(self.copy_name(name, copy), ty)
     }
 
     /// The value a lambda of the class `c` builds for a set represented by `own`: the class's capture
@@ -1083,7 +1083,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
     fn closure_value(&mut self, c: u32, ty: Arc<TypeNode>) -> Arc<ExprNode> {
         let cap = self.capture_struct_value(c);
         let cap_ty = cap.type_.clone().unwrap();
-        let callee = expr_var(self.lifted_name(c), None).set_type(type_arrow(cap_ty, ty));
+        let callee = expr_var_typed(self.lifted_name(c), type_arrow(cap_ty, ty));
         expr_app_typed(callee, vec![cap])
     }
 
@@ -1103,7 +1103,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
         let callee_name = self.callee_name(c);
         if lambda.is_body() {
             // The symbol's copy captures nothing, so the call leaves the capture struct unread.
-            let callee = expr_var(callee_name, None).set_type(type_arrow(arg_ty, ty.clone()));
+            let callee = expr_var_typed(callee_name, type_arrow(arg_ty, ty.clone()));
             let call = e.set_app_func(callee).set_app_args(vec![arg]).set_type(ty);
             if func.is_var() {
                 return call;
@@ -1118,8 +1118,10 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 .push(callee_name.clone());
         }
         let cap_ty = func.type_.clone().unwrap();
-        let callee = expr_var(callee_name, None)
-            .set_type(type_arrow(cap_ty, type_arrow(arg_ty, ty.clone())));
+        let callee = expr_var_typed(
+            callee_name,
+            type_arrow(cap_ty, type_arrow(arg_ty, ty.clone())),
+        );
         let partial = expr_app_typed(callee, vec![func]);
         e.set_app_func(partial).set_app_args(vec![arg]).set_type(ty)
     }
@@ -1154,7 +1156,7 @@ impl<'a, 'e> Rewriter<'a, 'e> {
                 let pat =
                     PatternNode::make_union_with_span(Self::variant_name(&tycon, i), None, payload)
                         .set_type(func.type_.clone().unwrap());
-                let cap = expr_var(FullName::local(LS_PAYLOAD_NAME), None).set_type(payload_ty);
+                let cap = expr_var_typed(FullName::local(LS_PAYLOAD_NAME), payload_ty);
                 let call = self.call_class(walk, *c, e, cap, arg.clone(), ty.clone());
                 (pat, call)
             })
@@ -1173,7 +1175,7 @@ fn bind_unless_var(
     if value.is_var() {
         return value;
     }
-    let local = expr_var(FullName::local(&name), None).set_type(value.type_.clone().unwrap());
+    let local = expr_var_typed(FullName::local(&name), value.type_.clone().unwrap());
     bindings.push((name, value));
     local
 }

@@ -8,52 +8,13 @@
 /// building no union — the property these tests assert.
 #[cfg(test)]
 mod integration_tests {
-    use crate::tests::test_util::{build_project_and_read_rc_ir, copy_dir_recursive};
-    use std::path::PathBuf;
+    use crate::tests::test_util::{
+        build_project_and_read_rc_ir, rc_ir_function_bodies_naming_all, setup_case_projects,
+    };
     use std::process::Command;
-    use tempfile::TempDir;
 
-    /// The directory holding the case projects, `src/tests/test_simplify/cases` in the source tree.
-    fn get_test_cases_dir() -> PathBuf {
-        let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        path.push("src/tests/test_simplify/cases");
-        path
-    }
-
-    /// Copy the test cases into a fresh temporary directory so parallel test runs do not conflict,
-    /// and return the directory of the named case project.
-    fn setup_test_env(case: &str) -> (TempDir, PathBuf) {
-        let temp_dir = TempDir::new().expect("Failed to create temp directory");
-        let dst = temp_dir.path().to_path_buf();
-        copy_dir_recursive(&get_test_cases_dir(), &dst).expect("Failed to copy test cases");
-        let project_dir = dst.join(case);
-        (temp_dir, project_dir)
-    }
-
-    /// Each `fn` block of the dump whose header line contains all of `needles`: the header line
-    /// itself and every line up to the next `fn` header.
-    fn fn_bodies_matching(dump: &str, needles: &[&str]) -> Vec<String> {
-        let mut bodies = Vec::new();
-        let mut current_body: Option<String> = None;
-        for line in dump.lines() {
-            if line.starts_with("fn ") {
-                if let Some(body) = current_body.take() {
-                    bodies.push(body);
-                }
-                if needles.iter().all(|n| line.contains(n)) {
-                    current_body = Some(String::new());
-                }
-            }
-            if let Some(body) = current_body.as_mut() {
-                body.push_str(line);
-                body.push('\n');
-            }
-        }
-        if let Some(body) = current_body.take() {
-            bodies.push(body);
-        }
-        bodies
-    }
+    /// The directory holding this module's case projects.
+    const CASES: &str = "src/tests/test_simplify/cases";
 
     /// The header needles of the fold that `to_array` runs over `range(0, 10).map(f)`, the one
     /// function of a case whose answer is an `Array I64`. The call `map` makes to `f` is inlined
@@ -77,10 +38,10 @@ mod integration_tests {
         held_nodes: &[&str],
         expected: &str,
     ) {
-        let (_temp_dir, project_dir) = setup_test_env(case);
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, case);
         let dump = build_project_and_read_rc_ir(&project_dir, "all", "rc_ir.post.txt");
 
-        let bodies = fn_bodies_matching(&dump, needles);
+        let bodies = rc_ir_function_bodies_naming_all(&dump, needles);
         assert!(
             !bodies.is_empty(),
             "no {} in the RC IR dump:\n{}",
@@ -126,7 +87,7 @@ mod integration_tests {
     /// one, and the move is all-or-nothing.
     #[test]
     fn test_loop_state_cancelled() {
-        let (_temp_dir, project_dir) = setup_test_env("loop_two_conditions");
+        let (_temp_dir, project_dir) = setup_case_projects(CASES, "loop_two_conditions");
         let dump = build_project_and_read_rc_ir(&project_dir, "all", "rc_ir.post.txt");
         assert!(
             !dump.contains("LoopState"),

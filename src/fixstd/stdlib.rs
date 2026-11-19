@@ -1092,6 +1092,7 @@ pub fn make_with_retained_name() -> FullName {
     FullName::from_strs(&[STD_NAME], WITH_RETAINED_NAME)
 }
 
+/// Tests of `is_std_fix`.
 #[cfg(test)]
 mod tests {
     use super::{is_std_fix, FullName, FIX_NAME, INSTANCIATED_NAME_SEPARATOR, STD_NAME};

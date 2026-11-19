@@ -22,7 +22,7 @@ use std::{collections::HashMap, mem::replace, sync::Arc};
 
 use crate::{
     ast::{
-        expr::expr_var,
+        expr::expr_var_typed,
         name::{FullName, Name},
         program::{Program, Symbol},
         types::{tycon, type_tyapp, type_tycon, TyCon, Type::TyApp, TypeNode},
@@ -104,7 +104,7 @@ fn run_on_array_act(
     if let Some(opt_func_name) = opt_func_name {
         let inst_name = prg.require_instantiation(&opt_func_name, &act_ty)?;
         prg.instantiate_symbols(tc)?;
-        let optimized_val = expr_var(inst_name, None).set_type(act_ty.clone());
+        let optimized_val = expr_var_typed(inst_name, act_ty.clone());
         sym.expr = Some(optimized_val);
     }
 
@@ -148,7 +148,7 @@ fn run_on_struct_field_act(
     if let Some(opt_func_name) = opt_func_name {
         let inst_name = prg.require_instantiation(&opt_func_name, &act_ty)?;
         prg.instantiate_symbols(tc)?;
-        let optimized_val = expr_var(inst_name, None).set_type(act_ty.clone());
+        let optimized_val = expr_var_typed(inst_name, act_ty.clone());
         sym.expr = Some(optimized_val);
     }
 

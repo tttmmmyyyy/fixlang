@@ -12,7 +12,7 @@ Higher-order uncurrying (https://xavierleroy.org/publi/higher-order-uncurrying.p
 
 use crate::{
     ast::{
-        expr::{expr_abs, expr_app, expr_var, Expr, ExprNode, Var},
+        expr::{expr_abs, expr_app, expr_var_typed, Expr, ExprNode, Var},
         name::{FullName, Name},
         program::{Program, Symbol},
         types::type_func,
@@ -88,8 +88,10 @@ pub fn run(prg: &mut Program, num_threads: usize) {
             continue;
         };
         export.value_name = uncurried_value.name.clone();
-        export.value_expr =
-            Some(expr_var(uncurried_value.name.clone(), None).set_type(uncurried_value.ty.clone()));
+        export.value_expr = Some(expr_var_typed(
+            uncurried_value.name.clone(),
+            uncurried_value.ty.clone(),
+        ));
     }
 
     // Replace entry IO value so that it uses an uncurried function.
@@ -97,7 +99,7 @@ pub fn run(prg: &mut Program, num_threads: usize) {
         // The entry IO value has the unwrapped `IO` type, i.e., the `IOState -> (IOState, a)` type,
         // so it takes one argument.
         if let Some(sym) = uncurried_symbol(&prg.symbols, &funcs, entry_io_value, 1) {
-            prg.entry_io_value = Some(expr_var(sym.name.clone(), None).set_type(sym.ty.clone()));
+            prg.entry_io_value = Some(expr_var_typed(sym.name.clone(), sym.ty.clone()));
         }
     }
 }
@@ -325,7 +327,7 @@ fn replace_closure_call_with_func_call(
                 .map(|arg| arg.type_.clone().unwrap())
                 .collect::<Vec<_>>();
             let func_ty = type_func(arg_tys, result_ty.clone());
-            let f_func = expr_var(func.clone(), None).set_type(func_ty);
+            let f_func = expr_var_typed(func.clone(), func_ty);
             expr_app(f_func, args, None).set_type(result_ty)
         }
         _ => expr.clone(),

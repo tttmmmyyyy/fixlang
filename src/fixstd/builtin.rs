@@ -7411,7 +7411,6 @@ fn make_struct_union_unique<'c, 'm>(
 pub struct StructSetOp {
     pub value_name: FullName,
     pub struct_name: FullName,
-    field_count: u32,
     field_idx: u32,
     /// When true, clone the struct first if it is shared, so the write lands in a uniquely owned
     /// struct. Set false only where the struct is statically known to be unique.
@@ -7559,7 +7558,6 @@ pub fn struct_set(
 
     // Find the index of `field_name` in the given struct.
     let (field_idx, field) = definition.get_field_by_name(field_name).unwrap();
-    let field_count = definition.fields().len() as u32;
 
     let str_ty = definition.applied_type();
     let expr = expr_abs(
@@ -7571,7 +7569,6 @@ pub fn struct_set(
                     assume_local: false,
                     value_name: FullName::local(VALUE_NAME),
                     struct_name: FullName::local(STRUCT_NAME),
-                    field_count,
                     field_idx,
                     force_unique: true,
                 }),
@@ -8304,11 +8301,8 @@ pub fn undefined_internal_function() -> (Arc<ExprNode>, Arc<Scheme>) {
     (expr, scm)
 }
 
-/// The builtin operation of `Std::#hole`. Code generation
-/// should be unreachable in practice because elaboration rejects any
-/// program containing a hole; the body still emits an `unreachable`
-/// instruction defensively so the LLVM module stays well-formed if
-/// the diagnostic is somehow bypassed.
+/// The builtin operation of `Std::#hole`. Elaboration rejects any program containing a hole, so code
+/// generation never reaches this operation, and it panics if it does.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct HoleOp {}
 
