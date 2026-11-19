@@ -249,7 +249,7 @@ const _: () = assert!(MAX_LS_UNION_VARIANTS <= MAX_UNION_VARIANTS);
 /// many copies of the next function as of itself, so the copies grow exponentially in the length of
 /// the chain and go past the budget. The budget bounds the copies the rewrite makes; `specialize`
 /// still lists every copy.
-pub const LS_COPIES_PER_SITE: usize = 4;
+pub const LS_COPIES_PER_SITE: usize = 1;
 /// The part of the lambda set specialization copy budget that every program gets, whatever its
 /// references; `LS_COPIES_PER_SITE` adds to it.
 pub const LS_COPY_BUDGET_BASE: usize = 64;
