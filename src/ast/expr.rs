@@ -218,20 +218,6 @@ impl ExprNode {
         Arc::new(ret)
     }
 
-    /// This application with the function at the root of its application spine replaced by `head`.
-    ///
-    /// # Examples
-    /// Given `g`, `f(x)(y)` becomes `g(x)(y)`.
-    pub fn set_app_spine_head(&self, head: Arc<ExprNode>) -> Arc<Self> {
-        let func = self.get_app_func();
-        let func = if func.is_app() {
-            func.set_app_spine_head(head)
-        } else {
-            head
-        };
-        self.set_app_func(func)
-    }
-
     /// The function an application applies. Panics on an expression that is not an application.
     pub fn get_app_func(&self) -> Arc<ExprNode> {
         match &*self.expr {

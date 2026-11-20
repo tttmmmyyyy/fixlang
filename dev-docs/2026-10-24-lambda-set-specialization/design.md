@@ -305,9 +305,9 @@ s = { lam8, lam9[f: u, acc: { lam8, lam9[f: u, acc: { lam8, lam9[...] }] }] }
 inline, inline_local
 uncurry                     1 回目
 lambda_set                  推論 -> 特殊化 -> 書き換え -> move_bodies_into_callers
-inline
 decapture_scope_functions
 collapse_constructions
+inline
 uncurry                     2 回目
 inline_local
 dead_symbol_elimination
@@ -316,7 +316,7 @@ dead_symbol_elimination
 - この位置では単相化が済み、すべてのシンボル (`Program::symbols`) が具体的な型を持ち、すべての式のノードに型が付いている。`inline` がコンビネータを利用者のコードに展開した後なので、ラムダの数が少なく、集合も小さい。RC IR では、クロージャはすでに関数ポインタと `#DynamicObject` の組で、構造体の型のレイアウトも決まっているので、型のコピーを作るには遅い。
 - 1 回目の `uncurry` は、グローバル関数 `g` ごとに、先頭の k 個の引数をまとめて受け取る uncurried function `g#func<k>` を作り、`g(a)(b)` のような呼び出しを `g#func2(a, b)` に書き換える。`g#func<k>` の型は func type `#Func<k>` である。そのため、新しいパスの位置の式には、複数の引数を持つ `Lam` (uncurried function の本体) と、複数の引数を持つ `App` (uncurried function の呼び出し) が現れる。func type の値は集合を持たず、名前で直接呼ばれる。
 - 2 回目の `uncurry` は、1 回目と同じく、func type でないグローバル関数すべてに uncurried function を作る。前の回の uncurried function の扱いは「段階 4 で行うこと」にある。
-- `inline` は、application spine (入れ子の適用を関数の側へ根からたどった道) の根のグローバル関数を、spine 上の引数がその関数の引数をすべて渡すところでだけ展開する。一部の引数だけを渡した適用は関数のクロージャを作る式で、そこに本体を置いても呼び出しは減らず、同じクロージャをラムダとして作ることになる。後段の `inline` がリフトした関数を `lam(cap)` に置くと、リフトする前のラムダに戻ってしまう。
+- `decapture_scope_functions` は、lambda set のパスの直後、2 回目の `inline` の前に動く。このパスは、スコープの組み込み関数に渡された `lam(cap)` を読む。`inline` がリフトした関数の本体を `lam(cap)` の位置に置くと、リフトする前のラムダに戻り、このパスが読む形がなくなる。
 - 新しいパスは `Configuration::enable_lambda_set_specialization` が真のとき (`Max` 以上) に動く。旧と新を切り替える設定は作らない。比べる相手は main のバイナリである。
 
 ## 推論が書き換えに渡すもの
