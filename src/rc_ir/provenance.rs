@@ -893,10 +893,15 @@ pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> ProvenanceAnalys
 #[cfg(test)]
 mod tests {
     use super::{
-        join_envs, resolve, sole_origin, LeafOrigin, Provenance, SharingVerdict, Uniqueness,
+        analyze_program, join_envs, resolve, sole_origin, LeafOrigin, Provenance, SharingVerdict,
+        Uniqueness,
     };
     use crate::ast::name::FullName;
+    use crate::ast::type_env::TypeEnv;
+    use crate::fixstd::builtin::bulitin_tycons;
     use crate::misc::{Map, Set};
+    use crate::rc_ir::borrow::sink_retains;
+    use crate::rc_ir::test_program::{func, global_name, prog};
 
     /// A single boxed value's provenance: one leaf at the root path.
     fn boxed(src: LeafOrigin) -> Provenance {
@@ -1089,12 +1094,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "after `sink_retains` moved the retains")]
     fn analyze_program_refuses_a_program_whose_retains_sunk() {
-        use super::analyze_program;
-        use crate::ast::type_env::TypeEnv;
-        use crate::fixstd::builtin::bulitin_tycons;
-        use crate::rc_ir::borrow::sink_retains;
-        use crate::rc_ir::test_program::{func, global_name, prog};
-
         let type_env = TypeEnv::new(bulitin_tycons(), Map::default());
         let main = global_name("main");
         let unsunk = prog(vec![func(main.clone(), &[])], vec![], &[main]);
