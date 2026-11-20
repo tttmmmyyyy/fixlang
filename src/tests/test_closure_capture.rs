@@ -22,7 +22,7 @@ mod tests {
     /// lambda no longer stands as a closure fails here rather than passing on an empty search.
     fn assert_closures_at_type_store_nothing(dump: &str, closure_ty: &str) {
         // A binding's type is followed by the name it was minted under, `(as ...)`, or by its
-        // ownership, `[...]`.
+        // provenance, `[...]`.
         let held_at = [
             format!(" : {} (as ", closure_ty),
             format!(" : {} [", closure_ty),
