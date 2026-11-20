@@ -85,3 +85,30 @@ main = pure();
         ": Implementing trait `Std::ToString` for type `Std::Array elm` in module `Main` is illegal;",
     );
 }
+
+/// An associated type given an argument of a kind its parameter does not take.
+#[test]
+pub fn test_a_kind_mismatch_in_an_associated_type_quotes_the_type_variables_as_written() {
+    let source = r##"
+module Main;
+
+trait a : MyTrait {
+    type [f : *->*] MyAssoc a f;
+}
+
+impl I64 : MyTrait {
+    type MyAssoc I64 f = f I64;
+}
+
+func : [s : MyTrait] (s, MyAssoc s String) -> I64;
+func = |x| 0;
+
+main : IO ();
+main = pure();
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": Kind mismatch in `Main::MyTrait::MyAssoc s Std::String`. Expected `*->*`, found `*`.",
+    );
+}
