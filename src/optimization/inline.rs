@@ -767,7 +767,13 @@ impl<'c> Inliner<'c> {
 
     /// The expression of the symbol `name` names, a symbol of the program being rewritten.
     fn body_of(&self, name: &FullName) -> Arc<ExprNode> {
-        self.symbols.get(name).unwrap().expr.as_ref().unwrap().clone()
+        self.symbols
+            .get(name)
+            .unwrap()
+            .expr
+            .as_ref()
+            .unwrap()
+            .clone()
     }
 }
 
