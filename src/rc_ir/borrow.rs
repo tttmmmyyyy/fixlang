@@ -1826,6 +1826,9 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
 /// `BodyModel`'s answers, the ones `cancel` decides by: a pair deleted on a path is a pair `cancel`
 /// would delete if that path were the only one.
 ///
+/// The program returned is marked `RcProgram::retains_sunk`, which `provenance::analyze_program`
+/// refuses.
+///
 /// # Examples
 /// With `f` consuming its argument, the body
 /// ```text
