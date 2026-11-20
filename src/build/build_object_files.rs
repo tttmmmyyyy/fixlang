@@ -189,22 +189,20 @@ fn dump_rc_ir(rc_program: &RcProgram, filter: &str, stage: &str, ann: Annotation
     let in_module = |name: &FullName| {
         filter == "all" || name.namespace.names.first().map(String::as_str) == Some(filter)
     };
-    let selected = RcProgram {
-        funcs: rc_program
+    let selected = rc_program.with_code(
+        rc_program
             .funcs
             .iter()
             .filter(|(r, _)| in_module(&r.name))
             .map(|(r, f)| (r.clone(), f.clone()))
             .collect(),
-        globals: rc_program
+        rc_program
             .globals
             .iter()
             .filter(|g| in_module(&g.symbol))
             .cloned()
             .collect(),
-        roots: rc_program.roots.clone(),
-        retains_sunk: rc_program.retains_sunk,
-    };
+    );
 
     // `filter` is arbitrary command-line input, so keep only characters safe in a file name.
     let file_name = if filter == "all" {

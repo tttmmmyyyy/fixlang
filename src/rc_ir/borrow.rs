@@ -368,12 +368,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
         );
     }
 
-    RcProgram {
-        funcs,
-        globals,
-        roots: prog.roots.clone(),
-        retains_sunk: prog.retains_sunk,
-    }
+    prog.with_code(funcs, globals)
 }
 
 /// The versions of the program's functions, and what deciding the key of one reads.
@@ -1421,12 +1416,7 @@ fn rewrite_bodies(
             g.with_init(rewrite(&vars, &g.init))
         })
         .collect();
-    RcProgram {
-        funcs,
-        globals,
-        roots: prog.roots.clone(),
-        retains_sunk: prog.retains_sunk,
-    }
+    prog.with_code(funcs, globals)
 }
 
 /// What the reference-count nodes and the consumes of one body act on. Every pass that deletes or

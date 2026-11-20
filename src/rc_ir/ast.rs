@@ -68,6 +68,19 @@ pub struct RcProgram {
     pub retains_sunk: bool,
 }
 
+impl RcProgram {
+    /// This program with `funcs` and `globals` in place of its functions and global initializers,
+    /// and the rest of it kept: what a pass rewriting the code of a program returns.
+    pub fn with_code(&self, funcs: Map<FuncRef, RcFunc>, globals: Vec<RcGlobalInit>) -> RcProgram {
+        RcProgram {
+            funcs,
+            globals,
+            roots: self.roots.clone(),
+            retains_sunk: self.retains_sunk,
+        }
+    }
+}
+
 /// A top-level function. One shape uniformly represents lifted lambda bodies, global functions, and
 /// uncurried functions.
 #[derive(Clone, Serialize)]
