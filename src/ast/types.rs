@@ -1277,7 +1277,7 @@ impl TypeNode {
         let type_name = self.to_string_normalize();
         if type_name_path.contains(&type_name) {
             return Err(Errors::from_msg_srcs(
-                format!("Circular type aliasing is found in `{}`.", type_name),
+                format!("Circular type aliasing is found in `{}`.", self.to_string()),
                 &[entry_type_src],
             ));
         }
@@ -1295,7 +1295,7 @@ impl TypeNode {
                         format!(
                             "Cannot resolve type alias `{}` in `{}` because it is not fully applied.",
                             tc.to_string(),
-                            self.to_string_normalize()
+                            self.to_string()
                         ),
                         &[toplevel_ty.get_source()],
                     ));
@@ -1578,21 +1578,13 @@ impl TypeNode {
             arg: &Arc<TypeNode>,
             arg_kind: &Arc<Kind>,
         ) -> Errors {
-            let type_strs = TypeNode::to_string_normalize_many(&[
-                application.clone(),
-                fun.clone(),
-                arg.clone(),
-            ]);
-            let application_str = &type_strs[0];
-            let fun_str = &type_strs[1];
-            let arg_str = &type_strs[2];
             Errors::from_msg_srcs(
                 format!(
                     "Kind mismatch in `{}`. Type `{}` of kind `{}` cannot be applied to type `{}` of kind `{}`.",
-                    application_str,
-                    fun_str,
+                    application.to_string(),
+                    fun.to_string(),
                     fun_kind.to_string(),
-                    arg_str,
+                    arg.to_string(),
                     arg_kind.to_string()
                 ),
                 &[application.get_source()],
@@ -1625,7 +1617,7 @@ impl TypeNode {
                         return Err(Errors::from_msg_srcs(
                             format!(
                                 "Kind mismatch in `{}`. Expected `{}`, found `{}`.",
-                                self.to_string_normalize(),
+                                self.to_string(),
                                 expected.to_string(),
                                 found.to_string()
                             ),
@@ -1883,20 +1875,9 @@ impl TypeNode {
     /// of appearance, so that two types differing only in the names of their variables are written
     /// alike.
     pub fn to_string_normalize(self: &Arc<TypeNode>) -> String {
-        TypeNode::to_string_normalize_many(&[self.clone()])
-            .pop()
-            .unwrap()
-    }
-
-    /// The types written in source syntax under one renaming of their type variables to `a`, `b`,
-    /// ... in order of appearance across the whole list, so that a variable two of them share is
-    /// written with one name in both.
-    pub fn to_string_normalize_many(tys: &[Arc<TypeNode>]) -> Vec<String> {
         // Collect free variables keeping the order of appearance.
         let mut free_vars = vec![];
-        for ty in tys {
-            ty.free_vars_to_vec(&mut free_vars);
-        }
+        self.free_vars_to_vec(&mut free_vars);
 
         // Create substitution that normalizes the names of type variables.
         let mut s = Substitution::default();
@@ -1916,10 +1897,7 @@ impl TypeNode {
             next_tyvar_no += 1;
         }
 
-        // Substitute and stringify all types.
-        tys.iter()
-            .map(|ty| s.substitute_type(ty).to_string())
-            .collect()
+        s.substitute_type(self).to_string()
     }
 
     /// This type written in source syntax, under the names its own type variables carry.
