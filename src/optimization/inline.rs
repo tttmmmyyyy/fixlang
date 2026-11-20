@@ -762,15 +762,12 @@ impl<'c> Inliner<'c> {
         if !self.take_budget_for(name) {
             return None;
         }
-        Some(
-            self.symbols
-                .get(name)
-                .unwrap()
-                .expr
-                .as_ref()
-                .unwrap()
-                .clone(),
-        )
+        Some(self.body_of(name))
+    }
+
+    /// The expression of the symbol `name` names, a symbol of the program being rewritten.
+    fn body_of(&self, name: &FullName) -> Arc<ExprNode> {
+        self.symbols.get(name).unwrap().expr.as_ref().unwrap().clone()
     }
 }
 
@@ -802,8 +799,7 @@ impl<'c> ExprVisitor for Inliner<'c> {
         if !self.take_budget_for(func_name) {
             return EndVisitResult::unchanged(expr);
         }
-        let func_expr = self.symbols.get(func_name).unwrap().expr.as_ref().unwrap();
-        EndVisitResult::changed(expr.set_app_func(func_expr.clone()))
+        EndVisitResult::changed(expr.set_app_func(self.body_of(func_name)))
     }
 
     /// Replaces each global name a builtin operation reads with the expression of the symbol it
