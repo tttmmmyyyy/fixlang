@@ -33,7 +33,7 @@ use crate::{
         dead_code_elim, locality,
         lower::lower_program,
         print::{program_to_string_annotated, Annotations},
-        provenance::{analyze_program, Provenance},
+        provenance::analyze_program,
         rc_insert::insert_rc,
         simplify::simplify,
         unique_check_elim, validate,
@@ -104,17 +104,16 @@ fn lower_and_insert_rc(
 /// path needs it. Borrow-ification records each version's borrowed parameters on the functions
 /// (`RcFunc::borrowed_units`), which `param_ownership_shapes` reads back as the owned complement.
 ///
-/// Returns the optimized program and, when `read_provenance` is true, the provenance of each
-/// binding as the passes deciding uniqueness read it. That provenance is read just before
-/// `sink_retains`, since provenance holds only while the retains are unmoved
+/// `before_sinking` is given the program the passes deciding uniqueness leave, just before
+/// `sink_retains` moves its retains. It is the last program whose provenance can be read
 /// (`RcProgram::retains_sunk`).
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,
     global_types: &Map<FullName, Arc<TypeNode>>,
     config: &Configuration,
-    read_provenance: bool,
-) -> (RcProgram, Option<Map<FullName, Provenance>>) {
+    before_sinking: impl FnOnce(&RcProgram),
+) -> RcProgram {
     // The whole program's symbol names, for the debug-only validator to recognize global references
     // (a unit may reference a symbol another unit defines). Built only when the validator runs.
     let symbol_names: Set<FullName> = if config.develop_mode {
@@ -140,15 +139,12 @@ fn optimize_rc_program(
         validate(prog, stage);
     };
 
-    let read_provenance_if_asked =
-        |prog: &RcProgram| read_provenance.then(|| analyze_program(prog, type_env).bindings);
-
     validate(&prog, "after insert_rc");
     split_rc_units(&mut prog, type_env);
     validate(&prog, "after split_rc_units");
     if !config.enable_borrow_optimization() {
-        let provenance = read_provenance_if_asked(&prog);
-        return (prog, provenance);
+        before_sinking(&prog);
+        return prog;
     }
     prog = borrow_ify(&prog, type_env, config.develop_mode);
     validate(&prog, "after borrow_ify");
@@ -171,10 +167,10 @@ fn optimize_rc_program(
     // bound would leave that alias reading as unique, so the retains move once the passes
     // deciding uniqueness from provenance have run, and `analyze_program` refuses the program once
     // they have moved.
-    let provenance = read_provenance_if_asked(&prog);
+    before_sinking(&prog);
     prog = sink_retains(&prog, type_env);
     validate(&prog, "after sink_retains");
-    (prog, provenance)
+    prog
 }
 
 /// Write the `stage` (`pre` or `post` optimization) RC IR of the module selected by `filter` to a
@@ -184,26 +180,8 @@ fn optimize_rc_program(
 /// # Arguments
 /// * `rc_program` — the whole program at that stage. The module filter is applied here, on the RC
 ///   IR, so the dumped functions carry the whole-program context code generation compiles.
-/// * `provs` — the provenance to annotate each binding with, as `optimize_rc_program` reads it
-///   before `sink_retains` moves the retains; `None` for the pre-optimization dump.
-fn dump_rc_ir(
-    rc_program: &RcProgram,
-    type_env: &TypeEnv,
-    filter: &str,
-    stage: &str,
-    provs: Option<&Map<FullName, Provenance>>,
-    config: &Configuration,
-) {
-    // Provenance and ownership are optimization-analysis outputs, so only the post-optimization dump
-    // carries them; the pre-optimization dump shows the plain lowered RC IR.
-    let post = stage == "post";
-    let param_ownerships = (post && config.enable_borrow_optimization())
-        .then(|| param_ownership_shapes(rc_program, type_env));
-    let ann = Annotations {
-        provs,
-        param_ownerships: param_ownerships.as_ref(),
-    };
-
+/// * `ann` — the annotations of the bindings and the parameters.
+fn dump_rc_ir(rc_program: &RcProgram, filter: &str, stage: &str, ann: Annotations) {
     // Keep the functions and globals of the selected module. Every function name carries its source
     // module in its top namespace component — a top-level name, a `<function>::closure{N}` lambda, or a
     // clone of either. Annotations stay computed over the whole program, so a kept function's
@@ -270,16 +248,23 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     // The whole program is lowered here, and the C world enters it through its root values alone.
     let roots = program.root_value_names().into_iter().collect();
     let base = lower_and_insert_rc(&type_env, &all_symbols, &global_types, roots, config);
-    dump_rc_ir(&base, &type_env, filter, "pre", None, config);
-    let (optimized, provs) = optimize_rc_program(base, &type_env, &global_types, config, true);
-    dump_rc_ir(
-        &optimized,
-        &type_env,
-        filter,
-        "post",
-        provs.as_ref(),
-        config,
-    );
+    dump_rc_ir(&base, filter, "pre", Annotations::default());
+
+    // Provenance and ownership are optimization-analysis outputs, so only the post-optimization dump
+    // carries them. The provenance is the one the passes deciding uniqueness read, which can be read
+    // only before `sink_retains` moves the retains.
+    let mut provs = None;
+    let optimized = optimize_rc_program(base, &type_env, &global_types, config, |prog| {
+        provs = Some(analyze_program(prog, &type_env).bindings)
+    });
+    let param_ownerships = config
+        .enable_borrow_optimization()
+        .then(|| param_ownership_shapes(&optimized, &type_env));
+    let ann = Annotations {
+        provs: provs.as_ref(),
+        param_ownerships: param_ownerships.as_ref(),
+    };
+    dump_rc_ir(&optimized, filter, "post", ann);
 }
 
 /// Compile the program into object files, and return their paths for the linker.
@@ -332,7 +317,7 @@ pub fn build_object_files<'c>(
         root_value_names.clone(),
         config,
     );
-    let (rc_prog, _) = optimize_rc_program(rc_prog, &type_env, &global_types, config, false);
+    let rc_prog = optimize_rc_program(rc_prog, &type_env, &global_types, config, |_| {});
     let mut units = divide_into_units(&rc_prog, config);
     let division = divide_among_units(rc_prog, &units, &global_types, root_value_names);
 
