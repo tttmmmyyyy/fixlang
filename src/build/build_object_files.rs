@@ -139,13 +139,14 @@ fn optimize_rc_program(
         validate(prog, stage);
     };
 
-    let read = |prog: &RcProgram| read_provenance.then(|| analyze_program(prog, type_env).bindings);
+    let read_provenance_if_asked =
+        |prog: &RcProgram| read_provenance.then(|| analyze_program(prog, type_env).bindings);
 
     validate(&prog, "after insert_rc");
     split_rc_units(&mut prog, type_env);
     validate(&prog, "after split_rc_units");
     if !config.enable_borrow_optimization() {
-        let provenance = read(&prog);
+        let provenance = read_provenance_if_asked(&prog);
         return (prog, provenance);
     }
     prog = borrow_ify(&prog, type_env, config.develop_mode);
@@ -169,7 +170,7 @@ fn optimize_rc_program(
     // bound would leave that alias reading as unique, so the retains move once the passes
     // deciding uniqueness from provenance have run, and `analyze_program` refuses the program
     // they leave.
-    let provenance = read(&prog);
+    let provenance = read_provenance_if_asked(&prog);
     prog = sink_retains(&prog, type_env);
     validate(&prog, "after sink_retains");
     (prog, provenance)
