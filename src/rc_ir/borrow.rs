@@ -372,6 +372,7 @@ pub(crate) fn borrow_ify(prog: &RcProgram, type_env: &TypeEnv, develop_mode: boo
         funcs,
         globals,
         roots: prog.roots.clone(),
+        retains_sunk: prog.retains_sunk,
     }
 }
 
@@ -1424,6 +1425,7 @@ fn rewrite_bodies(
         funcs,
         globals,
         roots: prog.roots.clone(),
+        retains_sunk: prog.retains_sunk,
     }
 }
 
@@ -1846,7 +1848,7 @@ fn drop_nodes_inner(node: &RcExprNode, to_delete: &Set<NodeId>) -> RcExprNode {
 /// ```
 pub(crate) fn sink_retains(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
     let owned_units = all_owned_units(prog, type_env);
-    rewrite_bodies(prog, |vars, body| {
+    let mut sunk = rewrite_bodies(prog, |vars, body| {
         let sinker = RetainSinker {
             model: BodyModel {
                 vars,
@@ -1856,7 +1858,9 @@ pub(crate) fn sink_retains(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
             },
         };
         sinker.rewrite(body)
-    })
+    });
+    sunk.retains_sunk = true;
+    sunk
 }
 
 /// The rewrite `sink_retains` makes of one body.

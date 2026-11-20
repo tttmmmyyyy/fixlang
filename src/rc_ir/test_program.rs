@@ -83,5 +83,6 @@ pub fn prog(funcs: Vec<RcFunc>, globals: Vec<RcGlobalInit>, roots: &[FullName]) 
         funcs: funcs.into_iter().map(|f| (f.name.clone(), f)).collect(),
         globals,
         roots: roots.iter().cloned().collect(),
+        retains_sunk: false,
     }
 }

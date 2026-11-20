@@ -87,6 +87,7 @@ pub fn specialize(prog: &RcProgram, type_env: &TypeEnv) -> RcProgram {
         funcs: spec.output_funcs,
         globals,
         roots: prog.roots.clone(),
+        retains_sunk: prog.retains_sunk,
     }
 }
 

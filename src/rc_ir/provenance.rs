@@ -814,8 +814,14 @@ fn merge_by_unique_name<V>(whole: &mut Map<FullName, V>, one: Map<FullName, V>, 
 }
 
 /// Analyze every function and global initializer of `prog`, after computing each function's result
-/// provenance to a fixed point so that a call composes its callee's effect.
+/// provenance to a fixed point so that a call composes its callee's effect. `prog`'s retains must
+/// not have moved (`RcProgram::retains_sunk`).
 pub fn analyze_program(prog: &RcProgram, type_env: &TypeEnv) -> ProvenanceAnalysis {
+    assert!(
+        !prog.retains_sunk,
+        "provenance is analyzed after `sink_retains` moved the retains, where an alias bound above a \
+         moved retain would read as unique"
+    );
     // Phase 1: compute each function's effect (its result provenance, symbolic in its parameters) to
     // a fixed point. A direct call substitutes the callee's effect, so recursion needs iteration;
     // the lattice is finite and the join is monotone, so it converges. Start each effect at `⊥`.

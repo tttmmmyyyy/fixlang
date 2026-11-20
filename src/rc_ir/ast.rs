@@ -61,6 +61,11 @@ pub struct RcProgram {
     /// program — the names the unit publishes for the others (`divide_among_units`).
     /// `dead_code_elim::eliminate_unreachable` keeps what they reach and drops the rest.
     pub roots: Set<FullName>,
+    /// Whether `sink_retains` has moved the program's retains. Provenance reads a retain as demoting
+    /// only the variable it names, which holds where every alias of a retained value is bound after
+    /// the retain; a moved retain can sit below where an alias is bound, so
+    /// `provenance::analyze_program` refuses such a program.
+    pub retains_sunk: bool,
 }
 
 /// A top-level function. One shape uniformly represents lifted lambda bodies, global functions, and

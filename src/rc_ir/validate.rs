@@ -612,6 +612,7 @@ mod tests {
             funcs: Map::default(),
             globals: vec![],
             roots: Set::default(),
+            retains_sunk: false,
         }
     }
 
@@ -652,6 +653,7 @@ mod tests {
             funcs,
             globals: vec![],
             roots: [root].into_iter().collect(),
+            retains_sunk: false,
         };
         validate(&prog, &Set::default(), &type_env(), "test");
     }

@@ -33,7 +33,7 @@ use crate::{
         dead_code_elim, locality,
         lower::lower_program,
         print::{program_to_string_annotated, Annotations},
-        provenance::analyze_program,
+        provenance::{analyze_program, Provenance},
         rc_insert::insert_rc,
         simplify::simplify,
         unique_check_elim, validate,
@@ -103,12 +103,17 @@ fn lower_and_insert_rc(
 /// by input uniqueness to elide unique checks, and move each remaining retain down to where each
 /// path needs it. Borrow-ification records each version's borrowed parameters on the functions
 /// (`RcFunc::borrowed_units`), which `param_ownership_shapes` reads back as the owned complement.
+///
+/// Returns the optimized program, and, where `read_provenance` asks for it, the provenance of each
+/// binding as the passes deciding uniqueness read it: the retains have not moved yet there, and
+/// provenance read after they move would be wrong (`RcProgram::retains_sunk`).
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,
     global_types: &Map<FullName, Arc<TypeNode>>,
     config: &Configuration,
-) -> RcProgram {
+    read_provenance: bool,
+) -> (RcProgram, Option<Map<FullName, Provenance>>) {
     // The whole program's symbol names, for the debug-only validator to recognize global references
     // (a unit may reference a symbol another unit defines). Built only when the validator runs.
     let symbol_names: Set<FullName> = if config.develop_mode {
@@ -134,34 +139,40 @@ fn optimize_rc_program(
         validate(prog, stage);
     };
 
+    let read = |prog: &RcProgram| read_provenance.then(|| analyze_program(prog, type_env).bindings);
+
     validate(&prog, "after insert_rc");
     split_rc_units(&mut prog, type_env);
     validate(&prog, "after split_rc_units");
-    if config.enable_borrow_optimization() {
-        prog = borrow_ify(&prog, type_env, config.develop_mode);
-        validate(&prog, "after borrow_ify");
-        prog = cancel(&prog, type_env, config.develop_mode);
-        validate(&prog, "after cancel");
-        prune(&mut prog, "after dce following cancel");
-        prog = unique_check_elim::specialize(&prog, type_env);
-        validate(&prog, "after specialize");
-        prune(&mut prog, "after dce following specialize");
-        // Locality inference rests on nothing moving a live object out of the local state, which a
-        // threaded build breaks: `mark_threaded` marks an object every existing binding to it still
-        // reaches. A threaded build keeps the runtime dispatch everywhere.
-        if !config.threaded {
-            prog = locality::specialize(&prog, type_env);
-            validate(&prog, "after locality");
-            prune(&mut prog, "after dce following locality");
-        }
-        // Provenance reads a retain as demoting only the variable it names, which holds where every
-        // alias of a retained value is bound after the retain. Moving a retain past where an alias is
-        // bound would leave that alias reading as unique, so the retains move once the passes
-        // deciding uniqueness from provenance have run.
-        prog = sink_retains(&prog, type_env);
-        validate(&prog, "after sink_retains");
+    if !config.enable_borrow_optimization() {
+        let provenance = read(&prog);
+        return (prog, provenance);
     }
-    prog
+    prog = borrow_ify(&prog, type_env, config.develop_mode);
+    validate(&prog, "after borrow_ify");
+    prog = cancel(&prog, type_env, config.develop_mode);
+    validate(&prog, "after cancel");
+    prune(&mut prog, "after dce following cancel");
+    prog = unique_check_elim::specialize(&prog, type_env);
+    validate(&prog, "after specialize");
+    prune(&mut prog, "after dce following specialize");
+    // Locality inference rests on nothing moving a live object out of the local state, which a
+    // threaded build breaks: `mark_threaded` marks an object every existing binding to it still
+    // reaches. A threaded build keeps the runtime dispatch everywhere.
+    if !config.threaded {
+        prog = locality::specialize(&prog, type_env);
+        validate(&prog, "after locality");
+        prune(&mut prog, "after dce following locality");
+    }
+    // Provenance reads a retain as demoting only the variable it names, which holds where every
+    // alias of a retained value is bound after the retain. Moving a retain past where an alias is
+    // bound would leave that alias reading as unique, so the retains move once the passes
+    // deciding uniqueness from provenance have run, and `analyze_program` refuses the program
+    // they leave.
+    let provenance = read(&prog);
+    prog = sink_retains(&prog, type_env);
+    validate(&prog, "after sink_retains");
+    (prog, provenance)
 }
 
 /// Write the `stage` (`pre` or `post` optimization) RC IR of the module selected by `filter` to a
@@ -171,21 +182,23 @@ fn optimize_rc_program(
 /// # Arguments
 /// * `rc_program` — the whole program at that stage. The module filter is applied here, on the RC
 ///   IR, so the dumped functions carry the whole-program context code generation compiles.
+/// * `provs` — the provenance to annotate each binding with, which `optimize_rc_program` reads for
+///   the post-optimization dump; `None` for the pre-optimization one.
 fn dump_rc_ir(
     rc_program: &RcProgram,
     type_env: &TypeEnv,
     filter: &str,
     stage: &str,
+    provs: Option<&Map<FullName, Provenance>>,
     config: &Configuration,
 ) {
     // Provenance and ownership are optimization-analysis outputs, so only the post-optimization dump
     // carries them; the pre-optimization dump shows the plain lowered RC IR.
     let post = stage == "post";
-    let provs = post.then(|| analyze_program(rc_program, type_env).bindings);
     let param_ownerships = (post && config.enable_borrow_optimization())
         .then(|| param_ownership_shapes(rc_program, type_env));
     let ann = Annotations {
-        provs: provs.as_ref(),
+        provs,
         param_ownerships: param_ownerships.as_ref(),
     };
 
@@ -210,6 +223,7 @@ fn dump_rc_ir(
             .cloned()
             .collect(),
         roots: rc_program.roots.clone(),
+        retains_sunk: rc_program.retains_sunk,
     };
 
     // `filter` is arbitrary command-line input, so keep only characters safe in a file name.
@@ -254,9 +268,16 @@ fn dump_rc_ir_stages(program: &Program, config: &Configuration) {
     // The whole program is lowered here, and the C world enters it through its root values alone.
     let roots = program.root_value_names().into_iter().collect();
     let base = lower_and_insert_rc(&type_env, &all_symbols, &global_types, roots, config);
-    dump_rc_ir(&base, &type_env, filter, "pre", config);
-    let optimized = optimize_rc_program(base, &type_env, &global_types, config);
-    dump_rc_ir(&optimized, &type_env, filter, "post", config);
+    dump_rc_ir(&base, &type_env, filter, "pre", None, config);
+    let (optimized, provs) = optimize_rc_program(base, &type_env, &global_types, config, true);
+    dump_rc_ir(
+        &optimized,
+        &type_env,
+        filter,
+        "post",
+        provs.as_ref(),
+        config,
+    );
 }
 
 /// Compile the program into object files, and return their paths for the linker.
@@ -309,7 +330,7 @@ pub fn build_object_files<'c>(
         root_value_names.clone(),
         config,
     );
-    let rc_prog = optimize_rc_program(rc_prog, &type_env, &global_types, config);
+    let (rc_prog, _) = optimize_rc_program(rc_prog, &type_env, &global_types, config, false);
     let mut units = divide_into_units(&rc_prog, config);
     let division = divide_among_units(rc_prog, &units, &global_types, root_value_names);
 
