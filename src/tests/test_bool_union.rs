@@ -8,7 +8,7 @@
 mod bool_union_tests {
     use crate::{configuration::Configuration, tests::test_util::test_source};
 
-    // `Bool` is a union, so it can be matched on with the `_true()` / `_false()` patterns.
+    /// `Bool` is a union, so it can be matched on with the `_true()` / `_false()` patterns.
     #[test]
     pub fn test_match_on_bool() {
         let source = r#"
