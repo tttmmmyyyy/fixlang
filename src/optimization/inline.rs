@@ -796,11 +796,7 @@ impl<'c> ExprVisitor for Inliner<'c> {
         if func_name.is_local() {
             return EndVisitResult::unchanged(expr);
         }
-        if !self
-            .costs
-            .get(func_name)
-            .may_be_inlined_at_call_site()
-        {
+        if !self.costs.get(func_name).may_be_inlined_at_call_site() {
             return EndVisitResult::unchanged(expr);
         }
         if !self.take_budget_for(func_name) {
