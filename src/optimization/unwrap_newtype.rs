@@ -31,7 +31,7 @@ use crate::{
         types::{tycon, TyCon, TyConInfo, TyConVariant},
     },
     fixstd::builtin::{
-        make_tuple_name_abs, make_unit_ty, StructPlugInOp, StructPunchOp, StructSetOp,
+        expr_unit, make_tuple_name_abs, make_unit_ty, StructPlugInOp, StructPunchOp, StructSetOp,
     },
     misc::{for_each_on_compiler_threads, Map, Set},
 };
@@ -243,8 +243,7 @@ impl<'a> ExprVisitor for ExprUnwrapper<'a> {
                 let field_ty = field_unit_ty.collect_type_arguments()[0].clone();
                 let unit_ty = make_unit_ty();
                 let struct_expr = expr_var(struct_name, expr.source.clone()).set_type(field_ty);
-                let unit_expr =
-                    expr_make_struct(tycon(make_tuple_name_abs(0)), vec![]).set_type(unit_ty);
+                let unit_expr = expr_unit().set_type(unit_ty);
                 expr = expr_make_struct(
                     tycon(make_tuple_name_abs(2)),
                     vec![("0".to_string(), struct_expr), ("1".to_string(), unit_expr)],
