@@ -104,9 +104,10 @@ fn lower_and_insert_rc(
 /// path needs it. Borrow-ification records each version's borrowed parameters on the functions
 /// (`RcFunc::borrowed_units`), which `param_ownership_shapes` reads back as the owned complement.
 ///
-/// Returns the optimized program, and, where `read_provenance` asks for it, the provenance of each
-/// binding as the passes deciding uniqueness read it: the retains have not moved yet there, and
-/// provenance read after they move would be wrong (`RcProgram::retains_sunk`).
+/// Returns the optimized program and, when `read_provenance` is true, the provenance of each
+/// binding as the passes deciding uniqueness read it. That provenance is read just before
+/// `sink_retains`, since provenance holds only while the retains are unmoved
+/// (`RcProgram::retains_sunk`).
 fn optimize_rc_program(
     mut prog: RcProgram,
     type_env: &TypeEnv,
@@ -168,8 +169,8 @@ fn optimize_rc_program(
     // Provenance reads a retain as demoting only the variable it names, which holds where every
     // alias of a retained value is bound after the retain. Moving a retain past where an alias is
     // bound would leave that alias reading as unique, so the retains move once the passes
-    // deciding uniqueness from provenance have run, and `analyze_program` refuses the program
-    // they leave.
+    // deciding uniqueness from provenance have run, and `analyze_program` refuses the program once
+    // they have moved.
     let provenance = read_provenance_if_asked(&prog);
     prog = sink_retains(&prog, type_env);
     validate(&prog, "after sink_retains");
@@ -183,8 +184,8 @@ fn optimize_rc_program(
 /// # Arguments
 /// * `rc_program` — the whole program at that stage. The module filter is applied here, on the RC
 ///   IR, so the dumped functions carry the whole-program context code generation compiles.
-/// * `provs` — the provenance to annotate each binding with, which `optimize_rc_program` reads for
-///   the post-optimization dump; `None` for the pre-optimization one.
+/// * `provs` — the provenance to annotate each binding with, as `optimize_rc_program` reads it
+///   before `sink_retains` moves the retains; `None` for the pre-optimization dump.
 fn dump_rc_ir(
     rc_program: &RcProgram,
     type_env: &TypeEnv,

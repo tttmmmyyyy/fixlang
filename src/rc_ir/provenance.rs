@@ -1088,9 +1088,9 @@ mod tests {
         );
     }
 
-    /// Provenance reads a retain as demoting only the variable it names, which a retain
-    /// `sink_retains` moved below where an alias is bound breaks, so the analysis refuses a program
-    /// whose retains moved and accepts the same program before they move.
+    /// Verifies that `analyze_program` accepts a program before `sink_retains` and refuses the same
+    /// program after it. Provenance reads a retain as demoting only the variable it names, and a
+    /// moved retain can sit below where an alias is bound.
     #[test]
     #[should_panic(expected = "after `sink_retains` moved the retains")]
     fn analyze_program_refuses_a_program_whose_retains_sunk() {
