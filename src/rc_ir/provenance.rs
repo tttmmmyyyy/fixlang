@@ -1082,4 +1082,23 @@ mod tests {
             uniq(vec![(vec![1], SharingVerdict::Unique)])
         );
     }
+
+    /// Provenance reads a retain as demoting only the variable it names, which a retain
+    /// `sink_retains` moved below where an alias is bound breaks, so the analysis refuses a program
+    /// whose retains moved and accepts the same program before they move.
+    #[test]
+    #[should_panic(expected = "after `sink_retains` moved the retains")]
+    fn analyze_program_refuses_a_program_whose_retains_sunk() {
+        use super::analyze_program;
+        use crate::ast::type_env::TypeEnv;
+        use crate::fixstd::builtin::bulitin_tycons;
+        use crate::rc_ir::borrow::sink_retains;
+        use crate::rc_ir::test_program::{func, global_name, prog};
+
+        let type_env = TypeEnv::new(bulitin_tycons(), Map::default());
+        let main = global_name("main");
+        let unsunk = prog(vec![func(main.clone(), &[])], vec![], &[main]);
+        analyze_program(&unsunk, &type_env);
+        analyze_program(&sink_retains(&unsunk, &type_env), &type_env);
+    }
 }
