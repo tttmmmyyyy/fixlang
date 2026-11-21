@@ -138,6 +138,40 @@ main : IO () = (
     );
 }
 
+/// A boolean literal used where another type is expected is reported as a `Std::Bool` at the
+/// literal, the way a number literal is.
+#[test]
+pub fn test_a_mismatched_boolean_literal_is_one_sentence_finding_bool_at_the_literal() {
+    let source = r##"
+module Main;
+
+main : IO () = (
+    let x = [1];
+    let y = [x.@size, true];
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": Expected `Std::I64`, found `Std::Bool`.\n\n6:23-6:27 in ",
+    );
+    let source = r##"
+module Main;
+
+main : IO () = (
+    let f = |x : I64| x;
+    let y = f(false);
+    pure()
+);
+"##;
+    test_source_fail(
+        source,
+        Configuration::develop_mode(),
+        ": Expected `Std::I64`, found `Std::Bool`.\n\n6:15-6:20 in ",
+    );
+}
+
 /// An expression whose type differs from the expected one inside the two opens the report with the
 /// two types that do not match, followed by the expected type and the found one.
 #[test]
