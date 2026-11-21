@@ -206,15 +206,15 @@ impl<'n> Walk<'n> {
     /// The record the walk meets next, moving the walk past it. Panics unless `is_reached` holds of
     /// the node recorded there; `what` names the kind of node the walk has reached.
     fn take(&mut self, is_reached: impl FnOnce(&NodeRef) -> bool, what: &str) -> &'n NodeType {
-        let node = &self.nodes[self.cursor];
+        let record = &self.nodes[self.cursor];
         assert!(
-            is_reached(&node.node),
+            is_reached(&record.node),
             "the rewrite meets {} at node {} where inference recorded another node",
             what,
             self.cursor
         );
         self.cursor += 1;
-        node
+        record
     }
 }
 
