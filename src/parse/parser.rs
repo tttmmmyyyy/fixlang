@@ -707,11 +707,10 @@ fn semicolon_before_the_else_branch<'i>(expr_if: &Pair<'i, Rule>) -> Option<Pair
         .find(|pair| pair.as_rule() == Rule::semicolon)
 }
 
-/// Whether `pair` is followed on its line by nothing but spaces or a line comment.
+/// Whether `pair` is followed on its line by nothing but spaces and comments.
 fn ends_its_line(pair: Pair<Rule>) -> bool {
     let rest = &pair.get_input()[pair.as_span().end()..];
-    let rest = rest.trim_start_matches([' ', '\t', '\u{00A0}']);
-    rest.is_empty() || rest.starts_with(['\n', '\r']) || rest.starts_with("//")
+    FixParser::parse(Rule::rest_of_line_of_separators, rest).is_ok()
 }
 
 /// The bound expression of the binding of `expr_let` whose `in` or `;` is at the byte offset `at`,

@@ -280,12 +280,12 @@ main : IO () = (
     test_source(&source, Configuration::develop_mode());
 }
 
-/// An `if` whose `;` is followed on its line by nothing but spaces or a line comment is reported,
+/// An `if` whose `;` is followed on its line by nothing but spaces and comments is reported,
 /// in a source whose lines end with `\n` or with `\r\n`: its else branch starts on a later line.
 #[test]
 pub fn test_an_if_whose_semicolon_ends_its_line_is_reported() {
     let message = "This `if` has no `else` block.\n\n5:13-5:15";
-    for after_semicolon in ["   \t", " // one"] {
+    for after_semicolon in ["   \t", " // one", " /* one */ "] {
         let source = format!(
             r##"
 module Main;
